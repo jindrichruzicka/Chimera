@@ -546,6 +546,8 @@ const {
     resolveRuntimePaths,
     resolveRendererProtocolFilePath,
     registerRendererProtocolScheme,
+    buildRendererProtocolResponse,
+    parseSingleByteRange,
     sanitiseE2eInitialUrl,
     buildRendererGameLaunchUrl,
     resolveRendererLaunchUrl,
@@ -1273,6 +1275,97 @@ describe('renderer app protocol', () => {
                 headers: new Headers(),
             }),
         ).toBeNull();
+    });
+
+    it('serves .mp4 with the video/mp4 content type (not octet-stream)', async () => {
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/renderer/out/chimera_logo.mp4',
+            data: Buffer.from('fake-mp4-bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.headers.get('content-type')).toBe('video/mp4');
+    });
+
+    it('advertises byte-range support on a full (rangeless) media response', async () => {
+        const data = Buffer.from('fake-mp4-bytes');
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/renderer/out/chimera_logo.mp4',
+            data,
+            rangeHeader: null,
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('accept-ranges')).toBe('bytes');
+        expect(response.headers.get('content-length')).toBe(String(data.byteLength));
+    });
+
+    it('answers a Range request with 206 Partial Content and a Content-Range header', async () => {
+        const data = Buffer.from('0123456789'); // 10 bytes
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/renderer/out/chimera_logo.mp4',
+            data,
+            rangeHeader: 'bytes=2-5',
+        });
+
+        expect(response.status).toBe(206);
+        expect(response.headers.get('content-range')).toBe('bytes 2-5/10');
+        expect(response.headers.get('accept-ranges')).toBe('bytes');
+        expect(response.headers.get('content-length')).toBe('4');
+        await expect(response.text()).resolves.toBe('2345');
+    });
+
+    it('clamps an open-ended Range (bytes=N-) to the end of the file', async () => {
+        const data = Buffer.from('0123456789'); // 10 bytes
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/renderer/out/chimera_logo.mp4',
+            data,
+            rangeHeader: 'bytes=8-',
+        });
+
+        expect(response.status).toBe(206);
+        expect(response.headers.get('content-range')).toBe('bytes 8-9/10');
+        await expect(response.text()).resolves.toBe('89');
+    });
+
+    it('answers an unsatisfiable Range with 416 Range Not Satisfiable', async () => {
+        const data = Buffer.from('0123456789'); // 10 bytes
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/renderer/out/chimera_logo.mp4',
+            data,
+            rangeHeader: 'bytes=100-200',
+        });
+
+        expect(response.status).toBe(416);
+        expect(response.headers.get('content-range')).toBe('bytes */10');
+    });
+
+    it('ignores a Range header on a non-media response and returns the whole file', async () => {
+        const data = Buffer.from('<html></html>');
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/renderer/out/index.html',
+            data,
+            rangeHeader: 'bytes=0-3',
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-range')).toBeNull();
+    });
+
+    it('resolves a suffix Range (bytes=-N) to the final N bytes', () => {
+        // size 10; bytes=-3 → the last three bytes [7,9].
+        expect(parseSingleByteRange('bytes=-3', 10)).toEqual({ start: 7, end: 9 });
+    });
+
+    it('clamps a suffix Range larger than the file to the whole file', () => {
+        expect(parseSingleByteRange('bytes=-100', 10)).toEqual({ start: 0, end: 9 });
+    });
+
+    it('returns null for an absent, malformed, or multi-range header', () => {
+        expect(parseSingleByteRange(null, 10)).toBeNull();
+        expect(parseSingleByteRange('bytes=abc', 10)).toBeNull();
+        expect(parseSingleByteRange('bytes=0-1,4-5', 10)).toBeNull();
+        expect(parseSingleByteRange('bytes=-', 10)).toBeNull();
     });
 });
 

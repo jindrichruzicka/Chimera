@@ -478,15 +478,136 @@ const CONTENT_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
     '.html': HTML_CONTENT_TYPE,
     '.js': 'application/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
+    '.m4v': 'video/mp4',
     '.map': 'application/json; charset=utf-8',
+    '.mov': 'video/quicktime',
+    '.mp4': 'video/mp4',
     '.ogg': 'audio/ogg',
     '.png': 'image/png',
     '.svg': 'image/svg+xml; charset=utf-8',
     '.txt': RSC_CONTENT_TYPE,
     '.wav': 'audio/wav',
+    '.webm': 'video/webm',
     '.webp': 'image/webp',
     '.woff2': 'font/woff2',
 };
+
+/**
+ * MIME-type prefixes that a `<video>`/`<audio>` element streams via HTTP byte
+ * ranges. Chromium's media stack issues a `Range` request and refuses to play a
+ * source whose response does not honour it (a plain `200` full-body reply makes
+ * the element fire `error`). The `chimera://` scheme therefore answers range
+ * requests for these media types with `206 Partial Content` — without it a
+ * packaged build's logo video (served over this protocol) errors instantly and
+ * `LogoVideoScreen` skips straight to the main menu.
+ */
+const RANGE_CAPABLE_CONTENT_TYPE_PREFIXES = ['video/', 'audio/'] as const;
+
+function isRangeCapableContentType(contentType: string): boolean {
+    return RANGE_CAPABLE_CONTENT_TYPE_PREFIXES.some((prefix) => contentType.startsWith(prefix));
+}
+
+/**
+ * Parse a single-range HTTP `Range` header (`bytes=start-end`) against a known
+ * resource size. Returns the inclusive `[start, end]` byte offsets, or `null`
+ * when the header is absent, malformed, multi-range (unsupported), or does not
+ * overlap the resource (the caller answers the latter with `416`). Follows
+ * RFC 7233: an absent end clamps to the last byte; a `bytes=-N` suffix means the
+ * final `N` bytes.
+ */
+export function parseSingleByteRange(
+    rangeHeader: string | null,
+    size: number,
+): { readonly start: number; readonly end: number } | null {
+    if (rangeHeader === null) {
+        return null;
+    }
+    const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+    if (match === null) {
+        return null;
+    }
+    const [, rawStart, rawEnd] = match;
+    if (rawStart === '' && rawEnd === '') {
+        return null;
+    }
+
+    let start: number;
+    let end: number;
+    if (rawStart === '') {
+        // Suffix range: the final `rawEnd` bytes.
+        const suffixLength = Number(rawEnd);
+        if (suffixLength === 0) {
+            return null;
+        }
+        start = Math.max(0, size - suffixLength);
+        end = size - 1;
+    } else {
+        start = Number(rawStart);
+        end = rawEnd === '' ? size - 1 : Math.min(Number(rawEnd), size - 1);
+    }
+
+    if (start > end || start >= size) {
+        return null;
+    }
+    return { start, end };
+}
+
+export interface BuildRendererProtocolResponseOptions {
+    readonly filePath: string;
+    readonly data: Buffer;
+    readonly rangeHeader: string | null;
+}
+
+/**
+ * Build the `Response` for a resolved renderer-protocol file, honouring HTTP
+ * byte-range requests for media so `<video>`/`<audio>` playback works over the
+ * custom `chimera://` scheme. Non-media files (and media requests without a
+ * `Range` header) are returned whole; media responses always advertise
+ * `Accept-Ranges: bytes` so the element knows it may seek.
+ */
+export function buildRendererProtocolResponse(
+    options: BuildRendererProtocolResponseOptions,
+): Response {
+    const contentType = contentTypeForPath(options.filePath);
+    const size = options.data.byteLength;
+
+    if (!isRangeCapableContentType(contentType)) {
+        return new Response(options.data, {
+            status: 200,
+            headers: { 'content-type': contentType },
+        });
+    }
+
+    const baseMediaHeaders: Record<string, string> = {
+        'content-type': contentType,
+        'accept-ranges': 'bytes',
+    };
+
+    if (options.rangeHeader === null) {
+        return new Response(options.data, {
+            status: 200,
+            headers: { ...baseMediaHeaders, 'content-length': String(size) },
+        });
+    }
+
+    const range = parseSingleByteRange(options.rangeHeader, size);
+    if (range === null) {
+        return new Response('Range Not Satisfiable', {
+            status: 416,
+            headers: { ...baseMediaHeaders, 'content-range': `bytes */${size}` },
+        });
+    }
+
+    const chunk = options.data.subarray(range.start, range.end + 1);
+    return new Response(chunk, {
+        status: 206,
+        headers: {
+            ...baseMediaHeaders,
+            'content-range': `bytes ${range.start}-${range.end}/${size}`,
+            'content-length': String(chunk.byteLength),
+        },
+    });
+}
 
 function isRendererProtocolRscRequest(url: URL, headers: RendererProtocolHeaders): boolean {
     return url.searchParams.has('_rsc') || headers.get('RSC') === '1';
@@ -656,11 +777,10 @@ async function handleRendererProtocolRequest(
 
     try {
         const data = await readFile(filePath);
-        return new Response(data, {
-            status: 200,
-            headers: {
-                'content-type': contentTypeForPath(filePath),
-            },
+        return buildRendererProtocolResponse({
+            filePath,
+            data,
+            rangeHeader: request.headers.get('range'),
         });
     } catch (error) {
         const code = codeFromError(error);
