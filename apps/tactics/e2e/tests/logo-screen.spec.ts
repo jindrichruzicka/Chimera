@@ -56,8 +56,20 @@ test.describe('Game logo screen (§4.37 / #858)', () => {
             timeout: NAV_TIMEOUT_MS,
         });
 
-        // Any click is a skip input (LogoVideoScreen wires window 'click').
-        await mainWindow.getByTestId('logo-video-screen').click();
+        // LogoVideoScreen wires the skip to a `window` 'click' listener, so
+        // dispatch the event on `window` directly instead of `locator.click()`.
+        // The real brand video reaches its `ended`/`error` exit fast enough to
+        // race a locator click (the screen fades out and detaches mid-action);
+        // a synchronous `window`-level dispatch lands the skip the instant the
+        // screen is up, before any auto-advance can win. The e2e tsconfig ships
+        // no DOM lib, so browser globals are reached through a structural cast.
+        await mainWindow.evaluate(() => {
+            const browser = globalThis as unknown as {
+                dispatchEvent: (event: unknown) => boolean;
+                MouseEvent: new (type: string, init?: { bubbles?: boolean }) => unknown;
+            };
+            browser.dispatchEvent(new browser.MouseEvent('click', { bubbles: true }));
+        });
 
         await expect(mainWindow).toHaveURL(/\/main-menu\/?\?gameId=tactics$/, {
             timeout: NAV_TIMEOUT_MS,
