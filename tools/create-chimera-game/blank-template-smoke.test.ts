@@ -171,6 +171,33 @@ describe('blank template smoke harness', () => {
         expect(loaders).toContain('cursor: __gameCamel__Manifest.cursor');
     });
 
+    it('declares the engine default logo screen as an ACTIVE manifest field (#857)', async () => {
+        const manifest = await read('manifest.ts');
+        // Active, not a commented-out example like cursor (#849): every scaffolded
+        // game boots Chimera-branded out of the box; a game opts out by deleting
+        // the field (or points the route at its own custom page).
+        expect(manifest).toContain("logoScreen: { route: '/logo-screen' }");
+        expect(manifest).not.toContain('// logoScreen');
+    });
+
+    it('re-exports the engine logo-screen page at the declared route (#857)', async () => {
+        const page = await read('renderer/app/logo-screen/page.tsx');
+        expect(page).toContain(
+            "export { default } from '@chimera-engine/renderer/shell/logo-screen/page';",
+        );
+    });
+
+    it('ships the committed engine brand video under renderer/public (#857)', async () => {
+        // Next serves each host's own public/, so the template commits its own
+        // copy (same pattern as chimera-logo-compact.png). A scaffolded game
+        // replacing it with its own media owns that asset (Invariant #97).
+        const mp4 = await readFile(
+            path.join(blankTemplateDir, 'renderer', 'public', 'chimera_logo.mp4'),
+        );
+        // ISO base media file format: bytes 4-8 of the first box are 'ftyp'.
+        expect(mp4.subarray(4, 8).toString('latin1')).toBe('ftyp');
+    });
+
     it('names no model game in any smoke file (tokens only)', async () => {
         const files = [
             'manifest.test.ts',

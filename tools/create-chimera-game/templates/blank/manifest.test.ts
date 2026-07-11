@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
@@ -23,5 +25,19 @@ describe('__gameCamel__Manifest', () => {
         // Renderer-relative path the F67 resolver maps to apps/<gameId>/assets/icons/icon.png;
         // electron-builder reuses the same PNG for the distributable bundle icon.
         expect(__gameCamel__Manifest.icon).toBe('icons/icon.png');
+    });
+
+    it('declares the engine default logo screen so a packaged boot lands on it', () => {
+        expect(__gameCamel__Manifest.logoScreen).toEqual({ route: '/logo-screen' });
+    });
+
+    it('re-exports the engine logo-screen page at the declared route', () => {
+        const pageSource = readFileSync(
+            fileURLToPath(new URL('./renderer/app/logo-screen/page.tsx', import.meta.url)),
+            'utf8',
+        );
+        expect(pageSource).toContain(
+            "export { default } from '@chimera-engine/renderer/shell/logo-screen/page';",
+        );
     });
 });

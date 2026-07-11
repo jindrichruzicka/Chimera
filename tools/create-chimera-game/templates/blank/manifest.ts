@@ -23,6 +23,12 @@ import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
  * directory (`assets/`, Invariant #97), resolved by the renderer through the
  * game-asset protocol. Absent ⇒ the plain system cursor. `hotspot` is the
  * click point in image pixels from the texture's top-left; omit it for (0, 0).
+ *
+ * `logoScreen` (F70) points a packaged boot at `renderer/app/logo-screen/`, a
+ * thin re-export of the engine default logo page playing the committed
+ * `renderer/public/chimera_logo.mp4`; dev boots skip it and go straight to
+ * the main menu. Remove the field to skip it in packaged builds too, or point
+ * the route at your own page for a custom logo/intro sequence.
  */
 export const __gameCamel__Manifest: GameManifest = {
     gameId: __GAME_CONSTANT___GAME_ID,
@@ -33,4 +39,5 @@ export const __gameCamel__Manifest: GameManifest = {
     // cursor: {
     //     default: { image: 'cursors/default.png', hotspot: { x: 0, y: 0 } },
     // },
+    logoScreen: { route: '/logo-screen' },
 };
