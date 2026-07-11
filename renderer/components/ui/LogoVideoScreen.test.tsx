@@ -192,8 +192,10 @@ describe('LogoVideoScreen — app-level screen fade', () => {
         // frame ran — the video never flashes before the fade.
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('1');
 
+        // The logo fade-in runs at the slow duration (screenFadeMs('slow') =
+        // 400ms); advance past it to reach the fully-revealed state.
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(400);
+            await vi.advanceTimersByTimeAsync(800);
         });
 
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
@@ -201,22 +203,23 @@ describe('LogoVideoScreen — app-level screen fade', () => {
 
     it('on skip fades back to black and only then calls onDone', async () => {
         renderWithFade(onDone);
+        // Let the slow (400ms) fade-in complete first.
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(400);
+            await vi.advanceTimersByTimeAsync(800);
         });
 
         fireEvent.click(window);
         // The exit is asynchronous: the fade-out must complete before onDone.
         expect(onDone).not.toHaveBeenCalled();
 
-        // Mid-fade (screenFadeMs() = 200) the exit is still pending.
+        // Mid-fade (screenFadeMs('slow') = 400ms) the exit is still pending.
         await act(async () => {
             await vi.advanceTimersByTimeAsync(100);
         });
         expect(onDone).not.toHaveBeenCalled();
 
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(400);
+            await vi.advanceTimersByTimeAsync(800);
         });
 
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('1');

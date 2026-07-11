@@ -393,8 +393,10 @@ describe('MainMenuPage — app-level screen fade', () => {
         // frame ran — the menu never flashes before the fade.
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('1');
 
+        // The menu fade-in runs at the slow duration (screenFadeMs('slow') =
+        // 400ms); advance past it to reach the fully-revealed state.
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(400);
+            await vi.advanceTimersByTimeAsync(800);
         });
 
         // The fade-in completed and the overlay is fully transparent.
@@ -412,7 +414,7 @@ describe('MainMenuPage — app-level screen fade', () => {
             </ThemeProvider>,
         );
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(400);
+            await vi.advanceTimersByTimeAsync(800);
         });
         cleanup();
 
@@ -429,7 +431,7 @@ describe('MainMenuPage — app-level screen fade', () => {
         );
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(400);
+            await vi.advanceTimersByTimeAsync(800);
         });
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
     });
@@ -446,7 +448,7 @@ describe('MainMenuPage — app-level screen fade', () => {
             </ThemeProvider>,
         );
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(400);
+            await vi.advanceTimersByTimeAsync(800);
         });
         cleanup();
 
@@ -463,7 +465,7 @@ describe('MainMenuPage — app-level screen fade', () => {
 
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('1');
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(400);
+            await vi.advanceTimersByTimeAsync(800);
         });
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
     });

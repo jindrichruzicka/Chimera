@@ -140,7 +140,7 @@ function useMainMenuFadeIn(): void {
 
     React.useEffect(() => {
         menuHasAppeared = true;
-        void fadeRef.current?.fadeIn(screenFadeMs());
+        void fadeRef.current?.fadeIn(screenFadeMs('slow'));
     }, []);
 }
 

@@ -33,7 +33,7 @@ export function LogoVideoScreen({
     }, []);
 
     React.useEffect(() => {
-        void fadeRef.current?.fadeIn(screenFadeMs());
+        void fadeRef.current?.fadeIn(screenFadeMs('slow'));
     }, []);
 
     const beginExit = React.useCallback((): void => {
@@ -45,7 +45,7 @@ export function LogoVideoScreen({
             // If the component unmounts mid-fade the promise still settles (the
             // provider cancels-and-resolves on teardown), so onDone fires at
             // most once either way.
-            await fadeRef.current?.fadeOut(screenFadeMs());
+            await fadeRef.current?.fadeOut(screenFadeMs('slow'));
             onDoneRef.current();
         })();
     }, []);
