@@ -164,6 +164,39 @@
             "console": "integratedTerminal",
             "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
             "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Package: Tactics — Windows (.exe / nsis)",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": ["run", "package:tactics:win"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Package: Tactics — Linux (AppImage)",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": ["run", "package:tactics:linux-appimage"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Package: Tactics — Linux (folder)",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": ["run", "package:tactics:linux-dir"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
         }
     ]
 }
