@@ -4,10 +4,13 @@ import {
     DEFAULT_CURSOR_HOTSPOT,
     DEFAULT_TICK_RATE_MS,
     DEFAULT_WINDOW_TITLE,
+    firstLanguageCode,
     resolveGameCursor,
+    resolveGameLanguages,
     resolveGameLogoScreen,
     resolveTickerHz,
     resolveWindowTitle,
+    type GameLanguage,
     type GameLogoScreen,
     type GameManifest,
 } from './game-manifest-contract.js';
@@ -171,5 +174,152 @@ describe('resolveGameLogoScreen', () => {
         const resolved = resolveGameLogoScreen(manifest);
         expect(manifest.logoScreen).toEqual({ route: '/logo-screen' });
         expect(resolved).not.toBe(logoScreen);
+    });
+});
+
+describe('resolveGameLanguages', () => {
+    it('returns undefined when there is no manifest', () => {
+        expect(resolveGameLanguages(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined when the manifest declares no languages — single-language, selector stays hidden', () => {
+        expect(resolveGameLanguages(makeManifest())).toBeUndefined();
+    });
+
+    it('returns undefined for an empty array', () => {
+        expect(resolveGameLanguages(makeManifest({ languages: [] }))).toBeUndefined();
+    });
+
+    it('returns undefined for a single valid entry — single-language is behaviour-neutral', () => {
+        const manifest = makeManifest({ languages: [{ code: 'en-US', label: 'English' }] });
+        expect(resolveGameLanguages(manifest)).toBeUndefined();
+    });
+
+    it('resolves a valid two-entry array, preserving code and label', () => {
+        const manifest = makeManifest({
+            languages: [
+                { code: 'en-US', label: 'English' },
+                { code: 'cs-CZ', label: 'Čeština' },
+            ],
+        });
+        expect(resolveGameLanguages(manifest)).toEqual([
+            { code: 'en-US', label: 'English' },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ]);
+    });
+
+    it('dedupes duplicate codes, first occurrence wins', () => {
+        const manifest = makeManifest({
+            languages: [
+                { code: 'en-US', label: 'English (first)' },
+                { code: 'cs-CZ', label: 'Čeština' },
+                { code: 'en-US', label: 'English (second)' },
+            ],
+        });
+        expect(resolveGameLanguages(manifest)).toEqual([
+            { code: 'en-US', label: 'English (first)' },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ]);
+    });
+
+    it('drops an entry with a non-string code without throwing', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = [
+            { code: 42, label: 'English' },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ] as unknown as readonly GameLanguage[];
+        expect(resolveGameLanguages(makeManifest({ languages: malformed }))).toBeUndefined();
+    });
+
+    it('drops an entry with an empty-string code without throwing', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = [
+            { code: '', label: 'English' },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ] as unknown as readonly GameLanguage[];
+        expect(resolveGameLanguages(makeManifest({ languages: malformed }))).toBeUndefined();
+    });
+
+    it('drops an entry with a non-string label without throwing', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = [
+            { code: 'en-US', label: 7 },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ] as unknown as readonly GameLanguage[];
+        expect(resolveGameLanguages(makeManifest({ languages: malformed }))).toBeUndefined();
+    });
+
+    it('drops an entry with an empty-string label without throwing', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = [
+            { code: 'en-US', label: '' },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ] as unknown as readonly GameLanguage[];
+        expect(resolveGameLanguages(makeManifest({ languages: malformed }))).toBeUndefined();
+    });
+
+    it('returns undefined when dropping malformed entries brings the valid count below 2', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = [
+            { code: 'en-US', label: 'English' },
+            { code: '', label: 'Bad' },
+            { code: 42, label: 'Also bad' },
+        ] as unknown as readonly GameLanguage[];
+        expect(resolveGameLanguages(makeManifest({ languages: malformed }))).toBeUndefined();
+    });
+
+    it('does not mutate the manifest languages array or its entries', () => {
+        const languages = [
+            { code: 'en-US', label: 'English' },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ] as const;
+        const manifest = makeManifest({ languages });
+        const resolved = resolveGameLanguages(manifest);
+        expect(manifest.languages).toEqual([
+            { code: 'en-US', label: 'English' },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ]);
+        expect(resolved).not.toBe(languages);
+    });
+});
+
+describe('firstLanguageCode', () => {
+    it('returns undefined when there is no manifest', () => {
+        expect(firstLanguageCode(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined when languages is absent', () => {
+        expect(firstLanguageCode(makeManifest())).toBeUndefined();
+    });
+
+    it('returns undefined when only a single valid entry is declared', () => {
+        const manifest = makeManifest({ languages: [{ code: 'en-US', label: 'English' }] });
+        expect(firstLanguageCode(manifest)).toBeUndefined();
+    });
+
+    it("returns the first resolved entry's code for a valid two-entry declaration", () => {
+        const manifest = makeManifest({
+            languages: [
+                { code: 'en-US', label: 'English' },
+                { code: 'cs-CZ', label: 'Čeština' },
+            ],
+        });
+        expect(firstLanguageCode(manifest)).toBe('en-US');
+    });
+
+    it('returns the code that dedup determines survives at index 0', () => {
+        const manifest = makeManifest({
+            languages: [
+                { code: 'cs-CZ', label: 'Čeština (first)' },
+                { code: 'en-US', label: 'English' },
+                { code: 'cs-CZ', label: 'Čeština (second)' },
+            ],
+        });
+        expect(firstLanguageCode(manifest)).toBe('cs-CZ');
     });
 });

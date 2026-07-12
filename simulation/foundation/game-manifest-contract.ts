@@ -2,10 +2,10 @@
 //
 // Per-game manifest: the small, pure-data descriptor each game declares about
 // itself (display name, window title, real-time loop mode, optional icon,
-// hardware-cursor textures and logo screen). Lives in `shared/` with zero
-// platform imports so BOTH the main process (window title + RealtimeTicker)
-// and the renderer (game-shell display name, cursor token overrides) read one
-// source of truth.
+// hardware-cursor textures, logo screen and UI languages). Lives in `shared/`
+// with zero platform imports so BOTH the main process (window title +
+// RealtimeTicker) and the renderer (game-shell display name, cursor token
+// overrides) read one source of truth.
 // The host wall-clock fields (`realtime`, `tickRateMs`) never enter the
 // deterministic core — they only steer how the host drives `engine:tick`
 // (Invariant #2).
@@ -62,6 +62,14 @@ export interface GameLogoScreen {
     readonly route: `/${string}`;
 }
 
+/** One language a game ships UI translations for. */
+export interface GameLanguage {
+    /** BCP-47 tag, e.g. 'en-US', 'cs-CZ'. Matches EngineSettings.gameplay.language. */
+    readonly code: string;
+    /** Endonym shown in the selector, e.g. 'English', 'Čeština'. */
+    readonly label: string;
+}
+
 /** Everything a game declares about itself, independent of platform layer. */
 export interface GameManifest {
     /** Stable game id; must equal the game's `gameId` (e.g. `'tactics'`). */
@@ -110,6 +118,17 @@ export interface GameManifest {
      * (via `withShellGameId`).
      */
     readonly logoScreen?: GameLogoScreen;
+    /**
+     * Optional list of UI languages this game ships. Absent (or fewer than 2)
+     * ⇒ the game is single-language: the engine hides the language selector and
+     * the settings language entry, and never switches locale. Present ⇒ the
+     * renderer offers these languages; the first entry is the game's default
+     * when the persisted gameplay.language matches none of them. Pure data here —
+     * bundles themselves are contributed renderer-side (see the translations task).
+     * Codes are opaque BCP-47 strings at this layer — no `Intl` calls here
+     * (Invariant #1); only the renderer interprets them.
+     */
+    readonly languages?: readonly GameLanguage[];
 }
 
 /** Resolve the OS window title for a (possibly absent) game manifest. */
@@ -183,4 +202,57 @@ export function resolveGameLogoScreen(
         return undefined;
     }
     return { route: route as `/${string}` };
+}
+
+/**
+ * Resolve a manifest's UI-language declaration. Returns `undefined` when
+ * there is no manifest, no `languages` field, the field is not an array, or
+ * fewer than 2 entries survive validation — all behaviour-neutral: the game
+ * is treated as single-language, so the selector stays hidden and locale is
+ * never switched. Malformed entries (a `code` or `label` that is not a
+ * non-empty string) are dropped rather than thrown on, so a bad manifest can
+ * never brick a packaged boot. Duplicate `code`s are deduped, first
+ * occurrence wins. Never throws. Never mutates the input, and never aliases
+ * the input array or its entries — always returns a fresh array of fresh
+ * `{ code, label }` objects. Codes are opaque BCP-47 strings at this layer;
+ * no `Intl` calls (Invariant #1) — resolving a code to a translation bundle
+ * is a renderer concern.
+ */
+export function resolveGameLanguages(
+    manifest: GameManifest | undefined,
+): readonly GameLanguage[] | undefined {
+    const declared: unknown = manifest?.languages;
+    if (!Array.isArray(declared) || declared.length === 0) {
+        return undefined;
+    }
+    const seenCodes = new Set<string>();
+    const resolved: GameLanguage[] = [];
+    for (const entry of declared as readonly unknown[]) {
+        const candidate = entry as { readonly code?: unknown; readonly label?: unknown };
+        const code = candidate?.code;
+        const label = candidate?.label;
+        if (typeof code !== 'string' || code.length === 0) {
+            continue;
+        }
+        if (typeof label !== 'string' || label.length === 0) {
+            continue;
+        }
+        if (seenCodes.has(code)) {
+            continue;
+        }
+        seenCodes.add(code);
+        resolved.push({ code, label });
+    }
+    return resolved.length >= 2 ? resolved : undefined;
+}
+
+/**
+ * The game's default language code: the first entry of the *resolved*
+ * (validated, deduped) language list — not necessarily `manifest.languages[0]`,
+ * since a raw first entry that is malformed or a later duplicate of an
+ * earlier code will not survive resolution. `undefined` under every
+ * condition where {@link resolveGameLanguages} returns `undefined`.
+ */
+export function firstLanguageCode(manifest: GameManifest | undefined): string | undefined {
+    return resolveGameLanguages(manifest)?.[0]?.code;
 }
