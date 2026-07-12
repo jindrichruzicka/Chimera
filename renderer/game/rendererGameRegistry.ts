@@ -10,12 +10,35 @@ import type {
 import type {
     GameCursorImage,
     GameCursorRole,
+    GameLanguage,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import type { TranslationBundle } from '../i18n/translation-bundle.js';
 import type { InputAction } from '../input/InputAction.js';
 import { loadGameFonts } from './GameFontLoader';
 import { warmGameImages } from './GameImageWarmup';
 import { applyGameCursorOverrides } from './gameCursorStyles';
+
+/**
+ * A game's contributed UI translations, forwarded verbatim through the renderer
+ * shell registration. This is the boundary-safe path for a game's per-locale
+ * bundles to reach the {@link I18nProvider}: no `renderer/` → `games/*`/`apps/*`
+ * static import (Invariants #80/#94) — the data enters only as registration
+ * payload, exactly like {@link LoadedRendererGameShell.cursor}.
+ *
+ * `languages` mirrors the game's declared, resolved `GameManifest.languages`
+ * (see `resolveGameLanguages`), carried alongside the bundles so the registry
+ * loader can dev-warn on a bundle locale that matches no declared language (a
+ * typo guard). `bundles` are per-locale flat token maps that may re-key engine
+ * tokens (override) and/or add game-namespaced tokens; the provider's fallback
+ * chain (game override → engine default → raw key) does the rest.
+ */
+export interface GameTranslations {
+    /** The game's declared UI languages (resolved), for locale cross-checking. */
+    readonly languages: readonly GameLanguage[];
+    /** locale code (BCP-47) → flat token bundle. */
+    readonly bundles: Readonly<Record<string, TranslationBundle>>;
+}
 
 export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
@@ -50,6 +73,16 @@ export interface LoadedRendererGameShell {
      * manifest declares one.
      */
     readonly cursor?: Partial<Record<GameCursorRole, GameCursorImage>> | undefined;
+    /**
+     * Optional game-contributed UI translation bundles (see {@link GameTranslations}).
+     * The app root feeds the active-locale bundle into `<I18nProvider>` as the
+     * `gameOverride` layer through this registry seam (wiring lives with the
+     * provider-mount task). Absent ⇒ the provider gets no override layer ⇒
+     * engine English only (the single-language path). Passed through the loaded
+     * shell unmodified; the loader only dev-warns on a bundle locale that
+     * matches no declared language.
+     */
+    readonly translations?: GameTranslations;
 }
 
 export interface LoadedRendererGame {
@@ -136,6 +169,37 @@ export function getDefaultRendererGameId(): string {
     return defaultRendererGameId;
 }
 
+/**
+ * Light, dev-time validation for a game's contributed translations. The data is
+ * code-authored, so this is a typo-catching safety net, never a hard error:
+ * every check degrades to a `console.warn` and the shell still loads. Warns when
+ * the bundle map is not a plain object, and for each bundle locale that matches
+ * no declared {@link GameLanguage} code (the provider simply won't select it). A
+ * non-array `languages` is tolerated the same way — it yields an empty declared
+ * set, so every bundle locale reads as undeclared and warns rather than throwing.
+ */
+function warnOnUndeclaredTranslationLocales(gameId: string, translations: GameTranslations): void {
+    const { bundles, languages } = translations;
+    if (typeof bundles !== 'object' || bundles === null) {
+        console.warn(
+            `[chimera] game '${gameId}' contributed a translations bundle map that is not an object; ignoring.`,
+        );
+        return;
+    }
+    // `languages` is statically typed as an array, but this helper defends the
+    // code-authored cast escape hatch the sibling `bundles` guard also covers:
+    // a non-array must yield an empty declared set, never throw on `.map`.
+    const declaredLanguages: readonly GameLanguage[] = Array.isArray(languages) ? languages : [];
+    const declaredCodes = new Set(declaredLanguages.map((language) => language.code));
+    for (const locale of Object.keys(bundles)) {
+        if (!declaredCodes.has(locale)) {
+            console.warn(
+                `[chimera] game '${gameId}' contributes a translation bundle for locale '${locale}' with no matching declared language; the provider will not select it.`,
+            );
+        }
+    }
+}
+
 export async function loadRendererGame(gameId: string): Promise<LoadedRendererGame> {
     const loader = rendererGameLoaders.get(gameId);
     if (loader === undefined) {
@@ -151,6 +215,9 @@ export async function loadRendererGame(gameId: string): Promise<LoadedRendererGa
     }
     if (game.shell?.cursor !== undefined) {
         await applyGameCursorOverrides(gameId, game.shell.cursor);
+    }
+    if (game.shell?.translations !== undefined) {
+        warnOnUndeclaredTranslationLocales(gameId, game.shell.translations);
     }
     return game;
 }
@@ -170,6 +237,9 @@ export async function loadRendererGameShell(gameId: string): Promise<LoadedRende
     }
     if (shell.cursor !== undefined) {
         await applyGameCursorOverrides(gameId, shell.cursor);
+    }
+    if (shell.translations !== undefined) {
+        warnOnUndeclaredTranslationLocales(gameId, shell.translations);
     }
     return shell;
 }

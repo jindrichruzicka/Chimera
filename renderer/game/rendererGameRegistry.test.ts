@@ -10,7 +10,9 @@ import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation
 import type {
     GameCursorImage,
     GameCursorRole,
+    GameLanguage,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import type { TranslationBundle } from '../i18n/translation-bundle.js';
 import {
     _resetRendererGameRegistryForTest,
     getDefaultRendererGameId,
@@ -19,6 +21,7 @@ import {
     loadRendererGameShell,
     NoDefaultRendererGameError,
     registerRendererGame,
+    type GameTranslations,
     type LoadedRendererGame,
     type LoadedRendererGameShell,
     type RendererGameContribution,
@@ -235,6 +238,144 @@ describe('rendererGameRegistry', () => {
         });
     });
 
+    describe('shell.translations game-contribution seam (#866)', () => {
+        const EN: GameLanguage = { code: 'en-US', label: 'English' };
+        const CS: GameLanguage = { code: 'cs-CZ', label: 'Čeština' };
+        const EN_BUNDLE: TranslationBundle = { 'engine.menu.play': 'Play' };
+        const CS_BUNDLE: TranslationBundle = { 'engine.menu.play': 'Hrát' };
+
+        function makeTranslations(overrides?: Partial<GameTranslations>): GameTranslations {
+            return {
+                languages: [EN, CS],
+                bundles: { 'en-US': EN_BUNDLE, 'cs-CZ': CS_BUNDLE },
+                ...overrides,
+            };
+        }
+
+        let warnSpy: ReturnType<typeof vi.spyOn>;
+
+        beforeEach(() => {
+            warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        });
+
+        afterEach(() => {
+            warnSpy.mockRestore();
+        });
+
+        function registerTranslationsShell(translations: GameTranslations): void {
+            const shell = fakeShell({ translations });
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(fakeGame({ shell })),
+                loadShell: () => Promise.resolve(shell),
+                isDefault: true,
+            });
+        }
+
+        it('exposes the contributed translations on the loaded shell, unmodified', async () => {
+            const translations = makeTranslations();
+            registerTranslationsShell(translations);
+
+            const loaded = await loadRendererGameShell('fake');
+
+            expect(loaded.translations).toEqual(translations);
+            // Passed through by reference — the registry never clones or merges.
+            expect(loaded.translations).toBe(translations);
+        });
+
+        it('leaves translations undefined when the shell contributes none', async () => {
+            registerFake();
+
+            const loaded = await loadRendererGameShell('fake');
+
+            expect(loaded.translations).toBeUndefined();
+        });
+
+        it('warns for a bundle locale with no matching declared language', async () => {
+            registerTranslationsShell(
+                makeTranslations({
+                    languages: [EN],
+                    bundles: { 'en-US': EN_BUNDLE, 'cs-CZ': CS_BUNDLE },
+                }),
+            );
+
+            await loadRendererGameShell('fake');
+
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            const [message] = warnSpy.mock.calls[0] ?? [];
+            expect(String(message)).toContain('cs-CZ');
+        });
+
+        it('does not warn when every bundle locale matches a declared language', async () => {
+            registerTranslationsShell(makeTranslations());
+
+            await loadRendererGameShell('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('warns and does not throw when the bundle map is not a plain object', async () => {
+            registerTranslationsShell(
+                makeTranslations({
+                    // A code-authored typo could hand us a non-object; light validation
+                    // must degrade to a dev warning, never crash the shell load.
+                    bundles: null as unknown as GameTranslations['bundles'],
+                }),
+            );
+
+            await expect(loadRendererGameShell('fake')).resolves.toBeDefined();
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+        });
+
+        it('warns and does not throw when languages is not an array', async () => {
+            registerTranslationsShell(
+                makeTranslations({
+                    // Same code-authored cast escape hatch as the bundle-map guard:
+                    // a non-array languages must degrade to a warning, not crash the
+                    // shell load with a TypeError on .map — every bundle locale is
+                    // then undeclared, so each warns.
+                    languages: null as unknown as GameTranslations['languages'],
+                    bundles: { 'en-US': EN_BUNDLE, 'cs-CZ': CS_BUNDLE },
+                }),
+            );
+
+            await expect(loadRendererGameShell('fake')).resolves.toBeDefined();
+            expect(warnSpy).toHaveBeenCalledTimes(2);
+            const messages = warnSpy.mock.calls.map((call) => String(call[0]));
+            expect(messages.some((message) => message.includes('en-US'))).toBe(true);
+            expect(messages.some((message) => message.includes('cs-CZ'))).toBe(true);
+        });
+
+        it('warns for an undeclared locale when translations arrive via loadRendererGame', async () => {
+            const shell = fakeShell({
+                translations: makeTranslations({
+                    languages: [EN],
+                    bundles: { 'en-US': EN_BUNDLE, 'cs-CZ': CS_BUNDLE },
+                }),
+            });
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(fakeGame({ shell })),
+                loadShell: () => Promise.resolve(shell),
+                isDefault: true,
+            });
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            const [message] = warnSpy.mock.calls[0] ?? [];
+            expect(String(message)).toContain('cs-CZ');
+        });
+
+        it('a shell without translations warns nothing', async () => {
+            registerFake();
+
+            await loadRendererGameShell('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+    });
+
     it('rejects unknown game ids', async () => {
         registerFake();
 
@@ -326,6 +467,13 @@ describe('rendererGameRegistry', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['LobbyScreen']>().toEqualTypeOf<
                 ComponentType<GameLobbyScreenProps> | undefined
+            >();
+        });
+
+        it('shell.translations is typed as GameTranslations | undefined (#866)', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['translations']>().toEqualTypeOf<
+                GameTranslations | undefined
             >();
         });
 
