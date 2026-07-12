@@ -47,7 +47,8 @@
         "assets",
         "CHANGELOG.md",
         "preload/api-types.ts",
-        "preload/debug-api-types.ts"
+        "preload/debug-api-types.ts",
+        "!dist/**/__test-support__/**"
     ],
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
