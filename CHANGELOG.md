@@ -7,9 +7,41 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-07-12
+
+### Added
+
+- Monorepo pnpm Workspace Foundation — pnpm workspace skeleton, `workspace:*` inter-package deps, and `tsc --build` project references with composite per-package tsconfig (F57)
+- `@chimera-engine/simulation` — the pure deterministic simulation core extracted as a standalone published package, including a composable `SimulationHost` usable outside Electron (F58)
+- `@chimera-engine/ai` — the AI framework extracted as a standalone published package (F59)
+- `@chimera-engine/networking` — the networking layer extracted as a standalone published package (F60)
+- `@chimera-engine/renderer` — the React / R3F renderer shell, store, and game-registration seam extracted as a standalone published package (F61)
+- `@chimera-engine/electron` — the Electron main/preload host extracted as a standalone published package, reduced to a thin wrapper composing the `SimulationHost` (F62)
+- Tactics Standalone Consumer App — the tactics game relocated to `apps/tactics/` as a standalone app consuming the published engine packages, with the E2E suite migrated alongside (F63)
+- Package Build/Link/Update Pipeline — the build/link/update pipeline that lets consumer apps build against and update the engine packages (F64)
+- `create-chimera-game` CLI + Blank Template — `npm create chimera-game` scaffolds a self-contained, bootable game project (own toolchain, frozen tsconfig, published `@chimera-engine/*` deps) from a blank template; `verify:scaffold` boots the emitted project end-to-end from packed tarballs (F65)
+- Engine Package Publishing & Release Pipeline — publish-ready package metadata, independent per-package semantic versioning via Changesets with per-package CHANGELOGs, and the `release.yml` CI publish workflow with npm provenance (F66)
+- App Icon & Per-Game Branding — the default Chimera icon set (dev-runtime `chimera.png` + `.icns`/`.ico` build set) plus per-game icon and tokenised electron-builder packaging wired into the blank template; standalone build-and-package out of the monorepo (F67)
+- Save System — in-game save and restorable sessions: `SaveFile` v6, `SessionRestoreCoordinator`, and the restore-status IPC surface (F68)
+- Per-Game Hardware Mouse Cursor — the optional `GameManifest.cursor` declaration, the `--ch-cursor-*` token family with all engine cursor styles tokenised, and the renderer registry injector that resolves declared cursor textures over the game-asset protocol and pre-decodes them so the first paint never flashes the system cursor (F69)
+- Game Logo Screen — the optional `GameManifest.logoScreen` declaration, the engine default `LogoVideoScreen` and re-exportable shell logo page, and packaged boots launching into the declared logo-screen route before handing off to the main menu (F70)
+
+### Changed
+
+- Unified keyboard-focus (`:focus-visible`) styling across the UI kit — all interactive primitives draw their focus indicator at or inside the border-box through the single `--ch-focus-ring-color` token (overridable per game), so scroll containers can never clip the indicator; `Button` and `Slider` gain focus styles they previously lacked
+
+### Fixed
+
+- Player colours (and other host-authored seat attributes) no longer flash their default value for one frame at the start of a replay before snapping to the chosen value
+- "Return to lobby" after a match ends (from the post-game summary or the post-game replay) now works — the `ActionPipeline` terminal-match gate allows `engine:return_to_lobby` after a `gameResult` is recorded, and the leave action is context-aware (back to lobby vs. replay library)
+
 ### Removed
 
 - Crash recovery — removed the `CrashRecoveryBanner` "Resume last session" prompt and the entire unclean-shutdown detection mechanism: the `lastCleanExit.flag` sentinel, `SaveManager.checkCrashRecovery` / `markCleanExit` / `clearCleanExitFlag`, the `chimera:saves:check-crash-recovery` and `chimera:system:was-clean-exit` IPC channels, `CrashRecoveryStatus`, and the `triggerCrashSave` E2E hook. Autosave (including the crash reporter's autosave-before-crash-dump) and manual save/load are unaffected.
+
+### Packages
+
+- First public npm release of the engine packages during this milestone (`@chimera-engine/{simulation,ai,networking,renderer,electron}@0.9.0`, `create-chimera-game@0.1.0`). The F67–F70 additions in this milestone advance them to `@chimera-engine/{simulation,renderer,electron}@0.10.0`, `@chimera-engine/{ai,networking}@0.9.1`, and `create-chimera-game@0.2.0` — see each package's `CHANGELOG.md` for details.
 
 ## [0.8.0] — 2026-06-19
 
@@ -119,6 +151,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pino sink uses async writes with `flushSync` on crash/quit paths; SonicBoom destination closed before day-rollover
 - Crash dump write guarded against circular refs and oversized payloads; `process.exit(1)` after fatal crash dump
 
+[0.9.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.9.0
 [0.8.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.8.0
 [0.7.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.7.0
 [0.6.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.6.0
@@ -127,4 +160,4 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 [0.3.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.1.0
-[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.9.0...HEAD

@@ -1,6 +1,6 @@
 {
     "name": "@chimera-engine/networking",
-    "version": "0.9.0",
+    "version": "0.9.1",
     "description": "Host/client multiplayer transport + provider interfaces for the Chimera engine.",
     "license": "MIT",
     "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",
