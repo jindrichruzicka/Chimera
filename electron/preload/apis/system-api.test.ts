@@ -4,6 +4,7 @@ import {
     SYSTEM_CONNECTION_STATUS_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
+    SYSTEM_I18N_TOKEN_MODE_CHANNEL,
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
     SYSTEM_RELAUNCH_CHANNEL,
@@ -179,6 +180,38 @@ describe('createSystemApi', () => {
             expect(cbA).not.toHaveBeenCalled();
             expect(cbB).toHaveBeenCalledOnce();
             expect(cbB).toHaveBeenCalledWith('connecting');
+        });
+    });
+
+    describe('onI18nTokenMode()', () => {
+        it('registers a listener on chimera:system:i18n-token-mode and forwards the boolean', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+            const callback = vi.fn<(enabled: boolean) => void>();
+
+            api.onI18nTokenMode(callback);
+
+            const registered = stub.listeners.get(SYSTEM_I18N_TOKEN_MODE_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, true);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(true);
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+            const callback = vi.fn<(enabled: boolean) => void>();
+
+            const unsubscribe = api.onI18nTokenMode(callback);
+            const beforeUnsub = stub.listeners.get(SYSTEM_I18N_TOKEN_MODE_CHANNEL)?.size;
+            unsubscribe();
+
+            expect(beforeUnsub).toBe(1);
+            expect(stub.listeners.get(SYSTEM_I18N_TOKEN_MODE_CHANNEL)?.size).toBe(0);
         });
     });
 

@@ -1087,6 +1087,15 @@ export interface SystemAPI {
      */
     onDeviceInfoChange(cb: (info: DeviceInfo) => void): Unsubscribe;
     /**
+     * Fires when the Debug Inspector's "Show translation tokens" toggle changes
+     * (§4.12, Invariant #28 — a data-free boolean). The main-process debug bridge
+     * pushes it here after an Inspector `SET_I18N_TOKEN_MODE` request; the renderer
+     * flips its i18n token-mode flag. In production the bridge never starts, so
+     * this never fires and the flag stays `false` (Invariant #27). Returns an
+     * unsubscribe function.
+     */
+    onI18nTokenMode(cb: (enabled: boolean) => void): Unsubscribe;
+    /**
      * Toggle the Debug Inspector window (§4.12). Data-free fire-and-forget
      * `send` on `chimera:debug:toggle-inspector` — an `ipcMain.on` channel
      * registered only by `debug-bridge.ts` when `IS_DEBUG_MODE` is true, so

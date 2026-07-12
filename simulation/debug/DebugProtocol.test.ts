@@ -119,6 +119,8 @@ describe('DebugProtocol — DebugRequest union', () => {
                 return 'subscribe';
             case 'UNSUBSCRIBE_LIVE':
                 return 'unsubscribe';
+            case 'SET_I18N_TOKEN_MODE':
+                return `i18n-token-mode:${request.enabled}`;
             default: {
                 const exhaustive: never = request;
                 return exhaustive;
@@ -137,6 +139,7 @@ describe('DebugProtocol — DebugRequest union', () => {
             { type: 'GET_NETWORK_DIAGNOSTICS' },
             { type: 'SUBSCRIBE_LIVE' },
             { type: 'UNSUBSCRIBE_LIVE' },
+            { type: 'SET_I18N_TOKEN_MODE', enabled: true },
         ];
         expect(requests.map(classify)).toEqual([
             'tick-list',
@@ -148,6 +151,7 @@ describe('DebugProtocol — DebugRequest union', () => {
             'network-diagnostics',
             'subscribe',
             'unsubscribe',
+            'i18n-token-mode:true',
         ]);
     });
 

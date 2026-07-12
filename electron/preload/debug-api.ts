@@ -120,6 +120,8 @@ export function createDebugApi(port: DebugApiIpcPort): ChimeraDebugApi {
         subscribeLive: () => request(port, 'ACK', { type: 'SUBSCRIBE_LIVE' }).then(() => undefined),
         unsubscribeLive: () =>
             request(port, 'ACK', { type: 'UNSUBSCRIBE_LIVE' }).then(() => undefined),
+        setI18nTokenMode: (enabled) =>
+            request(port, 'ACK', { type: 'SET_I18N_TOKEN_MODE', enabled }).then(() => undefined),
         onLiveTick: (cb) =>
             subscribePush<DebugResponse | undefined>(port, DEBUG_PUSH_CHANNEL, (payload) => {
                 // Anything that is not a LIVE_TICK push is silently ignored.

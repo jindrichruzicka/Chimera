@@ -431,6 +431,52 @@ describe('debug-bridge — request validation', () => {
         });
     });
 
+    it('SET_I18N_TOKEN_MODE ACKs and forwards the flag to the game renderer without an attached session', async () => {
+        const tokenModeCalls: boolean[] = [];
+        const h = makeBridge({ onI18nTokenModeChange: (enabled) => tokenModeCalls.push(enabled) });
+        const win = openInspector(h);
+
+        expect(
+            await invoke(h, win.webContents, { type: 'SET_I18N_TOKEN_MODE', enabled: true }),
+        ).toEqual({ type: 'ACK' });
+        expect(
+            await invoke(h, win.webContents, { type: 'SET_I18N_TOKEN_MODE', enabled: false }),
+        ).toEqual({ type: 'ACK' });
+
+        expect(tokenModeCalls).toEqual([true, false]);
+    });
+
+    it('SET_I18N_TOKEN_MODE ACKs even when no game-renderer sink is wired', async () => {
+        const h = makeBridge();
+        const win = openInspector(h);
+
+        expect(
+            await invoke(h, win.webContents, { type: 'SET_I18N_TOKEN_MODE', enabled: true }),
+        ).toEqual({ type: 'ACK' });
+    });
+
+    it('rejects SET_I18N_TOKEN_MODE from a foreign sender (Invariant #29)', async () => {
+        const tokenModeCalls: boolean[] = [];
+        const h = makeBridge({ onI18nTokenModeChange: (enabled) => tokenModeCalls.push(enabled) });
+        openInspector(h);
+        const foreign = new FakeWebContents();
+
+        expect(
+            (await invoke(h, foreign, { type: 'SET_I18N_TOKEN_MODE', enabled: true })).type,
+        ).toBe('ERROR');
+        expect(tokenModeCalls).toEqual([]);
+    });
+
+    it('rejects SET_I18N_TOKEN_MODE with a non-boolean enabled field', async () => {
+        const h = makeBridge();
+        const win = openInspector(h);
+
+        expect(
+            (await invoke(h, win.webContents, { type: 'SET_I18N_TOKEN_MODE', enabled: 'yes' }))
+                .type,
+        ).toBe('ERROR');
+    });
+
     it('GET_NETWORK_DIAGNOSTICS returns the injected builder result without an attached session', async () => {
         const diagnostics = {
             localAddresses: ['192.168.0.10'],

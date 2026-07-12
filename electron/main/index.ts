@@ -144,6 +144,7 @@ import { CHAT_MESSAGE_CHANNEL } from '../preload/apis/chat-api.js';
 import {
     SYSTEM_CONNECTION_STATUS_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
+    SYSTEM_I18N_TOKEN_MODE_CHANNEL,
 } from '../preload/apis/system-api.js';
 import {
     createDeviceProbeWatcher,
@@ -1324,6 +1325,16 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     networkInterfaces: () => networkInterfaces(),
                     getHostPort: () => lobbyManager.getHostPort(),
                 }),
+            // Late-bound like getNetworkDiagnostics: `mainWindow` is created
+            // further below and only ever read here at IPC-request time. Relays
+            // the Inspector's token-mode toggle to the game window over the
+            // sanctioned system push channel (Invariant #28 — boolean only).
+            onI18nTokenModeChange: (enabled) => {
+                const win = mainWindow;
+                if (win !== null && !win.isDestroyed()) {
+                    win.webContents.send(SYSTEM_I18N_TOKEN_MODE_CHANNEL, enabled);
+                }
+            },
         });
     }
 

@@ -207,6 +207,14 @@ export interface StartDebugBridgeOptions {
      * `GET_NETWORK_DIAGNOSTICS` answers with an ERROR response.
      */
     readonly getNetworkDiagnostics?: () => NetworkDiagnostics;
+    /**
+     * Sink for the data-free `SET_I18N_TOKEN_MODE` command: relays the boolean to
+     * the game renderer (the real wiring in `index.ts` sends it over the
+     * `chimera:system:*` push channel to the main game window). Late-bound so the
+     * game window need not exist at bridge-start time. Absent (e.g. unit harnesses)
+     * ⇒ the request still ACKs; the flip is simply a no-op.
+     */
+    readonly onI18nTokenModeChange?: (enabled: boolean) => void;
     /** Ring buffer capacity override (Invariant #30: always explicit-fixed). */
     readonly ringBufferCapacity?: number;
     /** Action-log cap override — tests only. */
@@ -267,6 +275,7 @@ const debugRequestSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('GET_NETWORK_DIAGNOSTICS') }).strict(),
     z.object({ type: z.literal('SUBSCRIBE_LIVE') }).strict(),
     z.object({ type: z.literal('UNSUBSCRIBE_LIVE') }).strict(),
+    z.object({ type: z.literal('SET_I18N_TOKEN_MODE'), enabled: z.boolean() }).strict(),
 ]);
 
 // ─── Default Inspector window factory ─────────────────────────────────────────
@@ -392,7 +401,7 @@ interface SessionState {
 }
 
 export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge {
-    const { ipcMain, logger, getNetworkDiagnostics } = options;
+    const { ipcMain, logger, getNetworkDiagnostics, onI18nTokenModeChange } = options;
     const actionLogCapacity = options.actionLogCapacity ?? DEBUG_ACTION_LOG_CAPACITY;
     const mementoRetention = options.mementoRetention ?? DEBUG_MEMENTO_RETENTION;
 
@@ -466,7 +475,13 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
         state: SessionState,
         request: Exclude<
             DebugRequest,
-            { type: 'SUBSCRIBE_LIVE' | 'UNSUBSCRIBE_LIVE' | 'GET_NETWORK_DIAGNOSTICS' }
+            {
+                type:
+                    | 'SUBSCRIBE_LIVE'
+                    | 'UNSUBSCRIBE_LIVE'
+                    | 'GET_NETWORK_DIAGNOSTICS'
+                    | 'SET_I18N_TOKEN_MODE';
+            }
         >,
     ): DebugResponse => {
         const { inspector, latestTick } = state;
@@ -531,6 +546,12 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
             subscribers.delete(event.sender.id);
             return { type: 'ACK' };
         }
+        // Token mode is a game-renderer display concern, unrelated to any
+        // attached session — relay it bridge-level, before the session gate.
+        if (parsed.data.type === 'SET_I18N_TOKEN_MODE') {
+            onI18nTokenModeChange?.(parsed.data.enabled);
+            return { type: 'ACK' };
+        }
         // Connection diagnostics are bridge-level (§6, §11): they read host/OS
         // facts, not session state, so they resolve while hosting in the lobby
         // before any game is running — served before the session gate below.
@@ -549,7 +570,13 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
         // absent (not undefined-assigned) keys so no assertion is needed.
         const request: Exclude<
             DebugRequest,
-            { type: 'SUBSCRIBE_LIVE' | 'UNSUBSCRIBE_LIVE' | 'GET_NETWORK_DIAGNOSTICS' }
+            {
+                type:
+                    | 'SUBSCRIBE_LIVE'
+                    | 'UNSUBSCRIBE_LIVE'
+                    | 'GET_NETWORK_DIAGNOSTICS'
+                    | 'SET_I18N_TOKEN_MODE';
+            }
         > =
             parsed.data.type === 'GET_ACTION_LOG'
                 ? {

@@ -163,6 +163,7 @@ export function createDebugApiMock(overrides: Partial<ChimeraDebugApi> = {}): De
         getNetworkDiagnostics: vi.fn(() => Promise.resolve(makeNetworkDiagnostics())),
         subscribeLive: vi.fn(() => Promise.resolve()),
         unsubscribeLive: vi.fn(() => Promise.resolve()),
+        setI18nTokenMode: vi.fn(() => Promise.resolve()),
         onLiveTick: vi.fn((cb: (event: LiveTickEvent) => void) => {
             listeners.add(cb);
             return liveTickUnsubscribe;

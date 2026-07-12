@@ -97,6 +97,33 @@ describe('DebugInspectorPage', () => {
         expect(screen.getByTestId('action-log-panel')).toBeVisible();
     });
 
+    describe('Show translation tokens toggle', () => {
+        it('renders the toggle, unchecked by default', () => {
+            installPageBridge();
+            render(<DebugInspectorPage />);
+
+            const toggle = screen.getByRole('switch', { name: 'Show translation tokens' });
+            expect(toggle).toBeInTheDocument();
+            expect(toggle).not.toBeChecked();
+        });
+
+        it('drives setI18nTokenMode when toggled on and off', async () => {
+            const user = userEvent.setup();
+            const api = installPageBridge();
+            render(<DebugInspectorPage />);
+
+            const toggle = screen.getByRole('switch', { name: 'Show translation tokens' });
+
+            await user.click(toggle);
+            expect(api.setI18nTokenMode).toHaveBeenLastCalledWith(true);
+            expect(toggle).toBeChecked();
+
+            await user.click(toggle);
+            expect(api.setI18nTokenMode).toHaveBeenLastCalledWith(false);
+            expect(toggle).not.toBeChecked();
+        });
+    });
+
     it('reveals the Performance panel when its tab is activated', async () => {
         const user = userEvent.setup();
         installPageBridge();

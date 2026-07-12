@@ -72,6 +72,7 @@ function makeSystemApi(
         relaunch: vi.fn(),
         getDeviceInfo: vi.fn(),
         onDeviceInfoChange: vi.fn(),
+        onI18nTokenMode: vi.fn(),
         toggleDebugInspector: vi.fn(),
     };
 }

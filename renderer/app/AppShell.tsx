@@ -10,8 +10,9 @@ import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { ScreenFadeRoot } from '../components/shell/ScreenFadeRoot';
 import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
 import { ToastHost } from '../components/shell/ToastHost';
-import { I18nProvider } from '../i18n/I18nProvider';
+import { TokenModeI18nProvider } from '../i18n/TokenModeI18nProvider';
 import { ThemeProvider } from '../theme/ThemeProvider';
+import { DebugI18nBootstrap } from './DebugI18nBootstrap';
 import { GameRegistrationBootstrap } from './GameRegistrationBootstrap';
 import { GameStoreBootstrap } from './GameStoreBootstrap';
 import { LoggingBootstrap } from './LoggingBootstrap';
@@ -25,15 +26,17 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
         <Providers>
             <ThemeProvider>
                 {/*
-                 * Opt-in i18n runtime (F71). Mounted inert here: with no props
-                 * it resolves engine English at zero cost, so single-language /
-                 * no-i18n games are unaffected. Live inputs (settings locale,
-                 * the game's declared languages + contributed override bundle,
-                 * the debug token-mode flag) are wired by later F71 tasks; this
-                 * mount only makes useTranslate() available to pages and the
-                 * bootstraps below.
+                 * Opt-in i18n runtime. The TokenModeI18nProvider wrapper feeds
+                 * <I18nProvider> the `showTokens` debug flag from debugI18nStore
+                 * (flipped by the Debug Inspector's "Show translation tokens"
+                 * toggle via DebugI18nBootstrap). With the flag off — its default,
+                 * and always in production — it resolves engine English at zero
+                 * cost, so single-language / no-i18n games are unaffected.
+                 * Settings locale, declared languages, and the game override
+                 * bundle are wired elsewhere; this makes useTranslate() available
+                 * to pages and the bootstraps below.
                  */}
-                <I18nProvider>
+                <TokenModeI18nProvider>
                     {/*
                      * App-level fade for cross-screen route transitions
                      * (main-menu ↔ lobby ↔ game). Lives above {children} so its
@@ -45,6 +48,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                      */}
                     <ScreenFadeRoot>
                         <GameRegistrationBootstrap />
+                        <DebugI18nBootstrap />
                         <LoggingBootstrap />
                         <SettingsBootstrap />
                         <LobbyStoreBootstrap />
@@ -69,7 +73,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                             <ToastHost />
                         </div>
                     </ScreenFadeRoot>
-                </I18nProvider>
+                </TokenModeI18nProvider>
             </ThemeProvider>
         </Providers>
     );

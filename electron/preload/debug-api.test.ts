@@ -368,6 +368,30 @@ describe('createDebugApi', () => {
         });
     });
 
+    describe('setI18nTokenMode()', () => {
+        it('sends SET_I18N_TOKEN_MODE with the enabled flag and resolves to undefined on ACK', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(DEBUG_CHANNEL, { type: 'ACK' });
+            const api = createDebugApi(stub.port);
+
+            await expect(api.setI18nTokenMode(true)).resolves.toBeUndefined();
+            expect(stub.invocations).toStrictEqual([
+                { channel: DEBUG_CHANNEL, args: [{ type: 'SET_I18N_TOKEN_MODE', enabled: true }] },
+            ]);
+        });
+
+        it('forwards enabled=false verbatim', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(DEBUG_CHANNEL, { type: 'ACK' });
+            const api = createDebugApi(stub.port);
+
+            await api.setI18nTokenMode(false);
+            expect(stub.invocations).toStrictEqual([
+                { channel: DEBUG_CHANNEL, args: [{ type: 'SET_I18N_TOKEN_MODE', enabled: false }] },
+            ]);
+        });
+    });
+
     describe('error propagation', () => {
         it('rejects with the bridge message when main returns an ERROR response', async () => {
             const stub = makeIpcStub();

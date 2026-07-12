@@ -43,6 +43,15 @@ export const SYSTEM_DEVICE_INFO_CHANNEL = 'chimera:system:device-info';
 export const SYSTEM_DEVICE_INFO_CHANGE_CHANNEL = 'chimera:system:device-info-change';
 
 /**
+ * `ipcRenderer.on` target for {@link SystemAPI.onI18nTokenMode}. The main
+ * process's debug bridge pushes the boolean flag via `webContents.send` on this
+ * channel when the Inspector's "Show translation tokens" toggle changes. In
+ * production the debug bridge never starts, so nothing is ever pushed here and
+ * the subscription is an idle no-op (Invariant #27).
+ */
+export const SYSTEM_I18N_TOKEN_MODE_CHANNEL = 'chimera:system:i18n-token-mode';
+
+/**
  * Full response shape for the {@link SYSTEM_PLATFORM_CHANNEL} channel.
  * Intentionally matches the return type of {@link SystemAPI.platform}.
  */
@@ -116,6 +125,8 @@ export function createSystemApi(ipc: SystemApiIpcPort, notifyQuit?: QuitNotifier
                 ),
         onDeviceInfoChange: (cb: (info: DeviceInfo) => void): Unsubscribe =>
             subscribeValidatedPush(ipc, SYSTEM_DEVICE_INFO_CHANGE_CHANNEL, DeviceInfoSchema, cb),
+        onI18nTokenMode: (cb: (enabled: boolean) => void): Unsubscribe =>
+            subscribePush<boolean>(ipc, SYSTEM_I18N_TOKEN_MODE_CHANNEL, cb),
         toggleDebugInspector: () => {
             // Fire-and-forget by design: in production no listener exists on
             // this channel, and a send to an unregistered channel is a true

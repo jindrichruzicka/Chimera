@@ -16,6 +16,7 @@ function makeBridge(
             relaunch: () => undefined,
             getDeviceInfo: () => Promise.reject(new Error('not implemented')),
             onDeviceInfoChange: () => () => undefined,
+            onI18nTokenMode: () => () => undefined,
             toggleDebugInspector: () => Promise.resolve(),
         },
     };
