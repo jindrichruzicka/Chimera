@@ -5,9 +5,6 @@
  * Also exports the SizeClass breakpoint constants used to derive
  * `windowSizeClass` from a BrowserWindow content width.
  *
- * Architecture reference: §4.17 — Device Info
- * Issue: #588 (F42 — Define DeviceInfo interface and types)
- *
  * §4.17: These types are renderer-only. This module must never be
  * imported by simulation/ or ai/.
  * Must NOT import from: electron/main/, simulation/, ai/

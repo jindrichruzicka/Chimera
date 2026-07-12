@@ -1,5 +1,3 @@
-// renderer/game/gameShellAssetSource.ts
-//
 // Shared resolver for game-shell asset declarations (fonts, preload images,
 // cursor textures). Shell contributions declare sources as local game asset
 // refs (`<gameId>/<relativePath>`); this maps them onto the renderer asset

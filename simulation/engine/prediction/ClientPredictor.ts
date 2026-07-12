@@ -8,7 +8,6 @@
  * `NonPredictableActionError` — never silently applies unpredictable actions.
  *
  * Architecture reference: §6 — simulation/prediction/ · Client Prediction
- * Task: F17 (issue #366)
  *
  * Invariants upheld:
  *   #1 — simulation/ is side-effect-free; no Node.js or Electron imports.
@@ -68,10 +67,10 @@ export class NonPredictableActionError extends Error {
  *             defaults to `BaseGameSnapshot`. In practice callers pass the
  *             concrete game snapshot type (e.g. `TacticsSnapshot`).
  *
- * Design note (WARN-2): `ClientPredictor` currently operates on the full
+ * Design note: `ClientPredictor` currently operates on the full
  * `BaseGameSnapshot`. Constraining `TState extends PlayerSnapshot` would make it
- * operate on the projected per-player view instead. This is a follow-on design
- * decision deferred beyond F26; consider filing an issue if this becomes a priority.
+ * operate on the projected per-player view instead — a deliberately deferred
+ * design decision, not yet a priority.
  */
 export class ClientPredictor<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #registry: ActionRegistry<TState>;

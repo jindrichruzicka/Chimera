@@ -1,7 +1,7 @@
 /**
  * electron/main/replay/replay-playback-manager.ts
  *
- * Main-process owner of *replay playback* (§4.28, F44 / T6, #660).
+ * Main-process owner of *replay playback* (§4.28).
  *
  * The renderer's replay player never runs a `ReplayPlayer` itself — it requests
  * tick-by-tick snapshots over IPC. This manager loads a replay file, drives a
@@ -172,7 +172,7 @@ export class ReplayPlaybackManager {
             // (possibly non-zero) base tick. `#projectedAt` maps each 0-based
             // renderer tick onto the replay's absolute ticks, so the terminal
             // (game-over) snapshot at renderer tick `file.actions.length` stays
-            // reachable (#663). The file's `metadata.durationTicks` records the
+            // reachable. The file's `metadata.durationTicks` records the
             // highest *issued* action tick and cannot be used here.
             totalTicks: file.actions.length,
             playerIds: [...playerIds],

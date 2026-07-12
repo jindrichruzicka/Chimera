@@ -15,7 +15,7 @@ export interface GameResultBannerProps {
 }
 
 /**
- * Engine capabilities handed to a game's in-game menu component (F55 / §4.33–§4.34).
+ * Engine capabilities handed to a game's in-game menu component (§4.33–§4.34).
  * The menu is the Escape-toggled overlay shown during an in-progress match; the
  * engine supplies these callbacks so the game's menu can resume play or leave
  * without importing engine internals (Invariant #80 — the menu reaches the shell
@@ -48,8 +48,8 @@ export interface GameScreenProps {
      */
     readonly content?: GameContent;
     /**
-     * The most recently received verified reveal in commitment battle mode
-     * (F54 / T9), or null/absent. Main gates it through `CommitmentScheme.verify()`
+     * The most recently received verified reveal in commitment battle mode,
+     * or null/absent. Main gates it through `CommitmentScheme.verify()`
      * (Invariant #9) before it reaches the renderer. Generic and game-agnostic —
      * only the authoring game interprets the opaque `reveal.value` (e.g. tactics
      * plays back the revealed turn).
@@ -108,7 +108,7 @@ export interface GameScreenRegistry {
     readonly transitionOverlay?: GameScreenComponent<GameScreenProps>;
     readonly gameResultBanner?: GameScreenComponent<GameResultBannerProps>;
     /**
-     * Escape-toggled in-game menu for in-progress matches (F55). Three states:
+     * Escape-toggled in-game menu for in-progress matches. Three states:
      * a component (game override), the string `'none'` (opt out → Escape is a
      * no-op), or omitted (engine default Resume/Leave menu). Like every other
      * slot, it is supplied only through this registry (Invariant #80) and is

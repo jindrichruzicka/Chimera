@@ -5,13 +5,12 @@
  *
  * This module is the deterministic core's only clock reader: it returns
  * `snapshot.tick` and nothing else. Wall-clock sources (`Date.now`,
- * `performance.now`) are forbidden here by invariant #43.
+ * `performance.now`) are forbidden here by Invariant #43.
  *
  * Host-side real-time tick dispatch lives outside `simulation/` — see
  * `electron/main/runtime/RealtimeTicker.ts`.
  *
  * Architecture reference: §4.2.1 — Rule 1 (Action-Driven Clock)
- * Task: F04 / T2 (issue #42); relocation: issue #89
  *
  * Invariants upheld:
  *   Rule 1 — SimulationClock.now() reads snapshot.tick only; never calls

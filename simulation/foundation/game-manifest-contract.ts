@@ -89,7 +89,7 @@ export interface GameManifest {
     readonly tickRateMs?: number;
     /**
      * Optional per-game window/app icon override — a game-asset-relative path
-     * resolved under the game's own asset root (F67, `resolveAppIcon`); absent
+     * resolved under the game's own asset root (`resolveAppIcon`); absent
      * ⇒ the default Chimera icon.
      */
     readonly icon?: string;

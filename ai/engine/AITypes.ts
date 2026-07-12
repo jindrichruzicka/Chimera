@@ -1,10 +1,8 @@
 /**
- * ai/engine/AITypes.ts
- *
  * Shared domain types for the AI framework.
  *
- * Extracted from PlayerAgent.ts to break the circular import between
- * AIBrain.ts ↔ PlayerAgent.ts (both now import from here instead).
+ * Lives here (rather than in PlayerAgent.ts) to break the circular import between
+ * AIBrain.ts and PlayerAgent.ts — both import from here.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
  *
@@ -15,8 +13,6 @@
 
 import type { GameResult as EngineGameResult } from '@chimera-engine/simulation/engine/types.js';
 import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
-
-// ─── AIParams ─────────────────────────────────────────────────────────────────
 
 /**
  * Base type for game-specific AI personality parameters.
@@ -30,15 +26,10 @@ import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/State
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface AIParams extends Record<string, number | string | boolean | null | undefined> {}
 
-// ─── PlayerSnapshot (imported from StateProjector) ────────────────────────────
-
-// Re-export the canonical PlayerSnapshot type from F26 StateProjector (§4.6).
-// This replaces the pre-F26 local stub interface, ensuring the AI layer receives
-// the same `PlayerSnapshot` shape that the projection system produces.
+// Re-export the canonical PlayerSnapshot type from StateProjector (§4.6) so the
+// AI layer receives the same shape the projection system produces.
 // Invariant #3 — GameSnapshot never leaves the host; PlayerSnapshot crosses boundaries.
 export type { PlayerSnapshot };
-
-// ─── GameResult ───────────────────────────────────────────────────────────────
 
 /**
  * Outcome of a completed game session.

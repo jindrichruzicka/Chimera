@@ -5,7 +5,7 @@
  */
 
 /**
- * Runtime Debug Layer IPC channels (§4.12 — F47 T5/T6). Plain string
+ * Runtime Debug Layer IPC channels (§4.12). Plain string
  * constants declared here so the Inspector preload (`debug-api.ts`) and the
  * main-process debug bridge share the same literals without the preload
  * importing the debug module graph (Invariant #27: no debug code lives in

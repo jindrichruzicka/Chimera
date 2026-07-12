@@ -2,7 +2,7 @@
 
 // renderer/components/debug/NetworkPanel.tsx
 //
-// Inspector Network panel (§4.12 — Runtime Debug Layer, F47 T10, #717).
+// Inspector Network panel (§4.12 — Runtime Debug Layer).
 // Surfaces the host's non-internal IPv4 addresses, the active hosted port, a
 // hosting badge, copy-to-clipboard affordances, and a static port-forward
 // guide so a player hosting a lobby can read off (and copy) the join address

@@ -16,7 +16,7 @@
 // engine core — augment THIS module (`./asset-contract.js`).
 //
 // This module is PURE TYPE DECLARATIONS only — zero runtime code, zero
-// workspace imports. Relocated under issue #758.
+// workspace imports.
 
 /** Base phantom brand for built-in and game-contributed asset kinds. */
 export interface AssetKindBrand<TKind extends string> {
@@ -67,6 +67,6 @@ export type AssetKindId<TAssetKind extends AssetKind = AssetKind> = TAssetKind['
  */
 export type AssetRef<T extends AssetKind = AssetKind> = string & {
     // Embedding T in the brand makes AssetRef<TextureAsset> and
-    // AssetRef<AudioClipAsset> structurally incompatible (H1 hardening).
+    // AssetRef<AudioClipAsset> structurally incompatible.
     readonly __assetRef: T;
 };

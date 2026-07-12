@@ -8,7 +8,6 @@
  *
  * Architecture reference: §4.35 — UI Design System
  * Invariants #86 and #91
- * Issue: #560
  */
 
 import type { Rule } from 'eslint';

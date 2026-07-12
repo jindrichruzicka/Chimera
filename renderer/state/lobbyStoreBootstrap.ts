@@ -9,8 +9,6 @@
  *   const stop = bootstrapLobbyStore(window.__chimera.lobby, window.__chimera.system);
  *   return stop; // cleanup on unmount
  *
- * Architecture reference: §F12/T02 (issue #269)
- *
  * Invariant #1: LobbyState (not GameSnapshot) is what crosses IPC.
  */
 
@@ -97,7 +95,7 @@ export function bootstrapLobbyStore(
 
     useLobbyStore.getState().markInitialStateLoading();
 
-    // WARN-3: gate concurrent getLocalPlayerId IPC calls with an in-flight flag.
+    // Gate concurrent getLocalPlayerId IPC calls with an in-flight flag.
     let hydrateInFlight = false;
     function tryHydrateLocalPlayer(lobbyState: LobbyState): void {
         if (hydrateInFlight) {
@@ -109,7 +107,6 @@ export function bootstrapLobbyStore(
         });
     }
 
-    // Subscribe to lobby updates
     const unsubscribeLobby = lobbyApi.onUpdate((lobbyState) => {
         markFresherEvent();
         useLobbyStore.getState().applyLobbyState(lobbyState);
@@ -123,8 +120,8 @@ export function bootstrapLobbyStore(
             if (!active) {
                 return;
             }
-            // WARN-1: only apply replay while bootstrap freshness is still current.
-            // A fresher push/disconnect/error event invalidates this replay response.
+            // Only apply replay while bootstrap freshness is still current. A
+            // fresher push/disconnect/error event invalidates this replay response.
             if (isReplayCurrent()) {
                 useLobbyStore.getState().applyLobbyState(lobbyState);
                 if (lobbyState !== null) {
@@ -136,7 +133,7 @@ export function bootstrapLobbyStore(
         })
         .catch((err: unknown) => {
             if (active) {
-                // WARN-2: log the error so schema drift / main-process bugs are
+                // Log the error so schema drift / main-process bugs are
                 // observable in production rather than silently swallowed.
                 console.warn('[lobbyStoreBootstrap] Failed to replay lobby state:', err);
                 if (isReplayCurrent()) {
@@ -146,7 +143,6 @@ export function bootstrapLobbyStore(
             }
         });
 
-    // Subscribe to connection status changes
     const unsubscribeSystem = systemApi.onConnectionStatus((status) => {
         if (status === 'disconnected' || status === 'error') {
             markFresherEvent();
@@ -155,7 +151,6 @@ export function bootstrapLobbyStore(
         }
     });
 
-    // Return a combined unsubscribe function that unsubscribes from both
     return () => {
         active = false;
         unsubscribeLobby();

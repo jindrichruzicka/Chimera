@@ -1,7 +1,5 @@
 'use client';
 
-// renderer/components/shell/InGameMenuHost.tsx
-
 import React, { useCallback, useState } from 'react';
 import type { PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import type {
@@ -15,7 +13,7 @@ import { useEscapeLayer } from './EscapeStack.js';
 
 export interface InGameMenuHostProps {
     /**
-     * The game's `inGameMenu` registry slot (F55). A component overrides the
+     * The game's `inGameMenu` registry slot. A component overrides the
      * engine default; the string `'none'` opts out (Escape is a no-op); omitted
      * (`undefined`) yields the engine-default Resume/Leave menu.
      */
@@ -35,8 +33,8 @@ export interface InGameMenuHostProps {
 }
 
 /**
- * Mounts the Escape-toggled in-game menu for an in-progress match (F55 ·
- * §4.33–§4.34). Mounted by `RegistryGameShell`, which keeps `GameShell`
+ * Mounts the Escape-toggled in-game menu for an in-progress match
+ * (§4.33–§4.34). Mounted by `RegistryGameShell`, which keeps `GameShell`
  * game-agnostic (Invariant #80): the menu reaches the shell only through the
  * registry-supplied `inGameMenu` slot.
  *
@@ -79,7 +77,7 @@ export function InGameMenuHost({
         setOpen((current) => !current);
     });
 
-    // Base layer of the Escape stack while open (T6): closes the menu, and a
+    // Base layer of the Escape stack while open: closes the menu, and a
     // transient overlay registered above it wins the Escape.
     useEscapeLayer(closeMenu, open && enabled);
 

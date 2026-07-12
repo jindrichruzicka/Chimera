@@ -3,7 +3,6 @@
  *
  * Host-side trust gate for inbound profile attestations.
  * Architecture: §4.24 — Player Profiles & Directory
- * Task: F14-T02 (issue #339)
  *
  * Invariants upheld:
  *   #2  — zero imports from renderer/, electron/, games/*, or DOM APIs
@@ -117,17 +116,15 @@ function checkCustomAvatar(
     mimeType: string,
     base64: string,
 ): 'AVATAR_INVALID_MIME' | 'AVATAR_TOO_LARGE' | 'AVATAR_DECODE_FAILED' | null {
-    // 1. MIME whitelist
     if (!(ALLOWED_AVATAR_MIME_TYPES as readonly string[]).includes(mimeType)) {
         return 'AVATAR_INVALID_MIME';
     }
 
-    // 2. Validate base64 syntax before attempting decode
+    // Reject malformed base64 before attempting to decode it.
     if (!VALID_BASE64_RE.test(base64)) {
         return 'AVATAR_DECODE_FAILED';
     }
 
-    // Decode base64 → bytes
     let bytes: Buffer;
     try {
         bytes = Buffer.from(base64, 'base64');
@@ -135,12 +132,11 @@ function checkCustomAvatar(
         return 'AVATAR_DECODE_FAILED';
     }
 
-    // 3. Size cap (decoded byte count)
+    // Cap on decoded size, not the base64 length.
     if (bytes.length > MAX_CUSTOM_AVATAR_BYTES) {
         return 'AVATAR_TOO_LARGE';
     }
 
-    // 4. Magic-bytes check
     const validMimeType = mimeType as (typeof ALLOWED_AVATAR_MIME_TYPES)[number];
     if (!hasMagicBytes(bytes, validMimeType)) {
         return 'AVATAR_DECODE_FAILED';
@@ -186,7 +182,8 @@ export function admit(
     existingIds: ReadonlySet<string> = new Set(),
     gameSchemaValidator?: (profile: PlayerProfile) => boolean,
 ): AdmissionResult {
-    // Step 1 — Structural validation (loose schema to allow AVATAR_INVALID_MIME)
+    // Loose schema first so a bad avatar MIME surfaces as AVATAR_INVALID_MIME,
+    // not a generic SCHEMA_MISMATCH.
     const parsed = LooseProfileSchema.safeParse(attestation);
     if (!parsed.success) {
         return { ok: false, reason: 'SCHEMA_MISMATCH' };
@@ -194,7 +191,6 @@ export function admit(
 
     const raw: LooseProfile = parsed.data;
 
-    // Step 2 — Custom avatar checks (MIME, size, magic bytes)
     if (raw.avatar.kind === 'custom') {
         const avatarRejection = checkCustomAvatar(raw.avatar.mimeType, raw.avatar.base64);
         if (avatarRejection !== null) {
@@ -202,7 +198,7 @@ export function admit(
         }
     }
 
-    // Step 3 — Display name: empty check before length check
+    // Empty check before length check so an all-whitespace name is EMPTY, not TOO_LONG.
     if (raw.displayName.trim().length === 0) {
         return { ok: false, reason: 'DISPLAY_NAME_EMPTY' };
     }
@@ -211,7 +207,6 @@ export function admit(
         return { ok: false, reason: 'DISPLAY_NAME_TOO_LONG' };
     }
 
-    // Step 4 — Namespace collision (reserved prefixes + existing lobby entries)
     const hasReservedPrefix = RESERVED_ID_PREFIXES.some((prefix) =>
         raw.localProfileId.startsWith(prefix),
     );
@@ -219,7 +214,6 @@ export function admit(
         return { ok: false, reason: 'NAMESPACE_COLLISION' };
     }
 
-    // Step 5 — Game-schema validator (optional; enables game-specific profile extensions)
     // Cast is safe: all base EngineProfile fields have been validated above.
     const profile = raw as PlayerProfile;
     if (gameSchemaValidator !== undefined && !gameSchemaValidator(profile)) {

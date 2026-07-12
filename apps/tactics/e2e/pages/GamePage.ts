@@ -51,8 +51,8 @@ interface TacticsGridClickOptions {
 // Mirrors apps/tactics/scene/tacticsCamera.ts without importing game rendering internals.
 // Kept in sync by GamePage.test.ts (sync-guard tests import the source-of-truth directly).
 // These are the camera frustum world bounds — used to project a grid point to a canvas
-// pixel. Since #710 widened the frustum past the board so corner units render whole, this
-// is wider than the playable board and must NOT be used to decide which tiles are clickable.
+// pixel. The frustum is deliberately wider than the playable board so corner units render
+// whole, so it must NOT be used to decide which tiles are clickable.
 export const TACTICS_CANVAS_WORLD_BOUNDS = {
     left: -2.75,
     right: 4.75,
@@ -136,17 +136,17 @@ export class GamePage {
         this.perfFps = page.getByTestId('perf-fps');
         this.perfDrawCalls = page.getByTestId('perf-draw-calls');
         this.perfTriangles = page.getByTestId('perf-triangles');
-        // Post-game summary replay action (F44 / T8). Saving moved into the replay
-        // player's compact save icon — see `ReplayPlayerPage.saveButton`.
+        // Post-game summary replay action. Saving lives in the replay player's
+        // compact save icon — see `ReplayPlayerPage.saveButton`.
         this.replayButton = page.getByTestId('post-game-replay-btn');
-        // Stamina / turn-gating / commitment HUD surfaces (F54). In commitment mode
+        // Stamina / turn-gating / commitment HUD surfaces. In commitment mode
         // End Turn IS the commit; `commitStatus` is the pulsing "waiting for other
         // player(s)" message shown only while a committed seat awaits the rest.
         this.staminaReadout = page.getByTestId('hud-stamina');
         this.turnStatus = page.getByTestId('tactics-turn-status');
         this.commitStatus = page.getByTestId('tactics-commit-status');
         this.revealOverlay = page.getByTestId('tactics-reveal');
-        // HUD save flow (F68). The trigger is host-only (client shells receive
+        // HUD save flow. The trigger is host-only (client shells receive
         // no `saveGame` capability) and disabled while the commitment buffer
         // holds unsent moves; the name dialog is a `SaveGameButton` Modal.
         this.saveButton = page.getByTestId('hud-save-btn');
@@ -892,7 +892,7 @@ function projectGridPointToCanvasPosition(
     box: { readonly width: number; readonly height: number },
 ): { readonly x: number; readonly y: number } {
     const { left, right, top, bottom } = TACTICS_CANVAS_WORLD_BOUNDS;
-    // Multiply before dividing: the #710 frustum range (7.5 × 5) makes a divide-first
+    // Multiply before dividing: the frustum range (7.5 × 5) makes a divide-first
     // ratio non-terminating in binary (e.g. 2.75 / 7.5), so grid points that land on exact
     // pixels would otherwise carry float dust and fail the deep-equality assertions.
     return {

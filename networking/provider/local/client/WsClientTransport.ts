@@ -6,7 +6,6 @@
  * types.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T05 (issue #220); F13 / T04 (issue #309)
  */
 
 import type { PlayerId, EngineAction } from '@chimera-engine/simulation/contracts';
@@ -103,7 +102,6 @@ export class WsClientTransport implements ClientTransport {
                 scope: msg.payload.scope,
             });
         }
-        // profile updates are handled via PROFILE_UPDATE
         if (msg.kind === 'profile') {
             this.connection.send({
                 type: 'PROFILE_UPDATE',
@@ -234,7 +232,7 @@ export class WsClientTransport implements ClientTransport {
                 break;
 
             case 'PROFILE_REJECT':
-                // Mid-session PROFILE_UPDATE rejection (#688). Surfaced as the
+                // Mid-session PROFILE_UPDATE rejection. Surfaced as the
                 // `profile_reject` side-channel so LobbyManager can raise the
                 // §4.30 "Profile rejected" toast on the joined client.
                 for (const cb of this.sideChannelCbs) {

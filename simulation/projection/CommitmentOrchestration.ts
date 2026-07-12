@@ -1,8 +1,8 @@
 /**
  * simulation/projection/CommitmentOrchestration.ts
  *
- * Game-neutral contract for the host-side commit-then-sync reveal orchestration
- * (T9 / #729, F54). The host (`electron/main`) drives the reveal sequence
+ * Game-neutral contract for the host-side commit-then-sync reveal orchestration.
+ * The host (`electron/main`) drives the reveal sequence
  * without naming any game (Invariant #2/#94): a game registers a
  * {@link CommitmentTurnOrchestration} via its main-side contribution, and the
  * host's `RevealOrchestrator` calls these pure hooks to decide when to stage a

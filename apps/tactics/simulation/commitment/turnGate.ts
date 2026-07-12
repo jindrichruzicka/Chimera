@@ -1,10 +1,8 @@
 /**
- * apps/tactics/commitment/turnGate.ts
- *
- * Pure turn-mode authorization for the tactics commitment-scheme battle mode
- * (F54 / #730). Sequential turns are single-active and unchanged; commitment
- * mode makes the turn **simultaneous**: every seated, not-yet-committed player
- * acts in parallel, and once every seat has committed any of them may fire the
+ * Pure turn-mode authorization for the tactics commitment-scheme battle mode.
+ * Sequential turns are single-active and unchanged; commitment mode makes the
+ * turn **simultaneous**: every seated, not-yet-committed player acts in
+ * parallel, and once every seat has committed any of them may fire the
  * reveal-only End Turn.
  *
  * These hooks reach the engine through generic injection points that name no

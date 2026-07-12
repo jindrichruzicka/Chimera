@@ -5,7 +5,6 @@
  * and restarts the Electron child process via a debounced callback.
  *
  * Architecture reference: §4.32 — Development Multiplayer Harness
- * Issue: #170
  *
  * Invariants upheld:
  *   #2  — Lives in `tools/`; does NOT import from `renderer/`, `simulation/`,

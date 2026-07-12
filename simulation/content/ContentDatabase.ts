@@ -117,7 +117,6 @@ export interface ContentCollection {
  * construct a database without touching the filesystem.
  */
 export function createContentDatabase(collections: readonly ContentCollection[]): ContentDatabase {
-    // Build an immutable Map<collectionType, Map<id, DataObject>>
     const store = new Map<string, Map<string, DataObject>>();
 
     for (const { collectionType, items } of collections) {
@@ -158,7 +157,6 @@ export function createContentDatabase(collections: readonly ContentCollection[])
         },
 
         resolveRef<T extends DataObject>(ref: DataRef<T>): T {
-            // parseRef throws MalformedRefError if format is invalid
             const { collectionType, id } = parseRef(ref);
             const item = store.get(collectionType)?.get(id);
             if (item === undefined) {

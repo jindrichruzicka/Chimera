@@ -60,7 +60,7 @@ export interface ReplayListBridge {
 
 /**
  * The read-only `list` slice of `window.__chimera.replay.perspective`
- * (`PerspectiveReplayAPI`, §4.28 ADR F44b) that a game's shell module may read
+ * (`PerspectiveReplayAPI`, §4.28) that a game's shell module may read
  * off `globalThis` to decide whether a replay-related menu affordance is
  * available.
  */
@@ -77,7 +77,7 @@ export interface PerspectiveReplayListBridge {
  * The export / open-in-player slice of `window.__chimera.replay`
  * (`ReplayAPI`, §4.28) that a game's *screen* module reads off `globalThis` to
  * finalise the in-progress recording and hand it to the replay player from the
- * post-game summary (F44 / T8).
+ * post-game summary.
  *
  * Why this lives in `shared/`: a game screen (`games/<name>/screens/*.tsx`) may
  * import only from `simulation/`, `ai/`, `shared/`, and its own files (§3 Module
@@ -110,7 +110,7 @@ export interface ReplayExportBridge {
     /**
      * Finalise the in-progress host recording to disk and resolve with the saved
      * file path (§4.28). Rejects when no match is being hosted — surfaced as an
-     * inline error by the post-game summary actions (F44 / T8).
+     * inline error by the post-game summary actions.
      *
      * `intent` (default `'save'`) decides whether main raises the "Replay saved"
      * toast: `'save'` does, `'view'` (export-for-path-only) does not. See
@@ -134,7 +134,7 @@ export interface ReplayExportBridge {
 
 /**
  * The export / open-in-player slice of `window.__chimera.replay.perspective`
- * (`PerspectiveReplayAPI`, §4.28 ADR F44b) that a game's *screen* module reads
+ * (`PerspectiveReplayAPI`, §4.28) that a game's *screen* module reads
  * off `globalThis` to finalise the CLIENT's own perspective recording and hand it
  * to the replay player from the post-game summary.
  *

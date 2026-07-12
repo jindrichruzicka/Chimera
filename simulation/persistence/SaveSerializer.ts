@@ -9,7 +9,6 @@
  *   - CompressedSaveSerializer — gzip-compressed JSON (space-efficient)
  *
  * Architecture reference: §4.11
- * Task: F06 / T1 (issue #120)
  *
  * Invariants upheld:
  *   #2 — simulation/ is side-effect-free; no Node.js FS or Electron imports.

@@ -7,18 +7,18 @@
  * which turns the per-game contributions injected at bootstrap into the lookup
  * maps the host (`index.ts`) consumes.
  *
- * The games/* coupling that used to live here has moved to the consumer app
- * composition root `apps/tactics/electron/main.ts` (relocated there from the
- * top-level `app/` in F63/#783).
- * That root constructs each game's `MainGameContribution` from `@chimera-engine/<game>/*`
- * and injects it into `main(contributions)` at runtime — so this file, and the
- * rest of `electron/main/`, never import a game. The boundary is enforced by
- * ESLint (`chimera/no-main-games-import`) and invariants Check 10.
+ * Any games/* coupling lives in the consumer app composition root
+ * `apps/tactics/electron/main.ts`, not here. That root constructs each game's
+ * `MainGameContribution` from `@chimera-engine/<game>/*` and injects it into
+ * `main(contributions)` at runtime — so this file, and the rest of
+ * `electron/main/`, never import a game. The boundary is enforced by ESLint
+ * (`chimera/no-main-games-import`) and invariants Check 10.
  *
  * The host currently hosts exactly one game ({@link MainGameRegistryView.hostedGame},
- * the M1 single-game lifecycle); `createMainGameRegistry` enforces that invariant
- * structurally (exactly one contribution) without naming a game. F18 (multi-game)
- * relaxes the guard into a runtime selection; the derived maps are already general.
+ * the single-game lifecycle); `createMainGameRegistry` enforces that invariant
+ * structurally (exactly one contribution) without naming a game. Multi-game
+ * would relax the guard into a runtime selection; the derived maps are already
+ * general.
  *
  * Architecture: §4.8 Content Database, §4.13 Settings, §4.6/§8 Projection.
  */
@@ -77,18 +77,16 @@ export interface MainGameContribution {
      * hands these to the generic `ContentLoader` at startup so malformed content
      * fails validation (Invariant #14) before the lobby comes up. Absent ⇒ the
      * game declares no content and its `ContentDatabase` stays absent
-     * (`PipelineContext.db` undefined, Invariant #46). Replaces the former
-     * static `gameContentRegistry` (#788) — schemas now arrive by injection so
-     * `@chimera-engine/electron` names no game.
+     * (`PipelineContext.db` undefined, Invariant #46). Schemas arrive by
+     * injection so `@chimera-engine/electron` names no game.
      */
     readonly contentSchemas?: Readonly<Record<string, ZodType>>;
     /**
      * Optional builder for this game's customizable-lobby descriptor. Given the
      * game's loaded content, returns the pure `GameLobbySetup` the host reads to
      * seed lobby defaults and validate host/join writes (§4.14). Absent ⇒ the
-     * game has no customizable lobby and the host seeds nothing. Replaces the
-     * former static `lobbySetupBuilders` map (#789) — the builder now arrives by
-     * injection so `@chimera-engine/electron` names no game.
+     * game has no customizable lobby and the host seeds nothing. The builder
+     * arrives by injection so `@chimera-engine/electron` names no game.
      */
     readonly lobbySetup?: (content: GameContent) => GameLobbySetup;
     /**
@@ -99,17 +97,17 @@ export interface MainGameContribution {
      */
     readonly createAIState?: (playerId: PlayerId) => AIState;
     /**
-     * Optional host-side commit-then-sync reveal orchestration (F54 / T9). When
-     * present, the host stages each commit and, on the commitment-mode End Turn,
+     * Optional host-side commit-then-sync reveal orchestration. When present,
+     * the host stages each commit and, on the commitment-mode End Turn,
      * drives the deterministic reveal sequence through these pure hooks — staying
      * ignorant of the game (Invariant #2). Absent ⇒ the game has no commitment
      * turn mode and the host never reveals.
      */
     readonly commitment?: CommitmentTurnOrchestration;
     /**
-     * Optional `isMyTurn` resolver fed to `StateProjectorOptions.resolveIsMyTurn`
-     * (F54 / #730). Simultaneous turn modes supply it so more than one seat can
-     * be active at once (e.g. commitment mode: every not-yet-committed seat acts
+     * Optional `isMyTurn` resolver fed to `StateProjectorOptions.resolveIsMyTurn`.
+     * Simultaneous turn modes supply it so more than one seat can be active at
+     * once (e.g. commitment mode: every not-yet-committed seat acts
      * in parallel). Absent ⇒ the projector keeps its single-active default, so
      * sequential games are unaffected. Pure and host-side (may read host-local
      * fields the projection does not cross).
@@ -125,8 +123,9 @@ export interface MainGameRegistryView {
     /** `gameId → contribution` for the injected set. */
     readonly mainGameRegistry: Readonly<Record<string, MainGameContribution>>;
     /**
-     * The single game the host currently hosts (M1). Selected from the injected
-     * set — the host never names a game. F18 replaces this with a runtime choice.
+     * The single game the host currently hosts. Selected from the injected
+     * set — the host never names a game. Multi-game would replace this with a
+     * runtime choice.
      */
     readonly hostedGame: MainGameContribution;
     /** All injected game ids, in contribution order. */
@@ -154,9 +153,9 @@ export interface MainGameRegistryView {
 
 /**
  * Build the host-side registry view from the game contributions injected at
- * bootstrap. Enforces the M1 single-game lifecycle structurally — exactly one
+ * bootstrap. Enforces the single-game lifecycle structurally — exactly one
  * contribution — so the host can pick a `hostedGame` without naming any game.
- * F18 (multi-game) relaxes this guard into a runtime selection; the derived maps
+ * Multi-game would relax this guard into a runtime selection; the derived maps
  * are already general over the set.
  *
  * @throws if the injected set is not exactly one contribution.

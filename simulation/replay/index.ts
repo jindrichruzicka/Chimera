@@ -5,18 +5,6 @@
  *
  * Consumers import from `@chimera-engine/simulation/replay` rather than
  * internal module paths directly.
- *
- * Populated as F44 tasks land:
- *   - T1 (#655): ReplayFile schema, parseReplayFile, ReplayParseError,
- *                serializeReplay, deserializeReplay
- *   - T2 (#656): ReplayPlayer, replay seek/determinism errors,
- *                typed initial snapshots, assertReplayDeterministic
- *   - T3 (#657): ReplayHeader, ReplayRepository + in-memory double,
- *                ReplaySerializer strategy, ReplayMigrator + ReplayVersionError
- *
- * F44b (perspective replays):
- *   - T1 (#667): PerspectiveReplayFile schema + header/frame types,
- *                parsePerspectiveReplayFile
  */
 
 export type {

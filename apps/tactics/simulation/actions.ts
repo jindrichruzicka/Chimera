@@ -433,7 +433,7 @@ function uniquePlayerIds(playerIds: readonly PlayerId[]): PlayerId[] {
 }
 
 /**
- * End-turn guard for tactics (T8 / #728). In sequential mode end-turn is always
+ * End-turn guard for tactics. In sequential mode end-turn is always
  * allowed. In commitment mode `End Turn` is reveal-only and enabled only once
  * every seated player has committed for the current turn — so this rejects with
  * `awaiting_commitment` until each player in `state.players` has a

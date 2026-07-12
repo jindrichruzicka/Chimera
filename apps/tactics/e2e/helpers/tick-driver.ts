@@ -7,7 +7,6 @@
  * event loop between batches to avoid flooding the message queue.
  *
  * Architecture: §13.7 — IPC and WebSocket Test Helpers
- * Issue: #474
  *
  * Invariants upheld:
  *   #2 — tick driver does not inject state; it only advances the clock via the

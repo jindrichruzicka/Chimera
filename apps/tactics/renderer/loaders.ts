@@ -1,11 +1,7 @@
-// apps/tactics/renderer/loaders.ts
-//
-// The tactics renderer bundle loaders. Relocated out of
-// `renderer/game/rendererGameRegistry.ts` in #784 so that `renderer/**` names no
-// game: the renderer host became a runtime injection seam and the game's
-// renderer contribution now lives in the consumer app. The `@chimera-engine/tactics`
-// dynamic imports are kept (so the heavy screen/shell/font modules stay
-// code-split), rewritten as relative paths since this file is part of the
+// The tactics renderer bundle loaders. The renderer host names no game — it is a
+// runtime injection seam — so the game's renderer contribution lives here in the
+// consumer app. The dynamic imports keep the heavy screen/shell/font modules
+// code-split, and use relative paths because this file is part of the
 // `@chimera-engine/tactics` library build.
 //
 // Font loading is intentionally NOT performed here: the renderer seam's

@@ -4,16 +4,11 @@
 // preload namespace (`system`, `lobby`, `saves`, `settings`, `game`) exposes
 // at least one `onXxx(cb): Unsubscribe` method that registers an
 // `ipcRenderer.on` listener, forwards the payload to `cb`, and returns an
-// `Unsubscribe` closure that calls `ipcRenderer.removeListener`. Before this
-// module existed, each namespace duplicated:
-//
-//   1. An `XxxApiListener` type alias identical to `IpcListener` below.
-//   2. A 7-line listener body: typed listener → ipc.on → Unsubscribe.
-//
-// Five nearly-identical copies is the exact "extract helper" smell flagged
-// in the F02 retrospective (Point 9). The helpers below centralise the
-// subscribe/unsubscribe lifecycle so call sites collapse to a single line
-// and the pattern has one canonical implementation.
+// `Unsubscribe` closure that calls `ipcRenderer.removeListener`. Each namespace
+// would otherwise duplicate an `XxxApiListener` alias identical to
+// `IpcListener` below plus a ~7-line listener body (typed listener → ipc.on →
+// Unsubscribe). Centralising the subscribe/unsubscribe lifecycle collapses each
+// call site to one line and gives the pattern a single canonical implementation.
 //
 // Scope boundary: this module is transport-level only. It does not import
 // channel constants, does not know about any specific payload type, and is
@@ -32,8 +27,8 @@ import { PreloadIpcValidationError, parseInvokeResponse } from './schemas.js';
  * event is the channel payload (single-arg case) or a tuple (multi-arg,
  * e.g. `chimera:settings:change` → `(gameId, settings)`).
  *
- * Every preload namespace used to declare a private `XxxApiListener` alias
- * with exactly this shape. They are replaced with this single import.
+ * The single alias every preload namespace shares instead of declaring a
+ * private `XxxApiListener` of the same shape.
  */
 export type IpcListener = (event: unknown, ...args: unknown[]) => void;
 
@@ -55,10 +50,9 @@ export interface PushListenerPort {
  * Returns an {@link Unsubscribe} that removes exactly the listener this
  * call registered — other subscriptions on the same channel are unaffected.
  *
- * `T` is the declared payload type. The cast inside is the SAME
- * `as T` cast each namespace used before this module existed: the preload
- * contract declares the callback signature, and main is trusted to push a
- * conforming payload on the wire. Call sites that need a stronger guarantee
+ * `T` is the declared payload type. The `as T` cast is deliberate: the
+ * preload contract declares the callback signature, and main is trusted to
+ * push a conforming payload on the wire. Call sites that need a stronger guarantee
  * (e.g. `chimera:game:action-rejected` where drift would surface as
  * garbage in a React error boundary) use {@link subscribeValidatedPush}
  * instead.
@@ -87,7 +81,7 @@ export function subscribePush<T>(
  * Used for push channels where the payload carries user-visible semantics
  * and silent drift would be a debugging nightmare (today: only
  * `chimera:game:action-rejected`; future candidates include snapshot /
- * commitment reveal pushes once F03–F15 wire them).
+ * commitment reveal pushes once they are wired).
  */
 export function subscribeValidatedPush<T>(
     port: PushListenerPort,
@@ -111,7 +105,7 @@ export function subscribeValidatedPush<T>(
  * outlives it (e.g. a status overlay). Valid pushes keep flowing afterwards.
  *
  * Used for lifecycle push channels the renderer merely observes (today:
- * `chimera:saves:restore-status`, F68 #826). Channels where drift must be
+ * `chimera:saves:restore-status`). Channels where drift must be
  * LOUD (a rejected action disappearing would be a debugging nightmare) stay
  * on the throwing {@link subscribeValidatedPush}.
  *

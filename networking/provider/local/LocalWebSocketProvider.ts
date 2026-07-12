@@ -11,7 +11,6 @@
  *   - TOKEN     — 32-hex random token from LobbyServer.token
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T06 (issue #221)
  */
 
 import type {
@@ -58,10 +57,10 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             port: 0,
             gameId: params.gameId,
             maxPlayers: params.maxPlayers,
-            // F56: an empty/whitespace host password leaves the lobby open.
+            // An empty/whitespace host password leaves the lobby open.
             ...(params.password !== undefined ? { password: params.password } : {}),
-            // F68/#821: a restored session seeds its saved seats for join-time
-            // id resolution and reclaims its saved host id.
+            // A restored session seeds its saved seats for join-time id
+            // resolution and reclaims its saved host id.
             ...(params.restore !== undefined
                 ? {
                       matchId: params.restore.matchId,
@@ -71,7 +70,7 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
                 : {}),
         });
 
-        // Add to openServers only AFTER ready() succeeds to avoid resource leaks (W-1)
+        // Add to openServers only AFTER ready() succeeds to avoid resource leaks.
         await server.ready();
         this.openServers.add(server);
 
@@ -80,8 +79,8 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
         const lobbyCode = `127.0.0.1:${server.port}:${server.token}`;
         const lobbyInfo: LobbyInfo = {
             sessionId: lobbyCode,
-            // F68/#821: a restored host reclaims its saved id; this must match
-            // what LobbyServer mints into WELCOME lobby states.
+            // A restored host reclaims its saved id; this must match what
+            // LobbyServer mints into WELCOME lobby states.
             hostId: params.restore?.hostPlayerId ?? toPlayerId(`host-${server.token.slice(0, 8)}`),
             gameId: params.gameId,
         };
@@ -118,9 +117,9 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             },
             params.reconnectPlayerId,
             params.password,
-            // F68/#821: out-of-bounds claims are sanitized before the wire —
-            // the host silently drops schema-invalid JOIN frames, so sending
-            // them raw would hang the join instead of degrading to a fresh id.
+            // Out-of-bounds claims are sanitized before the wire — the host
+            // silently drops schema-invalid JOIN frames, so sending them raw
+            // would hang the join instead of degrading to a fresh id.
             sanitizeSeatClaims(params.claims),
         );
 

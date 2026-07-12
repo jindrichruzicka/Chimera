@@ -19,9 +19,8 @@ import { TACTICS_DEFAULT_UNIT_ID_VALUE, TACTICS_START_POSITIONS } from './consta
  *
  * @param playerIds Seats in insertion order; each gets the start position at its
  *   index.
- * @param _setup Host-authored lobby setup (#702-T3) accepted for
- *   forward-compatibility; start positions derive purely from the seat index, so
- *   it is unused here.
+ * @param _setup Host-authored lobby setup accepted for forward-compatibility;
+ *   start positions derive purely from the seat index, so it is unused here.
  * @throws if `playerIds.length` exceeds the number of available start positions.
  */
 export function buildInitialTacticsEntities(
@@ -37,7 +36,6 @@ export function buildInitialTacticsEntities(
 
     const entities: Record<EntityId, BaseEntityState> = {};
 
-    // Create one movable unit per player in insertion order
     for (let index = 0; index < playerIds.length; index += 1) {
         const playerId = playerIds[index];
         if (playerId === undefined) continue;
@@ -54,7 +52,6 @@ export function buildInitialTacticsEntities(
             );
         }
 
-        // Use the default unit ID for the first player, then generate unique IDs for others
         const unitIdValue = index === 0 ? TACTICS_DEFAULT_UNIT_ID_VALUE : `unit-${index + 1}`;
         const unitId = entityId(unitIdValue);
 

@@ -3,7 +3,7 @@
 // Shared log schema for the main process, renderer, and simulation layer
 // (architecture §4.27). Declared in `shared/` because both sides of the
 // preload bridge need to agree on the shape — the renderer emits via
-// `window.__chimera.logs` (F43) and the main process writes via the
+// `window.__chimera.logs` and the main process writes via the
 // structured `Logger` interface declared in `electron/main/logger.ts`.
 //
 // Kept dependency-free and side-effect-free so `simulation/` and `ai/` can
@@ -19,7 +19,7 @@ export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
  * Intentionally kept in `shared/` so `simulation/` and `ai/` can accept an
  * injected `Logger` without importing from `electron/`.
  *
- * Production implementations live in `electron/main/logger.ts` (F02/F08).
+ * Production implementations live in `electron/main/logger.ts`.
  * `error` and `fatal` accept an optional `Error` because these levels are almost
  * always paired with an exception; trace/debug/info/warn take only a message and
  * a context object.

@@ -1,9 +1,7 @@
 'use client';
 
-// renderer/app/page.tsx
-//
-// Boot-smoke page. For the M1 boot-smoke (§12 checklist item
-// "Electron boots, preload bridge wired") this page only needs to:
+// Boot-smoke page (§12 checklist item "Electron boots, preload bridge wired").
+// It only needs to:
 //
 //   1. Render a visible logo so the developer can see Electron loaded
 //      `renderer/out/index.html` via `window.loadFile()`.

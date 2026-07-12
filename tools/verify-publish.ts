@@ -1,7 +1,7 @@
 /**
  * tools/verify-publish.ts
  *
- * `verify:publish` — the publish-readiness gate (issue #804, F66).
+ * `verify:publish` — the publish-readiness gate.
  *
  * `verify:pack` already proves the packed `exports`/`files` surface resolves end to
  * end. This sibling gate proves the orthogonal property: every `@chimera-engine/*` package
@@ -94,7 +94,7 @@ export interface VerifyPublishDeps {
  * Specifiers a package's published dist may import that are NOT npm packages and so
  * are intentionally undeclared: virtual build-time seams the CONSUMER resolves via a
  * bundler alias. `chimera-game-registration` is the renderer's game-agnostic
- * registration seam (F63) — `renderer/dist/app/GameRegistrationBootstrap.js` imports
+ * registration seam — `renderer/dist/app/GameRegistrationBootstrap.js` imports
  * it, and each consumer app aliases it to its own game module at build time.
  */
 export const CONSUMER_PROVIDED_SPECIFIERS: readonly string[] = ['chimera-game-registration'];

@@ -5,7 +5,6 @@
  * Pure simulation code — no I/O, platform APIs, Electron, renderer, or game imports.
  *
  * Architecture reference: §4.28
- * Task: F44 / T2 (issue #656)
  *
  * Invariants upheld:
  *   #1  — simulation/replay has zero runtime deps on Electron, renderer, games, or networking

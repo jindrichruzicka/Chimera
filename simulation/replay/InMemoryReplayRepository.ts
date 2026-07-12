@@ -1,15 +1,12 @@
 /**
- * simulation/replay/InMemoryReplayRepository.ts
- *
  * In-memory ReplayRepository implementation for unit tests and E2E fixtures.
- * Backed by a `Map`; no filesystem access (§4.28, invariant #41).
+ * Backed by a `Map`; no filesystem access (§4.28, Invariant #41).
  *
  * Storage paths are synthetic, deterministic keys (a monotonic counter) so the
  * double needs neither `crypto.randomUUID` nor wall-clock reads — keeping
  * simulation/ free of non-deterministic globals.
  *
  * Architecture reference: §4.28
- * Task: F44 / T3 (issue #657)
  *
  * Invariants upheld:
  *   #2  — simulation/ is side-effect-free; no FS or Electron imports.

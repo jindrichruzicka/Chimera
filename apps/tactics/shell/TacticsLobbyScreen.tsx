@@ -10,12 +10,12 @@
  * per-player colour controls. Leave/Start are NOT rendered here: the lobby
  * page's Modal footer owns them, aligned with every other modal's button row.
  *
- * Authority split (F53): the board-colour select is host-authored — editable
+ * Authority split: the board-colour select is host-authored — editable
  * only for the host (a client sees it `disabled`) and routed through
  * `setMatchSetting`. Each per-player colour select is owner-authored — editable
  * only on the local player's OWN row (every other seat is `disabled`) and routed
  * through `setPlayerAttribute`, which `main` accepts only for the caller's own
- * seat (#706). The screen performs no privileged writes itself.
+ * seat. The screen performs no privileged writes itself.
  *
  * Module boundary (§3 / Invariant #96): game shell components import the shared
  * component library only through the public `components/ui` barrel; the colour
@@ -23,7 +23,6 @@
  * database) by this game's own `content/tacticsContent.ts`.
  *
  * Architecture: §4.37 — Renderer Shell Pages UI Contract; §4.4 — Lobby State Sync
- * Task: #708 (T6, part of #702 — Customizable Lobby)
  */
 
 import React from 'react';
@@ -75,14 +74,14 @@ export function TacticsLobbyScreen({
     const palette = paletteFromCollections(content ?? {});
     const readyCount = lobbyState.players.filter((player) => player.ready).length;
     const boardColor = lobbyState.matchSettings?.['boardColor'] ?? DEFAULT_BOARD_COLOR;
-    // Commitment battle mode is a host-authored synced match setting (T7, #727):
-    // the toggle writes the shared `turnMode` key, off (`sequential`) by default,
-    // and rides `snapshot.setup` into the match for T8 to read.
+    // Commitment battle mode is a host-authored synced match setting: the toggle
+    // writes the shared `turnMode` key, off (`sequential`) by default, and rides
+    // `snapshot.setup` into the match.
     const commitmentEnabled = readTacticsTurnMode(lobbyState.matchSettings) === 'commitment';
-    // AI agent slots come synced in the lobby state (F54 T4). The lobby is "full"
-    // on total occupancy — humans + AI together against maxPlayers — matching the
-    // host's auto-remove-on-overflow rule (#724). The AI section renders for the
-    // host (to add/remove) or whenever any AI slot exists (read-only for clients).
+    // AI agent slots come synced in the lobby state. The lobby is "full" on total
+    // occupancy — humans + AI together against maxPlayers — matching the host's
+    // auto-remove-on-overflow rule. The AI section renders for the host (to
+    // add/remove) or whenever any AI slot exists (read-only for clients).
     const agentSlots = lobbyState.agentSlots ?? [];
     const isFull = lobbyState.players.length + agentSlots.length >= TACTICS_MAX_PLAYERS;
     const showAiSection = isHost || agentSlots.length > 0;
@@ -90,7 +89,7 @@ export function TacticsLobbyScreen({
     // Gate the host AI controls while an add/remove round-trip is in flight so a
     // rapid double-click cannot fire two `addAi`/`removeAi` invocations from one
     // gesture. The synced state arrives via the lobby update, so we clear the
-    // flag when the round-trip settles (#724, review WARN-2).
+    // flag when the round-trip settles.
     const [aiActionPending, setAiActionPending] = React.useState(false);
     const runAiAction = (action: () => Promise<void>): void => {
         setAiActionPending(true);

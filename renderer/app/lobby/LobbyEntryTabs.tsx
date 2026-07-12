@@ -10,10 +10,10 @@ export interface LobbyEntryTabsProps {
     readonly activeTabId: LobbyEntryTabId;
     readonly lobbyCode: string;
     readonly onLobbyCodeChange: (value: string) => void;
-    /** Host-set lobby password (F56). Blank hosts an open lobby. */
+    /** Host-set lobby password. Blank hosts an open lobby. */
     readonly hostPassword: string;
     readonly onHostPasswordChange: (value: string) => void;
-    /** Password the joining client presents to the host (F56). */
+    /** Password the joining client presents to the host. */
     readonly joinPassword: string;
     readonly onJoinPasswordChange: (value: string) => void;
     /** Marks the join password field invalid (red) after a wrong-password rejection. */

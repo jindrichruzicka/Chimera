@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * renderer/app/replays/player/page.tsx — Replay Player (§4.28, F44 / T6, #660).
+ * Replay Player (§4.28).
  *
  * Plays back a recorded match. The player does NOT run a `ReplayPlayer` itself:
  * it requests {@link PlayerSnapshot}s from the main process over IPC (only

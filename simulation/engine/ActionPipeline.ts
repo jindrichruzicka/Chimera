@@ -8,7 +8,6 @@
  * re-exported here for backward compatibility.
  *
  * Architecture reference: §4.7
- * Task: F03 / T5 (issue #28)
  *
  * Invariants upheld:
  *   #1  — ActionPipeline is the sole mutation point; no raw action object bypasses it.
@@ -90,7 +89,7 @@ export class ActionUnauthorizedError extends Error {
  * Thrown by the `ctx.dispatch` stub injected into `ReduceContext` when an
  * action type other than `'engine:tick'` attempts to call `ctx.dispatch()`.
  *
- * Only `engine:tick` may trigger re-entrant dispatch (§4.20, F21, Invariant #89).
+ * Only `engine:tick` may trigger re-entrant dispatch (§4.20, Invariant #89).
  * Game reducers that call `ctx.dispatch` are violating the ISP contract and
  * will receive this error immediately — before any recursive pipeline call.
  */
@@ -131,11 +130,11 @@ type MutableReduceContext = { -readonly [K in keyof ReduceContext]: ReduceContex
  * Stage order (immutable — invariant #2):
  *   1. Tick validation     — envelope.tick must equal snapshot.tick; throws StaleActionError.
  *   2. Schema validation   — def.parsePayload(); throws ActionSchemaError.
- *   3. Undo/redo intercept — engine:undo/redo are short-circuited via UndoManager (F16).
+ *   3. Undo/redo intercept — engine:undo/redo are short-circuited via UndoManager.
  *   4. Authorization       — def.validate(); throws ActionUnauthorizedError.
  *   5. Reduce              — def.reduce() via StateReducer; produces nextState.
- *   6. History record      — appends ActionEnvelope to HistoryContext (F16).
- *   7. Snapshot broadcast  — fires only when nextState !== snapshot (F26).
+ *   6. History record      — appends ActionEnvelope to HistoryContext.
+ *   7. Snapshot broadcast  — fires only when nextState !== snapshot.
  *
  * Between stages 5 and 7 the optional `context.debugObserver` is invoked with
  * the post-reduce state (§4.12, Invariant #31) — undefined in production. The
@@ -163,14 +162,14 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
     #depth = 0;
     /**
      * Re-entrant dispatch function hoisted to a private field so the same
-     * closure is reused across every `process()` call (issue #36).
+     * closure is reused across every `process()` call.
      *
-     * Only `engine:tick` (F21 timers) may call this. Game reducers must NOT.
+     * Only `engine:tick` timers may call this. Game reducers must NOT.
      */
     readonly #dispatchFn: NonNullable<ReduceContext['dispatch']>;
     /**
      * Forbidden dispatch stub injected into `ctx.dispatch` for every action
-     * type other than `'engine:tick'` (issue #35, Invariant #89).
+     * type other than `'engine:tick'` (Invariant #89).
      *
      * Throws `ForbiddenDispatchError` immediately when called, providing a
      * developer-friendly message that identifies the offending action type.
@@ -200,12 +199,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         this.#context = options?.context;
         this.#gameId = options?.gameId;
 
-        // Hoist the dispatch closure once — same body as before, rooted on the
-        // instance so #depth tracking works correctly for re-entrant calls.
+        // Hoist the dispatch closure once, rooted on the instance so #depth
+        // tracking works correctly for re-entrant calls.
         // Save/restore #ctx.dispatch and #currentActionType around the nested
         // process() call so the outer context's dispatch is not clobbered when
         // a fired game action's process() sets #ctx.dispatch = forbiddenStub
-        // (issue #35 — #ctx is a shared mutable singleton).
+        // (#ctx is a shared mutable singleton).
         this.#dispatchFn = (dispatchState, dispatchAction) => {
             if (this.#depth >= MAX_NESTED_DISPATCH) {
                 throw new RecursiveDispatchError(this.#depth);
@@ -213,13 +212,13 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             this.#depth++;
             // Save the current dispatch and action type so nested process() calls
             // (which overwrite #ctx.dispatch for the nested action) do not clobber
-            // the outer engine:tick context (issue #35 — #ctx is a shared singleton).
+            // the outer engine:tick context (#ctx is a shared singleton).
             // Fallback to #forbiddenDispatchFn (always non-null) satisfies the
             // exactOptionalPropertyTypes constraint on #ctx.dispatch.
             const savedDispatch = this.#ctx.dispatch ?? this.#forbiddenDispatchFn;
             const savedActionType = this.#currentActionType;
             try {
-                // Cast invariant (WARN-2): `dispatch` is only invoked by
+                // Cast invariant: `dispatch` is only invoked by
                 // `engine:tick` reducers, which receive the accumulating state
                 // from a prior `process()` call on a `TState` snapshot. The
                 // `ReduceContext.dispatch` signature uses the wider
@@ -367,7 +366,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                 }
             }
 
-            // Cast invariant (WARN-2): `UndoManager.undo/redo()` returns
+            // Cast invariant: `UndoManager.undo/redo()` returns
             // `BaseGameSnapshot` because the interface is non-generic. The
             // concrete value is always a `TState` because every memento stored
             // by `saveTurnMemento()` (called after `engine:end_turn`) was itself
@@ -379,10 +378,10 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
         // ── Stage 4 — authorization (validate) ────────────────────────────
         // Re-seed the shared context for this invocation. `#ctx` is reused
-        // across calls (issue #36) — `rng` varies per (seed, tick) pair and
+        // across calls — `rng` varies per (seed, tick) pair and
         // `dispatchDepth` mirrors the current re-entrant depth so reducers can
-        // inspect it. `dispatch` is gated to 'engine:tick' only (issue #35,
-        // Invariant #89) — all other action types receive the forbidden stub.
+        // inspect it. `dispatch` is gated to 'engine:tick' only (Invariant #89)
+        // — all other action types receive the forbidden stub.
         // IMPORTANT: #ctx must never escape this stack frame.
         this.#ctx.rng = createRng(snapshot.seed, snapshot.tick);
         this.#ctx.dispatchDepth = this.#depth;
@@ -435,7 +434,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         //   1. Clear the prior active player's undo history so the
         //      `crossTurnUndo: false` policy default holds in production.
         //   2. Record a turn memento for the NEW active player so the next
-        //      turn has a baseline to undo back to (host wiring — WARN-1).
+        //      turn has a baseline to undo back to (host wiring).
         //   3. Prune the bounded action history to `TURN_MEMENTO_RETENTION`
         //      turns of retention so memory stays bounded under long sessions.
         // This runs before Stage 7 so projected `undoMeta` reflects the current
@@ -473,7 +472,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // the logical clock and therefore returns a new snapshot reference, causing a
         // broadcast. If "always broadcast" semantics are ever required for unchanged
         // state (e.g. for sync-on-join), revisit this guard here and in
-        // StateBroadcaster (F26).
+        // StateBroadcaster.
         //
         // Skipped for nested dispatches (this.#depth > 0): only the outer action's
         // final state is broadcast. Timer-fired sub-actions accumulate into the

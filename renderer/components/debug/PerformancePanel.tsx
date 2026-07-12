@@ -2,7 +2,7 @@
 
 // renderer/components/debug/PerformancePanel.tsx
 //
-// Inspector Performance panel (§4.12 — Runtime Debug Layer, F47 T9, #698).
+// Inspector Performance panel (§4.12 — Runtime Debug Layer).
 // Tick-duration graph plus avg/max tick time, ring-buffer fill, and total
 // action count from the bridge's perf aggregates. Live ticks trigger a
 // coalesced refetch (one in-flight request, at most one trailing), and only

@@ -9,7 +9,7 @@
  * so the foundation can describe the wire protocol (`shared/messages.ts`) and
  * the game-screen contract (`shared/game-screen-contract.ts`) without importing
  * *up* into `networking` or `electron`. Two distinct shapes are kept on purpose
- * (they are NOT unified — that would be a real logic change, see issue #758):
+ * (they are NOT unified — that would be a real logic change):
  *
  *  - {@link PlayerSnapshot}     — the rich, renderer/screen-facing projection.
  *    `electron/preload/api-types.ts` re-exports it; game screens read it through
@@ -18,8 +18,7 @@
  *    the network. `networking/provider/MultiplayerProvider.ts` re-exports it as
  *    `PlayerSnapshot`; `shared/messages.ts` carries it on the `SNAPSHOT` frame.
  *
- * This module is PURE TYPE DECLARATIONS only — zero runtime code. Relocated
- * under issue #758.
+ * This module is PURE TYPE DECLARATIONS only — zero runtime code.
  */
 
 import type {
@@ -52,7 +51,7 @@ export interface GameEvent {
 
 /**
  * Projected game state for the active viewer.
- * Canonical: simulation/snapshot.ts (F03).
+ * Canonical: simulation/snapshot.ts.
  *
  * Invariant #1: GameSnapshot never crosses any IPC boundary. Only PlayerSnapshot does.
  */
@@ -76,7 +75,7 @@ export interface PlayerSnapshot {
     readonly setup?: GameSetupConfig;
     /**
      * Host-minted stable match identity, passed through projection verbatim
-     * like `setup` (Invariant #101, F68/#820). Optional and backward-compatible.
+     * like `setup` (Invariant #101). Optional and backward-compatible.
      */
     readonly matchId?: string;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
@@ -131,7 +130,7 @@ export interface WirePlayerSnapshot {
     readonly setup?: GameSetupConfig;
     /**
      * Host-minted stable match identity, passed through projection verbatim
-     * like `setup` (Invariant #101, F68/#820). Optional and backward-compatible.
+     * like `setup` (Invariant #101). Optional and backward-compatible.
      */
     readonly matchId?: string;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };

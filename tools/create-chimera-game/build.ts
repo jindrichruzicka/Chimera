@@ -1,6 +1,4 @@
 /**
- * tools/create-chimera-game/build.ts
- *
  * Build the publishable `create-chimera-game` bin: esbuild-bundle `index.ts` (and its sibling
  * pure modules — normalize / tokens / standalone / toolchain.generated) into a single
  * self-contained CommonJS `dist/index.js` with a `#!/usr/bin/env node` shebang, so end users run

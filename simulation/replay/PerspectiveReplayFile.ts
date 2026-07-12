@@ -1,6 +1,4 @@
 /**
- * simulation/replay/PerspectiveReplayFile.ts
- *
  * PerspectiveReplayFile schema, associated types, and structural validation.
  * Pure type declarations and pure functions — zero I/O, no Node.js APIs.
  *
@@ -14,8 +12,7 @@
  * The `kind: 'perspective'` literal discriminates this file from the
  * deterministic `ReplayFile` (which has no `kind`); both kinds coexist on disk.
  *
- * Architecture reference: §4.28 (ADR F44b)
- * Task: F44b / T1 (issue #667)
+ * Architecture reference: §4.28
  *
  * Invariants upheld:
  *   #1  — simulation/ has zero runtime deps on React, DOM, or networking

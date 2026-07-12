@@ -12,11 +12,11 @@
  *
  * Also handles automatic navigation: when a snapshot arrives (game started)
  * and the current path is /lobby — or /saves for a completed session restore
- * (#828) — navigates to /game. This drives the CLIENT window's navigation
- * without requiring a snapshot subscription in lobby/page or saves/page.
+ * — navigates to /game. This drives the CLIENT window's navigation without
+ * requiring a snapshot subscription in lobby/page or saves/page.
  *
  * Architecture reference: §4.4 — Renderer State Stores;
- *                         §6  — simulation/prediction · Client Prediction (F17)
+ *                         §6  — simulation/prediction · Client Prediction
  *
  * Invariants upheld:
  *   #1  — Only PlayerSnapshot (never GameSnapshot) crosses the IPC boundary.
@@ -65,7 +65,7 @@ export function GameStoreBootstrap(): null {
     // fire when the snapshot lands, so the fade-out runs to completion uncontested
     // (a second fade-out from the lobby would cancel this one and skip the fade).
     //
-    // /saves joins the gate for session restore (#828): the saves page issues
+    // /saves joins the gate for session restore: the saves page issues
     // load() and stays put; when the restored match snapshot lands, this effect
     // carries the host (and single-player loads) into /game. Restricted to
     // non-'lobby' phases there so a return-to-lobby broadcast cannot bounce
@@ -97,7 +97,7 @@ export function GameStoreBootstrap(): null {
 
     // Symmetric reverse of the /lobby → /game redirect above: when a
     // phase:'lobby' snapshot arrives on /game (host return-to-lobby plus every
-    // following client — both receive the broadcast lobby snapshot, #737), drop
+    // following client — both receive the broadcast lobby snapshot), drop
     // the stale match snapshot and return to /lobby. Reset first so the
     // /lobby → /game effect above does not immediately bounce back to /game on
     // /lobby. Invariant #1: only PlayerSnapshot.phase drives this decision.

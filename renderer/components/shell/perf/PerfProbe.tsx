@@ -1,13 +1,10 @@
 'use client';
 
 /**
- * renderer/components/shell/perf/PerfProbe.tsx
- *
  * Headless R3F component that collects per-frame GL stats and timing,
  * and writes them to perfStore every 500 ms via setPerfFrame().
  *
  * Architecture reference: §4.16 — Performance HUD
- * Task: issue #582 — Implement PerfProbe.tsx
  *
  * Rules:
  *  - Must be mounted inside a <Canvas> (uses useFrame).
@@ -76,10 +73,8 @@ export function PerfProbe(): null {
 
         const accTime = accTimeRef.current;
 
-        // Append this frame's timing sample.
         frameDeltasRef.current.push(deltaMs);
 
-        // Evict samples beyond the rolling frame cap.
         if (frameDeltasRef.current.length > FRAME_SAMPLE_CAP) {
             frameDeltasRef.current = frameDeltasRef.current.slice(
                 frameDeltasRef.current.length - FRAME_SAMPLE_CAP,

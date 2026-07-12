@@ -9,7 +9,6 @@
  * node:util) stay outside simulation/, satisfying invariant #2.
  *
  * Architecture reference: §4.11
- * Task: F06 / WARN-7 (issue #137)
  *
  * Invariants upheld:
  *   #2 — simulation/ has zero Node.js imports. This file is in electron/main/.

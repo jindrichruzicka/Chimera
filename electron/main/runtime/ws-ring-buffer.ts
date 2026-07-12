@@ -7,8 +7,7 @@
  * is full. The public surface is a plain T[] — consumers (ws-inspector helpers,
  * Vitest matchers) see a normal array with correct insertion-order indices.
  *
- * Architecture: §13.9 — WARN-2 performance fix.
- * Issue: #472
+ * Architecture: §13.9.
  */
 
 /** Brand symbol — survives structured-clone but is opaque to callers. */

@@ -1,5 +1,3 @@
-// electron/preload/api.ts
-//
 // Preload runtime entry point.
 //
 // Electron loads this file (after compilation to `electron/preload/api.js`)
@@ -83,8 +81,8 @@ const api: ChimeraAPI = {
     chat: createChatApi(port),
     // Deferred namespaces — the interfaces are empty stubs today (see the
     // `*API` declarations in `api-types.ts`) and will gain concrete methods
-    // in their respective milestones (F43). Exposing empty objects now keeps
-    // `window.__chimera` shape-stable for the renderer.
+    // later. Exposing empty objects now keeps `window.__chimera` shape-stable
+    // for the renderer.
     logs: buildLogsApi(port),
     extensions: buildExtensionsApi(),
 };

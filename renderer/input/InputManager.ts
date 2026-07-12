@@ -105,7 +105,7 @@ function findConflict(
         const id = rawId as InputActionId;
         if (id === skipId) continue;
 
-        // Only check within the same category
+        // Conflicts only matter within the same category.
         if (!registry.has(id)) continue;
         const action = registry.get(id);
         if (action.category !== targetCategory) continue;
@@ -291,7 +291,6 @@ export function createInputManager(
                         : undefined;
 
                 if (isNowPressed && !wasPressed) {
-                    // Button just pressed
                     if (matchedActionId !== undefined) {
                         pressedActions.add(matchedActionId);
                         dispatchEvent({
@@ -317,7 +316,6 @@ export function createInputManager(
                         });
                     }
                 } else if (!isNowPressed && wasPressed) {
-                    // Button just released
                     const currentBindings = getBindings();
                     for (const [rawId, binding] of Object.entries(currentBindings)) {
                         const id = rawId as InputActionId;
@@ -402,7 +400,6 @@ export function createInputManager(
             const currentBindings = getBindings();
             const newPrimaryCombo = makeCombo(binding.primary, binding.modifiers);
 
-            // Check primary combo for conflict within same category
             const primaryConflict = findConflict(
                 newPrimaryCombo,
                 currentBindings,
@@ -414,7 +411,6 @@ export function createInputManager(
                 return { ok: false, reason: 'conflict', conflictingAction: primaryConflict };
             }
 
-            // Check secondary combo for conflict within same category (if provided)
             if (binding.secondary !== undefined) {
                 const newSecondaryCombo = makeCombo(binding.secondary, binding.modifiers);
                 const secondaryConflict = findConflict(

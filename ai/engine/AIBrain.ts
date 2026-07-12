@@ -1,12 +1,9 @@
 /**
- * ai/engine/AIBrain.ts
- *
  * AIBrain<TParams> facade — wires together AIStateMachine, CommandScheduler,
  * CommandContext, and AIParams into a single lifecycle object consumed by
  * AIPlayerAgent.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F23 (issue #420)
  *
  * Invariants upheld:
  *   #16 — AI players submit EngineAction through ActionPipeline; AIBrain
@@ -20,8 +17,6 @@ import type { AIStateMachine } from './AIStateMachine.js';
 import type { AIParams, GameResult, PlayerSnapshot } from './AITypes.js';
 import type { CommandContext } from './CommandContext.js';
 import type { CommandScheduler } from './CommandScheduler.js';
-
-// ─── AIBrain ──────────────────────────────────────────────────────────────────
 
 /**
  * Facade that wires the full AI subsystem together for a single player agent.

@@ -1,7 +1,7 @@
 /**
  * tools/watch-packages.ts
  *
- * Live package-development watch loop for the `@chimera-engine/*` hierarchy (issue #793).
+ * Live package-development watch loop for the `@chimera-engine/*` hierarchy.
  *
  * Drives the fluent dev loop that pairs with the first-class `pnpm build`:
  *

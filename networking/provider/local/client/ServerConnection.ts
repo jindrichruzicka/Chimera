@@ -14,7 +14,6 @@
  *     (up to opts.maxRetries, default 5, delays: 250, 500, 1000, 2000, 4000 ms)
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T04 (issue #219)
  */
 
 import WebSocket from 'ws';
@@ -142,13 +141,13 @@ export class ServerConnection {
     private token = '';
     private profile: Record<string, unknown> | null = null;
     /**
-     * Optional lobby password (F56) presented in every JOIN, including
-     * auto-reconnect attempts. Stored alongside the token so a transient drop
-     * re-authenticates against a password-protected host without re-prompting.
+     * Optional lobby password presented in every JOIN, including auto-reconnect
+     * attempts. Stored alongside the token so a transient drop re-authenticates
+     * against a password-protected host without re-prompting.
      */
     private password: string | undefined = undefined;
     /**
-     * Optional saved-seat claims (F68/#821) presented in every JOIN, including
+     * Optional saved-seat claims presented in every JOIN, including
      * auto-reconnect attempts. Resending them on reconnect is harmless: once a
      * WELCOME assigned an id, `reconnectPlayerId` outranks claims server-side.
      */
@@ -176,7 +175,7 @@ export class ServerConnection {
     /** Whether the connection was closed intentionally (no reconnect). */
     private intentionalClose = false;
     private retryCount = 0;
-    /** Pending reconnect timer — cleared in close() to prevent timer leaks (W-6). */
+    /** Pending reconnect timer — cleared in close() to prevent timer leaks. */
     private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(opts?: ServerConnectionOptions) {
@@ -260,11 +259,11 @@ export class ServerConnection {
         this.intentionalClose = true;
         // Announce a deliberate departure before tearing down the socket so the
         // host distinguishes this from a transient drop and suppresses the
-        // opponent "disconnected" presence toast (#687). Best-effort: send() is a
+        // opponent "disconnected" presence toast. Best-effort: send() is a
         // no-op unless the socket is OPEN, and `ws` flushes buffered frames before
         // the close handshake, so the LEAVE reaches the host ahead of the close.
         this.send({ type: 'LEAVE' });
-        // Cancel any pending reconnect timer (W-6)
+        // Cancel any pending reconnect timer.
         if (this.reconnectTimer !== null) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;

@@ -5,9 +5,8 @@
  * Human-readable and easy to inspect / debug (§4.11).
  *
  * Architecture reference: §4.11
- * Task: F06 / T1 (issue #120)
  *
- * Security hardening (issue #133 — OWASP A08):
+ * Security hardening (OWASP A08):
  *   - Maximum raw size enforced before JSON.parse (prevents DoS via huge inputs).
  *   - safeReviver drops __proto__, constructor, and prototype keys to prevent
  *     prototype pollution.
@@ -51,7 +50,7 @@ const SaveFileHeaderSchema = z.object({
 
 /**
  * Wire shape of a single `CommitmentEnvelope` stored under `pendingCommitments`.
- * Mirrors the full F27 `CommitmentEnvelope` interface (§4.6 / §8).
+ * Mirrors the full `CommitmentEnvelope` interface (§4.6 / §8).
  * `revealedAt` must be an integer tick (invariant #44) when present.
  */
 const WireCommitmentEnvelopeSchema = z.object({
@@ -79,7 +78,7 @@ const SaveFileSchema = z.object({
     }),
     deltaActions: z.array(z.unknown()),
     pendingCommitments: z.record(z.string(), WireCommitmentEnvelopeSchema),
-    // Optional so pre-#26 (v4) saves parse without the field; the v4→v5 migration
+    // Optional so v4 saves parse without the field; the v4→v5 migration
     // backfills `{}`. `value` is opaque at the persistence boundary.
     stagedReveals: z
         .record(
@@ -92,8 +91,8 @@ const SaveFileSchema = z.object({
             }),
         )
         .optional(),
-    // Optional so pre-#820 (v5) saves parse without the field; the v5→v6
-    // migration backfills a manifest derived from the checkpoint. `slotIndex`
+    // Optional so v5 saves parse without the field; the v5→v6 migration
+    // backfills a manifest derived from the checkpoint. `slotIndex`
     // and `maxPlayers` are integers (invariant #44).
     session: z
         .object({

@@ -50,7 +50,7 @@ export const SAVES_SLOT_UPDATE_CHANNEL = 'chimera:saves:slot-update';
 /**
  * `ipcRenderer.on` target for {@link SavesAPI.onRestoreStatus}. Main pushes a
  * slim `RestoreStatusEvent` via `webContents.send` on every session-restore
- * transition (F68 #826).
+ * transition.
  */
 export const SAVES_RESTORE_STATUS_CHANNEL = 'chimera:saves:restore-status';
 
@@ -113,7 +113,7 @@ export function createSavesApi(ipc: SavesApiIpcPort): SavesAPI {
         onSlotUpdate: (cb: (slots: SaveSlotMeta[]) => void): Unsubscribe =>
             subscribePush<SaveSlotMeta[]>(ipc, SAVES_SLOT_UPDATE_CHANNEL, cb),
         // Guarded (log-and-drop): a malformed status push must not take down
-        // the renderer's long-lived restore overlay subscription (#826).
+        // the renderer's long-lived restore overlay subscription.
         onRestoreStatus: (cb: (event: RestoreStatusEvent) => void): Unsubscribe =>
             subscribeGuardedPush<RestoreStatusEvent>(
                 ipc,

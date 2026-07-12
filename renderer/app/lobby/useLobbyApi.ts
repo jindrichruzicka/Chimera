@@ -28,13 +28,13 @@ export interface LobbyApi {
     leave(): Promise<void>;
     startGame(): Promise<void>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
-    /** Host-only: set a host-authored match setting; main rejects non-host writes (#706). */
+    /** Host-only: set a host-authored match setting; main rejects non-host writes. */
     setMatchSetting(key: string, value: string): Promise<void>;
-    /** Owner-authored: set an attribute on the local player's OWN seat (`playerId` must be local); main rejects other seats (#706, F53). */
+    /** Owner-authored: set an attribute on the local player's OWN seat (`playerId` must be local); main rejects other seats. */
     setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
-    /** Host-only: append an AI agent slot; main rejects non-host writes and a full lobby, then rebroadcasts the synced lobby state (#724). */
+    /** Host-only: append an AI agent slot; main rejects non-host writes and a full lobby, then rebroadcasts the synced lobby state. */
     addAiPlayer(): Promise<void>;
-    /** Host-only: remove the AI agent slot at `slotIndex`; main rejects non-host writes, then rebroadcasts the synced lobby state (#724). */
+    /** Host-only: remove the AI agent slot at `slotIndex`; main rejects non-host writes, then rebroadcasts the synced lobby state. */
     removeAiPlayer(slotIndex: number): Promise<void>;
 }
 

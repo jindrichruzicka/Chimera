@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
- * Page object for the Escape-toggled in-game menu on Tactics (F55, §4.33–§4.34).
+ * Page object for the Escape-toggled in-game menu on Tactics (§4.33–§4.34).
  * The engine `InGameMenuHost` (`renderer/components/shell/InGameMenuHost.tsx`)
  * opens the game-supplied menu; Tactics registers `TacticsInGameMenu`
  * (`apps/tactics/screens/TacticsInGameMenu.tsx`) — a single-step Leave-game

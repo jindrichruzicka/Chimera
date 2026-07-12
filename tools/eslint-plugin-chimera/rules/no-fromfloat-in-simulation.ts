@@ -16,8 +16,6 @@
  *   `// eslint-disable-next-line chimera/no-fromfloat-in-simulation`
  * without a companion `// @chimera-review: <reason>` on the same or previous
  * line is itself reported as an error.
- *
- * Issue: #400
  */
 
 import type { Rule } from 'eslint';
@@ -47,9 +45,8 @@ function isFixedPointSource(source: string): boolean {
  */
 function isInSimulationNonLoader(filename: string): boolean {
     const n = filename.replace(/\\/g, '/');
-    // Must be inside simulation/ (absolute or relative)
     if (!n.includes('/simulation/') && !n.startsWith('simulation/')) return false;
-    // Exempt: simulation/content/loaders/**
+    // Loaders are the sanctioned place to call fromFloat(), so exempt them.
     if (n.includes('/simulation/content/loaders/') || n.includes('simulation/content/loaders/')) {
         return false;
     }

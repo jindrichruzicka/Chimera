@@ -22,6 +22,7 @@ Quality gate for Chimera branch review. Read changed files, measure against sour
 2. Load the source sections that apply to the changed files.
 3. Run the invariant checker and any targeted validation needed to classify findings.
 4. Review architecture, module boundaries, determinism, type safety, UI state, IPC/network trust, tests, security, performance, and docs against the linked sources.
+    - Comment quality per [§16 Code Comments](../../docs/coding-standards-sections/code-comments.md): flag what-not-why comments, redundant/stale comments, and any issue or review-finding reference (`#nnn`, `WARN-n`, `BLOCK-n`).
 5. Report findings only; never patch during review.
 
 ## Report

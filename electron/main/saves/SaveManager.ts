@@ -1,20 +1,12 @@
 /**
- * electron/main/SaveManager.ts
- *
  * Orchestrates all save / load persistence operations for the main process.
  * Delegates I/O to an injected `SaveRepository` — no concrete repository
  * class is ever imported here (architecture §4.11, invariant #37).
- *
- * Responsibilities:
- *   - Thin delegation: list / load / save / delete / has → repository
- *   - autoSave: forces slotId to 'autosave' before delegating
- *   - restoreFromSave: loads and returns a SaveFile for session restoration
  *
  * The concrete repository is wired once in `electron/main/index.ts`. Tests
  * use `InMemorySaveRepository`.
  *
  * Architecture reference: §4.11
- * Task: F06 / T5 (issue #124)
  *
  * Invariants upheld:
  *   #37 — No import of FileSaveRepository or any concrete class by name.

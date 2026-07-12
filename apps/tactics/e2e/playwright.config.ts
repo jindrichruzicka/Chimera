@@ -3,8 +3,8 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
     testDir: './tests',
     // Resolve `@chimera-engine/*` specifiers for the Playwright transform via e2e/tsconfig.json.
-    // The root tsconfig dropped the `@chimera-engine/*` paths in F57 (#752); Playwright has no
-    // non-tsconfig alias hook, so this shim restores resolution for the runner only.
+    // The root tsconfig carries no `@chimera-engine/*` paths, and Playwright has no non-tsconfig
+    // alias hook, so this shim restores resolution for the runner only.
     tsconfig: './tsconfig.json',
     timeout: 90_000,
     expect: { timeout: 10_000 },

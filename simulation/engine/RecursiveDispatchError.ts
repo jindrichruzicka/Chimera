@@ -8,7 +8,6 @@
  *   - `RecursiveDispatchError` — thrown when that ceiling is exceeded.
  *
  * Architecture reference: §4.7, §4.20
- * Task: F21 (issue #405)
  *
  * Invariants upheld:
  *   #43 — simulation/ is side-effect-free; no Node.js or Electron imports.
@@ -24,7 +23,7 @@
  * Exceeding this limit indicates a cyclic timer chain or a game logic bug.
  * The pipeline throws `RecursiveDispatchError` at depth `MAX_NESTED_DISPATCH + 1`.
  *
- * Only `engine:tick` (F21 timer dispatch) may call `ctx.dispatch()`.
+ * Only `engine:tick` (timer dispatch) may call `ctx.dispatch()`.
  * Game reducers must schedule work via `TimerManager.create()` instead.
  */
 export const MAX_NESTED_DISPATCH = 16;

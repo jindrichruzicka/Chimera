@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * renderer/app/replays/page.tsx — Replay Browser (§4.28, F44 / T6, #660; F44b / T8, #674).
+ * Replay Browser (§4.28).
  *
  * Lists saved replays for the active game — **both** deterministic and
  * perspective kinds, each row carrying a type badge. Deterministic replays come

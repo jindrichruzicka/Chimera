@@ -1,5 +1,3 @@
-// renderer/game/GameImageWarmup.ts
-//
 // Warm-up loader for game-declared shell images (`LoadedRendererGameShell.
 // preloadImages`) — the image twin of GameFontLoader. Sources are local game
 // asset refs resolved onto the renderer asset protocol; each is fetched AND

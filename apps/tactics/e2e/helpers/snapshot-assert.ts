@@ -5,7 +5,6 @@
  * are correctly obfuscated and that simulation state converges between processes.
  *
  * Architecture: §13.7 — IPC and WebSocket Test Helpers
- * Issue: #473
  *
  * Invariants upheld:
  *   #3 — Operates on PlayerSnapshot only; never on GameSnapshot.

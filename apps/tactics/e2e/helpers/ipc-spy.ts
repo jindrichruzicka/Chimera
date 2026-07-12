@@ -6,7 +6,6 @@
  * globalThis.__e2eHooks in simulation-host.ts when that flag is set.
  *
  * Architecture: §13.7 — IPC and WebSocket Test Helpers
- * Issue: #471
  *
  * Invariants upheld:
  *   #3  — Returns PlayerSnapshot only; never GameSnapshot.

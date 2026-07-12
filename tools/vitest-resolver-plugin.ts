@@ -10,12 +10,11 @@ export type ResolverPlugin = Readonly<{
 
 /**
  * Maps each `@chimera-engine/<pkg>` workspace package onto its source directory
- * (relative to the workspace root). F57 removes the tsconfig `paths` aliases, so
- * this plugin — not vite-tsconfig-paths — is what lets vitest resolve bare
- * `@chimera-engine/*` specifiers onto in-tree TypeScript source while no `dist/` build
- * exists yet. `@chimera-engine/tactics` lives under `apps/tactics` (relocated in F63
- * #782; its `dist/` is built but not yet consumed — F64 flips this map to honour
- * its exports). Mirrors the webpack aliases in `renderer/next.config.ts`.
+ * (relative to the workspace root). With no tsconfig `paths` aliases, this plugin —
+ * not vite-tsconfig-paths — is what lets vitest resolve bare `@chimera-engine/*`
+ * specifiers onto in-tree TypeScript source while no `dist/` build exists yet.
+ * `@chimera-engine/tactics` lives under `apps/tactics`. Mirrors the webpack aliases in
+ * `renderer/next.config.ts`.
  */
 const CHIMERA_PACKAGE_DIRS: Readonly<Record<string, string>> = {
     // `@chimera-engine/simulation`, `@chimera-engine/ai`, `@chimera-engine/networking`,
@@ -24,8 +23,7 @@ const CHIMERA_PACKAGE_DIRS: Readonly<Record<string, string>> = {
     // Leaving them out lets Vite's default resolver honour the exports map
     // (build-before-consume), so other packages' tests exercise the packaged
     // artefact. Their own tests use relative imports and therefore never hit this
-    // map. (`@chimera-engine/renderer` joined this group in #773 and `@chimera-engine/electron`
-    // in #777 once their dist/ builds landed.)
+    // map.
     '@chimera-engine/tactics': 'apps/tactics',
 };
 
@@ -145,7 +143,6 @@ export function createPreferTypeScriptSourceResolver(
                 resolved.delete(tsSourcePath);
             }
 
-            // Compute new result based on current file state
             const result = fileCurrentlyExists ? tsSourcePath : null;
             resolved.set(tsSourcePath, result);
             return result;

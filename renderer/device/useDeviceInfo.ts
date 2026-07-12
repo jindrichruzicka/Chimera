@@ -1,12 +1,7 @@
 'use client';
 
 /**
- * renderer/device/useDeviceInfo.ts
- *
  * Consumer hooks for the DeviceInfo context tree (§4.17).
- *
- * Architecture reference: §4.17 — Device Info
- * Issue: #591 (F42 — Implement DeviceInfo hooks)
  *
  * Invariants upheld:
  *   #83 — Each hook throws a descriptive error when context is null.

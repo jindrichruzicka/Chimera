@@ -1,7 +1,7 @@
 /**
  * tools/verify-scaffold.ts
  *
- * `verify:scaffold` — the scaffold-and-smoke gate (issue #801, F65).
+ * `verify:scaffold` — the scaffold-and-smoke gate.
  *
  * `verify:pack` proves the packed `@chimera-engine/*` surfaces resolve. This gate proves the
  * NEXT link in the chain: that `create-chimera-game` token-substitutes those packages
@@ -26,8 +26,8 @@
  *   7. `pnpm --filter <app> test:e2e` — the generated app's Electron BOOT-smoke
  *   8. `pnpm --filter <app> build` + `build:app` — the PRODUCTION build: `tsc -p tsconfig.build.json`
  *      (proves the standalone refs rewrite resolves the engine from `node_modules`) + the esbuild
- *      main/preload bundles. This is what fails out-of-repo today (#816).
- *   9. `next build` the renderer + an UNSIGNED `electron-builder --dir` — proves the #814 tokenised
+ *      main/preload bundles. This is the arm that fails out-of-repo.
+ *   9. `next build` the renderer + an UNSIGNED `electron-builder --dir` — proves the tokenised
  *      packaging config produces a branded local app bundle from the standalone-emitted project.
  *
  * `--self-test` proves the gate bites: it drops the required renderer registration from
@@ -170,7 +170,7 @@ export function applyTarballOverrides(
  * would make `pnpm install` reject the app; pointing each at its tarball resolves it through
  * the packed `exports`. Rewrites BOTH `dependencies` and `devDependencies`: the blank template
  * carries the engine packages under `devDependencies` (esbuild-inlined, kept out of
- * electron-builder's prod tree, #817), so a section-blind rewrite would leave a `workspace:*` the
+ * electron-builder's prod tree), so a section-blind rewrite would leave a `workspace:*` the
  * gate's `pnpm install` then rejects. The root `pnpm.overrides` may already mask this, but this
  * function's own contract must hold regardless.
  */
@@ -324,7 +324,7 @@ async function scaffoldPipeline(
         assertStepOk('e2e', runAppScript(deps, tmp, 'test:e2e'));
     }
 
-    // 8. production build (#816). `build` runs `tsc -p tsconfig.build.json`: out-of-repo it only
+    // 8. production build. `build` runs `tsc -p tsconfig.build.json`: out-of-repo it only
     //    succeeds because the standalone emit neutralised the template's monorepo `references` (the
     //    engine now resolves from `node_modules`). `build:app` esbuild-bundles main/preload — the
     //    EMITTED script self-sets `CHIMERA_VERIFY_PACK_NODE_MODULES`, so the host resolves from the
@@ -339,10 +339,10 @@ async function scaffoldPipeline(
         deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'build:app'], { cwd: tmp }),
     );
 
-    // 9. package (#816). Export the Next renderer (populates `renderer/out`), then build an UNSIGNED
+    // 9. package. Export the Next renderer (populates `renderer/out`), then build an UNSIGNED
     //    `electron-builder --dir` bundle from the standalone-emitted project. electron-builder
     //    validates + consumes the per-game top-level `icon`, so a missing/invalid icon fails here.
-    //    `--dir` skips dmg/nsis/AppImage (no python, CI-feasible — signing stays out of scope, #813).
+    //    `--dir` skips dmg/nsis/AppImage (no python, CI-feasible — signing stays out of scope).
     deps.log('packaging the generated app (electron-builder --dir, unsigned)…');
     assertStepOk(
         'package',

@@ -1,7 +1,7 @@
 /**
  * electron/main/runtime/RevealOrchestrator.ts
  *
- * Host-side driver for the commit-then-sync reveal sequence (T9 / #729). When
+ * Host-side driver for the commit-then-sync reveal sequence. When
  * every seat has committed and the commitment-mode End Turn lands,
  * `runRevealSync` reveals each player's staged bundle over the existing reveal
  * channel and re-applies it so every client converges.

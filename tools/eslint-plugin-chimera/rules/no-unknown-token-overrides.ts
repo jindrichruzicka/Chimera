@@ -1,6 +1,4 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-unknown-token-overrides.ts
- *
  * ESLint rule: `chimera/no-unknown-token-overrides`
  *
  * Flags game token override custom properties that are not declared in the
@@ -8,7 +6,6 @@
  *
  * Architecture reference: §4.35 — UI Design System
  * Invariant #85
- * Issue: #556
  */
 
 import { readFileSync } from 'node:fs';
@@ -37,7 +34,7 @@ function normalizeFilename(filename: string): string {
     return filename.replace(/\\/gu, '/');
 }
 
-// Game apps live under apps/<name>/ (relocated from games/<name>/ in F63 #782).
+// Game apps live under apps/<name>/.
 function isTokenOverrideFile(filename: string): boolean {
     return /(?:^|[/])apps[/][^/]+[/]styles[/]tokens-override\.css$/u.test(
         normalizeFilename(filename),

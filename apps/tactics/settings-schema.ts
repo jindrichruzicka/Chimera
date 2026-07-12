@@ -4,7 +4,7 @@
  * TacticsSettings extends EngineSettings with tactics-specific fields.
  * The exported tacticsSettingsSchema is registered with SettingsManager at startup.
  *
- * Architecture reference: §F07/T7 (issue #153), §4.13
+ * Architecture reference: §4.13
  *
  * Module boundary: may import from simulation/, ai/, shared/ and own files only.
  * Must NOT import from renderer/, electron/, or other games/ directories.
@@ -53,9 +53,7 @@ export const TACTICS_DEFAULTS: TacticsSettings = {
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
 const tacticsZodSchema = z.object({
-    // Engine fields — spread from shared engineSettingsZodShape (WARN-1 fix)
     ...engineSettingsZodShape,
-    // Tactics-specific fields
     showGrid: z.boolean(),
     animationSpeed: z.enum(['slow', 'normal', 'fast', 'instant']),
     showDamageNumbers: z.boolean(),

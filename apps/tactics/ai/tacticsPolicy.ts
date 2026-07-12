@@ -1,7 +1,7 @@
 /**
  * apps/tactics/ai/tacticsPolicy.ts
  *
- * Tactics AI policy (issue #725). A game-owned policy: it lives in the tactics
+ * Tactics AI policy. A game-owned policy: it lives in the tactics
  * game package and is built on the game-agnostic `ai/` framework. It reads the
  * viewer-safe `PlayerSnapshot` and emits the same `tactics:move_unit` /
  * `tactics:attack` / `engine:end_turn` EngineActions a human would, through the

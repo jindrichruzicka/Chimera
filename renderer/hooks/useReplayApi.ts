@@ -5,7 +5,7 @@
  * player routes. Mirrors the pattern of `renderer/hooks/useSavesApi.ts`.
  *
  * Both replay pages depend on this hook so no component reaches into the preload
- * bridge directly (issue #660 acceptance criterion / Invariant boundary).
+ * bridge directly, keeping the module boundary intact.
  *
  * Architecture reference: §4.28 — Replay System
  *
@@ -53,7 +53,7 @@ export function getReplayBridge(source: unknown = globalThis): ReplayAPI | null 
 
 /**
  * The renderer-facing slice of the perspective replay surface
- * (`window.__chimera.replay.perspective.*`, §4.28 ADR F44b). Only the methods
+ * (`window.__chimera.replay.perspective.*`, §4.28). Only the methods
  * the browser and player consume are wrapped: `list` (opaque paths),
  * `exportCurrent`, `openPlayback`, the floor-lookup `snapshotAt`, and
  * `closePlayback`.
@@ -80,7 +80,7 @@ export interface ReplayApi {
     /**
      * Finalise the in-progress host recording and resolve with the saved file
      * path (§4.28). Rejects when no match is being hosted — surfaced as an
-     * inline error by the post-game summary actions (F44 / T8).
+     * inline error by the post-game summary actions.
      *
      * `intent` (default `'save'`) gates the "Replay saved" toast: `'save'`
      * raises it, `'view'` suppresses it. See {@link ReplayExportIntent}.

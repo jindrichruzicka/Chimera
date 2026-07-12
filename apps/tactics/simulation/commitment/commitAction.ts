@@ -1,8 +1,6 @@
 /**
- * apps/tactics/commitment/commitAction.ts
- *
- * The `tactics:commit` action for commitment-scheme battle mode (T8 / #728). It
- * records the non-secret per-turn commit marker so the end-turn guard can gate
+ * The `tactics:commit` action for commitment-scheme battle mode. It records the
+ * non-secret per-turn commit marker so the end-turn guard can gate
  * `engine:end_turn` until every seated player has committed.
  *
  * Secrecy: the reducer writes ONLY `committedTurns[playerId] = turnNumber`. The

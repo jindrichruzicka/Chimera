@@ -4,7 +4,6 @@
  * Minimal transport-facing contract consumed by MessageRouter.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: issue #333
  */
 
 import type { Unsubscribe } from '../../MultiplayerProvider.js';

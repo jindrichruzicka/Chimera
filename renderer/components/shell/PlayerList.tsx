@@ -1,8 +1,3 @@
-// renderer/components/shell/PlayerList.tsx
-//
-// Player list component for the lobby screen.
-// Displays a list of players with their ready states.
-
 import React from 'react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';

@@ -6,14 +6,13 @@ import { GamePage } from '../pages/GamePage';
  * e2e/helpers/lobby-match.ts
  *
  * Drive a connected host+client lobby to a started match and wait for both
- * match canvases. Shared by `game.fixture` and the in-game-menu/leave spec
- * (#743).
+ * match canvases. Shared by `game.fixture` and the in-game-menu/leave spec.
  *
  * Robust to the players' current ready state: each window flips its OWN seat's
  * ready toggle only when that seat is not already ready. This works from a fresh
- * lobby and from a restart after a host return-to-lobby (#736, which now clears
- * ready) without an unconditional toggle accidentally flipping an already-ready
- * seat back to unready and stalling the start gate.
+ * lobby and from a restart after a host return-to-lobby (which clears ready)
+ * without an unconditional toggle accidentally flipping an already-ready seat
+ * back to unready and stalling the start gate.
  */
 export async function readyAndStart(
     hostLobby: LobbyPage,

@@ -75,7 +75,7 @@ export default function LobbyPage() {
     const [hostPassword, setHostPassword] = useState('');
     const [joinPassword, setJoinPassword] = useState('');
     // A wrong/absent password marks the join password field invalid (red) — no
-    // message text; the invalid state alone is the cue (F56).
+    // message text; the invalid state alone is the cue.
     const [joinPasswordInvalid, setJoinPasswordInvalid] = useState(false);
     const [activeTabId, setActiveTabId] = useState<LobbyEntryTabId>('host');
     const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -135,7 +135,7 @@ export default function LobbyPage() {
         try {
             setPendingAction('hosting');
             setError(null);
-            // F56: a blank password hosts an open lobby (omit the field entirely).
+            // A blank password hosts an open lobby (omit the field entirely).
             const trimmedPassword = hostPassword.trim();
             await lobbyApi.host({
                 gameId,
@@ -173,8 +173,8 @@ export default function LobbyPage() {
                 // The host rejects a wrong/absent password with the structured
                 // reason `invalid_password`; that string is the only signal that
                 // survives the IPC boundary (the JoinRejectedError class does not),
-                // so flag the password field invalid (F56). Any other failure
-                // stays in the top-level banner.
+                // so flag the password field invalid. Any other failure stays in
+                // the top-level banner.
                 const message = err instanceof Error ? err.message : 'Failed to join lobby';
                 if (message.includes('invalid_password')) {
                     setJoinPasswordInvalid(true);

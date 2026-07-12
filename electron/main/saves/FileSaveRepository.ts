@@ -14,7 +14,6 @@
  * In tests, supply a custom `baseDir` pointing to a temp directory.
  *
  * Architecture reference: §4.11
- * Task: F06 / T4 (issue #123)
  *
  * Invariants upheld:
  *   #23 — save() writes to .tmp and renames atomically.
@@ -43,13 +42,13 @@ const FILE_EXT = '.chimera';
  * Maximum number of save-file entries read in parallel by `list()`.
  *
  * Capping parallelism at this value prevents file-descriptor exhaustion
- * (EMFILE) when a user has hundreds of save slots (issue #139 — WARN-9).
+ * (EMFILE) when a user has hundreds of save slots.
  */
 export const LIST_CONCURRENCY = 16;
 
 /**
  * Thrown when a slot-ID component (gameId or slotName) fails the allowlist
- * validation that prevents path traversal (OWASP A01, invariant #128-fix).
+ * validation that prevents path traversal (OWASP A01, Invariant #128).
  *
  * Allowed pattern: `^[a-z0-9][a-z0-9_-]{0,63}$`
  * — starts with a lowercase letter or digit

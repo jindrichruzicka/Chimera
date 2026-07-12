@@ -13,7 +13,6 @@
  * back, and `list()` returns the stored paths for a game.
  *
  * Architecture reference: §4.28
- * Task: F44 / T3 (issue #657)
  *
  * Invariants upheld:
  *   #2  — simulation/ is side-effect-free; no FS or Electron imports.

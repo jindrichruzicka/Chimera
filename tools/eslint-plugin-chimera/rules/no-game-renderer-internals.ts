@@ -7,7 +7,7 @@
  * the UI primitive barrel (`@chimera-engine/renderer/components/ui`), the chat barrel
  * (`@chimera-engine/renderer/components/chat`), the in-Canvas component barrel
  * (`@chimera-engine/renderer/components/r3f`), and the game-registration seam
- * (`@chimera-engine/renderer/game`, #784) — while blocking all other renderer internals
+ * (`@chimera-engine/renderer/game`) — while blocking all other renderer internals
  * from games packages. Game renderer surfaces are the React screens/shell
  * components (`apps/<name>/{screens,shell}/*.{jsx,tsx}`) and the renderer
  * composition root (`apps/<name>/renderer/*.{ts,tsx}`), which registers the
@@ -59,7 +59,7 @@ function resolveImportPath(filename: string, source: string): string {
     return normalizePathSegments(`${dirname(filename)}/${normalizedSource}`);
 }
 
-// Game apps live under apps/<name>/ (relocated from games/<name>/ in F63 #782).
+// Game apps live under apps/<name>/.
 function isGameFile(filename: string): boolean {
     return /(?:^|\/)apps\/[^/]+\//u.test(normalizePath(filename));
 }
@@ -68,7 +68,7 @@ function isGameRendererSurface(filename: string): boolean {
     const normalized = normalizePath(filename);
     // A game's renderer-facing surfaces: the React screens/shell components
     // (.jsx/.tsx) and the renderer composition root under apps/<name>/renderer/
-    // (.ts/.tsx — register.ts/loaders.ts, #784), which wires the game's renderer
+    // (.ts/.tsx — register.ts/loaders.ts), which wires the game's renderer
     // contribution into the @chimera-engine/renderer host through the public game seam.
     return /(?:^|\/)apps\/[^/]+\/(?:(?:screens|shell)\/.*\.(?:jsx|tsx)|renderer\/.*\.(?:ts|tsx))$/u.test(
         normalized,
@@ -133,7 +133,7 @@ function isPublicR3fBarrelImport(source: string): boolean {
     );
 }
 
-// The renderer game-registration seam (#784): the public `@chimera-engine/renderer/game`
+// The renderer game-registration seam: the public `@chimera-engine/renderer/game`
 // export a consumer app's renderer composition root uses to register its game's
 // renderer contribution (`registerRendererGame`, `RendererGameContribution`).
 function isPublicGameSeamImport(source: string): boolean {
@@ -145,7 +145,7 @@ function isPublicGameSeamImport(source: string): boolean {
     );
 }
 
-// The engine GUI shell surface (F65 Phase 2c): the public `@chimera-engine/renderer/shell/*`
+// The engine GUI shell surface: the public `@chimera-engine/renderer/shell/*`
 // route + layout exports a consumer app's OWN Next host re-exports so the app owns its
 // renderer GUI while the game-agnostic shell ships from the package. Allowed ONLY from
 // the app's Next host route tree (apps/<name>/renderer/app/**), never from game logic

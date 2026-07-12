@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * renderer/components/lobby/ProfileRejectedToastBridge.tsx (§4.30, #688).
+ * renderer/components/lobby/ProfileRejectedToastBridge.tsx (§4.30).
  *
  * App-wide listener that turns a main-process profile-admission rejection into a
  * "Profile rejected: {reason}" error toast. Main pushes

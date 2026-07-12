@@ -1,10 +1,6 @@
 /**
- * electron/main/SettingsManager.ts
- *
  * Orchestrates per-game settings: schema registration, merge, persist, and
  * broadcast.  Delegates I/O to an injected `SettingsRepository`.
- *
- * Architecture reference: §F07/T4 (issue #150), §3 settings-manager.ts
  *
  * Invariants upheld:
  *   #34 — registerSchema() must be called before getSettings/updateSettings
@@ -29,7 +25,7 @@ import {
     SettingsMerger,
 } from '@chimera-engine/simulation/settings/index.js';
 
-/** Top-level engine namespace keys that game schemas must not shadow (invariant #35). */
+/** Top-level engine namespace keys that game schemas must not shadow (Invariant #35). */
 const ENGINE_NAMESPACE_KEYS = new Set(['audio', 'display', 'gameplay', 'controls']);
 
 /**
@@ -119,13 +115,12 @@ export class SettingsManager {
         }
 
         // Invariant #35: game-specific keys (keys beyond the five engine namespaces)
-        // must not shadow engine namespace keys. Extract only the game-specific keys.
+        // must not shadow engine namespace keys.
         const allKeys = Object.keys(schema.defaults);
         const gameSpecificKeys = allKeys.filter((k) => !ENGINE_NAMESPACE_KEYS.has(k));
 
-        // If the game has added custom keys, verify none of them conflict with engine namespaces.
-        // This check is redundant if gameSpecificKeys are truly outside ENGINE_NAMESPACE_KEYS,
-        // but is kept here for clarity and as a defence-in-depth check.
+        // Defence in depth: gameSpecificKeys already excludes ENGINE_NAMESPACE_KEYS, so this
+        // never fires today, but it guards the invariant if the filter above ever changes.
         const colliding = gameSpecificKeys.filter((k) => ENGINE_NAMESPACE_KEYS.has(k));
         if (colliding.length > 0) {
             throw new SettingsNamespaceCollisionError(
@@ -218,13 +213,13 @@ export class SettingsManager {
      * Throws `SettingsValidationError` if the patch contains invalid values.
      *
      * Only the validated user overrides are persisted — never the full defaults
-     * tree (BLOCK-1 fix). The return value of validatePatch is used so that
-     * type-coerced, unknown-key-stripped values are what gets saved (WARN-2 fix).
+     * tree. The return value of validatePatch is used so that type-coerced,
+     * unknown-key-stripped values are what gets saved.
      */
     /**
      * Validate a patch against the registered per-game schema.
      * Throws `SettingsValidationError` if validation fails or if no schema
-     * is registered for the game (BLOCK-4: called at IPC boundary before updateSettings).
+     * is registered for the game (called at the IPC boundary before updateSettings).
      * Returns the validated, unknown-key-stripped patch on success.
      */
     validatePatchForGame(gameId: string, patch: Partial<UserSettings>): Partial<UserSettings> {
@@ -255,13 +250,13 @@ export class SettingsManager {
     async updateSettings(gameId: string, patch: Partial<UserSettings>): Promise<ResolvedSettings> {
         return this.runSerializedMutation(gameId, async () => {
             const schema = this.schemas.get(gameId);
-            // WARN-2 fix: use the return value (validated, stripped patch)
+            // Use the return value: the validated, unknown-key-stripped patch.
             const validatedPatch =
                 schema !== undefined ? SettingsMerger.validatePatch(schema.schema, patch) : patch;
 
             const currentOverrides = await this.repo.load(gameId);
-            // BLOCK-1 fix: merge the validated patch into existing OVERRIDES only,
-            // not into the full resolved defaults tree.
+            // Merge the validated patch into existing OVERRIDES only, never into
+            // the full resolved defaults tree — otherwise defaults would be persisted.
             const newOverrides = mergeUserOverrides(
                 currentOverrides,
                 validatedPatch,

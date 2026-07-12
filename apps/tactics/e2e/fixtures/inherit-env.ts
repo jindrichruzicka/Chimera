@@ -1,6 +1,4 @@
 /**
- * e2e/fixtures/inherit-env.ts
- *
  * Builds the environment passed to `electron.launch` from the parent process
  * environment.
  *

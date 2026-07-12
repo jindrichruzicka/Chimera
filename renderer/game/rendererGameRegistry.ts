@@ -87,7 +87,7 @@ export type RendererGameShellLoader = () => Promise<LoadedRendererGameShell>;
 
 /**
  * A consumer app's renderer-side contribution, injected at the renderer
- * composition root (the F62 `MainGameContribution` twin). The renderer host
+ * composition root (the `MainGameContribution` twin). The renderer host
  * (`@chimera-engine/renderer`) ships no game-specific renderer code; a game enters the
  * renderer exclusively by registering one of these through
  * {@link registerRendererGame}. The two loaders keep the heavy game modules
@@ -103,8 +103,8 @@ export interface RendererGameContribution {
 }
 
 // Mutable, module-singleton registry populated at runtime by the consumer app's
-// renderer composition root (`apps/<game>/renderer/register.ts`). Replaces the
-// previous hard-coded loader records: the renderer no longer names any game.
+// renderer composition root (`apps/<game>/renderer/register.ts`). The renderer
+// itself names no game.
 const rendererGameLoaders = new Map<string, RendererGameLoader>();
 const rendererGameShellLoaders = new Map<string, RendererGameShellLoader>();
 let defaultRendererGameId: string | null = null;

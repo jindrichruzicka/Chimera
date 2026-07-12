@@ -10,7 +10,6 @@
  * `registerEngineAction()` bypass on `ActionRegistry`.
  *
  * Architecture reference: §4.2, §4.7
- * Task: F03 / T4 (issue #27), issue #350
  *
  * Invariants upheld:
  *   #2 — Engine reserved actions are the only mechanism for cross-cutting
@@ -44,7 +43,7 @@ import { ActionUnauthorizedError } from './ActionPipeline.js';
 /**
  * Payload for `engine:tick`.
  * `seed` is the per-tick RNG seed derived by the host at tick advance time.
- * All arithmetic fields are integers (invariant #42).
+ * All arithmetic fields are integers (Invariant #42).
  *
  * Plain interface — no `Record<string, unknown>` intersection required now that
  * `TPayload extends object` is the constraint on `ActionDefinition`.
@@ -73,7 +72,7 @@ export interface EngineSaveLoadPayload {
 /**
  * Payload for `engine:undo` and `engine:redo`.
  * `steps` is the number of actions to undo/redo; defaults to 1 if absent.
- * Must be a positive integer when present (invariant #42).
+ * Must be a positive integer when present (Invariant #42).
  */
 export interface EngineUndoRedoPayload {
     readonly steps: number;
@@ -101,9 +100,9 @@ export interface EngineStartGamePayload {
      */
     readonly setup?: GameSetupConfig;
     /**
-     * Host-minted stable match identity (F68, #820), written onto
-     * `BaseGameSnapshot.matchId` by the reducer. Carried in the payload (not
-     * generated in the reducer) so deterministic replay reproduces the same id.
+     * Host-minted stable match identity, written onto `BaseGameSnapshot.matchId`
+     * by the reducer. Carried in the payload (not generated in the reducer) so
+     * deterministic replay reproduces the same id.
      * Optional and backward-compatible.
      */
     readonly matchId?: string;
@@ -249,18 +248,17 @@ export function parseSetup(raw: unknown): GameSetupConfig | undefined {
 // ─── engine:tick ──────────────────────────────────────────────────────────────
 
 /**
- * Stub `ActionDefinition` for `engine:tick`.
+ * `ActionDefinition` for `engine:tick`.
  *
  * Advances the simulation clock by one tick. Payload must carry a `seed`
- * integer (the per-tick RNG seed). The reducer is a no-op stub for M1 —
- * full clock advancement belongs to F04 / F21.
+ * integer (the per-tick RNG seed).
  */
 export const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
     type: 'engine:tick',
 
     parsePayload(raw: Readonly<Record<string, unknown>>): EngineTickPayload {
         // Invariant #42: all arithmetic state fields must be integers. The seed
-        // is the base for F04's DeterministicRng, so non-integer, NaN, Infinity,
+        // is the base for the DeterministicRng, so non-integer, NaN, Infinity,
         // and -Infinity values must be rejected at the boundary. Number.isInteger
         // returns false for all of them (and false for non-numbers generally).
         // -0 is accepted as an integer (Number.isInteger(-0) === true); it is
@@ -368,7 +366,7 @@ export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
             if (!authorized) {
                 return { ok: false, reason: 'not_active_player' };
             }
-            // WARN-2: reject when activePlayerId has been removed from state.players.
+            // Reject when activePlayerId has been removed from state.players.
             // indexOf would silently return -1 and reduce would pick players[0] instead.
             if (!(state.turnClock.activePlayerId in state.players)) {
                 return { ok: false, reason: 'active_player_not_in_game' };
@@ -590,10 +588,10 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
             sceneId: sceneId('engine:game'),
             sceneTransition: null,
             // Carry host-authored lobby config onto the snapshot so projection
-            // syncs it to every client (#705). Preserve any prior `state.setup`
+            // syncs it to every client. Preserve any prior `state.setup`
             // (spread above) when the payload omits one.
             ...(payload.setup !== undefined ? { setup: payload.setup } : {}),
-            // Host-minted match identity (#820); same preserve-when-omitted
+            // Host-minted match identity; same preserve-when-omitted
             // semantics as `setup` via the base spread above.
             ...(payload.matchId !== undefined ? { matchId: payload.matchId } : {}),
         };
@@ -609,7 +607,7 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
  * `engine:start_game`.
  *
  * Abandons the active match and returns the session snapshot to the lobby phase
- * so a new match can be started. Host-only (invariant #25), flows through the
+ * so a new match can be started. Host-only (Invariant #25), flows through the
  * normal `ActionPipeline`. This is an *abandon*, distinct from a finished match:
  * it does NOT set `gameResult` and must NOT trigger any game-end path.
  *
@@ -660,7 +658,7 @@ export const engineReturnToLobbyDefinition: ActionDefinition<EngineReturnToLobby
  * Stub `ActionDefinition` for `engine:save`.
  *
  * Signals the host to write the current simulation state to a save slot.
- * Only the host player may dispatch this action (invariant #25).
+ * Only the host player may dispatch this action (Invariant #25).
  * The reducer is a no-op stub — actual persistence is handled by SaveManager
  * in the main process after the action clears the pipeline.
  */
@@ -704,7 +702,7 @@ export const engineSaveDefinition: ActionDefinition<EngineSaveLoadPayload> = {
  * Stub `ActionDefinition` for `engine:load`.
  *
  * Signals the host to replace the current simulation state from a save slot.
- * Only the host player may dispatch this action (invariant #25).
+ * Only the host player may dispatch this action (Invariant #25).
  * The reducer is a no-op stub — actual state replacement is handled by
  * SaveManager.restoreFromSave() in the main process.
  */
@@ -781,7 +779,7 @@ export const engineUndoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
     },
 
     reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineUndoRedoPayload): BaseGameSnapshot {
-        // Stub: returns snapshot unchanged. Full undo logic to be implemented later.
+        // No-op: Stage 3 reconstructs state when an undoManager is wired.
         return state;
     },
 } satisfies ActionDefinition<EngineUndoRedoPayload>;
@@ -825,7 +823,7 @@ export const engineRedoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
     },
 
     reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineUndoRedoPayload): BaseGameSnapshot {
-        // Stub: returns snapshot unchanged. Full redo logic to be implemented later.
+        // No-op: Stage 3 reconstructs state when an undoManager is wired.
         return state;
     },
 } satisfies ActionDefinition<EngineUndoRedoPayload>;
@@ -861,7 +859,7 @@ export const engineSyncRequestDefinition: ActionDefinition<EngineSyncRequestPayl
 // ─── EngineActions ────────────────────────────────────────────────────────────
 
 /**
- * The complete set of M1/M3-required engine-reserved action definitions.
+ * The complete set of engine-reserved action definitions.
  *
  * This array is the single source of truth for which `engine:` action types
  * are registered at engine initialisation. Add new engine action definitions
@@ -898,7 +896,7 @@ export const EngineActions: readonly ActionDefinition<object>[] = [
  *
  * Generic over `TState extends BaseGameSnapshot` so that a concrete-snapshot
  * registry (e.g. `ActionRegistry<TacticsSnapshot>`) can be passed without a
- * cast at the call site (issue #38, §4.7).
+ * cast at the call site (§4.7).
  *
  * @param registry - The `ActionRegistry` instance to populate.
  */

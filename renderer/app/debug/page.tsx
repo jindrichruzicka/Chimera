@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * renderer/app/debug/page.tsx — Debug Inspector window (§4.12, F47 / T8, #697).
+ * Debug Inspector window (§4.12).
  *
  * Served at `chimera://localhost/debug/` inside the Inspector
  * `BrowserWindow` that `electron/main/debug-bridge.ts` opens on F9. All

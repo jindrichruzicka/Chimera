@@ -6,7 +6,6 @@
  * not required.
  *
  * Architecture: §4.24 — Player Profiles & Directory
- * Task: F14-T03 (issue #340)
  *
  * Invariants upheld:
  *   #2  — zero imports from renderer/, electron/, games/*, or DOM APIs

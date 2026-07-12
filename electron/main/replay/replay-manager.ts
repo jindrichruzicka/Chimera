@@ -11,7 +11,6 @@
  * free of any game-logic dependency (invariant #71).
  *
  * Architecture reference: §4.28
- * Task: F44 / T3 (issue #657)
  *
  * Invariants upheld:
  *   #67 — constructed with an injected Logger child; every public method logs
@@ -133,8 +132,8 @@ export class ReplayManager {
     /**
      * Idempotent "ensure this match's replay is on disk, and give me its path".
      *
-     * Backs the replay player's save icon (F44 / T8) — the sole gate that persists
-     * a match (the match is NOT finalised at game-over; the post-game summary's
+     * Backs the replay player's save icon — the sole gate that persists a match
+     * (the match is NOT finalised at game-over; the post-game summary's
      * Replay button now previews the in-memory recording via
      * {@link getCurrentMatchFile} instead of exporting). So unlike the destructive
      * {@link finaliseRecording}, this method does not require an in-progress

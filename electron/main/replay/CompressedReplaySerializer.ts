@@ -7,8 +7,7 @@
  * Lives in electron/main/replay/ so that Node.js imports (node:zlib,
  * node:util) stay outside simulation/, satisfying invariant #1.
  *
- * Architecture reference: §4.28 (ADR F44b)
- * Task: F44 / T1 (issue #655); generalised in F44b / T3 (issue #669)
+ * Architecture reference: §4.28
  *
  * Two storage strategies live here:
  *   - Deterministic replays (`ReplayFile`): the whole JSON is gzipped — the file

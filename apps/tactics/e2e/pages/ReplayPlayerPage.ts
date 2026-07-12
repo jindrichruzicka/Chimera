@@ -4,7 +4,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * Page object for the replay player route (`/replays/player`). Wraps the
  * `ReplayControls` transport (Play/Pause, scrubber, speed) and the
  * `<current> / <total>` tick counter so a test can drive playback and assert it
- * reaches the final tick (F44 / T9, #663).
+ * reaches the final tick.
  */
 export class ReplayPlayerPage {
     readonly playButton: Locator;

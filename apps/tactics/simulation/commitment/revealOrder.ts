@@ -1,10 +1,8 @@
 /**
- * apps/tactics/commitment/revealOrder.ts
- *
- * The deterministic reveal order for tactics commitment-scheme battle mode
- * (T9 / #729). Implements the {@link ResolveRevealOrder} contract declared in
- * `contract.ts`: a pure function of `(seed, tick)` that groups by player,
- * reveals attack-committers first, and shuffles each partition with the seeded
+ * The deterministic reveal order for tactics commitment-scheme battle mode.
+ * Implements the {@link ResolveRevealOrder} contract declared in `contract.ts`:
+ * a pure function of `(seed, tick)` that groups by player, reveals
+ * attack-committers first, and shuffles each partition with the seeded
  * `DeterministicRng` — never `Math.random`.
  *
  * Why attack-first: an attack reveal can end the match
@@ -15,7 +13,7 @@
  * Why deterministic: the order is a pure function of the integer
  * `GameSnapshot.seed`/`tick`, never host discretion, so every client and every
  * replay converges on the same reveal sequence and `verify()` stays sound
- * (Invariant #71; the "deterministic reveal order" invariant ratified in T11).
+ * (Invariant #71, the "deterministic reveal order" invariant).
  *
  * Design note: docs/security-trust/tactics-commitment-battle-mode.md §5
  */

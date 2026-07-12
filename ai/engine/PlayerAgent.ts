@@ -5,7 +5,6 @@
  * AIPlayerAgent (brain delegate) implementations.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F22 (issue #412)
  *
  * Invariants upheld:
  *   #16 — AI players submit EngineAction through ActionPipeline. AIPlayerAgent

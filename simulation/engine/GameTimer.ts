@@ -4,7 +4,6 @@
  * Tick-based deterministic timer registry and manager.
  *
  * Architecture reference: §4.20 — Game Timers
- * Issue: #404
  *
  * Invariants upheld:
  *   #54 — GameTimer lives in GameSnapshot.timers; remainingTicks is tick-based,
@@ -55,7 +54,6 @@ export interface FiredTimerAction {
 /**
  * Shared frozen empty array for the all-inactive fast path.
  * Reused on every call where no timers are active, eliminating O(n) allocation.
- * Mitigation for WARN-1 (GameTimer.ts, advance() method).
  */
 const EMPTY_FIRED: readonly FiredTimerAction[] = Object.freeze([]);
 
@@ -112,14 +110,12 @@ export const TimerManager = {
      *
      * Fast path: if all timers are inactive (or registry is empty), returns the
      * input registry reference unchanged and a stable EMPTY_FIRED array, avoiding
-     * O(n) allocation. Mitigates WARN-1 (GameTimer.ts, advance() method).
+     * O(n) allocation.
      */
     advance(registry: TimerRegistry): {
         next: TimerRegistry;
         fired: readonly FiredTimerAction[];
     } {
-        // Fast path: check if any timer is active.
-        // If not, return registry unchanged and reuse frozen empty array.
         let hasActive = false;
         for (const timer of Object.values(registry)) {
             if (timer.active) {
@@ -131,7 +127,6 @@ export const TimerManager = {
             return { next: registry, fired: EMPTY_FIRED };
         }
 
-        // Slow path: process active timers
         const nextEntries: [TimerId, GameTimer][] = [];
         const fired: FiredTimerAction[] = [];
 
@@ -146,14 +141,11 @@ export const TimerManager = {
             const decremented = timer.remainingTicks - 1;
 
             if (decremented <= 0) {
-                // Timer fires
                 fired.push({ timerId, actionType: timer.actionType, payload: timer.payload });
 
                 if (timer.intervalTicks === 0) {
-                    // One-shot: mark inactive
                     nextEntries.push([timerId, { ...timer, remainingTicks: 0, active: false }]);
                 } else {
-                    // Interval: reset and keep active
                     nextEntries.push([
                         timerId,
                         { ...timer, remainingTicks: timer.intervalTicks, active: true },

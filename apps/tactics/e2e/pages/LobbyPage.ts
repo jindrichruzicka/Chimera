@@ -1,10 +1,10 @@
 import type { Locator, Page } from '@playwright/test';
 
 /**
- * Page object for the multiplayer lobby. Since the customizable-lobby feature
- * (#702), a hosted Tactics lobby renders the registry-loaded `TacticsLobbyScreen`
- * (testids `tactics-lobby-screen`, `tactics-lobby-player`, `tactics-ready-toggle`)
- * in place of the engine-default `ActiveLobbyPanel`. The pre-lobby host/join
+ * Page object for the multiplayer lobby. A hosted Tactics lobby renders the
+ * registry-loaded `TacticsLobbyScreen` (testids `tactics-lobby-screen`,
+ * `tactics-lobby-player`, `tactics-ready-toggle`) in place of the engine-default
+ * `ActiveLobbyPanel`. The pre-lobby host/join
  * controls (`host-lobby`, `join-lobby`, `address-input`, `confirm-join`) and the
  * global `connection-status` indicator are panel-independent.
  *
@@ -48,7 +48,7 @@ export class LobbyPage {
         this.closeButton = page.getByTestId('lobby-close');
     }
 
-    /** Host a lobby, optionally protecting it with a password (F56). */
+    /** Host a lobby, optionally protecting it with a password. */
     public async hostLobby(password?: string): Promise<void> {
         if (password !== undefined) {
             await this.hostPasswordInput.fill(password);
@@ -65,7 +65,7 @@ export class LobbyPage {
     }
 
     /**
-     * Submit a join without waiting for success (F56). Use when the join may be
+     * Submit a join without waiting for success. Use when the join may be
      * rejected — the caller asserts on the error banner / pre-lobby screen.
      */
     public async attemptJoin(address: string, password?: string): Promise<void> {

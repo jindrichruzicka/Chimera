@@ -20,17 +20,16 @@ interface WebpackConfig {
 /**
  * Next.js configuration for the Chimera renderer.
  *
- * SUPERSEDED AS THE GAME HOST (F65 Phase 2c): each consumer app now owns its OWN
- * Next host (`apps/<game>/renderer/`) that re-exports the engine shell from
- * `@chimera-engine/renderer/shell/*` (the package now ships the whole shell from dist) and
- * binds its own game. `apps/tactics/renderer` is the production host the Electron
- * app loads; the e2e + verify:pack build that, not this config. This config is kept
- * only as a renderer-package-local dev preview of the shell (still bound to tactics
- * via the aliases below); nothing in the build/test pipeline runs `next build
- * renderer` anymore.
+ * This is NOT the production game host. Each consumer app owns its own Next host
+ * (`apps/<game>/renderer/`) that re-exports the engine shell from
+ * `@chimera-engine/renderer/shell/*` (shipped whole from dist) and binds its own
+ * game. `apps/tactics/renderer` is the production host the Electron app loads; the
+ * e2e + verify:pack pipeline build that, not this config. This config is kept only
+ * as a renderer-package-local dev preview of the shell (still bound to tactics via
+ * the aliases below); nothing in the build/test pipeline runs `next build renderer`.
  *
  * The Electron main process loads the compiled output via `loadFile` from
- * `<app>/renderer/out/index.html` (see `electron/main/index.ts` — issue #3).
+ * `<app>/renderer/out/index.html` (see `electron/main/index.ts`).
  * Static export mode is mandatory: there is no Next.js server at runtime.
  */
 const nextConfig: NextConfig = {
@@ -53,20 +52,19 @@ const nextConfig: NextConfig = {
     webpack(rawConfig): WebpackConfig {
         const config = rawConfig as WebpackConfig;
         // Resolve the still-in-source @chimera-engine/* workspace packages onto their
-        // in-tree source dir for the Next build. F57 (#752) removed the root
-        // tsconfig `paths` aliases, so these webpack aliases are the bundler's
-        // @chimera-engine/* resolver for the packages that have no `dist/` build yet.
+        // in-tree source dir for the Next build. The root tsconfig has no `paths`
+        // aliases, so these webpack aliases are the bundler's @chimera-engine/*
+        // resolver for the packages that have no `dist/` build yet.
         // `@chimera-engine/simulation`, `@chimera-engine/ai`, `@chimera-engine/networking`,
         // `@chimera-engine/renderer`, and `@chimera-engine/electron` are intentionally NOT
-        // aliased: each is a built package (issues #759, #764, #768, #773, #777)
-        // and Next resolves it through its `exports` map onto `<pkg>/dist`
-        // (build-before-consume; `build:renderer` fronts `build:packages`, so the
-        // dist builds exist before `next build`). In particular the chat barrel's
-        // `@chimera-engine/electron/preload/api-types` type import now resolves onto
-        // electron/dist. The renderer app's own internals import relatively.
-        // `@chimera-engine/tactics` lives under apps/tactics (relocated in F63 #782); its
-        // dist/ is built but not yet consumed, so the renderer still aliases it onto
-        // source — F64 flips this onto its exports map.
+        // aliased: each is a built package and Next resolves it through its `exports`
+        // map onto `<pkg>/dist` (build-before-consume; `build:renderer` fronts
+        // `build:packages`, so the dist builds exist before `next build`). In
+        // particular the chat barrel's `@chimera-engine/electron/preload/api-types`
+        // type import resolves onto electron/dist. The renderer app's own internals
+        // import relatively.
+        // `@chimera-engine/tactics` lives under apps/tactics; its dist/ is built but
+        // not yet consumed, so the renderer still aliases it onto source.
         config.resolve ??= { alias: {}, extensionAlias: {} };
         config.resolve.alias = {
             ...config.resolve.alias,
@@ -94,7 +92,7 @@ const nextConfig: NextConfig = {
             '@chimera-engine/renderer/components/ui': path.join(root, 'renderer/components/ui'),
             '@chimera-engine/renderer/components/chat': path.join(root, 'renderer/components/chat'),
             '@chimera-engine/renderer/game': path.join(root, 'renderer/game/rendererGameRegistry'),
-            // `renderer/**` source must name no game (#784). The renderer pulls in
+            // `renderer/**` source must name no game. The renderer pulls in
             // the active game's renderer contribution through this synthetic,
             // build-selected specifier — the renderer twin of how `package.json`
             // `main` selects `apps/tactics/electron/main.ts` for the Electron host.

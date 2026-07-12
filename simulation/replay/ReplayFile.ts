@@ -1,11 +1,8 @@
 /**
- * simulation/replay/ReplayFile.ts
- *
  * ReplayFile schema, associated types, and structural validation.
  * Pure type declarations and pure functions — zero I/O, no Node.js APIs.
  *
  * Architecture reference: §4.28
- * Task: F44 / T1 (issue #655)
  *
  * Invariants upheld:
  *   #1  — simulation/ has zero runtime deps on React, DOM, or networking

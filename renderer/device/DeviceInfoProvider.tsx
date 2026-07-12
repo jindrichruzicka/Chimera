@@ -7,9 +7,6 @@
  * signals (via inputTracker) into a React context that the rest of the app
  * consumes via useDeviceInfo() (§4.17).
  *
- * Architecture reference: §4.17 — Device Info
- * Issue: #590 (F42 — Implement DeviceInfoProvider and inputTracker)
- *
  * Invariants upheld:
  *   #83 — createContext<DeviceInfo | null>(null); consumer hook throws
  *          descriptive error when null.

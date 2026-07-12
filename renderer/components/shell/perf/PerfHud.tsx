@@ -1,12 +1,9 @@
 'use client';
 
 /**
- * renderer/components/shell/perf/PerfHud.tsx
- *
  * Floating performance metrics overlay (§4.16).
  *
  * Architecture reference: §4.16 — Performance HUD
- * Issue: #583
  *
  * Visibility:
  *  - Toggled by F3 (engine:toggle-perf-hud InputAction) OR
@@ -51,7 +48,7 @@ function fmtInt(value: number | null, suffix = ''): string {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function PerfHud(): React.ReactElement | null {
-    // ── Read metrics with narrow selectors ───────────────────────────────────
+    // Narrow selectors: each field re-renders the HUD only when it changes (§5.2).
     const fps = usePerfStore((s) => s.sample.fps);
     const frameMsAvg = usePerfStore((s) => s.sample.frameMsAvg);
     const frameMsP95 = usePerfStore((s) => s.sample.frameMsP95);
@@ -64,14 +61,13 @@ export function PerfHud(): React.ReactElement | null {
     const triangles = usePerfStore((s) => s.sample.triangles);
     const visible = usePerfStore((s) => s.visible);
 
-    // ── Settings: force-visible flag ──────────────────────────────────────────
     const settingsShowPerfHud = useSettingsStore((state) => {
         const gameId = state.activeGameId ?? '__engine__';
         const s = state.settings[gameId] as { gameplay?: { showPerfHud?: boolean } } | undefined;
         return s?.gameplay?.showPerfHud ?? false;
     });
 
-    // ── F3 toggle — must be called unconditionally (React hooks rules) ────────
+    // Must be called unconditionally, before any early return (React hooks rules).
     const handleToggle = useCallback((event: InputEvent) => {
         if (!event.pressed) {
             return;
@@ -82,16 +78,13 @@ export function PerfHud(): React.ReactElement | null {
 
     useInputAction('engine:toggle-perf-hud', handleToggle);
 
-    // ── Visibility gate ───────────────────────────────────────────────────────
     const shouldShow = visible || settingsShowPerfHud;
     if (!shouldShow) {
         return null;
     }
 
-    // ── Computed values ───────────────────────────────────────────────────────
     const fpsStat = fpsStatus(fps);
 
-    // ── Overlay styles (all via design tokens) ────────────────────────────────
     const overlayStyle: React.CSSProperties = {
         position: 'fixed',
         top: 'var(--ch-space-sm)',

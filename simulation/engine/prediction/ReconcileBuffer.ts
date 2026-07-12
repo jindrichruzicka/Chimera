@@ -9,7 +9,6 @@
  * the reconciled snapshot.
  *
  * Architecture reference: §6 — simulation/prediction/ · Client Prediction
- * Task: F18 (issue #367)
  *
  * Invariants upheld:
  *   #1 — simulation/ is side-effect-free; no Node.js or Electron imports.
@@ -138,17 +137,16 @@ export class ReconcileBuffer<TState extends BaseGameSnapshot = BaseGameSnapshot>
      * enqueue only predictable actions.
      */
     reconcile(authoritativeSnapshot: TState, predictor: ClientPredictor<TState>): TState {
-        // Step 1: evict confirmed entries
+        // Drop actions the host has already confirmed; replaying them would double-apply.
         while (this.#queue.length > 0 && this.#queue[0]!.tick <= authoritativeSnapshot.tick) {
             this.#queue.shift();
         }
 
-        // Step 2: short-circuit when nothing to replay
+        // Nothing left to replay: hand back the authoritative snapshot by reference.
         if (this.#queue.length === 0) {
             return authoritativeSnapshot;
         }
 
-        // Step 3: replay unconfirmed actions
         let state: TState = authoritativeSnapshot;
         for (const action of this.#queue) {
             state = predictor.applyOptimistic(state, action);

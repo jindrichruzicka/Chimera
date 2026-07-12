@@ -91,7 +91,7 @@ export default function GamePage(): React.ReactElement | null {
         [currentTick, sendActionToHost, snapshot],
     );
 
-    // Client leave-to-main-menu (#741). useLeaveGame() sets this flag before the
+    // Client leave-to-main-menu. useLeaveGame() sets this flag before the
     // disconnect lands; routing owns the navigation + stale-snapshot reset. Latch
     // the in-flight leave in a ref so the direct-boot effect below cannot hijack
     // it to /lobby once the disconnect nulls both snapshot and lobbyState
@@ -120,18 +120,17 @@ export default function GamePage(): React.ReactElement | null {
         }
     }, [leavingToMainMenu, router]);
 
-    // Restore-abort exit (#842). Cancelling the waiting-for-players overlay
-    // unwinds the hosted session, but the mid-restore hop already parked this
-    // window on /game and the torn-down session never broadcasts the
-    // phase:'lobby' snapshot that drives the usual reverse navigation. The
-    // overlay cannot navigate either — the no-session redirect below fires
-    // once the cancelled lobby empties and would beat any exit issued there.
-    // So, mirroring the #741 leave flag above: the overlay raises the marker,
-    // this effect consumes it, drops the restored checkpoint, and returns the
-    // host to the saves screen so another slot can be loaded. Declared BEFORE
-    // the no-session redirect so the leavingRef latch lands within the same
-    // commit; no fade-out — /saves has no mount fade-in (useScreenFadeNavigate)
-    // and the abort happens on a faded-in screen.
+    // Restore-abort exit. Cancelling the waiting-for-players overlay unwinds the
+    // hosted session, but the mid-restore hop already parked this window on /game
+    // and the torn-down session never broadcasts the phase:'lobby' snapshot that
+    // drives the usual reverse navigation. The overlay cannot navigate either —
+    // the no-session redirect below fires once the cancelled lobby empties and
+    // would beat any exit issued there. So, mirroring the leave flag above: the
+    // overlay raises the marker, this effect consumes it, drops the restored
+    // checkpoint, and returns the host to the saves screen so another slot can be
+    // loaded. Declared BEFORE the no-session redirect so the leavingRef latch
+    // lands within the same commit; no fade-out — /saves has no mount fade-in
+    // (useScreenFadeNavigate) and the abort happens on a faded-in screen.
     useEffect(() => {
         if (restoreAbortPending && !leavingRef.current) {
             leavingRef.current = true;
@@ -260,7 +259,7 @@ export default function GamePage(): React.ReactElement | null {
     // here — `gameId` derives from it and is guarded above.
     const isHost = lobbyState !== null && lobbyState.info.hostId === resolvedPlayerId;
 
-    // In-game save (#825). Built ONLY for the host so GameShell never offers the
+    // In-game save. Built ONLY for the host so GameShell never offers the
     // saveGame capability to a joined client (Invariant #25 — main-side
     // captureSaveFile rejects non-hosted sessions regardless, defense in depth).
     // A blank name omits `label` so SaveManager default naming applies. Toast

@@ -8,7 +8,6 @@
  * transport.sendSnapshot(viewerId, snapshot).
  *
  * Architecture: §4.6, §4.14 — StateProjector / StateBroadcaster
- * Task: F11-T02 (issue #239), issue #436
  *
  * Invariants upheld:
  *   #3  — Sends only PlayerSnapshot through HostTransport.
@@ -40,7 +39,7 @@ export interface RendererSnapshotRecipient {
  * The two branches are mutually exclusive:
  * - No E2E: neither `hostViewerId` nor `e2eHooks` need be supplied.
  * - E2E: both `hostViewerId` **and** `e2eHooks` must be supplied together;
- *   supplying `e2eHooks` without `hostViewerId` is a type error (WARN-2 / ISP).
+ *   supplying `e2eHooks` without `hostViewerId` is a type error (ISP).
  */
 export type StateBroadcasterOptions =
     | { readonly hostViewerId?: PlayerId; readonly e2eHooks?: undefined }

@@ -49,8 +49,8 @@ export const SYSTEM_DEVICE_INFO_CHANGE_CHANNEL = 'chimera:system:device-info-cha
 export type PlatformInfo = Awaited<ReturnType<SystemAPI['platform']>>;
 
 /**
- * Back-compat alias for {@link IpcListener}. Retained so test files that
- * imported `SystemApiListener` continue to compile. New code should use
+ * Back-compat alias for {@link IpcListener}, kept so callers of the old
+ * `SystemApiListener` name still compile. New code should use
  * {@link IpcListener} directly.
  */
 export type SystemApiListener = IpcListener;

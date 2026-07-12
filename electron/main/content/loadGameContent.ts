@@ -1,6 +1,4 @@
 /**
- * electron/main/content/loadGameContent.ts
- *
  * Loads every registered game's content directory into an immutable
  * `ContentDatabase` at startup, using the game-supplied schemas. The loader is
  * generic (`simulation/content`); this module only resolves the per-game data
@@ -28,8 +26,8 @@ import type { ZodType } from 'zod';
 /**
  * Load each game's content from `<gameAssetsRoot>/<gameId>/data`, validating it
  * against the per-game schemas the host derived from the injected game
- * contributions (`MainGameContribution.contentSchemas` → `contentSchemasByGameId`,
- * #788). Returns a map keyed by `gameId`; a game absent from `schemasByGameId`
+ * contributions (`MainGameContribution.contentSchemas` → `contentSchemasByGameId`).
+ * Returns a map keyed by `gameId`; a game absent from `schemasByGameId`
  * (i.e. one that declares no content) is absent from the map, so its
  * `PipelineContext.db` stays `undefined` (Invariant #46).
  *

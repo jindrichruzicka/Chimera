@@ -16,7 +16,6 @@
  * In tests, supply a custom `baseDir` pointing to a temp directory.
  *
  * Architecture reference: §4.24
- * Task: F14-T04 (issue #341)
  *
  * Invariants upheld:
  *   #2  — zero imports from renderer/, games/*, or any DOM API.

@@ -7,7 +7,6 @@
  * to HostTransport / ClientTransport — never to WebSocket connections directly.
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider / LobbyManager
- * Task: F11-T01 (issue #234)
  *
  * Invariants upheld:
  *   #1  — Only PlayerSnapshot crosses transport boundaries; this module never
@@ -74,11 +73,11 @@ export interface LobbyManagerOptions {
     readonly onGameStartRequested?: (state: LobbyState) => void | Promise<void>;
     /**
      * Invoked when the host requests a return to the lobby for an active hosted
-     * session (#736) — the reverse of {@link onGameStartRequested}. The wiring
-     * point (`electron/main/index.ts`, T4) dispatches an `engine:return_to_lobby`
-     * action to abandon the match and reset the session snapshot to the lobby
-     * phase. Receives the current {@link LobbyState}. When omitted, the call
-     * resolves with no side effect (plumbing-only until T4 wires it).
+     * session — the reverse of {@link onGameStartRequested}. The wiring point
+     * (`electron/main/index.ts`) dispatches an `engine:return_to_lobby` action
+     * to abandon the match and reset the session snapshot to the lobby phase.
+     * Receives the current {@link LobbyState}. When omitted, the call resolves
+     * with no side effect.
      */
     readonly onReturnToLobbyRequested?: (state: LobbyState) => void | Promise<void>;
     readonly onLobbyStateChanged?: (state: LobbyState) => void;
@@ -88,7 +87,7 @@ export interface LobbyManagerOptions {
      * removed slot index. The composition root uses it to reconcile the host
      * session's slot ledger (drop the removed AI's synthetic seat, re-pack
      * humans), the way {@link onLobbyStateChanged} keeps the live AI roster in
-     * sync. Fires only on an actual removal, never for a no-op remove (#838).
+     * sync. Fires only on an actual removal, never for a no-op remove.
      */
     readonly onAiSlotRemoved?: (slotIndex: number) => void;
     readonly onLocalSeatAdded?: (player: LobbyPlayerEntry) => void;
@@ -113,21 +112,21 @@ export interface LobbyManagerOptions {
      * Invoked when an opponent's connection presence transitions (transient drop
      * or reconnect) while hosting. The wiring point forwards this to the renderer
      * over `chimera:lobby:player-connection` so it can raise the §4.30
-     * "Player disconnected"/"Player reconnected" toasts (#687).
+     * "Player disconnected"/"Player reconnected" toasts.
      */
     readonly onPlayerConnectionChanged?: (event: PlayerConnectionEvent) => void;
     /**
      * Invoked when this client's profile is rejected — at JOIN or for a
      * mid-session PROFILE_UPDATE. The wiring point forwards this to the renderer
      * over `chimera:lobby:profile-rejected` for the §4.30 "Profile rejected"
-     * toast (#688). `reason` is the raw gate code (`'profile:<...>'` /
+     * toast. `reason` is the raw gate code (`'profile:<...>'` /
      * `'rate_limit'`), never a parsed `Error.message`.
      */
     readonly onProfileRejected?: (reason: string) => void;
     readonly e2eHooks?: E2eHooks;
     /**
      * Resolves the host-authored lobby-setup descriptor for a `gameId`, or
-     * `undefined` when the game declares none (#706). Injected from the
+     * `undefined` when the game declares none. Injected from the
      * composition root (`electron/main/index.ts`) so the manager can seed
      * default match settings and per-player attributes without importing
      * `games/*` directly (Invariant #2). When omitted — or when it returns
@@ -135,14 +134,14 @@ export interface LobbyManagerOptions {
      */
     readonly resolveLobbySetup?: (gameId: string) => GameLobbySetup | undefined;
     /**
-     * Supplies this client's remembered seat claims for outbound JOIN requests
-     * (F68 #822). Injected from the composition root (`electron/main/index.ts`),
-     * which sources them from the `SessionTicketStore` — the manager never
-     * touches the store directly (Invariant #37). Consulted only when the
-     * caller did not supply `claims` itself; returning `undefined` (a fresh
-     * client) omits the key entirely so the host's claimless join-order
-     * fallback stays available (#821). A resolver failure degrades to a
-     * claimless join — reclaiming a seat is a convenience, joining is not.
+     * Supplies this client's remembered seat claims for outbound JOIN requests.
+     * Injected from the composition root (`electron/main/index.ts`), which
+     * sources them from the `SessionTicketStore` — the manager never touches the
+     * store directly (Invariant #37). Consulted only when the caller did not
+     * supply `claims` itself; returning `undefined` (a fresh client) omits the
+     * key entirely so the host's claimless join-order fallback stays available.
+     * A resolver failure degrades to a claimless join — reclaiming a seat is a
+     * convenience, joining is not.
      */
     readonly resolveJoinClaims?: () => Promise<readonly SeatClaim[] | undefined>;
 }
@@ -168,7 +167,7 @@ export class LobbyManager {
     /**
      * Seat cap for the active hosted session (humans + AI together), captured
      * from `HostLobbyParams.maxPlayers` at host time. Gates the host-only
-     * add-AI fullness check and the join-overflow auto-remove (#724). Reset to
+     * add-AI fullness check and the join-overflow auto-remove. Reset to
      * `0` on close so it never bleeds across sessions.
      */
     private maxPlayers = 0;
@@ -208,7 +207,7 @@ export class LobbyManager {
     /**
      * Opponents currently in a transient-drop state (left with a non-deliberate
      * reason, not yet reconnected). Gates the "reconnected" toast so it fires
-     * only for a genuine reconnect — never for a first-time join (#687). Cleared
+     * only for a genuine reconnect — never for a first-time join. Cleared
      * on lobby close so presence does not bleed across sessions.
      */
     private readonly disconnectedPlayers = new Set<PlayerId>();
@@ -243,7 +242,7 @@ export class LobbyManager {
      * Resolve the lobby-setup descriptor for the current session's game, or
      * `undefined` when none is registered / no injector was wired. Read from the
      * live `LobbyState.info.gameId` so seeding works on every join, not just at
-     * host time (#706).
+     * host time.
      */
     private currentLobbySetup(): GameLobbySetup | undefined {
         if (this.resolveLobbySetup === undefined || this.lobbyState === null) {
@@ -273,8 +272,8 @@ export class LobbyManager {
 
     /**
      * Rebuild a full {@link LobbyState} from `base` with a new `players` roster,
-     * preserving the host-authored top-level `matchSettings` (#706) and the
-     * synced AI `agentSlots` (#724). Roster mutations must funnel through here so
+     * preserving the host-authored top-level `matchSettings` and the
+     * synced AI `agentSlots`. Roster mutations must funnel through here so
      * seeded match settings and the AI roster survive every join / leave / ready
      * / profile update broadcast.
      */
@@ -289,7 +288,7 @@ export class LobbyManager {
 
     /**
      * Rebuild a full {@link LobbyState} from `base` with a new AI `agentSlots`
-     * roster, preserving `players` and host-authored `matchSettings` (#724). The
+     * roster, preserving `players` and host-authored `matchSettings`. The
      * key is dropped when `agentSlots` is empty so the state stays clean. Used by
      * the host-only add/remove-AI paths and the join-overflow auto-remove.
      */
@@ -316,7 +315,7 @@ export class LobbyManager {
      * footprint (rather than the contiguous block) stops an AI from re-issuing a
      * joined human's slot — a collision misclassifies the human as an AI seat and
      * emits a duplicate `slotIndex`, corrupting the save manifest and making the
-     * save restore-rejected (#832, and #836 for the AI-before-human order). Seat
+     * save restore-rejected (including the AI-before-human order). Seat
      * 0 is always the host. Deterministic so the synthetic `ai-{slotIndex}` id
      * and the host game-start slot resolution agree. The `maxPlayers` fallback is
      * unreachable while {@link addAi}'s fullness guard holds.
@@ -328,7 +327,7 @@ export class LobbyManager {
         const usedAi = new Set(current.map((slot) => slot.slotIndex));
         const used = new Set(usedAi);
         // Reserve the lowest `humanSeatCount` NON-AI slots as the human footprint
-        // (skipping existing AI slots), mirroring the host's placement (#836).
+        // (skipping existing AI slots), mirroring the host's placement.
         let reserved = 0;
         for (
             let slotIndex = 0;
@@ -439,9 +438,9 @@ export class LobbyManager {
      * Start a new hosted session.
      *
      * Calls `provider.hostLobby()`, stores the returned `HostedSession`, and
-     * wires transport event callbacks.  The action-received callback remains as
-     * a no-op here; the actual dispatch is wired in index.ts and routed through
-     * SessionRuntime and SimulationHost (F15 ActionPipeline integration complete).
+     * wires transport event callbacks.  The action-received callback is a no-op
+     * here; the actual dispatch is wired in index.ts and routed through
+     * SessionRuntime and SimulationHost.
      *
      * Returns a `LobbyInfo` for the IPC caller.
      */
@@ -490,12 +489,12 @@ export class LobbyManager {
         this.localSeatIds.add(info.hostId);
         // Capture the seat cap and any host-time AI slots so the synced lobby
         // state carries the AI roster and the add-AI / overflow logic can gate
-        // on total occupancy (#724).
+        // on total occupancy.
         this.maxPlayers = params.maxPlayers;
         const initialAgentSlots: readonly LobbyAgentSlot[] = params.agentSlots ?? [];
 
-        // Seed host-authored defaults from the game's lobby-setup descriptor
-        // (#706). The host occupies seat 0. No-ops when no descriptor resolves,
+        // Seed host-authored defaults from the game's lobby-setup descriptor.
+        // The host occupies seat 0. No-ops when no descriptor resolves,
         // leaving `matchSettings`/`attributes` absent (backward-compatible).
         const setup = this.resolveLobbySetup?.(params.gameId);
         const hostEntry: LobbyPlayerEntry = {
@@ -524,11 +523,10 @@ export class LobbyManager {
 
         // Wire transport callbacks to simulation-host integration.  Capture the
         // Unsubscribe handles so closeLobby() can tear them down cleanly.
-        // NOTE: F15 (ActionPipeline integration) is complete; the actual
-        // onActionReceived handler is wired in index.ts and dispatches to
-        // SimulationHost.  This stub remains as a placeholder since the transport
-        // subscription is managed here and the callback is intentionally no-op
-        // (the real dispatch happens at the HostSessionPipeline boundary).
+        // The onActionReceived callback here is intentionally a no-op: the
+        // transport subscription is owned here, but the real dispatch happens at
+        // the HostSessionPipeline boundary (wired in index.ts, dispatching to
+        // SimulationHost).
         this.subscriptions.push(
             session.transport.onActionReceived((_from, _action) => {
                 // Actions are dispatched in index.ts::hostLobby() via
@@ -634,7 +632,7 @@ export class LobbyManager {
                     return;
                 }
 
-                // Owner-authored (F53): apply the attribute to the SENDER's seat,
+                // Owner-authored: apply the attribute to the SENDER's seat,
                 // derived from the connection — never a client-supplied playerId.
                 const hasPlayer = this.lobbyState.players.some((entry) => entry.playerId === from);
                 if (!hasPlayer) {
@@ -658,8 +656,8 @@ export class LobbyManager {
                     return;
                 }
 
-                // A player rejoining after a transient drop → "reconnected"
-                // (#687). A first-time join is silent — only players we saw drop
+                // A player rejoining after a transient drop → "reconnected".
+                // A first-time join is silent — only players we saw drop
                 // are in `disconnectedPlayers`.
                 if (this.disconnectedPlayers.delete(player.playerId)) {
                     this.publishPlayerConnection({
@@ -672,7 +670,7 @@ export class LobbyManager {
                     (entry) => entry.playerId === player.playerId,
                 );
                 // A fresh join takes the next free seat and is seeded with the
-                // descriptor's default attributes for that seat index (#706). A
+                // descriptor's default attributes for that seat index. A
                 // duplicate join event for a player already in the roster
                 // preserves the seat owner's attributes rather than reseeding
                 // — the transport-delivered entry never carries them, so a
@@ -700,7 +698,7 @@ export class LobbyManager {
                           );
 
                 // Auto-remove an AI to make room when seating a FRESH human would
-                // push total occupancy (humans + AI) past `maxPlayers` (#724).
+                // push total occupancy (humans + AI) past `maxPlayers`.
                 // Drop the most-recently-added AI (the last appended) before the
                 // human is seated; a re-add / reconnect (existing !== undefined)
                 // adds no seat, so it never overflows.
@@ -721,7 +719,7 @@ export class LobbyManager {
                 this.publishLobbyState(nextState);
                 this.broadcastLobbyStateIfHosted(nextState);
                 // The overflow auto-remove drops an AI just like `removeAi`, so
-                // reconcile the host slot ledger the same way (#838).
+                // reconcile the host slot ledger the same way.
                 if (droppedAiSlot !== undefined) {
                     this.onAiSlotRemoved?.(droppedAiSlot.slotIndex);
                 }
@@ -734,7 +732,7 @@ export class LobbyManager {
                 // A transient drop ('timeout'/'error') raises the opponent
                 // "disconnected" toast and remembers the player so a later rejoin
                 // counts as a reconnect. A deliberate leave ('normal'/'kicked'/
-                // 'host_closed') is silent and clears any pending drop state (#687).
+                // 'host_closed') is silent and clears any pending drop state.
                 if (reason === 'timeout' || reason === 'error') {
                     this.disconnectedPlayers.add(playerId);
                     this.publishPlayerConnection({ playerId, status: 'disconnected' });
@@ -751,9 +749,9 @@ export class LobbyManager {
             }),
         );
 
-        // Notify the wiring point (index.ts) that a hosted session is live
-        // so it can wire StateBroadcaster and SimulationHost.  F15 is complete;
-        // the actual wiring happens in index.ts::hostLobby().
+        // Notify the wiring point (index.ts) that a hosted session is live so
+        // it can wire StateBroadcaster and SimulationHost. The actual wiring
+        // happens in index.ts::hostLobby().
         const e2eHooks = this.e2eHooks;
         const metadata: HostedSessionMetadata = {
             hostId: info.hostId,
@@ -776,9 +774,7 @@ export class LobbyManager {
      * Join an existing hosted session.
      *
      * Calls `provider.joinLobby()`, stores the returned `JoinedSession`, and
-     * wires transport event callbacks to no-op renderer broadcast stubs.  The
-     * stubs will be replaced in a follow-up task when the renderer IPC bridge
-     * is fully wired.
+     * wires transport event callbacks to the injected onClient* sinks.
      *
      * Returns the `LobbyInfo` from the session.
      */
@@ -793,10 +789,10 @@ export class LobbyManager {
             );
         }
 
-        // Present this client's remembered seat claims (F68 #822) unless the
-        // caller supplied its own. `undefined` keeps the key absent — a fresh
-        // client must not send `claims: []`, which would opt it out of the
-        // host's claimless join-order fallback (#821).
+        // Present this client's remembered seat claims unless the caller
+        // supplied its own. `undefined` keeps the key absent — a fresh client
+        // must not send `claims: []`, which would opt it out of the host's
+        // claimless join-order fallback.
         if (params.claims === undefined && this.resolveJoinClaims !== undefined) {
             try {
                 const claims = await this.resolveJoinClaims();
@@ -817,7 +813,7 @@ export class LobbyManager {
             this.publishConnectionStatus('error');
             // A profile-gate JOIN rejection carries a structured reason
             // (`'profile:<AdmissionRejection>'`); surface it for the §4.30
-            // "Profile rejected" toast (#688), then rethrow so the lobby page
+            // "Profile rejected" toast, then rethrow so the lobby page
             // still shows its inline error. Non-profile rejections (lobby_full,
             // invalid_token) and other failures are not profile toasts.
             if (error instanceof JoinRejectedError && error.reason.startsWith('profile:')) {
@@ -852,7 +848,7 @@ export class LobbyManager {
                 if (msg.kind === 'chat') {
                     this.onLocalChatDelivered?.(LobbyManager.wireChatToCanonical(msg.payload));
                 } else if (msg.kind === 'profile_reject') {
-                    // Mid-session PROFILE_UPDATE rejection (#688) — surface the
+                    // Mid-session PROFILE_UPDATE rejection — surface the
                     // structured reason for the §4.30 "Profile rejected" toast.
                     this.publishProfileRejected(msg.reason);
                 }
@@ -912,8 +908,8 @@ export class LobbyManager {
             ready: options.ready ?? existing?.ready ?? false,
         };
         // A brand-new local seat (AI / pass-and-play) is a real game seat, so it
-        // is seeded with the descriptor's default attributes for its seat index
-        // (#706). A re-add preserves any owner-authored attributes already set.
+        // is seeded with the descriptor's default attributes for its seat index.
+        // A re-add preserves any owner-authored attributes already set.
         const entry: LobbyPlayerEntry =
             existing === undefined
                 ? this.seedSeatAttributes(
@@ -947,8 +943,8 @@ export class LobbyManager {
     }
 
     /**
-     * Set a host-authored match setting and rebroadcast the full lobby state
-     * (#706). Host-only: rejects from a joined (non-host) session — the host is
+     * Set a host-authored match setting and rebroadcast the full lobby state.
+     * Host-only: rejects from a joined (non-host) session — the host is
      * the sole authority for match settings. The value is merged into the
      * existing `matchSettings`, the renderer is re-pushed via
      * {@link publishLobbyState}, and clients receive the full updated state.
@@ -980,12 +976,12 @@ export class LobbyManager {
 
     /**
      * Host-only: request a return to the lobby for the active hosted session
-     * (#736) — the reverse of {@link startGame}. Mirrors {@link setMatchSetting}'s
+     * — the reverse of {@link startGame}. Mirrors {@link setMatchSetting}'s
      * host-only guard: rejects from a joined (non-host) session or when no
      * session is active. Clears every player's `ready` flag first (the reverse of
      * startGame's all-ready gate) so the returned-to lobby is a clean slate, then
      * fires {@link LobbyManagerOptions.onReturnToLobbyRequested} with the current
-     * {@link LobbyState}; the wiring point (T4) dispatches the
+     * {@link LobbyState}; the wiring point dispatches the
      * `engine:return_to_lobby` action that abandons the match and resets the
      * session snapshot to the lobby phase. The callback's result is awaited so
      * an async dispatch propagates its outcome to the caller.
@@ -1007,7 +1003,7 @@ export class LobbyManager {
         }
 
         // Reset every player's ready flag so the returned-to lobby starts a fresh
-        // ready round. Only `ready` changes — per-player attributes (colour, F53),
+        // ready round. Only `ready` changes — per-player attributes (e.g. colour),
         // displayName, matchSettings and agentSlots are preserved (withPlayers).
         // Publish to the host renderer and broadcast to clients via the live
         // LobbyState push (not a side channel), mirroring setMatchSetting.
@@ -1027,7 +1023,7 @@ export class LobbyManager {
 
     /**
      * Set an attribute on the local player's OWN seat (e.g. unit colour) and
-     * rebroadcast the full lobby state (#706, F53). Owner-authored: a player may
+     * rebroadcast the full lobby state. Owner-authored: a player may
      * only write its own seat, so `playerId` must equal {@link localPlayerId} —
      * any other target is rejected. Mirrors {@link updatePlayerReadyState}: a
      * joined (non-host) session forwards the intent to the authoritative host
@@ -1080,7 +1076,7 @@ export class LobbyManager {
 
     /**
      * Host-only: append an AI agent slot to the lobby roster and rebroadcast the
-     * full {@link LobbyState} (#724). Mirrors {@link setMatchSetting}'s host-only
+     * full {@link LobbyState}. Mirrors {@link setMatchSetting}'s host-only
      * guard (rejects a joined/non-host session). Rejects when the lobby is full
      * — total occupancy (humans + AI) has reached `maxPlayers`. The host assigns
      * the lowest free slot index in `[1, maxPlayers)`; clients observe the new
@@ -1124,7 +1120,7 @@ export class LobbyManager {
 
     /**
      * Host-only: remove the AI agent slot at `slotIndex` from the lobby roster
-     * and rebroadcast the full {@link LobbyState} (#724). Mirrors {@link addAi}'s
+     * and rebroadcast the full {@link LobbyState}. Mirrors {@link addAi}'s
      * host-only guard. A `slotIndex` with no matching AI slot is a no-op (still
      * republishes the unchanged roster), never an error.
      */
@@ -1150,7 +1146,7 @@ export class LobbyManager {
         this.publishLobbyState(nextState);
         this.broadcastLobbyStateIfHosted(nextState);
         // Reconcile the host slot ledger only when an AI slot was actually
-        // dropped — an absent `slotIndex` is a silent no-op (#838).
+        // dropped — an absent `slotIndex` is a silent no-op.
         if (agentSlots.length !== current.length) {
             this.onAiSlotRemoved?.(slotIndex);
         }
@@ -1176,7 +1172,7 @@ export class LobbyManager {
      * message out via {@link deliverChat}. Returns the relay's {@link RelayResult}
      * so the renderer can surface a rejection.
      *
-     * Host/local path only (F45 T03): a joined-client session has no local relay
+     * Host/local path only: a joined-client session has no local relay
      * — client send over the wire is a deliberate follow-on — so this returns a
      * `no_session` rejection there (and when called before a lobby is hosted)
      * rather than bypassing the gate.
@@ -1204,8 +1200,8 @@ export class LobbyManager {
         // authoritative `id`/`serverTime`, and echoes accepted messages back over
         // the side-channel (surfaced via the joinLobby receive wiring). Per-send
         // rejection feedback to the client (wire `chat_reject` frame + toast) is a
-        // deliberate follow-on (F14 wire frame / F46 toast, #646), so the client
-        // never blocks on a synchronous verdict.
+        // deliberate follow-on, so the client never blocks on a synchronous
+        // verdict.
         if (!('close' in session)) {
             session.transport.sendSideChannel({
                 kind: 'chat',
@@ -1337,7 +1333,7 @@ export class LobbyManager {
         // (Invariant #62).
         this.profileUpdateTimestamps.clear();
         // Clear opponent-presence tracking so a stale "disconnected" player does
-        // not produce a spurious "reconnected" toast in the next session (#687).
+        // not produce a spurious "reconnected" toast in the next session.
         this.disconnectedPlayers.clear();
 
         if (session === null) {
@@ -1357,12 +1353,12 @@ export class LobbyManager {
         this.chatRelay?.reset();
 
         // Tear down all transport subscriptions before closing the session so
-        // that re-hosting does not accumulate dead callbacks (BLOCK-2 fix).
+        // that re-hosting does not accumulate dead callbacks.
         const subs = this.subscriptions.splice(0);
         for (const unsub of subs) unsub();
 
         // Call the teardown returned by onSessionHosted (e.g. StateBroadcaster
-        // cleanup) before closing the underlying transport (BLOCK-4 fix).
+        // cleanup) before closing the underlying transport.
         const hostedTeardown = this.sessionHostedTeardown;
         this.sessionHostedTeardown = null;
         hostedTeardown?.();

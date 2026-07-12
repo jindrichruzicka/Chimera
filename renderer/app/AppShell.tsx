@@ -52,7 +52,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                         <RootErrorBoundary>{children}</RootErrorBoundary>
                         {/*
                          * App-level so the waiting modal survives the
-                         * /saves → /game route hop mid-restore (#828).
+                         * /saves → /game route hop mid-restore.
                          */}
                         <RestoreWaitingOverlay />
                         <ToastHost />

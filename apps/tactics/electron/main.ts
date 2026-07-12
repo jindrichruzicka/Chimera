@@ -1,7 +1,6 @@
 // apps/tactics/electron/main.ts
 //
-// Composition root for the tactics Electron app (F62/T2; relocated here from the
-// top-level `app/` directory in F63/#783). This is the SOLE module that names a
+// Composition root for the tactics Electron app. This is the SOLE module that names a
 // concrete game AND drives the Electron bootstrap: it constructs the tactics
 // `MainGameContribution` from `@chimera-engine/tactics/*` and injects it into the
 // game-agnostic host `main(contributions)` exposed by the `@chimera-engine/electron`

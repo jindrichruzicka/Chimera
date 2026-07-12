@@ -8,8 +8,6 @@
  * without going through IPC.
  *
  * Architecture reference: §13.9, §13.10 — E2E hooks and CHIMERA_E2E flag.
- * Issue: #458
- * Issue: #530
  *
  * Invariants upheld:
  *   #3  — lastHostSnapshot stores PlayerSnapshot only, never GameSnapshot.

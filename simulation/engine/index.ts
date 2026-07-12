@@ -2,17 +2,6 @@
  * Public API of the simulation engine sub-module.
  *
  * Re-exports all engine types and classes from `simulation/engine/`.
- * Populated progressively as F03 tasks land:
- *   - T2 (§4.2): BaseGameSnapshot, EngineAction, ActionEnvelope, ActionDefinition,
- *                ReduceContext, SimulationHostRole, SimulationClientRole
- *   - T3 (§4.7): ActionRegistry, UnknownActionTypeError, NamespaceCollisionError
- *   - T4 (§4.7): EngineActions, registerEngineActions
- *   - T5 (§4.7): ActionPipeline, StateReducer, StaleActionError,
- *                ActionSchemaError, ActionUnauthorizedError, RecursiveDispatchError,
- *                MAX_NESTED_DISPATCH
- *   - F16 (§4.5): UndoPolicy, DEFAULT_UNDO_POLICY,
- *                TurnMemento, ActionHistoryEntry, ActionHistory, UndoManager,
- *                UndoNotAllowedError, InMemoryActionHistory, InMemoryUndoManager
  */
 
 export type {

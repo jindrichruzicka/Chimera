@@ -19,7 +19,6 @@
  * `import type`, erased at build — so the module stays safe to load anywhere.
  *
  * Architecture: §4.37 — Renderer Shell Pages UI Contract; §4.4 — Lobby State Sync
- * Task: #708 (T6, part of #702 — Customizable Lobby)
  */
 
 import {
@@ -72,7 +71,7 @@ export const DEFAULT_PLAYER_COLOR_HEX = '#2563eb';
 /**
  * Maximum seats this game's lobby admits (humans + AI together). Exported so
  * the lobby screen can gate the "Add AI player" control on total occupancy
- * without re-hardcoding it (F54 T3, #723).
+ * without re-hardcoding it.
  */
 export const TACTICS_MAX_PLAYERS = 4;
 
@@ -86,8 +85,8 @@ export const TACTICS_MAX_PLAYERS = 4;
  *
  * `turnMode` is seeded to {@link TACTICS_DEFAULT_TURN_MODE} (`sequential`) so the
  * synced `LobbyState.matchSettings` carries the commitment battle-mode flag from
- * the start; the host's Battle Setup toggle (T7) flips it via `setMatchSetting`
- * and it rides into the match through `snapshot.setup` for T8 to read.
+ * the start; the host's Battle Setup toggle flips it via `setMatchSetting`
+ * and it rides into the match through `snapshot.setup`.
  */
 export function buildTacticsLobbySetup(palette: TacticsPalette): GameLobbySetup {
     return {

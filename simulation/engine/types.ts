@@ -7,7 +7,6 @@
  * Every type lives under strict + exactOptionalPropertyTypes + noUncheckedIndexedAccess.
  *
  * Architecture references: §4.2, §4.7
- * Task: F03 / T2 (issue #25)
  *
  * Invariants upheld:
  *   #1 — ActionEnvelope is the exclusive inbound IPC payload for game actions.
@@ -24,11 +23,11 @@ import type { Logger } from '../foundation/logging.js';
 import type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
 export type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
 
-// The brand/contract TYPES below now live in the zero-dependency foundation leaf
-// `../foundation/engine-contract.js` (issue #758) so the foundation can
-// describe its wire/screen contracts without importing up into simulation. They
-// are imported for local use (the brand factories cast to them) and re-exported
-// so `@chimera-engine/simulation/engine/types.js` stays the unchanged public import path.
+// The brand/contract TYPES below live in the zero-dependency foundation leaf
+// `../foundation/engine-contract.js` so the foundation can describe its
+// wire/screen contracts without importing up into simulation. They are imported
+// for local use (the brand factories cast to them) and re-exported so
+// `@chimera-engine/simulation/engine/types.js` stays the public import path.
 import type {
     PlayerId,
     EntityId,
@@ -120,8 +119,8 @@ export interface GameEvent {
 // ─── Game result ────────────────────────────────────────────────────────────
 //
 // `GameResult` is declared in the foundation leaf `../foundation/engine-contract.js`
-// (re-exported above, issue #758). `GameResolution` — the engine-internal
-// discriminated union built on it — stays here.
+// (re-exported above). `GameResolution` — the engine-internal discriminated
+// union built on it — stays here.
 
 /**
  * Discriminated union that represents the resolution state of a game.
@@ -195,17 +194,17 @@ export interface BaseGameSnapshot {
      *
      * Set by the `resolveGameResult` hook in `ActionPipeline` after each
      * `reduce()` step (§4.38). The initial snapshot must always set this to
-     * `null`. Downstream tasks (#509–#511) propagate this through
-     * `PlayerSnapshot`, `HostSessionPipeline`, and `GameShell`.
+     * `null`. Propagated through `PlayerSnapshot`, `HostSessionPipeline`, and
+     * `GameShell`.
      *
      * `winnerIds: []` encodes a draw. `null` means no decision yet.
      *
      * Architecture reference: §4.38 — Game Resolution & Winner Detection
      */
     readonly gameResult: GameResult | null;
-    /** Current coarse-grained game scene (§4.18). Optional for pre-F38 fixtures/saves. */
+    /** Current coarse-grained game scene (§4.18). Optional for older fixtures/saves. */
     readonly sceneId?: SceneId;
-    /** Default renderer screen key for the current scene, projected from SceneDescriptor (§4.18). Optional for pre-F38 fixtures/saves. */
+    /** Default renderer screen key for the current scene, projected from SceneDescriptor (§4.18). Optional for older fixtures/saves. */
     readonly sceneDefaultScreen?: string;
     /** Pending two-phase scene transition, or null between transitions (§4.18). */
     readonly sceneTransition?: SceneTransitionState | null;
@@ -215,25 +214,25 @@ export interface BaseGameSnapshot {
      * authoritative snapshot. Projected verbatim by `StateProjector.project()`
      * so every client agrees on the match configuration — it holds no owner-only
      * fields (§4.37, Invariant #1). Optional and backward-compatible: absent on
-     * pre-#705 fixtures/saves and games with no lobby setup.
+     * older fixtures/saves and games with no lobby setup.
      */
     readonly setup?: GameSetupConfig;
     /**
-     * Stable identity of the current match (F68, #820). Minted host-side
+     * Stable identity of the current match. Minted host-side
      * (`crypto.randomUUID()` in `onGameStartRequested`) and carried in the
      * `engine:start_game` payload, so deterministic replay reproduces the same
      * id. Projected verbatim by `StateProjector.project()` like `setup` — this
      * is how clients learn the matchId from their normal snapshot stream
      * (Invariant #101). Preserved by `engine:return_to_lobby` so post-abandon
      * saves still correlate to the match; the next `engine:start_game` mints a
-     * fresh one. Optional and backward-compatible: absent on pre-#820
+     * fresh one. Optional and backward-compatible: absent on older
      * fixtures/saves.
      */
     readonly matchId?: string;
     /**
      * Per-player commitment status for the current turn, for turn modes that gate
      * turn advance on every seated player having committed (commit-then-sync;
-     * §4.6/§8, F54). Maps a player ID to the `turnNumber` they last committed for;
+     * §4.6/§8). Maps a player ID to the `turnNumber` they last committed for;
      * the end-turn guard treats an entry as current only when it equals the
      * snapshot's `turnNumber`, so stale entries from prior turns auto-expire.
      *
@@ -343,7 +342,7 @@ export const toViewerSnapshot = (projected: Readonly<Record<string, unknown>>): 
 /**
  * Per-viewer undo/redo eligibility injected into every broadcast snapshot.
  *
- * Architecture: §4.5, §7 — canUndo / canRedo propagation (issue #361).
+ * Architecture: §4.5, §7 — canUndo / canRedo propagation.
  * Derived at Stage 7 broadcast time from `UndoManager.canUndo(viewerId)` /
  * `canRedo(viewerId)`. Defaults to `false` for both fields when `undoManager`
  * is absent from `PipelineContext`.
@@ -419,9 +418,9 @@ export interface PipelineContext
 // ─── Actions ─────────────────────────────────────────────────────────────────
 //
 // `EngineAction`, `TypedAction`, and `ActionEnvelope` are declared in the
-// foundation leaf `../foundation/engine-contract.js` (re-exported above, issue
-// #758) so the foundation wire/screen contracts can reference the action shape
-// without importing up into simulation.
+// foundation leaf `../foundation/engine-contract.js` (re-exported above) so the
+// foundation wire/screen contracts can reference the action shape without
+// importing up into simulation.
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
@@ -454,7 +453,7 @@ export interface ValidationResult {
  * `db`  — optional content database. Games that declare no content never receive a `db`.
  *
  * `undoManager` — optional undo eligibility query surface populated by `ActionPipeline`
- *          from `PipelineContext.undoManager` when provided (F16).
+ *          from `PipelineContext.undoManager` when provided.
  *
  * `dispatchDepth` — re-entrant dispatch nesting depth. Zero for the top-level call;
  *          readable by game code per Invariant #89.
@@ -462,7 +461,7 @@ export interface ValidationResult {
 export interface GameReduceContext {
     readonly rng: DeterministicRng;
     readonly db?: ContentDatabase;
-    /** Populated from PipelineContext.undoManager by ActionPipeline (F16). */
+    /** Populated from PipelineContext.undoManager by ActionPipeline. */
     readonly undoManager?: {
         canUndo(playerId: PlayerId): boolean;
         canRedo(playerId: PlayerId): boolean;
@@ -472,7 +471,7 @@ export interface GameReduceContext {
      * active game's `GameDefinition.canEndTurn`. `engine:end_turn.validate()`
      * consults it after its generic active-player checks so a game can reject a
      * premature end-turn (e.g. commit-then-sync mode blocking until every seat
-     * has committed; §4.6/§8, F54) without the engine knowing the game. Absent
+     * has committed; §4.6/§8) without the engine knowing the game. Absent
      * for games that register no `canEndTurn`. Adding this field to the
      * ISP-narrow surface is backed by a dedicated invariant (#102), as this
      * interface's contract requires.
@@ -488,7 +487,7 @@ export interface GameReduceContext {
      * `engine:end_turn.validate()`: the game decides which seats may end the
      * turn. The simultaneous commit-then-sync mode uses this so any seat may
      * fire the reveal once every seat has committed (the active-player gate
-     * would otherwise deadlock a parallel turn; §4.6/§8, F54). Returning `false`
+     * would otherwise deadlock a parallel turn; §4.6/§8). Returning `false`
      * rejects with `not_active_player`. Absent ⇒ the engine keeps its default
      * "only `turnClock.activePlayerId` may end the turn" behaviour, so
      * sequential games are unaffected. The `endTurnGuard` (canEndTurn) is still
@@ -510,7 +509,7 @@ export interface GameReduceContext {
 
 /**
  * Engine-internal context. Extends `GameReduceContext` with `dispatch?` which
- * is ONLY accessible to `engine:tick` (§4.20, F21). Game code receives
+ * is ONLY accessible to `engine:tick` (§4.20). Game code receives
  * `GameReduceContext` via `ActionDefinition.validate/reduce` and cannot reach
  * `dispatch` without a deliberate `isReduceContext()` narrowing call.
  *
@@ -523,7 +522,7 @@ export interface ReduceContext extends GameReduceContext {
         action: ActionEnvelope,
     ) => BaseGameSnapshot;
     /**
-     * Optional structured logger for engine-internal diagnostics (§4.20, F21).
+     * Optional structured logger for engine-internal diagnostics (§4.20).
      *
      * Populated by `ActionPipeline` from its injected logger. Used exclusively
      * by the `engine:tick` reducer to emit `warn`-level entries for timer-fired

@@ -50,8 +50,8 @@ export const GAME_TICK_CHANNEL = 'chimera:game:tick';
  * `ipcRenderer.on` target for {@link GameAPI.onActionRejected}. Main pushes
  * a typed {@link ActionRejection} via `event.sender.send` whenever an
  * action submitted through {@link GAME_SEND_ACTION_CHANNEL} is refused —
- * today at the IPC boundary (envelope validation), and once F03–F15 land,
- * at Stage 3 of the ActionPipeline.
+ * at the IPC boundary (envelope validation) and at Stage 3 of the
+ * ActionPipeline.
  *
  * Wire-shape analogue of the §4.3 WebSocket `ServerMessage` REJECT frame.
  */

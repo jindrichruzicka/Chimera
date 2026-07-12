@@ -11,7 +11,7 @@ import React, {
 } from 'react';
 
 /**
- * Shared renderer Escape/overlay stack (F55 · T6).
+ * Shared renderer Escape/overlay stack.
  *
  * Transient overlays (Modal, Drawer, …) register an Escape handler while open
  * and unregister on close. A single capture-phase `window` keydown listener

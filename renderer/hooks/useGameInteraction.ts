@@ -1,10 +1,7 @@
 'use client';
-// renderer/hooks/useGameInteraction.ts
-//
 // R3F pointer interaction hook for §4.23.
 // Reads InteractionContext to gate click dispatching;
 // hover state is always local (invariant #58).
-// Issue: #551
 
 import { useCallback, useDebugValue, useState } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';

@@ -1,6 +1,4 @@
 /**
- * electron/main/ChatHub.ts
- *
  * ChatHub — the main-side local-delivery sink for chat (architecture §4.29 —
  * Chat System). Where {@link ChatRelay} is the host-side *policy gate* between an
  * inbound CHAT and its rebroadcast, ChatHub is the *recipient-side* terminus for
@@ -11,8 +9,8 @@
  * the local player as a recipient (locally-originated or relayed from a remote
  * client). The hub then:
  *   - appends it to a rolling buffer capped at `capacity` (default 500), dropping
- *     the oldest entry from the head when full — chat history is not persisted in
- *     1.0.0 and exists only for the session lifetime;
+ *     the oldest entry from the head when full — chat history is not persisted
+ *     and exists only for the session lifetime;
  *   - pushes it to `onMessage` unless its sender is muted.
  *
  * Mute is a reversible *view filter*: the full buffer always stores every
@@ -22,8 +20,6 @@
  * Chat is a cosmetic communication channel: ChatHub never advances `tick`, never
  * touches `ActionPipeline`, and is never recorded in replays / saves
  * (Invariant #72). It imports nothing from those subsystems.
- *
- * Task: F45 / T03 (issue #681)
  *
  * Invariants upheld:
  *   #67 — Constructed with an injected `Logger` child; no `console.*`.

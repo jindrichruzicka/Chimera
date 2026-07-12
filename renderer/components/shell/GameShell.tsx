@@ -1,7 +1,5 @@
 'use client';
 
-// renderer/components/shell/GameShell.tsx
-
 import React, { type ReactNode } from 'react';
 import type {
     CommitmentReveal,
@@ -95,7 +93,7 @@ interface GameShellRegistryProps {
      * the generic `GameScreenProps.content`. Game-agnostic plain data.
      */
     readonly content?: GameContent;
-    /** Latest verified commitment-mode reveal (F54 / T9), passed through to the board. */
+    /** Latest verified commitment-mode reveal, passed through to the board. */
     readonly reveal?: CommitmentReveal | null;
     /**
      * Whether the local player hosted the match; passed through to screens as

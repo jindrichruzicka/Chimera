@@ -115,7 +115,7 @@ export async function fetchGoogleFontsForGame(
 
     const sourceFontDir = resolve(
         options.workspaceRoot,
-        // Game apps live under apps/<gameId>/ (relocated from games/ in F63 #782).
+        // Game apps live under apps/<gameId>/.
         'apps',
         options.gameId,
         'assets',

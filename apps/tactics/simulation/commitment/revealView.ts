@@ -1,12 +1,9 @@
 /**
- * apps/tactics/commitment/revealView.ts
- *
  * Renderer-side narrowing of a verified commitment reveal back to the tactics
- * committed turn (F54 / T9), so the board can play back / animate each revealed
- * turn. The main process already gated the reveal through
- * `CommitmentScheme.verify()` (Invariant #9); this is a structural re-narrow of
- * the opaque `reveal.value` (defence in depth) using the same schema the host
- * stages with.
+ * committed turn, so the board can play back / animate each revealed turn. The
+ * main process already gated the reveal through `CommitmentScheme.verify()`
+ * (Invariant #9); this is a structural re-narrow of the opaque `reveal.value`
+ * (defence in depth) using the same schema the host stages with.
  *
  * Typed on `{ value: unknown }` rather than the preload `CommitmentReveal` so the
  * tactics game package never imports `electron/*` (module boundary).

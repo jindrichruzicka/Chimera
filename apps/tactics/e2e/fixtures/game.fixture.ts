@@ -65,7 +65,6 @@ async function advanceToGame(
     await hostLobby.waitForPlayerCount(2);
     await clientLobby.waitForPlayerCount(2);
 
-    // Ready both seats, host-start, and wait for both match canvases.
     await readyAndStart(hostLobby, clientLobby, hostWindow, clientWindow);
 }
 

@@ -17,7 +17,6 @@
  * **Scope:** the scope schema only — no relay logic, no IPC, no UI.
  *
  * Architecture: §4.29 — Chat System
- * Task: F45 / T03 (issue #681)
  *
  * Invariants upheld:
  *   #2 — Zero runtime imports from electron/, renderer/, simulation/, or DOM

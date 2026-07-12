@@ -49,8 +49,8 @@ const boardSceneStyle: React.CSSProperties = {
 };
 
 /**
- * Reveal playback overlay (F54 / T9): in commitment mode the host reveals each
- * player's committed turn in deterministic order. The board surfaces the most
+ * Reveal playback overlay: in commitment mode the host reveals each player's
+ * committed turn in deterministic order. The board surfaces the most
  * recent revealed turn here — non-interactive and corner-anchored so it never
  * occludes board clicks (cf. the chat drawer). The authoritative snapshot
  * remains the source of truth for unit positions; this is the playback hook.
@@ -87,8 +87,8 @@ export function TacticsDemoBoard({
     const [selectedUnitId, setSelectedUnitId] = useState<TacticsSceneUnit['id'] | null>(null);
 
     // Commitment battle mode: move/attack/reveal selections are buffered locally
-    // (never dispatched) and shown as an optimistic view until the player commits
-    // (#730, F54). The buffer is shared with the HUD via this module store.
+    // (never dispatched) and shown as an optimistic view until the player commits.
+    // The buffer is shared with the HUD via this module store.
     const isCommitment = readTacticsTurnMode(snapshot.setup?.matchSettings) === 'commitment';
     const buffer = useCommitmentBuffer(selectBuffer);
     const committedLatch = useCommitmentBuffer(selectCommittedLatch);

@@ -16,7 +16,6 @@
  * talks to LobbyServer through its typed API, never to ws primitives.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T02 (issue #217)
  *
  * Invariants upheld:
  *   #1  — Only PlayerSnapshot crosses wire boundaries; LobbyServer never
@@ -61,7 +60,7 @@ export interface LobbyServerOptions {
     readonly gameId: string;
     readonly maxPlayers: number;
     /**
-     * Optional host-set lobby password (F56). When non-empty, every JOIN must
+     * Optional host-set lobby password. When non-empty, every JOIN must
      * present a matching `password` (compared timing-safe) or is rejected with
      * `REJECT 'invalid_password'`. When undefined/empty the lobby is open. The
      * secret stays here — it is never written to `LobbyState` or logged.
@@ -70,22 +69,22 @@ export interface LobbyServerOptions {
     /** Optional structured logger. Logs join/leave events and validation failures. */
     readonly logger?: Logger;
     /**
-     * Stable match identity of a restored session (F68/#821). A JOIN seat
-     * claim is only honored when its `matchId` equals this value; absent on
+     * Stable match identity of a restored session. A JOIN seat claim is only
+     * honored when its `matchId` equals this value; absent on
      * non-restored lobbies, so no claim can ever match.
      */
     readonly matchId?: string;
     /**
-     * Saved host PlayerId of a restored session (F68/#821). Minted as the
-     * lobby's `hostId` instead of the default `host-${token}`, and never
+     * Saved host PlayerId of a restored session. Minted as the lobby's `hostId`
+     * instead of the default `host-${token}`, and never
      * grantable to a joining client's claim.
      */
     readonly hostPlayerId?: PlayerId;
     /**
-     * Non-host restored human seats, pre-sorted slotIndex-ascending
-     * (F68/#821). Seeded into `knownPlayers` for id resolution only — never
-     * broadcast as a fabricated roster — and handed out in order to claimless
-     * joins as the join-order fallback.
+     * Non-host restored human seats, pre-sorted slotIndex-ascending. Seeded
+     * into `knownPlayers` for id resolution only — never broadcast as a
+     * fabricated roster — and handed out in order to claimless joins as the
+     * join-order fallback.
      */
     readonly restoredSeats?: readonly PlayerId[];
 }
@@ -114,25 +113,24 @@ export class LobbyServer implements MessageBus {
     private latestLobbyState: LobbyState | null = null;
     private readonly knownPlayers = new Map<PlayerId, LobbyPlayerEntry>();
     /**
-     * Host-filtered restored seats in slotIndex order (F68/#821) — the claim
-     * universe and the claimless join-order fallback.
+     * Host-filtered restored seats in slotIndex order — the claim universe and
+     * the claimless join-order fallback.
      */
     private readonly restoredSeatSet = new Set<PlayerId>();
     /**
-     * Restored seats that have been handed out at least once (F68/#821). The
-     * join-order fallback never re-hands such a seat — after a drop it stays
-     * reclaimable via an explicit claim or reconnectPlayerId only.
+     * Restored seats that have been handed out at least once. The join-order
+     * fallback never re-hands such a seat — after a drop it stays reclaimable
+     * via an explicit claim or reconnectPlayerId only.
      */
     private readonly claimedRestoredSeats = new Set<PlayerId>();
     /**
-     * Every identity that completed a JOIN on this server instance
-     * (F68/#821). `reconnectPlayerId` is only honored for these — never for
-     * merely-seeded restored seats — so a stale ticket cannot bypass the
-     * matchId gate that claims enforce, and the never-connecting host id
-     * cannot be seized.
+     * Every identity that completed a JOIN on this server instance.
+     * `reconnectPlayerId` is only honored for these — never for merely-seeded
+     * restored seats — so a stale ticket cannot bypass the matchId gate that
+     * claims enforce, and the never-connecting host id cannot be seized.
      */
     private readonly everConnected = new Set<PlayerId>();
-    /** Lookups handed to the shared seat resolver (F68/#821). */
+    /** Lookups handed to the shared seat resolver. */
     private readonly seatResolutionCtx: SeatResolutionContext;
 
     private readonly opts: LobbyServerOptions;
@@ -151,8 +149,8 @@ export class LobbyServer implements MessageBus {
         this.logger = opts.logger;
         this._token = randomBytes(16).toString('hex');
 
-        // Seed restored seats for join-time id resolution (F68/#821). The
-        // knownPlayers entry only provides the seat's displayName default —
+        // Seed restored seats for join-time id resolution. The knownPlayers
+        // entry only provides the seat's displayName default —
         // this never touches latestLobbyState, so the roster the host
         // broadcasts still starts with the host entry only.
         for (const pid of opts.restoredSeats ?? []) {
@@ -165,8 +163,8 @@ export class LobbyServer implements MessageBus {
             hostPlayerId: opts.hostPlayerId,
             restoredSeats: this.restoredSeatSet,
             isConnected: (pid) => this.connections.has(pid),
-            // knownPlayers preserves the LEAVE-forgets semantics (#687);
-            // everConnected keeps merely-seeded seats out of the reconnect path.
+            // knownPlayers preserves the LEAVE-forgets semantics; everConnected
+            // keeps merely-seeded seats out of the reconnect path.
             isReconnectable: (pid) => this.knownPlayers.has(pid) && this.everConnected.has(pid),
             isHandedOut: (pid) => this.claimedRestoredSeats.has(pid),
         };
@@ -296,7 +294,7 @@ export class LobbyServer implements MessageBus {
         if (this.closed) return;
         this.closed = true;
 
-        // Notify all clients — snapshot the map before iterating (W-3)
+        // Notify all clients — snapshot the map before iterating.
         const closeMsg: ServerMessage = {
             type: 'CLOSE',
             reason: 'host_closed',
@@ -305,7 +303,7 @@ export class LobbyServer implements MessageBus {
         const entries = [...this.connections.entries()];
         for (const [playerId, ws] of entries) {
             if (ws.readyState === WebSocket.OPEN) {
-                // Flush the CLOSE frame first, then close in the callback (W-2)
+                // Flush the CLOSE frame first, then close in the callback.
                 ws.send(serialised, () => ws.close());
             }
             for (const cb of this.disconnectedCbs) {
@@ -327,7 +325,7 @@ export class LobbyServer implements MessageBus {
         // Set when the client sends an explicit LEAVE before closing. Lets the
         // close handler distinguish an intentional departure (`'normal'`) from a
         // transient drop (`'timeout'`), so the host's opponent-presence toasts
-        // (#687) never fire "disconnected" on a deliberate leave.
+        // never fire "disconnected" on a deliberate leave.
         let intentionalLeave = false;
 
         const onMessage = (raw: Buffer | ArrayBuffer | Buffer[]): void => {
@@ -348,7 +346,6 @@ export class LobbyServer implements MessageBus {
             const msg = parsed;
 
             if (!authenticated) {
-                // Only JOIN is valid before authentication
                 if (msg.type !== 'JOIN') {
                     ws.send(
                         JSON.stringify({
@@ -361,7 +358,7 @@ export class LobbyServer implements MessageBus {
                     return;
                 }
 
-                // Validate token — timing-safe comparison (T07)
+                // Validate token — timing-safe comparison.
                 if (!timingSafeTokenEqual(msg.token, this._token)) {
                     ws.send(
                         JSON.stringify({
@@ -375,10 +372,9 @@ export class LobbyServer implements MessageBus {
                 }
 
                 // Validate lobby password — timing-safe, only when the host set
-                // one (F56). An empty/undefined host password leaves the lobby
-                // open (unchanged behaviour). A missing or mismatched client
-                // password is rejected before WELCOME; the secret is never
-                // echoed back to the client.
+                // one. An empty/undefined host password leaves the lobby open.
+                // A missing or mismatched client password is rejected before
+                // WELCOME; the secret is never echoed back to the client.
                 const requiredPassword = this.opts.password;
                 if (
                     requiredPassword !== undefined &&
@@ -396,7 +392,6 @@ export class LobbyServer implements MessageBus {
                     return;
                 }
 
-                // Check capacity
                 if (this.connections.size >= this.opts.maxPlayers) {
                     ws.send(
                         JSON.stringify({
@@ -430,9 +425,9 @@ export class LobbyServer implements MessageBus {
                 }
 
                 this.connections.set(pid, ws);
-                // Only now is the identity consumed (F68/#821) — marking any
-                // earlier would let a gate-rejected join burn a restored seat
-                // for the claimless fallback or open it to reconnect claims.
+                // Only now is the identity consumed — marking any earlier would
+                // let a gate-rejected join burn a restored seat for the
+                // claimless fallback or open it to reconnect claims.
                 this.everConnected.add(pid);
                 if (this.restoredSeatSet.has(pid)) {
                     this.claimedRestoredSeats.add(pid);
@@ -441,7 +436,6 @@ export class LobbyServer implements MessageBus {
                 authenticated = true;
                 this.logger?.info('player connected', { playerId: pid });
 
-                // Send WELCOME
                 const lobbyState = this.buildWelcomeLobbyState(pid, displayName);
                 const welcomeMsg: ServerMessage = {
                     type: 'WELCOME',
@@ -464,7 +458,7 @@ export class LobbyServer implements MessageBus {
             // subscribers: it marks the departure as intentional and forgets the
             // player so a later JOIN with the same reconnectPlayerId is treated as
             // a fresh join (no "reconnected" toast). The socket close that follows
-            // then reports `'normal'` (#687).
+            // then reports `'normal'`.
             if (msg.type === 'LEAVE') {
                 intentionalLeave = true;
                 this.knownPlayers.delete(pid);
@@ -485,7 +479,7 @@ export class LobbyServer implements MessageBus {
                 // An explicit LEAVE → `'normal'` (deliberate). A bare socket close
                 // with no preceding LEAVE → `'timeout'` (transient drop); the
                 // player stays in `knownPlayers` so a reconnect resolves the same
-                // PlayerId and the host can raise the "reconnected" toast (#687).
+                // PlayerId and the host can raise the "reconnected" toast.
                 const reason: DisconnectReason = intentionalLeave ? 'normal' : 'timeout';
                 for (const cb of this.disconnectedCbs) {
                     cb(pid, reason);
@@ -506,7 +500,7 @@ export class LobbyServer implements MessageBus {
             ({
                 info: {
                     sessionId: this._token,
-                    // A restored session reclaims its saved host id (F68/#821).
+                    // A restored session reclaims its saved host id.
                     hostId: this.opts.hostPlayerId ?? toPlayerId(`host-${this._token}`),
                     gameId: this.opts.gameId,
                 },
@@ -531,10 +525,10 @@ export class LobbyServer implements MessageBus {
     }
 
     /**
-     * Resolve the PlayerId a JOIN is admitted under. The F68/#821 priority
-     * chain (reconnect → claims → claimless restored-seat fallback) lives in
-     * the shared `resolveRestoredSeat` so it cannot drift between providers;
-     * this method only adds the fresh `player-N` mint.
+     * Resolve the PlayerId a JOIN is admitted under. The priority chain
+     * (reconnect → claims → claimless restored-seat fallback) lives in the
+     * shared `resolveRestoredSeat` so it cannot drift between providers; this
+     * method only adds the fresh `player-N` mint.
      *
      * Pure — hand-out bookkeeping happens at admission time only, so a
      * profile-gate rejection cannot burn a seat.
@@ -552,7 +546,7 @@ export class LobbyServer implements MessageBus {
     private mintFreshId(): PlayerId {
         // Restored seats carry prior-session 'player-N' ids while idCounter
         // restarts at 0 per server — skip occupied ids so a "fresh" mint can
-        // never collide with a restored seat or a live connection (F68/#821).
+        // never collide with a restored seat or a live connection.
         let pid: PlayerId;
         do {
             this.idCounter += 1;

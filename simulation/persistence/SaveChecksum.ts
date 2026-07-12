@@ -1,13 +1,12 @@
 /**
  * simulation/persistence/SaveChecksum.ts
  *
- * SHA-256 checksum computation for save file bodies (issue #134).
+ * SHA-256 checksum computation for save file bodies.
  *
  * Uses the Web Crypto API (`globalThis.crypto.subtle`) which is available in
  * Node.js 18+ and all modern browsers without any Node.js built-in imports.
  *
  * Architecture reference: §4.11
- * Task: F06 / integrity (issue #134)
  *
  * Invariants upheld:
  *   #2 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
@@ -22,7 +21,7 @@ import type { SaveFile } from './SaveFile.js';
  * The portion of a `SaveFile` that participates in the integrity checksum.
  * The header is excluded because `header.checksum` itself is stored there.
  *
- * `session` is deliberately excluded too (F68, #820): the v5→v6 migration
+ * `session` is deliberately excluded too: the v5→v6 migration
  * backfills a manifest onto legacy files AFTER their checksum was stored, and
  * the repository verifies the checksum on the migrated file — including
  * `session` in the hash would fail every migrated v5 save. Unlike
@@ -50,7 +49,7 @@ export type SaveBody = Pick<
  * @returns A 64-character hex SHA-256 digest.
  */
 export async function computeBodyChecksum(body: SaveBody): Promise<string> {
-    // `stagedReveals` is included only when non-empty so that a pre-#26 save
+    // `stagedReveals` is included only when non-empty so that a v4 save
     // (whose stored checksum was computed over the three original fields) still
     // verifies after the v4→v5 migration backfills `stagedReveals: {}`. An empty
     // map is semantically "no staging", so omitting it from the hash is correct;

@@ -1,6 +1,4 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-shell-games-import.ts
- *
  * ESLint rule: chimera/no-shell-games-import
  *
  * Flags forbidden game imports on the engine's game-agnostic renderer surfaces:
@@ -16,12 +14,11 @@
  *   3. Any import from a games package path in `GameShell.tsx` /
  *      `InGameMenuHost.tsx` (Invariant #80). These engine↔game-React coupling
  *      surfaces stay game-agnostic — the `GameScreenRegistry` prop is the sole
- *      coupling point. Locks the boundary across the @chimera-engine/renderer package
- *      cut alongside the bash invariants Check 7 (issue #774).
+ *      coupling point. Mirrors the bash invariants Check 7 across the
+ *      @chimera-engine/renderer package boundary.
  *
  * Architecture reference: section 4.35 UI Design System, 4.37 Shell Pages UI Contract
  * Invariants #80, #93 and #94
- * Issue: #561, #774
  */
 
 import type { Rule } from 'eslint';
@@ -77,9 +74,9 @@ const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
  *   - a `@chimera-engine/<pkg>` package whose `<pkg>` is NOT an engine package
  *     (e.g. `@chimera-engine/tactics`).
  *
- * Detecting games by the engine allowlist — rather than the legacy `/games/`
- * directory substring — keeps the guard correct now that games are first-class
- * `@chimera-engine/<game>` packages (F57) and once they move out of `games/` (F63).
+ * Detecting games by the engine allowlist — rather than a `/games/` directory
+ * substring — keeps the guard correct now that games are first-class
+ * `@chimera-engine/<game>` packages that live outside `games/`.
  */
 function isGamesImport(source: string): boolean {
     const n = source.replace(/\\/gu, '/');

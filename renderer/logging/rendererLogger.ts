@@ -99,7 +99,6 @@ export function installRendererLogger(logsApi: LogsAPI): () => void {
     const origWarn = console.warn;
     const origError = console.error;
 
-    // console.warn → level: 'warn'
     console.warn = (...args: unknown[]): void => {
         origWarn(...args);
         try {
@@ -109,7 +108,6 @@ export function installRendererLogger(logsApi: LogsAPI): () => void {
         }
     };
 
-    // console.error → level: 'error'
     console.error = (...args: unknown[]): void => {
         origError(...args);
         try {
@@ -119,7 +117,6 @@ export function installRendererLogger(logsApi: LogsAPI): () => void {
         }
     };
 
-    // window 'error' event → level: 'fatal'
     const onError = (event: Event): void => {
         const e = event as ErrorEvent;
         const error = e.error instanceof Error ? e.error : undefined;
@@ -137,7 +134,6 @@ export function installRendererLogger(logsApi: LogsAPI): () => void {
         }
     };
 
-    // window 'unhandledrejection' event → level: 'error'
     const onUnhandledRejection = (event: Event): void => {
         const e = event as PromiseRejectionEvent;
         const reason: unknown = e.reason;

@@ -9,7 +9,7 @@
 // Inspector `BrowserWindow` (§4.12 — Runtime Debug Layer).
 //
 // Everything is `import type`/`export type`, so the renderer debug page
-// (F47 T7/T8) consumes this module — via `renderer/types/chimera-debug.d.ts`
+// consumes this module — via `renderer/types/chimera-debug.d.ts`
 // — with zero runtime coupling to `simulation/debug` (Invariant #27: the
 // debug module graph stays out of production bundles).
 //
@@ -34,7 +34,7 @@ import type { PlayerSnapshot } from '../projection/StateProjector.js';
 import type { Unsubscribe } from './api-types.js';
 
 // Single import root for the Inspector page: every protocol type it needs is
-// re-exported here so T7/T8 never reach into `simulation/` directly.
+// re-exported here so the page never reaches into `simulation/` directly.
 export type {
     ActionHistoryEntry,
     DebugRequest,

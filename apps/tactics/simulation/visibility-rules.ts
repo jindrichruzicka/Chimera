@@ -1,6 +1,4 @@
 /**
- * apps/tactics/visibility-rules.ts
- *
  * Tactics visibility policy used by the main-process StateProjector wiring.
  * Tactics units are visible to their owner and to players listed in the
  * unit's internal `visibleTo` reveal list. Projection strips that internal
@@ -65,9 +63,9 @@ export const tacticsVisibilityRules: VisibilityRules<
         }
         return entity;
     },
-    // Owner-only stamina (#721): the viewer reads their own remaining moves so
-    // the HUD can show them; every other player's stamina is masked to null —
-    // an opponent's budget is irrelevant to the viewer and never leaves the host.
+    // Owner-only stamina: the viewer reads their own remaining moves so the HUD
+    // can show them; every other player's stamina is masked to null — an
+    // opponent's budget is irrelevant to the viewer and never leaves the host.
     maskPlayerState(player, viewer, state): TacticsObservedPlayer {
         // `committed` is the public per-turn commit marker — projected for every
         // seat (not owner-only) so the renderer can gate the reveal-only End Turn.

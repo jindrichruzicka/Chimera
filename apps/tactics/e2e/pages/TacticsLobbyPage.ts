@@ -2,7 +2,7 @@ import { expect, type Locator } from '@playwright/test';
 import { LobbyPage } from './LobbyPage';
 
 /**
- * Page object for the Tactics customizable lobby (#702). Extends {@link LobbyPage}
+ * Page object for the Tactics customizable lobby. Extends {@link LobbyPage}
  * with the Tactics-specific colour controls rendered by
  * `apps/tactics/shell/TacticsLobbyScreen.tsx`:
  *   - board colour select (`tactics-board-color-select`)
@@ -74,7 +74,7 @@ export class TacticsLobbyPage extends LobbyPage {
         return this.page.getByTestId('lobby-address-copy');
     }
 
-    // ── Commitment scheme (host-authored Battle Setup toggle, F54) ────────────
+    // ── Commitment scheme (host-authored Battle Setup toggle) ────────────
 
     /** The commitment-scheme toggle (`<input type=checkbox>`, host-only editable). */
     public commitmentToggle(): Locator {
@@ -91,7 +91,7 @@ export class TacticsLobbyPage extends LobbyPage {
         await expect.poll(() => this.commitmentToggle().isChecked()).toBe(enabled);
     }
 
-    // ── AI players (F54) ──────────────────────────────────────────────────────
+    // ── AI players ──────────────────────────────────────────────────────
 
     /** The "Add AI player" button (host-only; disabled when the lobby is full). */
     public addAiButton(): Locator {

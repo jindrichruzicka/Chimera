@@ -1,9 +1,7 @@
 'use client';
 
 /**
- * renderer/components/replay/ReplayExportToastBridge.tsx (§4.30, F46 / #646).
- *
- * App-wide listener that turns a main-process replay-export-completed push into
+ * App-wide listener (§4.30) that turns a main-process replay-export-completed push into
  * a "Replay saved" toast. The save affordance is the replay player's compact save
  * icon (a `'save'`-intent `export-current-match`); main pushes
  * `chimera:replay:exported` once that export resolves, and this bridge — a

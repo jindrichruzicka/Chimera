@@ -7,7 +7,6 @@
  * Mirrors the pattern of `renderer/hooks/useReplayApi.ts`.
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #374 (WARN-1)
  *
  * Rules:
  *   - Must NOT import from: electron/main/, simulation/engine/, networking/.

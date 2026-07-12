@@ -14,7 +14,7 @@
  * unchanged public import path.
  *
  * This module is PURE TYPE DECLARATIONS only — zero runtime code, zero workspace
- * imports. Relocated under issue #758.
+ * imports.
  */
 
 /**

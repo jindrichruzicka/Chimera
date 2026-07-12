@@ -1,9 +1,7 @@
 'use client';
 
 /**
- * renderer/components/replay/ReplayControls.tsx
- *
- * Display-only playback controls for the replay player (§4.28, F44 / T6, #660).
+ * Display-only playback controls for the replay player (§4.28).
  *
  * Holds NO state of its own — `currentTick`, `totalTicks`, and `isPlaying` are
  * props, and every interaction is reported through a callback so the parent

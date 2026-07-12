@@ -2,7 +2,7 @@
  * simulation/projection/RevealStaging.ts
  *
  * Host-side reveal-staging store — the companion to {@link CommitmentScheme} for
- * commit-then-reveal turn modes (§4.6/§8, F54). Retains each committed
+ * commit-then-reveal turn modes (§4.6/§8). Retains each committed
  * player-turn's `{ value, nonce }` between Commit and Reveal so the host can
  * build a valid {@link CommitmentReveal} after every seat has committed —
  * necessary because `DefaultCommitmentScheme.commit()` discards the nonce.

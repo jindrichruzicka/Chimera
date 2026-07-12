@@ -5,7 +5,6 @@
  * TurnMemento, ActionHistoryEntry, ActionHistory, and UndoNotAllowedError.
  *
  * Architecture reference: §4.5, §7
- * Task: F16 (issue #359)
  *
  * Strategy: Hybrid Memento + Event Sourcing.
  *   - `saveTurnMemento()` stores a full BaseGameSnapshot at turn start.

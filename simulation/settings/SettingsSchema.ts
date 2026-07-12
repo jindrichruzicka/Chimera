@@ -119,7 +119,7 @@ export type UserSettings = DeepPartial<ResolvedSettings>;
 /**
  * Zod shape for all four engine-owned setting namespaces.
  * Game schemas can spread this into their own `z.object({ ...engineSettingsZodShape, ... })`
- * to avoid duplicating the engine field definitions (WARN-1 fix).
+ * to avoid duplicating the engine field definitions.
  *
  * This is exported as a raw `ZodRawShape` (plain object of Zod schemas) so
  * game packages can use it with `z.object({ ...engineSettingsZodShape, gameKey: ... })`

@@ -18,6 +18,7 @@ Senior engine developer for Chimera. Implement features and fixes through TDD, w
 1. Load the relevant source docs before editing.
 2. For code changes, follow red → green → refactor and keep tests scoped to the behavior under change.
 3. Implement the smallest architecture-aligned change; prefer existing patterns and dependency injection points from the docs.
+    - Comment per [§16 Code Comments](../../docs/coding-standards-sections/code-comments.md): the why not the what, minimal, no issue or review-finding references.
 4. Run the appropriate gate from the coding standards and task risk.
 5. Use the git skill workflow for commit, push, merge, and issue closure when requested.
 

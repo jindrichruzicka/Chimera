@@ -1,10 +1,7 @@
 /**
- * apps/tactics/commitment/contract.ts
- *
- * Type contract for the tactics **commitment-scheme battle mode** (T6 / #726,
- * part of F54 / #720). This is the design gate for T7 (#727, Battle Setup
- * checkbox), T8 (#728, commitment turn mode) and T9 (#729, reveal-sync): those
- * tasks implement against the shapes declared here.
+ * Type contract for the tactics **commitment-scheme battle mode**. This is the
+ * design gate for the Battle Setup checkbox, the commitment turn mode, and
+ * reveal-sync: those implement against the shapes declared here.
  *
  * The mode layers a simultaneous **commit-then-sync** turn on top of the
  * EXISTING commit/reveal primitive — `CommitmentScheme` /
@@ -32,7 +29,7 @@ import type {
     TacticsRevealTilePayload,
 } from '../actions.js';
 
-// ─── Local action buffer (Phase: Local play, T8) ────────────────────────────
+// ─── Local action buffer (Phase: Local play) ────────────────────────────────
 
 /**
  * Maps each bufferable tactics action type to its payload. The computed keys
@@ -86,7 +83,7 @@ export function bufferHasAttack(buffer: LocalActionBuffer): boolean {
     return buffer.some((action) => action.type === TACTICS_ATTACK_ACTION);
 }
 
-// ─── Committed value (Phase: Commit, T8/T9) ──────────────────────────────────
+// ─── Committed value (Phase: Commit) ─────────────────────────────────────────
 
 /**
  * The value hashed into a {@link CommitmentEnvelope} and echoed verbatim in the
@@ -103,7 +100,7 @@ export interface TacticsCommitmentEnvelopeValue {
     readonly actions: LocalActionBuffer;
 }
 
-// ─── Reveal ordering (Phase: End turn / reveal, T9) ──────────────────────────
+// ─── Reveal ordering (Phase: End turn / reveal) ──────────────────────────────
 
 /**
  * The minimal per-player fact the deterministic reveal order needs: who
@@ -117,8 +114,8 @@ export interface CommittedTurn {
 /**
  * Derives the deterministic reveal order from the committed turns. Pure: order
  * is a function of `(seed, tick)` only, never host discretion, so replays and
- * `verify()` stay sound (Invariant #71; new "deterministic reveal order"
- * invariant drafted in T6, ratified in T11).
+ * `verify()` stay sound (Invariant #71, the "deterministic reveal order"
+ * invariant).
  *
  * Algorithm (see design note §Reveal ordering):
  *   1. Partition into attack-committers and the rest.
@@ -127,7 +124,7 @@ export interface CommittedTurn {
  *   3. Attack-committers first, then the rest.
  *
  * `seed` and `tick` mirror the integer `GameSnapshot.seed` / `GameSnapshot.tick`
- * fields. Implemented in T9; this type is the contract it satisfies.
+ * fields. This type is the contract the implementation satisfies.
  */
 export type ResolveRevealOrder = (
     committed: readonly CommittedTurn[],
@@ -135,13 +132,13 @@ export type ResolveRevealOrder = (
     tick: number,
 ) => readonly PlayerId[];
 
-// ─── Host-side reveal staging (Phase: Commit → reveal, T8/T9) ────────────────
+// ─── Host-side reveal staging (Phase: Commit → reveal) ───────────────────────
 //
 // The host-side reveal-staging STORE is game-agnostic and lives next to the
 // commit/reveal primitive at `simulation/projection/RevealStaging.ts`
 // (`RevealStaging` / `RevealStagingPort` / `StagedReveal` / `StagedReveals`),
 // keyed by envelope id with an opaque `value`. The host must stay ignorant of
 // which games exist (Invariant #2), so the tactics value type is not baked into
-// the store. T9 derives the tactics-specific {@link CommittedTurn} list (with
-// `hasAttack`) and reveal order from the store's `capture()` by narrowing each
+// the store. The tactics-specific {@link CommittedTurn} list (with `hasAttack`)
+// and reveal order are derived from the store's `capture()` by narrowing each
 // staged `value` to {@link TacticsCommitmentEnvelopeValue}.

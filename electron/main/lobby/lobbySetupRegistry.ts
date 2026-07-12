@@ -8,14 +8,13 @@
  * `GameSetupConfig` carried into the match at `engine:start_game`.
  *
  * This module names NO game. The per-game builders arrive by injection from the
- * consumer composition root via `MainGameContribution.lobbySetup` (#789),
+ * consumer composition root via `MainGameContribution.lobbySetup`,
  * derived by the host into `lobbySetupByGameId` — so `@chimera-engine/electron` imports
  * no game lobby code (Invariant #2). `createResolveLobbySetup` closes each
  * builder over the game's loaded content; `LobbyManager` stays free of game and
  * content-loader imports.
  *
  * Architecture: §4.14 — LobbyManager; §4.4 — Lobby State Sync; §4.8 — Content Database
- * Task: #706 (part of #702 — Customizable Lobby); #789 (game-injection seam)
  */
 
 import type { LobbyState } from '@chimera-engine/networking';

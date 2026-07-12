@@ -2,7 +2,7 @@
 
 // renderer/components/debug/ProjectionExplorerPanel.tsx
 //
-// Inspector Projection Explorer (§4.12 — Runtime Debug Layer, F47 T9, #698).
+// Inspector Projection Explorer (§4.12 — Runtime Debug Layer).
 // Side-by-side view of the full debug-truth snapshot and the projection one
 // player would receive at the selected tick, with the fields the projection
 // hides, masks, or derives highlighted in both trees. Both payloads are
@@ -49,7 +49,7 @@ type ProjectionState =
  * This is a shape heuristic, not a contract — if the snapshot ever stops
  * exposing a root `players` record, the panel degrades to its "no players"
  * message with no other signal. The durable fix is a `listPlayers`-style
- * query in the debug protocol (deferred follow-up to F47 T9, #698).
+ * query in the debug protocol.
  */
 function extractPlayerIds(snapshot: unknown): readonly string[] {
     if (typeof snapshot !== 'object' || snapshot === null) {

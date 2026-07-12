@@ -2,7 +2,7 @@
 
 // renderer/components/debug/DiffViewPanel.tsx
 //
-// Inspector Diff View (§4.12 — Runtime Debug Layer, F47 T9, #698). Pick any
+// Inspector Diff View (§4.12 — Runtime Debug Layer). Pick any
 // two recorded ticks and see the flat list of changed paths with
 // before/after values plus the added/removed/changed summary, resolved by
 // the bridge's structural differ.

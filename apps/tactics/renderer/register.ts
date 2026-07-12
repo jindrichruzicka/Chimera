@@ -1,5 +1,3 @@
-// apps/tactics/renderer/register.ts
-//
 // Renderer composition root for the tactics app — the renderer twin of
 // `apps/tactics/electron/main.ts`. This is the SOLE renderer-side module that
 // names a concrete game AND drives renderer registration: it builds the tactics

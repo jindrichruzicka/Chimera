@@ -8,7 +8,7 @@
  * pushes `chimera:lobby:player-left` only when an opponent deliberately leaves
  * while a match is in progress — the in-battle counterpart to
  * `PlayerConnectionToastBridge`, which stays silent for intentional leaves and
- * fires only for transient drops/reconnects (#687).
+ * fires only for transient drops/reconnects.
  *
  * Local seats are excluded defensively: a player never sees a leave toast about
  * their own seat. `displayName` is lobby-scoped cosmetic data (Invariant #59) —

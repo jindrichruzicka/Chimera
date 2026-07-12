@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * renderer/app/saves/page.tsx — Saves Browser (§4.11, F68 / #824).
+ * Saves Browser (§4.11).
  *
  * Pure load/delete browser over the save slots in `saveStore.slots`, rebuilt on
  * the replay-browser pattern (`renderer/app/replays/page.tsx`) so the two
@@ -104,8 +104,8 @@ export default function SavesPage(): React.ReactElement {
     const isLoading = useSaveStore((s) => s.isLoading);
     const savesApi = useSavesApi();
     const router = useRouter();
-    // Surface load rejections inline (BLOCK-3 wiring rejects when no session is
-    // active, load can throw SaveNotFoundError, etc.) so users see what went wrong.
+    // Surface load rejections inline (wiring rejects when no session is active,
+    // load can throw SaveNotFoundError, etc.) so users see what went wrong.
     const [error, setError] = React.useState<string | null>(null);
     const [pendingDelete, setPendingDelete] = React.useState<SlotId | null>(null);
 

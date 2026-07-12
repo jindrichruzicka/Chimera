@@ -15,7 +15,6 @@
  * mirroring `shared/game-shell-contract.ts`.
  *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
- * Task: #703 (part of #702 — game lobby contract types)
  *
  * Module boundary (§3 Module Boundary Table): `shared/` must not import from
  * `renderer/`, `games/*`, `electron/`, or simulation runtime. The sole import
@@ -92,8 +91,8 @@ export interface GameSetupConfig {
  * `playerId` must be the local player. `main` rejects a write to any other seat
  * and, for a joined client, forwards the own-seat intent to the authoritative
  * host (`chimera:lobby:set-player-attribute`), which applies it and rebroadcasts
- * (owner-authored, F53). Board/match settings remain host-authored via
- * `setMatchSetting` (#706).
+ * (owner-authored). Board/match settings remain host-authored via
+ * `setMatchSetting`.
  */
 export type LobbyPendingAction =
     | 'hosting'
@@ -128,16 +127,16 @@ export interface GameLobbyScreenProps {
     /**
      * Host-only: append an AI agent slot to the lobby roster. The host assigns
      * the slot index; `main` rejects the call from a joined (non-host) session
-     * and when the lobby is full, then rebroadcasts the synced `LobbyState`
-     * (F54 T3/T4, #723/#724). The screen renders the control for the host only.
+     * and when the lobby is full, then rebroadcasts the synced `LobbyState`.
+     * The screen renders the control for the host only.
      * Resolves when the round-trip settles so the screen can gate double-submit.
      */
     readonly addAiPlayer: () => Promise<void>;
     /**
      * Host-only: remove the AI agent slot at `slotIndex` from the lobby roster.
      * `main` rejects the call from a joined (non-host) session, then rebroadcasts
-     * the synced `LobbyState` (F54 T3/T4, #723/#724). Resolves when the round-trip
-     * settles so the screen can gate double-submit.
+     * the synced `LobbyState`. Resolves when the round-trip settles so the screen
+     * can gate double-submit.
      */
     readonly removeAiPlayer: (slotIndex: number) => Promise<void>;
     readonly onToggleReady: (ready: boolean) => Promise<void>;

@@ -44,8 +44,8 @@ export interface InspectorMemento<TState extends BaseGameSnapshot = BaseGameSnap
 }
 
 /**
- * Injected dependencies. The debug bridge (`electron/main/debug-bridge.ts`,
- * F47 T4) wires these from the live simulation host.
+ * Injected dependencies. The debug bridge (`electron/main/debug-bridge.ts`)
+ * wires these from the live simulation host.
  */
 export interface SnapshotInspectorOptions<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly ringBuffer: SnapshotRingBuffer<TState>;

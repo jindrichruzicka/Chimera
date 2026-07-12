@@ -1,7 +1,7 @@
 // renderer/components/debug/projectionDiff.ts
 //
 // Structural diff between the full debug-truth snapshot and a per-player
-// projection, for the Inspector's Projection Explorer (§4.12, F47 T9, #698).
+// projection, for the Inspector's Projection Explorer (§4.12).
 //
 // Paths use the same dot-delimited convention as the simulation's snapshot
 // differ (root `''`, array indices as numbers-as-strings). The walk is

@@ -8,7 +8,6 @@
  * `window.__chimera.saves.onSlotUpdate` push events.
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #373
  *
  * Rules:
  *  - Components subscribe through narrow typed selectors only.
@@ -91,9 +90,9 @@ export interface SaveStoreState {
     /**
      * True while a user-initiated restore abort (RestoreWaitingOverlay
      * Cancel / Escape) waits for the game route to carry the host off the
-     * dead mid-restore /game hop and back to /saves (#842). Raised by the
+     * dead mid-restore /game hop and back to /saves. Raised by the
      * overlay's abort handler; consumed by the game page's abort-exit
-     * effect, which owns the navigation (mirrors the #741 leave flag).
+     * effect, which owns the navigation (mirrors the leave flag).
      */
     readonly restoreAbortPending: boolean;
 

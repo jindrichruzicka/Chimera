@@ -1,8 +1,8 @@
 /**
  * simulation/persistence/SessionManifest.ts
  *
- * Derives a best-effort `SaveSessionManifest` from a checkpoint snapshot
- * (F68, #820). Shared by the v5→v6 `sessionManifestMigration` (legacy saves
+ * Derives a best-effort `SaveSessionManifest` from a checkpoint snapshot.
+ * Shared by the v5→v6 `sessionManifestMigration` (legacy saves
  * carry no manifest) and by `captureSaveFile`'s fallback when the host wires
  * no live manifest provider, so the two paths can never drift.
  *

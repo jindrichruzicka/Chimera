@@ -6,7 +6,6 @@
  * allowed import perimeter (../fixtures/, ../pages/, ../helpers/ only).
  *
  * Architecture: §13.7 — IPC and WebSocket Test Helpers
- * Related: BLOCK-3 — reconnect spec must not call electron.launch directly
  */
 
 import { _electron as electron } from '@playwright/test';

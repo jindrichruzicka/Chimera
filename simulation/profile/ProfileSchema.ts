@@ -1,9 +1,6 @@
 /**
- * simulation/profile/ProfileSchema.ts
- *
  * Core profile types and repository interface for the Chimera engine.
  * Architecture: §4.24 — Player Profiles & Directory
- * Task: F14-T01 (issue #338)
  *
  * Invariants upheld:
  *   #2  — zero imports from renderer/, electron/, games/*, or DOM APIs

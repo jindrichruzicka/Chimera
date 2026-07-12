@@ -1,5 +1,5 @@
 /**
- * Pure name-normalisation core for the `create-chimera-game` scaffolder (F65).
+ * Pure name-normalisation core for the `create-chimera-game` scaffolder.
  *
  * A new game is named once on the command line; the blank template references that name in
  * six different casings. {@link normalizeGameName} expands a single input — in any shape

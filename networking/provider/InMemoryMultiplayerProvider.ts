@@ -4,14 +4,11 @@
  * Test double implementing MultiplayerProvider using shared in-memory event
  * channels. Connects host and client sessions without WebSockets or real I/O.
  *
- * Intended for:
- *   - MultiplayerProvider contract tests (T5 / issue #205)
- *   - All subsequent M2 unit and integration tests
+ * Intended for MultiplayerProvider contract tests and other unit/integration tests.
  *
  * Must NOT import from networking/provider/local/ — this is an independent provider.
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider
- * Task: F09 / T4 (issue #204)
  *
  * Invariants upheld:
  *   #2 — networking/provider/ has zero imports from renderer/ or electron/
@@ -97,9 +94,9 @@ class InMemoryChannel {
 
     closed = false;
 
-    // Restored-session seams (F68/#821) — the resolution policy itself lives
-    // in the shared `resolveRestoredSeat`; seats are seeded for id resolution
-    // only, never fabricated into a roster.
+    // Restored-session seams — the resolution policy itself lives in the shared
+    // `resolveRestoredSeat`; seats are seeded for id resolution only, never
+    // fabricated into a roster.
     /** Host-filtered restored seats in slotIndex order (insertion-ordered). */
     readonly restoredSeats = new Set<PlayerId>();
     /** Seats handed out at least once — the claimless fallback never re-hands them. */
@@ -184,7 +181,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         const lobbyCode = `in-memory-${this.nextId()}`;
         const lobbyInfo: LobbyInfo = {
             sessionId: lobbyCode,
-            // F68/#821: a restored session reclaims its saved host id.
+            // A restored session reclaims its saved host id.
             hostId: params.restore?.hostPlayerId ?? toPlayerId(`host-${this.nextId()}`),
             gameId: params.gameId,
         };
@@ -296,7 +293,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
                 sanitizeSeatClaims(params.claims),
             ) ?? this.mintFreshClientId(channel);
 
-        // Profile gate check (Invariant #61 — gate is the only path to admission)
+        // Profile gate check (Invariant #61 — gate is the only path to admission).
         // Reclaimed restored seats default to the seat id, matching LobbyServer's
         // seeded-displayName behavior.
         let displayName = channel.restoredSeats.has(clientPlayerId)
@@ -306,16 +303,16 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             const gateResult = channel.profileGate(clientPlayerId, params.profile);
             if (!gateResult.admitted) {
                 // Typed rejection so consumers branch on the structured reason
-                // (parity with LocalWebSocketProvider) — see JoinRejectedError (#688).
+                // (parity with LocalWebSocketProvider) — see JoinRejectedError.
                 return Promise.reject(new JoinRejectedError(gateResult.reason));
             }
             displayName = gateResult.displayName;
         }
 
         const record = channel.addClient(clientPlayerId);
-        // Only now is the identity consumed (F68/#821) — marking any earlier
-        // would let a gate-rejected join burn a restored seat for the
-        // claimless fallback or open it to reconnect claims.
+        // Only now is the identity consumed — marking any earlier would let a
+        // gate-rejected join burn a restored seat for the claimless fallback or
+        // open it to reconnect claims.
         channel.everConnected.add(clientPlayerId);
         if (channel.restoredSeats.has(clientPlayerId)) {
             channel.claimedSeats.add(clientPlayerId);
@@ -418,7 +415,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             onLatencyUpdate:
                 (_cb: (latencyMs: number) => void): Unsubscribe =>
                 (): void => {
-                    // InMemoryMultiplayerProvider does not measure latency — no-op stub.
+                    // No latency measurement in the in-memory provider.
                 },
         };
 
@@ -440,7 +437,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
     private mintFreshClientId(channel: InMemoryChannel): PlayerId {
         // Restored seats saved from a prior InMemory session are themselves
         // 'client-N' ids while the counter restarts per provider — skip
-        // occupied ids so a "fresh" mint can never collide (F68/#821).
+        // occupied ids so a "fresh" mint can never collide.
         let pid: PlayerId;
         do {
             pid = toPlayerId(`client-${this.nextId()}`);

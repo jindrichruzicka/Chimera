@@ -1,6 +1,4 @@
 /**
- * electron/main/FileSettingsRepository.ts
- *
  * Filesystem-backed SettingsRepository implementation.
  *
  * Settings are stored as JSON files:
@@ -8,9 +6,6 @@
  *
  * `save()` writes to a `.tmp` file first, then renames atomically so that
  * a crash never leaves a corrupt settings file.
- *
- * Architecture reference: §F07/T3
- * Task: F07 / T3 (issue #149)
  */
 
 import * as fs from 'fs/promises';

@@ -1,10 +1,10 @@
 /**
  * electron/main/replay/PerspectiveReplayPlaybackManager.ts
  *
- * Main-process owner of *perspective* replay playback (§4.28, ADR F44b, F44b /
- * T6, #672) — the read side of the recording machinery in
- * `./PerspectiveReplayManager.ts`, and the privacy-preserving counterpart to the
- * deterministic `./replay-playback-manager.ts`.
+ * Main-process owner of *perspective* replay playback (§4.28) — the read side of
+ * the recording machinery in `./PerspectiveReplayManager.ts`, and the
+ * privacy-preserving counterpart to the deterministic
+ * `./replay-playback-manager.ts`.
  *
  * A perspective replay stores only already-projected `PlayerSnapshot` frames for
  * a single, **locked** `viewerId`. Playback is therefore *verbatim*: this manager
@@ -18,8 +18,7 @@
  * and deliberately offers no seat list and no seat switching (contrast the
  * deterministic `ReplayPlaybackManager.open`, which lists every `playerId`).
  *
- * Architecture reference: §4.28 (ADR F44b)
- * Task: F44b / T6 (issue #672)
+ * Architecture reference: §4.28
  *
  * Invariants upheld:
  *   #67 — constructed with an injected Logger child; every public method logs at

@@ -1,7 +1,5 @@
 /**
- * renderer/components/replay/replayKind.ts (§4.28, ADR F44b / T8, #674).
- *
- * The two replay kinds that coexist in the renderer and a parser for the player
+ * The two replay kinds (§4.28) that coexist in the renderer and a parser for the player
  * route's `?kind=` query param. Deterministic replays drive
  * `window.__chimera.replay.*`; perspective replays drive
  * `window.__chimera.replay.perspective.*` and lock playback to a single

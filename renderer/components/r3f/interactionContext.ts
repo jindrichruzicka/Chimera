@@ -1,9 +1,7 @@
 'use client';
-// renderer/components/r3f/interactionContext.ts
-//
-// InteractionContext and useInteractionContext hook extracted to a plain .ts
-// file so that non-JSX modules (renderer/**/*.ts in the root tsconfig) can
-// import from here without triggering the "jsx not set" TS error.
+// InteractionContext and useInteractionContext live in a plain .ts file so
+// non-JSX modules (renderer/**/*.ts in the root tsconfig) can import from here
+// without triggering the "jsx not set" TS error.
 //
 // InteractionBlocker.tsx re-exports everything from this file.
 // Architecture: §4.23 — Pointer and Click Interactions

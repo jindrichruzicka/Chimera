@@ -12,7 +12,7 @@
  *   return stop; // cleanup on unmount
  *
  * Architecture reference: §4.4 — Renderer State Stores;
- *                         §6  — simulation/prediction · Client Prediction (F17)
+ *                         §6  — simulation/prediction · Client Prediction
  *
  * Invariants upheld:
  *   #1  — GameSnapshot never crosses any IPC boundary; only PlayerSnapshot.
@@ -78,9 +78,9 @@ export async function bootstrapGameStore(
     const predictableTypesPromise = api.getPredictableActionTypes();
     const client = clientFactory(api, trackedStore, (type: string) => predictableTypes.has(type));
     const unsubscribeClient = client.bootstrap();
-    // Commitment battle mode (F54 / T9): main pushes only reveals that already
-    // passed `CommitmentScheme.verify()` (Invariant #9). The board plays each
-    // revealed turn back from the store.
+    // Commitment battle mode: main pushes only reveals that already passed
+    // `CommitmentScheme.verify()` (Invariant #9). The board plays each revealed
+    // turn back from the store.
     const unsubscribeReveal = api.onReveal((reveal) => resolvedStore.applyReveal(reveal));
     const unsubscribe: Unsubscribe = () => {
         unsubscribeClient();

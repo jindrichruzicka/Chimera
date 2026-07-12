@@ -1,5 +1,3 @@
-// electron/main/startup-guard.ts
-//
 // Pure production startup guards — imports only from `shared/`, no Electron or
 // Node imports, so they can be unit-tested without any module mocking overhead.
 //

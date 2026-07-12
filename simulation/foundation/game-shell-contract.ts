@@ -1,12 +1,10 @@
 /**
  * shared/game-shell-contract.ts
  *
- * Shared declarative contract for game-customisable shell pages (F51 — §4.37).
+ * Shared declarative contract for game-customisable shell pages (§4.37).
  * Consumed by both renderer/ (to render menus) and games/* (to declare menus).
  *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
- * Task: #616 (F51 — GameMainMenuDefinition contract types)
- * Task: #625 (F52 — GameSettingsPageDefinition contract types)
  *
  * Module boundary (§3 Module Boundary Table): `shared/` must not import from
  * `renderer/` or `games/*`. This module has zero imports — the constraint is
@@ -197,7 +195,7 @@ export interface GameMainMenuDefinition {
     readonly buttons: readonly GameMainMenuButton[];
 }
 
-// ─── Settings page contract (§4.13, §4.37 — F52 #625) ────────────────────────
+// ─── Settings page contract (§4.13, §4.37) ───────────────────────────────────
 
 /**
  * Exhaustive branded union of every engine setting field that may be referenced

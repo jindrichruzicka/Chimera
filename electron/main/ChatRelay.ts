@@ -1,6 +1,4 @@
 /**
- * electron/main/ChatRelay.ts
- *
  * ChatRelay — the mandatory host-side gate between an inbound `CHAT` message and
  * its rebroadcast (architecture §4.29 — Chat System).
  *
@@ -14,8 +12,6 @@
  * Chat is a cosmetic communication channel: the relay never advances `tick`,
  * never touches `ActionPipeline`, and is never recorded in `ActionHistory` /
  * replays / saves (Invariant #72). It imports nothing from those subsystems.
- *
- * Task: F45 / T02 (issue #680)
  *
  * Invariants upheld:
  *   #67 — Constructed with an injected `Logger` child; no `console.*`.

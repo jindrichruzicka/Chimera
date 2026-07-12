@@ -1,11 +1,9 @@
 /**
- * electron/main/session/snapshot-ticket-recorder.ts
- *
- * Bridges the client snapshot stream to the SessionTicketStore (F68 #822).
+ * Bridges the client snapshot stream to the SessionTicketStore.
  *
  * The composition root (`electron/main/index.ts`) calls the returned function
  * from its `onClientSnapshotReceived` hook. The first snapshot carrying a
- * `matchId` (#820) records `{matchId, playerId: viewerId, gameId, updatedAt}`;
+ * `matchId` records `{matchId, playerId: viewerId, gameId, updatedAt}`;
  * identical repeats are deduped in-memory so the store is not rewritten on
  * every frame, and a match or seat change records again.
  *

@@ -1,7 +1,5 @@
 /**
- * tools/gen-toolchain.ts
- *
- * Generator + drift gate for the create-chimera-game TOOLCHAIN SNAPSHOT (F66 follow-on).
+ * Generator + drift gate for the create-chimera-game TOOLCHAIN SNAPSHOT.
  *
  * The published `create-chimera-game` CLI emits a standalone game project whose root declares the
  * toolchain (react / three / next / vitest / playwright / electron / typescript / …) and whose app

@@ -17,7 +17,6 @@
  * temp directory in tests to avoid touching the real user directory.
  *
  * Architecture reference: §4.28
- * Task: F44 / T3 (issue #657)
  *
  * Invariants upheld:
  *   #23 — save() writes to .tmp and renames atomically.

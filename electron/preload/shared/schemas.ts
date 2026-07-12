@@ -3,13 +3,12 @@
 // Runtime validation of values returned by main-process `ipcMain.handle`
 // calls to the preload's `ipcRenderer.invoke` callers.
 //
-// The preload namespace factories used to cast `ipc.invoke(...)` results via
-// `as Promise<T>` with no runtime shape check, trusting main to return
-// whatever each method's declared `SomeType` demands. That held today —
-// every handler in F02 is a stub — but any drift between what a future main
-// handler actually returns and what the preload contract declares would
-// surface as a confusing `Cannot read properties of undefined` inside a React
-// component, far from the root cause.
+// Without this, the preload namespace factories would cast `ipc.invoke(...)`
+// results via `as Promise<T>` with no runtime shape check, trusting main to
+// return whatever each method's declared `SomeType` demands. Any drift between
+// what a main handler actually returns and what the preload contract declares
+// would then surface as a confusing `Cannot read properties of undefined`
+// inside a React component, far from the root cause.
 //
 // Validating at the preload boundary turns shape drift into a single clear
 // `PreloadIpcValidationError` that names the offending channel, so the
@@ -133,7 +132,7 @@ export const LobbyStateSchema = z.object({
     info: LobbyInfoSchema,
     players: z.array(LobbyPlayerEntrySchema).readonly(),
     // Synced AI agent slots so a renderer reading the snapshot (e.g. on initial
-    // load / replay) sees the AI roster, not just the live `onUpdate` push (#724).
+    // load / replay) sees the AI roster, not just the live `onUpdate` push.
     agentSlots: z.array(LobbyAgentSlotSchema).readonly().optional(),
 }) satisfies z.ZodType<LobbyState>;
 
@@ -187,7 +186,7 @@ export const SaveSlotListSchema: z.ZodType<readonly SaveSlotMeta[]> = z.array(Sa
 
 /**
  * Schema for the {@link RestoreStatusEvent} pushed on
- * `chimera:saves:restore-status` (F68 #826). Preload-side copy — main
+ * `chimera:saves:restore-status`. Preload-side copy — main
  * validates the same shape independently in `ipc-schemas.ts` (Invariant #5:
  * schemas are duplicated on each side of the main↔preload boundary).
  * `matchId` allows `''` — a load can fail before any validated matchId
@@ -223,7 +222,7 @@ export const RestoreStatusEventSchema: z.ZodType<RestoreStatusEvent> = z
 /**
  * Schema for {@link ResolvedSettings} returned by `chimera:settings:*`. The
  * declared type is `Record<string, unknown>` — the merge / schema-per-game
- * logic lands in F07/F19 — so the preload gate only enforces "is a plain
+ * logic lives elsewhere — so the preload gate only enforces "is a plain
  * object, not a primitive / array / null".
  */
 export const ResolvedSettingsSchema = z.record(

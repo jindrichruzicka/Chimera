@@ -2,7 +2,7 @@
 
 // renderer/app/GameRegistrationBootstrap.tsx
 //
-// Runs the active game's renderer registration in the CLIENT bundle (#784).
+// Runs the active game's renderer registration in the CLIENT bundle.
 //
 // `renderer/**` names no game; the game's renderer contribution enters through
 // the synthetic `chimera-game-registration` specifier, which `next.config.ts`

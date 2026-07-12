@@ -10,7 +10,6 @@
  *   pnpm dev:mp 4 --game tactics
  *
  * Architecture reference: §4.32 — Development Multiplayer Harness
- * Issue: #84
  *
  * Invariants upheld:
  *   #2  — This module lives in `tools/`, not `simulation/`. It does not
@@ -435,8 +434,8 @@ if (invokedDirectly) {
  * rather than imported by another module (test runner, REPL).
  *
  * Compares canonical absolute paths: `fileURLToPath(importMetaUrl)` against
- * the resolved `argv[1]`. This replaces the old `endsWith` substring match,
- * which could falsely match whenever two repos contained same-named files.
+ * the resolved `argv[1]`. A substring/`endsWith` match would falsely fire
+ * whenever two repos contained same-named files.
  */
 export function isDirectInvocation(importMetaUrl: string, argv1: string | undefined): boolean {
     if (argv1 === undefined) return false;

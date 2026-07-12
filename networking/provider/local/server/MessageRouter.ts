@@ -13,7 +13,6 @@
  * messages reach MessageRouter) are silently ignored.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T03 (issue #218)
  */
 
 import type { PlayerId, EngineAction } from '@chimera-engine/simulation/contracts';
@@ -132,10 +131,10 @@ export class MessageRouter {
 
             case 'CHAT':
                 for (const cb of this.sideChannelCbs) {
-                    // Internal placeholders only: the host relay (F45) assigns the
+                    // Internal placeholders only: the host relay assigns the
                     // authoritative `id` and `serverTime`, and WsHostTransport forwards
-                    // both verbatim. Keep `id` empty and `timestamp` at 0 so review
-                    // readers do not treat router-local payload values as authoritative.
+                    // both verbatim. Keep `id` empty and `timestamp` at 0 so readers
+                    // do not treat router-local payload values as authoritative.
                     cb(from, {
                         kind: 'chat',
                         payload: {
@@ -162,7 +161,7 @@ export class MessageRouter {
                 const pong: ServerMessage = {
                     type: 'PONG',
                     sentAt: msg.sentAt,
-                    // TODO(F-clock-skew): add serverTime once clock-skew estimation is implemented.
+                    // TODO: add serverTime once clock-skew estimation is implemented.
                 };
                 this.bus.sendToPlayer(from, pong);
                 break;

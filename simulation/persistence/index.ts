@@ -5,11 +5,6 @@
  *
  * Re-exports all persistence types and classes so consumers import from
  * `@chimera-engine/simulation/persistence` rather than internal module paths.
- *
- * Populated progressively as F06 tasks land:
- *   - T1 (#120): SaveFile, SaveSerializer, JsonSaveSerializer, CompressedSaveSerializer
- *   - T2 (#121): SaveMigrator, SaveMigration, SaveNotFoundError, SaveSchemaTooNewError
- *   - T3 (#122): SaveRepository, SaveSlotMeta, InMemorySaveRepository
  */
 
 export type { SaveFileHeader, SaveFile, SaveSeat, SaveSessionManifest } from './SaveFile.js';

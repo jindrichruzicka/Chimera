@@ -1,10 +1,7 @@
 /**
- * ai/engine/AIStateMachine.ts
- *
  * AIStateMachine<TParams> interface and AIStateMachineImpl<TParams> class.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F23 (issue #418)
  *
  * Invariants upheld:
  *   #18 — AIParams are passed by value (frozen) to every lifecycle method;
@@ -19,8 +16,6 @@ import type { AIParams, PlayerSnapshot } from './AITypes.js';
 import type { CommandContext } from './CommandContext.js';
 import type { CommandScheduler } from './CommandScheduler.js';
 import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
-
-// ─── AIStateMachine interface ─────────────────────────────────────────────────
 
 /**
  * State-machine interface for AI brains.
@@ -80,8 +75,6 @@ export interface AIStateMachine<TParams extends AIParams = AIParams> {
     readonly currentState: AIState<TParams>;
 }
 
-// ─── AIStateMachineImpl ───────────────────────────────────────────────────────
-
 /**
  * Concrete implementation of `AIStateMachine<TParams>`.
  *
@@ -101,9 +94,9 @@ export class AIStateMachineImpl<
         this.logger = options?.logger;
     }
 
-    // ── Fix 2: stable wrapped-context proxy (Performance §13) ─────────────────
-    // Live tick args are stored here for the duration of tick(); nulled in finally.
-    // Any post-tick use of a captured context reference throws immediately.
+    // Stable wrapped-context proxy (Performance §13). Live tick args are stored
+    // here for the duration of tick() and nulled in finally, so any post-tick use
+    // of a captured context reference throws immediately.
     private _tc: CommandContext | null = null;
     private _ts: PlayerSnapshot | null = null;
     private _tp: TParams | null = null;
@@ -135,9 +128,8 @@ export class AIStateMachineImpl<
         },
     };
 
-    // ── Fix 1: frozen() memoization (Performance §13) ─────────────────────────
-    // Avoids a spread+freeze allocation when the caller passes the same params
-    // reference on consecutive ticks.
+    // frozen() memoization (Performance §13): avoids a spread+freeze allocation
+    // when the caller passes the same params reference on consecutive ticks.
     private _lastParams: TParams | undefined;
     private _lastFrozen: Readonly<TParams> | undefined;
 
@@ -155,10 +147,9 @@ export class AIStateMachineImpl<
         const state = this.requireState(stateName);
         this._currentState = state;
 
-        // Populate live fields so the wrapped proxy can forward transitionState() calls.
         // If onEnter calls context.transitionState(), it must route through _wrappedCtx
-        // to buffer the transition (Invariant #19); null them out in finally so stale
-        // captured references throw (Performance §13).
+        // to buffer the transition (Invariant #19), so populate the live fields first;
+        // null them out in finally so stale captured references throw (Performance §13).
         const frozenParams = this.frozen(params);
         this._tc = context;
         this._ts = snapshot;
@@ -199,22 +190,17 @@ export class AIStateMachineImpl<
         scheduler: CommandScheduler<TParams>,
         context: CommandContext,
     ): void {
-        // Fix 1 — compute frozen params (memoized by params reference)
         const frozenParams = this.frozen(params);
 
-        // Fix 2 — populate live fields so the stable proxy can forward calls;
-        //          null them out in finally so stale captured references throw.
+        // Populate live fields so the stable _wrappedCtx proxy can forward calls;
+        // nulled in finally so stale captured references throw.
         this._tc = context;
         this._ts = snapshot;
         this._tp = params;
         this._tsch = scheduler;
 
         try {
-            // Step 1 — _wrappedCtx is the stable proxy replacing the per-tick literal
-            //           (Invariant #19: transitionState() inside lifecycle methods
-            //           still routes through this.transition() correctly)
-
-            // Step 2 — Apply buffered transition from the previous tick (Invariant #19)
+            // Apply the transition buffered on the previous tick (Invariant #19).
             if (this.pendingTransition !== null) {
                 const nextStateName = this.pendingTransition;
                 this.pendingTransition = null;
@@ -224,16 +210,15 @@ export class AIStateMachineImpl<
                 nextState.onEnter(snapshot, frozenParams, scheduler, this._wrappedCtx);
             }
 
-            // Step 3 — Drive the command queue; updates scheduler.isIdle
+            // Drive the command queue; updates scheduler.isIdle.
             scheduler.advance(snapshot, tick, frozenParams, this._wrappedCtx);
 
-            // Step 4 — Planning hook when scheduler queue is empty
             const current = this.currentState; // throws if not initialised
+            // Planning hook: enqueue new work only when the queue has drained.
             if (scheduler.isIdle) {
                 current.onIdle(snapshot, tick, frozenParams, scheduler, this._wrappedCtx);
             }
 
-            // Step 5 — Reaction hook for general state behavior
             current.onTick(snapshot, tick, frozenParams, scheduler, this._wrappedCtx);
         } finally {
             this._tc = null;
@@ -265,7 +250,7 @@ export class AIStateMachineImpl<
             this._lastParams = params;
             this._lastFrozen = Object.freeze({ ...params });
         }
-        // safe: branch above always sets _lastFrozen when params changes; params is never nullish
+        // Non-null: the branch above always sets _lastFrozen when params changes, and params is never nullish.
         return this._lastFrozen!;
     }
 

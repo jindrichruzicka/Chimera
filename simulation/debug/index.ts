@@ -8,13 +8,6 @@
  * module paths directly. Everything here is debug-only tooling: instantiated
  * exclusively when `IS_DEBUG_MODE` is true (Invariant #31) and tree-shaken
  * out of production builds.
- *
- * Populated as F47 tasks land:
- *   - T1 (#690): SnapshotRingBuffer, RingBufferEntry,
- *                DEFAULT_RING_BUFFER_CAPACITY
- *   - T2 (#691): diffSnapshots, DiffEntry, SnapshotDiff
- *   - T3 (#692): SnapshotInspector, TickNotAvailableError,
- *                DEFAULT_PERF_SAMPLE_CAPACITY, DebugProtocol types
  */
 
 export { SnapshotRingBuffer, DEFAULT_RING_BUFFER_CAPACITY } from './SnapshotRingBuffer.js';

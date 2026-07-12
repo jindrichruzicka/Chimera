@@ -1,13 +1,10 @@
 'use client';
 
 /**
- * renderer/components/shell/debug/DebugInspectorToggle.tsx
- *
  * Headless component wiring the F9 `engine:toggle-debug-inspector` InputAction
  * to the Debug Inspector window. Renders nothing.
  *
  * Architecture reference: §4.12 — Runtime Debug Layer; §4.26 — Input & Keybindings
- * Issue: #696 — F47 T7
  *
  * Rules:
  *  - 'use client' — renderer component.

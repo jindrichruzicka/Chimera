@@ -1,8 +1,6 @@
 /**
- * simulation/replay/PerspectiveReplayRepository.ts
- *
- * Repository interface for *perspective* replay-file storage (§4.28, ADR F44b),
- * the privacy-preserving counterpart to {@link ReplayRepository}. PURE TYPE
+ * Repository interface for *perspective* replay-file storage (§4.28), the
+ * privacy-preserving counterpart to {@link ReplayRepository}. PURE TYPE
  * DECLARATIONS + an interface — zero runtime code, zero FS or Electron imports.
  * Two implementations exist:
  *   - InMemoryPerspectiveReplayRepository (this package) — test double
@@ -12,13 +10,12 @@
  * the repository on `save()` (a generated UUID file name) and returned to the
  * caller; `load()` / `delete()` take that opaque path back, and `list()` returns
  * the stored paths for a game. Deliberately narrower than `ReplayRepository`: no
- * `listItems()` — the perspective replay browser is added with T4 when needed.
+ * `listItems()` — the perspective replay browser adds it when needed.
  *
  * The owned root is **disjoint** from the deterministic `userData/replays/`: the
  * file implementation stores under `userData/perspective-replays/<gameId>/`.
  *
- * Architecture reference: §4.28 (ADR F44b)
- * Task: F44b / T3 (issue #669)
+ * Architecture reference: §4.28
  *
  * Invariants upheld:
  *   #2  — simulation/ is side-effect-free; no FS or Electron imports.

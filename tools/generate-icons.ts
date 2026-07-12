@@ -7,16 +7,14 @@ import * as png2icons from 'png2icons';
 import sharp from 'sharp';
 
 /**
- * tools/generate-icons.ts
- *
- * F67 T1 (#811) — deterministic platform icon-set generator for the Chimera engine.
+ * Deterministic platform icon-set generator for the Chimera engine.
  *
  * Derives the application/window icon set from a single square master logo PNG and
- * writes the canonical set into one directory consumed by two later F67 layers:
- *   - the dev-runtime default (`chimera.png`, 512×512) resolved by F67 T2 in
+ * writes the canonical set into one directory consumed by two later layers:
+ *   - the dev-runtime default (`chimera.png`, 512×512) resolved in
  *     `@chimera-engine/electron`'s `createMainWindow`, and
  *   - the build icon set (`chimera.icns` / `chimera.ico` + loose Linux PNG sizes)
- *     wired into the packaging config by F67 T4.
+ *     wired into the packaging config.
  *
  * Loose PNGs are downscaled with `sharp` (libvips) for crisp small sizes; the
  * `.icns`/`.ico` containers are assembled with the pure-JS `png2icons`. Both are
@@ -38,9 +36,9 @@ export const PNG_SIZES = [16, 32, 48, 64, 128, 256, 512, 1024] as const;
 export const DEFAULT_ICON_BASENAME = 'chimera';
 
 /**
- * Size used for the dev-runtime default `chimera.png` — the stable filename F67 T2
- * passes to `createMainWindow({ icon })`. 512px reads well as a BrowserWindow icon
- * on Windows/Linux and as the macOS dock icon.
+ * Size used for the dev-runtime default `chimera.png` — the stable filename passed
+ * to `createMainWindow({ icon })`. 512px reads well as a BrowserWindow icon on
+ * Windows/Linux and as the macOS dock icon.
  */
 export const DEFAULT_RUNTIME_ICON_SIZE = 512;
 

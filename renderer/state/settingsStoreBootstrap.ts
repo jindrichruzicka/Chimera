@@ -9,8 +9,6 @@
  *   const stop = bootstrapSettingsStore(window.__chimera.settings);
  *   return stop; // cleanup on unmount
  *
- * Architecture reference: §F07 hardening #157 (BLOCK-2, WARN-4)
- *
  * Invariant #1: ResolvedSettings (not GameSnapshot) is what crosses IPC.
  */
 

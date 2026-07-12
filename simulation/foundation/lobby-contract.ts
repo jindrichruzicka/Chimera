@@ -16,8 +16,7 @@
  * pre-existing structural divergence is intentional and left untouched — this
  * module owns the branded view used by the message-type layer and networking.
  *
- * This module is PURE TYPE DECLARATIONS only — zero runtime code. Relocated
- * under issue #758.
+ * This module is PURE TYPE DECLARATIONS only — zero runtime code.
  */
 
 import type { PlayerId } from './engine-contract.js';
@@ -46,7 +45,7 @@ export interface LobbyPlayerEntry {
     readonly ready: boolean;
     /**
      * Owner-authored per-player match attributes (e.g. unit colour): each player
-     * writes its own seat (F53). Optional and backward-compatible: absent on games
+     * writes its own seat. Optional and backward-compatible: absent on games
      * with no lobby setup and on older clients.
      */
     readonly attributes?: Record<string, string>;
@@ -63,8 +62,8 @@ export interface LobbyState {
     readonly matchSettings?: Record<string, string>;
     /**
      * Host-configured AI agent slots, synced to all clients so every peer sees
-     * the AI roster (F54 T3/T4, #723/#724). Optional and backward-compatible:
-     * absent on games with no AI and on older clients.
+     * the AI roster. Optional and backward-compatible: absent on games with no
+     * AI and on older clients.
      */
     readonly agentSlots?: readonly LobbyAgentSlot[];
 }

@@ -1,7 +1,7 @@
 /**
  * tools/verify-pack.ts
  *
- * `verify:pack` — the release-gating TRUE-ARTIFACT validation step (issue #794, F64 T2).
+ * `verify:pack` — the release-gating TRUE-ARTIFACT validation step.
  *
  * Day-to-day, `apps/tactics` consumes the `@chimera-engine/*` packages through pnpm
  * `workspace:*` symlinks, which resolve the WHOLE source tree regardless of what
@@ -61,8 +61,8 @@ import {
 } from './verify-shared';
 
 // The injected I/O surfaces, engine-package list, renderer peer set, and the two
-// pure pack/peer helpers now live in `verify-shared.ts` (shared with verify-scaffold).
-// Re-exported here so this module's existing public surface — and its test — is unchanged.
+// pure pack/peer helpers live in `verify-shared.ts` (shared with verify-scaffold).
+// Re-exported here so this module's public surface — and its test — is self-contained.
 export {
     CHIMERA_PACKAGES,
     RENDERER_PEERS,
@@ -97,8 +97,8 @@ const PROBE_SUBPATHS = [
     '@chimera-engine/renderer/components/ui',
     '@chimera-engine/renderer/components/chat',
     '@chimera-engine/renderer/game',
-    // F65 Phase 2c: a consumer app's per-app Next host re-exports the engine shell
-    // from `@chimera-engine/renderer/shell/*`; probe a representative route + the root layout
+    // A consumer app's per-app Next host re-exports the engine shell from
+    // `@chimera-engine/renderer/shell/*`; probe a representative route + the root layout
     // so a missing `dist/app/*` entry in the packed artifact fails the gate.
     '@chimera-engine/renderer/shell/layout',
     '@chimera-engine/renderer/shell/main-menu/page',

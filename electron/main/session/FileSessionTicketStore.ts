@@ -1,7 +1,5 @@
 /**
- * electron/main/session/FileSessionTicketStore.ts
- *
- * Filesystem-backed `SessionTicketStore` (F68 #822, §4.11/§4.14).
+ * Filesystem-backed `SessionTicketStore` (§4.11/§4.14).
  *
  * All tickets live in a single JSON file — in production
  * `<userData>/session-tickets.json`, injected by the composition root

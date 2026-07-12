@@ -1,15 +1,13 @@
-// renderer/app/bootSmoke.ts
-//
 // Minimal boot-time smoke helper: calls `window.__chimera.system.platform()`
-// and forwards the result to the supplied logger. Extracted from the React
+// and forwards the result to the supplied logger. Lives outside the React
 // shell page so the behaviour can be unit-tested without a DOM runtime — the
 // page itself is a thin client component that wires this helper into a
 // `useEffect`.
 //
-// This is the §12 M1 "Electron boots, preload bridge wired" boot-smoke check
-// referenced by task #14. When the preload bridge is live the logger records
-// the host platform; when it is missing or fails the logger records the
-// failure, which surfaces a broken bridge immediately in devtools.
+// This is the §12 "Electron boots, preload bridge wired" boot-smoke check.
+// When the preload bridge is live the logger records the host platform; when
+// it is missing or fails the logger records the failure, which surfaces a
+// broken bridge immediately in devtools.
 
 import type { ChimeraAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 

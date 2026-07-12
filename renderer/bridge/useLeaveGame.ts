@@ -63,9 +63,9 @@ export function useLeaveGame(source: unknown = globalThis): LeaveGame {
             return;
         }
         // Client disconnect: flag the leaving-to-main-menu intent for routing
-        // (which owns navigation and local-context reset, F55) and call the raw
+        // (which owns navigation and local-context reset) and call the raw
         // bridge leave(). Unlike useLobbyApi().leave(), this deliberately does not
-        // clearLocalLobbyContext() — that reset belongs to the routing task, so
+        // clearLocalLobbyContext() — that reset belongs to the routing layer, so
         // this hook stays a pure leave capability.
         useLobbyUiStore.getState().setLeavingToMainMenu(true);
         await lobby.leave();

@@ -1,6 +1,4 @@
 /**
- * e2e/fixtures/direct-game.fixture.ts
- *
  * Direct-game fixture — launches a host + client pair that bootstrap directly
  * into a running game without going through the lobby UI.
  *
@@ -14,13 +12,13 @@
  * exercise the lobby → game transition.  The only test that SHOULD keep
  * using `game.fixture` (the full lobby flow) is `game-flow.spec.ts`.
  *
- * §13.8: direct-game.fixture.ts — Bypasses lobby UI; both windows start on
- * /game with an established host + client connection.
+ * §13.8: Bypasses lobby UI; both windows start on /game with an established
+ * host + client connection.
  *
  * Invariants upheld:
- *   #27 — CHIMERA_E2E is set by the launcher — not here.
- *   #42 — The match must reach game-over through normal pipeline processing;
- *          the fixture never directly mutates tick.
+ *   Invariant #27 — CHIMERA_E2E is set by the launcher — not here.
+ *   Invariant #42 — The match must reach game-over through normal pipeline
+ *          processing; the fixture never directly mutates tick.
  */
 
 import type { ElectronApplication, Page } from '@playwright/test';

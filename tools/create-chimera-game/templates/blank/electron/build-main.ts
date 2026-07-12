@@ -68,8 +68,8 @@ export interface AliasOptions {
  *
  * The app's own `@chimera-engine/<game>` always resolves to the consumer app source (it is
  * the game, not a packed engine artifact). `@chimera-engine/electron/main` is aliased onto
- * host SOURCE for the everyday suite (#778: the main entry is the consumer's
- * composition root, which imports the host as a consumer would). In `verify:pack`
+ * host SOURCE for the everyday suite: the main entry is the consumer's
+ * composition root, which imports the host as a consumer would. In `verify:pack`
  * mode that alias is DROPPED so the host resolves from the packed `@chimera-engine/electron`
  * tarball — validating the real artifact end-to-end.
  */
@@ -225,7 +225,7 @@ export function buildAppBundles(deps: BuildAppBundlesDeps): void {
     const preloadEntry = deps.resolvePreload(verifyPackMode ? nodePaths[0] : undefined);
 
     // The debug preload is a dev/e2e convenience only and never ships in a verify:pack
-    // run (the gate excludes the debug specs; #27 keeps it private). Optional keys are
+    // run (the gate excludes the debug specs; Invariant #27 keeps it private). Optional keys are
     // spread in only when defined (exactOptionalPropertyTypes forbids explicit undefined).
     const debugPreloadEntry = verifyPackMode ? undefined : deps.debugPreloadEntry;
     const specs = planBundles({

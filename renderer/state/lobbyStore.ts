@@ -3,10 +3,8 @@
  *
  * Zustand store for multiplayer lobby state.
  *
- * Architecture reference: §F12/T01 (issue #268), §renderer/state/lobbyStore.ts
- *
  * Rules:
- *  - Components subscribe through narrow typed selectors only (renderer.instructions.md)
+ *  - Components subscribe through narrow typed selectors only.
  *  - _applyLobbyState() is called by IPC listeners; do NOT call from components
  *  - This store mirrors authoritative lobby state from IPC only
  */
@@ -71,7 +69,7 @@ let lobbyStoreInstance: StoreApi<LobbyStoreState> | undefined;
  * Lazily instantiate the singleton on first access. Importing this module — and
  * the `@chimera-engine/renderer/components/chat` barrel that pulls it through
  * `ChatPanel` — therefore creates no store, keeping that barrel side-effect-free
- * (issue #772, Invariant #96). Behaviour is otherwise identical to an eager
+ * (Invariant #96). Behaviour is otherwise identical to an eager
  * module-level singleton: the same instance is returned on every access.
  */
 function getLobbyStore(): StoreApi<LobbyStoreState> {

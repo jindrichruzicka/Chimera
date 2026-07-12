@@ -2,7 +2,7 @@
 
 // renderer/components/debug/ActionLogPanel.tsx
 //
-// Inspector Action Log panel (§4.12 — Runtime Debug Layer, F47 T8, #697).
+// Inspector Action Log panel (§4.12 — Runtime Debug Layer).
 // Filterable `ActionHistoryEntry` table: player, action type, and inclusive
 // tick range. The log is fetched once (plus on Refresh) and all three
 // filters run client-side over that result — the bridge's range parameters

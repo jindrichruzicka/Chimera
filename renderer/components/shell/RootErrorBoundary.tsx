@@ -87,8 +87,7 @@ export class RootErrorBoundary extends React.Component<Props, State> {
         // Navigate to root so React re-renders from a clean tree. Simply
         // setting hasError:false re-renders the broken subtree and immediately
         // re-throws. window.location.replace avoids a history entry so the
-        // user cannot navigate "back" to the broken page (F18/§4.19 will
-        // replace this with a proper router call).
+        // user cannot navigate "back" to the broken page.
         window.location.replace('/');
     };
 

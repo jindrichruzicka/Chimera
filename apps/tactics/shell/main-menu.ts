@@ -1,9 +1,8 @@
 // apps/tactics/shell/main-menu.ts
 //
-// Tactics main menu definition — F51 §4.37 sample for game customisation.
+// Tactics main menu definition — §4.37 sample for game customisation.
 //
 // Architecture reference: §4.37 — Renderer Shell Pages UI Contract
-// Task: #620
 //
 // Module boundary (§3 Module Boundary Table): games/* may only import from
 // simulation/, ai/, shared/, and own files. This module imports from shared/

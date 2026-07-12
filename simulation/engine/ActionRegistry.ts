@@ -1,11 +1,8 @@
 /**
- * simulation/engine/ActionRegistry.ts
- *
  * Maps action type strings to their ActionDefinition strategies.
- * Enforces the engine: namespace collision guard (invariant #2).
+ * Enforces the engine: namespace collision guard (Invariant #2).
  *
  * Architecture reference: §4.7
- * Task: F03 / T3 (issue #26)
  *
  * Invariants upheld:
  *   #2 — The engine: namespace is reserved exclusively for EngineActions.
@@ -27,7 +24,7 @@ export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapsh
      * Called once by the host when a session is being created for this game.
      * Receives the player IDs in insertion order and, optionally, the
      * host-authored lobby `setup` (chosen match settings + per-player
-     * attributes) so the game can seed starting entities from it (§4.37, #705).
+     * attributes) so the game can seed starting entities from it (§4.37).
      * `setup` is optional and absent for games with no lobby config.
      */
     readonly buildInitialEntities?: (
@@ -44,7 +41,7 @@ export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapsh
      * Optional pure guard consulted by `engine:end_turn.validate()` AFTER the
      * generic active-player checks. Returns `{ ok: false, reason }` to block the
      * end-turn — e.g. commit-then-sync turn modes reject until every seated
-     * player has committed for the current turn (§4.6/§8, F54). Absent ⇒ no extra
+     * player has committed for the current turn (§4.6/§8). Absent ⇒ no extra
      * gate, so sequential games and games with no turn modes are unaffected.
      *
      * Keeps the generic engine ignorant of any specific game: the engine consults
@@ -60,7 +57,7 @@ export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapsh
      * Sequential games omit this (the engine keeps "only the active seat may end
      * the turn"). Simultaneous commit-then-sync mode supplies it so any seated
      * player may fire the reveal once every seat has committed — a pure
-     * active-player gate would deadlock a parallel turn (§4.6/§8, F54). Consulted
+     * active-player gate would deadlock a parallel turn (§4.6/§8). Consulted
      * before `canEndTurn`, which still gates the reason (e.g. `awaiting_commitment`).
      *
      * Reaches the engine ignorant of any specific game via
@@ -135,7 +132,7 @@ const ENGINE_NAMESPACE = 'engine:' as const;
  *
  * Invariant: game code must ONLY call `register()`. The `registerEngineAction()`
  * method is reserved for the engine-internal EngineActions registration path
- * (F03 T4) and must never be called from games/* or renderer/*.
+ * and must never be called from games/* or renderer/*.
  */
 export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #definitions = new Map<string, ActionDefinition<object, TState>>();
@@ -182,7 +179,7 @@ export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      *
      * Registers an ActionDefinition whose type begins with `engine:`.
      * This method MUST NOT be called from game code or renderer code.
-     * It exists solely for use by EngineActions (F03 T4) to populate the
+     * It exists solely for use by EngineActions to populate the
      * reserved engine: namespace at engine initialisation time.
      *
      * Invariant: only called from simulation/engine/EngineActions.ts.

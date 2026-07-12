@@ -1,7 +1,5 @@
 'use client';
 
-// renderer/components/shell/ScreenFadeOverlay.tsx
-//
 // App-level full-screen fade overlay for cross-screen route transitions
 // (main-menu ↔ lobby ↔ game). Always mounted at the app shell, it reads the
 // app-level FadeProvider and renders a black scrim whose alpha is the current

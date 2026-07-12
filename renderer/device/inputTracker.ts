@@ -4,9 +4,6 @@
  * Listens for pointer, keyboard, and gamepad events and tracks the currently
  * active input modalities (§4.17).
  *
- * Architecture reference: §4.17 — Device Info
- * Issue: #590 (F42 — Implement DeviceInfoProvider and inputTracker)
- *
  * §4.17: renderer-only. Must NOT import from electron/main,
  *                simulation/, or ai/.
  *

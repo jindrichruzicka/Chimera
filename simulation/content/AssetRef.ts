@@ -27,10 +27,10 @@ import {
 
 export { MalformedAssetRefError } from '../foundation/asset-ref-parse.js';
 
-// The phantom asset-kind TYPES now live in the zero-dependency foundation leaf
-// `../foundation/asset-contract.js` (issue #758). They are imported for local
+// The phantom asset-kind TYPES live in the zero-dependency foundation leaf
+// `../foundation/asset-contract.js`. They are imported for local
 // use by the runtime factories below and re-exported so
-// `@chimera-engine/simulation/content/AssetRef.js` stays the unchanged public import path.
+// `@chimera-engine/simulation/content/AssetRef.js` stays the public import path.
 import type {
     AssetKindBrand,
     TextureAsset,
@@ -45,8 +45,8 @@ import type {
 } from '../foundation/asset-contract.js';
 
 // ---------------------------------------------------------------------------
-// Phantom asset-kind types — declared in `../foundation/asset-contract.js`
-// (foundation leaf, issue #758) and re-exported here so the public import path
+// Phantom asset-kind types — declared in the `../foundation/asset-contract.js`
+// leaf and re-exported here so the public import path
 // `@chimera-engine/simulation/content/AssetRef.js` is unchanged. `AssetKindRegistry`
 // stays open for declaration merging — augment the shared module.
 // ---------------------------------------------------------------------------
@@ -108,5 +108,5 @@ export function parseAssetRef(ref: AssetRef): {
     return parseAssetRefBase(ref);
 }
 
-// AssetManifest types (AssetPriority, AssetManifestEntry, AssetManifest) have been
-// extracted to ./AssetManifest.ts — see §4.10.
+// AssetManifest types (AssetPriority, AssetManifestEntry, AssetManifest) live in
+// ./AssetManifest.ts — see §4.10.

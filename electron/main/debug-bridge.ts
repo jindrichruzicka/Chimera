@@ -1,8 +1,7 @@
 /**
  * electron/main/debug-bridge.ts
  *
- * Runtime Debug Layer bridge (§4.12 — runtime-debug-layer.md, F47 T5,
- * issue #694).
+ * Runtime Debug Layer bridge (§4.12 — runtime-debug-layer.md).
  *
  * Started exclusively via the `IS_DEBUG_MODE` dynamic-import gate in
  * `electron/main/index.ts` (Invariant #27) — this module is therefore the
@@ -83,7 +82,7 @@ import type { HostSessionDebugPort } from './runtime/HostSessionPipeline.js';
 
 // Channel constants (DEBUG_CHANNEL, DEBUG_TOGGLE_INSPECTOR_CHANNEL,
 // DEBUG_PUSH_CHANNEL) live in `shared/constants.ts` so the Inspector preload
-// (F47 T6) shares the literals without importing this debug module graph.
+// shares the literals without importing this debug module graph.
 
 // ─── Bounds (Invariant #30 spirit — nothing grows unboundedly) ────────────────
 
@@ -100,11 +99,11 @@ const INSPECTOR_WINDOW_HEIGHT = 800;
  * Same dark bootstrap surface as the main window (`BOOTSTRAP_BACKGROUND_COLOR`
  * in `index.ts`) and the `--ch-color-surface` fallback in
  * `renderer/app/layout.tsx` — without it the window paints default white
- * while loading and stays white when the load fails (#701).
+ * while loading and stays white when the load fails.
  */
 const INSPECTOR_WINDOW_BACKGROUND_COLOR = '#111113';
 
-/** Route served by the chimera:// renderer protocol (page ships in F47 T8). */
+/** Route served by the chimera:// renderer protocol. */
 const INSPECTOR_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/debug/`;
 
 /** Chromium net error for a superseded navigation — never a real failure. */
@@ -197,7 +196,7 @@ export interface DebugIpcMain {
 export interface StartDebugBridgeOptions {
     readonly ipcMain: DebugIpcMain;
     readonly logger: Logger;
-    /** Compiled `debug-api.js` preload path (ships in F47 T6). */
+    /** Compiled `debug-api.js` preload path. */
     readonly debugPreloadPath: string;
     /** Inspector window factory override — tests inject in-process fakes. */
     readonly createWindow?: () => DebugWindowLike;
@@ -282,8 +281,8 @@ const escapeHtml = (value: string): string =>
 /**
  * Dark in-window diagnostic shown instead of the bare protocol 404 / load
  * error. The dominant cause is a stale renderer static export: the bridge can
- * exist while `renderer/out` predates the `/debug` route (F47 T8), in which
- * case the chimera:// protocol serves a blank "Not found" page (#701).
+ * exist while `renderer/out` predates the `/debug` route, in which case the
+ * chimera:// protocol serves a blank "Not found" page.
  */
 function buildInspectorLoadFallbackUrl(failedUrl: string, detail: string): string {
     const html =
@@ -310,10 +309,10 @@ export interface CreateInspectorWindowOptions {
 
 /**
  * Creates the Inspector `BrowserWindow`, hardened like `createMainWindow`
- * (WARN-2/WARN-3: no popups, no navigation outside the renderer protocol),
- * painted with the dark bootstrap surface, and self-diagnosing: a failed
- * document load (protocol 404 or net error) is replaced with an actionable
- * dark fallback page instead of a silent white window (#701).
+ * (no popups, no navigation outside the renderer protocol), painted with the
+ * dark bootstrap surface, and self-diagnosing: a failed document load
+ * (protocol 404 or net error) is replaced with an actionable dark fallback
+ * page instead of a silent white window.
  */
 export function createInspectorWindow(options: CreateInspectorWindowOptions): InspectorWindowLike {
     const { logger } = options;

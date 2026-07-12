@@ -3,7 +3,6 @@
 // Tactics settings page definition for the engine-owned settings shell.
 //
 // Architecture reference: section 4.13 Settings System, section 4.37.9 Settings page definition.
-// Task: #629
 //
 // Module boundary: games/* may import from simulation/, ai/, shared/, and own files.
 // This module imports from shared/ only; it must never import from renderer/*.

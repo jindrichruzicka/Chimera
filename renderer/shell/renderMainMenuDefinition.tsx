@@ -1,14 +1,13 @@
 'use client';
 // renderer/shell/renderMainMenuDefinition.tsx
 //
-// Declarative engine menu renderer (F51 — §4.37).
+// Declarative engine menu renderer (§4.37).
 // Maps a GameMainMenuDefinition (or undefined) to <Button> components
 // with token-based layout. No hardcoded pixel/colour literals (Invariant #91).
 // All interactive actions use <Button> from renderer/components/ui/ (Invariant #92).
 // Must NOT import from games/* (Invariant #94).
 //
 // Architecture reference: §4.37 — Renderer Shell Pages UI Contract
-// Task: #618
 
 import React, { type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
@@ -43,7 +42,7 @@ const ENGINE_DEFAULT_DEFINITION: GameMainMenuDefinition = {
 /**
  * Gap pixel → CSS custom property token mapping.
  * Source: renderer/styles/tokens.css — `--ch-space-*`.
- * Values outside this set throw at render time (issue spec: "reject non-token values").
+ * Values outside this set throw at render time to reject non-token values.
  */
 const GAP_TOKEN_MAP = new Map<number, string>([
     [0, 'var(--ch-space-none)'],

@@ -1,6 +1,4 @@
 /**
- * simulation/projection/types.ts
- *
  * Shared type contracts for state projection and visibility rules.
  *
  * This module is PURE TYPE DECLARATIONS only — zero runtime code.

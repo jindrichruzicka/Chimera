@@ -8,7 +8,6 @@
  *
  * Architecture reference: §4.4 — Renderer State Stores;
  *                         §6  — simulation/prediction · Client Prediction
- * Task: issue #368 — Wire client prediction into renderer ipcClient
  *
  * Module boundary rules (hard constraints):
  *  - Must NOT import `ClientPredictor` or `ReconcileBuffer` from simulation/.

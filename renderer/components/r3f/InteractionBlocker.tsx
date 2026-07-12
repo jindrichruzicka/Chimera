@@ -10,7 +10,6 @@
 //
 // Invariant #58: blocking state never leaks to simulation.
 // Invariant #83: context uses null default; consumer throws on null.
-// Issue: #552
 
 import React from 'react';
 import type { ReactNode } from 'react';

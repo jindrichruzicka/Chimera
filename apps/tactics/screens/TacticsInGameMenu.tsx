@@ -1,13 +1,11 @@
 'use client';
 
-// apps/tactics/screens/TacticsInGameMenu.tsx
-
 import React from 'react';
 import type { InGameMenuProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { Modal } from '@chimera-engine/renderer/components/ui';
 
 /**
- * Tactics Leave-game confirmation dialog (F55 · §4.33). Adopted via the
+ * Tactics Leave-game confirmation dialog (§4.33). Adopted via the
  * `inGameMenu` slot of {@link TacticsGameScreenRegistry}; the Escape-toggled
  * `InGameMenuHost` opens it and supplies the engine capabilities through
  * {@link InGameMenuProps}.

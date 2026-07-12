@@ -1,8 +1,8 @@
 /**
  * electron/main/replay/PerspectiveReplayManager.ts
  *
- * Main-process owner of *perspective* replay recording and persistence (§4.28,
- * ADR F44b) — the privacy-preserving counterpart to the deterministic
+ * Main-process owner of *perspective* replay recording and persistence (§4.28)
+ * — the privacy-preserving counterpart to the deterministic
  * `ReplayManager` (`./replay-manager.ts`). Holds the in-progress recording state
  * machine and delegates all I/O to an injected `PerspectiveReplayRepository`.
  *
@@ -16,8 +16,7 @@
  * the `PerspectiveReplayFile`/repository contracts, keeping it I/O-agnostic
  * (mirroring `ReplayManager`).
  *
- * Architecture reference: §4.28 (ADR F44b)
- * Task: F44b / T4 (issue #670)
+ * Architecture reference: §4.28
  *
  * Invariants upheld:
  *   #67 — constructed with an injected Logger child; every public method logs
@@ -66,7 +65,7 @@ interface RecordingState {
 
 /**
  * Records, persists, lists, loads, and deletes perspective replays for the main
- * process. Constructed once and wired into the replay IPC namespace (T5).
+ * process. Constructed once and wired into the replay IPC namespace.
  */
 export class PerspectiveReplayManager {
     private readonly log: Logger;

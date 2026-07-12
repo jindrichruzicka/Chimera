@@ -6,7 +6,6 @@
  * `PredictionStore` (optimistic client-side prediction queue).
  *
  * Architecture reference: §4.4 — Renderer State Stores
- * Task: issue #368 — Wire client prediction into renderer ipcClient
  *
  * Rules:
  *  - Components subscribe through narrow typed selectors only.
@@ -47,8 +46,8 @@ export interface SnapshotStore {
     /**
      * Drop the current match snapshot and all derived in-match state back to
      * initial. Routing/lifecycle only — called by navigation effects on a
-     * match → lobby or match → main-menu transition (issue #741), NOT from
-     * render. Distinct from the `// ipcClient only` mutators above.
+     * match → lobby or match → main-menu transition, NOT from render. Distinct
+     * from the `// ipcClient only` mutators above.
      */
     reset(): void;
 }
@@ -85,7 +84,7 @@ export interface PredictionStore {
 }
 
 /**
- * Verified reveal stream for commitment battle mode (F54 / T9). The main process
+ * Verified reveal stream for commitment battle mode. The main process
  * already gated each reveal through `CommitmentScheme.verify()` (Invariant #9)
  * before pushing it here; the store holds the most recent reveal so the active
  * game's board can play back each revealed turn as it lands (reveals arrive

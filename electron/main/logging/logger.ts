@@ -250,8 +250,8 @@ const NOOP_SOURCE: LogSource = { process: 'main', module: 'noop' };
 
 /**
  * Trivial {@link Logger} that discards every entry. Handy default for
- * tests and for the F02 handler-registration helpers (which take an
- * optional `logger` — managers landing in F03+ will demand a real one).
+ * tests and for handler-registration helpers that take an optional
+ * `logger`; managers demand a real one.
  */
 export function createNoopLogger(): Logger {
     return createLogger({ source: NOOP_SOURCE, sink: NOOP_SINK });

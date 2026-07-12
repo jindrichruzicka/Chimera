@@ -1,9 +1,7 @@
-// electron/main/app-icon.ts
-//
-// Resolve the application/window icon for the hosted game (F67 — App Icon &
-// Per-Game Branding). Returns either a game's `GameManifest.icon` override —
-// a renderer-relative path resolved to an absolute path under the game's asset
-// root — or the bundled default Chimera icon shipped inside this package.
+// Resolve the application/window icon for the hosted game. Returns either a
+// game's `GameManifest.icon` override — a renderer-relative path resolved to an
+// absolute path under the game's asset root — or the bundled default Chimera
+// icon shipped inside this package.
 //
 // Lives in `@chimera-engine/electron` (not pure `simulation/`, where the
 // stringy `resolveWindowTitle` lives) because it performs filesystem path-math

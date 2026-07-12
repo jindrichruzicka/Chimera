@@ -7,13 +7,12 @@
 // (`window.__chimera.chat.onMessage`) and feeds it into the store, and provides
 // a send box. Every message is lobby-scoped.
 //
-// For the initial release the per-message scope selector and the mute/unmute
-// controls were intentionally removed from this panel — it is now a single
-// lobby-scoped send/receive surface. The underlying API is untouched and stays
-// available for a future UI: the host relay still routes by `ChatScope`
-// (Invariant #73), `window.__chimera.chat.mute`/`unmute` still suppress
-// host-side delivery and filter `history()` backfill, and the renderer
-// `chatStore` still tracks the `muted` set.
+// This panel is a single lobby-scoped send/receive surface: no per-message
+// scope selector, no mute/unmute controls. The underlying API deliberately
+// keeps more than the UI exposes, available for a future UI: the host relay
+// still routes by `ChatScope` (Invariant #73), `window.__chimera.chat.mute`/
+// `unmute` still suppress host-side delivery and filter `history()` backfill,
+// and the renderer `chatStore` still tracks the `muted` set.
 //
 // This is a game-agnostic shared component: it imports nothing from `games/*` and
 // never derives content from authoritative simulation state. Chat is a cosmetic
@@ -24,8 +23,6 @@
 // override it to name the panel for their context (Tactics → `'Match chat'`). It
 // is the accessible name, not a visible heading — a host wrapper (e.g. `Drawer`)
 // renders its own visible caption.
-//
-// Task: F45 / T05 (issue #683)
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollArea } from '../ui/ScrollArea';
@@ -41,8 +38,8 @@ import styles from './ChatPanel.module.css';
 /**
  * Friendly, inline copy for a relay rejection. Shown next to the composer for
  * every rejection reason; `rate_limited` additionally raises a toast (§4.30
- * engine-wired source, F46 #646) so the throttle is noticed even if the user
- * has looked away from the composer.
+ * engine-wired source) so the throttle is noticed even if the user has looked
+ * away from the composer.
  */
 const REJECT_REASON_LABELS: Record<ChatRejectReason, string> = {
     too_long: 'Message is too long.',

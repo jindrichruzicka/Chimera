@@ -12,7 +12,7 @@ import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
  * optional `tickRateMs`.
  *
  * `icon` is a renderer-relative path under this game's own asset directory
- * (`assets/`, Invariant #97). The F67 resolver maps it to
+ * (`assets/`, Invariant #97). The resolver maps it to
  * `apps/__game_kebab__/assets/icons/icon.png` for the window/dock icon, and the
  * electron-builder config reuses the same PNG for the distributable bundle icon —
  * replace `assets/icons/icon.png` with your own art to rebrand both at once.
@@ -24,7 +24,7 @@ import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
  * game-asset protocol. Absent ⇒ the plain system cursor. `hotspot` is the
  * click point in image pixels from the texture's top-left; omit it for (0, 0).
  *
- * `logoScreen` (F70) points a packaged boot at `renderer/app/logo-screen/`, a
+ * `logoScreen` points a packaged boot at `renderer/app/logo-screen/`, a
  * thin re-export of the engine default logo page playing the committed
  * `renderer/public/chimera_logo.mp4`; dev boots skip it and go straight to
  * the main menu. Remove the field to skip it in packaged builds too, or point

@@ -13,7 +13,6 @@
  * `import type` to avoid any circular runtime dependencies.
  *
  * Architecture: §4.3 — WebSocket Message Protocol
- * Task: F10 / T01 (issue #216)
  *
  * Invariants upheld:
  *   #1  — SNAPSHOT / LOBBY_STATE carry PlayerSnapshot, not GameSnapshot.
@@ -28,9 +27,9 @@ import type { LobbyState } from './lobby-contract.js';
 import type { ChatScope } from './chat.js';
 
 // ─── Re-export for consumers in local/ ───────────────────────────────────────
-// These contract types now live in the foundation leaf (issue #758); the wire
-// `SNAPSHOT` frame carries the loose `WirePlayerSnapshot`, re-exported here under
-// the historical name `PlayerSnapshot` so local/ consumers are unaffected.
+// These contract types live in the foundation leaf; the wire `SNAPSHOT` frame
+// carries the loose `WirePlayerSnapshot`, re-exported here as `PlayerSnapshot`
+// so local/ consumers reach it under that name.
 
 export type { PlayerId, EngineAction, GameResult, PlayerSnapshot, LobbyState };
 
@@ -39,7 +38,7 @@ export type { PlayerId, EngineAction, GameResult, PlayerSnapshot, LobbyState };
 /**
  * Wire-level player profile carried with JOIN and PROFILE_UPDATE messages.
  *
- * Expanded in F14 (§4.24) to carry the full sanitisable profile. Uses plain
+ * Carries the full sanitisable profile (§4.24). Uses plain
  * string types for wire compatibility (no branded LocalProfileId / AssetRef).
  * The host passes this through ProfileSanitizer.admit() before any other
  * subsystem may read it (Invariant #61).
@@ -58,8 +57,8 @@ export interface WirePlayerProfile {
 }
 
 /**
- * Anti-tamper commitment reveal. Expanded in F27 — Cryptographic Commitment
- * Scheme (§4.6). Carried by `ServerMessage.REVEAL`.
+ * Anti-tamper commitment reveal (Cryptographic Commitment Scheme, §4.6).
+ * Carried by `ServerMessage.REVEAL`.
  */
 export interface WireCommitmentReveal {
     readonly id: string;
@@ -70,7 +69,7 @@ export interface WireCommitmentReveal {
 // ─── Client → Server messages ─────────────────────────────────────────────────
 
 /**
- * One saved-seat claim on a `JOIN` frame (F68/#821). Opaque bounded ids only —
+ * One saved-seat claim on a `JOIN` frame. Opaque bounded ids only —
  * no display names or other profile data may cross the wire here (Invariants
  * #59/#60). This is the single wire-level declaration of the claim shape; the
  * provider layer re-exports it as `SeatClaim`.
@@ -85,11 +84,11 @@ export interface JoinSeatClaim {
  *
  * - JOIN          Initial authentication handshake. The `token` is the lobby
  *                 token embedded in the lobby code returned by `hostLobby()`.
- *                 May carry `reconnectPlayerId` (#687), `password` (F56), and
- *                 saved-seat `claims` (F68/#821).
+ *                 May carry `reconnectPlayerId`, `password`, and
+ *                 saved-seat `claims`.
  * - ACTION        A game action to be processed by the ActionPipeline on the
  *                 host. `checksum` is CRC32 of JSON(action) — integrity guard,
- *                 not a cryptographic control (§4.3). Populated since F308.
+ *                 not a cryptographic control (§4.3).
  * - PROFILE_UPDATE Mid-lobby cosmetic update; side-channel only (§4.24).
  * - READY_STATE_UPDATE Joined-client intent to toggle its own ready state.
  *                 Host remains authoritative and rebroadcasts LOBBY_STATE.
@@ -119,15 +118,15 @@ export type ClientMessage =
            */
           readonly profile: Record<string, unknown>;
           /**
-           * Optional lobby password presented by the joining client (F56). Only
+           * Optional lobby password presented by the joining client. Only
            * sent when the joiner supplied one; the host compares it timing-safe
            * against its host-set password and rejects a mismatch/absence with
            * `REJECT 'invalid_password'`. Absent on open lobbies and older clients.
            */
           readonly password?: string;
           /**
-           * Optional saved-seat claims presented by a restoring client
-           * (F68/#821). The host matches `matchId` against its restored match
+           * Optional saved-seat claims presented by a restoring client.
+           * The host matches `matchId` against its restored match
            * and `playerId` against its restored seats; a claim that matches
            * nothing degrades to a fresh id. ≤16 entries, each id ≤64 chars
            * (enforced by the wire schema).
@@ -162,14 +161,14 @@ export type ClientMessage =
  *                 GameSnapshot NEVER appears here (Invariant #1).
  * - TICK          Tiny authoritative clock update for idle ticks where no
  *                 projected state changed.
- * - DELTA         Incremental event stream optimisation (F13). Placeholder only
- *                 in F10 — hosts always send full SNAPSHOT in this milestone.
+ * - DELTA         Incremental event stream optimisation. Placeholder for now —
+ *                 hosts always send full SNAPSHOT.
  * - REJECT        Signals that the host rejected an ACTION (stale tick, checksum
  *                 mismatch, etc.).
  * - CLOSE         Signals that the hosted session is terminating and the client
  *                 must disconnect.
  * - REVEAL        Discloses a committed hidden value for anti-tamper verification
- *                 (§4.6 / F27).
+ *                 (§4.6).
  * - CHAT          Chat message relayed from a player; includes server timestamp
  *                 for ordering.
  * - PONG          Reply to client PING; includes the server's own timestamp for

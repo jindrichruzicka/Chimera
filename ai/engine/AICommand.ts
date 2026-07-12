@@ -1,11 +1,8 @@
 /**
- * ai/engine/AICommand.ts
- *
  * AICommand interface, CommandProgress discriminated union,
  * AnyAICommand existential wrapper.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F23 (issue #418)
  *
  * Invariants upheld:
  *   #18 — AIParams are passed by value (frozen) to every lifecycle method.
@@ -13,8 +10,6 @@
 
 import type { CommandContext } from './CommandContext.js';
 import type { AIParams, PlayerSnapshot } from './AITypes.js';
-
-// ─── CommandProgress ───────────────────────────────────────────────────────────
 
 /**
  * Discriminated union returned by `AICommand.onTick` to drive the scheduler.
@@ -27,8 +22,6 @@ export type CommandProgress =
     | { readonly status: 'running' }
     | { readonly status: 'done' }
     | { readonly status: 'failed'; readonly reason: string };
-
-// ─── AICommand ────────────────────────────────────────────────────────────────
 
 /**
  * Command pattern interface — a single goal spanning multiple simulation ticks.

@@ -30,8 +30,8 @@ export const SETTINGS_RESET_CHANNEL = 'chimera:settings:reset';
 export const SETTINGS_CHANGE_CHANNEL = 'chimera:settings:change';
 
 /**
- * Back-compat alias for {@link IpcListener}. Retained so test files that
- * imported `SettingsApiListener` continue to compile. New code should use
+ * Back-compat alias for {@link IpcListener}, kept so callers of the old
+ * `SettingsApiListener` name still compile. New code should use
  * {@link IpcListener} directly.
  */
 export type SettingsApiListener = IpcListener;

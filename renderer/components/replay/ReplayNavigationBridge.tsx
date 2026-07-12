@@ -1,12 +1,9 @@
 'use client';
 
 /**
- * renderer/components/replay/ReplayNavigationBridge.tsx (§4.28, F44 / T6, #660).
- *
- * App-wide listener that turns a main-process replay `navigate` push into a
- * client route change. `window.__chimera.replay.openInPlayer(path)` (called from
- * the replay browser now, and the Tactics main-menu / post-game UI in T7/T8)
- * makes main push the validated path; this bridge receives it via
+ * App-wide listener (§4.28) that turns a main-process replay `navigate` push into a
+ * client route change. `window.__chimera.replay.openInPlayer(path)` makes main
+ * push the validated path; this bridge receives it via
  * `onNavigate` and routes to the player with the path as a query param.
  *
  * Mounted once in `AppShell` so the push is never missed by the

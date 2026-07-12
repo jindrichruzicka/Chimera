@@ -15,7 +15,7 @@
  * This module is PURE TYPE DECLARATIONS only — zero runtime code, zero workspace
  * imports.
  *
- * Architecture references: §4.2, §4.7. Relocated under issue #758.
+ * Architecture references: §4.2, §4.7.
  */
 
 // ─── Primitive branded identifiers ───────────────────────────────────────────

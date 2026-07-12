@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 
 /**
- * Page object for the saves screen (`/saves`, F68 #824). Rows are the
+ * Page object for the saves screen (`/saves`). Rows are the
  * per-slot load buttons (`save-load-btn`); each row has a sibling delete
  * `IconButton` that opens a confirm dialog. Loading a save does NOT navigate
  * from here — `GameStoreBootstrap` routes `/saves → /game` once the restored

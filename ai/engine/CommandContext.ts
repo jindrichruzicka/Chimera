@@ -1,11 +1,8 @@
 /**
- * ai/engine/CommandContext.ts
- *
  * CommandContext interface and CommandContextImpl — dispatch bridge between AI
  * commands and the ActionPipeline, plus deferred state-transition request.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F23 (issue #418), F24 (issue #424)
  *
  * Invariants upheld:
  *   #16 — AI players submit EngineAction through ActionPipeline (via dispatch).
@@ -30,8 +27,6 @@ export interface CommandContext {
     /** Request state transition — deferred to end of current tick (re-entrancy guard). */
     transitionState(stateName: string): void;
 }
-
-// ─── CommandContextImpl ───────────────────────────────────────────────────────
 
 /**
  * Concrete implementation of `CommandContext`.

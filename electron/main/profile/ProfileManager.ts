@@ -5,7 +5,6 @@
  * mid-lobby attestation updates, and persists only after the host ACKs.
  *
  * Architecture: §4.24 — Player Profiles & Directory
- * Task: F14-T-342 (issue #342)
  *
  * Attest-first / persist-on-ACK protocol:
  *   1. `getLocal(id)` loads from disk; sets the active profile.

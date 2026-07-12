@@ -19,7 +19,6 @@
  * (`GameSnapshot` / `PlayerSnapshot` / `SaveFile`). It is not persisted.
  *
  * Architecture reference: §4.29 — Chat System
- * Task: F45 / T04 (issue #682)
  *
  * Invariants upheld:
  *   #72 — Chat is a cosmetic side channel; chatStore contents are never derived
@@ -84,7 +83,7 @@ let chatStoreInstance: StoreApi<ChatStore> | undefined;
  * Lazily instantiate the singleton on first access. Importing this module — and
  * the `@chimera-engine/renderer/components/chat` barrel that pulls it through
  * `ChatPanel` — therefore creates no store, keeping the barrel side-effect-free
- * (issue #772, Invariant #96). Behaviour is otherwise identical to an eager
+ * (Invariant #96). Behaviour is otherwise identical to an eager
  * module-level singleton: the same instance is returned on every access.
  */
 function getChatStore(): StoreApi<ChatStore> {

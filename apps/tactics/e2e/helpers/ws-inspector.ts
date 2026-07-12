@@ -7,7 +7,6 @@
  * that flag is set.
  *
  * Architecture: §13.7 — IPC and WebSocket Test Helpers
- * Issue: #472
  *
  * Invariants upheld:
  *   #6  — Interceptor is purely read-only; it never injects or modifies frames.

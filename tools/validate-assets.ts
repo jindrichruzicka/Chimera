@@ -727,7 +727,7 @@ function getScriptKind(filePath: string): ScriptKind {
 }
 
 async function findDataJsonFiles(workspaceRoot: string): Promise<readonly string[]> {
-    // Game apps live under apps/<name>/ (relocated from games/ in F63 #782).
+    // Game apps live under apps/<name>/.
     const appsRoot = resolve(workspaceRoot, 'apps');
     const gameEntries = await readDirectoryOrEmpty(appsRoot);
     const files: string[] = [];

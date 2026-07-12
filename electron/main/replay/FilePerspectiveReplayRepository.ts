@@ -1,8 +1,8 @@
 /**
  * electron/main/replay/FilePerspectiveReplayRepository.ts
  *
- * Filesystem-backed `PerspectiveReplayRepository` implementation (§4.28, ADR
- * F44b), mirroring `FileReplayRepository`.
+ * Filesystem-backed `PerspectiveReplayRepository` implementation (§4.28),
+ * mirroring `FileReplayRepository`.
  *
  * Perspective replays are stored under their **own owned root**, disjoint from
  * the deterministic `userData/replays/`:
@@ -17,8 +17,7 @@
  * and `LIST_CONCURRENCY` are reused) so the two persistence-layer guards cannot
  * drift.
  *
- * Architecture reference: §4.28 (ADR F44b)
- * Task: F44b / T3 (issue #669)
+ * Architecture reference: §4.28
  *
  * Invariants upheld:
  *   #23 — save() writes to .tmp and renames atomically.

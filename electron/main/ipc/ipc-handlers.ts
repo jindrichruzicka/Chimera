@@ -3,17 +3,8 @@
 // Registers the main-process IPC handlers exposed through the preload
 // namespaces. One `register<Namespace>Handlers` function per namespace keeps
 // registration auditable and matches the one-module-per-namespace convention
-// on the preload side (§4.1).
-//
-// Currently wired: `chimera:system:*` (see preload/system-api.ts),
-// `chimera:game:*` stubs (see preload/game-api.ts), `chimera:lobby:*` stubs
-// (see preload/lobby-api.ts), `chimera:saves:*` stubs (see
-// preload/saves-api.ts), `chimera:settings:*` stubs (see
-// preload/settings-api.ts), and `chimera:profile:*` (see
-// preload/profile-api.ts — F14-T08). The game/lobby/saves/settings handlers
-// are stubs only — actual game/simulation logic lands in F03–F15; real lobby
-// logic lands in F11; real save persistence lands in F06/F18; real settings
-// merging and persistence land in F07/F19.
+// on the preload side (§4.1). Channel constants for each namespace come from
+// its preload/apis/<namespace>-api.ts module.
 
 import {
     SYSTEM_PLATFORM_CHANNEL,
@@ -249,9 +240,8 @@ export interface RegisterSystemHandlersOptions {
     readonly platform: NodeJS.Platform;
     readonly electronVersion: string;
     /**
-     * Injected logger (invariant 67). Optional at F02 because the handlers
-     * are stubs; real managers landing in F03+ will require it. Defaults to
-     * a noop logger so today's tests and call sites need not supply one.
+     * Injected logger (invariant 67). Optional; defaults to a noop logger so
+     * tests and call sites need not supply one.
      */
     readonly logger?: Logger;
     /**
@@ -449,11 +439,9 @@ function buildIpcValidationRejection(
 }
 
 /**
- * Register every `chimera:game:*` main-side channel. These are deliberate
- * stubs — actual ActionPipeline dispatch and snapshot
- * broadcasting are wired in F03–F15. Registering them here lets the preload
- * bridge and renderer already speak their half of the protocol without
- * racing the later wiring.
+ * Register every `chimera:game:*` main-side channel. The actual ActionPipeline
+ * dispatch and snapshot broadcasting are wired at the composition root; these
+ * handlers only validate the boundary and delegate to the injected ports.
  *
  * `chimera:game:snapshot` is intentionally absent: it is a one-way push from
  * main → renderer via `webContents.send`. There is no main-side listener or
@@ -475,19 +463,18 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
     });
 
     ipcMain.on(GAME_SEND_ACTION_CHANNEL, (event, action) => {
-        // Validate the envelope before handing off to the (future)
-        // ActionPipeline. Per §4.7 the action-type-specific payload
-        // schema lives in the simulation layer; here we only guard the
-        // outer envelope so malformed requests never reach the pipeline.
+        // Validate the envelope before handing off to the ActionPipeline. Per
+        // §4.7 the action-type-specific payload schema lives in the simulation
+        // layer; here we only guard the outer envelope so malformed requests
+        // never reach the pipeline.
         //
         // `chimera:game:send-action` is an `ipcMain.on` send — throwing
         // out of an `on` callback is silently dropped by Electron, so
         // validation failure is reported back to the sender via the
         // `chimera:game:action-rejected` push channel (wire-shape mirror
-        // of the §4.3 WebSocket REJECT frame). The same channel will
-        // carry ActionPipeline Stage-3 rejections once F03–F15 wire the
-        // real pipeline — the renderer's listener contract does not
-        // churn.
+        // of the §4.3 WebSocket REJECT frame). The same channel also carries
+        // ActionPipeline Stage-3 rejections, so the renderer's listener contract
+        // is uniform.
         let validatedAction: EngineAction;
         try {
             validatedAction = parseInvokeRequest(
@@ -510,7 +497,7 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
                 return;
             }
             // Unknown error class — re-throw so the main-process crash
-            // reporter (F43) records it. Silently swallowing would hide a
+            // reporter records it. Silently swallowing would hide a
             // genuine bug behind the REJECT channel.
             throw err;
         }
@@ -564,7 +551,7 @@ export interface LobbyHandlersIpcMain {
 
 export interface RegisterLobbyHandlersOptions {
     readonly ipcMain: LobbyHandlersIpcMain;
-    /** Real LobbyManager that handles host / join / leave (F11). */
+    /** Real LobbyManager that handles host / join / leave. */
     readonly lobbyManager: LobbyManager;
     /** Supplies the local profile attestation attached to outbound JOIN requests. */
     readonly profileManager?: ProfileManagerPort;
@@ -580,9 +567,8 @@ export interface RegisterLobbyHandlersOptions {
  * main → renderer via `webContents.send`. There is no main-side listener
  * or invoke handler for that channel.
  *
- * `chimera:lobby:list` (LobbyDiscoveryAPI) is deferred to F12 and is
- * surfaced only when the active MultiplayerProvider implements
- * `BrowsableProvider` (§4.1, §4.14).
+ * `chimera:lobby:list` (LobbyDiscoveryAPI) is surfaced only when the active
+ * MultiplayerProvider implements `BrowsableProvider` (§4.1, §4.14).
  *
  * Invariant 5: channel constants come from `preload/lobby-api.ts`; there is
  * no parallel list in this file to drift out of sync.
@@ -634,7 +620,7 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
     });
 
     // Host-only: abandon the active match back to the lobby phase (reverse of
-    // start-game, #736). No payload — host identity is derived main-side; the
+    // start-game). No payload — host identity is derived main-side; the
     // empty boundary is still validated per §8.3 to reject any stray payload.
     ipcMain.handle(LOBBY_RETURN_TO_LOBBY_CHANNEL, (_event, payload) => {
         parseInvokeRequest(EmptyPayloadSchema, LOBBY_RETURN_TO_LOBBY_CHANNEL, payload);
@@ -679,7 +665,7 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
     });
 
     // Host-only: append an AI agent slot. No payload — the host assigns the slot
-    // index; `LobbyManager` rejects non-host sessions and a full lobby (#724).
+    // index; `LobbyManager` rejects non-host sessions and a full lobby.
     ipcMain.handle(LOBBY_ADD_AI_CHANNEL, (_event, payload) => {
         parseInvokeRequest(EmptyPayloadSchema, LOBBY_ADD_AI_CHANNEL, payload);
         return lobbyManager.addAi();
@@ -792,7 +778,7 @@ export interface RegisterSavesHandlersOptions {
      */
     readonly broadcastSlotsChanged?: (gameId: string, slots: SaveSlotMeta[]) => void;
     /**
-     * Abort a pending menu-load session restore (F68 #826). Required — the
+     * Abort a pending menu-load session restore. Required — the
      * channel is always registered. Production binds
      * `SessionRestoreCoordinator.cancel()` (a no-op outside an in-flight
      * restore); tests inject a stub.
@@ -802,8 +788,8 @@ export interface RegisterSavesHandlersOptions {
 
 /**
  * Project a coordinator {@link SessionRestoreStatus} onto the slim
- * {@link RestoreStatusEvent} pushed over `chimera:saves:restore-status`
- * (F68 #826). `idle` and `hosting` are internal transitions the renderer
+ * {@link RestoreStatusEvent} pushed over `chimera:saves:restore-status`.
+ * `idle` and `hosting` are internal transitions the renderer
  * never sees — they map to `null` (no push). Every non-null event is parsed
  * through {@link RestoreStatusEventSchema} so only a validated projection can
  * cross IPC (Invariant #1); `gameId` is injected by the composition root
@@ -1004,7 +990,7 @@ export interface ReplayIpcPort {
 }
 
 /**
- * Narrow port driving replay *playback* (§4.28, F44 / T6). Wired to
+ * Narrow port driving replay *playback* (§4.28). Wired to
  * `ReplayPlaybackManager` in `index.ts`.
  *
  * Invariant #3: `snapshotAt` returns a projected {@link PlayerSnapshot}; the
@@ -1224,7 +1210,7 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
     });
 }
 
-// ─── Perspective replay namespace (§4.28, ADR F44b, F44b / T7) ────────────────
+// ─── Perspective replay namespace (§4.28, ADR F44b) ───────────────────────────
 
 /**
  * Narrow port the perspective-replay IPC handlers depend on. A subset of
@@ -1244,7 +1230,7 @@ export interface PerspectiveReplayIpcPort {
 }
 
 /**
- * Narrow port driving perspective-replay *playback* (§4.28, F44b / T6). Wired to
+ * Narrow port driving perspective-replay *playback* (§4.28). Wired to
  * `PerspectiveReplayPlaybackManager` in `index.ts`.
  *
  * Invariant #3 / #98: `snapshotAt` / `snapshotRange` serve stored, already
@@ -1450,22 +1436,22 @@ export interface RegisterSettingsHandlersOptions {
     readonly ipcMain: SettingsHandlersIpcMain;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
-    /** Live SettingsManager instance (wired in F07). When absent, falls back to stub behaviour. */
+    /** Live SettingsManager instance. When absent, falls back to stub behaviour. */
     readonly settingsManager?: SettingsManager;
 }
 
 /**
- * Placeholder `ResolvedSettings` returned by the get/update/reset stubs.
- * Real values come from the `SettingsManager` in F07/F19. An empty object
- * satisfies the `ResolvedSettings = Record<string, unknown>` contract
- * without asserting any engine-wide or game-specific default values.
+ * Placeholder `ResolvedSettings` returned by the get/update/reset stubs when no
+ * `SettingsManager` is wired. An empty object satisfies the
+ * `ResolvedSettings = Record<string, unknown>` contract without asserting any
+ * engine-wide or game-specific default values.
  */
 const STUB_RESOLVED_SETTINGS: ResolvedSettings = Object.freeze({});
 
 /**
- * Register every `chimera:settings:*` main-side channel. These are
- * deliberate stubs — actual schema validation, three-layer merging, and
- * persisted user overrides land in F07/F19.
+ * Register every `chimera:settings:*` main-side channel. With no
+ * `SettingsManager` wired these fall back to stubs; the live manager supplies
+ * schema validation, three-layer merging, and persisted user overrides.
  *
  * `chimera:settings:change` is intentionally absent: it is a one-way push
  * from main → renderer via `webContents.send` whenever settings change
@@ -1495,7 +1481,7 @@ export function registerSettingsHandlers(options: RegisterSettingsHandlersOption
         parseInvokeRequest(GameIdSchema, SETTINGS_UPDATE_CHANNEL, gameId);
         parseInvokeRequest(UserSettingsPatchSchema, SETTINGS_UPDATE_CHANNEL, patch);
         if (mgr !== undefined) {
-            // BLOCK-4: validate patch against per-game schema at IPC boundary
+            // Validate patch against per-game schema at IPC boundary.
             const validatedPatch = mgr.validatePatchForGame(
                 gameId as string,
                 patch as UserSettings,
@@ -1636,7 +1622,7 @@ export function registerLogsHandlers(options: RegisterLogsHandlersOptions): void
     });
 }
 
-// ── Profile handlers (§4.24 — F14-T08) ───────────────────────────────────────
+// ── Profile handlers (§4.24) ─────────────────────────────────────────────────
 
 /**
  * Shape of a main-side `ipcMain.handle` handler for the profile namespace.
@@ -1691,13 +1677,13 @@ export interface RegisterProfileHandlersOptions {
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
     /**
-     * Live ProfileManager instance (wired in F14).
+     * Live ProfileManager instance.
      * When absent, `chimera:profile:get-local` returns a sentinel stub and
      * `chimera:profile:update-local` is a no-op.
      */
     readonly profileManager?: ProfileManagerPort;
     /**
-     * Live PlayerDirectory instance (wired in F14, host-only).
+     * Live PlayerDirectory instance (host-only).
      * When absent, `chimera:profile:get-lobby-directory` returns an empty
      * record.
      */
@@ -1706,7 +1692,7 @@ export interface RegisterProfileHandlersOptions {
 
 /**
  * Sentinel stub profile returned by `chimera:profile:get-local` when no
- * `ProfileManager` has been wired yet (F14). The shape satisfies
+ * `ProfileManager` has been wired yet. The shape satisfies
  * `PlayerProfile` so the preload's `Promise<PlayerProfile>` contract is
  * honest, but no real profile data is present.
  */

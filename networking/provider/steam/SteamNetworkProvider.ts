@@ -11,7 +11,6 @@
  * No imports from networking/provider/local/ — this is an independent provider.
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider
- * Task: F09 / T3 (issue #203)
  *
  * Invariants upheld:
  *   #2 — networking/provider/ has zero imports from renderer/ or electron/

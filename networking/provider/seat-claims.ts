@@ -1,15 +1,14 @@
 /**
  * networking/provider/seat-claims.ts
  *
- * Shared saved-seat logic for the restored-session seams (F68/#821): the
- * client-side claim sanitizer and the join-time seat resolver. Both concrete
- * providers (LocalWebSocketProvider's LobbyServer and
- * InMemoryMultiplayerProvider) delegate to `resolveRestoredSeat` so the
- * resolution policy cannot drift between them; each provider supplies only
- * its own connection/identity lookups.
+ * Shared saved-seat logic for the restored-session seams: the client-side
+ * claim sanitizer and the join-time seat resolver. Both concrete providers
+ * (LocalWebSocketProvider's LobbyServer and InMemoryMultiplayerProvider)
+ * delegate to `resolveRestoredSeat` so the resolution policy cannot drift
+ * between them; each provider supplies only its own connection/identity
+ * lookups.
  *
  * Architecture: §4.14 — Multiplayer Provider & WebSocket
- * Task: F68 / #821
  */
 
 import {
@@ -96,7 +95,7 @@ export interface SeatResolutionContext {
 }
 
 /**
- * Resolve the identity a join is admitted under (F68/#821 priority chain):
+ * Resolve the identity a join is admitted under (priority chain):
  *
  *   1. explicit `reconnectPlayerId` for a reconnectable, disconnected,
  *      non-host identity — existing live-session behavior;

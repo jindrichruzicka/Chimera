@@ -13,7 +13,6 @@
  *
  * Architecture reference: Appendix C.3 / §C.4 — Composable SimulationHost;
  *                         §4.9 — AI Framework and Agent System
- * Issue: #760 (feature F58)
  *
  * The port is generic over `TAgent` because the host only ever forwards the
  * agent value to `registerAgent`; it never inspects it. Concrete consumers

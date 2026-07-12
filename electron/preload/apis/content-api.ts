@@ -1,5 +1,3 @@
-// electron/preload/apis/content-api.ts
-//
 // Implements the `window.__chimera.content` namespace (§4.8). A single generic,
 // game-AGNOSTIC query: given a gameId, return that game's content collections as
 // plain data (`Record<collectionType, items[]>`), or null when the game declares

@@ -7,8 +7,8 @@
 // may import it without a cross-layer back-edge. Side-effect-free type contracts
 // derived from simulation types, alongside the other `foundation/*-contract` types.
 // `@chimera-engine/electron/preload/api-types` re-exports it (electron implements the
-// contract), preserving that public surface; this removes the old renderer→electron
-// type back-edge (F62/F65).
+// contract), preserving that public surface, so the renderer never takes a
+// type back-edge onto electron.
 //
 // Consumed by the renderer directly, and re-exported to every namespace factory
 // under `electron/preload/*-api.ts` and the main-process IPC handlers
@@ -45,16 +45,16 @@ import type { EngineSettings } from '../settings/SettingsSchema.js';
 
 // ─── Primitive aliases ────────────────────────────────────────────────────────
 
-/** Opaque player identifier. Canonical branded type: simulation/ (F03). */
+/** Opaque player identifier. Canonical branded type: simulation/. */
 export type { PlayerId };
 
-/** Opaque entity identifier. Canonical branded type: simulation/ (F03). */
+/** Opaque entity identifier. Canonical branded type: simulation/. */
 export type { EntityId };
 
 /** Opaque commitment identifier. Canonical branded type: simulation/projection (§4.6). */
 export type { CommitmentId };
 
-/** Current phase of the game state machine. Canonical: simulation/ (F03). */
+/** Current phase of the game state machine. Canonical: simulation/. */
 export type { GamePhase };
 
 /** Current coarse-grained scene identifier. Canonical: simulation/scene (§4.18). */
@@ -123,10 +123,10 @@ export const toSlotId = (raw: string): SlotId => raw as SlotId;
 // ─── Simulation domain stubs ──────────────────────────────────────────────────
 // The projected-snapshot contract (`PlayerSnapshot` + its `ObservedPlayerState` /
 // `ObservedEntityState` / `GameEvent` helpers) and the commit/reveal
-// envelope/reveal shapes now live in the zero-dependency foundation leaf
-// `../foundation` (issue #758). They are re-exported here so the preload
-// contract surface — and every renderer/main consumer that imports them from
-// this module — stays unchanged.
+// envelope/reveal shapes live in the zero-dependency foundation leaf
+// `../foundation`. They are re-exported here so the preload contract surface —
+// and every renderer/main consumer that imports them from this module — has a
+// single stable import path.
 
 import type {
     PlayerSnapshot,
@@ -141,7 +141,7 @@ export type { CommitmentEnvelope, CommitmentReveal };
 
 /**
  * Generic IPC action envelope dispatched through GameAPI.sendAction().
- * Canonical: simulation/ (F03).
+ * Canonical: simulation/.
  */
 export interface EngineAction<
     TType extends string = string,
@@ -163,10 +163,10 @@ export interface EngineAction<
  * ActionPipeline several ticks later).
  *
  * Today's sole trigger is IPC-layer envelope validation failure
- * (`IpcRequestValidationError`, introduced in issue #17). The same channel
- * and shape will be reused once F03–F15 wire the full `ActionPipeline` —
- * Stage 3 validation failures and unknown-action-type rejections also push
- * on this channel, so the renderer's listener contract does not churn.
+ * (`IpcRequestValidationError`). The same channel and shape are reused once the
+ * full `ActionPipeline` is wired — Stage 3 validation failures and
+ * unknown-action-type rejections also push on this channel, so the renderer's
+ * listener contract does not churn.
  *
  * `tick` is `-1` when the request was so malformed that the tick could
  * not be recovered from the envelope.
@@ -181,7 +181,7 @@ export interface ActionRejection {
 }
 
 // ─── Lobby domain stubs ───────────────────────────────────────────────────────
-// Superseded by networking/ (F09–F11).
+// Superseded by networking/.
 
 /** Configurable controller kind for a hosted lobby player slot. */
 export type LobbyAgentKind = 'human' | 'ai';
@@ -199,7 +199,7 @@ export interface HostLobbyParams {
     readonly maxPlayers: number;
     readonly agentSlots?: readonly LobbyAgentSlot[];
     /**
-     * Optional lobby password (F56). When set, joining clients must present a
+     * Optional lobby password. When set, joining clients must present a
      * matching password; when absent/blank the lobby is open. Server-side only —
      * never broadcast or logged.
      */
@@ -209,7 +209,7 @@ export interface HostLobbyParams {
 /** Parameters for joining an existing lobby session. */
 export interface JoinLobbyParams {
     readonly address: string;
-    /** Optional lobby password (F56) presented to the host's password gate. */
+    /** Optional lobby password presented to the host's password gate. */
     readonly password?: string;
 }
 
@@ -226,13 +226,13 @@ export interface LobbyListEntry {
 
 /**
  * Transition of an opponent's connection presence, pushed host→renderer so the
- * renderer can raise the §4.30 "Player disconnected"/"Player reconnected" toasts
- * (#687). `disconnected` is a transient drop (not an intentional leave);
+ * renderer can raise the §4.30 "Player disconnected"/"Player reconnected" toasts.
+ * `disconnected` is a transient drop (not an intentional leave);
  * `reconnected` is the same player rejoining after such a drop.
  */
 export type PlayerConnectionStatus = 'disconnected' | 'reconnected';
 
-/** Payload of the `chimera:lobby:player-connection` push (§4.30 / #687). */
+/** Payload of the `chimera:lobby:player-connection` push (§4.30). */
 export interface PlayerConnectionEvent {
     readonly playerId: PlayerId;
     readonly status: PlayerConnectionStatus;
@@ -254,7 +254,7 @@ export interface PlayerLeftMatchEvent {
 
 /**
  * Structured profile-admission rejection, pushed host→renderer so the renderer
- * can raise the §4.30 "Profile rejected: {reason}" toast (#688). `reason` is the
+ * can raise the §4.30 "Profile rejected: {reason}" toast. `reason` is the
  * raw gate code — `'profile:<AdmissionRejection>'` or `'rate_limit'` — never a
  * parsed `Error.message` (Invariants #61/#62). The renderer maps it to friendly
  * copy.
@@ -264,7 +264,7 @@ export interface ProfileRejection {
 }
 
 // ─── Save domain stubs ────────────────────────────────────────────────────────
-// Superseded by simulation/ saves module (F06).
+// Superseded by simulation/ saves module.
 
 /** Metadata for a single save slot. */
 export interface SaveSlotMeta {
@@ -310,11 +310,11 @@ export interface SaveRequest {
 }
 
 // ─── Settings domain stubs ────────────────────────────────────────────────────
-// Superseded by simulation/ settings module (F07).
+// Superseded by simulation/ settings module.
 
 /**
  * Engine-wide settings structure.
- * Canonical: simulation/settings/SettingsSchema.ts (F07).
+ * Canonical: simulation/settings/SettingsSchema.ts.
  */
 export type { EngineSettings };
 
@@ -446,7 +446,7 @@ export type Unsubscribe = () => void;
 // Each will be replaced with a concrete interface in the milestone listed.
 
 // ─── Profile domain types ─────────────────────────────────────────────────────
-// Canonical definitions live in simulation/profile/ProfileSchema.ts (F14).
+// Canonical definitions live in simulation/profile/ProfileSchema.ts.
 // Redeclared here so the renderer's type-only dependency on this module
 // (via renderer/types/chimera.d.ts) does NOT depend on simulation/profile/.
 // Type-only imports from simulation/content are allowed by the architecture
@@ -468,14 +468,14 @@ export interface CustomAvatarSource {
 
 /**
  * Discriminated union for the two avatar strategies.
- * Canonical: simulation/profile/ProfileSchema.ts (F14).
+ * Canonical: simulation/profile/ProfileSchema.ts.
  */
 export type AvatarSource = BuiltinAvatarSource | CustomAvatarSource;
 
 /**
  * Base profile carried by every player. Cosmetic only — never enters
  * GameSnapshot, PlayerSnapshot, or SaveFile (Invariant #59).
- * Canonical: simulation/profile/ProfileSchema.ts (F14).
+ * Canonical: simulation/profile/ProfileSchema.ts.
  */
 export interface EngineProfile {
     readonly localProfileId: string;
@@ -486,7 +486,7 @@ export interface EngineProfile {
 
 /**
  * Convenience alias for the unextended engine profile.
- * Canonical: simulation/profile/ProfileSchema.ts (F14).
+ * Canonical: simulation/profile/ProfileSchema.ts.
  */
 export type PlayerProfile = EngineProfile;
 
@@ -499,7 +499,7 @@ export interface LocalProfileSlot {
     readonly displayName: string;
 }
 
-/** F14 — Player Profiles and Directory (§4.24). */
+/** Player Profiles and Directory (§4.24). */
 export interface ProfileAPI {
     /** Returns this machine's local player profile. */
     getLocalProfile(): Promise<PlayerProfile>;
@@ -766,7 +766,7 @@ export interface PerspectiveReplayAPI
 }
 
 /**
- * F45 — Chat System (§4.29). The renderer's window into the bounded,
+ * Chat System (§4.29). The renderer's window into the bounded,
  * host-relayed chat layer. All messages route through the host's `ChatRelay`;
  * `send` resolves the relay's {@link RelayResult}, `onMessage` delivers relayed
  * messages, `history` returns a bounded server-ordered list, and `mute`/`unmute`
@@ -796,7 +796,7 @@ export interface ChatAPI {
     unmute(playerId: PlayerId): void;
 }
 
-/** Stub. Expanded in F43 — Crash Reporter / Logging (§4.27). */
+/** Crash Reporter / Logging (§4.27). */
 export interface LogsAPI {
     /** Fire-and-forget: renderer emits a structured log entry to the main process. */
     emit(entry: LogEntry): void;
@@ -954,7 +954,7 @@ export interface LobbyAPI {
     /**
      * Host-only: abandon the active match and return the session to the lobby
      * phase — the reverse of {@link startGame}. The main process rejects this
-     * from a joined (non-host) session (#736). Clients observe the lobby-phase
+     * from a joined (non-host) session. Clients observe the lobby-phase
      * reset via the existing projected snapshot stream, not this channel.
      */
     returnToLobby(): Promise<void>;
@@ -965,7 +965,7 @@ export interface LobbyAPI {
     /**
      * Host-only: set a host-authored match setting (e.g. board colour). The main
      * process rejects this from a joined (non-host) session, then rebroadcasts
-     * the full {@link LobbyState} to every client (#706).
+     * the full {@link LobbyState} to every client.
      */
     setMatchSetting(key: string, value: string): Promise<void>;
     /**
@@ -973,27 +973,27 @@ export interface LobbyAPI {
      * `playerId` (e.g. unit colour); `playerId` must be the local player. The main
      * process rejects a write to any other seat and, for a joined client, forwards
      * the own-seat intent to the authoritative host, which applies it and
-     * rebroadcasts the full {@link LobbyState} (#706, F53).
+     * rebroadcasts the full {@link LobbyState}.
      */
     setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
     /**
      * Host-only: append an AI agent slot to the lobby roster. The host assigns
      * the slot index. The main process rejects the call from a joined (non-host)
      * session and when the lobby is full, then rebroadcasts the full
-     * {@link LobbyState} to every client (#724).
+     * {@link LobbyState} to every client.
      */
     addAi(): Promise<void>;
     /**
      * Host-only: remove the AI agent slot at `slotIndex` from the lobby roster.
      * The main process rejects the call from a joined (non-host) session, then
-     * rebroadcasts the full {@link LobbyState} to every client (#724).
+     * rebroadcasts the full {@link LobbyState} to every client.
      */
     removeAi(slotIndex: number): Promise<void>;
     onUpdate(cb: (lobby: LobbyState) => void): Unsubscribe;
     /**
      * Fires when an opponent's connection presence transitions (transient drop or
      * reconnect). Drives the §4.30 "Player disconnected"/"Player reconnected"
-     * toasts (#687). Never fires for an intentional leave or a first-time join.
+     * toasts. Never fires for an intentional leave or a first-time join.
      */
     onPlayerConnectionChanged(cb: (event: PlayerConnectionEvent) => void): Unsubscribe;
     /**
@@ -1005,7 +1005,7 @@ export interface LobbyAPI {
     onOpponentLeftMatch(cb: (event: PlayerLeftMatchEvent) => void): Unsubscribe;
     /**
      * Fires when this client's profile is rejected — at JOIN or for a mid-session
-     * PROFILE_UPDATE. Drives the §4.30 "Profile rejected: {reason}" toast (#688).
+     * PROFILE_UPDATE. Drives the §4.30 "Profile rejected: {reason}" toast.
      */
     onProfileRejected(cb: (rejection: ProfileRejection) => void): Unsubscribe;
 }
@@ -1024,7 +1024,7 @@ export interface LobbyDiscoveryAPI {
 
 /**
  * Slim projection of the host's session-restore lifecycle pushed over
- * `chimera:saves:restore-status` (§4.11, F68 #826). Never carries a
+ * `chimera:saves:restore-status` (§4.11). Never carries a
  * `SaveFile`/`GameSnapshot` (Invariant #1); `pendingSeats` holds raw seat
  * PlayerIds only — no profile data (Invariant #59).
  */
@@ -1048,10 +1048,10 @@ export interface SavesAPI {
     /** Fires after save / delete / autosave. */
     onSlotUpdate(cb: (slots: SaveSlotMeta[]) => void): Unsubscribe;
     /**
-     * Fires on every session-restore transition (F68 #826). Push-only by
+     * Fires on every session-restore transition. Push-only by
      * design — there is no pull twin (unlike `onSlotUpdate`/`list`), so a
      * listener registered mid-restore sees only future transitions. The
-     * renderer's restore store slice (#828) must subscribe at bootstrap,
+     * renderer's restore store slice must subscribe at bootstrap,
      * before any load can be issued.
      */
     onRestoreStatus(cb: (event: RestoreStatusEvent) => void): Unsubscribe;

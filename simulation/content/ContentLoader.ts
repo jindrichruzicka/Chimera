@@ -101,7 +101,6 @@ export function createContentLoader(): ContentLoader {
                 }
             }
 
-            // Build the immutable database.
             const db = createContentDatabase(
                 Array.from(collections.entries()).map(([collectionType, items]) => ({
                     collectionType,

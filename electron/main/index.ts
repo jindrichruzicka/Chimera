@@ -216,7 +216,7 @@ function asProjectedSnapshot(wire: WirePlayerSnapshot): PlayerSnapshot {
 }
 
 /**
- * Egress seam for perspective-replay recording (§4.28, ADR F44b, T5). Mirrors
+ * Egress seam for perspective-replay recording (§4.28, ADR F44b). Mirrors
  * the role `ReplayPort` plays for the deterministic recorder, but is driven from
  * the snapshot *egress* (host renderer + joined-client) rather than the pipeline:
  * it records only already-projected `PlayerSnapshot`s and never re-runs the
@@ -383,8 +383,8 @@ export interface CreateMainWindowOptions {
      * is wired into the {@link BrowserWindow} `icon` and, on macOS, the dock
      * icon. When omitted, Electron keeps its stock icon. Resolution from the
      * bundled default Chimera asset or a game's `GameManifest` override happens
-     * at the call site (F67 T2); this layer only applies an already-resolved
-     * absolute path.
+     * at the call site; this layer only applies an already-resolved absolute
+     * path.
      */
     readonly icon?: string;
     /**
@@ -836,8 +836,8 @@ export function resolveRuntimePaths(options: ResolveRuntimePathOptions): Runtime
     // `<root>/apps/<gameId>`, the bundle is nested one level deeper, and the
     // game's `data` is at `<root>/apps/<gameId>/data`, so the asset root (the
     // `apps/` dir) is the PARENT of the app dir. Using the packaged `../../apps`
-    // walk here overshoots to `apps/<gameId>/apps`, the ENOENT seen when
-    // launching the dev app from source (relocation gap from F63 #783).
+    // walk here overshoots to `apps/<gameId>/apps`, an ENOENT when launching the
+    // dev app from source.
     const appDir = path.join(options.moduleDirname, '..', '..');
     const gameAssetsRoot = options.isPackaged ? path.join(appDir, 'apps') : path.dirname(appDir);
 
@@ -893,7 +893,7 @@ export function registerClientRevealForwarding(
 /**
  * Validate a CHIMERA_E2E_INITIAL_URL value from the environment.
  *
- * Security invariant (BLOCK-1): the env var is untrusted input — accept only
+ * Security invariant: the env var is untrusted input — accept only
  * URLs whose protocol is `chimera:` and whose host is `renderer`.  Any other
  * value (remote https, wrong host, malformed string, undefined) falls back to
  * `CHIMERA_RENDERER_URL` (the renderer root, distinct from the production launch
@@ -947,7 +947,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         backgroundColor: BOOTSTRAP_BACKGROUND_COLOR,
         title: resolvedTitle,
         // Only set `icon` when supplied so the no-icon case leaves Electron's
-        // stock icon untouched (F67 T1).
+        // stock icon untouched.
         ...(options.icon !== undefined ? { icon: options.icon } : {}),
         ...(fullscreen ? (isDarwin ? { simpleFullscreen: true } : { fullscreen: true }) : {}),
         show: true,
@@ -972,7 +972,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
     // darwin (`Dock | undefined`), so guard on the platform and chain defensively.
     // `setIcon` throws ("Failed to load image from path …") when the icon file is
     // missing; a cosmetic dock icon must never abort window creation, so swallow
-    // and warn rather than letting it bubble out of createMainWindow (WARN-6 idiom).
+    // and warn rather than letting it bubble out of createMainWindow.
     if (options.icon !== undefined && process.platform === 'darwin') {
         try {
             app.dock?.setIcon(options.icon);
@@ -996,15 +996,15 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
     ) {
         throw new Error(
             `[chimera] createMainWindow: refusing to load untrusted URL "${urlToLoad}". ` +
-                `Only ${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/… is permitted (WARN-1).`,
+                `Only ${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/… is permitted.`,
         );
     }
     void window.loadURL(urlToLoad);
 
-    // WARN-2: block all new-window / popup navigations
+    // Block all new-window / popup navigations.
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-    // WARN-3: prevent in-page navigations outside the renderer app protocol.
+    // Prevent in-page navigations outside the renderer app protocol.
     window.webContents.on('will-navigate', (event, url) => {
         if (!url.startsWith(`${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/`)) {
             event.preventDefault();
@@ -1020,7 +1020,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         window.setTitle(resolvedTitle);
     });
 
-    // WARN-6: log renderer load failures so silent white-screen bugs are diagnosable
+    // Log renderer load failures so silent white-screen bugs are diagnosable.
     window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
         const msg = `[chimera] renderer failed to load: ${errorCode} ${errorDescription}`;
         options.logger.warn(msg);
@@ -1070,7 +1070,7 @@ function createProductionLoggerSink(logsDir: string): FlushableSink {
 }
 
 /**
- * Select the renderer URL the main window boots into (F70). A packaged build
+ * Select the renderer URL the main window boots into. A packaged build
  * whose hosted game declares a `logoScreen` launches into that route; every
  * other boot (no declaration, dev, E2E) launches into the main menu exactly
  * as before. `isPackaged` is injected (`app.isPackaged` at the call site) so
@@ -1090,10 +1090,10 @@ export function resolveRendererLaunchUrl(
  * Entry-point orchestration. Kept as a distinct function so tests can import
  * the helpers above without triggering Electron lifecycle side effects.
  *
- * Preload path follows the convention declared in issue #2:
+ * Preload path convention:
  *   `path.join(__dirname, '../preload/api.js')`
  *
- * Renderer entry follows issue #3:
+ * Renderer entry convention:
  *   `path.join(__dirname, '../../renderer/out/index.html')`
  */
 export async function main(contributions: readonly MainGameContribution[]): Promise<void> {
@@ -1106,11 +1106,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     assertProductionDevHarnessGuard(process.env);
 
     // Derive the host-side game registry from the contributions injected by the
-    // consumer app composition root (apps/tactics/electron/main.ts) — the host names
-    // no game, it indexes
-    // whatever set it is given. Built before any consumer so the registerActions
-    // loop below registers the game into ActionRegistry before the tick loop
-    // starts (Invariant #10).
+    // consumer app composition root (apps/tactics/electron/main.ts) — the host
+    // names no game, it indexes whatever set it is given. Built before any
+    // consumer so the registerActions loop below registers the game into
+    // ActionRegistry before the tick loop starts (Invariant #10).
     const {
         mainGameRegistry,
         hostedGame,
@@ -1158,7 +1157,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // ContentDatabase before the lobby/tick loop comes up. A failure is fatal —
     // the app must not start with invalid content. The engine stays agnostic:
     // each game supplies its own schemas through its injected contribution
-    // (`MainGameContribution.contentSchemas`, #788), derived above into
+    // (`MainGameContribution.contentSchemas`), derived above into
     // `contentSchemasByGameId` — the host names no game.
     let contentDbs: Map<string, ContentDatabase>;
     try {
@@ -1189,7 +1188,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // so crash dumps can include the current authoritative snapshot.
     let activeSession: SessionRuntime | null = null;
 
-    // The matchId of the currently-running match (F68, #820), or `null` before
+    // The matchId of the currently-running match, or `null` before
     // the first `engine:start_game` of the session. Minted in
     // `onGameStartRequested` and read lazily by the live session-manifest
     // closure built in `onSessionHosted` — shared main() scope because those
@@ -1227,8 +1226,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         logger.child({ module: 'saves' }),
     );
 
-    // ReplayManager owns live-match recording and replay persistence (§4.28,
-    // F44). Concrete repository/serializer/migrator are chosen here at the DIP
+    // ReplayManager owns live-match recording and replay persistence (§4.28).
+    // Concrete repository/serializer/migrator are chosen here at the DIP
     // wiring point; the manager itself imports none of them. Replays are stored
     // under <userData>/replays/<gameId>/<uuid>.chimera-replay (atomic write).
     // The manager re-childs the logger to module 'replay-manager' internally
@@ -1302,7 +1301,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         getDeviceInfo: () => deviceProbeWatcher?.getCurrentInfo(),
     });
 
-    // Runtime Debug Layer (§4.12, F47 T5). The bridge module is loaded ONLY
+    // Runtime Debug Layer (§4.12). The bridge module is loaded ONLY
     // via this dynamic import behind the dot-access IS_DEBUG_MODE constant so
     // the bundler's define replacement constant-folds the branch and
     // tree-shakes the whole debug graph in production (Invariant #27).
@@ -1359,41 +1358,41 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     await ensureActiveProfile(profileManager, profileRepository, harnessFlags?.profileId);
 
     // Session wiring callbacks consumed by the saves IPC adapter to capture
-    // SaveFiles (BLOCK-3) and apply restored files (WARN-2).
+    // SaveFiles and apply restored files.
     let dispatchRendererAction: ((action: ActionEnvelope) => void) | null = null;
     let saveInitialTurnMemento: ((playerId: PlayerId) => void) | null = null;
     let handleHostedLocalSeatAdded: ((entry: LobbyPlayerEntry) => void) | null = null;
     let broadcastRestoredSnapshot: (() => void) | null = null;
-    // Host-local match-state reset for return-to-lobby (#737). Assigned inside
+    // Host-local match-state reset for return-to-lobby. Assigned inside
     // `onSessionHosted` (the `saveInitialTurnMemento` pattern) so the sibling
     // `onReturnToLobbyRequested` callback can reuse that scope's closures; null
     // when no hosted session is live.
     let resetActiveSessionToLobby: (() => void) | null = null;
-    // Seats lobby-added AI agents from the LIVE lobby `agentSlots` at game-start
-    // (#730 follow-up). Assigned inside `onSessionHosted` (the
-    // `saveInitialTurnMemento` pattern) so `onGameStartRequested` can register the
-    // AI agents and learn their synthetic player ids; null when no hosted session
-    // is live. AI is added to the lobby AFTER hosting, so the host-time
-    // `metadata.agentSlots` is empty — this re-derives the roster at start.
+    // Seats lobby-added AI agents from the LIVE lobby `agentSlots` at game-start.
+    // Assigned inside `onSessionHosted` (the `saveInitialTurnMemento` pattern) so
+    // `onGameStartRequested` can register the AI agents and learn their synthetic
+    // player ids; null when no hosted session is live. AI is added to the lobby
+    // AFTER hosting, so the host-time `metadata.agentSlots` is empty — this
+    // re-derives the roster at start.
     let seatLobbyAgentsForGameStart:
         | ((agentSlots: readonly LobbyAgentSlot[]) => readonly PlayerId[])
         | null = null;
     // Mirrors the live lobby AI roster into the hosted session as `addAi()`
-    // mutates it during the lobby (#833). Assigned inside `onSessionHosted` (the
+    // mutates it during the lobby. Assigned inside `onSessionHosted` (the
     // `seatLobbyAgentsForGameStart` pattern) so `onLobbyStateChanged` can keep
     // the human-slot authority (`nextHumanSlotIndex`) aware of `addAi()` AI
     // seats; without it a human joining AFTER an AI is added is handed the AI's
     // slot index. Null when no hosted session is live.
     let syncLiveAgentSlots: ((agentSlots: readonly LobbyAgentSlot[]) => void) | null = null;
     // Reconciles the host slot ledger when an AI is removed from the lobby roster
-    // — `removeAi()` or the join-overflow auto-remove (#838). Assigned inside
+    // — `removeAi()` or the join-overflow auto-remove. Assigned inside
     // `onSessionHosted` (the `syncLiveAgentSlots` pattern) so `onAiSlotRemoved`
     // can drive it from outside; null when no hosted session is live.
     let removeAiSeat: ((slotIndex: number) => void) | null = null;
-    // Seats a restored save's roster into the freshly hosted session (F68 #823).
-    // Assigned inside `onSessionHosted` (the `seatLobbyAgentsForGameStart`
-    // pattern) so the SessionRestoreCoordinator can drive seating from outside;
-    // null when no hosted session is live.
+    // Seats a restored save's roster into the freshly hosted session. Assigned
+    // inside `onSessionHosted` (the `seatLobbyAgentsForGameStart` pattern) so the
+    // SessionRestoreCoordinator can drive seating from outside; null when no
+    // hosted session is live.
     let seatRestoredRoster: ((seats: readonly SaveSeat[]) => Promise<void>) | null = null;
     // Suppresses `tryStartGame` between restore-hosting and roster completion:
     // `onSessionHosted` fires a start attempt DURING `hostLobby` and local-seat
@@ -1403,7 +1402,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // of `seatRestoredRoster` (which then retries the start itself).
     let restoreSeatingActive = false;
 
-    // Joined-client perspective recording state (F44b T5). Non-null only inside a
+    // Joined-client perspective recording state. Non-null only inside a
     // joined session: `onSessionJoined` arms it, the cleanup fn disarms it, and
     // `onClientSnapshotReceived` lazily starts recording on the first snapshot
     // (the client has no session-start header — `viewerId` is read off the first
@@ -1424,7 +1423,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // The single primary renderer window, captured when app.whenReady()
     // resolves.  Used to target IPC snapshot/reveal messages to the one
     // window that owns the game UI, instead of blasting every BrowserWindow
-    // (e.g. detached DevTools) with private per-player projected data (WARN-1).
+    // (e.g. detached DevTools) with private per-player projected data.
     let mainWindow: BrowserWindow | null = null;
 
     // The most recently projected PlayerSnapshot sent to the main window.
@@ -1435,7 +1434,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // simulation-layer branded types are incompatible with the preload types.
     let lastSentPlayerSnapshot: unknown = null;
 
-    // The single game the host runs (M1 single-game lifecycle), sourced from the
+    // The single game the host runs (single-game lifecycle), sourced from the
     // game registry rather than named here.  Stamped on captured save files and
     // used as the qualified slot prefix.
     const HOSTED_GAME_ID = hostedGame.gameId;
@@ -1444,10 +1443,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // exactOptionalPropertyTypes. Absent for a game that declares no content.
     const hostedContentDb = contentDbs.get(HOSTED_GAME_ID);
 
-    // Session tickets remember which seat this client held per match (F68 #822)
-    // so the next joinLobby can present them as JOIN claims and reclaim the
-    // seat on a restored session (#821). Concrete store chosen here (invariant
-    // #37); tickets hold opaque ids only and never cross IPC (Inv #59/#60).
+    // Session tickets remember which seat this client held per match so the next
+    // joinLobby can present them as JOIN claims and reclaim the seat on a
+    // restored session. Concrete store chosen here (invariant #37); tickets hold
+    // opaque ids only and never cross IPC (Inv #59/#60).
     const sessionTicketLogger = logger.child({ module: 'session-tickets' });
     const sessionTicketStore = new FileSessionTicketStore(
         path.join(userData, 'session-tickets.json'),
@@ -1460,7 +1459,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     });
 
     // Register E2E hooks at the wiring point so no module-level side effects
-    // are needed in SimulationHost.ts (WARN-1 / §2 DIP).
+    // are needed in SimulationHost.ts (§2 DIP).
     registerE2eHooks(process.env);
     const resolvedE2eHooks = getE2eHooks();
     let activeE2eHooks: E2eHooks | undefined = undefined;
@@ -1468,7 +1467,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // ChatHub is the recipient-side terminus for the local player (§4.29): it
     // owns the bounded history buffer + mute set and pushes delivered messages to
     // the renderer. Chat is private-capable, so it targets the primary game window
-    // only (mirroring snapshot egress, WARN-1) rather than every BrowserWindow.
+    // only (mirroring snapshot egress) rather than every BrowserWindow.
     const chatHub = new ChatHub({
         logger: lobbyLogger,
         onMessage: (message) => {
@@ -1494,12 +1493,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
         // Inject the game lobby-setup resolver from the composition-root registry
         // so the manager can seed host-authored defaults without importing
-        // `games/*` (Invariant #2). Empty registry → no-op seeding (#706).
+        // `games/*` (Invariant #2). Empty registry → no-op seeding.
         resolveLobbySetup,
-        // Present this client's remembered seats as JOIN claims (F68 #822).
+        // Present this client's remembered seats as JOIN claims.
         // `undefined` when no ticket matches the hosted game — a fresh client
         // must omit the key entirely to keep the host's claimless join-order
-        // fallback available (#821); the provider sanitizes and caps the list.
+        // fallback available; the provider sanitizes and caps the list.
         resolveJoinClaims: async () => {
             const tickets = await sessionTicketStore.claims();
             const relevant = tickets.filter((ticket) => ticket.gameId === HOSTED_GAME_ID);
@@ -1518,8 +1517,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
 
             // Build a SessionRuntime around the freshly-created pipeline so
             // the host-side `processAction` flow updates a single live
-            // snapshot reference.  `captureSaveFile` (BLOCK-3) and
-            // `applyRestoredFile` (WARN-2) read/write through this runtime.
+            // snapshot reference.  `captureSaveFile` and `applyRestoredFile`
+            // read/write through this runtime.
             const initialPlayerSlots = collectInitialPlayerSlots(metadata);
             const initialPlayerIds = initialPlayerSlots.map((slot) => slot.playerId);
             const initialEntities = resolveInitialEntitiesForGame(
@@ -1540,7 +1539,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
             });
 
-            // Live-match replay recording adapter (F44 / T4, Issue #658).
+            // Live-match replay recording adapter.
             // Delegates to the shared `ReplayManager`; `recordAction` is driven by
             // the pipeline, `startRecording` by the composition root just below. The
             // match is NOT persisted at game-over — the recording is retained and
@@ -1551,7 +1550,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 recordAction: (entry) => replayManager.recordAction(entry),
             };
 
-            // Runtime Debug Layer per-session attach (§4.12, F47 T5).
+            // Runtime Debug Layer per-session attach (§4.12).
             // Both getters are lazy: `projector` and `replay` are declared
             // further down in this closure and are only dereferenced from IPC
             // query handling, which cannot run before this synchronous body
@@ -1563,7 +1562,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
 
             // `pipeline`, `processAction`, and `clearUndoHistory` come from
             // the same factory; `processAction` adds the autosave fire-and-
-            // forget hook on top of `pipeline.process` (Issue #375).
+            // forget hook on top of `pipeline.process`.
             const { processAction, clearUndoHistory, undoManager, replay } =
                 buildHostSessionPipeline(
                     gameRegistry,
@@ -1610,13 +1609,13 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     },
                 );
 
-            // Renderer-egress gate for the host's *perspective* recording (F44b
-            // T5): `sendHostedRendererSnapshot` appends a frame only while this is
+            // Renderer-egress gate for the host's *perspective* recording:
+            // `sendHostedRendererSnapshot` appends a frame only while this is
             // true. Declared here so `startSessionRecordings` can re-arm it.
             let hostPerspectiveActive = false;
 
             // Begin (or re-arm) both host-side recordings. Extracted so
-            // return-to-lobby (#737) can restart recording for a fresh match —
+            // return-to-lobby can restart recording for a fresh match —
             // otherwise the restarted match would run with no replay and no host
             // perspective recording. Called once now that `seed` and `gameConfig`
             // are resolved, and again from `resetActiveSessionToLobby`.
@@ -1712,7 +1711,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
 
             // Per-session commitment runtime shared between the projector and
             // SessionRuntime so `commit()` envelopes are automatically included
-            // in the next broadcasted PlayerSnapshot (BLOCK-1 fix, §4.6 / §8).
+            // in the next broadcasted PlayerSnapshot (§4.6 / §8).
             const sessionCommitmentRuntime = new SessionCommitmentRuntime();
 
             const projector = new DefaultStateProjector(hostedGame.visibilityRules, {
@@ -1731,7 +1730,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             const simulationHost = new SimulationHost(agentManager, projector);
             simulationHostRef.current = simulationHost;
             // Wire StateBroadcaster + ActionPipeline (with InMemoryActionHistory
-            // and InMemoryUndoManager) for the hosted session (issue #364).
+            // and InMemoryUndoManager) for the hosted session.
             // Each hosted session gets a fresh history and undoManager so
             // undo state never bleeds between sessions.
             // Must be set before any pipeline.process()/processAction-triggered
@@ -1747,7 +1746,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 broadcasterOptions,
             );
 
-            // Live session-composition provider for captured saves (F68, #820):
+            // Live session-composition provider for captured saves:
             // one seat per registered player, classified host → ai (by agent
             // slot) → local (`lobbyManager.isLocalSeat`) → remote. Returns
             // `null` before the first `engine:start_game` (no match to
@@ -1800,7 +1799,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             if (metadata.e2eHooks !== undefined) {
                 // Cast to the narrow E2E interface — dispatchTick is private on
                 // SessionRuntime so production callers cannot reach it.
-                // This is the sole permitted path (WARN-1 fix, §ISP).
+                // This is the sole permitted path (§ISP).
                 // @chimera-review: as unknown as E2eSessionRuntime is safe here;
                 //   the concrete class implements the method; it is only hidden
                 //   from the public type surface.
@@ -1811,7 +1810,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 };
             }
 
-            // Real-time heartbeat (§4.2.1, #89). A game whose manifest opts into
+            // Real-time heartbeat (§4.2.1). A game whose manifest opts into
             // `realtime` is driven by a wall-clock RealtimeTicker that dispatches
             // `engine:tick` through the normal pipeline at the manifest's
             // tickRateMs (converted to Hz); a turn-/action-driven game (e.g.
@@ -1852,7 +1851,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
                     win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
                 }
-                // Perspective recording (F44b T5): append this projected frame while
+                // Perspective recording: append this projected frame while
                 // the match is live. At game-over, stop appending (lock the frame
                 // set) but do NOT persist — the recording is retained in memory and
                 // written only on an explicit save from the replay player; an unsaved
@@ -1872,8 +1871,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     win.webContents.send(GAME_TICK_CHANNEL, tick);
                 }
             };
-            // Push a host-verified commitment reveal to the host's own renderer
-            // (F54 / T9). The host never receives its own 'broadcast' over the
+            // Push a host-verified commitment reveal to the host's own renderer.
+            // The host never receives its own 'broadcast' over the
             // transport, so the board's reveal playback needs this direct path —
             // symmetric with the joined-client `sendRevealToRenderer` wiring.
             const sendRevealToHostRenderer = (reveal: CommitmentReveal): void => {
@@ -1938,11 +1937,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     });
                 }, LOCAL_SEAT_HANDOFF_DELAY_MS);
             };
-            // Commitment battle mode side effects (F54 / T9), shared by BOTH the
-            // host's own renderer-action path (`dispatchRendererAction`) and remote
-            // clients' `transport.onActionReceived`. Without sharing, a host-
-            // triggered commit/End-Turn would never stage its buffer nor reveal —
-            // only client-triggered ones would (#730).
+            // Commitment battle mode side effects, shared by BOTH the host's own
+            // renderer-action path (`dispatchRendererAction`) and remote clients'
+            // `transport.onActionReceived`. Without sharing, a host-triggered
+            // commit/End-Turn would never stage its buffer nor reveal — only
+            // client-triggered ones would.
             const commitmentOrchestration = hostedGame.commitment;
             const stageCommitmentIfAccepted = (action: ActionEnvelope): void => {
                 if (commitmentOrchestration === undefined) {
@@ -1951,8 +1950,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 // Stage ONLY a commit the pipeline accepted (`stageOnCommit` checks
                 // the authoritative `committedTurns` marker on the post-apply
                 // snapshot). A rejected/out-of-mode commit never stages a reveal nor
-                // projects a phantom envelope; the buffer stays off the snapshot
-                // (#3/#8).
+                // projects a phantom envelope; the buffer stays off the snapshot.
                 const staged = commitmentOrchestration.stageOnCommit(
                     action,
                     sessionRuntime.getSnapshot(),
@@ -1964,7 +1962,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             const revealIfCommitmentEndTurn = (action: ActionEnvelope): void => {
                 // On the commitment-mode End Turn (every seat has committed), reveal +
                 // apply each staged turn in the deterministic order so every viewer
-                // converges (T9). No-op for sequential turns.
+                // converges. No-op for sequential turns.
                 if (!commitmentOrchestration?.shouldReveal(action, sessionRuntime.getSnapshot())) {
                     return;
                 }
@@ -1988,7 +1986,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             const autoEndTurnIfReady = (action: ActionEnvelope): void => {
                 // A commit that completed the set (every seat committed for the turn)
                 // auto-advances the turn and reveals — the player's single End Turn
-                // (= commit) is the only confirmation a turn needs (#730 UX). The
+                // (= commit) is the only confirmation a turn needs. The
                 // host synthesises `engine:end_turn` for the active seat, reading the
                 // LIVE post-commit snapshot: the commit already bumped the tick, and a
                 // stale tick would `StaleActionError` (mirrors `runRevealSync`). That
@@ -2033,7 +2031,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             };
             dispatchRendererAction = runHostAction;
 
-            // Drive an active AI seat to the end of its turn (#730 follow-up).
+            // Drive an active AI seat to the end of its turn.
             // Tactics is turn-based with an action-driven clock — there is no
             // wall-clock tick loop — so nothing pumps an AI agent once it becomes
             // active: it would act once per human action and stall mid-turn.
@@ -2083,18 +2081,18 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 initialPlayerSlots.map((slot) => slot.slotIndex),
             );
             // Records each player's slot index as it is registered so the
-            // return-to-lobby reset (#737) can rebuild fresh agents for the exact
+            // return-to-lobby reset can rebuild fresh agents for the exact
             // current roster after `agentManager.clear()`.
             const playerSlotIndexById = new Map<PlayerId, number>();
             // Guard: onGameStart must fire exactly once per session regardless
-            // of player churn (WARN-1 fix — `>=` would re-fire on leave+rejoin).
+            // of player churn (`>=` would re-fire on leave+rejoin).
             let gameStarted = false;
 
             // The live AI roster for this session. Seeded from the (host-time,
             // usually empty) `metadata.agentSlots` and re-pointed at the current
-            // lobby `agentSlots` when the game starts (#730 follow-up). Slot/agent
-            // resolution below consults this so a return-to-lobby restart re-seats
-            // the same AI roster.
+            // lobby `agentSlots` when the game starts. Slot/agent resolution below
+            // consults this so a return-to-lobby restart re-seats the same AI
+            // roster.
             let currentAgentSlots: readonly LobbyAgentSlot[] = metadata.agentSlots ?? [];
             const resolveLiveAgentSlot = (slotIndex: number): LobbyAgentSlot =>
                 resolveAgentSlot({ ...metadata, agentSlots: currentAgentSlots }, slotIndex);
@@ -2134,7 +2132,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             const tryStartGame = (): void => {
                 // Mid-restore the roster is incomplete and the checkpoint may not
                 // be applied yet — `seatRestoredRoster` retries once seating is
-                // done (F68 #823).
+                // done.
                 if (restoreSeatingActive) {
                     return;
                 }
@@ -2147,7 +2145,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
             };
 
-            // Host-local match-state reset for return-to-lobby (#737). The
+            // Host-local match-state reset for return-to-lobby. The
             // `engine:return_to_lobby` dispatch (in `onReturnToLobbyRequested`)
             // already reset the *snapshot* to the lobby phase and broadcast it;
             // this releases the per-session host state so the lobby is cleanly
@@ -2204,8 +2202,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             handleHostedLocalSeatAdded = (entry): void => {
                 // A restored local seat was already registered at its SAVED
                 // slotIndex by `seatRestoredRoster` before `addLocalSeat` fired
-                // this callback — re-registering here would burn a fresh slot
-                // (F68 #823). Fresh pass-and-play seats are never pre-active.
+                // this callback — re-registering here would burn a fresh slot.
+                // Fresh pass-and-play seats are never pre-active.
                 if (activePlayers.has(entry.playerId)) {
                     return;
                 }
@@ -2214,8 +2212,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 tryStartGame();
             };
 
-            // Seat the lobby-added AI roster at game-start (#730 follow-up). The UI
-            // adds AI AFTER hosting, so the host-time `metadata.agentSlots` is empty
+            // Seat the lobby-added AI roster at game-start. The UI adds AI AFTER
+            // hosting, so the host-time `metadata.agentSlots` is empty
             // and `collectInitialPlayerSlots` above never seated them. Re-point the
             // live roster at the current lobby `agentSlots`, register a fresh AI
             // agent for each (idempotent — `AgentManager` dedups by playerId and we
@@ -2237,7 +2235,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             };
 
             // Keep the live AI roster in sync with the lobby as `addAi()` mutates
-            // it (#833) — only while still in the lobby. `nextHumanSlotIndex`
+            // it — only while still in the lobby. `nextHumanSlotIndex`
             // gates human joins on `resolveLiveAgentSlot(...).kind === 'human'`,
             // so without this a human joining AFTER an AI is added would be
             // handed the AI's slot index. Guarded to the lobby phase: a restored
@@ -2252,7 +2250,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 currentAgentSlots = liveAgentSlots;
             };
 
-            // Seat a restored save's roster (F68 #823). Driven by the
+            // Seat a restored save's roster. Driven by the
             // SessionRestoreCoordinator AFTER the checkpoint is applied, so
             // every agent registers over the restored snapshot. Mirrors
             // `seatLobbyAgentsForGameStart`: re-points `currentAgentSlots` at
@@ -2309,11 +2307,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
 
             // Re-pack the host ledger's HUMANS into contiguous human-kind slots,
             // PINNING every AI entry at its slot, so the ledger mirrors
-            // LobbyManager's compacted roster (#834). Shared by the human-leave
-            // (`releaseLobbySeat`) and AI-removal (`removeAiSeat`, #838)
-            // reconciles. AI seats can be in the ledger during the lobby (host-
-            // time `agentSlots`, or a return-to-lobby #737 that retains the prior
-            // match's AI), so a position-only re-pack would slide an AI into a
+            // LobbyManager's compacted roster. Shared by the human-leave
+            // (`releaseLobbySeat`) and AI-removal (`removeAiSeat`) reconciles. AI
+            // seats can be in the ledger during the lobby (host-time `agentSlots`,
+            // or a return-to-lobby that retains the prior match's AI), so a
+            // position-only re-pack would slide an AI into a
             // human slot and misclassify it as `remote`. Remaining humans keep
             // their join order (== LobbyManager's compacted `players` order),
             // re-taking the lowest human-kind slots.
@@ -2339,11 +2337,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
             };
 
-            // Release a departing lobby seat (#834). Without this the ledger only
+            // Release a departing lobby seat. Without this the ledger only
             // grows: `getSessionManifest` would emit the departed player's stale
             // seat and `nextHumanSlotIndex` could hand a later join an out-of-range
             // slot. Lobby-phase only — an in-match disconnect keeps its seat for
-            // reconnect/restore (#821/#823).
+            // reconnect/restore.
             const releaseLobbySeat = (pid: PlayerId): void => {
                 playerSlotIndexById.delete(pid);
                 registeredPlayers.delete(pid); // a lobby rejoin is a fresh join, not a reconnect
@@ -2351,9 +2349,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             };
 
             // Reconcile the host ledger when an AI is removed from the lobby
-            // roster — `removeAi()` or the join-overflow auto-remove (#838).
+            // roster — `removeAi()` or the join-overflow auto-remove.
             // Lobby-phase only. Drops the removed AI's synthetic seat if it was
-            // seated (host-time `agentSlots` / return-to-lobby #737) — else the
+            // seated (host-time `agentSlots` / return-to-lobby) — else the
             // manifest keeps a phantom `remote` seat and `activePlayers` is off by
             // one — then re-packs humans into the freed slot (so a human stranded
             // ABOVE the removed AI does not collide with a later `addAi`).
@@ -2402,17 +2400,17 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 if (isReconnect) {
                     broadcastCurrentGameSnapshot(pid);
                 }
-                // Fill a missing restored seat (F68 #823) — a no-op outside an
+                // Fill a missing restored seat — a no-op outside an
                 // in-flight restore.
                 sessionRestoreCoordinator.notePlayerJoined(pid);
             });
             const unsubLeft = transport.onPlayerLeft((pid, reason) => {
                 activePlayers.delete(pid);
                 // A lobby-phase leave frees + re-packs the host slot ledger so it
-                // stays in step with LobbyManager's compacted `players` roster
-                // (#834). An in-match disconnect (below) RETAINS the seat for
-                // reconnect/restore (#821/#823); a mid-restore leave is left to
-                // the coordinator (the `!restoreSeatingActive` guard keeps
+                // stays in step with LobbyManager's compacted `players` roster.
+                // An in-match disconnect (below) RETAINS the seat for
+                // reconnect/restore; a mid-restore leave is left to the
+                // coordinator (the `!restoreSeatingActive` guard keeps
                 // `seatRestoredRoster`'s rebuild intact).
                 if (
                     sessionRuntime.getSnapshot().phase === gamePhase('lobby') &&
@@ -2423,7 +2421,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
                 // In-battle only: notify the host when an opponent *deliberately*
                 // leaves a live match → "{name} left game." toast (§4.30). A
-                // transient drop ('timeout'/'error') keeps the #687 "Player
+                // transient drop ('timeout'/'error') keeps the "Player
                 // disconnected" presence toast; a lobby-phase leave stays silent
                 // (the roster update is already visible). The display name is the
                 // lobby-scoped cosmetic name from the host PlayerDirectory
@@ -2447,7 +2445,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // Drive the pipeline with every received `EngineAction`.  Each
             // action mutates the SessionRuntime's live snapshot via the
             // pipeline's `processAction`, and `engine:end_turn` triggers
-            // autosave fire-and-forget (Issue #375).  Errors here are
+            // autosave fire-and-forget.  Errors here are
             // swallowed so a single misbehaving client cannot crash the
             // host event loop; the pipeline already logs invalid actions.
             const unsubAction = transport.onActionReceived((_from, action) => {
@@ -2479,7 +2477,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 unsubLeft();
                 unsubAction();
                 clearUndoHistory([...activePlayers]);
-                // Discard any retained replay recording on session close (F44 / T4).
+                // Discard any retained replay recording on session close.
                 // Matches are no longer persisted at game-over, so this drops both an
                 // abandoned mid-match recording AND a finished-but-unsaved one — the
                 // replay player's save icon is the only path that writes a file.
@@ -2496,7 +2494,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     // A torn-down session has no "current snapshot" to replay:
                     // left stale, a renderer reload would replay the dead
                     // match's checkpoint and bounce /saves and /lobby back
-                    // onto an empty /game (#843).
+                    // onto an empty /game.
                     lastSentPlayerSnapshot = null;
                     activeE2eHooks = undefined;
                     dispatchRendererAction = null;
@@ -2510,7 +2508,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     seatRestoredRoster = null;
                     restoreSeatingActive = false;
                     // Aborts an in-flight restore / re-arms a completed one so
-                    // a later menu-load can restore again (F68 #823).
+                    // a later menu-load can restore again.
                     sessionRestoreCoordinator.noteSessionClosed();
                 }
             };
@@ -2519,7 +2517,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             handleHostedLocalSeatAdded?.(entry);
         },
         onSessionJoined: (transport) => {
-            // Arm the joined-client perspective recording (F44b T5). Recording is
+            // Arm the joined-client perspective recording. Recording is
             // started lazily on the first received snapshot (in
             // `onClientSnapshotReceived`) since the client has no session-start
             // header; the cleanup fn below aborts anything still in progress.
@@ -2559,7 +2557,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 joinedSessionActive = false;
                 // Same rule as the hosted teardown: no session, no "current
                 // snapshot" — a stale cache would replay the dead match on
-                // renderer reload (#843).
+                // renderer reload.
                 lastSentPlayerSnapshot = null;
                 unsubSnapshotCommitments();
                 unsubReveal();
@@ -2580,7 +2578,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 firstPlayer: selectedFirstPlayer,
             });
 
-            // Seat the lobby-added AI roster (#730 follow-up): register their agents
+            // Seat the lobby-added AI roster: register their agents
             // and fold their synthetic ids into the start roster so each AI gets a
             // unit, a players-map seat, and a place in the turn rotation. Appended
             // AFTER the human ids so the (always-human) first player keeps
@@ -2601,7 +2599,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             );
 
             // Carry the host-authored lobby setup (chosen match settings +
-            // per-player attributes) into the match (#706). Keyed by real
+            // per-player attributes) into the match. Keyed by real
             // playerId via `state.players`, so the firstPlayer turn-order reorder
             // above does not affect it. Omitted (undefined) for games with no
             // lobby setup, keeping the payload backward-compatible.
@@ -2609,7 +2607,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
 
             // Mint the stable match identity here — host-side, once per match
             // start — and carry it in the action payload so deterministic
-            // replay reproduces the same id (F68, #820). The reducer writes it
+            // replay reproduces the same id. The reducer writes it
             // onto the snapshot; projection syncs it verbatim to every client.
             const matchId = crypto.randomUUID();
             currentMatchId = matchId;
@@ -2630,13 +2628,13 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // Seed the turn-start memento only for the active (first-to-act) player.
             // Seeding every player would make non-active players eligible to undo the
             // host's actions, violating the per-turn ownership rule in
-            // undo-redo-policy.md §60 and the per-viewer contract (BLOCK-2 fix).
+            // undo-redo-policy.md §60 and the per-viewer contract.
             // Non-active players receive their memento when engine:end_turn fires and
             // their turn begins.
             saveInitialTurnMemento?.(firstPlayer);
         },
         onReturnToLobbyRequested: (state) => {
-            // Reverse of `onGameStartRequested` (#737): abandon the live match
+            // Reverse of `onGameStartRequested`: abandon the live match
             // back to the lobby. Dispatch `engine:return_to_lobby` into the
             // active session — its pipeline broadcast carries the resulting
             // `phase:'lobby'` snapshot to every client and the host's own
@@ -2662,12 +2660,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             resetActiveSessionToLobby?.();
         },
         onAiSlotRemoved: (slotIndex) => {
-            // Reconcile the host slot ledger when an AI leaves the roster (#838).
+            // Reconcile the host slot ledger when an AI leaves the roster.
             removeAiSeat?.(slotIndex);
         },
         onLobbyStateChanged: (state) => {
             // Keep the hosted session's live AI roster in sync so a human joining
-            // after `addAi()` skips the AI's slot index (#833).
+            // after `addAi()` skips the AI's slot index.
             syncLiveAgentSlots?.(state.agentSlots ?? []);
 
             BrowserWindow.getAllWindows().forEach((win) => {
@@ -2700,7 +2698,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             });
         },
         // Opponent presence transitions (host-side): a transient drop or reconnect
-        // → renderer "Player disconnected"/"Player reconnected" toast (§4.30 / #687).
+        // → renderer "Player disconnected"/"Player reconnected" toast (§4.30).
         onPlayerConnectionChanged: (event) => {
             BrowserWindow.getAllWindows().forEach((win) => {
                 if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
@@ -2709,7 +2707,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             });
         },
         // Profile-admission rejection (JOIN or mid-session PROFILE_UPDATE) →
-        // renderer "Profile rejected: {reason}" toast (§4.30 / #688).
+        // renderer "Profile rejected: {reason}" toast (§4.30).
         onProfileRejected: (reason) => {
             BrowserWindow.getAllWindows().forEach((win) => {
                 if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
@@ -2724,7 +2722,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         },
         onClientSnapshotReceived: (snapshot, checksum) => {
             lastSentPlayerSnapshot = snapshot;
-            // Remember this seat for restored-session reclaim (F68 #822) —
+            // Remember this seat for restored-session reclaim —
             // fire-and-forget inside the recorder; never blocks live egress.
             recordSessionTicket(snapshot);
             resolvedE2eHooks?.onBroadcastChecksum(snapshot.tick, snapshot.viewerId, checksum);
@@ -2732,7 +2730,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
                 win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
             }
-            // Joined-client perspective recording (F44b T5). Lazily start on the
+            // Joined-client perspective recording. Lazily start on the
             // first snapshot (locking to its `viewerId`, always the local seat),
             // append every frame, then finalise once the match resolves. Failures
             // never break the live egress; finalise is fire-and-forget. The
@@ -2808,7 +2806,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             }
         },
         // E2E hooks are resolved at the wiring point and injected so
-        // LobbyManager never pulls from globalThis directly (WARN-3 / §2 DIP).
+        // LobbyManager never pulls from globalThis directly (§2 DIP).
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
     });
 
@@ -2825,11 +2823,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         broadcastRestoredSnapshot?.();
     };
 
-    // Menu-load restore orchestrator (F68 #823): hosts a lobby pre-seeded with
+    // Menu-load restore orchestrator: hosts a lobby pre-seeded with
     // the saved roster, applies the checkpoint through the Invariant #24 helper
     // above, seats the roster, and tracks missing remote seats until the
     // `tryStartGame` gate can open. `onStatusChanged` is the seam the
-    // restore-status IPC push (#826) will attach to.
+    // restore-status IPC push attaches to.
     const sessionRestoreCoordinator = new SessionRestoreCoordinator({
         logger,
         ports: {
@@ -2845,7 +2843,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                         restore,
                     });
                     // LobbyInfo.sessionId IS the join code (`<host>:<port>:<token>`)
-                    // — the waiting overlay shows it via the #826 status push.
+                    // — the waiting overlay shows it via the status push.
                     return { lobbyCode: info.sessionId };
                 } catch (error) {
                     restoreSeatingActive = false;
@@ -2866,7 +2864,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     });
 
     // Push every renderer-relevant restore transition to all windows over
-    // `chimera:saves:restore-status` (F68 #826). `toRestoreStatusEvent`
+    // `chimera:saves:restore-status`. `toRestoreStatusEvent`
     // projects the coordinator status to a validated slim event (Invariant
     // #1) and returns null for internal transitions (idle/hosting) — those
     // are not pushed. A schema failure throws inside the listener and is
@@ -2930,7 +2928,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // can surface the error rather than silently writing a half-built
     // file.
     //
-    // `restoreSession` routes a loaded `SaveFile` (F68 #823): with an active
+    // `restoreSession` routes a loaded `SaveFile`: with an active
     // session a SAME-match file is live-applied via the Invariant #24 helper
     // (a different match rejects renderer-friendly); with no active session
     // the SessionRestoreCoordinator hosts a restored session seeded from the
@@ -2986,7 +2984,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     );
                 }
                 // Menu flow: host a session seeded from the saved roster and
-                // apply the checkpoint (F68 #823).
+                // apply the checkpoint.
                 await sessionRestoreCoordinator.restoreSession(file);
             },
             logger: savesLogger,
@@ -2998,20 +2996,20 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
             });
         },
-        // Abort a pending menu-load restore (F68 #826). A no-op outside an
+        // Abort a pending menu-load restore. A no-op outside an
         // in-flight restore — cancel never touches a completed live session.
         cancelRestore: () => sessionRestoreCoordinator.cancel(),
     });
 
     // Register the `chimera:replay:*` channels backed by the shared
-    // ReplayManager (§4.28, F44 / T5). `exportCurrentMatch` is gated on an
+    // ReplayManager (§4.28). `exportCurrentMatch` is gated on an
     // active hosted session here because only this scope knows the live
     // session graph; the manager's `exportCurrentMatch` is idempotent — it
     // finalises the retained recording on the first save press, or returns the path
     // already written on a repeat press (the match is not persisted at game-over;
-    // the player's save icon is the sole gate, F44 / T8). `navigateToPlayer` pushes
+    // the player's save icon is the sole gate). `navigateToPlayer` pushes
     // the validated path so the renderer can switch to the replay player route.
-    // Playback session (§4.28, F44 / T6): loads a replay and serves projected
+    // Playback session (§4.28): loads a replay and serves projected
     // per-viewer PlayerSnapshots tick-by-tick to the renderer's replay player.
     // Reuses the shared `gameRegistry` (live ActionPipeline wiring, invariant
     // #70) and projects via each game's visibility rules; only a PlayerSnapshot
@@ -3027,7 +3025,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // renderer can switch to the replay player route. Reused by BOTH the
     // deterministic and perspective `open-in-player` handlers — the renderer
     // subscribes once via `replay.onNavigate` (the perspective surface reuses
-    // the same `chimera:replay:navigate` channel, F44b / T7).
+    // the same `chimera:replay:navigate` channel).
     const navigateToReplayPlayer = (
         replayPath: string,
         kind: ReplayNavigateKind,
@@ -3079,7 +3077,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
 
     // Register the `chimera:replay:perspective:*` channels backed by the shared
     // PerspectiveReplayManager (read/delete + gated export) and a verbatim
-    // PerspectiveReplayPlaybackManager (§4.28, ADR F44b, F44b / T7). The manager
+    // PerspectiveReplayPlaybackManager (§4.28, ADR F44b). The manager
     // satisfies `PerspectiveReplayLoaderPort` via its `load` (engineVersion guard)
     // and `getCurrentFile` (in-memory preview of the just-finished match).
     // `exportCurrent` is gated on an active session and is idempotent — it flushes
@@ -3140,7 +3138,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // getSettings(gameId) returns full game defaults rather than bare engine
     // defaults.
     // broadcastFn pushes chimera:settings:change to all open renderer windows
-    // so multi-window coherence is maintained (BLOCK-2 fix).
+    // so multi-window coherence is maintained.
     const settingsRepo = new FileSettingsRepository(path.join(userData, 'settings'));
     const settingsManager = new SettingsManager(
         settingsRepo,
@@ -3337,7 +3335,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     };
 
     void app.whenReady().then(() => {
-        // WARN-4: deny all permission requests (camera, microphone, notifications, etc.).
+        // Deny all permission requests (camera, microphone, notifications, etc.).
         // Must be set after app.whenReady() — Electron 33 throws if session is
         // accessed before the app is ready.
         session.defaultSession.setPermissionRequestHandler(

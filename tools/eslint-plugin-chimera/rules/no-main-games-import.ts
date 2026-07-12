@@ -1,21 +1,15 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-main-games-import.ts
- *
  * ESLint rule: chimera/no-main-games-import
  *
  * Forbids `electron/main` modules from importing any `games/*` path so the host
  * (main process) stays agnostic of which games exist — required for packaged,
- * multi-game builds (F18). After F62 (#778) the main-side game registry became a
- * runtime injection seam (`mainGameRegistry.ts` is now a game-agnostic factory),
- * so the host's game wiring moved OUT of the package into the consumer app's
- * composition root `apps/tactics/electron/main.ts` (relocated from the top-level
- * `app/` in F63/#783) — a flat file under `electron/`, not `electron/main/`, so it
- * is outside this rule's scope (it injects the game's `MainGameContribution` at
- * runtime). Since #788/#789 there are NO in-package composition points left:
- * content schemas (`MainGameContribution.contentSchemas`) and lobby-setup
- * builders (`MainGameContribution.lobbySetup`) also arrive by injection, so the
- * former `gameContentRegistry.ts` / `lobbySetupRegistry.ts` exemptions are gone
- * and every non-test `electron/main` module is guarded.
+ * multi-game builds. The game's wiring lives in the consumer app's composition
+ * root (`apps/tactics/electron/main.ts`), a flat file under `electron/` rather
+ * than `electron/main/`, so it is outside this rule's scope; it injects the
+ * game's `MainGameContribution` at runtime. There are NO in-package composition
+ * points: content schemas (`MainGameContribution.contentSchemas`) and lobby-setup
+ * builders (`MainGameContribution.lobbySetup`) also arrive by injection, so every
+ * non-test `electron/main` module is guarded.
  *
  * Test files are exempt — they legitimately import game modules as fixtures
  * (e.g. index.test.ts, loadGameContent.test.ts).
@@ -40,9 +34,9 @@ function normalize(filename: string): string {
 
 /**
  * True for an `electron/main` source file that must stay game-agnostic — i.e.
- * any non-test file under `electron/main/`. Since #788/#789 there are no
- * allowlisted composition registries: content schemas and lobby setup arrive by
- * runtime injection, so every `electron/main` module is guarded.
+ * any non-test file under `electron/main/`. There are no allowlisted composition
+ * registries: content schemas and lobby setup arrive by runtime injection, so
+ * every `electron/main` module is guarded.
  */
 function isGuardedMainFile(filename: string): boolean {
     const n = normalize(filename);
@@ -70,9 +64,9 @@ const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
  *   - a `@chimera-engine/<pkg>` package whose `<pkg>` is NOT an engine package
  *     (e.g. `@chimera-engine/tactics`).
  *
- * Detecting games by the engine allowlist — rather than the legacy `/games/`
- * directory substring — keeps the guard correct now that games are first-class
- * `@chimera-engine/<game>` packages (F57) and once they move out of `games/` (F63).
+ * Detecting games by the engine allowlist — rather than a `/games/` directory
+ * substring — keeps the guard correct now that games are first-class
+ * `@chimera-engine/<game>` packages that live outside `games/`.
  */
 function isGamesImport(source: string): boolean {
     const n = source.replace(/\\/gu, '/');

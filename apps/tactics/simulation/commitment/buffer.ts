@@ -2,7 +2,7 @@
  * apps/tactics/commitment/buffer.ts
  *
  * Pure kernel for the per-instance local action buffer of the tactics
- * commitment-scheme battle mode (T8 / #728). In commitment mode a player's
+ * commitment-scheme battle mode. In commitment mode a player's
  * move/attack/reveal selections are NOT dispatched to the host — they are
  * appended to a {@link LocalActionBuffer} and applied to an optimistic local
  * view (spending local stamina) until the player commits.

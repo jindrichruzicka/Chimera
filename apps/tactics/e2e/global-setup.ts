@@ -50,11 +50,11 @@ export function resolveE2eAssetCopy(root: string, e2eBuildRoot: string): E2eAsse
  * has no tsconfig-paths support at runtime). In `verify:pack` mode
  * (`CHIMERA_VERIFY_PACK_NODE_MODULES` set) it resolves the host + preload from the
  * packed tarballs instead of source, validating the real artifact end-to-end; the
- * debug preload is skipped (the gate excludes the debug specs; #27 keeps it private).
+ * debug preload is skipped (the gate excludes the debug specs; Invariant #27 keeps it private).
  */
 export default function globalSetup(): void {
-    // apps/tactics/e2e → app dir is one up, repo root three up (suite relocated under
-    // the tactics consumer app in F63 #785). .e2e-build stays at the repo root.
+    // apps/tactics/e2e → app dir is one up, repo root three up. .e2e-build stays
+    // at the repo root.
     const appDir = path.resolve(__dirname, '..');
     const root = path.resolve(appDir, '..', '..');
     const e2eBuildRoot = path.join(root, '.e2e-build');
@@ -71,8 +71,8 @@ export default function globalSetup(): void {
     rmSync(e2eBuildRoot, { recursive: true, force: true });
 
     // Build the engine packages (the shell dist the app re-exports), then the app's
-    // OWN Next host (F65 Phase 2c) — apps/tactics/renderer → apps/tactics/renderer/out,
-    // which the launch fixture points CHIMERA_E2E_RENDERER_ENTRY at.
+    // OWN Next host — apps/tactics/renderer → apps/tactics/renderer/out, which the
+    // launch fixture points CHIMERA_E2E_RENDERER_ENTRY at.
     execSync('pnpm build:packages', { cwd: root, stdio: 'inherit' });
     execSync('pnpm exec next build apps/tactics/renderer', {
         cwd: root,

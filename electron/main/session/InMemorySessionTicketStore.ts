@@ -1,7 +1,5 @@
 /**
- * electron/main/session/InMemorySessionTicketStore.ts
- *
- * In-memory `SessionTicketStore` twin (F68 #822, invariant #41).
+ * In-memory `SessionTicketStore` twin (invariant #41).
  *
  * Behaviourally identical to `FileSessionTicketStore` for the same inputs —
  * both run the shared contract suite in

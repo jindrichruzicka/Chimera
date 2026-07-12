@@ -1,13 +1,9 @@
 'use client';
 
 /**
- * renderer/app/SettingsBootstrap.tsx
- *
  * Thin client component that wires the chimera:settings:change push channel
  * into the settingsStore on mount, then hydrates the active lobby game's
  * settings and input actions when a game session is active. Renders nothing.
- *
- * Architecture reference: §F07 hardening #157 (BLOCK-2, WARN-4)
  */
 
 import { useEffect } from 'react';

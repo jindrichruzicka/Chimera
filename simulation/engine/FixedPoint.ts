@@ -255,7 +255,6 @@ function cordicRotateKernel(angle: bigint): [cx: bigint, cy: bigint] {
  * without batching.
  */
 export function atan2(y: FixedPoint, x: FixedPoint): FixedPoint {
-    // Handle special cases
     if (y === 0n && x > 0n) return 0n;
     if (y === 0n && x < 0n) return FP_PI;
     if (x === 0n && y > 0n) return FP_HALF_PI;
@@ -281,7 +280,6 @@ export function atan2(y: FixedPoint, x: FixedPoint): FixedPoint {
         }
     }
 
-    // CORDIC rotation
     for (let i = 0; i < 32; i++) {
         const tx = cx;
         if (cy < 0n) {

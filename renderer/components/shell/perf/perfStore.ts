@@ -1,6 +1,4 @@
 /**
- * renderer/components/shell/perf/perfStore.ts
- *
  * Zustand store for the Performance HUD (§4.16).
  *
  * Holds a rolling PerfSample snapshot consumed by PerfHud and written by:
@@ -10,7 +8,6 @@
  *  - Snapshot receiver (via recordSnapshotReceived)
  *
  * Architecture reference: §4.16 — Performance HUD; §5.5 (store mutation ownership)
- * Task: issue #581 — Implement perfStore.ts
  *
  * Module boundary rules:
  *  - Must NOT import from simulation/, electron/, ai/, or games/*.
@@ -241,7 +238,6 @@ export function createPerfStore(): StoreApi<PerfStoreState> {
             if (pendingDispatchStamps.length > 0) {
                 const oldest = pendingDispatchStamps[0] ?? stamp;
                 actionRoundTripMs = Math.max(0, stamp - oldest);
-                // Evict consumed stamp
                 pendingDispatchStamps = pendingDispatchStamps.slice(1);
             }
 

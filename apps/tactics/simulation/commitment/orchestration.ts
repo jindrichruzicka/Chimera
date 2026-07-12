@@ -1,11 +1,9 @@
 /**
- * apps/tactics/commitment/orchestration.ts
- *
- * The tactics implementation of the host-neutral {@link CommitmentTurnOrchestration}
- * (T9 / #729). Registered through the main-side game registry so the host can
- * drive the commit-then-sync reveal sequence without naming tactics
- * (Invariant #2/#94). Every hook is pure; the host passes generic engine values
- * and these hooks narrow the opaque buffer/value to tactics' own shapes.
+ * The tactics implementation of the host-neutral {@link CommitmentTurnOrchestration}.
+ * Registered through the main-side game registry so the host can drive the
+ * commit-then-sync reveal sequence without naming tactics (Invariant #2/#94).
+ * Every hook is pure; the host passes generic engine values and these hooks
+ * narrow the opaque buffer/value to tactics' own shapes.
  *
  * Flow these hooks serve (host `RevealOrchestrator`):
  *   - `stageOnCommit` reads the buffer riding the `tactics:commit` envelope and

@@ -8,7 +8,6 @@
  * wrapper from AICommand.ts.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Tasks: F23 (issue #418), F24 (issue #425)
  *
  * Invariants upheld:
  *   #18 — AIParams are passed by value (frozen) to every lifecycle method.

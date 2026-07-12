@@ -1,10 +1,8 @@
 'use client';
 
 /**
- * renderer/components/shell/RestoreWaitingOverlay.tsx
- *
  * Game-agnostic overlay shown while a multiplayer session restore waits for
- * the saved remote seats to reconnect (F68 #828). Driven entirely by the
+ * the saved remote seats to reconnect. Driven entirely by the
  * saveStore restore slice — mounted app-wide in AppShell so it survives the
  * /saves → /game route hop that happens mid-restore.
  *
@@ -12,13 +10,13 @@
  * plain dismiss into onClose, and Escape (useEscapeLayer inside Modal) lands
  * there too, so both abort through this single handler: fire-and-forget
  * cancelRestore(), optimistic local dismiss, static-literal toast, and the
- * `markRestoreAborted()` exit marker (#842). The waiting host sits on the
- * mid-restore /game hop (#828), and the unwound session never broadcasts the
+ * `markRestoreAborted()` exit marker. The waiting host sits on the
+ * mid-restore /game hop, and the unwound session never broadcasts the
  * phase:'lobby' snapshot that drives the usual reverse navigation — but this
  * overlay must NOT navigate directly: the game page's no-session redirect
  * fires once the cancelled lobby empties and would race (and beat) any exit
  * issued from here. Instead the game page consumes the marker and owns the
- * /game → /saves exit, mirroring the #741 leave-to-main-menu flag.
+ * /game → /saves exit, mirroring the leave-to-main-menu flag.
  *
  * Terminal pushes (`ready`/`cancelled`/`failed`) unmount the modal via the
  * waiting-only render gate without touching the abort path; main-initiated
@@ -63,7 +61,7 @@ export function RestoreWaitingOverlay(): React.ReactElement | null {
         void savesApi.cancelRestore().catch(() => undefined);
         dismissRestore();
         useToastStore.getState().push({ severity: 'info', title: 'Restore cancelled' });
-        // #842 exit marker (see module header) — the game page consumes it
+        // Exit marker (see module header) — the game page consumes it
         // and routes the host back to /saves.
         markRestoreAborted();
     }, [savesApi, dismissRestore, markRestoreAborted]);

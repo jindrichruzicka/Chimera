@@ -145,7 +145,7 @@ export interface StandaloneAppRewriteParams {
  *      published `^x.y.z` range, so a plain `pnpm/npm install` resolves them from the registry —
  *      across BOTH `dependencies` and `devDependencies`. The blank template carries the engine
  *      packages under `devDependencies` (they are esbuild-inlined at build time and kept out of
- *      electron-builder's prod tree, #817), so a section-blind rewrite would leave a `workspace:*`
+ *      electron-builder's prod tree), so a section-blind rewrite would leave a `workspace:*`
  *      spec that a standalone `npm install` rejects; and
  *   2. prefix `build:app` + `test:e2e` with `cross-env CHIMERA_VERIFY_PACK_NODE_MODULES=<value>` so
  *      the app's Electron bundler resolves `@chimera-engine/electron`'s host/preload from `node_modules`

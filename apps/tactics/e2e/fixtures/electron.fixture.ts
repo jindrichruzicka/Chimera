@@ -54,9 +54,9 @@ export interface E2eElectronLaunchOptions {
     /**
      * Override the game-assets root (`CHIMERA_E2E_GAME_ASSETS_ROOT`) for this
      * launch. Defaults to the repo `apps/` dir; the cursor overwrite spec
-     * (F69 #848) points it at a scratch copy with swapped cursor art. Must
-     * mirror the `<root>/<gameId>/assets/<relativePath>` layout — the
-     * protocol handler injects the `assets` segment itself.
+     * points it at a scratch copy with swapped cursor art. Must mirror the
+     * `<root>/<gameId>/assets/<relativePath>` layout — the protocol handler
+     * injects the `assets` segment itself.
      */
     readonly gameAssetsRoot?: string;
 }
@@ -108,16 +108,16 @@ function createFreshE2eUserDataDir(options: E2eElectronLaunchOptions): string {
 export function createE2eElectronLaunchConfig(
     options: E2eElectronLaunchOptions,
 ): E2eElectronLaunchConfig {
-    // apps/tactics/e2e/fixtures → repo root is four levels up (suite relocated under
-    // the tactics consumer app in F63 #785). .e2e-build stays at the repo root.
+    // apps/tactics/e2e/fixtures → repo root is four levels up. .e2e-build stays
+    // at the repo root.
     const root = path.resolve(__dirname, '../../../..');
     const e2eBuildRoot = path.join(root, '.e2e-build');
     const mainEntry = path.join(e2eBuildRoot, 'electron', 'main', 'index.js');
     const preloadPath = path.join(e2eBuildRoot, 'electron', 'preload', 'api.js');
-    // The app owns its Next host now (F65 Phase 2c): the GUI is built to
-    // apps/tactics/renderer/out, not the root renderer/out.
+    // The app owns its Next host: the GUI is built to apps/tactics/renderer/out,
+    // not the root renderer/out.
     const rendererEntry = path.join(root, 'apps', 'tactics', 'renderer', 'out', 'index.html');
-    // Game apps live under apps/<gameId>/ (relocated from games/ in F63 #782).
+    // Game apps live under apps/<gameId>/.
     const gameAssetsRoot = path.join(root, 'apps');
 
     ensureE2eBuild(mainEntry, preloadPath, rendererEntry);

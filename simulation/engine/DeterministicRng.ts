@@ -7,7 +7,6 @@
  * Algorithm: splitmix64 for state initialisation, xoshiro256** for generation.
  *
  * Architecture reference: §4.2.1 — Rule 2 (Seeded RNG Only)
- * Task: F04 / T1 (issue #41)
  *
  * Invariants upheld:
  *   #43 — This module is the ONLY approved source of randomness inside
@@ -116,7 +115,6 @@ export function createRng(seed: number, tick: number): DeterministicRng {
         const result = [...items];
         for (let i = result.length - 1; i > 0; i--) {
             const j = int(0, i);
-            // Swap result[i] and result[j].
             const tmp = result[i] as T;
             result[i] = result[j] as T;
             result[j] = tmp;

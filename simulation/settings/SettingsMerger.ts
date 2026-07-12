@@ -61,7 +61,6 @@ function deepValidatePatch(
     for (const [key, value] of Object.entries(patch)) {
         if (!(key in shape)) continue; // strip unknown
         const fieldSchema = shape[key]!;
-        // Recurse into nested ZodObject shapes
         const innerShape = (fieldSchema as unknown as z.ZodObject<z.ZodRawShape>).shape;
         if (
             typeof innerShape === 'object' &&

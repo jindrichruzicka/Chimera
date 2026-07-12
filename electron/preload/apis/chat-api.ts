@@ -1,5 +1,3 @@
-// electron/preload/apis/chat-api.ts
-//
 // Implements the `window.__chimera.chat` namespace exposed to the renderer
 // (§4.29 — Chat System). Only depends on a narrow `ChatApiIpcPort` so the
 // factory is trivially testable without spinning up Electron.

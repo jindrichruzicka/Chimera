@@ -1,7 +1,7 @@
 // apps/tactics/electron/build-main.ts
 //
-// The app-OWNED Electron bundler (Seam 1, F65). Bundles this consumer app's
-// Electron MAIN composition root (`electron/main.ts`, which constructs the game's
+// The app-OWNED Electron bundler. Bundles this consumer app's Electron MAIN
+// composition root (`electron/main.ts`, which constructs the game's
 // `MainGameContribution` and calls the host `@chimera-engine/electron/main`'s `main()`)
 // AND the host PRELOAD (`@chimera-engine/electron/preload/api`) into single runnable CJS
 // files under the app's own `dist/`:
@@ -10,14 +10,12 @@
 //   @chimera-engine/electron/preload/api          → dist/preload/api.js     (sibling the host
 //                                            resolves at runtime: <main>/../preload/api.js)
 //
-// Unlike the old `tools/build-tactics-app.ts`, this lives INSIDE the app and names
-// no other game: the `@chimera-engine/<game>` alias key is read from the app's own
-// `package.json` `name`, so the file is copied verbatim into a scaffolded app
+// This lives INSIDE the app and names no other game: the `@chimera-engine/<game>` alias
+// key is read from the app's own `package.json` `name`, so the file is copied verbatim
+// into a scaffolded app
 // (`tools/create-chimera-game/templates/blank/electron/build-main.ts`) with zero
-// edits. It also bundles the
-// preload (the old tool emitted only `main.js`, so the built app was not actually
-// standalone-launchable), making `pnpm --filter <app> build:app` produce a
-// fully launchable bundle.
+// edits. It bundles the preload alongside main so `pnpm --filter <app> build:app`
+// produces a fully standalone-launchable bundle.
 //
 // The pure config derivation below is shared with the app's E2E `global-setup.ts`
 // (one source of truth for the esbuild alias / nodePaths), and honours the
@@ -74,8 +72,8 @@ export interface AliasOptions {
  *
  * The app's own `@chimera-engine/<game>` always resolves to the consumer app source (it is
  * the game, not a packed engine artifact). `@chimera-engine/electron/main` is aliased onto
- * host SOURCE for the everyday suite (#778: the main entry is the consumer's
- * composition root, which imports the host as a consumer would). In `verify:pack`
+ * host SOURCE for the everyday suite: the main entry is the consumer's
+ * composition root, which imports the host as a consumer would. In `verify:pack`
  * mode that alias is DROPPED so the host resolves from the packed `@chimera-engine/electron`
  * tarball — validating the real artifact end-to-end.
  */
@@ -113,10 +111,10 @@ export function appBundleOutfiles(appDir: string): BundleOutfiles {
  * source (`<root>/electron/preload/debug-api.ts`); a scaffolded game copies this
  * file verbatim but has no host source, so `fileExists` returns false and the
  * debug bundle is skipped — matching `@chimera-engine/electron/preload/debug-api`
- * being a private, non-public export (Invariant #27). Without this, `build:app`
- * emitted only `api.js` and never `debug-api.js`, so a dev launch's F9 opened an
- * Inspector window whose preload bridge could not load (the e2e `global-setup`
- * already builds the same entry into `.e2e-build`, which is why e2e stayed green).
+ * being a private, non-public export (Invariant #27). Without this the dev `build:app`
+ * would emit only `api.js`, so a dev launch's F9 would open an Inspector window whose
+ * preload bridge could not load (the e2e `global-setup` builds the same entry into
+ * `.e2e-build`, so e2e wouldn't catch it).
  */
 export function resolveDevDebugPreloadEntry(
     root: string,
@@ -231,8 +229,8 @@ export function buildAppBundles(deps: BuildAppBundlesDeps): void {
     const preloadEntry = deps.resolvePreload(verifyPackMode ? nodePaths[0] : undefined);
 
     // The debug preload is a dev/e2e convenience only and never ships in a verify:pack
-    // run (the gate excludes the debug specs; #27 keeps it private). Optional keys are
-    // spread in only when defined (exactOptionalPropertyTypes forbids explicit undefined).
+    // run (the gate excludes the debug specs; Invariant #27 keeps it private). Optional keys
+    // are spread in only when defined (exactOptionalPropertyTypes forbids explicit undefined).
     const debugPreloadEntry = verifyPackMode ? undefined : deps.debugPreloadEntry;
     const specs = planBundles({
         appDir: deps.appDir,

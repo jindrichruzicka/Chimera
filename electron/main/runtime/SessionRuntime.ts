@@ -10,9 +10,9 @@
  *                                    received action and update the live
  *                                    snapshot in place;
  *   - `captureSaveFile(request)`   — produce a {@link SaveFile} from the
- *                                    current snapshot (BLOCK-3 fix);
+ *                                    current snapshot;
  *   - `applyRestoredFile(file)`    — replace the live snapshot from a
- *                                    loaded save (WARN-2 fix).
+ *                                    loaded save.
  *
  * `SessionRuntime` is intentionally small.  It is the only place in `main/`
  * that owns a mutable reference to a {@link BaseGameSnapshot}; everywhere
@@ -176,9 +176,9 @@ export interface CommitmentRuntimePort {
  * hooks.dispatchTick = () => e2e.dispatchTick(metadata.hostId);
  * ```
  *
- * `as unknown as E2eSessionRuntime` is intentional (WARN-1 fix, SOLID §ISP);
- * the cast is safe because the concrete class implements the method — it is
- * only hidden from the public type surface.
+ * `as unknown as E2eSessionRuntime` is intentional (SOLID §ISP); the cast is
+ * safe because the concrete class implements the method — it is only hidden
+ * from the public type surface.
  *
  * Architecture: §13.9 — E2E hooks contract.
  * @chimera-review: only `electron/main/index.ts` may hold a value of this type;
@@ -222,14 +222,14 @@ export interface SessionRuntimeOptions {
      */
     readonly commitmentRuntime?: CommitmentRuntimePort;
     /**
-     * Host-side reveal-staging store for tactics commitment turn mode (T8 /
-     * #728).  Defaults to `new RevealStaging()`.  Retains each committed
-     * player-turn's `{ value, nonce }` between Commit and Reveal and persists
-     * alongside `pendingCommitments` (Invariant #26).  Injectable for tests.
+     * Host-side reveal-staging store for the commitment turn mode.  Defaults
+     * to `new RevealStaging()`.  Retains each committed player-turn's
+     * `{ value, nonce }` between Commit and Reveal and persists alongside
+     * `pendingCommitments` (Invariant #26).  Injectable for tests.
      */
     readonly revealStaging?: RevealStagingPort;
     /**
-     * Live session-composition provider for `SaveFile.session` (F68, #820).
+     * Live session-composition provider for `SaveFile.session`.
      * Wired in `index.ts` from the lobby roster + agent slots so captured
      * saves record who controlled each seat.  May return `null` (and defaults
      * to absent) when no live composition exists — `captureSaveFile` then
@@ -382,7 +382,7 @@ export class SessionRuntime {
      * The envelope will be included in the next `PlayerSnapshot.commitments`
      * broadcast once `StateProjector.project()` is configured with
      * `getPendingCommitments: () => sessionRuntime.capturePendingCommitments()`
-     * (BLOCK-1 fix, §4.6 / §8).
+     * (§4.6 / §8).
      *
      * Phase 1 of the commit/reveal protocol.
      */
@@ -391,7 +391,7 @@ export class SessionRuntime {
     }
 
     /**
-     * Commit a player's buffered turn in commit-then-sync turn mode (T8 / #728):
+     * Commit a player's buffered turn in commit-then-sync turn mode:
      * produce + broadcast the commitment envelope and stage the matching
      * `{ value, nonce }` so the host can reveal it after every seat has
      * committed.  The same nonce flows into the envelope (via
@@ -411,14 +411,14 @@ export class SessionRuntime {
         return envelope;
     }
 
-    /** Whether `playerId` has a staged commitment for the current turn (T8). */
+    /** Whether `playerId` has a staged commitment for the current turn. */
     hasCommitted(playerId: PlayerId): boolean {
         return this.staging.hasCommitted(playerId);
     }
 
     /**
      * The players staged so far, for the End-Turn gate and the deterministic
-     * reveal order (T9). Game-specific grouping (e.g. tactics' attack-first
+     * reveal order. Game-specific grouping (e.g. tactics' attack-first
      * ordering) is derived by the game from `staging.capture()`.
      */
     committedPlayerIds(): readonly PlayerId[] {
@@ -426,9 +426,9 @@ export class SessionRuntime {
     }
 
     /**
-     * Snapshot of every staged reveal, keyed by envelope id (T9 / #729). The
-     * host's `RevealOrchestrator` reads this to derive the deterministic reveal
-     * order from the (game-opaque) staged values without touching their shape.
+     * Snapshot of every staged reveal, keyed by envelope id. The host's
+     * `RevealOrchestrator` reads this to derive the deterministic reveal order
+     * from the (game-opaque) staged values without touching their shape.
      */
     captureStagedReveals(): StagedReveals {
         return this.staging.capture();
@@ -436,7 +436,7 @@ export class SessionRuntime {
 
     /**
      * Build the reveal payload for a staged player so the host can broadcast it
-     * via `HostTransport.sendReveal` (T9). The matching envelope in
+     * via `HostTransport.sendReveal`. The matching envelope in
      * `pendingCommitments` verifies it (Invariant #9). Throws
      * `RevealStagingError` if `playerId` has no staged commitment.
      */
@@ -446,7 +446,7 @@ export class SessionRuntime {
 
     /**
      * Discard the turn's staged reveals once every one has been revealed and
-     * applied (T9), so the next commitment turn starts clean.
+     * applied, so the next commitment turn starts clean.
      */
     clearStagedReveals(): void {
         this.staging.clearTurn();

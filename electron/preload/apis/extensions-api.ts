@@ -1,5 +1,3 @@
-// electron/preload/extensions-api.ts
-//
 // Extension registration infrastructure for the Chimera preload layer.
 //
 // Game packages and external integrations call `registerExtension()` to add

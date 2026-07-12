@@ -1,16 +1,12 @@
 /**
- * simulation/replay/InMemoryPerspectiveReplayRepository.ts
- *
  * In-memory PerspectiveReplayRepository implementation for unit tests and E2E
- * fixtures. Backed by a `Map`; no filesystem access (§4.28, ADR F44b,
- * invariant #41).
+ * fixtures. Backed by a `Map`; no filesystem access (§4.28, Invariant #41).
  *
  * Storage paths are synthetic, deterministic keys (a monotonic counter) so the
  * double needs neither `crypto.randomUUID` nor wall-clock reads — keeping
  * simulation/ free of non-deterministic globals.
  *
- * Architecture reference: §4.28 (ADR F44b)
- * Task: F44b / T3 (issue #669)
+ * Architecture reference: §4.28
  *
  * Invariants upheld:
  *   #2  — simulation/ is side-effect-free; no FS or Electron imports.

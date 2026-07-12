@@ -2,11 +2,11 @@
  * shared/chat.ts
  *
  * Canonical chat contract shared across the host relay, the wire protocol, and
- * the renderer. This is the type surface F45 — Chat System (§4.29) builds on:
+ * the renderer. This is the type surface the Chat System (§4.29) builds on:
  * the routing scope, the relayed message shape, and the relay outcome.
  *
  * **Scope:** Types only — no relay logic, no validation, no UI. The host-side
- * `ChatRelay` (F45) assigns `id` + `serverTime`, applies the length cap, rate
+ * `ChatRelay` assigns `id` + `serverTime`, applies the length cap, rate
  * limit, and scope validation (Invariant #73), then rebroadcasts per `scope`.
  *
  * Chat is a cosmetic communication channel. A `ChatMessage` is NEVER an
@@ -15,7 +15,6 @@
  * a `SideChannelMessage`, parallel to `PROFILE_UPDATE`.
  *
  * Architecture: §4.29 — Chat System
- * Task: F45 / T01 (issue #679)
  *
  * Invariants upheld:
  *   #2  — Zero runtime imports from electron/, renderer/, or DOM APIs;
@@ -40,7 +39,7 @@ export type ChatScope =
 
 /**
  * A relayed chat message as seen by recipients. `id` and `serverTime` are
- * assigned by the host relay (F45); clients never author them.
+ * assigned by the host relay; clients never author them.
  */
 export interface ChatMessage {
     /** Stable identifier assigned by the host relay. */

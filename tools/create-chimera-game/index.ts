@@ -1,5 +1,5 @@
 /**
- * `create-chimera-game` CLI entry + scaffold core (F65, issue #799).
+ * `create-chimera-game` CLI entry + scaffold core.
  *
  * Ties the pure substitution engine ({@link ./normalize}, {@link ./tokens}) to the filesystem:
  * resolve `templates/<id>/` (default `blank`), copy that tree into `apps/<game>` with every token

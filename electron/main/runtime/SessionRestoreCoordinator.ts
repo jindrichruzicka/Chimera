@@ -1,16 +1,16 @@
 /**
  * electron/main/runtime/SessionRestoreCoordinator.ts
  *
- * Menu-load restore orchestrator (F68, #823). When `chimera:saves:load`
- * arrives with no active session, the coordinator turns a v6 `SaveFile`
- * into a live hosted session: it sanitizes the saved `session` manifest,
- * hosts a lobby pre-seeded with the saved roster (`hostLobby({ restore })`,
- * #821 seam), applies the checkpoint through the composition root's single
- * Invariant #24 entry point (`SessionRuntime.applyRestoredFile`), seats the
- * roster, and tracks which remote human seats are still missing until the
- * existing `tryStartGame` gate can open. All-local rosters complete
- * immediately; rosters with remote seats park in `waiting-for-players`
- * until every saved remote id reconnects.
+ * Menu-load restore orchestrator. When `chimera:saves:load` arrives with no
+ * active session, the coordinator turns a v6 `SaveFile` into a live hosted
+ * session: it sanitizes the saved `session` manifest, hosts a lobby
+ * pre-seeded with the saved roster (`hostLobby({ restore })` seam), applies
+ * the checkpoint through the composition root's single Invariant #24 entry
+ * point (`SessionRuntime.applyRestoredFile`), seats the roster, and tracks
+ * which remote human seats are still missing until the existing
+ * `tryStartGame` gate can open. All-local rosters complete immediately;
+ * rosters with remote seats park in `waiting-for-players` until every saved
+ * remote id reconnects.
  *
  * The coordinator holds NO session objects — only restore status — so the
  * composition root remains the sole owner of session lifetime. It learns
@@ -19,10 +19,9 @@
  * through injected ports.
  *
  * The `onStatusChanged` subscription surface is the seam the restore-status
- * IPC push (#826) attaches to; this module itself has no IPC surface.
+ * IPC push attaches to; this module itself has no IPC surface.
  *
  * Architecture reference: §4.11 / §4.14
- * Task: F68 / issue #823
  *
  * Invariants upheld:
  *   #24 — restores flow through the injected `applyRestoredFile` port, which
@@ -46,7 +45,7 @@ import type { Logger } from '../logging/logger.js';
  * a session larger than the claim wire cap could never fully reclaim its
  * seats anyway. Primarily a corruption guard: a migrated v5 manifest derived
  * from a corrupted legacy key like `ai-1000000` would otherwise request a
- * million-slot lobby (#820 review guidance).
+ * million-slot lobby.
  */
 export const MAX_RESTORED_SEATS = 16;
 
@@ -193,9 +192,9 @@ export type SessionRestoreStatus =
  */
 export interface SessionRestorePorts {
     /**
-     * Host a lobby pre-seeded for the restore (#821 seam). The composition
-     * root's implementation also raises the start-suppression gate before
-     * hosting so `tryStartGame` cannot fire on the pre-restore lobby snapshot.
+     * Host a lobby pre-seeded for the restore. The composition root's
+     * implementation also raises the start-suppression gate before hosting so
+     * `tryStartGame` cannot fire on the pre-restore lobby snapshot.
      */
     readonly hostLobby: (params: {
         readonly maxPlayers: number;
@@ -390,7 +389,7 @@ export class SessionRestoreCoordinator {
     noteSessionClosed(): void {
         // A coordinator-driven closeLobby is mid-flight: its caller sets the
         // terminal state (`failed`/`aborted`) right after; reacting here would
-        // publish a transient bogus `aborted` to #826 listeners.
+        // publish a transient bogus `aborted` to status listeners.
         if (this.unwinding) {
             return;
         }
@@ -403,7 +402,7 @@ export class SessionRestoreCoordinator {
         }
     }
 
-    /** Subscribe to status transitions (#826 wires the IPC push here). */
+    /** Subscribe to status transitions (the restore-status IPC push wires here). */
     onStatusChanged(listener: (status: SessionRestoreStatus) => void): Unsubscribe {
         this.listeners.add(listener);
         return () => {

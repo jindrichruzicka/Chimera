@@ -59,7 +59,7 @@ export function TacticsGameHud({
     const turnStatus = resolveTacticsTurnStatus(snapshot.isMyTurn);
     const [chatOpen, setChatOpen] = useState<boolean>(false);
 
-    // ── Commitment battle mode (#730, F54) ──────────────────────────────────
+    // ── Commitment battle mode ──────────────────────────────────────────────
     // In commitment mode the HUD owns the local buffer loop: a Commit control,
     // Undo that pops the buffer, optimistic stamina, and an End Turn that is the
     // reveal trigger — enabled only once every seat has committed. All commitment
@@ -75,8 +75,8 @@ export function TacticsGameHud({
     const hasCommitted = committedLatch || localCommitted;
     const allCommitted = parseTacticsAllSeatsCommitted(snapshot.players);
 
-    // Owner-only stamina projected on the viewer's player state (#721/#722). In
-    // commitment mode the projected value lags the un-committed buffer, so compute
+    // Owner-only stamina projected on the viewer's player state. In commitment
+    // mode the projected value lags the un-committed buffer, so compute
     // the OPTIMISTIC remaining stamina from the buffer instead (decrements per
     // buffered move/attack). Null when the projection carries no stamina.
     const stamina =
@@ -88,7 +88,7 @@ export function TacticsGameHud({
             : parseTacticsViewerStamina(snapshot.players, snapshot.viewerId);
 
     const handleCommit = (): void => {
-        // In commitment mode End Turn IS the commit (#730 UX): the buffer rides the
+        // In commitment mode End Turn IS the commit: the buffer rides the
         // commit action's payload out-of-band; the reducer strips it (Invariants
         // #3/#8). markCommitted latches the local UI so the board goes inert and
         // End Turn / Undo disable before the snapshot round-trips. Once EVERY seat
@@ -210,7 +210,7 @@ export function TacticsGameHud({
                             >
                                 End Turn
                             </Button>
-                            {/* Host-only save (#825): the shell withholds saveGame
+                            {/* Host-only save: the shell withholds saveGame
                                 from clients, so presence IS the gate. Disabled while
                                 the commitment buffer holds unsent moves — a save
                                 captured now would miss them. */}

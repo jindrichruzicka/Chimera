@@ -8,7 +8,6 @@
  * concrete implementations live in sub-directories (local/, steam/, …).
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider
- * Task: F09 / T1 (issue #201)
  *
  * Invariants upheld:
  *   #1 — GameSnapshot never leaves main process; only PlayerSnapshot crosses
@@ -26,10 +25,10 @@ import type {
     WireCommitmentReveal,
 } from '@chimera-engine/simulation/foundation/messages.js';
 import type { ChatScope, ChatRejectReason } from '@chimera-engine/simulation/foundation/chat.js';
-// The projected wire snapshot and the lobby roster contracts now live in the
-// foundation leaf `@chimera-engine/simulation/foundation` (issue #758). `WirePlayerSnapshot` is the
-// canonical loose wire projection; it is imported here under the local name
-// `PlayerSnapshot` and re-exported so this module's public import path is
+// The projected wire snapshot and the lobby roster contracts live in the
+// foundation leaf `@chimera-engine/simulation/foundation`. `WirePlayerSnapshot`
+// is the canonical loose wire projection; it is imported here under the local
+// name `PlayerSnapshot` and re-exported so this module's public import path is
 // unchanged for every transport caller.
 import type { WirePlayerSnapshot as PlayerSnapshot } from '@chimera-engine/simulation/foundation/snapshot-contract.js';
 import type {
@@ -69,19 +68,19 @@ export const playerId = _makePlayerId;
 // ─── Wire-level snapshot type ────────────────────────────────────────────────
 //
 // `PlayerSnapshot` (the loose wire projection) is declared in the foundation
-// leaf as `WirePlayerSnapshot` and re-exported above (issue #758). It is the
-// ONLY snapshot type allowed to cross boundaries — GameSnapshot must never
-// appear here (Invariant #1).
+// leaf as `WirePlayerSnapshot` and re-exported above. It is the ONLY snapshot
+// type allowed to cross boundaries — GameSnapshot must never appear here
+// (Invariant #1).
 
 // ─── Lobby domain types ───────────────────────────────────────────────────────
 //
 // `LobbyAgentKind`, `LobbyAgentSlot`, `LobbyInfo`, `LobbyPlayerEntry`, and
-// `LobbyState` are declared in the foundation leaf `@chimera-engine/simulation/foundation/lobby-contract.js`
-// and re-exported above (issue #758). The host-/join-param and transport
-// interfaces below build on them.
+// `LobbyState` are declared in the foundation leaf
+// `@chimera-engine/simulation/foundation/lobby-contract.js` and re-exported
+// above. The host-/join-param and transport interfaces below build on them.
 
 /**
- * One saved-seat claim a restoring client presents on join (F68/#821).
+ * One saved-seat claim a restoring client presents on join.
  *
  * Alias of the wire-level {@link JoinSeatClaim} so the claim shape has exactly
  * one declaration. Plain strings on purpose: claims carry opaque host-minted
@@ -99,14 +98,14 @@ export interface HostLobbyParams {
     readonly maxPlayers: number;
     readonly agentSlots?: readonly LobbyAgentSlot[];
     /**
-     * Optional lobby password (F56). When set, joining clients must present a
+     * Optional lobby password. When set, joining clients must present a
      * matching password in their JOIN handshake or be rejected; when absent or
-     * empty the lobby is open (current behaviour). Server-side only — never
-     * broadcast in `LobbyState`/`LobbyInfo` or logged.
+     * empty the lobby is open. Server-side only — never broadcast in
+     * `LobbyState`/`LobbyInfo` or logged.
      */
     readonly password?: string;
     /**
-     * Restored-session seed (F68/#821). When set, the provider mints
+     * Restored-session seed. When set, the provider mints
      * `hostPlayerId` as the lobby's host id (the host reclaims its saved seat)
      * and seeds `humanSeats` — the non-host restored human seats, pre-sorted
      * slotIndex-ascending — for join-time id resolution: a joining client may
@@ -127,7 +126,7 @@ export interface JoinLobbyParams {
     /** Provider-assigned player identity to reclaim after a disconnect. */
     readonly reconnectPlayerId?: PlayerId;
     /**
-     * Optional lobby password (F56) presented to the host's password gate.
+     * Optional lobby password presented to the host's password gate.
      * Required only when the host set one; a mismatch/absence is rejected with
      * `JoinRejectedError('invalid_password')`.
      */
@@ -139,7 +138,7 @@ export interface JoinLobbyParams {
      */
     readonly profile?: unknown;
     /**
-     * Saved-seat claims presented on join (F68/#821). The host grants the
+     * Saved-seat claims presented on join. The host grants the
      * first claim whose `matchId` matches its restored match and whose seat is
      * known but not connected; anything else — stale matchId, unknown or
      * already-connected seat, out-of-bounds entries — degrades to a fresh id.
@@ -150,8 +149,8 @@ export interface JoinLobbyParams {
 }
 
 // `LobbyInfo`, `LobbyPlayerEntry`, and `LobbyState` are declared in the
-// foundation leaf `@chimera-engine/simulation/foundation/lobby-contract.js` and re-exported above
-// (issue #758).
+// foundation leaf `@chimera-engine/simulation/foundation/lobby-contract.js` and
+// re-exported above.
 
 /** A browsable lobby entry returned by BrowsableProvider.listLobbies(). */
 export interface LobbyListEntry {
@@ -169,16 +168,16 @@ export type DisconnectReason = 'kicked' | 'timeout' | 'host_closed' | 'error' | 
 /**
  * Chat message payload carried by `SideChannelMessage.kind === 'chat'`.
  *
- * Expanded in F45 — Chat System (§4.29) to carry the host-assigned `id` and the
- * routing `scope`. The host relay assigns `id` and stamps `timestamp`; on the
- * inbound (client → host) path both are placeholders (`id: ''`, `timestamp: 0`)
- * until `ChatRelay` (F45) assigns the authoritative values.
+ * Carries the host-assigned `id` and the routing `scope` (§4.29). The host relay
+ * assigns `id` and stamps `timestamp`; on the inbound (client → host) path both
+ * are placeholders (`id: ''`, `timestamp: 0`) until `ChatRelay` assigns the
+ * authoritative values.
  *
  * This payload is the wire form of the canonical `ChatMessage` in
- * `shared/chat.ts`; the field names differ (`senderId`/`text`/`timestamp`)
- * because this type predates the contract. It is named `WireChatPayload` (not
- * `ChatMessage`) precisely so the two never collide at a call site. Chat is a
- * cosmetic side-channel and never an `EngineAction` (Invariant #72).
+ * `shared/chat.ts`; the field names differ (`senderId`/`text`/`timestamp`). It
+ * is named `WireChatPayload` (not `ChatMessage`) precisely so the two never
+ * collide at a call site. Chat is a cosmetic side-channel and never an
+ * `EngineAction` (Invariant #72).
  */
 export interface WireChatPayload {
     readonly id: string;
@@ -191,11 +190,11 @@ export interface WireChatPayload {
 /**
  * Full player profile payload carried by SideChannelMessage.kind === 'profile'.
  *
- * Expanded in F14 — Player Profiles (§4.24) from the original stub.
- * Uses plain string types for wire compatibility; branded LocalProfileId and
- * AssetRef<T> exist only inside the engine (simulation/profile/ProfileSchema.ts).
- * The host passes this payload as `unknown` to ProfileSanitizer.admit() which
- * validates all fields structurally (Invariant #61).
+ * See §4.24 — Player Profiles. Uses plain string types for wire compatibility;
+ * branded LocalProfileId and AssetRef<T> exist only inside the engine
+ * (simulation/profile/ProfileSchema.ts). The host passes this payload as
+ * `unknown` to ProfileSanitizer.admit() which validates all fields structurally
+ * (Invariant #61).
  */
 export interface PlayerProfilePayload {
     readonly localProfileId: string;
@@ -251,8 +250,8 @@ export type JoinGateResult =
 /**
  * Thrown by {@link MultiplayerProvider.joinLobby} when the host rejects the JOIN
  * handshake. Part of the provider contract (not a provider-internal type) so
- * consumers — e.g. `LobbyManager` raising the §4.30 "Profile rejected" toast
- * (#688) — can branch on the structured `reason` instead of string-matching
+ * consumers — e.g. `LobbyManager` raising the §4.30 "Profile rejected" toast —
+ * can branch on the structured `reason` instead of string-matching
  * `Error.message`.
  *
  * For a profile-gate rejection, `reason` is `'profile:<AdmissionRejection>'`;

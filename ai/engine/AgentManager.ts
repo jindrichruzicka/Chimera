@@ -1,11 +1,8 @@
 /**
- * ai/engine/AgentManager.ts
- *
  * Per-tick fan-out coordinator: holds a PlayerId → PlayerAgent map and drives
  * all registered agents through the game lifecycle.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F22 (issue #413)
  *
  * Invariants upheld:
  *   #17 — tickAll() calls projector.project() for each agent before calling
@@ -23,8 +20,6 @@ import type {
 } from '@chimera-engine/simulation/projection/StateProjector.js';
 import type { AgentCoordinator } from '@chimera-engine/simulation/host';
 import type { PlayerAgent, GameResult } from './PlayerAgent.js';
-
-// ─── AgentManager ─────────────────────────────────────────────────────────────
 
 /**
  * Holds a `PlayerId → PlayerAgent` map and drives all registered agents

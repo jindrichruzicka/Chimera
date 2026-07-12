@@ -3,8 +3,6 @@
  *
  * Zustand store for per-game resolved settings.
  *
- * Architecture reference: §F07/T6 (issue #152), §renderer/state/settingsStore.ts
- *
  * Rules:
  *  - Components subscribe through narrow typed selectors only (renderer.instructions.md)
  *  - _applySettings() is called by IPC listeners; do NOT call from components

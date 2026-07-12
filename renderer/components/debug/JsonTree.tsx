@@ -3,14 +3,14 @@
 // renderer/components/debug/JsonTree.tsx
 //
 // Recursive collapsible JSON tree for the Inspector's Snapshot panel
-// (§4.12 — Runtime Debug Layer, F47 T8, #697). Values are JSON-plain debug
+// (§4.12 — Runtime Debug Layer). Values are JSON-plain debug
 // payloads typed `unknown` — the simulation snapshot type is never named in
 // the renderer (invariant check 6).
 //
 // Nodes are button-toggled (`aria-expanded`) rather than `<details>` so the
 // expansion state is fully controlled and deterministic under jsdom.
 //
-// `highlights` (F47 T9, #698) maps dot-paths (root `''`, array indices as
+// `highlights` maps dot-paths (root `''`, array indices as
 // numbers-as-strings) to a highlight kind; a collapsed composite that
 // contains a highlighted descendant gets a `data-contains-highlight` marker
 // so differences stay visible in collapsed subtrees.

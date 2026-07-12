@@ -1,11 +1,9 @@
 /**
- * electron/main/session/SessionTicketStore.ts
- *
- * Client-side session-ticket persistence contract (F68 #822, §4.11/§4.14).
+ * Client-side session-ticket persistence contract (§4.11/§4.14).
  *
  * A `SessionTicket` remembers which seat this machine held in a match so a
  * returning client can present it as a JOIN `claims` entry and reclaim its
- * original `PlayerId` on a restored session (#821). Tickets hold opaque
+ * original `PlayerId` on a restored session. Tickets hold opaque
  * host-minted ids only — never profile or display-name data — and live solely
  * in this client's own userData (invariants #59/#60). They never cross IPC to
  * the renderer.
@@ -23,7 +21,7 @@ import { WIRE_MAX_JOIN_CLAIM_ID_LENGTH } from '@chimera-engine/simulation/founda
 
 /** One remembered seat: "in match `matchId` this client played as `playerId`". */
 export interface SessionTicket {
-    /** Host-minted stable match identity (`BaseGameSnapshot.matchId`, #820). */
+    /** Host-minted stable match identity (`BaseGameSnapshot.matchId`). */
     readonly matchId: string;
     /** The seat this client held — an opaque provider-assigned id (Inv #59/#60). */
     readonly playerId: string;
@@ -44,8 +42,8 @@ export const SESSION_TICKET_CAP = 32;
  * Id bound for `matchId`/`playerId`, aligned to the JOIN claim wire bound: a
  * longer id could be stored but never presented — `sanitizeSeatClaims` would
  * drop it at join time, and an all-dropped list goes out as `claims: []`,
- * opting the client out of the claimless slot fallback (#821). The wire
- * snapshot schema leaves these ids unbounded, so the store enforces it.
+ * opting the client out of the claimless slot fallback. The wire snapshot
+ * schema leaves these ids unbounded, so the store enforces it.
  */
 export const SESSION_TICKET_MAX_CLAIM_ID_LENGTH = WIRE_MAX_JOIN_CLAIM_ID_LENGTH;
 

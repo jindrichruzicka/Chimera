@@ -11,8 +11,7 @@
 //
 // `chimera:lobby:list` (LobbyDiscoveryAPI) is deliberately NOT declared here
 // — discovery is an optional capability surfaced only when the active
-// MultiplayerProvider implements `BrowsableProvider` (§4.1, §4.14). It lands
-// in F09/F10.
+// MultiplayerProvider implements `BrowsableProvider` (§4.1, §4.14).
 //
 // Failure-reporting policy for `leave()`:
 //   `chimera:lobby:leave` uses invoke-style IPC (`ipcRenderer.invoke`). The
@@ -56,7 +55,7 @@ export const LOBBY_START_GAME_CHANNEL = 'chimera:lobby:start-game';
  * `ipcRenderer.invoke` target for {@link LobbyAPI.returnToLobby}. Host-only: the
  * main-side handler rejects calls from a joined (non-host) session and abandons
  * the active match back to the lobby phase — the reverse of
- * {@link LobbyAPI.startGame} (#736). No payload; host identity is derived
+ * {@link LobbyAPI.startGame}. No payload; host identity is derived
  * main-side.
  */
 export const LOBBY_RETURN_TO_LOBBY_CHANNEL = 'chimera:lobby:return-to-lobby';
@@ -72,29 +71,29 @@ export const LOBBY_UPDATE_READY_STATE_CHANNEL = 'chimera:lobby:update-ready-stat
 
 /**
  * `ipcRenderer.invoke` target for {@link LobbyAPI.setMatchSetting}. Host-only:
- * the main-side handler rejects writes from a joined (non-host) session (#706).
+ * the main-side handler rejects writes from a joined (non-host) session.
  */
 export const LOBBY_SET_MATCH_SETTING_CHANNEL = 'chimera:lobby:set-match-setting';
 
 /**
  * `ipcRenderer.invoke` target for {@link LobbyAPI.setPlayerAttribute}.
- * Owner-authored (F53): the main-side handler accepts a write only for the
+ * Owner-authored: the main-side handler accepts a write only for the
  * caller's OWN seat; a joined client's own-seat write is forwarded to the
- * authoritative host, which applies it and rebroadcasts (#706).
+ * authoritative host, which applies it and rebroadcasts.
  */
 export const LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL = 'chimera:lobby:set-player-attribute';
 
 /**
  * `ipcRenderer.invoke` target for {@link LobbyAPI.addAi}. Host-only: the
  * main-side handler rejects writes from a joined (non-host) session and a full
- * lobby, then rebroadcasts the synced {@link LobbyState} (#724).
+ * lobby, then rebroadcasts the synced {@link LobbyState}.
  */
 export const LOBBY_ADD_AI_CHANNEL = 'chimera:lobby:add-ai';
 
 /**
  * `ipcRenderer.invoke` target for {@link LobbyAPI.removeAi}. Host-only: the
  * main-side handler rejects writes from a joined (non-host) session, then
- * rebroadcasts the synced {@link LobbyState} (#724).
+ * rebroadcasts the synced {@link LobbyState}.
  */
 export const LOBBY_REMOVE_AI_CHANNEL = 'chimera:lobby:remove-ai';
 
@@ -108,7 +107,7 @@ export const LOBBY_UPDATE_CHANNEL = 'chimera:lobby:update';
 /**
  * `ipcRenderer.on` target for {@link LobbyAPI.onPlayerConnectionChanged}. Main
  * pushes a {@link PlayerConnectionEvent} when an opponent transiently drops or
- * reconnects, driving the §4.30 presence toasts (#687).
+ * reconnects, driving the §4.30 presence toasts.
  */
 export const LOBBY_PLAYER_CONNECTION_CHANNEL = 'chimera:lobby:player-connection';
 
@@ -122,7 +121,7 @@ export const LOBBY_PLAYER_LEFT_CHANNEL = 'chimera:lobby:player-left';
 /**
  * `ipcRenderer.on` target for {@link LobbyAPI.onProfileRejected}. Main pushes a
  * {@link ProfileRejection} when this client's profile is rejected at JOIN or for
- * a mid-session PROFILE_UPDATE, driving the §4.30 "Profile rejected" toast (#688).
+ * a mid-session PROFILE_UPDATE, driving the §4.30 "Profile rejected" toast.
  */
 export const LOBBY_PROFILE_REJECTED_CHANNEL = 'chimera:lobby:profile-rejected';
 

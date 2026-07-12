@@ -1,7 +1,5 @@
 /**
- * apps/tactics/stamina.ts
- *
- * Per-player stamina for the tactics game (#721). Stamina is deterministic
+ * Per-player stamina for the tactics game. Stamina is deterministic
  * `GameSnapshot` state derived solely from actions — no wall-clock, no RNG
  * (Invariant #43). It is stored as an optional ledger on the snapshot so that:
  *   - the start-of-game seed falls out as a derived default (absent ⇒ full), and
@@ -43,7 +41,7 @@ export interface TacticsStamina {
 
 /**
  * Tactics snapshot view: `BaseGameSnapshot` plus the optional stamina ledger.
- * Optional so engine-seeded start state and pre-#721 snapshots stay valid —
+ * Optional so engine-seeded start state and older snapshots stay valid —
  * absence is the derived "seeded at max" default.
  */
 export interface TacticsSnapshot extends BaseGameSnapshot {
@@ -55,7 +53,7 @@ export interface TacticsSnapshot extends BaseGameSnapshot {
  * their own `{ current, max }`; every other player is masked to `null`.
  *
  * `committed` is the non-secret "this seat has committed for the current turn"
- * marker (commitment battle mode, #730). Unlike stamina it is projected for
+ * marker (commitment battle mode). Unlike stamina it is projected for
  * EVERY player to every viewer — it leaks only the boolean, never the buffered
  * actions (Invariants #3/#8) — so the renderer can gate the reveal-only End
  * Turn and show a waiting affordance. Always `false` in sequential mode.
@@ -85,7 +83,7 @@ export function readStamina(state: Readonly<BaseGameSnapshot>, playerId: PlayerI
     // Sequential turns refresh only the single active seat. Commitment
     // (simultaneous) turns have every seat acting in parallel, so the
     // active-seat marker is irrelevant — any seat refreshes once a later turn
-    // has begun than its last write (#730, F54).
+    // has begun than its last write.
     const isCommitment = readTacticsTurnMode(state.setup?.matchSettings) === 'commitment';
     const turnHasBegun = isCommitment
         ? state.turnNumber > entry.refreshedTurn

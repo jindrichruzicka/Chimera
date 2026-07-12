@@ -6,7 +6,6 @@
  * the raw WebSocket server.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T03 (issue #218)
  */
 
 import type { PlayerId, EngineAction } from '@chimera-engine/simulation/contracts';
@@ -121,7 +120,7 @@ export class WsHostTransport implements HostTransport {
 
     private sideChannelToServerMessage(msg: SideChannelMessage): ServerMessage | null {
         if (msg.kind === 'chat') {
-            // The host-side ChatRelay (F45) is the authoritative source of `id`
+            // The host-side ChatRelay is the authoritative source of `id`
             // and `serverTime` (Invariant #73); the transport passes them through
             // verbatim rather than re-stamping, so recipients see the relay's
             // ordering clock — not a second, divergent wall-clock read.
@@ -135,7 +134,7 @@ export class WsHostTransport implements HostTransport {
             };
         }
         if (msg.kind === 'profile_reject') {
-            // Mid-session PROFILE_UPDATE rejection (#688). Carries the structured
+            // Mid-session PROFILE_UPDATE rejection. Carries the structured
             // reason (`'profile:<AdmissionRejection>'` or `'rate_limit'`) so the
             // client can raise the §4.30 "Profile rejected" toast. Originates from
             // the ProfileGate/ProfileSanitizer admission path (Invariants #61/#62).
@@ -147,7 +146,7 @@ export class WsHostTransport implements HostTransport {
         // is incorrect and confusing, so drop silently until proper protocol
         // support lands. (chat_reject is the sender-side rejection signal; without
         // a wire frame a WS sender still sees a silent drop — see chat-system.md.)
-        // TODO(F14): add a wire frame for chat_reject too.
+        // TODO: add a wire frame for chat_reject too.
         return null;
     }
 }

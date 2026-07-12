@@ -7,7 +7,6 @@
  * the file reaches CURRENT_SCHEMA_VERSION.
  *
  * Architecture reference: §4.11
- * Task: F06 / T2 (issue #121)
  *
  * Invariants upheld:
  *   #2 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
@@ -257,7 +256,7 @@ export const checkpointTurnNumberMigration: SaveMigration = {
  * Saves written before timers were introduced (and thus at v2 after the v1->v2
  * migration) should have timers: {} added as the default empty registry.
  * This ensures that `BaseGameSnapshot.timers` is never undefined after load
- * (Invariant #54, issue #407).
+ * (Invariant #54).
  *
  * Register this migration in the wiring point (`electron/main/index.ts`)
  * before the first call to `SaveMigrator.migrate()`.
@@ -305,7 +304,7 @@ export const checkpointGameResultMigration: SaveMigration = {
 /**
  * Migration from schema v4 to v5: ensure every save has a `stagedReveals` map.
  *
- * Saves written before commitment turn mode (§4.6/§8, F54, Invariant #26) have
+ * Saves written before commitment turn mode (§4.6/§8, Invariant #26) have
  * no reveal staging; they load with `stagedReveals: {}` (no in-progress
  * commitment turn). Existing staging is preserved verbatim so the migration is
  * additive and idempotent. The field is top-level (alongside
@@ -328,7 +327,7 @@ export const stagedRevealsMigration: SaveMigration = {
 
 /**
  * Migration from schema v5 to v6: ensure every save carries a `session`
- * manifest (F68, #820).
+ * manifest.
  *
  * Legacy saves predate session composition, so the manifest is backfilled
  * best-effort from the checkpoint via `deriveSessionManifest` (control kinds

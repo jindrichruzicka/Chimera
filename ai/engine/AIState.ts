@@ -1,10 +1,7 @@
 /**
- * ai/engine/AIState.ts
- *
  * AIState<TParams> interface — state-pattern building block for AIStateMachine.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F23 (issue #418)
  *
  * Invariants upheld:
  *   #18 — AIParams are passed by value (frozen) to every lifecycle method;
@@ -21,7 +18,7 @@ import type { AIParams, PlayerSnapshot } from './AITypes.js';
  * A single state in an `AIStateMachine<TParams>`.
  *
  * Implement this interface to define AI behaviour for one state. Register the
- * state with `AIStateMachine.registerState()` (implemented in F25).
+ * state with `AIStateMachine.registerState()`.
  *
  * Lifecycle order per transition:
  *   old state `onExit` → new state `onEnter` → repeated `onTick` / `onIdle`

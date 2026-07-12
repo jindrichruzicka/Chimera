@@ -1,8 +1,6 @@
 /**
- * apps/tactics/screens/useCommitmentBuffer.ts
- *
- * Renderer-side store for the tactics commitment-scheme local action buffer
- * (F54 / #730). In commitment mode a player's move/attack/reveal selections are
+ * Renderer-side store for the tactics commitment-scheme local action buffer.
+ * In commitment mode a player's move/attack/reveal selections are
  * NOT dispatched to the host — they are appended to this per-instance buffer and
  * applied to an optimistic local view until the player commits. This module-
  * singleton Zustand store is the single shared source of buffer state between

@@ -11,7 +11,6 @@
  * can stamp the correct `tick`, `seed`, and `playerId` every time.
  *
  * Architecture reference: §4.2.1 — Rule 1 (Action-Driven Clock)
- * Issue: #89
  */
 
 import type { ActionEnvelope } from '@chimera-engine/simulation/engine/index.js';

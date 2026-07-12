@@ -18,7 +18,6 @@
  *
  * Architecture reference: Appendix C.3 / §C.4 — Composable SimulationHost;
  *                         §4.9 — AI Framework and Agent System
- * Issue: #760 (feature F58), originally #414
  *
  * Invariants upheld:
  *   #1  — the host adds no React/DOM/networking/AI dependency to the

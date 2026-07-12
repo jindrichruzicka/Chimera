@@ -1,7 +1,5 @@
 'use client';
 
-// renderer/components/shell/ConnectionStatusIndicator.tsx
-
 import React, { useEffect, useState } from 'react';
 import type { ConnectionStatus } from '@chimera-engine/simulation/bridge/api-types.js';
 

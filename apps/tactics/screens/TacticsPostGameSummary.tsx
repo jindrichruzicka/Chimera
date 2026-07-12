@@ -84,12 +84,12 @@ const MISSING_BRIDGE_ERROR = 'Chimera replay API not available';
 /**
  * The export / open-in-player slice of the Chimera preload replay bridge, read
  * off `globalThis` (≡ `window.__chimera` at runtime). A game screen
- * (`games/<name>/screens/*.tsx`) may import only `simulation/`, `ai/`,
+ * (`apps/<name>/screens/*.tsx`) may import only `simulation/`, `ai/`,
  * `shared/`, and its own files (§3 Module Boundary Table; Invariant #96), so it
  * may not reach the canonical `ReplayAPI` (`electron/*`) nor the `useReplayApi`
  * hook (`renderer/*`); instead it reads the bridge off `globalThis`, typed
  * against the shared {@link ReplayExportBridge} contract — the same pattern the
- * sibling Replays main-menu task uses for `replay.perspective`.
+ * Replays main-menu surface uses for `replay.perspective`.
  */
 function requireReplayBridge(): ReplayExportBridge {
     const bridge = (globalThis as { __chimera?: { replay?: ReplayExportBridge } }).__chimera
@@ -140,7 +140,7 @@ function requirePostGameReplayBridge(isHost: boolean): PostGameReplayBridge {
 }
 
 /**
- * Replay action (F44 / T8). Mounted only once the match has resolved
+ * Replay action. Mounted only once the match has resolved
  * (`gameResult !== null`), so its `useState` hook runs unconditionally within
  * this component. Replay access reads the preload bridge off `globalThis`
  * (Invariant #96 — no renderer hook/IPC bridge import); feedback is inline, with
@@ -151,7 +151,7 @@ function requirePostGameReplayBridge(isHost: boolean): PostGameReplayBridge {
  * the in-memory recording (nothing is written to disk) with `saveable = true`, and
  * the player itself surfaces a compact save icon — the sole path that persists the
  * replay. `isHost` selects which replay opens — the host's authoritative
- * deterministic replay, or a joined client's own perspective replay (F44b).
+ * deterministic replay, or a joined client's own perspective replay.
  */
 function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.ReactElement {
     const [status, setStatus] = React.useState<ReplayActionStatus>(REPLAY_ACTION_IDLE);

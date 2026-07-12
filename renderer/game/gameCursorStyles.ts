@@ -1,5 +1,3 @@
-// renderer/game/gameCursorStyles.ts
-//
 // Hardware-cursor token injector for game-declared cursor textures
 // (`LoadedRendererGameShell.cursor`, typed from the `GameManifest` cursor
 // contract). Runs as a side-effect of game registry initialisation (Invariant

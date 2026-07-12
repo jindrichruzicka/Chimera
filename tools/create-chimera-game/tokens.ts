@@ -1,5 +1,5 @@
 /**
- * Token-substitution engine for the `create-chimera-game` scaffolder (F65).
+ * Token-substitution engine for the `create-chimera-game` scaffolder.
  *
  * Blank-template files embed named placeholders in both their contents and their paths; the
  * scaffolder swaps each for the matching {@link GameNames} casing. Keeping the placeholder

@@ -19,7 +19,6 @@
  *   ```
  *
  * Architecture: §4.3 — WebSocket Message Protocol
- * Task: F10.1 / T01 (issue #225)
  *
  * Invariants upheld:
  *   #2 — Zero runtime imports from renderer/, electron/, or DOM APIs.
@@ -68,8 +67,8 @@ export const WIRE_MAX_PROFILE_REJECT_REASON_LENGTH = 256;
 export const WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH = 256;
 
 /**
- * Coarse bound on the number of saved-seat claims an inbound `JOIN` may carry
- * (F68/#821). A restoring client presents one claim per saved seat it might
+ * Coarse bound on the number of saved-seat claims an inbound `JOIN` may carry.
+ * A restoring client presents one claim per saved seat it might
  * reclaim; real sessions have at most a handful of human seats, so this cap is
  * generous — anything past it is clearly abusive and dropped as a malformed
  * frame.
@@ -77,14 +76,14 @@ export const WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH = 256;
 export const WIRE_MAX_JOIN_CLAIMS = 16;
 
 /**
- * Coarse bound on a `JOIN` claim's `matchId`/`playerId`, in UTF-16 code units
- * (F68/#821). Both are opaque host-minted ids (UUIDs, `player-N`, `host-…`),
+ * Coarse bound on a `JOIN` claim's `matchId`/`playerId`, in UTF-16 code units.
+ * Both are opaque host-minted ids (UUIDs, `player-N`, `host-…`),
  * so 64 is well above any real value.
  */
 export const WIRE_MAX_JOIN_CLAIM_ID_LENGTH = 64;
 
 /**
- * One saved-seat claim on a `JOIN` frame (F68/#821). Strict and opaque by
+ * One saved-seat claim on a `JOIN` frame. Strict and opaque by
  * design: claims carry ids only — no display names or other profile data may
  * cross the wire here (Invariants #59/#60). The host matches `matchId` against
  * its own restored match and `playerId` against its known seats; a claim that
@@ -175,14 +174,14 @@ const LobbyPlayerEntry = z.object({
     displayName: z.string(),
     ready: z.boolean(),
     // Owner-authored, per-player match attributes (e.g. unit colour): each player
-    // writes its own seat (F53). Optional and backward-compatible: absent on older
+    // writes its own seat. Optional and backward-compatible: absent on older
     // clients and on games with no lobby setup.
     attributes: z.record(z.string(), z.string()).optional(),
 });
 
 // One host-configured controller slot (e.g. an AI player) carried in the synced
 // lobby roster. Mirrors `LobbyAgentSlot` in networking/electron; the renderer
-// reads it to render the AI sub-list (F54 T3, #723).
+// reads it to render the AI sub-list.
 const LobbyAgentSlot = z.object({
     slotIndex: z.number().int().nonnegative(),
     kind: z.enum(['human', 'ai']),
@@ -196,7 +195,7 @@ const LobbyState = z.object({
     // every LobbyState broadcast. Optional and backward-compatible.
     matchSettings: z.record(z.string(), z.string()).optional(),
     // Host-configured AI agent slots, synced to all clients so every peer sees
-    // the AI roster (F54 T3/T4, #723/#724). Optional and backward-compatible:
+    // the AI roster. Optional and backward-compatible:
     // absent on games with no AI and on older clients.
     agentSlots: z.array(LobbyAgentSlot).readonly().optional(),
 });
@@ -230,7 +229,7 @@ const PlayerSnapshot = z.object({
     // backward-compatible.
     setup: GameSetupConfig.optional(),
     // Host-minted stable match identity, projected verbatim like `setup`
-    // (Invariant #101, F68/#820). Optional and backward-compatible.
+    // (Invariant #101). Optional and backward-compatible.
     matchId: z.string().optional(),
     undoMeta: z.object({ canUndo: z.boolean(), canRedo: z.boolean() }),
     isMyTurn: z.boolean(),
@@ -247,9 +246,9 @@ const JoinMessage = z
         // (Invariant #61). Using a strict sub-schema here would prevent full
         // EngineProfile payloads from reaching the gate.
         profile: z.record(z.string(), z.unknown()),
-        // Optional lobby password (F56) — validated timing-safe by the host.
+        // Optional lobby password — validated timing-safe by the host.
         password: z.string().optional(),
-        // Optional saved-seat claims from a restoring client (F68/#821) —
+        // Optional saved-seat claims from a restoring client —
         // bounded, strict, opaque ids only.
         claims: z.array(JoinSeatClaim).max(WIRE_MAX_JOIN_CLAIMS).optional(),
     })
@@ -406,7 +405,7 @@ const PongMessage = z
     .object({
         type: z.literal('PONG'),
         sentAt: z.number(),
-        // TODO(F-clock-skew): serverTime removed until clock-skew estimation is implemented.
+        // TODO: serverTime removed until clock-skew estimation is implemented.
     })
     .strict();
 

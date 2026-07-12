@@ -5,7 +5,6 @@
  * fixtures. Backed by a `Map`; no filesystem access (§4.11, invariant #41).
  *
  * Architecture reference: §4.11
- * Task: F06 / T3 (issue #122)
  *
  * Invariants upheld:
  *   #2 — simulation/ is side-effect-free; no FS or Electron imports.

@@ -72,14 +72,13 @@ export interface PlayerSnapshot {
      * Public host-authored lobby setup, passed through projection verbatim so
      * every client agrees on the match configuration. Holds only public host
      * config — no owner-only fields cross (Invariant #1). Optional: absent on
-     * games with no lobby setup and on snapshots predating #705.
+     * games with no lobby setup.
      */
     readonly setup?: GameSetupConfig;
     /**
      * Host-minted stable match identity, passed through projection verbatim
-     * like `setup` so every viewer sees the identical id (Invariant #101,
-     * F68/#820). Optional: absent before the first `engine:start_game` and on
-     * snapshots predating #820.
+     * like `setup` so every viewer sees the identical id (Invariant #101).
+     * Optional: absent before the first `engine:start_game`.
      */
     readonly matchId?: string;
 }
@@ -91,12 +90,12 @@ export interface StateProjectorOptions<TState extends BaseGameSnapshot = BaseGam
      *
      * When supplied, `project()` includes the returned map in
      * `PlayerSnapshot.commitments` so every client snapshot contains
-     * the envelopes needed for Phase-2 REVEAL verification (§4.6 / §8,
-     * BLOCK-1 fix).  Returns a null-prototype copy from
+     * the envelopes needed for Phase-2 REVEAL verification (§4.6 / §8).
+     * Returns a null-prototype copy from
      * `SessionCommitmentRuntime.capturePendingCommitments()`.
      *
      * When absent the commitments field defaults to an empty null-prototype
-     * record (backwards-compatible default, same as the F27 stub).
+     * record (backwards-compatible default).
      */
     readonly getPendingCommitments?: () => Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     /**
@@ -183,7 +182,7 @@ export class DefaultStateProjector<
      * - `isMyTurn` is derived as `turnClock?.activePlayerId === viewerId` (true if no turnClock).
      */
     project(fullState: Readonly<TState>, viewerId: PlayerId): PlayerSnapshot {
-        // ── 1. Filter + mask entities (fog of war) ───────────────────────────
+        // Filter + mask entities (fog of war).
         // The `as` casts here are the single authorised widening site: TState
         // constrains entities/players to base types for generic compatibility,
         // but callers constructing DefaultStateProjector<TState, TEntity, TPlayer>
@@ -191,10 +190,8 @@ export class DefaultStateProjector<
         // avoids inline `unknown` casts.
         const entities = this.#projectEntities(fullState, viewerId);
 
-        // ── 2. Mask player states ────────────────────────────────────────────
         const players = this.#projectPlayers(fullState, viewerId);
 
-        // ── 3. Filter events ────────────────────────────────────────────────
         const events = this.#rules.filterEvents(fullState.events, viewerId, fullState);
         const undoMeta = this.#options.getUndoMeta?.(viewerId, fullState) ?? {
             canUndo: false,
@@ -205,10 +202,9 @@ export class DefaultStateProjector<
             this.#options.getPendingCommitments?.() ??
             (Object.create(null) as Readonly<Record<CommitmentId, CommitmentEnvelope>>);
 
-        // ── 4. Compute isMyTurn ──────────────────────────────────────────────
         // Default: the single active seat (or everyone when there is no
         // turnClock). A simultaneous-turn game overrides this via
-        // `resolveIsMyTurn` so multiple seats can be active at once (#730, F54).
+        // `resolveIsMyTurn` so multiple seats can be active at once.
         const isMyTurn =
             this.#options.resolveIsMyTurn?.(fullState, viewerId) ??
             (fullState.turnClock === undefined || fullState.turnClock.activePlayerId === viewerId);

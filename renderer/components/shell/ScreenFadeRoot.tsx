@@ -1,7 +1,5 @@
 'use client';
 
-// renderer/components/shell/ScreenFadeRoot.tsx
-//
 // Client wrapper that mounts the app-level screen-fade provider + overlay for
 // cross-screen route transitions (main-menu ↔ lobby ↔ game). It exists so the
 // easing FUNCTION stays inside client code: AppShell is a Server Component, and

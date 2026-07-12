@@ -1,11 +1,9 @@
 /**
- * renderer/components/shell/screenFadeDuration.ts
- *
  * Shared durations for the app-level screen fades (menu ↔ lobby ↔ game route
  * transitions, plus the boot logo sequence). Two speeds:
  *
  *   - `fast` — the default for all normal transitions (route nav, game
- *     enter/leave, lobby/menu fades). Unchanged from the original behaviour.
+ *     enter/leave, lobby/menu fades).
  *   - `slow` — the deliberate boot fades: the logo screen fading in and out,
  *     and the main menu fading in from black. Twice the fast duration by
  *     default so the boot sequence feels intentional rather than snappy.
@@ -29,10 +27,7 @@ export const SCREEN_FADE_FAST_MS = 200;
  */
 export const SCREEN_FADE_SLOW_MS = 2 * SCREEN_FADE_FAST_MS;
 
-/**
- * Back-compat alias for the fast duration. Existing importers of
- * `SCREEN_FADE_MS` keep the original 200ms value.
- */
+/** Back-compat alias for the fast duration (200ms). */
 export const SCREEN_FADE_MS = SCREEN_FADE_FAST_MS;
 
 /** Which speed tier a screen fade should run at. */

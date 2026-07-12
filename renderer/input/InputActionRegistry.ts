@@ -4,7 +4,6 @@
  * Registry for named InputAction objects, keyed by InputActionId.
  *
  * Architecture reference: §4.26 — Input & Keybindings
- * Issue: #573 — Implement InputActionRegistry
  *
  * Invariants upheld:
  *   #65 — InputManager is renderer-only. This registry must never be

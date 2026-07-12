@@ -1,6 +1,4 @@
 /**
- * electron/main/saves/SavesIpcAdapter.ts
- *
  * Production adapter that turns a {@link SaveManager} (which speaks the
  * simulation-side `SaveFile` / `SaveSlotMeta` vocabulary defined in
  * `simulation/persistence`) into the {@link SavesIpcPort} consumed by the
@@ -10,18 +8,17 @@
  * Two shape conversions happen here:
  *
  *   1. Simulation `SaveSlotMeta` (with `turnNumber`, `playerNames`,
- *      `turnNumber`, `playerNames`, `sizeBytes`, `schemaVersion`) → preload
- *      `SaveSlotMeta` (with checkpoint `tick`, `label?`). Simulation-only
- *      fields stay inside main and never cross IPC.
+ *      `sizeBytes`, `schemaVersion`) → preload `SaveSlotMeta` (with
+ *      checkpoint `tick`, `label?`). Simulation-only fields stay inside main
+ *      and never cross IPC.
  *
  *   2. `SaveRequest` (gameId + optional slotId/label) → `SaveFile`
  *      (full simulation memento). The capture step is delegated to the
  *      injected `captureSaveFile` callback because state capture requires
- *      access to the running simulation host (F18 territory). The adapter
- *      itself never touches the simulation directly.
+ *      access to the running simulation host. The adapter itself never
+ *      touches the simulation directly.
  *
  * Architecture reference: §4.11
- * Task: F18 / issue #372
  *
  * Invariants upheld:
  *   #25 — Inputs reaching this module are already validated by the IPC
@@ -46,9 +43,9 @@ import type { SaveManager } from './SaveManager.js';
 /**
  * Capture the running simulation state for a given {@link SaveRequest}.
  *
- * Lives in F18 / SimulationHost wiring — the adapter is intentionally
- * agnostic of how state is captured so this module remains testable
- * without spinning up a full host.
+ * Lives in SimulationHost wiring — the adapter is intentionally agnostic of
+ * how state is captured so this module remains testable without spinning up
+ * a full host.
  */
 export type SaveFileCapture = (request: SaveRequest) => Promise<SaveFile>;
 
@@ -56,7 +53,7 @@ export type SaveFileCapture = (request: SaveRequest) => Promise<SaveFile>;
  * Restore a previously persisted {@link SaveFile} into a playable session.
  *
  * Lives in composition-root wiring (`electron/main/index.ts`), which decides
- * between the two supported flows (#823): with an active session the file is
+ * between the two supported flows: with an active session the file is
  * live-applied via `SessionRuntime.applyRestoredFile` (Invariant #24); with
  * no active session the `SessionRestoreCoordinator` hosts a restored session
  * seeded from `SaveFile.session` and applies the checkpoint through that same

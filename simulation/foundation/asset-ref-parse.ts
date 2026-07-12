@@ -14,7 +14,7 @@
 /**
  * Returns true when the gameId or relativePath contain path-traversal
  * components that would allow escaping the assets root when resolved by
- * the AssetManager (F10). Pure string check — no filesystem access.
+ * the AssetManager. Pure string check — no filesystem access.
  *
  * Rejects:
  *   - empty gameId (would produce a filesystem-absolute-looking ref)
@@ -30,7 +30,6 @@ export function isTraversalUnsafe(gameId: string, relativePath: string): boolean
     if (relativePath.length === 0) return true;
     if (relativePath.startsWith('/')) return true;
     if (relativePath.includes('\0')) return true;
-    // Check each segment for '..'
     const segments = relativePath.split('/');
     return segments.some((s) => s === '..');
 }

@@ -4,10 +4,10 @@ export const TACTICS_ATTACK_ACTION = 'tactics:attack';
 export const TACTICS_REVEAL_TILE_ACTION = 'tactics:reveal_tile';
 /**
  * Marks the active player as having committed their buffered turn in commitment
- * mode (T8 / #728). Its reducer writes only the non-secret per-turn commit
- * marker into `snapshot.committedTurns`; the player's actual buffered actions are
- * never carried by this action (they stay host-local in the reveal-staging
- * store). The end-turn guard reads the marker to gate `engine:end_turn`.
+ * mode. Its reducer writes only the non-secret per-turn commit marker into
+ * `snapshot.committedTurns`; the player's actual buffered actions are never
+ * carried by this action (they stay host-local in the reveal-staging store). The
+ * end-turn guard reads the marker to gate `engine:end_turn`.
  */
 export const TACTICS_COMMIT_ACTION = 'tactics:commit';
 export const TACTICS_DEFAULT_UNIT_ID_VALUE = 'unit-1';
@@ -21,8 +21,8 @@ export const TACTICS_DEFAULT_UNIT_ID_VALUE = 'unit-1';
 export const TACTICS_MAX_STAMINA = 3;
 
 /**
- * Tactics turn mode (T6 / #726 — F54). `sequential` is today's behaviour: each
- * action is dispatched straight to the host, reduced, and projected back.
+ * Tactics turn mode. `sequential` is today's behaviour: each action is
+ * dispatched straight to the host, reduced, and projected back.
  * `commitment` switches the match to the cryptographic commit-then-sync turn
  * built on the existing commit/reveal primitive — each player acts locally,
  * commits a hidden bundle, and `End Turn` reveals & applies all bundles in a
@@ -35,7 +35,7 @@ export type TacticsTurnMode = 'sequential' | 'commitment';
 /**
  * Key under which the turn mode lives in the synced host-authored
  * `GameSetupConfig.matchSettings` (and therefore in `snapshot.setup`). The
- * Battle Setup checkbox (T7) writes this through the existing
+ * Battle Setup checkbox writes this through the existing
  * `chimera:lobby:set-match-setting` path; reducers and the renderer read it via
  * {@link readTacticsTurnMode}.
  */

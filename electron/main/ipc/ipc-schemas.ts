@@ -6,11 +6,10 @@
 // the renderer; this one guards requests flowing IN from the (untrusted)
 // renderer before any handler touches them.
 //
-// Today's handlers are stubs (F02). The real behaviour arrives in F06/F07/
-// F11/F18/F19. Shipping the validation scaffolding now means every future
-// handler inherits enforced input validation for free, and the §9.1 IPC
-// Attack Surface Audit can point at a single module instead of trusting
-// each handler to do its own defensive parsing.
+// Centralising the validation scaffolding here means every handler inherits
+// enforced input validation for free, and the §9.1 IPC Attack Surface Audit
+// can point at a single module instead of trusting each handler to do its own
+// defensive parsing.
 //
 // Scope: only `invoke` / `send` *argument* payloads are validated here.
 // Response payloads are validated at the preload boundary in
@@ -222,7 +221,7 @@ export const HostLobbyParamsSchema = z
         gameId: NonEmptyStringSchema,
         maxPlayers: z.number().int().positive(),
         agentSlots: z.array(LobbyAgentSlotSchema).readonly().optional(),
-        // Optional lobby password (F56). Bounded to avoid unbounded payloads;
+        // Optional lobby password. Bounded to avoid unbounded payloads;
         // a present password must be non-empty (an empty/whitespace password is
         // treated as "no password" at the call site, not sent over IPC).
         password: z.string().min(1).max(128).optional(),
@@ -252,7 +251,7 @@ export const HostLobbyParamsSchema = z
 export const JoinLobbyParamsSchema = z
     .object({
         address: NonEmptyStringSchema,
-        // Optional lobby password (F56) — bounded; absent on open lobbies.
+        // Optional lobby password — bounded; absent on open lobbies.
         password: z.string().max(128).optional(),
     })
     // Map to the explicit type so an absent password is omitted rather than set
@@ -282,8 +281,8 @@ export const SetMatchSettingPayloadSchema = z
 
 /**
  * Schema for the `{playerId, key, value}` payload accepted by
- * `chimera:lobby:set-player-attribute`. Owner-authored (F53): the handler
- * accepts only the caller's own-seat write (#706); `playerId` is validated and
+ * `chimera:lobby:set-player-attribute`. Owner-authored: the handler
+ * accepts only the caller's own-seat write; `playerId` is validated and
  * branded via {@link PlayerIdSchema} so the handler receives a typed `PlayerId`.
  * `key`/`value` are length-capped to match the wire frame's coarse bound.
  */
@@ -298,7 +297,7 @@ export const SetPlayerAttributePayloadSchema = z
 /**
  * Schema for the `{slotIndex}` payload accepted by `chimera:lobby:remove-ai`
  * (host-only). `slotIndex` is a non-negative integer matching the slot index
- * the host assigned when the AI was added (#724). `.strict()` rejects unknown
+ * the host assigned when the AI was added. `.strict()` rejects unknown
  * keys at the boundary (§9.1). The companion `chimera:lobby:add-ai` channel
  * takes no payload (the host assigns the next free slot index).
  */
@@ -330,7 +329,7 @@ export const SaveRequestSchema: z.ZodType<SaveRequest> = z.object({
 
 /**
  * Schema for the {@link RestoreStatusEvent} pushed over
- * `chimera:saves:restore-status` (F68 #826). Main-side copy — the preload
+ * `chimera:saves:restore-status`. Main-side copy — the preload
  * validates the same shape independently in `preload/shared/schemas.ts`
  * (Invariant #5: no shared schema module spans the main↔preload boundary).
  * `toRestoreStatusEvent` parses every outgoing event through this schema so
@@ -385,7 +384,7 @@ function objectDepth(value: unknown, current = 0): number {
  * Schema for a {@link UserSettings} patch accepted by
  * `chimera:settings:update`. Enforces the structural `Record<string, unknown>`
  * shape and rejects objects nested deeper than {@link SETTINGS_PATCH_MAX_DEPTH}
- * to prevent DoS-shaped payloads reaching the merger (BLOCK-4 depth guard).
+ * to prevent DoS-shaped payloads reaching the merger.
  */
 export const UserSettingsPatchSchema: z.ZodType<UserSettings> = z
     .record(z.string(), z.unknown())

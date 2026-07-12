@@ -2,7 +2,7 @@
  * apps/tactics/commitment/bufferSchema.ts
  *
  * Zod validators for the committed buffer that rides the `tactics:commit` action
- * out-of-band to the host (T9 / #729). The host reads `action.payload.actions`
+ * out-of-band to the host. The host reads `action.payload.actions`
  * (the raw, un-parsed envelope rider — the commit reducer strips it so it never
  * reaches the snapshot) and the tactics orchestration validates it here before
  * staging it for reveal. This is the trust boundary for the buffer; each action

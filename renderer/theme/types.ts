@@ -6,7 +6,7 @@ import type { CSSProperties } from 'react';
  *
  * Use {@link themeId} to construct a value from a raw string.
  *
- * Reference: TypeScript §1.3 (branded / phantom types), WARN-1.
+ * Reference: TypeScript §1.3 (branded / phantom types).
  */
 export type ThemeId = string & { readonly __brand: 'ThemeId' };
 

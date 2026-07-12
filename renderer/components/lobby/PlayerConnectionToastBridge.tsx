@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * renderer/components/lobby/PlayerConnectionToastBridge.tsx (§4.30, #687).
+ * renderer/components/lobby/PlayerConnectionToastBridge.tsx (§4.30).
  *
  * App-wide listener that turns a host-side opponent presence transition into a
  * "Player disconnected" (`warning`) / "Player reconnected" (`info`) toast. Main
@@ -31,7 +31,7 @@ export function PlayerConnectionToastBridge(): null {
         }
         return bridge.lobby.onPlayerConnectionChanged((event: PlayerConnectionEvent) => {
             // Never toast about a local seat (the host emits opponent-only, but
-            // exclude local seats per the §4.30 contract / #687).
+            // exclude local seats per the §4.30 contract).
             const { localPlayerId, localSeatIds } = useLobbyUiStore.getState();
             if (event.playerId === localPlayerId || localSeatIds.includes(event.playerId)) {
                 return;

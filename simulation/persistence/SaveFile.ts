@@ -7,7 +7,6 @@
  * All types are pure TypeScript — zero runtime code in this file.
  *
  * Architecture reference: §4.11
- * Task: F06 / T1 (issue #120)
  *
  * Invariants upheld:
  *   #2 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
@@ -19,7 +18,7 @@ import type { BaseGameSnapshot, EngineAction, PlayerId } from '../engine/types.j
 import type { CommitmentEnvelope, CommitmentId } from '../projection/CommitmentScheme.js';
 import type { StagedReveals } from '../projection/RevealStaging.js';
 
-// ─── Session manifest (F68, #820) ─────────────────────────────────────────────
+// ─── Session manifest ─────────────────────────────────────────────────────────
 
 /**
  * One seat in the saved session composition.
@@ -41,7 +40,7 @@ export interface SaveSeat {
 }
 
 /**
- * Host-local session composition captured alongside the checkpoint (F68, #820).
+ * Host-local session composition captured alongside the checkpoint.
  *
  * Orchestration metadata, not gameplay state: it is neither header (not needed
  * to pick a migration) nor checkpoint (the simulation never reads it). It stays
@@ -133,26 +132,23 @@ export interface SaveFile {
     readonly deltaActions: readonly EngineAction[];
 
     /**
-     * All pending commitment envelopes at save time (F27 / §8).
+     * All pending commitment envelopes at save time (§8).
      * Required for anti-cheat continuity: without these, the client
      * cannot verify REVEAL messages for values committed before the save.
-     *
-     * Empty until F27 is implemented. Typed now so save files written
-     * at M1 are forward-compatible with F27 persistence.
      */
-    // KNOWN-LIMITATION(F27): Record<CommitmentId, ...> does not enforce the CommitmentId brand at
+    // KNOWN-LIMITATION: Record<CommitmentId, ...> does not enforce the CommitmentId brand at
     // the type level — TypeScript allows plain string keys in computed positions. Authoritative
-    // validation of all CommitmentId keys is deferred to the F27 commitment scheme implementation,
+    // validation of all CommitmentId keys is deferred to the commitment scheme implementation,
     // which will own a dedicated validator at the deserialization boundary.
     readonly pendingCommitments: Record<CommitmentId, CommitmentEnvelope>;
 
     /**
      * Host-retained staged reveals for an in-progress commitment turn (§4.6/§8,
-     * F54, Invariant #26). Carries the `{ value, nonce }` matching each pending
+     * Invariant #26). Carries the `{ value, nonce }` matching each pending
      * commitment so a save taken mid-commit (some players committed, awaiting
      * others) can still reveal after load. Moves as a unit with
      * `pendingCommitments`: a load that restores envelopes but not staging must
-     * not apply reveals. Empty `{}` outside commitment mode and for pre-F54
+     * not apply reveals. Empty `{}` outside commitment mode and for v4
      * saves (the v4→v5 migration backfills it).
      *
      * Typed non-optional because every writer (`captureSaveFile`) and the
@@ -166,7 +162,7 @@ export interface SaveFile {
     readonly stagedReveals: StagedReveals;
 
     /**
-     * Saved session composition (F68, #820): match identity, lobby capacity,
+     * Saved session composition: match identity, lobby capacity,
      * and per-seat control kinds so a restore can rebuild the session. Host-local
      * orchestration metadata — no profile data (Invariant #59), never projected
      * or sent over IPC (Invariant #1), and deliberately excluded from the body

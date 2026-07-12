@@ -13,11 +13,11 @@
 // @chimera-review: node:crypto is permitted here per architecture §8 commitment mandate.
 import { createHash, randomBytes } from 'node:crypto';
 
-// The commit/reveal CONTRACT types now live in the zero-dependency foundation
-// leaf `../foundation/commitment-contract.js` (issue #758) so the projected
+// The commit/reveal CONTRACT types live in the zero-dependency foundation
+// leaf `../foundation/commitment-contract.js` so the projected
 // snapshot/screen contracts can carry commitments without importing up into
 // simulation. They are imported for local use and re-exported so
-// `@chimera-engine/simulation/projection` stays the unchanged public import path.
+// `@chimera-engine/simulation/projection` stays the public import path.
 import type {
     CommitmentId,
     CommitmentEnvelope,

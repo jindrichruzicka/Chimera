@@ -98,8 +98,8 @@ export function classifyTacticsUnitOwnership(
  * Resolve the ground-plane material colour from the host's lobby setup, mapping
  * the chosen board-colour name to its hex via the `boardColorHex` map the caller
  * derived from content (`paletteFromCollections`). Falls back to the default
- * slate when `setup` is absent (pre-#705 saves), the chosen name is off-palette,
- * or content has not loaded (empty map) — slate reproduces the historic ground.
+ * slate when `setup` is absent, the chosen name is off-palette, or content has
+ * not loaded (empty map) — slate reproduces the default ground.
  */
 export function resolveTacticsBoardColor(
     setup: GameSetupConfig | undefined,
@@ -181,12 +181,12 @@ export function parseTacticsSceneUnits(
 
 /**
  * Reads the viewer's own stamina from the projected `PlayerSnapshot.players`
- * map (#721/#722). Stamina is owner-only: the projection gives the viewer their
- * own `{ current, max }` and masks every other player to `null`. The generic
+ * map. Stamina is owner-only: the projection gives the viewer their own
+ * `{ current, max }` and masks every other player to `null`. The generic
  * projection type carries only `{ id }`, so the game-specific `stamina` field is
  * narrowed defensively here — never recomputed from `GameSnapshot` (Invariant
  * #3/#8). Returns `null` when the viewer has no entry, stamina is absent/masked
- * (pre-#721 snapshots or a non-owner), or the values are malformed.
+ * (a non-owner), or the values are malformed.
  */
 export function parseTacticsViewerStamina(
     players: Readonly<Record<PlayerId, ProjectedTacticsPlayerFields>>,
@@ -209,10 +209,10 @@ export function parseTacticsViewerStamina(
 
 /**
  * Reads the non-secret per-seat `committed` marker from a projected player
- * (commitment battle mode, #730). The projection sets it for every seat to every
+ * (commitment battle mode). The projection sets it for every seat to every
  * viewer (only the boolean crosses, never the buffer — Invariants #3/#8), so the
  * renderer can gate the reveal-only End Turn. Narrowed defensively like stamina;
- * absent/malformed ⇒ `false` (sequential mode and pre-#730 snapshots).
+ * absent/malformed ⇒ `false` (sequential mode).
  */
 export function parseTacticsSeatCommitted(
     players: Readonly<Record<PlayerId, ProjectedTacticsPlayerFields>>,

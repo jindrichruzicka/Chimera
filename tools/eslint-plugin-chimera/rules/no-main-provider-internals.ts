@@ -1,6 +1,4 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-main-provider-internals.ts
- *
  * ESLint rule: chimera/no-main-provider-internals
  *
  * Forbids `electron/main` orchestration modules from importing a
@@ -10,10 +8,10 @@
  * providers (`provider/local/*`, `provider/steam/*`, and their `server/`/
  * `client/` internals, plus the `InMemoryMultiplayerProvider` test double) stay
  * package-internal. This enforces Invariant #47 across the `@chimera-engine/networking`
- * boundary (issue #769) and reaffirms #38 (`LobbyManager` is constructed with an
+ * boundary and reaffirms Invariant #38 (`LobbyManager` is constructed with an
  * injected `MultiplayerProvider`; no orchestration module names a concrete
- * provider) and #39 (`StateBroadcaster`/`MessageRouter` go through the transport
- * interfaces, never provider-internal `server/`/`client/` directories).
+ * provider) and Invariant #39 (`StateBroadcaster`/`MessageRouter` go through the
+ * transport interfaces, never provider-internal `server/`/`client/` directories).
  *
  * The single exempt file is the composition root:
  *

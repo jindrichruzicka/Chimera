@@ -1,7 +1,5 @@
 /**
- * tools/changeset-policy.ts
- *
- * `verify:changeset-policy` — the bump-policy cascade gate (issue #805, F66).
+ * `verify:changeset-policy` — the bump-policy cascade gate.
  *
  * Changesets drives independent per-package semver for the `@chimera-engine/*` hierarchy,
  * but it cannot encode our one non-negotiable rule: `@chimera-engine/simulation` is the

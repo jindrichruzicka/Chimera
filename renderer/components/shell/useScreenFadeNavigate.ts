@@ -1,7 +1,5 @@
 'use client';
 
-// renderer/components/shell/useScreenFadeNavigate.ts
-//
 // Shared helper for the cross-screen route transitions: fade the app-level
 // overlay out to black, then run the navigation. The destination screen fades
 // itself back in on mount/ready, so callers only own the fade-out half.

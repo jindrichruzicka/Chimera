@@ -12,7 +12,6 @@
  *
  * Architecture: §4.5, §4.7, §4.11 — UndoManager, PipelineContext, ActionPipeline
  *   host bootstrap, autosave wiring.
- * Issues: #364, #375
  *
  * Invariants upheld:
  *   #2  — Zero imports from renderer/, electron/, games/*, or DOM APIs.
@@ -79,7 +78,7 @@ export interface GameEndPort {
 
 /**
  * Narrow interface through which `buildHostSessionPipeline` records a live match
- * for later replay (§4.28, F44 / T4).  Wired to `ReplayManager` in `index.ts`.
+ * for later replay (§4.28).  Wired to `ReplayManager` in `index.ts`.
  *
  * `startRecording` is called by the composition root at session initialisation
  * (after `seed` and `gameConfig` are resolved); the pipeline itself only calls
@@ -105,7 +104,7 @@ export interface ReplayPort {
 
 /**
  * Narrow interface through which the Runtime Debug Layer observes a hosted
- * session (§4.12, F47 T5). Implemented by `electron/main/debug-bridge.ts`
+ * session (§4.12). Implemented by `electron/main/debug-bridge.ts`
  * and supplied only when `IS_DEBUG_MODE` is true — when absent, the pipeline
  * context carries NO `debugObserver` field (Invariant #31) and
  * `processAction` performs no timing work.
@@ -189,12 +188,11 @@ export interface HostSessionPipelineOptions {
  * `pipeline`         — the fully wired `ActionPipeline` with history and undo context.
  * `processAction`    — thin wrapper around `pipeline.process` that fires autosave
  *                      fire-and-forget after a successful `engine:end_turn`.
- *                      Prefer calling this over `pipeline.process` directly once
- *                      transport wiring lands (F21).
+ *                      Prefer calling this over `pipeline.process` directly.
  * `undoManager`      — direct access to the `InMemoryUndoManager` for calling
  *                      `saveTurnMemento` at turn-start and any out-of-band queries.
  * `clearUndoHistory` — call at session close to release per-player undo memory
- *                      (Invariant #7, issue #364 teardown requirement).
+ *                      (Invariant #7 teardown requirement).
  */
 export interface HostSessionPipelineResult {
     readonly pipeline: ActionPipeline;
@@ -242,7 +240,7 @@ export interface HostSessionPipelineResult {
  *
  * @returns `HostSessionPipelineResult` — pipeline, processAction, undoManager, and a teardown helper.
  *
- * ## Autosave wiring (Issue #375, Invariants #25 and #43)
+ * ## Autosave wiring (Invariants #25 and #43)
  *
  * After a successful `engine:end_turn`, `processAction` fires
  * `options.savePort.autoSave(options.gameId)` as a fire-and-forget call.
@@ -322,7 +320,7 @@ export function buildHostSessionPipeline(
         }
     };
 
-    // ── Autosave hook (Issue #375) ─────────────────────────────────────────
+    // ── Autosave hook ──────────────────────────────────────────────────────
     // Resolve the optional logger and save port once at construction time so
     // the hot `processAction` path has no conditional property accesses.
     const log: Logger = resolvedOptions?.logger ?? createNoopLogger();
@@ -347,7 +345,7 @@ export function buildHostSessionPipeline(
         const processStartMs = debugPort === undefined ? 0 : performance.now();
         const nextState = pipeline.process(snapshot, action);
 
-        // ── Runtime Debug Layer feed (§4.12, F47 T5) ───────────────────────────
+        // ── Runtime Debug Layer feed (§4.12) ──────────────────────────────────
         // Mirror the Stage 6 history append shape (tickApplied = PRE-state
         // tick) and report the wall-clock pipeline.process duration. A debug
         // feed failure must never break the live pipeline (Invariant #25
@@ -373,7 +371,7 @@ export function buildHostSessionPipeline(
             }
         }
 
-        // ── Replay recording (Issue #658) ─────────────────────────────────────
+        // ── Replay recording ──────────────────────────────────────────────────
         // Record every successfully applied action while the match is live.
         // After resolution the recording is already finalised, so the
         // `!wasResolved` guard both records the match-ending action and prevents

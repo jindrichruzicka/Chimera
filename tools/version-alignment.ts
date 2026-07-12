@@ -3,7 +3,7 @@
  *
  * `verify:version-alignment` — the locked `1.X.Y` release gate.
  *
- * From `1.0.0` (M10) Chimera adopts a lock-step versioning scheme: every first-party
+ * From `1.0.0` Chimera adopts a lock-step versioning scheme: every first-party
  * PUBLISHED package — the five `@chimera-engine/*` engine packages AND the
  * `create-chimera-game` initializer — shares one version, `1.X.Y`. A milestone advances
  * the middle `X`; any between-milestone package update advances the patch `Y`; and the

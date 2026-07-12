@@ -5,7 +5,6 @@
  * profiles.  Session-scoped: cleared on lobby close via `reset()`.
  *
  * Architecture: §4.24 — Player Profiles & Directory
- * Task: F14-T-342 (issue #342)
  *
  * Design constraints:
  *   - Profiles must have already passed `ProfileSanitizer.admit()` before
