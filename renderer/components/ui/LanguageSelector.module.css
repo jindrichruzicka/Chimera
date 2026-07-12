@@ -1,0 +1,27 @@
+/* renderer/components/ui/LanguageSelector.module.css
+ *
+ * Styling for the inline (segmented) variant only — the default 'select'
+ * variant delegates entirely to the tokenized <Select> primitive and needs no
+ * rules here. All values are engine design tokens (Invariant #91): no hex
+ * colours, no raw pixel literals. */
+
+.inlineRoot {
+    color: var(--ch-color-text-primary);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--ch-font-ui);
+    gap: var(--ch-space-xs);
+}
+
+.inlineLabel {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
+}
+
+.inlineGroup {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-xs);
+}
