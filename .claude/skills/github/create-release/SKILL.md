@@ -34,21 +34,22 @@ gh issue list --repo $GH_REPO --milestone "$MILESTONE_TITLE" --state open \
 
 ## Step 3 — Determine version
 
+> **Locked `1.X.Y` from `1.0.0` on.** See [`docs/versioning-policy.md`](../../../../docs/versioning-policy.md). The milestone/project version is **one shared version** that every `@chimera-engine/*` package and `create-chimera-game` also carry. A milestone advances the **compatibility line** `X` and resets patch to `0` → **`1.X.0`**. Between-milestone package updates are handled by `/publish-packages` as patches (`1.X.Y`), not here.
+
 ```bash
 git tag --sort=-v:refname | head -5
 head -40 CHANGELOG.md
 awk '/^## \[Unreleased\]/{found=1; next} /^## \[/{if(found) exit} found{print}' CHANGELOG.md
 ```
 
-SemVer:
+Version rule (from `1.0.0`):
 
-| Unreleased contains                                  | Bump  | `0.1.0` → |
-| ---------------------------------------------------- | ----- | --------- |
-| `### Breaking` / incompatible IPC or snapshot change | major | `1.0.0`   |
-| `### Added` new features                             | minor | `0.2.0`   |
-| Only `### Fixed`/`### Changed`/`### Security`        | patch | `0.1.1`   |
+| Milestone                                              | Version     |
+| ------------------------------------------------------ | ----------- |
+| **M10** — first public release                         | `1.0.0`     |
+| Next coordinated milestone (any breaking/feature line) | `1.(X+1).0` |
 
-Convention: `M1`→`0.1.0`, `M2`→`0.2.0`, `M3`→`0.3.0`. Hot-fix milestones bump patch.
+`X` may contain breaking changes — that is expected and is exactly what a new milestone/compatibility line is for; the shared `X` is the compatibility promise across the whole set. (Legacy `0.x`: `M1`→`0.1.0` … `M9`→`0.9.0`, independent per-package semver — retired at `1.0.0`.)
 
 **Confirm with user** before proceeding:
 
@@ -102,16 +103,31 @@ Rules:
 - New `[Unreleased]` block is empty.
 - Preserve all existing link defs; add new version link above previous; update `[Unreleased]` compare URL.
 
-## Step 6 — Bump package.json
+## Step 6 — Bump versions to the shared `1.X.Y`
+
+Two things move to `$VERSION` together: the **root project** version and the **locked package group** (every `@chimera-engine/*` package + `create-chimera-game`).
 
 ```bash
+# 1. Root project package.json (the milestone/project version).
 npm version $VERSION --no-git-tag-version
 node -e "console.log(require('./package.json').version);"  # → <VERSION>
 ```
 
+For the **package group**, let Changesets drive the `fixed` group so all members land on `$VERSION` in one step (see [`.changeset/README.md`](../../../../.changeset/README.md)). If no changeset yet describes this release, author one (`minor` for a milestone / new `X` line — the leading `1` is the fixed public major):
+
+```bash
+# 2. Apply versions to the fixed package group + write per-package CHANGELOGs.
+pnpm version-packages   # = changeset version && pnpm install --lockfile-only
+```
+
+Confirm every first-party package (and the root, if you keep them equal) is now on `$VERSION`.
+
+> **First 1.0.0 (M10) note:** the tree is coming from drifted `0.x` versions. Land a single changeset covering the whole `fixed` group at `minor`/`major` as needed so `changeset version` re-aligns everything to `1.0.0`; if changesets can't reach `1.0.0` cleanly from the drifted state, set each first-party `package.json` version to `1.0.0` directly, then re-run the alignment gate below.
+
 ## Step 7 — Pre-release gate (all exit 0)
 
 ```bash
+pnpm verify:version-alignment   # locked 1.X.Y: all first-party pkgs on the SAME 1.X.Y
 pnpm format
 pnpm format:check
 pnpm lint
@@ -119,23 +135,31 @@ pnpm typecheck
 pnpm test
 ```
 
-Never bypass / `--no-verify`.
+`verify:version-alignment` MUST pass — if it reports drift, re-align (Step 6); never override it. Never bypass / `--no-verify`.
 
 ## Step 8 — Commit release prep
 
 ```bash
-git add CHANGELOG.md package.json README.md
+# Stage the release-prep changes: root CHANGELOG/package.json/README plus the
+# fixed-group version bumps + per-package CHANGELOGs written by `pnpm version-packages`.
+git add CHANGELOG.md package.json README.md \
+        pnpm-lock.yaml \
+        simulation/package.json ai/package.json networking/package.json \
+        renderer/package.json electron/package.json tools/create-chimera-game/package.json \
+        simulation/CHANGELOG.md ai/CHANGELOG.md networking/CHANGELOG.md \
+        renderer/CHANGELOG.md electron/CHANGELOG.md tools/create-chimera-game/CHANGELOG.md \
+        .changeset
 git status   # confirm only expected files staged
 
 git commit -m "chore(release): v$VERSION
 
 - Promote [Unreleased] → [$VERSION] in CHANGELOG
-- Bump package.json version to $VERSION
+- Bump root + locked package group (@chimera-engine/* + create-chimera-game) to $VERSION
 - Update README to reflect $MILESTONE_TITLE completion
 "
 ```
 
-Omit README bullet if not changed.
+Omit README bullet if not changed. Add only the package/CHANGELOG paths that actually changed.
 
 ## Step 9 — Tag + push
 
@@ -192,6 +216,7 @@ gh api repos/$GH_REPO/milestones/$M_NUM --jq '"\(.title) — \(.state)"'
 
 ## Rules
 
+- **Locked `1.X.Y` (from `1.0.0`).** The milestone version, every `@chimera-engine/*` package, and `create-chimera-game` all share one `1.X.Y`. A milestone sets `1.X.0`; `verify:version-alignment` enforces it. Full policy: [`docs/versioning-policy.md`](../../../../docs/versioning-policy.md).
 - **Only release from `main`.**
 - **All milestone issues must be closed** — release tag = complete milestone, not partial.
 - **Never force-push or amend** the release commit. For mistakes: cut a patch release using this same skill.

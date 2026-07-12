@@ -9,6 +9,8 @@ tags: [roadmap, index, milestones, features, traceability]
 > This file is an **index hub**. All content has been modularised into `docs/roadmap-sections/`.
 > Based on `docs/architecture-overview.md` (v1.0.0, 2026-04-24).
 > Every milestone, feature, and version maps directly to architecture sections.
+>
+> **Versioning (from `1.0.0` on):** the `Version` column below is the **milestone/project** version. From `1.0.0` (M10) onward, every published `@chimera-engine/*` package **and** `create-chimera-game` share **one locked `1.X.Y` version** — a milestone sets `1.X.0`; inter-milestone package updates bump the shared patch `1.X.Y`. The full rules live in [`docs/versioning-policy.md`](versioning-policy.md).
 
 ---
 
@@ -25,6 +27,7 @@ tags: [roadmap, index, milestones, features, traceability]
 | **0.7.0**    | M7 — 3D Render Integration                   | R3F canvas, asset pipeline, scene transitions                                                                                                                                                                    | [roadmap-sections/m7-3d-render-integration-v0.7.0.md](roadmap-sections/m7-3d-render-integration-v0.7.0.md)               |
 | **0.8.0**    | M8 — Hardening                               | Soak tests, Debug Inspector, performance baseline, anti-tamper, game-customizable shell pages and lobby, tactics-stub hardening                                                                                  | [roadmap-sections/m8-hardening-v0.8.0.md](roadmap-sections/m8-hardening-v0.8.0.md)                                       |
 | **0.9.0**    | M9 — Package Extraction & Game Scaffolding   | Monorepo → `@chimera-engine/*` packages, tactics as standalone consumer app, build/link/update pipeline, `create-chimera-game` CLI, publishing, save system & restorable sessions, per-game cursor & logo screen | [roadmap-sections/m9-package-extraction-v0.9.0.md](roadmap-sections/m9-package-extraction-v0.9.0.md)                     |
+| **1.0.0**    | M10 — First Public Release                   | First public `1.0.0`. Introduces the **locked `1.X.Y` versioning scheme** — every `@chimera-engine/*` package and `create-chimera-game` share one version. Features TBD.                                         | [roadmap-sections/m10-first-public-release-v1.0.0.md](roadmap-sections/m10-first-public-release-v1.0.0.md)               |
 | **post-1.0** | Future Extensions                            | Auto-update, accessibility, spectator, i18n, telemetry                                                                                                                                                           | [roadmap-sections/future-extensions-post-1.0.md](roadmap-sections/future-extensions-post-1.0.md)                         |
 
 ---
@@ -66,6 +69,10 @@ F43–F49, F51–F54. Production-grade quality: soak tests pass, Debug Inspector
 ### [M9 — Package Extraction & Game Scaffolding (v0.9.0)](roadmap-sections/m9-package-extraction-v0.9.0.md)
 
 F57–F70. Move Chimera from a single-package monorepo to an isolated, publishable package hierarchy, with tactics as the standalone reference consumer. Covers: pnpm Workspace Foundation, Extract @chimera-engine/simulation, @chimera-engine/ai, @chimera-engine/networking, @chimera-engine/renderer, @chimera-engine/electron, Tactics Standalone Consumer App + E2E Migration, Build/Link/Update Pipeline, create-chimera-game CLI + Blank Template, Engine Package Publishing, App Icon & Per-Game Branding, Save System: In-Game Save & Restorable Sessions, Per-Game Hardware Mouse Cursor, and Game Logo Screen.
+
+### [M10 — First Public Release (v1.0.0)](roadmap-sections/m10-first-public-release-v1.0.0.md)
+
+Features TBD. The first public `1.0.0` release. Introduces the **locked `1.X.Y` versioning scheme**: every published `@chimera-engine/*` package and `create-chimera-game` ship at one shared version, kept in sync per milestone and re-published together on every patch (see [`docs/versioning-policy.md`](versioning-policy.md)).
 
 ### [Post-1.0 Future Extensions](roadmap-sections/future-extensions-post-1.0.md)
 

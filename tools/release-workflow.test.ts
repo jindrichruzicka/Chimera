@@ -56,6 +56,16 @@ describe('release.yml CI release workflow', () => {
         expect(idxPublish).toBeGreaterThan(idxInitBuild);
     });
 
+    // Locked 1.X.Y scheme (docs/versioning-policy.md) — the version-alignment gate runs
+    // before build (and therefore before publish), so a drifted first-party set fails the
+    // job before anything reaches the registry.
+    it('runs verify:version-alignment before build (locked 1.X.Y gate)', () => {
+        const idxAlignment = content.search(/run:\s*pnpm verify:version-alignment\b/);
+        const idxBuild = content.search(/run:\s*pnpm build:packages/);
+        expect(idxAlignment).toBeGreaterThanOrEqual(0);
+        expect(idxBuild).toBeGreaterThan(idxAlignment);
+    });
+
     // AC2 — publish is gated behind verify:pack (it precedes publish; a failed step
     // fails the job before publish runs). Skip-unchanged is delegated to `changeset
     // publish`, which only publishes versions not already on the registry.

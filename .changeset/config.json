@@ -2,7 +2,16 @@
     "$schema": "https://unpkg.com/@changesets/config@3.1.4/schema.json",
     "changelog": "@changesets/cli/changelog",
     "commit": false,
-    "fixed": [],
+    "fixed": [
+        [
+            "@chimera-engine/simulation",
+            "@chimera-engine/ai",
+            "@chimera-engine/networking",
+            "@chimera-engine/renderer",
+            "@chimera-engine/electron",
+            "create-chimera-game"
+        ]
+    ],
     "linked": [],
     "access": "public",
     "baseBranch": "main",

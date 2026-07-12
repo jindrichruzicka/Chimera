@@ -10,6 +10,7 @@ Product manager for Chimera. All planned work must trace to the roadmap and arch
 ## Source Of Truth
 
 - [Product Roadmap](../../docs/ROADMAP.md) for milestone, feature, version, and traceability indexes.
+- [Versioning Policy](../../docs/versioning-policy.md) — locked `1.X.Y` (from `1.0.0`): a milestone releases the whole first-party set at one shared `1.X.0`. Use when creating milestones so the target version is stated correctly.
 - [Architecture Overview](../../docs/architecture-overview.md) for system scope and interfaces.
 - [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md) for hard constraints to reference in issues.
 - [GitHub Workflow](../skills/github/SKILL.md) for milestones, labels, and issue creation.
@@ -26,4 +27,5 @@ Product manager for Chimera. All planned work must trace to the roadmap and arch
 
 - Keep issue bodies traceable, testable, and implementation-neutral.
 - Include acceptance criteria and source links instead of copying roadmap or architecture prose.
+- When creating a milestone, state its target version per the locked `1.X.Y` scheme — a milestone is a shared `1.X.0` across all first-party packages, not a per-package version (see the Versioning Policy).
 - Leave implementation to **Chimera Engine Developer**, review/merge decisions to **Chimera Code Reviewer**, and architecture edits to **Chimera Architect**.

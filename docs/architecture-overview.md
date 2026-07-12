@@ -315,21 +315,26 @@ The dependency arrows already point this way in the monorepo — no refactoring 
 | Add import-boundary lint rules                                                                     | Small   | `eslint-plugin-import` `no-restricted-imports` — enforces what the architecture already requires                                |
 | Curate each package's `index.ts` barrel                                                            | Small   | Expose contract types only; hide implementation details                                                                         |
 | Per-package incremental build                                                                      | Medium  | `tsc --build` project references, or `turborepo`/`nx` for caching                                                               |
-| Semantic versioning and changelogs                                                                 | Ongoing | Each package gets independent semver; `@chimera-engine/simulation` breaking changes are major bumps                             |
+| Semantic versioning and changelogs                                                                 | Ongoing | Locked `1.X.Y` (from `1.0.0`): the whole first-party set shares one version; a milestone advances the compatibility line `X`    |
 
 The versioning row above is realized with **[Changesets](https://github.com/changesets/changesets)**
-(`pnpm changeset` → `pnpm version-packages` → `pnpm release`), configured for **independent**
-versioning (`fixed`/`linked` empty in [`.changeset/config.json`](../.changeset/config.json)): each
-`@chimera-engine/*` package carries its own `version` and its own `CHANGELOG.md`. The one rule Changesets
-cannot infer is the **`@chimera-engine/simulation` cascade** — because `simulation` is the zero-dependency
-leaf every other package points inward to (Invariant #1), a breaking change to it is genuinely
-**major** and must propagate a major to every publishable consumer (`ai`, `networking`, `renderer`,
-`electron`) in the same release. Left to its defaults Changesets would only `patch`-bump dependents to
-keep their pinned `workspace:*` ranges valid, silently weakening the promise; the
-**`verify:changeset-policy`** gate ([`tools/changeset-policy.ts`](../tools/changeset-policy.ts)) reads
-the pending changesets and fails the release if a publishable package is majored without its
-publishable dependents. The private `@chimera-engine/tactics` reference app is exempt — it publishes nothing.
-The full policy and a worked example live in [`.changeset/README.md`](../.changeset/README.md).
+(`pnpm changeset` → `pnpm version-packages` → `pnpm release`). **From `1.0.0` (M10)** it is configured
+for **locked lock-step** versioning: a single `fixed` group in
+[`.changeset/config.json`](../.changeset/config.json) ties every first-party published package — the five
+`@chimera-engine/*` packages **and** `create-chimera-game` — to **one shared `1.X.Y` version**. A milestone
+advances the compatibility line `X` (`1.X.0`); any between-milestone package update advances the patch `Y`
+and the whole set re-publishes together, so a matching `1.X.*` is the mutual-compatibility promise. The
+private `@chimera-engine/tactics` reference app and the `templates/blank` scaffolding source are outside the
+group — they publish nothing. The **`verify:version-alignment`** gate
+([`tools/version-alignment.ts`](../tools/version-alignment.ts)) fails any release where the set is not on one
+identical `1.X.Y`. The canonical rules live in [`docs/versioning-policy.md`](versioning-policy.md); the
+operational summary is in [`.changeset/README.md`](../.changeset/README.md).
+
+> Through `0.x` (M1–M9) the engine used **independent** per-package semver with a
+> `@chimera-engine/simulation`-major cascade gate ([`tools/changeset-policy.ts`](../tools/changeset-policy.ts)).
+> That scheme is retired at `1.0.0` and subsumed by the `fixed` group above. External **extension libraries**
+> (`@chimera-engine/<domain>` adopters, §C.6) still use independent semver — see the
+> [Adopter On-Ramp](adopter-on-ramp.md).
 
 ### C.5 Intermediate Step: pnpm Workspaces
 

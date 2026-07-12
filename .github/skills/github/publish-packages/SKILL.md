@@ -7,7 +7,9 @@ user-invocable: true
 
 # Publish Packages Skill
 
-Ships `@chimera-engine/{simulation,ai,networking,renderer,electron}` and `create-chimera-game` to npm with **independent, Changesets-driven per-package semver**. This is **not** `/create-release` — that cuts the milestone/project GitHub release; this publishes packages to the registry.
+Ships `@chimera-engine/{simulation,ai,networking,renderer,electron}` and `create-chimera-game` to npm under the **locked `1.X.Y` versioning scheme** — every one of these packages shares **one version**, kept in sync via a Changesets `fixed` group. This is **not** `/create-release` — that cuts the milestone/project GitHub release; this publishes packages to the registry.
+
+> **Locked `1.X.Y` (from `1.0.0`).** See [`docs/versioning-policy.md`](../../../../docs/versioning-policy.md). Between milestones, a package update bumps the shared **patch** → `1.X.(Y+1)`, and **all** first-party packages republish together at that version (even ones with no source change) so the shared version always signals a compatible set. A new compatibility line (`X`) is a milestone, cut via `/create-release`.
 
 Two modes:
 
@@ -23,42 +25,48 @@ Two modes:
 - **default mode:** the `NPM_TOKEN` repo secret is set (one-time; an npm **granular** access token with All-packages **read/write** + the `chimera-engine` org read/write) and `gh` is authenticated (to watch the run).
 - **`--local` mode:** `~/.npmrc` holds that same granular token at `//registry.npmjs.org/:_authToken=`. Classic "Publish"/login tokens fail with `E403 … 2fa … required` under npm policy. After `npm config set`, confirm `~/.npmrc`'s mtime actually changed before relying on it (`npm whoami` succeeds on a stale token and hides a no-op write).
 
-## Step 1 — Declare the bumps (changesets)
+## Step 1 — Declare the bump (one changeset)
 
 Skip if `.changeset/*.md` (other than `README.md`/`config.json`) already describe this release.
 
+Because the first-party packages are a Changesets **`fixed` group**, a single changeset bumps the **whole set** to one version — you do not (and should not) list each package. Pick the bump level for the shared version:
+
+- **`patch`** — a between-milestone package update → `1.X.Y` → `1.X.(Y+1)` (the normal case for this skill).
+- **`minor`** — a new compatibility line `X` (`1.X.Y` → `1.(X+1).0`); usually cut via `/create-release` at a milestone, not here.
+
 ```bash
-pnpm changeset            # interactive: pick packages + bump level + summary
+pnpm changeset            # interactive: pick ANY member of the fixed group + bump level + summary
 ```
 
-Non-interactive (agent) path — author `.changeset/<slug>.md` directly:
+Non-interactive (agent) path — author `.changeset/<slug>.md` directly. Naming one member is enough; the `fixed` group carries the rest:
 
 ```markdown
 ---
-'@chimera-engine/simulation': minor
 '@chimera-engine/renderer': patch
 ---
 
-Summary line that becomes the CHANGELOG entry.
+Summary line that becomes the CHANGELOG entry (describe what actually changed).
 ```
 
-A **breaking** `@chimera-engine/simulation` change is a **major** bump; the `verify:changeset-policy` gate (Step 2) enforces the downstream cascade.
-
-> First-publish exception: with no changesets, current manifest versions publish as-is (how `0.9.0` first shipped). After that, every release needs a changeset to move versions.
+> First-publish exception: with no changesets, current manifest versions publish as-is (how `0.9.0` first shipped, pre-lock-step). After `1.0.0`, every release needs a changeset to move the shared version.
 
 ## Step 2 — Versioning-policy gate
 
 ```bash
-pnpm verify:changeset-policy
+pnpm verify:version-alignment   # all first-party pkgs on the SAME 1.X.Y (post-version-apply, Step 3)
+pnpm verify:changeset-policy    # legacy cascade gate; a no-op under the fixed group, kept for safety
 ```
+
+Run `verify:version-alignment` after Step 3 (once versions are applied) — that is when the manifests reflect the new shared version.
 
 ## Step 3 — Apply versions
 
 ```bash
-pnpm version-packages     # = changeset version && pnpm install --lockfile-only
+pnpm version-packages        # = changeset version && pnpm install --lockfile-only
+pnpm verify:version-alignment # confirm the whole fixed group landed on ONE 1.X.Y
 ```
 
-Consumes the changesets: bumps each `package.json`, writes per-package `CHANGELOG.md`, updates the lockfile. Review the diff.
+Consumes the changesets: the `fixed` group bumps **every** first-party `package.json` to the same version, writes per-package `CHANGELOG.md`, and updates the lockfile. `verify:version-alignment` must pass — if it reports drift, re-align before committing (never override). Review the diff.
 
 ## Step 4 — Commit the release (on `main`)
 
@@ -137,7 +145,8 @@ Then verify as in Step 7 (mind the ~15 min scoped read lag).
 
 ## Rules
 
+- **Locked `1.X.Y`.** All first-party packages (`@chimera-engine/*` + `create-chimera-game`) share one version and **republish together** on every patch, even the unchanged ones — the shared version is the compatibility signal. Enforced by the `fixed` group + `verify:version-alignment`. Policy: [`docs/versioning-policy.md`](../../../../docs/versioning-policy.md).
 - **Never** attempt to republish an existing version — bump via a changeset instead.
-- Package versions are **independent** of the milestone/project version; this is not `/create-release`.
+- From `1.0.0` on, the package version and the milestone/project version are the **same shared `1.X.Y`** (a milestone sets `1.X.0` via `/create-release`; this skill ships patches `1.X.Y` between milestones).
 - **Heads-up:** `release.yml` also triggers on milestone `v*.*.*` tags, so `/create-release` publishes any pending package versions too — keep that in mind when cutting a milestone.
 - `--local` publishes carry **no provenance** (OIDC is CI-only); prefer default mode.

@@ -74,6 +74,13 @@ jobs:
       - name: Start Xvfb
         run: Xvfb :99 -screen 0 1024x768x24 &
 
+      # Locked 1.X.Y gate (docs/versioning-policy.md): the first-party set —
+      # every @chimera-engine/* package + create-chimera-game — must be on one identical
+      # 1.X.Y before anything publishes. Fails fast, before build, so a drifted set can
+      # never reach the registry.
+      - name: Verify version alignment (verify:version-alignment)
+        run: pnpm verify:version-alignment
+
       - name: Build packages
         run: pnpm build:packages
 
