@@ -31,6 +31,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameSettingsPageDefinition } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 import modalCss from '../../components/ui/Modal.module.css?raw';
 import { EscapeStackProvider } from '../../components/shell/EscapeStack';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import pageCss from './page.module.css?raw';
 import SettingsPage from './page';
 import { useSettingsStore } from '../../state/settingsStore';
@@ -39,10 +40,12 @@ import type { InputManager } from '../../input/InputManager.js';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import type { ResolvedSettings } from '@chimera-engine/simulation/bridge/api-types.js';
-import type { LoadedRendererGame } from '../../game/rendererGameRegistry';
+import type { GameLanguage } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import type { LoadedRendererGame, LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 
-const { mockLoadRendererGame, mockPush } = vi.hoisted(() => ({
+const { mockLoadRendererGame, mockLoadRendererGameShell, mockPush } = vi.hoisted(() => ({
     mockLoadRendererGame: vi.fn(),
+    mockLoadRendererGameShell: vi.fn(),
     mockPush: vi.fn(),
 }));
 
@@ -54,6 +57,7 @@ vi.mock('../../input/InputManagerContext.js', () => ({
 
 vi.mock('../../game/rendererGameRegistry', () => ({
     loadRendererGame: mockLoadRendererGame,
+    loadRendererGameShell: mockLoadRendererGameShell,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -82,18 +86,38 @@ function setChimera(): void {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// The page renders through the shared Modal, whose Escape handling registers on
-// the overlay stack — every render must sit inside an EscapeStackProvider.
+// The page renders through the shared Modal (Escape handling registers on the
+// overlay stack → EscapeStackProvider), and the gameplay.language field renders
+// <SettingsLanguageSelector> → useTranslate(), which throws outside an
+// I18nProvider. Both wrappers are required for every render.
+function AllProviders({ children }: { children: React.ReactNode }): React.ReactElement {
+    return (
+        <I18nProvider>
+            <EscapeStackProvider>{children}</EscapeStackProvider>
+        </I18nProvider>
+    );
+}
+
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
-    baseRender(ui, { wrapper: EscapeStackProvider });
+    baseRender(ui, { wrapper: AllProviders });
 
 const GAME_ID = 'tactics';
+
+const TWO_LANGUAGES: readonly GameLanguage[] = [
+    { code: 'en-US', label: 'English' },
+    { code: 'cs-CZ', label: 'Čeština' },
+];
 
 function makeRendererGame(settings?: GameSettingsPageDefinition): LoadedRendererGame {
     return {
         registry: { board: () => null },
         shell: settings === undefined ? {} : { settings },
     };
+}
+
+/** A loaded shell carrying the given declared languages (or none). */
+function makeRendererShell(languages: readonly GameLanguage[] = []): LoadedRendererGameShell {
+    return languages.length > 0 ? { translations: { languages, bundles: {} } } : {};
 }
 
 function makeSettings(
@@ -143,6 +167,9 @@ function setSettingsUrl(search = ''): void {
 beforeEach(() => {
     vi.resetAllMocks();
     mockLoadRendererGame.mockResolvedValue(makeRendererGame());
+    // Default: two declared languages so the Language selector renders. Tests
+    // that need the single-language (hidden-row) path override this.
+    mockLoadRendererGameShell.mockResolvedValue(makeRendererShell(TWO_LANGUAGES));
     mockPush.mockReset();
     mockGet.mockResolvedValue(makeSettings());
     mockUpdate.mockResolvedValue(undefined);
@@ -234,8 +261,58 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
     it('renders Gameplay fields after selecting the Gameplay tab', async () => {
         await renderSettingsPageAndOpenTab('Gameplay');
 
-        expect(screen.getByLabelText(/language/i)).toBeTruthy();
+        // The Language selector loads its declared languages asynchronously.
+        expect(await screen.findByRole('combobox', { name: 'Language' })).toBeTruthy();
         expect(screen.getByRole('switch', { name: 'Auto Save' })).toBeTruthy();
+    });
+
+    describe('gameplay.language field → LanguageSelector (#868)', () => {
+        it('renders the declared languages as the Language selector when the game declares ≥2', async () => {
+            await renderSettingsPageAndOpenTab('Gameplay');
+
+            const select = await screen.findByRole('combobox', { name: 'Language' });
+            expect(within(select).getByRole('option', { name: 'English' })).toHaveValue('en-US');
+            expect(within(select).getByRole('option', { name: 'Čeština' })).toHaveValue('cs-CZ');
+            // Reflects the persisted gameplay.language.
+            expect(select).toHaveValue('en-US');
+        });
+
+        it('uses a token-driven "Language" accessible name, not a hardcoded field label', async () => {
+            await renderSettingsPageAndOpenTab('Gameplay');
+
+            // 'Language' comes from useTranslate(SETTINGS_KEYS.language); the
+            // selector renders its own label, so there is exactly one.
+            const selects = await screen.findAllByRole('combobox', { name: 'Language' });
+            expect(selects).toHaveLength(1);
+        });
+
+        it('persists the chosen language via updateSettings', async () => {
+            await renderSettingsPageAndOpenTab('Gameplay');
+
+            const select = await screen.findByRole('combobox', { name: 'Language' });
+            fireEvent.change(select, { target: { value: 'cs-CZ' } });
+
+            expect(mockUpdate).toHaveBeenCalledWith(GAME_ID, { gameplay: { language: 'cs-CZ' } });
+        });
+
+        it('shows no Language row when the game declares fewer than two languages', async () => {
+            mockLoadRendererGameShell.mockResolvedValue(makeRendererShell([TWO_LANGUAGES[0]!]));
+
+            await renderSettingsPageAndOpenTab('Gameplay');
+            // Wait for a sibling gameplay field so the tab has painted.
+            expect(await screen.findByRole('switch', { name: 'Auto Save' })).toBeTruthy();
+
+            expect(screen.queryByRole('combobox', { name: 'Language' })).toBeNull();
+        });
+
+        it('shows no Language row when the game declares no languages', async () => {
+            mockLoadRendererGameShell.mockResolvedValue(makeRendererShell([]));
+
+            await renderSettingsPageAndOpenTab('Gameplay');
+            expect(await screen.findByRole('switch', { name: 'Auto Save' })).toBeTruthy();
+
+            expect(screen.queryByRole('combobox', { name: 'Language' })).toBeNull();
+        });
     });
 
     it('renders the Controls tab with registered game input actions', async () => {

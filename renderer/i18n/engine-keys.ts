@@ -51,7 +51,7 @@ export const MENU_KEYS = {
 
 /** Settings modal: field labels, option labels, value formatters, tabs, and the controls panel. */
 export const SETTINGS_KEYS = {
-    // Field labels (duplicated in renderSettingsSectionItems.tsx + settings/page.tsx).
+    // Field labels (mirrored by the engine-field descriptors in settings/page.tsx).
     masterVolume: translationKey('engine.settings.masterVolume'),
     sfxVolume: translationKey('engine.settings.sfxVolume'),
     musicVolume: translationKey('engine.settings.musicVolume'),

@@ -561,22 +561,22 @@ top-level namespaces from Invariant #35.
 
 The engine field registry is exhaustive for the current `EngineSettings` interface:
 
-| Field id                         | Label                | Control     | Default / notes                                                         |
-| -------------------------------- | -------------------- | ----------- | ----------------------------------------------------------------------- |
-| `audio.masterVolume`             | Master Volume        | Slider      | `1`, formatted as a percentage                                          |
-| `audio.sfxVolume`                | SFX Volume           | Slider      | `1`, formatted as a percentage                                          |
-| `audio.musicVolume`              | Music Volume         | Slider      | `0.8`, formatted as a percentage                                        |
-| `audio.muted`                    | Muted                | Toggle      | `false`                                                                 |
-| `display.fullscreen`             | Fullscreen           | Toggle      | `false`                                                                 |
-| `display.vsync`                  | VSync                | Toggle      | `true`                                                                  |
-| `display.targetFps`              | Target FPS           | Select      | `60`; options `30`, `60`, `120`, `0`                                    |
-| `display.uiScale`                | UI Scale             | Slider      | `1`, range `0.5`-`2`, formatted as `x`                                  |
-| `gameplay.language`              | Language             | Select      | `en-US`; localized language options                                     |
-| `gameplay.autoSave`              | Auto Save            | Toggle      | `true`                                                                  |
-| `gameplay.autoSaveIntervalTurns` | Auto Save Interval   | Slider      | `5`, range `1`-`100`, integer turns                                     |
-| `gameplay.showHints`             | Show Hints           | Toggle      | `true`                                                                  |
-| `gameplay.showPerfHud`           | Show Performance HUD | Toggle      | `false`                                                                 |
-| `controls.bindings`              | Controls             | Key-binding | Renders the input rebinding pane (game actions only; `engine:*` hidden) |
+| Field id                         | Label                | Control     | Default / notes                                                                                                                                 |
+| -------------------------------- | -------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `audio.masterVolume`             | Master Volume        | Slider      | `1`, formatted as a percentage                                                                                                                  |
+| `audio.sfxVolume`                | SFX Volume           | Slider      | `1`, formatted as a percentage                                                                                                                  |
+| `audio.musicVolume`              | Music Volume         | Slider      | `0.8`, formatted as a percentage                                                                                                                |
+| `audio.muted`                    | Muted                | Toggle      | `false`                                                                                                                                         |
+| `display.fullscreen`             | Fullscreen           | Toggle      | `false`                                                                                                                                         |
+| `display.vsync`                  | VSync                | Toggle      | `true`                                                                                                                                          |
+| `display.targetFps`              | Target FPS           | Select      | `60`; options `30`, `60`, `120`, `0`                                                                                                            |
+| `display.uiScale`                | UI Scale             | Slider      | `1`, range `0.5`-`2`, formatted as `x`                                                                                                          |
+| `gameplay.language`              | Language             | Select      | `en-US`; options are the game's declared `translations.languages` (endonyms); the row is hidden when the game declares fewer than two languages |
+| `gameplay.autoSave`              | Auto Save            | Toggle      | `true`                                                                                                                                          |
+| `gameplay.autoSaveIntervalTurns` | Auto Save Interval   | Slider      | `5`, range `1`-`100`, integer turns                                                                                                             |
+| `gameplay.showHints`             | Show Hints           | Toggle      | `true`                                                                                                                                          |
+| `gameplay.showPerfHud`           | Show Performance HUD | Toggle      | `false`                                                                                                                                         |
+| `controls.bindings`              | Controls             | Key-binding | Renders the input rebinding pane (game actions only; `engine:*` hidden)                                                                         |
 
 Typed game definitions cannot reference unknown engine field ids. Defensive renderer paths that
 receive an untyped or stale `engine-field` fail fast instead of silently rendering an inert control.
@@ -680,7 +680,7 @@ renderer/
 │   └── gameCursorStyles.ts     # Injects shell.cursor as --ch-cursor-* overrides (§4.37.14)
 ├── shell/
 │   ├── renderMainMenuDefinition.tsx # Engine renderer for GameMainMenuDefinition
-│   ├── renderSettingsSectionItems.tsx # Engine renderer for SettingsSectionDefinition
+│   ├── SettingsLanguageSelector.tsx # Store-connected wrapper mounting <LanguageSelector> for gameplay.language (§4.37.10)
 │   └── resolveMainMenuGameId.ts     # URL game context resolver for main menu
 ├── styles/
 │   └── tokens.css              # Engine default --ch-* tokens (§4.35)

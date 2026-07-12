@@ -42,6 +42,7 @@ import { useOptionalInputActionRegistry } from '../../input/InputActionRegistryC
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
+import { SettingsLanguageSelector } from '../../shell/SettingsLanguageSelector';
 import { useSettingsStore } from '../../state/settingsStore';
 import {
     getSettingsApi,
@@ -137,13 +138,6 @@ const TARGET_FPS_OPTIONS = [
     { value: '0', label: 'Uncapped' },
 ] as const;
 
-const LANGUAGE_OPTIONS = [
-    { value: 'en-US', label: 'English (US)' },
-    { value: 'de-DE', label: 'Deutsch' },
-    { value: 'es-ES', label: 'Espanol' },
-    { value: 'fr-FR', label: 'Francais' },
-] as const;
-
 const ENGINE_FIELD_DEFINITIONS: Record<EngineSettingsFieldId, EngineFieldDefinition> = {
     'audio.masterVolume': {
         control: { type: 'slider', min: 0, max: 1, step: 0.01 },
@@ -191,8 +185,13 @@ const ENGINE_FIELD_DEFINITIONS: Record<EngineSettingsFieldId, EngineFieldDefinit
         formatValue: formatScale,
         label: 'UI Scale',
     },
+    // The language field is not rendered from this descriptor — renderSettingsItem
+    // special-cases 'gameplay.language' to <SettingsLanguageSelector>, which sources
+    // its options from the game's declared languages and hides itself when <2. The
+    // entry stays because ENGINE_FIELD_DEFINITIONS is exhaustive over every field id;
+    // the empty option list is never read.
     'gameplay.language': {
-        control: { type: 'select', options: LANGUAGE_OPTIONS },
+        control: { type: 'select', options: [] },
         defaultValue: 'en-US',
         label: 'Language',
     },
@@ -546,6 +545,7 @@ export default function SettingsPage(): React.ReactElement {
                 >
                     <SettingsDefinitionSurface
                         activeGameId={activeGameId}
+                        gameId={gameId}
                         onUpdate={handleUpdate}
                         renderControlsPanel={renderControlsPanel}
                         resolvedSettings={resolvedSettings}
@@ -568,11 +568,14 @@ function useUrlGameId(): string | null | undefined {
 
 function SettingsDefinitionSurface({
     activeGameId,
+    gameId,
     onUpdate,
     renderControlsPanel,
     resolvedSettings,
 }: Readonly<{
     readonly activeGameId: string | null;
+    /** Resolved settings game context (URL → activeGameId → engine default). */
+    readonly gameId: string;
     readonly onUpdate: (patch: Record<string, unknown>) => void;
     readonly renderControlsPanel: () => React.ReactElement;
     readonly resolvedSettings: ResolvedSettings | undefined;
@@ -589,6 +592,7 @@ function SettingsDefinitionSurface({
                 panel: (
                     <SettingsTabPanel
                         key={tab.id}
+                        gameId={gameId}
                         onUpdate={onUpdate}
                         renderControlsPanel={renderControlsPanel}
                         resolvedSettings={resolvedSettings}
@@ -602,11 +606,13 @@ function SettingsDefinitionSurface({
 }
 
 function SettingsTabPanel({
+    gameId,
     onUpdate,
     renderControlsPanel,
     resolvedSettings,
     tab,
 }: Readonly<{
+    readonly gameId: string;
     readonly onUpdate: (patch: Record<string, unknown>) => void;
     readonly renderControlsPanel: () => React.ReactElement;
     readonly resolvedSettings: ResolvedSettings | undefined;
@@ -633,6 +639,7 @@ function SettingsTabPanel({
                             {section.items.map((item) =>
                                 renderSettingsItem({
                                     item,
+                                    gameId,
                                     onUpdate,
                                     renderControlsPanel,
                                     resolvedSettings,
@@ -660,17 +667,27 @@ function shouldRenderSectionHeading(
 
 function renderSettingsItem({
     item,
+    gameId,
     onUpdate,
     renderControlsPanel,
     resolvedSettings,
 }: Readonly<{
     readonly item: SettingsItemDefinition;
+    readonly gameId: string;
     readonly onUpdate: (patch: Record<string, unknown>) => void;
     readonly renderControlsPanel: () => React.ReactElement;
     readonly resolvedSettings: ResolvedSettings | undefined;
-}>): React.ReactElement {
+}>): React.ReactElement | null {
     switch (item.kind) {
         case 'engine-field': {
+            // The language field is language-aware: it renders the game's
+            // declared languages (endonyms) and hides itself for single-language
+            // games. SettingsLanguageSelector owns the label, the languages load,
+            // and the <2-languages null-return — so it replaces the whole row
+            // (no wrapping field <div>/label) rather than a static <Select>.
+            if (item.fieldId === 'gameplay.language') {
+                return <SettingsLanguageSelector gameId={gameId} key={item.fieldId} />;
+            }
             const definition = ENGINE_FIELD_DEFINITIONS[item.fieldId];
             if (definition.control.type === 'key-binding') {
                 return <React.Fragment key={item.fieldId}>{renderControlsPanel()}</React.Fragment>;
