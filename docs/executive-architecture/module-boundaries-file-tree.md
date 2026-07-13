@@ -219,7 +219,7 @@ chimera/
 │   │   ├── chat/                    # PUBLIC chat component (Tier 2); barrel: @chimera-engine/renderer/components/chat; mounted by game HUDs only; see §4.35.1
 │   │   │   ├── index.ts             # Public barrel
 │   │   │   └── ChatPanel.tsx        # In-match chat UI; see §4.29
-│   │   ├── ui/                      # PUBLIC UI primitive library (Tier 1); barrel: @chimera-engine/renderer/components/ui
+│   │   ├── ui/                      # PUBLIC UI primitive library (Tier 1); barrel: @chimera-engine/renderer/components/ui (includes <LanguageSelector>, §4.39)
 │   │   └── r3f/                     # Reusable R3F building blocks; PUBLIC barrel: @chimera-engine/renderer/components/r3f (curated in-Canvas components only)
 │   │       ├── index.ts             # Public barrel (currently exports PerfProbe; internals below stay unexported)
 │   │       ├── GameCanvas.tsx       # <Canvas> root; cameraMode + cameraPreset props; see §4.22
@@ -254,6 +254,19 @@ chimera/
 │   │   ├── InputManager.ts
 │   │   ├── KeyBindingRepository.ts
 │   │   └── useInputAction.ts
+│   ├── i18n/                         # Renderer-only i18n runtime (§4.39); public barrel: @chimera-engine/renderer/i18n
+│   │   ├── index.ts                 # Public barrel (re-export only, side-effect-free)
+│   │   ├── translation-bundle.ts    # resolveTranslation() fallback chain: game override → engine English → raw
+│   │   ├── format-message.ts        # Pure ICU-subset formatter (param, plural, select)
+│   │   ├── engine-keys.ts           # engine.<area>.<name> token catalogue
+│   │   ├── engine-bundle.en.ts      # engineBundleEn — the sole engine (English) bundle
+│   │   ├── i18n-context.ts          # I18nContext, TranslateFn
+│   │   ├── I18nProvider.tsx         # Locale resolve + bundle merge + t
+│   │   ├── TokenModeI18nProvider.tsx  # Store-connected wrapper (debug token-mode + active-game bundle)
+│   │   ├── useTranslate.ts          # useTranslate() — throws outside I18nProvider (#83)
+│   │   └── useActiveGameTranslations.ts  # Resolves active game's locale/languages/override bundle
+│   ├── shell/
+│   │   └── SettingsLanguageSelector.tsx  # Store-connected wrapper for the settings Language field (§4.39)
 │   ├── logging/
 │   │   └── rendererLogger.ts        # see §4.27
 │   ├── utils/

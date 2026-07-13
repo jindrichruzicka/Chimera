@@ -79,6 +79,7 @@ apps/tactics/e2e/
     ├── game-flow.spec.ts
     ├── game-navigation.spec.ts
     ├── game-result.spec.ts
+    ├── i18n-language-switch.spec.ts  # F71 UI-language switch: game-token re-translate + persistence + single-language inertness (ports 7791/7792)
     ├── in-game-menu-leave.spec.ts
     ├── input-keybindings.spec.ts
     ├── leave-to-tactics-menu.spec.ts
@@ -796,6 +797,38 @@ test.describe('Settings persistence', () => {
 
         const resetRelaunch = await relaunchSettingsApp(persistedRelaunch.app);
         await expectDisplayedMasterVolume(new SettingsPage(resetRelaunch.window), 1.0);
+    });
+});
+```
+
+---
+
+### i18n-language-switch.spec.ts
+
+The F71 i18n feature-review E2E (issue #872, [§4.39](../core-components/internationalization-i18n.md)). It boots the Tactics main menu (`?gameId=tactics`), opens Settings → Gameplay, switches the **Language** field English → Czech through the `SettingsPage.selectLanguage()` helper, and asserts the game-token menu labels re-translate live (`game.tactics.menu.newGame`: "New Game" → "Nová hra"). It then proves **persistence across a full relaunch** — the on-disk `gameplay.language` (read through `window.__chimera.settings.get('tactics')`) is still `cs-CZ`, and re-opening Settings after relaunch shows the Czech locale in the Language field. A second test proves **single-language inertness**: booting `/settings` with no `gameId` (the engine `__engine__` context declares no languages) shows no Language combobox and no settings Language row (Invariant #111).
+
+The spec reads only `window.__chimera.settings` and Settings/menu DOM state (never `GameSnapshot`/`SaveFile`). It clicks the Gameplay tab by its locale-independent `settings-tab-gameplay` testid (`SettingsPage.clickTabById`) because tab labels are translation tokens that flip to Czech once the persisted locale hydrates.
+
+**Deliberate exclusion (no silent gap):** the `engine.chat.title` engine-**token override** ("Match chat" → "Zápasový chat") — the one engine-namespaced token Tactics re-keys per locale — renders only in-match, in the collapsed `ChatPanel` mounted by `TacticsGameHud`. Re-driving it here would require the heavier direct-game fixture, entering a match, and expanding the chat drawer. Instead it is covered by unit tests: the override-as-default-label contract in `renderer/components/chat/ChatPanel.test.tsx`, and the per-locale parity in `apps/tactics/shell/translations/translations.test.tsx`. Debug token-mode is gated on the runtime debug flag (not `CHIMERA_E2E`) and is covered by #869's unit tests — also excluded here. Invariant #112 (override → engine → raw, override-never-deletes) is documented in §4.39.
+
+```typescript
+// apps/tactics/e2e/tests/i18n-language-switch.spec.ts
+test.describe('i18n language switch (F71)', () => {
+    test('switching EN → CS re-translates game strings and persists across relaunch', async ({
+        menuApp,
+        menuWindow,
+    }) => {
+        const menu = await gotoTacticsMenu(menuWindow); // waits for "New Game"
+        await menu.clickButtonByLabel('Settings');
+
+        const settingsPage = new SettingsPage(menuWindow);
+        await settingsPage.clickTabById('gameplay');
+        await settingsPage.selectLanguage('cs-CZ');
+        await settingsPage.close();
+
+        await expect.poll(() => menu.getButtonLabels()).toContain('Nová hra'); // live switch
+        await expect.poll(() => readPersistedLanguage(menuWindow, 'tactics')).toBe('cs-CZ');
+        // …relaunch, then re-open Settings and assert the Language field is still cs-CZ.
     });
 });
 ```

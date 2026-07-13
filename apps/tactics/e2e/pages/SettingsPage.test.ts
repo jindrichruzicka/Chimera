@@ -10,6 +10,7 @@ interface BuildPageDoubleResult {
     readonly requestedRoles: RequestedRole[];
     readonly clickedTestIds: string[];
     readonly filledValues: { readonly testId: string; readonly value: string }[];
+    readonly selectedOptions: { readonly locator: string; readonly value: string }[];
     readonly keyPresses: string[];
 }
 
@@ -31,6 +32,7 @@ const buildPageDouble = (): BuildPageDoubleResult => {
     const requestedRoles: RequestedRole[] = [];
     const clickedTestIds: string[] = [];
     const filledValues: { readonly testId: string; readonly value: string }[] = [];
+    const selectedOptions: { readonly locator: string; readonly value: string }[] = [];
     const keyPresses: string[] = [];
 
     const createLocator = (testId: string): Locator => {
@@ -41,6 +43,11 @@ const buildPageDouble = (): BuildPageDoubleResult => {
             fill: async (value: string): Promise<void> => {
                 filledValues.push({ testId, value });
             },
+            selectOption: async (value: string): Promise<string[]> => {
+                selectedOptions.push({ locator: testId, value });
+                return [value];
+            },
+            inputValue: async (): Promise<string> => `${testId}:value`,
             innerText: async (): Promise<string> => `${testId}:text`,
             filter: (): Locator => locatorLike as Locator,
             getByTestId: (childTestId: string): Locator => {
@@ -97,6 +104,7 @@ const buildPageDouble = (): BuildPageDoubleResult => {
         requestedRoles,
         clickedTestIds,
         filledValues,
+        selectedOptions,
         keyPresses,
     };
 };
@@ -151,6 +159,16 @@ describe('SettingsPage', () => {
         expect(clickedTestIds).toContain('tab:Display');
     });
 
+    it('clicks a settings tab by its locale-independent testid', async () => {
+        const { page, clickedTestIds, requestedLocators } = buildPageDouble();
+        const settingsPage = new SettingsPage(page);
+
+        await settingsPage.clickTabById('gameplay');
+
+        expect(requestedLocators).toContain('[role="tab"][data-testid="settings-tab-gameplay"]');
+        expect(clickedTestIds).toContain('[role="tab"][data-testid="settings-tab-gameplay"]');
+    });
+
     it('returns a control by accessible label', () => {
         const { page, requestedLabels } = buildPageDouble();
         const settingsPage = new SettingsPage(page);
@@ -168,6 +186,31 @@ describe('SettingsPage', () => {
 
         expect(requestedLabels).toContainEqual({ text: 'AI Thinking Delay', exact: true });
         expect(filledValues).toEqual([{ testId: 'label:AI Thinking Delay', value: '1200' }]);
+    });
+
+    it('binds the Language field by its combobox role and accessible name', () => {
+        const { page, requestedRoles } = buildPageDouble();
+
+        const settingsPage = new SettingsPage(page);
+
+        expect(settingsPage.languageSelect).toBeDefined();
+        expect(requestedRoles).toContainEqual({ role: 'combobox', name: 'Language', exact: true });
+    });
+
+    it('selects a UI language by its BCP-47 code', async () => {
+        const { page, selectedOptions } = buildPageDouble();
+        const settingsPage = new SettingsPage(page);
+
+        await settingsPage.selectLanguage('cs-CZ');
+
+        expect(selectedOptions).toEqual([{ locator: 'combobox:Language', value: 'cs-CZ' }]);
+    });
+
+    it('reads the current Language code', async () => {
+        const { page } = buildPageDouble();
+        const settingsPage = new SettingsPage(page);
+
+        expect(await settingsPage.currentLanguage()).toBe('combobox:Language:value');
     });
 
     it('reads a binding value from the action row', async () => {

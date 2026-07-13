@@ -468,6 +468,25 @@ if [[ ${#GAME_SURFACE_DIRS[@]} -gt 0 ]]; then
     )
 fi
 
+# ─── Check 18: i18n runtime stays renderer-only (invariant 110) ──────────────
+# The i18n RUNTIME — translation resolution, the ICU formatter, and the React
+# binding, all under renderer/i18n/ — is a renderer concern. simulation/, ai/,
+# and networking/ must never import or reference it. The ONLY i18n surface
+# allowed in simulation/ is the declarative language CONTRACT in
+# simulation/foundation/game-manifest-contract.ts (GameLanguage,
+# GameManifest.languages, resolveGameLanguages/firstLanguageCode) — a language
+# declaration, not a runtime — so this check deliberately does NOT match those
+# identifiers; it matches only runtime symbols/paths. The renderer-import ban of
+# Check 2 already forbids `from '.../renderer/...'`; this is the additional,
+# i18n-specific containment for Invariant #110 (it also catches a bare-specifier
+# or dynamic import that Check 2's `from ['\"].*renderer/` pattern would miss).
+# False-positive suppression (comments/tests/fixtures/node_modules) is inherited
+# from check_grep, so the JSDoc mention of `useTranslate()` in
+# simulation/bridge/debug-api-types.ts is not flagged.
+check_grep "110" \
+    'renderer/i18n|useTranslate|I18nProvider|formatMessage|TranslationBundle|TranslationKey' \
+    simulation ai networking
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then

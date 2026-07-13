@@ -13,18 +13,18 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ## Thematic Index
 
-| Theme                                  | Invariants                                                                                                          |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76, 104, 105, 106, 107                                                        |
-| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95, 99, 101, 103, 105, 108       |
-| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90, 103                                                              |
-| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46, 97                                                                                      |
-| **Save / load / replay**               | 23, 24, 25, 26, 70, 71, 108                                                                                         |
-| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                                                          |
-| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                                      |
-| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94, 96, 97, 100 |
-| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73, 99, 104                                                                        |
-| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                                                      |
+| Theme                                  | Invariants                                                                                                                         |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76, 104, 105, 106, 107, 110                                                                  |
+| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95, 99, 101, 103, 105, 108, 110, 111            |
+| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90, 103                                                                             |
+| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46, 97                                                                                                     |
+| **Save / load / replay**               | 23, 24, 25, 26, 70, 71, 108                                                                                                        |
+| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66, 111, 112                                                                               |
+| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                                                     |
+| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94, 96, 97, 100, 110, 111, 112 |
+| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73, 99, 104                                                                                       |
+| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                                                                     |
 
 ---
 
@@ -228,7 +228,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
-## Invariants 91–109
+## Invariants 91–112
 
 **91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
 
@@ -267,6 +267,12 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 **108.** `SaveFile.session` is **session-composition metadata**, never gameplay state: it is written only by the host's save capture (`SessionRuntime.captureSaveFile`, from the live lobby roster) and the v5→v6 migration backfill (`deriveSessionManifest`), and it is read only by session orchestration (`SessionRestoreCoordinator` / `sanitizeRestoreManifest` and the composition root's restore wiring). It is never projected, never read by any reducer or `validate()`, and never crosses IPC or the network as an object — the one sanctioned derived surface is the slim, schema-validated restore-status projection (`toRestoreStatusEvent` → `chimera:saves:restore-status`, #826), which carries only the `matchId` and the pending seat ids, never control kinds, slot indexes, or the manifest itself (Invariants #1, #59, #101). The `matchId` it mirrors is minted **host-side, once per match start**, in the `engine:start_game` dispatch path (Invariant #101). A restored session re-enters play **exclusively** via `hostLobby({ restore }) → applyRestoredFile → seatRestoredRoster` — the coordinator-driven menu flow (or the same-match in-session apply), both funnelling through the single Invariant #24 apply helper; no code path may fabricate a live session from a `SaveFile` any other way, and no restored seat may activate before the checkpoint is applied (the start-suppression gate keeps `onGameStart` off the pre-restore lobby snapshot) (§4.11, §4.14, F68).
 
 **109.** Engine UI motion (Modal/Drawer open-close, button press feedback) is declared as **global `ch-*` keyframes** in `renderer/styles/animations.css` and parameterised **exclusively** by `--ch-*` motion tokens (`--ch-<component>-anim-<enter|exit>-<name|duration|easing>`, composed from the `--ch-duration-*`/`--ch-easing-*` primitives) — engine component CSS never hardcodes animation values and never declares module-local keyframes for token-referenced animations (CSS Modules hash keyframe names, which would break the token indirection; reaffirms #86). Games customise motion **only** by overriding those tokens per Invariant #85 — retiming via the duration/easing tokens, disabling via `0ms`, or retargeting a `*-name` token at a game-namespaced `@keyframes` declared in the game's own override CSS (entering the cascade via Invariant #93). All engine motion collapses to instant under `prefers-reduced-motion` because engine durations reference the zeroed primitives; a game override that sets **literal** durations must ship its own `@media (prefers-reduced-motion: reduce)` block, since game overrides load after (and therefore outrank) the engine's. Close animations never change overlay semantics: when no exit animation is computable (reduced motion, `0ms` override, jsdom), `open=false` unmounts synchronously (`useExitPresence`, §4.35).
+
+**110.** The simulation is **language-agnostic**: game logic emits **stable identifiers, never user-facing strings**, and the i18n **runtime** (translation resolution, the ICU message formatter, the React binding — everything under `renderer/i18n/`) is a **renderer-only** concern that `simulation/`, `ai/`, and `networking/` must never import. The **only** i18n surface allowed in `simulation/` is the declarative language **contract** in `simulation/foundation/game-manifest-contract.ts` — the `GameLanguage` type, the optional `GameManifest.languages` field, and the pure `resolveGameLanguages()` / `firstLanguageCode()` resolvers (no `Intl`, no message templates, no bundle data). That is a language _declaration_, not a _runtime_. This extends the renderer-import ban of Invariant #1 and the settings-are-not-simulation rule of Invariant #36 to the localisation layer (§4.39, §3 mechanical check 18, F71).
+
+**111.** Opting into i18n is **strictly additive**: a game that declares no `languages` (or fewer than two) is behaviour-neutral. `<LanguageSelector>` and its store-connected wrapper `SettingsLanguageSelector` render `null` (no selector renders anywhere, and the settings **Language** row is absent), the effective locale is never switched, and the app-wide `<I18nProvider>` resolves pure engine English at zero measurable cost — the provider mounts with inert-by-default props whether or not any game opts in. No un-opted game changes behaviour, and no default game acquires a Language control (§4.39, §4.13, F71).
+
+**112.** Token resolution follows a fixed fallback chain — **`game override → engine English default → raw key`** (`resolveTranslation`). A game override **wins** for a token but **never deletes** the engine default: an un-overridden engine token always still resolves to its English default (the engine ships an English-only bundle, so un-overridden engine strings stay English rather than surfacing as tokens), and a token missing from every layer resolves to its **raw key** (surfacing the gap rather than rendering blank). Debug token-mode (Invariant #27/#28 debug graph) short-circuits every key to its raw token for auditing **without mutating any bundle**. This mirrors the layered-override-never-deletes rule of the settings merge (Invariant #34/#35) for the localisation layer (§4.39, §4.12, F71).
 
 ---
 
