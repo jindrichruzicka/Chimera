@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render as baseRender } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -11,8 +11,14 @@ import type {
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { PlayerConnectionToastBridge } from './PlayerConnectionToastBridge';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { useToastStore } from '../../state/toastStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
+
+// The bridge calls useTranslate(), which throws outside I18nProvider; the inert
+// provider resolves engine English so the existing toast-title assertions hold.
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: I18nProvider });
 
 const noopSystem = {
     onConnectionStatus: vi.fn(() => () => undefined),
@@ -65,6 +71,20 @@ describe('PlayerConnectionToastBridge', () => {
         expect(queue[0]!.severity).toBe('warning');
         expect(queue[0]!.title).toBe('Player disconnected');
         expect(queue[0]!.body).toBeUndefined();
+    });
+
+    it('resolves the disconnect title through the active-locale translator', () => {
+        const { onPlayerConnectionChanged, fire } = captureConnectionListener();
+        installLobbyBridge({ onPlayerConnectionChanged });
+
+        baseRender(
+            <I18nProvider gameOverride={{ 'engine.toast.playerDisconnected': 'Player dropped' }}>
+                <PlayerConnectionToastBridge />
+            </I18nProvider>,
+        );
+        fire({ playerId: OPPONENT, status: 'disconnected' });
+
+        expect(useToastStore.getState().queue[0]!.title).toBe('Player dropped');
     });
 
     it('pushes an info "Player reconnected" toast on a reconnect transition', () => {

@@ -16,28 +16,41 @@
  * severity default. Mounted once in `AppShell`; renders nothing.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ProfileRejection } from '@chimera-engine/simulation/bridge/api-types.js';
 import { getLobbyBridge } from '../../app/lobby/useLobbyApi';
+import { TOAST_KEYS } from '../../i18n/engine-keys';
+import type { TranslateFn } from '../../i18n/i18n-context';
+import { useTranslate } from '../../i18n/useTranslate';
+import type { TranslationKey } from '../../i18n/translation-bundle';
 import { useToastStore } from '../../state/toastStore';
 
-/** Friendly copy for each raw gate code; falls back to the raw reason. */
-const FRIENDLY_REASON: Readonly<Record<string, string>> = {
-    'profile:DISPLAY_NAME_EMPTY': 'display name is required',
-    'profile:DISPLAY_NAME_TOO_LONG': 'display name is too long',
-    'profile:AVATAR_INVALID_MIME': 'avatar image type is not supported',
-    'profile:AVATAR_TOO_LARGE': 'avatar image is too large',
-    'profile:AVATAR_DECODE_FAILED': 'avatar image could not be read',
-    'profile:SCHEMA_MISMATCH': 'profile data is invalid',
-    'profile:NAMESPACE_COLLISION': 'that profile is already in use',
-    rate_limit: 'updating too quickly',
+/** Friendly-copy translation token for each raw gate code; unknown codes fall
+ * back to the raw reason string (matching the prior `?? reason`). */
+const FRIENDLY_REASON_KEYS: Readonly<Record<string, TranslationKey>> = {
+    'profile:DISPLAY_NAME_EMPTY': TOAST_KEYS.profileDisplayNameEmpty,
+    'profile:DISPLAY_NAME_TOO_LONG': TOAST_KEYS.profileDisplayNameTooLong,
+    'profile:AVATAR_INVALID_MIME': TOAST_KEYS.profileAvatarInvalidMime,
+    'profile:AVATAR_TOO_LARGE': TOAST_KEYS.profileAvatarTooLarge,
+    'profile:AVATAR_DECODE_FAILED': TOAST_KEYS.profileAvatarDecodeFailed,
+    'profile:SCHEMA_MISMATCH': TOAST_KEYS.profileSchemaMismatch,
+    'profile:NAMESPACE_COLLISION': TOAST_KEYS.profileNamespaceCollision,
+    rate_limit: TOAST_KEYS.profileRateLimit,
 };
 
-function friendlyReason(reason: string): string {
-    return FRIENDLY_REASON[reason] ?? reason;
+function friendlyReason(t: TranslateFn, reason: string): string {
+    const key = FRIENDLY_REASON_KEYS[reason];
+    return key !== undefined ? t(key) : reason;
 }
 
 export function ProfileRejectedToastBridge(): null {
+    // The subscription is one-time (empty deps) so a locale change must not
+    // re-subscribe and drop events; read the latest translator through a ref
+    // instead. A resolved token is still a static title (Invariant #74).
+    const t = useTranslate();
+    const tRef = useRef(t);
+    tRef.current = t;
+
     useEffect(() => {
         // Guard: outside Electron (or before preload wiring) there is no bridge.
         const bridge = getLobbyBridge();
@@ -45,9 +58,12 @@ export function ProfileRejectedToastBridge(): null {
             return;
         }
         return bridge.lobby.onProfileRejected((rejection: ProfileRejection) => {
+            const translate = tRef.current;
             useToastStore.getState().push({
                 severity: 'error',
-                title: `Profile rejected: ${friendlyReason(rejection.reason)}`,
+                title: translate(TOAST_KEYS.profileRejectedPrefix, {
+                    reason: friendlyReason(translate, rejection.reason),
+                }),
             });
         });
     }, []);

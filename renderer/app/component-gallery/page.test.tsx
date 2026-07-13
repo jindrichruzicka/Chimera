@@ -19,6 +19,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EscapeStackProvider } from '../../components/shell/EscapeStack';
 import { ToastHost } from '../../components/shell/ToastHost';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { useToastStore } from '../../state/toastStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import ComponentGalleryClient from './ComponentGalleryClient';
@@ -36,9 +37,18 @@ vi.mock('next/navigation', () => ({
 import { notFound as notFoundMock } from 'next/navigation';
 
 // The gallery renders Modal/Drawer, which route Escape through the shared overlay
-// stack; wrap every render so useEscapeLayer resolves the provider.
+// stack (useEscapeLayer), and ToastHost, which calls useTranslate(); wrap every
+// render in both providers. The inert I18nProvider resolves engine English.
+function GalleryWrapper({ children }: { readonly children: React.ReactNode }): React.ReactElement {
+    return (
+        <I18nProvider>
+            <EscapeStackProvider>{children}</EscapeStackProvider>
+        </I18nProvider>
+    );
+}
+
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
-    baseRender(ui, { wrapper: EscapeStackProvider });
+    baseRender(ui, { wrapper: GalleryWrapper });
 
 function renderGallery(): void {
     render(

@@ -1,10 +1,23 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import {
+    act,
+    cleanup,
+    fireEvent,
+    render as baseRender,
+    screen,
+    within,
+} from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { useToastStore } from '../../state/toastStore';
 import { ToastHost } from './ToastHost';
+
+// ToastHost calls useTranslate() for the region aria-label; the inert provider
+// resolves engine English so the existing assertions hold.
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: I18nProvider });
 
 const UUID_1 = '00000000-0000-4000-8000-000000000001';
 const UUID_2 = '00000000-0000-4000-8000-000000000002';
@@ -111,6 +124,16 @@ describe('ToastHost', () => {
             ['Oldest toast', 'Newest toast'],
         );
         expect(toasts[1]?.getAttribute('data-toast-id')).toBe(UUID_2);
+    });
+
+    it('resolves the notifications region aria-label through the active-locale translator', () => {
+        baseRender(
+            <I18nProvider gameOverride={{ 'engine.toast.hostAriaLabel': 'Alerts' }}>
+                <ToastHost />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('toast-host').getAttribute('aria-label')).toBe('Alerts');
     });
 
     it('auto-dismisses each toast after its resolved duration', () => {

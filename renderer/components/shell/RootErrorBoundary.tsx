@@ -11,6 +11,8 @@
 // shell-root mount ordering.
 
 import React from 'react';
+import { CRASH_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { emitRendererError } from '../../logging/rendererLogger';
 
 // ── types ──────────────────────────────────────────────────────────────────────
@@ -37,15 +39,19 @@ function CrashFallback({
     onReturnToMenu,
     onRestart,
 }: CrashFallbackProps): React.ReactElement {
+    // CrashFallback is a function component, so useTranslate() is legal here (the
+    // boundary class below must not call hooks). In production AppShell mounts the
+    // i18n provider above the boundary, so the fallback resolves after a catch.
+    const t = useTranslate();
     return (
         <div role="alert" aria-live="assertive">
-            <h1>An unexpected error occurred.</h1>
-            <p>Crash ID: {crashId}</p>
+            <h1>{t(CRASH_KEYS.heading)}</h1>
+            <p>{t(CRASH_KEYS.crashId, { crashId })}</p>
             <button type="button" onClick={onReturnToMenu}>
-                Return to Main Menu
+                {t(CRASH_KEYS.returnToMenu)}
             </button>
             <button type="button" onClick={onRestart}>
-                Restart Application
+                {t(CRASH_KEYS.restart)}
             </button>
         </div>
     );

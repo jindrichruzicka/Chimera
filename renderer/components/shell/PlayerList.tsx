@@ -2,6 +2,9 @@ import React from 'react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Heading } from '../ui/Heading';
+import { LOBBY_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
+import type { TranslateFn } from '../../i18n/i18n-context';
 import { useLobbyStore } from '../../state/lobbyStore';
 import type {
     LobbyPlayerEntry,
@@ -27,13 +30,14 @@ export function PlayerList({
     onToggleReady,
     isTogglePending = false,
 }: PlayerListProps) {
+    const t = useTranslate();
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const players = lobbyState?.players ?? [];
 
     return (
         <div className={styles['root']} data-testid="player-list">
             <Heading level={3} size="md">
-                Players ({players.length})
+                {t(LOBBY_KEYS.playersHeading, { n: players.length })}
             </Heading>
             <ul className={styles['list']}>
                 {players.map((player) => (
@@ -43,6 +47,7 @@ export function PlayerList({
                         isLocalPlayer={player.playerId === localPlayerId}
                         onToggleReady={onToggleReady}
                         isTogglePending={isTogglePending}
+                        t={t}
                     />
                 ))}
             </ul>
@@ -55,9 +60,10 @@ interface PlayerRowProps {
     isLocalPlayer: boolean;
     onToggleReady: ((ready: boolean) => void | Promise<void>) | undefined;
     isTogglePending: boolean;
+    t: TranslateFn;
 }
 
-function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: PlayerRowProps) {
+function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending, t }: PlayerRowProps) {
     return (
         <li
             className={styles['row']}
@@ -67,13 +73,13 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: Pl
         >
             <span className={styles['identity']}>
                 <span className={styles['name']}>{player.displayName || player.playerId}</span>
-                {isLocalPlayer ? <Badge variant="neutral">(You)</Badge> : null}
+                {isLocalPlayer ? <Badge variant="neutral">{t(LOBBY_KEYS.you)}</Badge> : null}
             </span>
             <div className={styles['controls']}>
                 {/* 'warning' (amber) is intentional over 'error' (red): not-ready is a
                     pending/neutral state, not a fault condition. */}
                 <Badge variant={player.ready ? 'success' : 'warning'}>
-                    {player.ready ? 'Ready' : 'Not Ready'}
+                    {player.ready ? t(LOBBY_KEYS.ready) : t(LOBBY_KEYS.notReady)}
                 </Badge>
                 {isLocalPlayer && onToggleReady && (
                     <Button
@@ -85,7 +91,7 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: Pl
                         size="sm"
                         variant="secondary"
                     >
-                        {isTogglePending ? 'Updating...' : 'Toggle Ready'}
+                        {isTogglePending ? t(LOBBY_KEYS.updating) : t(LOBBY_KEYS.toggleReady)}
                     </Button>
                 )}
             </div>

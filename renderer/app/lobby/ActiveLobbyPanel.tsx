@@ -5,6 +5,8 @@ import type { LobbyState, PlayerId } from '@chimera-engine/simulation/bridge/api
 import { PlayerList } from '../../components/shell/PlayerList';
 import { Badge } from '../../components/ui/Badge';
 import { Heading } from '../../components/ui/Heading';
+import { LOBBY_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import type { PendingAction } from './lobbyTypes';
 import styles from './page.module.css';
 
@@ -23,6 +25,7 @@ export function ActiveLobbyPanel({
     pendingAction,
     onToggleReady,
 }: ActiveLobbyPanelProps): React.ReactElement {
+    const t = useTranslate();
     const isHost = localPlayerId !== null && localPlayerId === lobbyState.info.hostId;
     const readyCount = lobbyState.players.filter((player) => player.ready).length;
 
@@ -31,29 +34,29 @@ export function ActiveLobbyPanel({
             <section className={styles['session-panel']}>
                 <div className={styles['section-heading-row']}>
                     <Heading level={2} size="lg">
-                        Session
+                        {t(LOBBY_KEYS.sessionHeading)}
                     </Heading>
                     <Badge variant={isHost ? 'success' : 'neutral'}>
-                        {isHost ? 'Host' : 'Player'}
+                        {isHost ? t(LOBBY_KEYS.roleHost) : t(LOBBY_KEYS.rolePlayer)}
                     </Badge>
                 </div>
                 <dl className={styles['session-details']}>
                     <div className={styles['detail-row']}>
-                        <dt>Session ID:</dt>
+                        <dt>{t(LOBBY_KEYS.sessionIdLabel)}</dt>
                         <dd>
                             <span data-testid="lobby-session-id">{lobbyState.info.sessionId}</span>
                         </dd>
                     </div>
                     <div className={styles['detail-row']}>
-                        <dt>Host ID:</dt>
+                        <dt>{t(LOBBY_KEYS.hostIdLabel)}</dt>
                         <dd>{lobbyState.info.hostId}</dd>
                     </div>
                     <div className={styles['detail-row']}>
-                        <dt>Game:</dt>
+                        <dt>{t(LOBBY_KEYS.gameLabel)}</dt>
                         <dd>{lobbyState.info.gameId}</dd>
                     </div>
                     <div className={styles['detail-row']}>
-                        <dt>Ready:</dt>
+                        <dt>{t(LOBBY_KEYS.readyLabel)}</dt>
                         <dd>
                             {readyCount}/{lobbyState.players.length}
                         </dd>

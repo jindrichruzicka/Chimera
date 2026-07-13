@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // renderer/components/shell/GameShell.test.tsx
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '../../i18n/I18nProvider.js';
 import {
     gamePhase,
     playerId,
@@ -60,6 +61,13 @@ vi.mock('./InGameMenuHost.js', () => ({
 }));
 
 const TEST_AUDIO_REF = 'tactics/audio/sfx/test-hit.ogg' as AssetRef<AudioClipAsset>;
+
+// GameShell and its DefaultGameHud call useTranslate() for the landmark
+// accessible names; the inert I18nProvider resolves engine English so the
+// existing aria-label locators hold. renderWithAudio delegates here, so both
+// entry points sit inside the provider.
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: I18nProvider });
 
 afterEach(() => {
     cleanup();
@@ -376,6 +384,45 @@ describe('GameShell page object locators', () => {
         expect(screen.getByTestId('hud-tick').textContent).toBe('42');
     });
 
+    it('resolves the landmark accessible names through the active-locale translator', () => {
+        baseRender(
+            <I18nProvider
+                gameOverride={{
+                    'engine.gameShell.mainAriaLabel': 'Play area',
+                    'engine.gameShell.canvasAriaLabel': 'Board',
+                    'engine.gameShell.hudAriaLabel': 'Controls',
+                }}
+            >
+                <GameShell tick={1} canUndo={false} canRedo={false} />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByLabelText('Play area')).toBeTruthy();
+        expect(screen.getByLabelText('Board')).toBeTruthy();
+        expect(screen.getByLabelText('Controls')).toBeTruthy();
+    });
+
+    it('resolves the default HUD scaffold labels through engine.hud.* tokens (game override wins)', () => {
+        baseRender(
+            <I18nProvider
+                gameOverride={{
+                    'engine.hud.tick': 'Turn',
+                    'engine.hud.undo': 'Back',
+                    'engine.hud.redo': 'Forward',
+                    'engine.hud.endTurn': 'Finish',
+                }}
+            >
+                <GameShell tick={3} canUndo canRedo />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('undo').textContent).toBe('Back');
+        expect(screen.getByTestId('redo').textContent).toBe('Forward');
+        expect(screen.getByTestId('end-turn').textContent).toBe('Finish');
+        // The tick readout keeps its numeric <output>; only the label re-keys.
+        expect(screen.getByTestId('hud-tick').closest('div')?.textContent).toBe('Turn 3');
+    });
+
     it('keeps shell root layout structure while using tokenized font family', () => {
         render(<GameShell tick={1} canUndo={false} canRedo={false} />);
 
@@ -580,6 +627,35 @@ describe('GameShell page object locators', () => {
             screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('win');
         expect(screen.getByTestId('game-result-text').textContent).toBe('You won');
+    });
+
+    it('resolves the default result-banner copy through engine.gameResult.* tokens (game override wins)', () => {
+        const localPlayerId = playerId('p1');
+
+        baseRender(
+            <I18nProvider gameOverride={{ 'engine.gameResult.won': 'Victory!' }}>
+                <GameShell
+                    tick={7}
+                    canUndo={false}
+                    canRedo={false}
+                    isGameOver={true}
+                    localPlayerId={localPlayerId}
+                    gameResult={{ winnerIds: [localPlayerId] }}
+                />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Victory!');
+    });
+
+    it('resolves the game-over fallback message through the engine.gameResult.gameOver token', () => {
+        baseRender(
+            <I18nProvider gameOverride={{ 'engine.gameResult.gameOver': 'Match complete' }}>
+                <GameShell tick={7} canUndo={false} canRedo={false} isGameOver={true} />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Match complete');
     });
 
     it('delegates resolved match result rendering to a game-provided banner', () => {

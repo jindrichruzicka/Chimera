@@ -9,6 +9,8 @@ import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation
 import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { EscapeStackProvider } from '../../components/shell/EscapeStack';
 import modalCss from '../../components/ui/Modal.module.css?raw';
+import { I18nProvider } from '../../i18n/I18nProvider';
+import type { TranslationBundle } from '../../i18n/translation-bundle';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import LobbyPage from './page';
@@ -138,15 +140,28 @@ function createDeferredPromise(): DeferredPromise {
 }
 
 // The page renders through the shared Modal, whose Escape handling registers on
-// the overlay stack — every render must sit inside an EscapeStackProvider.
-function renderLobbyPage(): ReturnType<typeof render> {
-    return render(
-        <EscapeStackProvider>
-            <ThemeProvider>
-                <LobbyPage />
-            </ThemeProvider>
-        </EscapeStackProvider>,
+// the overlay stack — every render must sit inside an EscapeStackProvider. The
+// page reads its chrome/footer strings through useTranslate(), which throws
+// outside I18nProvider, so that wrapper is outermost; a `gameOverride` bundle
+// re-keys engine tokens to prove the strings are token-driven.
+function renderLobbyPageElement(gameOverride?: TranslationBundle): React.ReactElement {
+    // Spread `gameOverride` only when supplied: I18nProviderProps declares it
+    // optional and the tree compiles with exactOptionalPropertyTypes, so an
+    // explicit `undefined` is rejected.
+    const providerProps = gameOverride !== undefined ? { gameOverride } : {};
+    return (
+        <I18nProvider {...providerProps}>
+            <EscapeStackProvider>
+                <ThemeProvider>
+                    <LobbyPage />
+                </ThemeProvider>
+            </EscapeStackProvider>
+        </I18nProvider>
     );
+}
+
+function renderLobbyPage(gameOverride?: TranslationBundle): ReturnType<typeof render> {
+    return render(renderLobbyPageElement(gameOverride));
 }
 
 describe('LobbyPage pending actions', () => {
@@ -269,6 +284,19 @@ describe('LobbyPage pending actions', () => {
             closeButton,
             joinButton,
         ]);
+    });
+
+    it('renders game-overridden lobby chrome and footer labels (token-driven)', () => {
+        renderLobbyPage({
+            'engine.lobby.title': 'Match Setup',
+            'engine.lobby.hostLobby': 'Create Room',
+            'engine.lobby.close': 'Back',
+        });
+
+        expect(screen.getByRole('dialog', { name: 'Match Setup' })).toBeTruthy();
+        expect(screen.getByRole('main')).toHaveAttribute('aria-label', 'Match Setup');
+        expect(screen.getByTestId('host-lobby').textContent).toBe('Create Room');
+        expect(screen.getByTestId('lobby-close').textContent).toBe('Back');
     });
 
     it('closes the modal back to the main menu with game context preserved', () => {
@@ -620,13 +648,7 @@ describe('Start Game button enable/disable', () => {
                 { playerId: 'p2', displayName: 'Client', ready: false },
             ],
         };
-        rerender(
-            <EscapeStackProvider>
-                <ThemeProvider>
-                    <LobbyPage />
-                </ThemeProvider>
-            </EscapeStackProvider>,
-        );
+        rerender(renderLobbyPageElement());
         expect(screen.getByTestId('start-game').hasAttribute('disabled')).toBe(true);
     });
 });

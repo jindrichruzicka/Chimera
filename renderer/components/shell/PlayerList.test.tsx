@@ -2,10 +2,12 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlayerList } from './PlayerList';
+import { I18nProvider } from '../../i18n/I18nProvider';
+import type { TranslationBundle } from '../../i18n/translation-bundle';
 
 interface MockLobbyStoreState {
     readonly lobbyState: {
@@ -23,6 +25,27 @@ interface MockLobbyStoreState {
 }
 
 let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
+
+// PlayerList reads its heading and control strings through useTranslate(), which
+// throws outside an I18nProvider. Mount it inert (engine English, en-US) for
+// every render so the default-locale text assertions stay identical to the ship
+// strings; a `gameOverride` bundle re-keys engine tokens to prove the strings
+// are token-driven. Using the `wrapper` option keeps the provider in place
+// across RTL `rerender` calls.
+function render(
+    ui: React.ReactElement,
+    gameOverride?: TranslationBundle,
+): ReturnType<typeof baseRender> {
+    // Spread `gameOverride` only when supplied: I18nProviderProps declares it
+    // optional and the tree compiles with exactOptionalPropertyTypes, so an
+    // explicit `undefined` is rejected.
+    const providerProps = gameOverride !== undefined ? { gameOverride } : {};
+    return baseRender(ui, {
+        wrapper: ({ children }: { children: React.ReactNode }) => (
+            <I18nProvider {...providerProps}>{children}</I18nProvider>
+        ),
+    });
+}
 
 function getPlayerRow(playerId: string): HTMLElement {
     const row = screen
@@ -443,5 +466,31 @@ describe('PlayerList', () => {
         expect(getPlayerRow('player-2').textContent).toContain('(You)');
         expect(getPlayerRow('player-1').textContent).not.toContain('(You)');
         expect(getPlayerRow('player-3').textContent).not.toContain('(You)');
+    });
+
+    it('renders game-overridden heading and control labels (token-driven)', () => {
+        const onToggleReady = vi.fn();
+
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'player-1',
+                gameId: 'tactics',
+            },
+            players: [{ playerId: 'player-1', displayName: 'Alice', ready: false }],
+        };
+
+        render(<PlayerList localPlayerId="player-1" onToggleReady={onToggleReady} />, {
+            'engine.lobby.playersHeading': 'Seats ({n})',
+            'engine.lobby.notReady': 'Waiting',
+            'engine.lobby.toggleReady': 'I am ready',
+            'engine.lobby.you': '(Me)',
+        });
+
+        expect(screen.getByText('Seats (1)')).toBeTruthy();
+        const aliceRow = getPlayerRow('player-1');
+        expect(aliceRow.textContent).toContain('Waiting');
+        expect(aliceRow.textContent).toContain('(Me)');
+        expect(screen.getByText('I am ready')).toBeTruthy();
     });
 });

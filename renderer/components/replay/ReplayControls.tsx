@@ -11,21 +11,24 @@
 
 import React from 'react';
 import { Button, Caption, IconButton, Select, Slider, type SelectOption } from '../ui';
+import { REPLAYS_KEYS } from '../../i18n/engine-keys';
+import type { TranslationKey } from '../../i18n/translation-bundle';
+import { useTranslate } from '../../i18n/useTranslate';
 import type { ReplayKind } from './replayKind';
 import styles from './ReplayControls.module.css';
 
-/** Selectable wall-clock playback rates, as multiples of one tick per second. */
-const SPEED_OPTIONS: readonly SelectOption[] = [
-    { value: '0.5', label: '0.5×' },
-    { value: '1', label: '1×' },
-    { value: '2', label: '2×' },
-    { value: '4', label: '4×' },
+/** The selectable playback rates and the token that labels each speed option. */
+const SPEED_OPTION_KEYS: readonly { readonly value: string; readonly key: TranslationKey }[] = [
+    { value: '0.5', key: REPLAYS_KEYS.speed05 },
+    { value: '1', key: REPLAYS_KEYS.speed1 },
+    { value: '2', key: REPLAYS_KEYS.speed2 },
+    { value: '4', key: REPLAYS_KEYS.speed4 },
 ];
 
-/** Accessible group label per replay kind. */
-const GROUP_LABEL: Record<ReplayKind, string> = {
-    deterministic: 'Replay playback controls',
-    perspective: 'Perspective replay playback controls',
+/** The token that labels the accessible controls group per replay kind. */
+const GROUP_LABEL_KEY: Record<ReplayKind, TranslationKey> = {
+    deterministic: REPLAYS_KEYS.controlsGroupDeterministic,
+    perspective: REPLAYS_KEYS.controlsGroupPerspective,
 };
 
 /**
@@ -90,11 +93,17 @@ export function ReplayControls({
     onSpeedChange,
     save,
 }: ReplayControlsProps): React.ReactElement {
+    const t = useTranslate();
     const atStart = currentTick <= 0;
     const atEnd = currentTick >= totalTicks;
 
+    const speedOptions = React.useMemo<readonly SelectOption[]>(
+        () => SPEED_OPTION_KEYS.map(({ value, key }) => ({ value, label: t(key) })),
+        [t],
+    );
+
     return (
-        <div className={styles['root']} role="group" aria-label={GROUP_LABEL[kind]}>
+        <div className={styles['root']} role="group" aria-label={t(GROUP_LABEL_KEY[kind])}>
             {save !== undefined && (
                 <IconButton
                     className={styles['save']}
@@ -102,7 +111,9 @@ export function ReplayControls({
                     // The accessible name doubles as the saved-state signal: a
                     // perspective replay raises no toast, so the label switch (and
                     // the disabled state) is the only confirmation a save landed.
-                    aria-label={save.saved ? 'Replay saved' : 'Save replay'}
+                    aria-label={
+                        save.saved ? t(REPLAYS_KEYS.replaySavedLabel) : t(REPLAYS_KEYS.saveReplay)
+                    }
                     data-testid="replay-save-btn"
                     disabled={save.saving || save.saved}
                     onClick={save.onSave}
@@ -113,7 +124,7 @@ export function ReplayControls({
             <Button
                 size="sm"
                 variant="ghost"
-                aria-label="Seek to start"
+                aria-label={t(REPLAYS_KEYS.seekStart)}
                 disabled={atStart}
                 onClick={() => onSeek(0)}
             >
@@ -122,7 +133,7 @@ export function ReplayControls({
             <Button
                 size="sm"
                 variant="ghost"
-                aria-label="Step back"
+                aria-label={t(REPLAYS_KEYS.stepBack)}
                 disabled={atStart}
                 onClick={() => onStep(-1)}
             >
@@ -132,28 +143,28 @@ export function ReplayControls({
                 <Button
                     size="sm"
                     variant="primary"
-                    aria-label="Pause"
+                    aria-label={t(REPLAYS_KEYS.pause)}
                     data-testid="replay-pause-btn"
                     onClick={onPause}
                 >
-                    Pause
+                    {t(REPLAYS_KEYS.pause)}
                 </Button>
             ) : (
                 <Button
                     size="sm"
                     variant="primary"
-                    aria-label="Play"
+                    aria-label={t(REPLAYS_KEYS.play)}
                     data-testid="replay-play-btn"
                     disabled={atEnd}
                     onClick={onPlay}
                 >
-                    Play
+                    {t(REPLAYS_KEYS.play)}
                 </Button>
             )}
             <Button
                 size="sm"
                 variant="ghost"
-                aria-label="Step forward"
+                aria-label={t(REPLAYS_KEYS.stepForward)}
                 disabled={atEnd}
                 onClick={() => onStep(1)}
             >
@@ -162,7 +173,7 @@ export function ReplayControls({
             <Button
                 size="sm"
                 variant="ghost"
-                aria-label="Seek to end"
+                aria-label={t(REPLAYS_KEYS.seekEnd)}
                 disabled={atEnd}
                 onClick={() => onSeek(totalTicks)}
             >
@@ -170,7 +181,7 @@ export function ReplayControls({
             </Button>
             <Slider
                 className={styles['scrubber']}
-                label="Replay position"
+                label={t(REPLAYS_KEYS.scrubberLabel)}
                 data-testid="replay-scrubber"
                 min={0}
                 max={totalTicks}
@@ -184,8 +195,8 @@ export function ReplayControls({
             >{`${currentTick} / ${totalTicks}`}</Caption>
             <Select
                 className={styles['speed']}
-                label="Playback speed"
-                options={SPEED_OPTIONS}
+                label={t(REPLAYS_KEYS.speedLabel)}
+                options={speedOptions}
                 value={String(playbackSpeed)}
                 onValueChange={(value) => onSpeedChange(Number(value))}
             />

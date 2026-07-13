@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { MAX_SAVE_LABEL_LENGTH } from '@chimera-engine/simulation/bridge/api-types.js';
+import { SAVE_GAME_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { Button } from './Button';
 import { Modal } from './Modal';
 import { TextInput } from './TextInput';
@@ -31,6 +33,7 @@ export function SaveGameButton({
     style,
     'data-testid': testId,
 }: SaveGameButtonProps): React.ReactElement {
+    const t = useTranslate();
     const [open, setOpen] = useState(false);
     const [label, setLabel] = useState('');
 
@@ -50,13 +53,13 @@ export function SaveGameButton({
                 {...(style === undefined ? {} : { style })}
                 {...(testId === undefined ? {} : { 'data-testid': testId })}
             >
-                Save
+                {t(SAVE_GAME_KEYS.save)}
             </Button>
             <Modal
                 actions={[
-                    { label: 'Cancel', testId: 'save-name-cancel' },
+                    { label: t(SAVE_GAME_KEYS.cancel), testId: 'save-name-cancel' },
                     {
-                        label: 'Save',
+                        label: t(SAVE_GAME_KEYS.save),
                         onClick: () => onSave(label.trim()),
                         testId: 'save-name-confirm',
                         variant: 'primary',
@@ -65,12 +68,12 @@ export function SaveGameButton({
                 data-testid="save-name-dialog"
                 onClose={() => setOpen(false)}
                 open={open}
-                title="Save game"
+                title={t(SAVE_GAME_KEYS.dialogTitle)}
             >
                 <div className={styles['body']}>
                     <TextInput
                         data-testid="save-name-input"
-                        label="Name"
+                        label={t(SAVE_GAME_KEYS.nameLabel)}
                         maxLength={MAX_SAVE_LABEL_LENGTH}
                         onValueChange={setLabel}
                         value={label}

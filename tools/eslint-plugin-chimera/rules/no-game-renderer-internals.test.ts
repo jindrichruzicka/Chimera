@@ -113,6 +113,16 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             filename: 'apps/tactics/screens/TacticsDemoBoard.tsx',
             code: `import { PerfProbe } from '@chimera-engine/renderer/components/r3f/index.js';`,
         },
+        {
+            // F71: the engine i18n runtime barrel (I18nProvider, useTranslate, the
+            // engine token catalogue) is allowed from a game surface.
+            filename: 'apps/tactics/screens/TacticsGameHud.tsx',
+            code: `import { I18nProvider, useTranslate } from '@chimera-engine/renderer/i18n';`,
+        },
+        {
+            filename: 'apps/tactics/screens/TacticsGameHud.tsx',
+            code: `import { SETTINGS_KEYS } from '@chimera-engine/renderer/i18n/index.js';`,
+        },
     ],
     invalid: [
         {

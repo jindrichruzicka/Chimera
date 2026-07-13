@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render as baseRender, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -55,9 +55,21 @@ vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: mockRouterPush }),
 }));
 
+import { I18nProvider } from '../../../i18n/I18nProvider';
 import { useUiStore } from '../../../state/uiStore';
 import { resetGameContentCache } from '../../../state/useGameContent';
 import ReplayPlayerPage from './page';
+
+// The player and its ReplayControls render user-facing strings through
+// `useTranslate()`, which throws outside an I18nProvider; wrap every render.
+function render(
+    ui: React.ReactElement,
+    gameOverride?: Record<string, string>,
+): ReturnType<typeof baseRender> {
+    return baseRender(
+        <I18nProvider {...(gameOverride === undefined ? {} : { gameOverride })}>{ui}</I18nProvider>,
+    );
+}
 
 const PATH = '/replays/tactics/match.chimera-replay';
 
@@ -105,6 +117,18 @@ afterEach(() => {
 });
 
 describe('ReplayPlayerPage', () => {
+    it('renders the loading status text from the engine.replays.playerLoading token', () => {
+        // Keep the bridge pending so the player stays on its loading status, whose
+        // copy must come from the token (proving it is not a hardcoded literal).
+        installReplayBridge(
+            makeBridge({ openPlayback: vi.fn(() => new Promise<never>(() => {})) }),
+        );
+
+        render(<ReplayPlayerPage />, { 'engine.replays.playerLoading': 'Buffering…' });
+
+        expect(screen.getByText('Buffering…')).toBeInTheDocument();
+    });
+
     it('opens playback for the path and prefetches a range from tick 0', async () => {
         const bridge = makeBridge();
         installReplayBridge(bridge);

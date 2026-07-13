@@ -30,6 +30,7 @@ import type {
     GameScreenRegistry,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type { DeviceInfo } from '../../device/DeviceInfo.js';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { useToastStore } from '../../state/toastStore';
 import { useUiStore } from '../../state/uiStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
@@ -203,12 +204,17 @@ const testRegistry: GameScreenRegistry = {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function renderGamePage(): ReturnType<typeof render> {
+    // GamePage renders GameShell, whose tree calls useTranslate(); in production
+    // AppShell mounts the i18n provider above the route. The inert provider
+    // resolves engine English so the static save-toast titles hold.
     return render(
-        <Providers>
-            <ThemeProvider>
-                <GamePage />
-            </ThemeProvider>
-        </Providers>,
+        <I18nProvider>
+            <Providers>
+                <ThemeProvider>
+                    <GamePage />
+                </ThemeProvider>
+            </Providers>
+        </I18nProvider>,
     );
 }
 

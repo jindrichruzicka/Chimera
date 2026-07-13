@@ -13,12 +13,20 @@
  * is never missed. Renders nothing.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { getReplayBridge, useReplayApi } from '../../hooks/useReplayApi';
+import { TOAST_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { useToastStore } from '../../state/toastStore';
 
 export function ReplayExportToastBridge(): null {
     const replayApi = useReplayApi();
+    // Read the latest translator through a ref so a locale change never adds `t`
+    // to the effect deps and re-subscribes (which would drop the one-time
+    // listener). A resolved token is still a static title (Invariant #74).
+    const t = useTranslate();
+    const tRef = useRef(t);
+    tRef.current = t;
 
     useEffect(() => {
         // Guard: in a non-Electron context (or before preload wiring) there is
@@ -30,7 +38,9 @@ export function ReplayExportToastBridge(): null {
             // §4.30 engine-wired source. Static title, no body — toast content is
             // not derived from the pushed path (Invariant #74); duration is the
             // severity default.
-            useToastStore.getState().push({ severity: 'success', title: 'Replay saved' });
+            useToastStore
+                .getState()
+                .push({ severity: 'success', title: tRef.current(TOAST_KEYS.replaySaved) });
         });
     }, [replayApi]);
 

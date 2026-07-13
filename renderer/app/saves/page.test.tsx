@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toSlotId } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { SaveSlotMeta, SavesAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 import { EscapeStackProvider } from '../../components/ui';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { useToastStore } from '../../state/toastStore.js';
 import SavesPage from './page';
 
@@ -76,12 +77,22 @@ function installBridge(
 
 // The page itself and its confirm dialog are <Modal>s, which register
 // Escape-to-close on the shared overlay stack; render the page under the
-// provider so `useEscapeLayer` resolves.
-function renderPage(): ReturnType<typeof render> {
+// EscapeStack provider so `useEscapeLayer` resolves. The page's chrome now
+// reads engine tokens via useTranslate(), which throws outside I18nProvider —
+// so I18nProvider wraps the tree too. With no override it resolves to the
+// engine English base bundle, keeping every existing English assertion green.
+//
+// `override` re-keys engine tokens so a test can prove a string is
+// token-driven; it is spread conditionally because exactOptionalPropertyTypes
+// forbids passing an explicit `undefined` for the optional `gameOverride` prop.
+function renderPage(override?: Record<string, string>): ReturnType<typeof render> {
+    const providerProps = override !== undefined ? { gameOverride: override } : {};
     return render(
-        <EscapeStackProvider>
-            <SavesPage />
-        </EscapeStackProvider>,
+        <I18nProvider {...providerProps}>
+            <EscapeStackProvider>
+                <SavesPage />
+            </EscapeStackProvider>
+        </I18nProvider>,
     );
 }
 
@@ -102,6 +113,15 @@ afterEach(() => {
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe('SavesPage — token-driven engine strings', () => {
+    it('names the page modal from the engine.saves.title token', () => {
+        renderPage({ 'engine.saves.title': 'Snapshots' });
+
+        expect(screen.getByRole('dialog', { name: 'Snapshots' })).toBeInTheDocument();
+        expect(screen.queryByRole('dialog', { name: 'Saves' })).not.toBeInTheDocument();
+    });
+});
 
 describe('SavesPage — loading state', () => {
     it('shows a loading status inside the tagged page while the store loads', () => {

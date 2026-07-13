@@ -5,14 +5,27 @@ import { cleanup, fireEvent, render as baseRender, screen } from '@testing-libra
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MAX_SAVE_LABEL_LENGTH } from '@chimera-engine/simulation/bridge/api-types.js';
+import { I18nProvider } from '../../i18n/I18nProvider';
+import type { TranslationBundle } from '../../i18n/translation-bundle';
 import { EscapeStackProvider } from '../shell/EscapeStack';
 import { SaveGameButton } from './SaveGameButton';
 
 // SaveGameButton's name-prompt Modal routes Escape-to-close through the shared
 // overlay stack, so every render must sit inside an EscapeStackProvider
-// (useEscapeLayer throws otherwise).
-const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
-    baseRender(ui, { wrapper: EscapeStackProvider });
+// (useEscapeLayer throws otherwise). It also calls useTranslate(); the inert
+// I18nProvider resolves engine English so the existing label assertions hold. A
+// gameOverride exercises the translate-at-the-render-site path.
+const render = (
+    ui: React.ReactElement,
+    gameOverride?: TranslationBundle,
+): ReturnType<typeof baseRender> => {
+    const providerProps = gameOverride !== undefined ? { gameOverride } : {};
+    return baseRender(
+        <I18nProvider {...providerProps}>
+            <EscapeStackProvider>{ui}</EscapeStackProvider>
+        </I18nProvider>,
+    );
+};
 
 afterEach(() => {
     cleanup();
@@ -43,6 +56,16 @@ describe('SaveGameButton', () => {
         expect(screen.getByRole('dialog', { name: 'Save game' })).toBeInTheDocument();
         expect(screen.getByTestId('save-name-dialog')).toBeInTheDocument();
         expect(screen.getByTestId('save-name-input')).toHaveValue('');
+    });
+
+    it('resolves the dialog title through the active-locale translator', () => {
+        render(<SaveGameButton data-testid="save-trigger" onSave={vi.fn()} />, {
+            'engine.saveGame.dialogTitle': 'Store game',
+        });
+
+        openDialog();
+
+        expect(screen.getByRole('dialog', { name: 'Store game' })).toBeInTheDocument();
     });
 
     it('bounds the name input to the shared save-label maximum', () => {

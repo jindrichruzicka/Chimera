@@ -28,6 +28,9 @@ import { useRouter } from 'next/navigation';
 import type { SaveSlotMeta, SlotId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { Caption, IconButton, Modal } from '../../components/ui';
 import { useSavesApi } from '../../hooks/useSavesApi.js';
+import { SAVES_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
+import type { TranslateFn } from '../../i18n/i18n-context';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useSaveStore } from '../../state/saveStore.js';
 import { useToastStore } from '../../state/toastStore.js';
@@ -68,10 +71,12 @@ function SaveSlotRow({
     slot,
     onLoad,
     onDelete,
+    t,
 }: {
     readonly slot: SaveSlotMeta;
     readonly onLoad: (slotId: SlotId) => void;
     readonly onDelete: (slotId: SlotId) => void;
+    readonly t: TranslateFn;
 }): React.ReactElement {
     const title = slot.label ?? slot.slotId;
     return (
@@ -79,7 +84,7 @@ function SaveSlotRow({
             <button
                 type="button"
                 className={styles['row']}
-                aria-label={`Load ${title}`}
+                aria-label={t(SAVES_KEYS.loadRowAriaLabel, { title })}
                 data-testid="save-load-btn"
                 onClick={() => onLoad(slot.slotId)}
             >
@@ -94,12 +99,16 @@ function SaveSlotRow({
                     <Caption tone="muted">{formatSavedAt(slot.savedAt)}</Caption>
                 </div>
             </button>
-            <DeleteSaveButton label={`Delete ${title}`} onDelete={() => onDelete(slot.slotId)} />
+            <DeleteSaveButton
+                label={t(SAVES_KEYS.deleteRowAriaLabel, { title })}
+                onDelete={() => onDelete(slot.slotId)}
+            />
         </li>
     );
 }
 
 export default function SavesPage(): React.ReactElement {
+    const t = useTranslate();
     const slots = useSaveStore((s) => s.slots);
     const isLoading = useSaveStore((s) => s.isLoading);
     const savesApi = useSavesApi();
@@ -115,10 +124,11 @@ export default function SavesPage(): React.ReactElement {
             // No navigation here — the shell navigates when the restored
             // snapshot lands. The detail stays in the inline alert (no toast).
             void savesApi.load(slotId).catch((e: unknown) => {
-                setError(`Load failed: ${e instanceof Error ? e.message : String(e)}`);
+                const message = e instanceof Error ? e.message : String(e);
+                setError(t(SAVES_KEYS.loadFailedError, { message }));
             });
         },
-        [savesApi],
+        [savesApi, t],
     );
 
     const handleClose = React.useCallback(() => {
@@ -145,12 +155,16 @@ export default function SavesPage(): React.ReactElement {
         setPendingDelete(null);
         try {
             await savesApi.delete(slotId);
-            // §4.30: static-literal toast title — carries no save metadata.
-            useToastStore.getState().push({ severity: 'success', title: 'Save deleted' });
+            // §4.30: static-token toast title — carries no save metadata.
+            useToastStore
+                .getState()
+                .push({ severity: 'success', title: t(SAVES_KEYS.deletedToast) });
         } catch {
-            useToastStore.getState().push({ severity: 'error', title: 'Delete failed' });
+            useToastStore
+                .getState()
+                .push({ severity: 'error', title: t(SAVES_KEYS.deleteFailedToast) });
         }
-    }, [pendingDelete, savesApi]);
+    }, [pendingDelete, savesApi, t]);
 
     const isEmpty = !isLoading && slots.length === 0;
 
@@ -161,15 +175,17 @@ export default function SavesPage(): React.ReactElement {
     return (
         <Modal
             open
-            actions={[{ label: 'Close', variant: 'secondary', testId: 'saves-close-btn' }]}
+            actions={[
+                { label: t(SAVES_KEYS.close), variant: 'secondary', testId: 'saves-close-btn' },
+            ]}
             data-testid="saves-page"
             onClose={handleClose}
             size="lg"
-            title="Saves"
+            title={t(SAVES_KEYS.title)}
         >
             {isLoading && (
-                <div role="status" aria-label="Loading save slots">
-                    Loading…
+                <div role="status" aria-label={t(SAVES_KEYS.loadingAriaLabel)}>
+                    {t(SAVES_KEYS.loading)}
                 </div>
             )}
 
@@ -180,8 +196,11 @@ export default function SavesPage(): React.ReactElement {
             )}
 
             {isEmpty && (
-                <div aria-label="No saves yet" style={{ paddingTop: 'var(--ch-space-md)' }}>
-                    <Caption tone="muted">No saves yet.</Caption>
+                <div
+                    aria-label={t(SAVES_KEYS.emptyAriaLabel)}
+                    style={{ paddingTop: 'var(--ch-space-md)' }}
+                >
+                    <Caption tone="muted">{t(SAVES_KEYS.empty)}</Caption>
                 </div>
             )}
 
@@ -193,6 +212,7 @@ export default function SavesPage(): React.ReactElement {
                             slot={slot}
                             onLoad={handleLoad}
                             onDelete={handleRequestDelete}
+                            t={t}
                         />
                     ))}
                 </ul>
@@ -201,13 +221,13 @@ export default function SavesPage(): React.ReactElement {
             {pendingDelete !== null && (
                 <Modal
                     open
-                    title="Delete save?"
+                    title={t(SAVES_KEYS.deleteConfirmTitle)}
                     onClose={handleCancelDelete}
                     data-testid="save-delete-dialog"
                     actions={[
-                        { label: 'Cancel', testId: 'save-delete-cancel' },
+                        { label: t(SAVES_KEYS.deleteCancel), testId: 'save-delete-cancel' },
                         {
-                            label: 'Delete',
+                            label: t(SAVES_KEYS.deleteConfirm),
                             variant: 'danger',
                             testId: 'save-delete-confirm',
                             onClick: () => {
@@ -216,9 +236,7 @@ export default function SavesPage(): React.ReactElement {
                         },
                     ]}
                 >
-                    <Caption tone="muted">
-                        This save will be permanently deleted. This cannot be undone.
-                    </Caption>
+                    <Caption tone="muted">{t(SAVES_KEYS.deleteConfirmBody)}</Caption>
                 </Modal>
             )}
         </Modal>

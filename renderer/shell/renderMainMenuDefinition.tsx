@@ -20,20 +20,30 @@ import type {
 import { Button } from '../components/ui/Button';
 import { useScreenFadeNavigate } from '../components/shell/useScreenFadeNavigate';
 import { getSystemBridge } from '../bridge/system-bridge';
+import { MENU_KEYS } from '../i18n/engine-keys';
+import { useTranslate } from '../i18n/useTranslate';
+import type { TranslateFn } from '../i18n/i18n-context';
 import { withShellGameId } from './resolveMainMenuGameId';
 
 // ─── Engine default ───────────────────────────────────────────────────────────
+//
+// The engine-default button labels are engine translation TOKENS, not literal
+// English: they are resolved through `t()` at the render site (below) so a game
+// can relabel them by re-keying `engine.menu.*`. A game-provided definition, by
+// contrast, already carries final display strings and is rendered verbatim.
+// Keeping the tokens here (not the resolved text) keeps this pure-data default
+// language-agnostic — the token is translated at the render site.
 
 const ENGINE_DEFAULT_DEFINITION: GameMainMenuDefinition = {
     layout: { orientation: 'vertical', align: 'center', anchor: 'center' },
     buttons: [
-        { label: 'Play', action: { type: 'open-lobby' }, variant: 'primary' },
+        { label: MENU_KEYS.play, action: { type: 'open-lobby' }, variant: 'primary' },
         {
-            label: 'Settings',
+            label: MENU_KEYS.settings,
             action: { type: 'navigate', target: '/settings' },
             variant: 'secondary',
         },
-        { label: 'Quit', action: { type: 'quit' }, variant: 'danger' },
+        { label: MENU_KEYS.quit, action: { type: 'quit' }, variant: 'danger' },
     ],
 };
 
@@ -138,6 +148,15 @@ function defaultVariant(
     return 'secondary';
 }
 
+/**
+ * Resolve an engine-default button label. The engine default stores its labels
+ * as `engine.menu.*` translation tokens (string-branded), so we resolve them
+ * through the active `t()`; a game override re-keying those tokens wins.
+ */
+function resolveEngineLabel(t: TranslateFn, label: string): string {
+    return t(label as unknown as Parameters<TranslateFn>[0]);
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface RenderMainMenuDefinitionProps {
@@ -157,9 +176,19 @@ export function RenderMainMenuDefinition({
 }: RenderMainMenuDefinitionProps): React.ReactElement {
     const router = useRouter();
     const fadeOutThenNavigate = useScreenFadeNavigate();
+    const t = useTranslate();
 
+    // When no game definition is supplied, the engine default is used and its
+    // button labels are `engine.menu.*` tokens that must be resolved through
+    // `t()`. A game-provided definition already carries final strings, so its
+    // labels are rendered verbatim (a game localises via its own bundle, not
+    // through the engine's token resolution here).
+    const usingEngineDefault = definition === undefined;
     const def = definition ?? ENGINE_DEFAULT_DEFINITION;
     const { layout, buttons } = def;
+
+    const displayLabel = (button: GameMainMenuButton): string =>
+        usingEngineDefault ? resolveEngineLabel(t, button.label) : button.label;
 
     // ── Disabled resolution ─────────────────────────────────────────────────────
     // Buttons may declare `disabled` as a plain boolean or as an async check
@@ -296,7 +325,7 @@ export function RenderMainMenuDefinition({
                         disabled={resolveDisabled(button, index)}
                         onClick={handlers[index]}
                     >
-                        {button.label}
+                        {displayLabel(button)}
                     </Button>
                 ))}
             </div>

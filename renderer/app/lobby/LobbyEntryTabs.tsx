@@ -3,6 +3,8 @@
 import React from 'react';
 import { Tabs } from '../../components/ui/Tabs';
 import { TextInput } from '../../components/ui/TextInput';
+import { LOBBY_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import type { LobbyEntryTabId } from './lobbyTypes';
 import styles from './page.module.css';
 
@@ -32,10 +34,11 @@ export function LobbyEntryTabs({
     joinPasswordInvalid,
     onTabChange,
 }: LobbyEntryTabsProps): React.ReactElement {
+    const t = useTranslate();
     return (
         <Tabs
             activeTabId={activeTabId}
-            ariaLabel="Lobby entry mode"
+            ariaLabel={t(LOBBY_KEYS.entryTabsAriaLabel)}
             data-testid="lobby-entry-tabs"
             onActiveTabChange={(tabId) => {
                 if (tabId === 'host' || tabId === 'join') {
@@ -45,7 +48,7 @@ export function LobbyEntryTabs({
             tabs={[
                 {
                     id: 'host',
-                    label: 'Host',
+                    label: t(LOBBY_KEYS.tabHost),
                     panel: (
                         <div className={styles['entry-panel']}>
                             <TextInput
@@ -53,9 +56,9 @@ export function LobbyEntryTabs({
                                 className={styles['entry-field']}
                                 data-testid="host-password-input"
                                 id="lobby-host-password-input"
-                                label="Password (optional):"
+                                label={t(LOBBY_KEYS.hostPasswordLabel)}
                                 onValueChange={onHostPasswordChange}
-                                placeholder="Leave blank for an open lobby"
+                                placeholder={t(LOBBY_KEYS.hostPasswordPlaceholder)}
                                 value={hostPassword}
                             />
                         </div>
@@ -63,7 +66,7 @@ export function LobbyEntryTabs({
                 },
                 {
                     id: 'join',
-                    label: 'Join',
+                    label: t(LOBBY_KEYS.tabJoin),
                     panel: (
                         <div className={styles['entry-panel']}>
                             <TextInput
@@ -71,9 +74,9 @@ export function LobbyEntryTabs({
                                 className={styles['entry-field']}
                                 data-testid="address-input"
                                 id="lobby-code-input"
-                                label="Lobby Code:"
+                                label={t(LOBBY_KEYS.codeLabel)}
                                 onValueChange={onLobbyCodeChange}
-                                placeholder="127.0.0.1:7777"
+                                placeholder={t(LOBBY_KEYS.codePlaceholder)}
                                 value={lobbyCode}
                             />
                             <TextInput
@@ -82,9 +85,9 @@ export function LobbyEntryTabs({
                                 data-testid="join-password-input"
                                 id="lobby-join-password-input"
                                 invalid={joinPasswordInvalid}
-                                label="Password:"
+                                label={t(LOBBY_KEYS.joinPasswordLabel)}
                                 onValueChange={onJoinPasswordChange}
-                                placeholder="Required only if the host set one"
+                                placeholder={t(LOBBY_KEYS.joinPasswordPlaceholder)}
                                 value={joinPassword}
                             />
                         </div>

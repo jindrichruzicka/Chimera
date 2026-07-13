@@ -15,15 +15,29 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { RestoreStatusEvent } from '@chimera-engine/simulation/bridge/api-types.js';
+import { I18nProvider } from '../../i18n/I18nProvider';
+import type { TranslationBundle } from '../../i18n/translation-bundle';
 import { useSaveStore } from '../../state/saveStore';
 import { useToastStore } from '../../state/toastStore';
 import { EscapeStackProvider } from './EscapeStack';
 import { RestoreWaitingOverlay } from './RestoreWaitingOverlay';
 
 // Modal routes Escape-to-close through the shared overlay stack, so every render
-// must sit inside an EscapeStackProvider (useEscapeLayer throws otherwise).
-const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
-    baseRender(ui, { wrapper: EscapeStackProvider });
+// must sit inside an EscapeStackProvider (useEscapeLayer throws otherwise). The
+// overlay also calls useTranslate(); the inert I18nProvider resolves engine
+// English so the existing copy assertions hold. A gameOverride exercises the
+// translate-at-the-render-site path.
+const render = (
+    ui: React.ReactElement,
+    gameOverride?: TranslationBundle,
+): ReturnType<typeof baseRender> => {
+    const providerProps = gameOverride !== undefined ? { gameOverride } : {};
+    return baseRender(
+        <I18nProvider {...providerProps}>
+            <EscapeStackProvider>{ui}</EscapeStackProvider>
+        </I18nProvider>,
+    );
+};
 
 function makeRestoreEvent(overrides: Partial<RestoreStatusEvent> = {}): RestoreStatusEvent {
     return {
@@ -87,6 +101,22 @@ describe('RestoreWaitingOverlay — visibility', () => {
         ).toBeInTheDocument();
         expect(screen.getByTestId('waiting-join-code')).toHaveTextContent('ABCD');
         expect(screen.getByTestId('waiting-roster')).toHaveTextContent('0 / 2 players reconnected');
+    });
+
+    it('resolves the title, join code, and roster copy through the active-locale translator', () => {
+        render(<RestoreWaitingOverlay />, {
+            'engine.restore.waitingTitle': 'Standby',
+            'engine.restore.joinCode': 'Code {code}',
+            'engine.restore.rosterProgress': '{connected} of {expected} back',
+        });
+
+        act(() => {
+            useSaveStore.getState().applyRestoreStatus(makeRestoreEvent());
+        });
+
+        expect(screen.getByRole('dialog', { name: 'Standby' })).toBeInTheDocument();
+        expect(screen.getByTestId('waiting-join-code')).toHaveTextContent('Code ABCD');
+        expect(screen.getByTestId('waiting-roster')).toHaveTextContent('0 of 2 back');
     });
 
     it('centres the spinner horizontally and keeps clearance above the join code', () => {

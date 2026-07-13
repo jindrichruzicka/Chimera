@@ -30,8 +30,10 @@
  *   #96 — composed from the shared ui primitives (Modal, Spinner, Caption).
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
+import { RESTORE_KEYS, TOAST_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { useSaveStore } from '../../state/saveStore';
 import { useToastStore } from '../../state/toastStore';
 import { useSavesApi } from '../../hooks/useSavesApi';
@@ -49,18 +51,27 @@ const spinnerRowStyle: CSSProperties = {
 };
 
 export function RestoreWaitingOverlay(): React.ReactElement | null {
+    const t = useTranslate();
     const restore = useSaveStore((s) => s.restore);
     const expectedSeats = useSaveStore((s) => s.restoreExpectedSeats);
     const dismissRestore = useSaveStore((s) => s.dismissRestore);
     const markRestoreAborted = useSaveStore((s) => s.markRestoreAborted);
     const savesApi = useSavesApi();
 
+    // Read the latest translator through a ref so the abort toast stays current
+    // without widening handleClose's deps. The resolved token is a static title
+    // (Invariant #74).
+    const tRef = useRef(t);
+    tRef.current = t;
+
     const handleClose = useCallback(() => {
         // cancelRestore is a main-side no-op outside an in-flight restore; a
         // rejection must never block the optimistic local dismiss.
         void savesApi.cancelRestore().catch(() => undefined);
         dismissRestore();
-        useToastStore.getState().push({ severity: 'info', title: 'Restore cancelled' });
+        useToastStore
+            .getState()
+            .push({ severity: 'info', title: tRef.current(TOAST_KEYS.restoreCancelled) });
         // Exit marker (see module header) — the game page consumes it
         // and routes the host back to /saves.
         markRestoreAborted();
@@ -78,17 +89,23 @@ export function RestoreWaitingOverlay(): React.ReactElement | null {
     return (
         <Modal
             open
-            title="Waiting for players"
+            title={t(RESTORE_KEYS.waitingTitle)}
             onClose={handleClose}
             data-testid="waiting-for-players-modal"
-            actions={[{ label: 'Cancel', variant: 'danger', testId: 'waiting-cancel' }]}
+            actions={[
+                { label: t(RESTORE_KEYS.cancel), variant: 'danger', testId: 'waiting-cancel' },
+            ]}
         >
             <div style={spinnerRowStyle}>
-                <Spinner label="Waiting for players to reconnect" />
+                <Spinner label={t(RESTORE_KEYS.spinnerLabel)} />
             </div>
-            <Caption data-testid="waiting-join-code">Join code: {restore.lobbyCode}</Caption>
+            <Caption data-testid="waiting-join-code">
+                {/* lobbyCode is wire-optional; `?? ''` keeps the prior empty
+                    render when a waiting event omits it. */}
+                {t(RESTORE_KEYS.joinCode, { code: restore.lobbyCode ?? '' })}
+            </Caption>
             <Caption tone="muted" data-testid="waiting-roster">
-                {connected} / {expected} players reconnected
+                {t(RESTORE_KEYS.rosterProgress, { connected, expected })}
             </Caption>
         </Modal>
     );

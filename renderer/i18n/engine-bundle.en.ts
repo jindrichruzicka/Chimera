@@ -264,6 +264,19 @@ export const engineBundleEn: TranslationBundle = {
     'engine.gameShell.canvasAriaLabel': 'Game canvas',
     'engine.gameShell.hudAriaLabel': 'Game HUD',
 
+    // ── game result / game-over banner ──────────────────────────────────────────
+    'engine.gameResult.gameOver': 'Game Over',
+    'engine.gameResult.draw': 'Draw',
+    'engine.gameResult.ended': 'Game ended',
+    'engine.gameResult.won': 'You won',
+    'engine.gameResult.lose': 'You lose',
+
+    // ── in-game HUD scaffold ────────────────────────────────────────────────────
+    'engine.hud.tick': 'Tick',
+    'engine.hud.undo': 'Undo',
+    'engine.hud.redo': 'Redo',
+    'engine.hud.endTurn': 'End Turn',
+
     // ── common ────────────────────────────────────────────────────────────────
     'engine.common.close': 'Close',
     'engine.common.cancel': 'Cancel',

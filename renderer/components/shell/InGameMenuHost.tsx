@@ -7,6 +7,8 @@ import type {
     InGameMenuProps,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { useLeaveGame, type LeaveGame } from '../../bridge/useLeaveGame.js';
+import { IN_GAME_MENU_KEYS } from '../../i18n/engine-keys.js';
+import { useTranslate } from '../../i18n/useTranslate.js';
 import { useInputAction } from '../../input/useInputAction.js';
 import { Modal } from '../ui/Modal.js';
 import { useEscapeLayer } from './EscapeStack.js';
@@ -112,18 +114,19 @@ export function InGameMenuHost({
  * `Modal` (focus-trap, `aria-modal`, backdrop), using `var(--ch-*)` tokens only.
  */
 function DefaultInGameMenu({ closeMenu, leaveGame, isHost }: InGameMenuProps): React.ReactElement {
+    const t = useTranslate();
     const leavePrompt = isHost
-        ? 'Leave the match? This ends it for everyone and returns all players to the lobby.'
-        : 'Leave the match? You will disconnect and return to the main menu.';
+        ? t(IN_GAME_MENU_KEYS.leavePromptHost)
+        : t(IN_GAME_MENU_KEYS.leavePromptClient);
 
     return (
         <Modal
             open
-            title="Menu"
+            title={t(IN_GAME_MENU_KEYS.title)}
             onClose={closeMenu}
             actions={[
-                { label: 'Resume' },
-                { label: 'Leave match', variant: 'danger', onClick: leaveGame },
+                { label: t(IN_GAME_MENU_KEYS.resume) },
+                { label: t(IN_GAME_MENU_KEYS.leaveMatch), variant: 'danger', onClick: leaveGame },
             ]}
         >
             <p style={leavePromptStyle}>{leavePrompt}</p>

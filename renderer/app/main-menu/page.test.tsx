@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import { FadeProvider } from '../../components/shell/FadeContext';
 import { ScreenFadeOverlay } from '../../components/shell/ScreenFadeOverlay';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import MainMenuPage, { __resetMainMenuFadeForTest } from './page';
 
@@ -27,9 +28,11 @@ vi.mock('../../game/rendererGameRegistry', () => ({
 
 function renderMainMenuPage(): void {
     render(
-        <ThemeProvider>
-            <MainMenuPage />
-        </ThemeProvider>,
+        <I18nProvider>
+            <ThemeProvider>
+                <MainMenuPage />
+            </ThemeProvider>
+        </I18nProvider>,
     );
 }
 
@@ -381,12 +384,14 @@ describe('MainMenuPage — app-level screen fade', () => {
 
     it('on the first appearance (boot) starts black (pre-paint) and eases in to reveal the menu', async () => {
         render(
-            <ThemeProvider>
-                <FadeProvider>
-                    <MainMenuPage />
-                    <ScreenFadeOverlay />
-                </FadeProvider>
-            </ThemeProvider>,
+            <I18nProvider>
+                <ThemeProvider>
+                    <FadeProvider>
+                        <MainMenuPage />
+                        <ScreenFadeOverlay />
+                    </FadeProvider>
+                </ThemeProvider>
+            </I18nProvider>,
         );
 
         // The useLayoutEffect snapped the overlay fully black before any fade-in
@@ -406,12 +411,14 @@ describe('MainMenuPage — app-level screen fade', () => {
     it('does not fade when re-entering the menu from a non-fading screen (e.g. settings)', async () => {
         // First appearance consumes the one-time boot black-then-fade.
         render(
-            <ThemeProvider>
-                <FadeProvider>
-                    <MainMenuPage />
-                    <ScreenFadeOverlay />
-                </FadeProvider>
-            </ThemeProvider>,
+            <I18nProvider>
+                <ThemeProvider>
+                    <FadeProvider>
+                        <MainMenuPage />
+                        <ScreenFadeOverlay />
+                    </FadeProvider>
+                </ThemeProvider>
+            </I18nProvider>,
         );
         await act(async () => {
             await vi.advanceTimersByTimeAsync(800);
@@ -422,12 +429,14 @@ describe('MainMenuPage — app-level screen fade', () => {
         // preceded — e.g. back from settings/saves/replays) must NOT force black
         // or play any fade.
         render(
-            <ThemeProvider>
-                <FadeProvider>
-                    <MainMenuPage />
-                    <ScreenFadeOverlay />
-                </FadeProvider>
-            </ThemeProvider>,
+            <I18nProvider>
+                <ThemeProvider>
+                    <FadeProvider>
+                        <MainMenuPage />
+                        <ScreenFadeOverlay />
+                    </FadeProvider>
+                </ThemeProvider>
+            </I18nProvider>,
         );
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
         await act(async () => {
@@ -440,12 +449,14 @@ describe('MainMenuPage — app-level screen fade', () => {
         // Consume the one-time boot appearance with a throwaway mount so the flag
         // is set; this return is NOT the boot appearance.
         render(
-            <ThemeProvider>
-                <FadeProvider>
-                    <MainMenuPage />
-                    <ScreenFadeOverlay />
-                </FadeProvider>
-            </ThemeProvider>,
+            <I18nProvider>
+                <ThemeProvider>
+                    <FadeProvider>
+                        <MainMenuPage />
+                        <ScreenFadeOverlay />
+                    </FadeProvider>
+                </ThemeProvider>
+            </I18nProvider>,
         );
         await act(async () => {
             await vi.advanceTimersByTimeAsync(800);
@@ -455,12 +466,14 @@ describe('MainMenuPage — app-level screen fade', () => {
         // A game/lobby fade-out already left the overlay black (initialOpacity 1):
         // the menu's fadeIn reveals it even though it did NOT force the black.
         render(
-            <ThemeProvider>
-                <FadeProvider initialOpacity={1}>
-                    <MainMenuPage />
-                    <ScreenFadeOverlay />
-                </FadeProvider>
-            </ThemeProvider>,
+            <I18nProvider>
+                <ThemeProvider>
+                    <FadeProvider initialOpacity={1}>
+                        <MainMenuPage />
+                        <ScreenFadeOverlay />
+                    </FadeProvider>
+                </ThemeProvider>
+            </I18nProvider>,
         );
 
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('1');

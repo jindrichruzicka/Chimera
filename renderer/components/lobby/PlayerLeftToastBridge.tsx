@@ -16,13 +16,22 @@
  * duration is the severity default. Mounted once in `AppShell`; renders nothing.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { PlayerLeftMatchEvent } from '@chimera-engine/simulation/bridge/api-types.js';
 import { getLobbyBridge } from '../../app/lobby/useLobbyApi';
+import { TOAST_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { useToastStore } from '../../state/toastStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 
 export function PlayerLeftToastBridge(): null {
+    // The subscription is one-time (empty deps) so a locale change must not
+    // re-subscribe and drop events; read the latest translator through a ref
+    // instead. A resolved token is still a static title (Invariant #74).
+    const t = useTranslate();
+    const tRef = useRef(t);
+    tRef.current = t;
+
     useEffect(() => {
         // Guard: outside Electron (or before preload wiring) there is no bridge.
         const bridge = getLobbyBridge();
@@ -36,9 +45,10 @@ export function PlayerLeftToastBridge(): null {
             if (event.playerId === localPlayerId || localSeatIds.includes(event.playerId)) {
                 return;
             }
-            useToastStore
-                .getState()
-                .push({ severity: 'warning', title: `${event.displayName} left game.` });
+            useToastStore.getState().push({
+                severity: 'warning',
+                title: tRef.current(TOAST_KEYS.playerLeftGame, { displayName: event.displayName }),
+            });
         });
     }, []);
 

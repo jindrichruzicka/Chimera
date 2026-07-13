@@ -10,6 +10,8 @@ import type { LobbyEntryTabId, PendingAction } from './lobbyTypes';
 import { useOptionalFade } from '../../components/shell/FadeContext';
 import { screenFadeMs } from '../../components/shell/screenFadeDuration';
 import { Modal, type ModalAction } from '../../components/ui/Modal';
+import { LOBBY_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import { loadRendererGameShell } from '../../game/rendererGameRegistry';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
@@ -67,6 +69,7 @@ function useLobbyGameShell(gameId: string | null): LoadedRendererGameShell | nul
 }
 
 export default function LobbyPage() {
+    const t = useTranslate();
     const router = useRouter();
     const fade = useOptionalFade();
     const fadeRef = useRef(fade);
@@ -144,7 +147,7 @@ export default function LobbyPage() {
             });
         } catch (err) {
             if (isMountedRef.current) {
-                setError(err instanceof Error ? err.message : 'Failed to host lobby');
+                setError(err instanceof Error ? err.message : t(LOBBY_KEYS.hostFailed));
             }
         } finally {
             if (isMountedRef.current) {
@@ -155,7 +158,7 @@ export default function LobbyPage() {
 
     const handleJoin = async () => {
         if (!lobbyCode.trim()) {
-            setError('Please enter a lobby code');
+            setError(t(LOBBY_KEYS.enterCode));
             return;
         }
 
@@ -175,7 +178,7 @@ export default function LobbyPage() {
                 // survives the IPC boundary (the JoinRejectedError class does not),
                 // so flag the password field invalid. Any other failure stays in
                 // the top-level banner.
-                const message = err instanceof Error ? err.message : 'Failed to join lobby';
+                const message = err instanceof Error ? err.message : t(LOBBY_KEYS.joinFailed);
                 if (message.includes('invalid_password')) {
                     setJoinPasswordInvalid(true);
                 } else {
@@ -196,7 +199,7 @@ export default function LobbyPage() {
             await lobbyApi.leave();
         } catch (err) {
             if (isMountedRef.current) {
-                setError(err instanceof Error ? err.message : 'Failed to leave lobby');
+                setError(err instanceof Error ? err.message : t(LOBBY_KEYS.leaveFailed));
             }
         } finally {
             if (isMountedRef.current) {
@@ -234,7 +237,7 @@ export default function LobbyPage() {
             await lobbyApi.updatePlayerReadyState(ready);
         } catch (err) {
             if (isMountedRef.current) {
-                setError(err instanceof Error ? err.message : 'Failed to update ready state');
+                setError(err instanceof Error ? err.message : t(LOBBY_KEYS.readyFailed));
             }
         } finally {
             if (isMountedRef.current) {
@@ -255,7 +258,7 @@ export default function LobbyPage() {
             await lobbyApi.startGame();
         } catch (err) {
             if (isMountedRef.current) {
-                setError(err instanceof Error ? err.message : 'Failed to start game');
+                setError(err instanceof Error ? err.message : t(LOBBY_KEYS.startFailed));
             }
         } finally {
             if (isMountedRef.current) {
@@ -286,7 +289,7 @@ export default function LobbyPage() {
                   pendingAction,
                   setMatchSetting: (key, value) => {
                       lobbyApi.setMatchSetting(key, value).catch((err: unknown) => {
-                          reportSetupError(err, 'Failed to update match setting');
+                          reportSetupError(err, t(LOBBY_KEYS.matchSettingFailed));
                       });
                   },
                   setPlayerAttribute: (attributePlayerId, key, value) => {
@@ -295,16 +298,16 @@ export default function LobbyPage() {
                       lobbyApi
                           .setPlayerAttribute(playerId(attributePlayerId), key, value)
                           .catch((err: unknown) => {
-                              reportSetupError(err, 'Failed to update player attribute');
+                              reportSetupError(err, t(LOBBY_KEYS.playerAttrFailed));
                           });
                   },
                   addAiPlayer: () =>
                       lobbyApi.addAiPlayer().catch((err: unknown) => {
-                          reportSetupError(err, 'Failed to add AI player');
+                          reportSetupError(err, t(LOBBY_KEYS.addAiFailed));
                       }),
                   removeAiPlayer: (slotIndex) =>
                       lobbyApi.removeAiPlayer(slotIndex).catch((err: unknown) => {
-                          reportSetupError(err, 'Failed to remove AI player');
+                          reportSetupError(err, t(LOBBY_KEYS.removeAiFailed));
                       }),
                   onToggleReady: handleToggleReady,
                   onStartGame: handleStartGame,
@@ -317,7 +320,7 @@ export default function LobbyPage() {
     // navigation on leave/start is owned by the stores, never by dismissal.
     const activeActions: readonly ModalAction[] = [
         {
-            label: pendingAction === 'leaving' ? 'Leaving...' : 'Leave Lobby',
+            label: pendingAction === 'leaving' ? t(LOBBY_KEYS.leaving) : t(LOBBY_KEYS.leaveLobby),
             variant: 'danger',
             testId: 'lobby-leave-btn',
             dismiss: false,
@@ -328,7 +331,7 @@ export default function LobbyPage() {
             },
         },
         {
-            label: pendingAction === 'starting' ? 'Starting...' : 'Start Game',
+            label: pendingAction === 'starting' ? t(LOBBY_KEYS.starting) : t(LOBBY_KEYS.startGame),
             variant: 'primary',
             testId: 'start-game',
             dismiss: false,
@@ -342,10 +345,11 @@ export default function LobbyPage() {
     // Entry-mode footer: Close dismisses; Host/Join operate in place
     // (dismiss: false) so a failure keeps the form open with its error banner.
     const entryActions: readonly ModalAction[] = [
-        { label: 'Close', variant: 'secondary', testId: 'lobby-close' },
+        { label: t(LOBBY_KEYS.close), variant: 'secondary', testId: 'lobby-close' },
         activeTabId === 'host'
             ? {
-                  label: pendingAction === 'hosting' ? 'Hosting...' : 'Host Lobby',
+                  label:
+                      pendingAction === 'hosting' ? t(LOBBY_KEYS.hosting) : t(LOBBY_KEYS.hostLobby),
                   variant: 'primary',
                   testId: 'host-lobby',
                   dismiss: false,
@@ -355,7 +359,8 @@ export default function LobbyPage() {
                   },
               }
             : {
-                  label: pendingAction === 'joining' ? 'Joining...' : 'Join Lobby',
+                  label:
+                      pendingAction === 'joining' ? t(LOBBY_KEYS.joining) : t(LOBBY_KEYS.joinLobby),
                   variant: 'primary',
                   testId: 'confirm-join',
                   dismiss: false,
@@ -368,7 +373,7 @@ export default function LobbyPage() {
 
     return (
         <ThemeProvider theme={lobbyTheme}>
-            <main aria-label="Multiplayer Lobby" role="main">
+            <main aria-label={t(LOBBY_KEYS.title)} role="main">
                 <Modal
                     open
                     actions={lobbyState === null ? entryActions : activeActions}
@@ -376,11 +381,11 @@ export default function LobbyPage() {
                     data-testid="lobby-dialog"
                     onClose={handleModalClose}
                     size="xl"
-                    title="Multiplayer Lobby"
+                    title={t(LOBBY_KEYS.title)}
                 >
                     {error ? (
                         <div className={styles['error']} data-testid="lobby-error" role="alert">
-                            Error: {error}
+                            {t(LOBBY_KEYS.errorPrefix, { error })}
                         </div>
                     ) : null}
 
@@ -389,7 +394,7 @@ export default function LobbyPage() {
                         panel and game-provided screens alike. */}
                     {lobbyState ? (
                         <span className={styles['sr-only']} id="leave-warning">
-                            This will disconnect you from the current lobby
+                            {t(LOBBY_KEYS.leaveWarning)}
                         </span>
                     ) : null}
 

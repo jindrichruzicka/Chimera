@@ -27,6 +27,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollArea } from '../ui/ScrollArea';
 import { TextInput } from '../ui/TextInput';
+import { CHAT_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
+import type { TranslationKey } from '../../i18n/translation-bundle';
 import { useChatStore } from '../../state/chatStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useToastStore } from '../../state/toastStore';
@@ -36,17 +39,17 @@ import type { ChatScope, PlayerId } from '@chimera-engine/simulation/bridge/api-
 import styles from './ChatPanel.module.css';
 
 /**
- * Friendly, inline copy for a relay rejection. Shown next to the composer for
- * every rejection reason; `rate_limited` additionally raises a toast (§4.30
- * engine-wired source) so the throttle is noticed even if the user has looked
- * away from the composer.
+ * Maps a relay rejection reason to its engine translation token. The resolved
+ * English copy is shown next to the composer for every rejection reason;
+ * `rate_limited` additionally raises a toast (§4.30 engine-wired source) so the
+ * throttle is noticed even if the user has looked away from the composer.
  */
-const REJECT_REASON_LABELS: Record<ChatRejectReason, string> = {
-    too_long: 'Message is too long.',
-    rate_limited: 'You are sending messages too quickly.',
-    empty: 'Message cannot be empty.',
-    invalid_scope: 'That recipient is unavailable.',
-    no_session: 'You are not connected to a session.',
+const REJECT_REASON_KEYS: Record<ChatRejectReason, TranslationKey> = {
+    too_long: CHAT_KEYS.rejectTooLong,
+    rate_limited: CHAT_KEYS.rejectRateLimited,
+    empty: CHAT_KEYS.rejectEmpty,
+    invalid_scope: CHAT_KEYS.rejectInvalidScope,
+    no_session: CHAT_KEYS.rejectNoSession,
 };
 
 /** Stable empty roster reference so the selector default keeps a steady identity. */
@@ -66,7 +69,11 @@ export interface ChatPanelProps {
     readonly title?: string;
 }
 
-export function ChatPanel({ title = 'Chat' }: ChatPanelProps = {}): React.ReactElement {
+export function ChatPanel({ title }: ChatPanelProps = {}): React.ReactElement {
+    const t = useTranslate();
+    // An explicit `title` prop still wins; otherwise fall back to the engine
+    // token so a game can relabel the panel by re-keying `engine.chat.title`.
+    const label = title ?? t(CHAT_KEYS.title);
     const messages = useChatStore((state) => state.messages);
     const roster = useLobbyStore((state) => state.lobbyState?.players ?? EMPTY_ROSTER);
 
@@ -181,38 +188,41 @@ export function ChatPanel({ title = 'Chat' }: ChatPanelProps = {}): React.ReactE
         if (result.ok) {
             setBody('');
         } else {
-            setSendError(REJECT_REASON_LABELS[result.reason]);
+            setSendError(t(REJECT_REASON_KEYS[result.reason]));
             if (result.reason === 'rate_limited') {
                 // §4.30 engine-wired source: the relay throttled us. Duration is
-                // the severity default (Invariant #74); title is a static literal.
+                // the severity default (Invariant #74); title is a static token.
                 useToastStore
                     .getState()
-                    .push({ severity: 'warning', title: 'Sending messages too quickly' });
+                    .push({ severity: 'warning', title: t(CHAT_KEYS.rateLimitedToast) });
             }
         }
     }
 
     if (!bridgeAvailable) {
         return (
-            <section aria-label={title} className={styles['root']} data-testid="chat-unavailable">
-                <p className={styles['placeholder']}>Chat is unavailable.</p>
+            <section aria-label={label} className={styles['root']} data-testid="chat-unavailable">
+                <p className={styles['placeholder']}>{t(CHAT_KEYS.unavailable)}</p>
             </section>
         );
     }
 
     return (
-        <section aria-label={title} className={styles['root']} data-testid="chat-panel">
+        <section aria-label={label} className={styles['root']} data-testid="chat-panel">
             <div className={styles['messages']} data-testid="chat-messages">
                 {isLoading ? (
                     <p className={styles['placeholder']} data-testid="chat-loading">
-                        Loading messages…
+                        {t(CHAT_KEYS.loading)}
                     </p>
                 ) : messages.length === 0 ? (
                     <p className={styles['placeholder']} data-testid="chat-empty">
-                        No messages yet.
+                        {t(CHAT_KEYS.empty)}
                     </p>
                 ) : (
-                    <ScrollArea aria-label="Chat messages" className={styles['scroll']}>
+                    <ScrollArea
+                        aria-label={t(CHAT_KEYS.messagesAriaLabel)}
+                        className={styles['scroll']}
+                    >
                         <ul className={styles['list']} ref={messageListRef}>
                             {messages.map((message) => (
                                 <ChatMessageRow
@@ -237,10 +247,10 @@ export function ChatPanel({ title = 'Chat' }: ChatPanelProps = {}): React.ReactE
                 <TextInput
                     autoComplete="off"
                     data-testid="chat-body-input"
-                    label="Message"
+                    label={t(CHAT_KEYS.inputLabel)}
                     onKeyDown={handleBodyKeyDown}
                     onValueChange={setBody}
-                    placeholder="Type a message and press Enter…"
+                    placeholder={t(CHAT_KEYS.inputPlaceholder)}
                     value={body}
                 />
             </form>

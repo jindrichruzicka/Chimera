@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import type { ConnectionStatus } from '@chimera-engine/simulation/bridge/api-types.js';
+import { CONNECTION_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 
 // Optimistic initial state; replaced by the first onConnectionStatus event.
 const DEFAULT_STATUS: ConnectionStatus = 'connected';
@@ -32,9 +34,11 @@ const STATUS_STYLES: Record<
 };
 
 export function ConnectionStatusIndicator(): React.ReactElement {
+    const t = useTranslate();
     const [status, setStatus] = useState<ConnectionStatus>(DEFAULT_STATUS);
     const statusStyle = STATUS_STYLES[status];
-    const statusLabel = `Connection status: ${status}`;
+    // The raw status word is passed through so en-US stays 'Connection status: connected'.
+    const statusLabel = t(CONNECTION_KEYS.statusAriaLabel, { status });
 
     useEffect(() => {
         if (!window.__chimera?.system) {

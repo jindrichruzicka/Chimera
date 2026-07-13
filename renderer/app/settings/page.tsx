@@ -41,6 +41,9 @@ import { useInputManager } from '../../input/InputManagerContext.js';
 import { useOptionalInputActionRegistry } from '../../input/InputActionRegistryContext.js';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
+import { SETTINGS_KEYS } from '../../i18n/engine-keys';
+import type { TranslateFn } from '../../i18n/i18n-context';
+import { useTranslate } from '../../i18n/useTranslate';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { SettingsLanguageSelector } from '../../shell/SettingsLanguageSelector';
 import { useSettingsStore } from '../../state/settingsStore';
@@ -53,10 +56,16 @@ import styles from './page.module.css';
 
 type SettingPrimitive = boolean | number | string;
 
+// The slider value-caption formatters, keyed language-agnostically. Each kind is
+// resolved to a `(value) => string` at render through the active `t()`
+// (makeValueFormatter): the pure descriptor stays free of English.
+type ValueFormatterKind = 'percent' | 'scale' | 'turns';
+
 type EngineFieldDefinition = Readonly<{
     readonly control: SettingsControlDefinition;
     readonly defaultValue?: unknown;
-    readonly formatValue?: ((value: unknown) => string) | undefined;
+    readonly formatKind?: ValueFormatterKind | undefined;
+    /** Engine translation token for the field label, resolved through `t()` at render. */
     readonly label: string;
     readonly parseValue?: ((value: SettingPrimitive) => unknown) | undefined;
     readonly testId?: string | undefined;
@@ -66,15 +75,19 @@ type SettingsDefinitionResource = Readonly<{
     read(): GameSettingsPageDefinition;
 }>;
 
+// Tab and section labels are engine translation TOKENS, not literal English:
+// they are resolved through `t()` at the render site so a game can relabel them
+// by re-keying `engine.settings.*`, and the pure default stays language-agnostic.
+// A game-provided definition already carries final display strings.
 const ENGINE_DEFAULT_SETTINGS_DEFINITION: GameSettingsPageDefinition = {
     tabs: [
         {
             id: 'audio',
-            label: 'Audio',
+            label: SETTINGS_KEYS.tabAudio,
             sections: [
                 {
                     id: 'audio',
-                    label: 'Audio',
+                    label: SETTINGS_KEYS.tabAudio,
                     items: [
                         { kind: 'engine-field', fieldId: 'audio.masterVolume' },
                         { kind: 'engine-field', fieldId: 'audio.sfxVolume' },
@@ -86,11 +99,11 @@ const ENGINE_DEFAULT_SETTINGS_DEFINITION: GameSettingsPageDefinition = {
         },
         {
             id: 'display',
-            label: 'Display',
+            label: SETTINGS_KEYS.tabDisplay,
             sections: [
                 {
                     id: 'display',
-                    label: 'Display',
+                    label: SETTINGS_KEYS.tabDisplay,
                     items: [
                         { kind: 'engine-field', fieldId: 'display.fullscreen' },
                         { kind: 'engine-field', fieldId: 'display.vsync' },
@@ -102,11 +115,11 @@ const ENGINE_DEFAULT_SETTINGS_DEFINITION: GameSettingsPageDefinition = {
         },
         {
             id: 'gameplay',
-            label: 'Gameplay',
+            label: SETTINGS_KEYS.tabGameplay,
             sections: [
                 {
                     id: 'gameplay',
-                    label: 'Gameplay',
+                    label: SETTINGS_KEYS.tabGameplay,
                     items: [
                         { kind: 'engine-field', fieldId: 'gameplay.language' },
                         { kind: 'engine-field', fieldId: 'gameplay.autoSave' },
@@ -119,11 +132,11 @@ const ENGINE_DEFAULT_SETTINGS_DEFINITION: GameSettingsPageDefinition = {
         },
         {
             id: 'controls',
-            label: 'Controls',
+            label: SETTINGS_KEYS.tabControls,
             sections: [
                 {
                     id: 'controls',
-                    label: 'Controls',
+                    label: SETTINGS_KEYS.tabControls,
                     items: [{ kind: 'engine-field', fieldId: 'controls.bindings' }],
                 },
             ],
@@ -131,59 +144,65 @@ const ENGINE_DEFAULT_SETTINGS_DEFINITION: GameSettingsPageDefinition = {
     ],
 };
 
+// Option labels are engine translation TOKENS: resolved through `t()` when the
+// <Select> renders (SettingsControl), never English here. `value` is the
+// persisted setting and stays literal.
 const TARGET_FPS_OPTIONS = [
-    { value: '30', label: '30 FPS' },
-    { value: '60', label: '60 FPS' },
-    { value: '120', label: '120 FPS' },
-    { value: '0', label: 'Uncapped' },
+    { value: '30', label: SETTINGS_KEYS.fps30 },
+    { value: '60', label: SETTINGS_KEYS.fps60 },
+    { value: '120', label: SETTINGS_KEYS.fps120 },
+    { value: '0', label: SETTINGS_KEYS.fpsUncapped },
 ] as const;
 
+// `label` holds an engine translation TOKEN and `formatKind` names a value
+// formatter — both resolved through `t()` at render; the descriptor carries no
+// English.
 const ENGINE_FIELD_DEFINITIONS: Record<EngineSettingsFieldId, EngineFieldDefinition> = {
     'audio.masterVolume': {
         control: { type: 'slider', min: 0, max: 1, step: 0.01 },
         defaultValue: 1,
-        formatValue: formatPercent,
-        label: 'Master Volume',
+        formatKind: 'percent',
+        label: SETTINGS_KEYS.masterVolume,
         testId: 'master-volume',
     },
     'audio.sfxVolume': {
         control: { type: 'slider', min: 0, max: 1, step: 0.01 },
         defaultValue: 1,
-        formatValue: formatPercent,
-        label: 'SFX Volume',
+        formatKind: 'percent',
+        label: SETTINGS_KEYS.sfxVolume,
     },
     'audio.musicVolume': {
         control: { type: 'slider', min: 0, max: 1, step: 0.01 },
         defaultValue: 0.8,
-        formatValue: formatPercent,
-        label: 'Music Volume',
+        formatKind: 'percent',
+        label: SETTINGS_KEYS.musicVolume,
     },
     'audio.muted': {
         control: { type: 'toggle' },
         defaultValue: false,
-        label: 'Muted',
+        label: SETTINGS_KEYS.muted,
     },
     'display.fullscreen': {
         control: { type: 'toggle' },
         defaultValue: false,
-        label: 'Fullscreen',
+        label: SETTINGS_KEYS.fullscreen,
     },
     'display.vsync': {
         control: { type: 'toggle' },
         defaultValue: true,
-        label: 'VSync',
+        label: SETTINGS_KEYS.vsync,
     },
     'display.targetFps': {
         control: { type: 'select', options: TARGET_FPS_OPTIONS },
         defaultValue: 60,
-        label: 'Target FPS',
+        label: SETTINGS_KEYS.targetFps,
         parseValue: parseIntegerValue,
     },
     'display.uiScale': {
         control: { type: 'slider', min: 0.5, max: 2, step: 0.05 },
         defaultValue: 1,
-        formatValue: formatScale,
-        label: 'UI Scale',
+        formatKind: 'scale',
+        label: SETTINGS_KEYS.uiScale,
     },
     // The language field is not rendered from this descriptor — renderSettingsItem
     // special-cases 'gameplay.language' to <SettingsLanguageSelector>, which sources
@@ -193,32 +212,32 @@ const ENGINE_FIELD_DEFINITIONS: Record<EngineSettingsFieldId, EngineFieldDefinit
     'gameplay.language': {
         control: { type: 'select', options: [] },
         defaultValue: 'en-US',
-        label: 'Language',
+        label: SETTINGS_KEYS.language,
     },
     'gameplay.autoSave': {
         control: { type: 'toggle' },
         defaultValue: true,
-        label: 'Auto Save',
+        label: SETTINGS_KEYS.autoSave,
     },
     'gameplay.autoSaveIntervalTurns': {
         control: { type: 'slider', min: 1, max: 100, step: 1 },
         defaultValue: 5,
-        formatValue: formatTurns,
-        label: 'Auto Save Interval',
+        formatKind: 'turns',
+        label: SETTINGS_KEYS.autoSaveInterval,
     },
     'gameplay.showHints': {
         control: { type: 'toggle' },
         defaultValue: true,
-        label: 'Show Hints',
+        label: SETTINGS_KEYS.showHints,
     },
     'gameplay.showPerfHud': {
         control: { type: 'toggle' },
         defaultValue: false,
-        label: 'Show Performance HUD',
+        label: SETTINGS_KEYS.showPerfHud,
     },
     'controls.bindings': {
         control: { type: 'key-binding' },
-        label: 'Controls',
+        label: SETTINGS_KEYS.controlsField,
     },
 };
 
@@ -248,6 +267,7 @@ function selectActiveGameId(state: { activeGameId: string | null }): string | nu
 }
 
 export default function SettingsPage(): React.ReactElement {
+    const t = useTranslate();
     const router = useRouter();
     const urlGameId = useUrlGameId();
     const storedActiveGameId = useSettingsStore(selectActiveGameId);
@@ -415,7 +435,7 @@ export default function SettingsPage(): React.ReactElement {
 
     function renderControlsPanel(): React.ReactElement {
         if (actionsByCategory.size === 0) {
-            return <Caption tone="muted">No controls registered.</Caption>;
+            return <Caption tone="muted">{t(SETTINGS_KEYS.noControls)}</Caption>;
         }
 
         return (
@@ -447,12 +467,12 @@ export default function SettingsPage(): React.ReactElement {
                                             data-testid="binding-value"
                                         >
                                             {isCapturing
-                                                ? 'Press a key...'
-                                                : formatBinding(binding)}
+                                                ? t(SETTINGS_KEYS.pressKey)
+                                                : formatBinding(t, binding)}
                                         </span>
                                         {status !== undefined && !status.ok && status.conflict && (
                                             <span className={styles['conflict-status']}>
-                                                Conflict with{' '}
+                                                {t(SETTINGS_KEYS.conflictWith)}
                                                 {inputManager
                                                     .getActions()
                                                     .find(
@@ -469,12 +489,14 @@ export default function SettingsPage(): React.ReactElement {
                                                         )
                                                     }
                                                 >
-                                                    Unbind existing &amp; rebind
+                                                    {t(SETTINGS_KEYS.unbindAndRebind)}
                                                 </Button>
                                             </span>
                                         )}
                                         {status?.ok === true && (
-                                            <span className={styles['success-status']}>Saved</span>
+                                            <span className={styles['success-status']}>
+                                                {t(SETTINGS_KEYS.rebindSaved)}
+                                            </span>
                                         )}
                                         <div className={styles['binding-actions']}>
                                             {!isCapturing && (
@@ -485,7 +507,7 @@ export default function SettingsPage(): React.ReactElement {
                                                     variant="secondary"
                                                     onClick={() => setCapturingId(action.id)}
                                                 >
-                                                    Edit
+                                                    {t(SETTINGS_KEYS.editBinding)}
                                                 </Button>
                                             )}
                                             <Button
@@ -495,7 +517,7 @@ export default function SettingsPage(): React.ReactElement {
                                                 variant="ghost"
                                                 onClick={() => handleResetBinding(action.id)}
                                             >
-                                                Reset
+                                                {t(SETTINGS_KEYS.resetBinding)}
                                             </Button>
                                         </div>
                                     </div>
@@ -516,30 +538,30 @@ export default function SettingsPage(): React.ReactElement {
             open
             actions={[
                 {
-                    label: 'Reset',
+                    label: t(SETTINGS_KEYS.reset),
                     variant: 'danger',
                     testId: 'reset-to-defaults',
                     dismiss: false,
                     onClick: handleReset,
                 },
-                { label: 'Close', variant: 'secondary', testId: 'settings-close' },
+                { label: t(SETTINGS_KEYS.close), variant: 'secondary', testId: 'settings-close' },
             ]}
             actionsTestId="settings-dialog-actions"
             data-testid="settings-dialog"
             fixedHeight
             onClose={handleClose}
             size="lg"
-            title="Settings"
+            title={t(SETTINGS_KEYS.modalTitle)}
         >
             {activeGameId === undefined ? (
                 <div className={styles['loading']}>
-                    <Spinner label="Loading settings" />
+                    <Spinner label={t(SETTINGS_KEYS.loading)} />
                 </div>
             ) : (
                 <React.Suspense
                     fallback={
                         <div className={styles['loading']}>
-                            <Spinner label="Loading settings" />
+                            <Spinner label={t(SETTINGS_KEYS.loading)} />
                         </div>
                     }
                 >
@@ -549,6 +571,7 @@ export default function SettingsPage(): React.ReactElement {
                         onUpdate={handleUpdate}
                         renderControlsPanel={renderControlsPanel}
                         resolvedSettings={resolvedSettings}
+                        t={t}
                     />
                 </React.Suspense>
             )}
@@ -572,6 +595,7 @@ function SettingsDefinitionSurface({
     onUpdate,
     renderControlsPanel,
     resolvedSettings,
+    t,
 }: Readonly<{
     readonly activeGameId: string | null;
     /** Resolved settings game context (URL → activeGameId → engine default). */
@@ -579,16 +603,17 @@ function SettingsDefinitionSurface({
     readonly onUpdate: (patch: Record<string, unknown>) => void;
     readonly renderControlsPanel: () => React.ReactElement;
     readonly resolvedSettings: ResolvedSettings | undefined;
+    readonly t: TranslateFn;
 }>): React.ReactElement {
     const definition = readSettingsDefinition(activeGameId);
 
     return (
         <Tabs
-            ariaLabel="Settings categories"
+            ariaLabel={t(SETTINGS_KEYS.tabsAriaLabel)}
             data-testid="settings-tabs"
             tabs={definition.tabs.map((tab) => ({
                 id: tab.id,
-                label: tab.label,
+                label: resolveLabel(t, tab.label),
                 panel: (
                     <SettingsTabPanel
                         key={tab.id}
@@ -596,6 +621,7 @@ function SettingsDefinitionSurface({
                         onUpdate={onUpdate}
                         renderControlsPanel={renderControlsPanel}
                         resolvedSettings={resolvedSettings}
+                        t={t}
                         tab={tab}
                     />
                 ),
@@ -610,19 +636,30 @@ function SettingsTabPanel({
     onUpdate,
     renderControlsPanel,
     resolvedSettings,
+    t,
     tab,
 }: Readonly<{
     readonly gameId: string;
     readonly onUpdate: (patch: Record<string, unknown>) => void;
     readonly renderControlsPanel: () => React.ReactElement;
     readonly resolvedSettings: ResolvedSettings | undefined;
+    readonly t: TranslateFn;
     readonly tab: SettingsTabDefinition;
 }>): React.ReactElement {
     return (
         <div className={styles['tab-panel-content']}>
             {tab.sections.map((section) => {
                 const headingId = getSettingsElementId(tab.id, section.id, 'heading');
-                const shouldRenderHeading = shouldRenderSectionHeading(tab.label, section.label);
+                // Both labels may be engine tokens (or game literals) — resolve
+                // both before the dedup compare so a section heading that repeats
+                // the tab label is still suppressed once translated.
+                const resolvedTabLabel = resolveLabel(t, tab.label);
+                const resolvedSectionLabel =
+                    section.label === undefined ? undefined : resolveLabel(t, section.label);
+                const shouldRenderHeading = shouldRenderSectionHeading(
+                    resolvedTabLabel,
+                    resolvedSectionLabel,
+                );
                 return (
                     <section
                         aria-labelledby={shouldRenderHeading ? headingId : undefined}
@@ -632,7 +669,7 @@ function SettingsTabPanel({
                     >
                         {shouldRenderHeading ? (
                             <Heading id={headingId} level={2} size="lg">
-                                {section.label}
+                                {resolvedSectionLabel}
                             </Heading>
                         ) : null}
                         <div className={styles['field-list']}>
@@ -643,6 +680,7 @@ function SettingsTabPanel({
                                     onUpdate,
                                     renderControlsPanel,
                                     resolvedSettings,
+                                    t,
                                 }),
                             )}
                         </div>
@@ -671,12 +709,14 @@ function renderSettingsItem({
     onUpdate,
     renderControlsPanel,
     resolvedSettings,
+    t,
 }: Readonly<{
     readonly item: SettingsItemDefinition;
     readonly gameId: string;
     readonly onUpdate: (patch: Record<string, unknown>) => void;
     readonly renderControlsPanel: () => React.ReactElement;
     readonly resolvedSettings: ResolvedSettings | undefined;
+    readonly t: TranslateFn;
 }>): React.ReactElement | null {
     switch (item.kind) {
         case 'engine-field': {
@@ -692,22 +732,28 @@ function renderSettingsItem({
             if (definition.control.type === 'key-binding') {
                 return <React.Fragment key={item.fieldId}>{renderControlsPanel()}</React.Fragment>;
             }
+            // The engine descriptor stores tokens: resolve the field label, the
+            // select option labels, and the value formatter through `t()` before
+            // handing final display strings to the presentational control.
             return (
                 <SettingsControl
-                    control={definition.control}
+                    control={resolveEngineControl(t, definition.control)}
                     defaultValue={definition.defaultValue}
-                    formatValue={definition.formatValue}
+                    formatValue={makeValueFormatter(t, definition.formatKind)}
                     key={item.fieldId}
-                    label={definition.label}
+                    label={resolveLabel(t, definition.label)}
                     onUpdate={onUpdate}
                     parseValue={definition.parseValue}
                     path={item.fieldId}
+                    t={t}
                     testId={definition.testId}
                     value={getValueByPath(resolvedSettings, item.fieldId)}
                 />
             );
         }
         case 'game-field':
+            // A game field carries final display strings (its own localisation),
+            // rendered verbatim; only the shared key-binding Caption needs `t`.
             return (
                 <SettingsControl
                     control={item.control}
@@ -715,6 +761,7 @@ function renderSettingsItem({
                     label={item.label}
                     onUpdate={onUpdate}
                     path={item.path}
+                    t={t}
                     value={getValueByPath(resolvedSettings, item.path)}
                 />
             );
@@ -729,6 +776,7 @@ function SettingsControl({
     onUpdate,
     parseValue,
     path,
+    t,
     testId,
     value,
 }: Readonly<{
@@ -739,6 +787,7 @@ function SettingsControl({
     readonly onUpdate: (patch: Record<string, unknown>) => void;
     readonly parseValue?: ((value: SettingPrimitive) => unknown) | undefined;
     readonly path: string;
+    readonly t: TranslateFn;
     readonly testId?: string | undefined;
     readonly value: unknown;
 }>): React.ReactElement {
@@ -810,9 +859,7 @@ function SettingsControl({
                     data-setting-path={path}
                     data-testid={controlTestId}
                 >
-                    <Caption tone="muted">
-                        Key bindings are managed by the engine controls panel.
-                    </Caption>
+                    <Caption tone="muted">{t(SETTINGS_KEYS.keyBindingsManaged)}</Caption>
                 </div>
             );
     }
@@ -874,22 +921,63 @@ function readSettingsDefinition(activeGameId: string | null): GameSettingsPageDe
     return resource.read();
 }
 
-function formatBinding(binding: KeyBinding | undefined): string {
-    if (!binding) return 'Unbound';
+/** Resolve a label that may be an engine translation token (or a game literal). */
+function resolveLabel(t: TranslateFn, label: string): string {
+    return t(label as unknown as Parameters<TranslateFn>[0]);
+}
+
+/**
+ * Resolve a control's option labels through `t()` for `select` controls whose
+ * options carry engine tokens (the engine field descriptors). Other control
+ * kinds have no display strings and pass through unchanged.
+ */
+function resolveEngineControl(
+    t: TranslateFn,
+    control: SettingsControlDefinition,
+): SettingsControlDefinition {
+    if (control.type !== 'select') {
+        return control;
+    }
+    return {
+        ...control,
+        options: control.options.map((option) => ({
+            ...option,
+            label: resolveLabel(t, option.label),
+        })),
+    };
+}
+
+/**
+ * Build the slider value-caption formatter for a formatter kind, or `undefined`
+ * when the field has none. The numeric scaling/rounding stays with the consumer
+ * (percent rounds, scale keeps two decimals as a string so the ICU `{n}` echoes
+ * it verbatim, turns pluralises) and the token supplies only the surrounding
+ * text — so a game bundle can relabel the units.
+ */
+function makeValueFormatter(
+    t: TranslateFn,
+    kind: ValueFormatterKind | undefined,
+): ((value: unknown) => string) | undefined {
+    switch (kind) {
+        case undefined:
+            return undefined;
+        case 'percent':
+            return (value) =>
+                t(SETTINGS_KEYS.formatPercent, {
+                    n: Number((coerceNumber(value, 1) * 100).toFixed(0)),
+                });
+        case 'scale':
+            return (value) =>
+                t(SETTINGS_KEYS.formatScale, { n: coerceNumber(value, 1).toFixed(2) });
+        case 'turns':
+            return (value) => t(SETTINGS_KEYS.formatTurns, { n: coerceNumber(value, 5) });
+    }
+}
+
+function formatBinding(t: TranslateFn, binding: KeyBinding | undefined): string {
+    if (!binding) return t(SETTINGS_KEYS.unbound);
     const modifiers = binding.modifiers?.length ? `${binding.modifiers.join('+')}+` : '';
     return `${modifiers}${binding.primary}`;
-}
-
-function formatPercent(value: unknown): string {
-    return `${(coerceNumber(value, 1) * 100).toFixed(0)}%`;
-}
-
-function formatScale(value: unknown): string {
-    return `${coerceNumber(value, 1).toFixed(2)}x`;
-}
-
-function formatTurns(value: unknown): string {
-    return `${coerceNumber(value, 5).toFixed(0)} turns`;
 }
 
 function parseIntegerValue(value: SettingPrimitive): number {

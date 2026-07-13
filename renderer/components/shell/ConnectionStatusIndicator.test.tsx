@@ -1,11 +1,17 @@
 // renderer/components/shell/ConnectionStatusIndicator.test.tsx
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionStatus } from '@chimera-engine/simulation/bridge/api-types.js';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
+
+// The indicator calls useTranslate() for its status aria-label; the inert
+// provider resolves engine English so the existing aria-label assertions hold.
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: I18nProvider });
 
 type StatusListener = (status: ConnectionStatus) => void;
 
@@ -55,6 +61,23 @@ describe('ConnectionStatusIndicator', () => {
         expect(style).toContain('border-radius: var(--ch-radius-pill)');
         expect(style).toContain('background-color: var(--ch-color-success)');
         expect(style).toContain('opacity: var(--ch-opacity-disabled)');
+    });
+
+    it('resolves the status aria-label through the active-locale translator', () => {
+        installSystemBridge(
+            () => undefined,
+            () => undefined,
+        );
+
+        baseRender(
+            <I18nProvider gameOverride={{ 'engine.connection.statusAriaLabel': 'Link: {status}' }}>
+                <ConnectionStatusIndicator />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('connection-status').getAttribute('aria-label')).toBe(
+            'Link: connected',
+        );
     });
 
     it('updates status metadata and color when onConnectionStatus emits', () => {

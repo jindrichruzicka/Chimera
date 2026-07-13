@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { TOAST_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { TOAST_DURATION_MS_BY_SEVERITY, useToastStore, type Toast } from '../../state/toastStore';
 import { Button } from '../ui/Button';
 import styles from './ToastHost.module.css';
@@ -36,6 +38,7 @@ function usePrefersReducedMotion(): boolean {
 }
 
 export function ToastHost(): React.ReactElement {
+    const t = useTranslate();
     const queue = useToastStore((state) => state.queue);
     const dismiss = useToastStore((state) => state.dismiss);
     const timeoutIds = useRef(new Map<string, number>());
@@ -83,7 +86,7 @@ export function ToastHost(): React.ReactElement {
 
     return (
         <section
-            aria-label="Notifications"
+            aria-label={t(TOAST_KEYS.hostAriaLabel)}
             aria-live="polite"
             className={hostClassName}
             data-reduced-motion={prefersReducedMotion ? 'true' : 'false'}

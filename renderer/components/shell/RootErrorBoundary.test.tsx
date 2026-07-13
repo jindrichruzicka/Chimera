@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render as baseRender, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { I18nProvider } from '../../i18n/I18nProvider.js';
 import { RootErrorBoundary } from './RootErrorBoundary.js';
+
+// CrashFallback calls useTranslate(); in production AppShell mounts the i18n
+// provider above the boundary, so its fallback still resolves after a child
+// throws. The inert provider resolves engine English so the crash-copy
+// assertions hold.
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: I18nProvider });
 
 // Suppress React's console.error output for expected boundary errors in tests
 beforeEach(() => {
@@ -38,6 +46,17 @@ describe('RootErrorBoundary', () => {
             </RootErrorBoundary>,
         );
         expect(screen.getByText(/unexpected error/i)).toBeTruthy();
+    });
+
+    it('resolves the crash heading through the active-locale translator', () => {
+        baseRender(
+            <I18nProvider gameOverride={{ 'engine.crash.heading': 'Something broke.' }}>
+                <RootErrorBoundary>
+                    <Bomb shouldThrow={true} />
+                </RootErrorBoundary>
+            </I18nProvider>,
+        );
+        expect(screen.getByText('Something broke.')).toBeTruthy();
     });
 
     it('forwards caught errors through the logs IPC surface with component context', () => {

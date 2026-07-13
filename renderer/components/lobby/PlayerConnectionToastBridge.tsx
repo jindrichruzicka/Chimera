@@ -16,13 +16,22 @@
  * nothing.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { PlayerConnectionEvent } from '@chimera-engine/simulation/bridge/api-types.js';
 import { getLobbyBridge } from '../../app/lobby/useLobbyApi';
+import { TOAST_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { useToastStore } from '../../state/toastStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 
 export function PlayerConnectionToastBridge(): null {
+    // The subscription is one-time (empty deps) so a locale change must not
+    // re-subscribe and drop events; read the latest translator through a ref
+    // instead. A resolved token is still a static title (Invariant #74).
+    const t = useTranslate();
+    const tRef = useRef(t);
+    tRef.current = t;
+
     useEffect(() => {
         // Guard: outside Electron (or before preload wiring) there is no bridge.
         const bridge = getLobbyBridge();
@@ -37,11 +46,14 @@ export function PlayerConnectionToastBridge(): null {
                 return;
             }
             if (event.status === 'disconnected') {
+                useToastStore.getState().push({
+                    severity: 'warning',
+                    title: tRef.current(TOAST_KEYS.playerDisconnected),
+                });
+            } else {
                 useToastStore
                     .getState()
-                    .push({ severity: 'warning', title: 'Player disconnected' });
-            } else {
-                useToastStore.getState().push({ severity: 'info', title: 'Player reconnected' });
+                    .push({ severity: 'info', title: tRef.current(TOAST_KEYS.playerReconnected) });
             }
         });
     }, []);

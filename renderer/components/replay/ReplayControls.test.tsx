@@ -1,11 +1,23 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { ReplayControls } from './ReplayControls';
+
+// The controls render their labels through `useTranslate()`, which throws
+// outside an I18nProvider; wrap every render.
+function render(
+    ui: React.ReactElement,
+    gameOverride?: Record<string, string>,
+): ReturnType<typeof baseRender> {
+    return baseRender(
+        <I18nProvider {...(gameOverride === undefined ? {} : { gameOverride })}>{ui}</I18nProvider>,
+    );
+}
 
 interface Handlers {
     onPlay: ReturnType<typeof vi.fn>;
@@ -35,6 +47,7 @@ function renderControls(
         save: { onSave: () => void; saving: boolean; saved: boolean };
     }> = {},
     handlers: Handlers = makeHandlers(),
+    gameOverride?: Record<string, string>,
 ): Handlers {
     render(
         <ReplayControls
@@ -50,6 +63,7 @@ function renderControls(
             onSpeedChange={handlers.onSpeedChange}
             {...(props.save === undefined ? {} : { save: props.save })}
         />,
+        gameOverride,
     );
     return handlers;
 }
@@ -59,6 +73,11 @@ afterEach(() => {
 });
 
 describe('ReplayControls', () => {
+    it('labels a transport button from its engine.replays token', () => {
+        renderControls({}, makeHandlers(), { 'engine.replays.play': 'Resume' });
+        expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
+    });
+
     it('shows the current and total ticks', () => {
         renderControls({ currentTick: 4, totalTicks: 10 });
         expect(screen.getByText(/4\s*\/\s*10/)).toBeDefined();

@@ -292,6 +292,23 @@ export const GAME_SHELL_KEYS = {
     hudAriaLabel: translationKey('engine.gameShell.hudAriaLabel'),
 } as const;
 
+/** Engine-default game-over / result banner copy. */
+export const GAME_RESULT_KEYS = {
+    gameOver: translationKey('engine.gameResult.gameOver'),
+    draw: translationKey('engine.gameResult.draw'),
+    ended: translationKey('engine.gameResult.ended'),
+    won: translationKey('engine.gameResult.won'),
+    lose: translationKey('engine.gameResult.lose'),
+} as const;
+
+/** Engine-default in-game HUD scaffold (tick readout + undo/redo/end-turn). */
+export const HUD_KEYS = {
+    tick: translationKey('engine.hud.tick'),
+    undo: translationKey('engine.hud.undo'),
+    redo: translationKey('engine.hud.redo'),
+    endTurn: translationKey('engine.hud.endTurn'),
+} as const;
+
 /** Cross-cutting UI primitives shared across surfaces. */
 export const COMMON_KEYS = {
     close: translationKey('engine.common.close'),
@@ -318,6 +335,8 @@ const ALL_AREA_MAPS = [
     CRASH_KEYS,
     CONNECTION_KEYS,
     GAME_SHELL_KEYS,
+    GAME_RESULT_KEYS,
+    HUD_KEYS,
     COMMON_KEYS,
 ] as const;
 

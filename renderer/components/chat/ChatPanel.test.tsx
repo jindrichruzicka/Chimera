@@ -2,11 +2,20 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+    act,
+    cleanup,
+    fireEvent,
+    render as baseRender,
+    screen,
+    waitFor,
+} from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPanel } from './ChatPanel';
 import chatPanelCss from './ChatPanel.module.css?raw';
+import { I18nProvider } from '../../i18n/I18nProvider';
+import type { TranslationBundle } from '../../i18n/translation-bundle';
 import { useChatStore } from '../../state/chatStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
@@ -15,6 +24,21 @@ import type { ChatMessage } from '@chimera-engine/simulation/foundation/chat.js'
 import type { PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ─── Test helpers ───────────────────────────────────────────────────────────
+
+// ChatPanel reads its strings through useTranslate(), which throws outside an
+// I18nProvider. Mount it inert (engine English, en-US) for every render so the
+// default-locale text assertions below stay identical to the ship strings. A
+// `gameOverride` bundle can be passed to prove the game-override seam.
+function render(
+    ui: React.ReactElement,
+    gameOverride?: TranslationBundle,
+): ReturnType<typeof baseRender> {
+    // Spread `gameOverride` only when supplied: I18nProviderProps declares it
+    // optional and the tree compiles with exactOptionalPropertyTypes, so an
+    // explicit `undefined` is rejected.
+    const providerProps = gameOverride !== undefined ? { gameOverride } : {};
+    return baseRender(<I18nProvider {...providerProps}>{ui}</I18nProvider>);
+}
 
 /** Cast a raw string to the branded {@link PlayerId} (test-only). */
 function pid(raw: string): PlayerId {
@@ -136,6 +160,35 @@ describe('ChatPanel', () => {
         render(<ChatPanel title="Match chat" />);
 
         expect(screen.getByTestId('chat-unavailable')).toHaveAttribute('aria-label', 'Match chat');
+    });
+
+    it("uses a game's engine.chat.title override as the default accessible label", async () => {
+        // No `title` prop: the label falls back to the engine.chat.title token,
+        // which a game bundle re-keys — proving the override seam (Invariant
+        // #80/#94: the override arrives via the provider, not a game import).
+        render(<ChatPanel />, { 'engine.chat.title': 'Comms' });
+        await waitUntilReady();
+
+        expect(screen.getByTestId('chat-panel')).toHaveAttribute('aria-label', 'Comms');
+    });
+
+    it("lets an explicit title prop win over a game's engine.chat.title override", async () => {
+        render(<ChatPanel title="Match chat" />, { 'engine.chat.title': 'Comms' });
+        await waitUntilReady();
+
+        expect(screen.getByTestId('chat-panel')).toHaveAttribute('aria-label', 'Match chat');
+    });
+
+    it('reads the messages region accessible label from engine.chat.messagesAriaLabel', async () => {
+        useChatStore.setState({
+            messages: [makeMessage({ id: 'm-1', body: 'hi' })],
+            muted: new Set<PlayerId>(),
+        });
+
+        render(<ChatPanel />, { 'engine.chat.messagesAriaLabel': 'Match log' });
+        await waitUntilReady();
+
+        expect(screen.getByRole('region', { name: 'Match log' })).toBeInTheDocument();
     });
 
     // ── Resolved + muted filtering ────────────────────────────────────────────

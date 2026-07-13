@@ -23,6 +23,8 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { ReplayListItem } from '@chimera-engine/simulation/bridge/api-types.js';
 import { Badge, Caption, IconButton, Modal } from '../../components/ui';
+import { REPLAYS_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { useReplayApi } from '../../hooks/useReplayApi';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useToastStore } from '../../state/toastStore.js';
@@ -97,13 +99,14 @@ function ReplayRow({
     readonly onOpen: (path: string) => void;
     readonly onDelete: (path: string) => void;
 }): React.ReactElement {
+    const t = useTranslate();
     const recorded = formatRecordedAt(item.recordedAt);
     return (
         <li className={styles['rowItem']}>
             <button
                 type="button"
                 className={styles['row']}
-                aria-label={`Open replay recorded ${recorded}`}
+                aria-label={t(REPLAYS_KEYS.openDeterministicAriaLabel, { recorded })}
                 data-testid="replay-open-btn"
                 onClick={() => onOpen(item.path)}
             >
@@ -115,9 +118,10 @@ function ReplayRow({
                     }}
                 >
                     <span style={titleRowStyle}>
-                        <Badge variant="neutral">Deterministic</Badge>
+                        <Badge variant="neutral">{t(REPLAYS_KEYS.deterministicBadge)}</Badge>
                         <span>
-                            v{item.gameVersion} · {item.durationTicks} ticks
+                            v{item.gameVersion} ·{' '}
+                            {t(REPLAYS_KEYS.ticksSuffix, { n: item.durationTicks })}
                         </span>
                     </span>
                     <Caption tone="muted">
@@ -126,7 +130,7 @@ function ReplayRow({
                 </div>
             </button>
             <DeleteReplayButton
-                label={`Delete replay recorded ${recorded}`}
+                label={t(REPLAYS_KEYS.deleteDeterministicAriaLabel, { recorded })}
                 onDelete={() => onDelete(item.path)}
             />
         </li>
@@ -142,13 +146,14 @@ function PerspectiveReplayRow({
     readonly onOpen: (path: string) => void;
     readonly onDelete: (path: string) => void;
 }): React.ReactElement {
+    const t = useTranslate();
     const label = perspectiveLabel(path);
     return (
         <li className={styles['rowItem']}>
             <button
                 type="button"
                 className={styles['row']}
-                aria-label={`Open perspective replay ${label}`}
+                aria-label={t(REPLAYS_KEYS.openPerspectiveAriaLabel, { label })}
                 data-testid="replay-open-btn"
                 onClick={() => onOpen(path)}
             >
@@ -160,14 +165,14 @@ function PerspectiveReplayRow({
                     }}
                 >
                     <span style={titleRowStyle}>
-                        <Badge variant="success">Perspective</Badge>
+                        <Badge variant="success">{t(REPLAYS_KEYS.perspectiveBadge)}</Badge>
                         <span>{label}</span>
                     </span>
-                    <Caption tone="muted">Single-viewer replay</Caption>
+                    <Caption tone="muted">{t(REPLAYS_KEYS.singleViewer)}</Caption>
                 </div>
             </button>
             <DeleteReplayButton
-                label={`Delete perspective replay ${label}`}
+                label={t(REPLAYS_KEYS.deletePerspectiveAriaLabel, { label })}
                 onDelete={() => onDelete(path)}
             />
         </li>
@@ -175,6 +180,7 @@ function PerspectiveReplayRow({
 }
 
 export default function ReplaysPage(): React.ReactElement {
+    const t = useTranslate();
     const replayApi = useReplayApi();
     const router = useRouter();
     // Read at render time (not in an effect), so guard the static-prerender pass
@@ -209,14 +215,17 @@ export default function ReplaysPage(): React.ReactElement {
                 if (active) {
                     setState({
                         status: 'error',
-                        message: error instanceof Error ? error.message : 'Failed to load replays',
+                        message:
+                            error instanceof Error
+                                ? error.message
+                                : t(REPLAYS_KEYS.loadFailedError),
                     });
                 }
             });
         return () => {
             active = false;
         };
-    }, [fetchReplays]);
+    }, [fetchReplays, t]);
 
     const reloadReplays = React.useCallback(async (): Promise<void> => {
         setState({ status: 'loading' });
@@ -226,10 +235,10 @@ export default function ReplaysPage(): React.ReactElement {
         } catch (error: unknown) {
             setState({
                 status: 'error',
-                message: error instanceof Error ? error.message : 'Failed to load replays',
+                message: error instanceof Error ? error.message : t(REPLAYS_KEYS.loadFailedError),
             });
         }
-    }, [fetchReplays]);
+    }, [fetchReplays, t]);
 
     const handleOpenDeterministic = React.useCallback(
         (path: string) => {
@@ -288,13 +297,17 @@ export default function ReplaysPage(): React.ReactElement {
             await (kind === 'perspective'
                 ? replayApi.perspective.delete(path)
                 : replayApi.delete(path));
-            // §4.30: static-literal toast title — carries no replay metadata.
-            useToastStore.getState().push({ severity: 'success', title: 'Replay deleted' });
+            // §4.30: static toast title — carries no replay metadata.
+            useToastStore
+                .getState()
+                .push({ severity: 'success', title: t(REPLAYS_KEYS.deletedToast) });
             await reloadReplays();
         } catch {
-            useToastStore.getState().push({ severity: 'error', title: 'Delete failed' });
+            useToastStore
+                .getState()
+                .push({ severity: 'error', title: t(REPLAYS_KEYS.deleteFailedToast) });
         }
-    }, [pendingDelete, replayApi, reloadReplays]);
+    }, [pendingDelete, replayApi, reloadReplays, t]);
 
     const isEmpty =
         state.status === 'loaded' &&
@@ -308,15 +321,21 @@ export default function ReplaysPage(): React.ReactElement {
     return (
         <Modal
             open
-            actions={[{ label: 'Close', variant: 'secondary', testId: 'replays-close-btn' }]}
+            actions={[
+                {
+                    label: t(REPLAYS_KEYS.close),
+                    variant: 'secondary',
+                    testId: 'replays-close-btn',
+                },
+            ]}
             data-testid="replays-page"
             onClose={handleClose}
             size="lg"
-            title="Replays"
+            title={t(REPLAYS_KEYS.title)}
         >
             {state.status === 'loading' && (
-                <div role="status" aria-label="Loading replays">
-                    Loading…
+                <div role="status" aria-label={t(REPLAYS_KEYS.loadingAriaLabel)}>
+                    {t(REPLAYS_KEYS.loading)}
                 </div>
             )}
 
@@ -327,8 +346,11 @@ export default function ReplaysPage(): React.ReactElement {
             )}
 
             {isEmpty && (
-                <div aria-label="No replays saved yet" style={{ paddingTop: 'var(--ch-space-md)' }}>
-                    <Caption tone="muted">No replays saved yet.</Caption>
+                <div
+                    aria-label={t(REPLAYS_KEYS.emptyAriaLabel)}
+                    style={{ paddingTop: 'var(--ch-space-md)' }}
+                >
+                    <Caption tone="muted">{t(REPLAYS_KEYS.empty)}</Caption>
                 </div>
             )}
 
@@ -356,13 +378,13 @@ export default function ReplaysPage(): React.ReactElement {
             {pendingDelete !== null && (
                 <Modal
                     open
-                    title="Delete replay?"
+                    title={t(REPLAYS_KEYS.deleteConfirmTitle)}
                     onClose={handleCancelDelete}
                     data-testid="replay-delete-dialog"
                     actions={[
-                        { label: 'Cancel', testId: 'replay-delete-cancel' },
+                        { label: t(REPLAYS_KEYS.deleteCancel), testId: 'replay-delete-cancel' },
                         {
-                            label: 'Delete',
+                            label: t(REPLAYS_KEYS.deleteConfirm),
                             variant: 'danger',
                             testId: 'replay-delete-confirm',
                             onClick: () => {
@@ -371,9 +393,7 @@ export default function ReplaysPage(): React.ReactElement {
                         },
                     ]}
                 >
-                    <Caption tone="muted">
-                        This replay will be permanently deleted. This cannot be undone.
-                    </Caption>
+                    <Caption tone="muted">{t(REPLAYS_KEYS.deleteConfirmBody)}</Caption>
                 </Modal>
             )}
         </Modal>

@@ -31,6 +31,8 @@ import { GameShell } from '../../components/shell/GameShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
 import { useSavesApi } from '../../hooks/useSavesApi';
+import { TOAST_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
@@ -71,6 +73,7 @@ export default function GamePage(): React.ReactElement | null {
     const gameContent = useGameContent(gameId);
     const loadedGame = useLoadedRendererGame(gameId);
     const savesApi = useSavesApi();
+    const t = useTranslate();
     const assetManager = React.useMemo<AssetManager | null>(() => {
         if (loadedGame === null) {
             return null;
@@ -267,9 +270,9 @@ export default function GamePage(): React.ReactElement | null {
     const handleSaveGame = async (label: string): Promise<void> => {
         try {
             await savesApi.save({ gameId, ...(label === '' ? {} : { label }) });
-            useToastStore.getState().push({ severity: 'success', title: 'Game saved' });
+            useToastStore.getState().push({ severity: 'success', title: t(TOAST_KEYS.gameSaved) });
         } catch {
-            useToastStore.getState().push({ severity: 'error', title: 'Save failed' });
+            useToastStore.getState().push({ severity: 'error', title: t(TOAST_KEYS.saveFailed) });
         }
     };
 

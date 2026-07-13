@@ -37,6 +37,8 @@ import { GameShell } from '../../../components/shell/GameShell';
 import { ReplayControls } from '../../../components/replay/ReplayControls';
 import { parseReplayKind } from '../../../components/replay/replayKind';
 import { loadRendererGame, type LoadedRendererGame } from '../../../game/rendererGameRegistry';
+import { REPLAYS_KEYS } from '../../../i18n/engine-keys';
+import { useTranslate } from '../../../i18n/useTranslate';
 import { useReplayApi } from '../../../hooks/useReplayApi';
 import { resolveShellGameId, withShellGameId } from '../../../shell/resolveMainMenuGameId';
 import { useGameContent } from '../../../state/useGameContent';
@@ -110,6 +112,7 @@ function useLoadedRendererGame(
 }
 
 function ReplayPlayerView(): React.ReactElement {
+    const t = useTranslate();
     const replayApi = useReplayApi();
     const router = useRouter();
     // The role-aware live-match leave (host → returnToLobby), used only for a
@@ -180,7 +183,7 @@ function ReplayPlayerView(): React.ReactElement {
     // Open the playback session for the requested path; close it on unmount.
     React.useEffect(() => {
         if (path === null) {
-            setError('No replay path provided.');
+            setError(t(REPLAYS_KEYS.noPathError));
             return;
         }
         let active = true;
@@ -199,14 +202,14 @@ function ReplayPlayerView(): React.ReactElement {
             })
             .catch((err: unknown) => {
                 if (active) {
-                    setError(err instanceof Error ? err.message : 'Failed to open replay.');
+                    setError(err instanceof Error ? err.message : t(REPLAYS_KEYS.openFailedError));
                 }
             });
         return () => {
             active = false;
             void playback.closePlayback();
         };
-    }, [playback, path]);
+    }, [playback, path, t]);
 
     // Fetch (and buffer) a batch of snapshots anchored at `from`, deduping
     // concurrent requests for the same anchor.
@@ -224,13 +227,15 @@ function ReplayPlayerView(): React.ReactElement {
                     setBufferVersion((version) => version + 1);
                 })
                 .catch((err: unknown) => {
-                    setError(err instanceof Error ? err.message : 'Failed to load ticks.');
+                    setError(
+                        err instanceof Error ? err.message : t(REPLAYS_KEYS.loadTicksFailedError),
+                    );
                 })
                 .finally(() => {
                     inFlightRef.current.delete(from);
                 });
         },
-        [replayApi, info],
+        [replayApi, info, t],
     );
 
     // Deterministic: display the current tick from the buffer, fetching it (and
@@ -278,13 +283,15 @@ function ReplayPlayerView(): React.ReactElement {
             })
             .catch((err: unknown) => {
                 if (active) {
-                    setError(err instanceof Error ? err.message : 'Failed to load frame.');
+                    setError(
+                        err instanceof Error ? err.message : t(REPLAYS_KEYS.loadFrameFailedError),
+                    );
                 }
             });
         return () => {
             active = false;
         };
-    }, [kind, info, currentTick, playback]);
+    }, [kind, info, currentTick, playback, t]);
 
     // Auto-advance while playing; the interval scales inversely with speed.
     React.useEffect(() => {
@@ -400,10 +407,10 @@ function ReplayPlayerView(): React.ReactElement {
             <main style={pageStyle}>
                 <div
                     role="status"
-                    aria-label="Loading replay"
+                    aria-label={t(REPLAYS_KEYS.playerLoadingAriaLabel)}
                     style={{ padding: 'var(--ch-space-md)' }}
                 >
-                    Loading replay…
+                    {t(REPLAYS_KEYS.playerLoading)}
                 </div>
             </main>
         );
@@ -461,16 +468,17 @@ function ReplayPlayerView(): React.ReactElement {
  * mirrors the view's own "Loading replay…" status so the transition is seamless.
  */
 export default function ReplayPlayerPage(): React.ReactElement {
+    const t = useTranslate();
     return (
         <React.Suspense
             fallback={
                 <main style={pageStyle}>
                     <div
                         role="status"
-                        aria-label="Loading replay"
+                        aria-label={t(REPLAYS_KEYS.playerLoadingAriaLabel)}
                         style={{ padding: 'var(--ch-space-md)' }}
                     >
-                        Loading replay…
+                        {t(REPLAYS_KEYS.playerLoading)}
                     </div>
                 </main>
             }

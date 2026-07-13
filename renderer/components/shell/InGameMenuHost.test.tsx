@@ -18,6 +18,7 @@ import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { LobbyState } from '@chimera-engine/simulation/foundation/messages-schemas.js';
 import type { InGameMenuProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 
+import { I18nProvider } from '../../i18n/I18nProvider.js';
 import type { InputActionId, InputEvent } from '../../input/InputAction.js';
 import type { InputManager } from '../../input/InputManager.js';
 import { InputManagerContext } from '../../input/InputManagerContext.js';
@@ -128,11 +129,16 @@ describe('InGameMenuHost', () => {
         delete (globalThis as { __chimera?: unknown }).__chimera;
     });
 
+    // DefaultInGameMenu calls useTranslate(), which throws outside I18nProvider;
+    // the inert provider resolves engine English so the default-menu label
+    // assertions hold.
     function renderHost(ui: React.ReactElement): void {
         render(
-            <InputManagerContext.Provider value={manager}>
-                <EscapeStackProvider>{ui}</EscapeStackProvider>
-            </InputManagerContext.Provider>,
+            <I18nProvider>
+                <InputManagerContext.Provider value={manager}>
+                    <EscapeStackProvider>{ui}</EscapeStackProvider>
+                </InputManagerContext.Provider>
+            </I18nProvider>,
         );
     }
 
@@ -151,6 +157,21 @@ describe('InGameMenuHost', () => {
         expect(screen.getByRole('dialog')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
         expect(screen.getByRole('button', { name: /leave match/i })).toBeTruthy();
+    });
+
+    it('resolves the default-menu title through the active-locale translator', () => {
+        render(
+            <I18nProvider gameOverride={{ 'engine.inGameMenu.title': 'Paused' }}>
+                <InputManagerContext.Provider value={manager}>
+                    <EscapeStackProvider>
+                        <InGameMenuHost />
+                    </EscapeStackProvider>
+                </InputManagerContext.Provider>
+            </I18nProvider>,
+        );
+        toggleMenu();
+
+        expect(screen.getByRole('dialog', { name: 'Paused' })).toBeTruthy();
     });
 
     it('renders the game override with closeMenu, leaveGame, and isHost', () => {

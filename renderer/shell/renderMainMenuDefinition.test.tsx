@@ -14,14 +14,38 @@
 // Tests written first (TDD — red confirmed before implementation existed).
 
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+    act,
+    cleanup,
+    fireEvent,
+    render as baseRender,
+    screen,
+    waitFor,
+} from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
     GameMainMenuDefinition,
     GameMenuCommandId,
 } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
+import { I18nProvider } from '../i18n/I18nProvider';
+import type { TranslationBundle } from '../i18n/translation-bundle';
 import { RenderMainMenuDefinition } from './renderMainMenuDefinition';
+
+// The renderer translates the three engine-default button labels through
+// useTranslate() (which throws outside a provider), so every render mounts an
+// inert I18nProvider (engine English) to keep the default-label assertions
+// identical to the ship strings. A `gameOverride` bundle can prove those three
+// labels are token-driven (a game re-keying `engine.menu.*` relabels them).
+let currentOverride: TranslationBundle | undefined;
+
+function render(ui: React.ReactElement): ReturnType<typeof baseRender> {
+    // Spread `gameOverride` only when set: the prop is optional and the tree
+    // compiles with exactOptionalPropertyTypes, so an explicit `undefined` is
+    // rejected.
+    const providerProps = currentOverride !== undefined ? { gameOverride: currentOverride } : {};
+    return baseRender(<I18nProvider {...providerProps}>{ui}</I18nProvider>);
+}
 
 // ── Router mock ───────────────────────────────────────────────────────────────
 
@@ -49,6 +73,7 @@ afterEach(() => {
     Reflect.deleteProperty(window, '__chimera');
     vi.restoreAllMocks();
     mockPush.mockReset();
+    currentOverride = undefined;
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -129,6 +154,19 @@ describe('engine default (definition = undefined)', () => {
         for (const btn of buttons) {
             expect(btn).toHaveAttribute('data-ch-button-variant');
         }
+    });
+
+    it('resolves the three engine-default labels through engine.menu.* tokens (game override wins)', () => {
+        currentOverride = {
+            'engine.menu.play': 'Start',
+            'engine.menu.settings': 'Options',
+            'engine.menu.quit': 'Exit',
+        };
+        renderMenu(undefined);
+
+        expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Options' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Exit' })).toBeInTheDocument();
     });
 });
 

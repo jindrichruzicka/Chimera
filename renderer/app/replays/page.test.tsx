@@ -11,6 +11,7 @@ import type {
     ReplayListItem,
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { EscapeStackProvider } from '../../components/ui';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { useToastStore } from '../../state/toastStore.js';
 import ReplaysPage from './page';
 
@@ -64,13 +65,16 @@ function installBridge(
 }
 
 // The page itself and its confirm dialog are <Modal>s, which register
-// Escape-to-close on the shared overlay stack; render the page under the
-// provider so `useEscapeLayer` resolves.
-function renderPage(): ReturnType<typeof render> {
+// Escape-to-close on the shared overlay stack; render under EscapeStackProvider
+// so `useEscapeLayer` resolves. The page's user-facing strings come from
+// `useTranslate()`, which throws outside an I18nProvider, so that wraps it too.
+function renderPage(gameOverride?: Record<string, string>): ReturnType<typeof render> {
     return render(
-        <EscapeStackProvider>
-            <ReplaysPage />
-        </EscapeStackProvider>,
+        <I18nProvider {...(gameOverride === undefined ? {} : { gameOverride })}>
+            <EscapeStackProvider>
+                <ReplaysPage />
+            </EscapeStackProvider>
+        </I18nProvider>,
     );
 }
 
@@ -88,6 +92,14 @@ afterEach(() => {
 });
 
 describe('ReplaysPage', () => {
+    it('renders the modal title from the engine.replays.title token', async () => {
+        installBridge({});
+
+        renderPage({ 'engine.replays.title': 'Recordings' });
+
+        expect(await screen.findByText('Recordings')).toBeInTheDocument();
+    });
+
     it('lists deterministic replays with their metadata and a Deterministic badge', async () => {
         const list = vi.fn(() =>
             Promise.resolve([

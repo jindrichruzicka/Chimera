@@ -101,6 +101,22 @@ function AllProviders({ children }: { children: React.ReactNode }): React.ReactE
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
     baseRender(ui, { wrapper: AllProviders });
 
+// Renders under an I18nProvider carrying a game override bundle, so a test can
+// prove an engine string is token-driven: re-keying an `engine.settings.*` token
+// must change the rendered text.
+function renderWithOverride(
+    ui: React.ReactElement,
+    gameOverride: Record<string, string>,
+): ReturnType<typeof baseRender> {
+    return baseRender(ui, {
+        wrapper: ({ children }: { children: React.ReactNode }) => (
+            <I18nProvider gameOverride={gameOverride}>
+                <EscapeStackProvider>{children}</EscapeStackProvider>
+            </I18nProvider>
+        ),
+    });
+}
+
 const GAME_ID = 'tactics';
 
 const TWO_LANGUAGES: readonly GameLanguage[] = [
@@ -484,6 +500,35 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
 
         expect(screen.queryByRole('heading', { name: /game settings/i })).toBeNull();
         expect(screen.queryByText('12')).toBeNull();
+    });
+});
+
+// ── Token-driven engine strings ───────────────────────────────────────────────
+//
+// The engine settings strings are resolved through useTranslate() against the
+// engine token catalogue, so a game override bundle re-keying an
+// `engine.settings.*` token wins over the English default. These prove the page
+// renders tokens, not hardcoded literals.
+
+describe('SettingsPage — token-driven engine strings', () => {
+    it('renders the modal title from the engine.settings.modalTitle token', async () => {
+        renderWithOverride(<SettingsPage />, { 'engine.settings.modalTitle': 'Preferences' });
+        await screen.findByRole('tab', { name: 'Audio' });
+
+        expect(screen.getByRole('dialog', { name: 'Preferences' })).toBeTruthy();
+        expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+    });
+
+    it('renders a field label from its engine.settings token', async () => {
+        renderWithOverride(<SettingsPage />, { 'engine.settings.masterVolume': 'Main Volume' });
+        await screen.findByRole('tab', { name: 'Audio' });
+
+        expect(screen.getByLabelText(/main volume/i)).toBeTruthy();
+    });
+
+    it('renders a tab label from its engine.settings tab token', async () => {
+        renderWithOverride(<SettingsPage />, { 'engine.settings.tabAudio': 'Sound' });
+        expect(await screen.findByRole('tab', { name: 'Sound' })).toBeTruthy();
     });
 });
 

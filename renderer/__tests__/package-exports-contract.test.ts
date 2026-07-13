@@ -13,6 +13,10 @@
  *   - #773 emitted the dist/ build, so each barrel's `types` AND `default`
  *     conditions now both point at the built `dist/` artifact (the #772 bridge
  *     where `types` pointed at in-tree source is gone);
+ *   - an `./i18n` entry ships the engine i18n runtime barrel (I18nProvider +
+ *     useTranslate + the engine token catalogue) so a consumer game and its tests
+ *     can mount the provider once engine components read their copy through
+ *     `useTranslate()` (F71);
  *   - a `./styles/*.css` entry ships the design-token stylesheet so a consumer
  *     can `import '@chimera-engine/renderer/styles/tokens.css'` to load the `--ch-*`
  *     tokens the barrel components reference at `:root` (#773);
@@ -61,6 +65,7 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
             './components/r3f',
             './components/ui',
             './game',
+            './i18n',
             './shell/*',
             './styles/*.css',
         ]);
@@ -85,6 +90,16 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
             default: './dist/game/rendererGameRegistry.js',
         });
 
+        // F71 i18n: the engine i18n runtime (I18nProvider + useTranslate + the
+        // engine token catalogue) ships from dist so a consumer game — and its
+        // tests, once engine components read their copy through useTranslate() —
+        // can mount the provider and localise via the same package dist copy. The
+        // barrel is side-effect-free (Invariant #96).
+        expect(exportsMap['./i18n']).toEqual({
+            types: './dist/i18n/index.d.ts',
+            default: './dist/i18n/index.js',
+        });
+
         // F65 Phase 2c: the engine GUI shell (every route under app/) ships from dist
         // so a consumer app's thin per-app Next host re-exports each route from
         // `@chimera-engine/renderer/shell/<route>` (resolving every shared singleton through
@@ -98,8 +113,8 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
         expect(exportsMap['./styles/*.css']).toBe('./dist/styles/*.css');
 
         // No `.` barrel and no deep internal component subpath leaks internals;
-        // the only non-component entry points are the game seam, the shell route
-        // wildcard, and the curated styles asset wildcard.
+        // the only non-component entry points are the game seam, the i18n runtime
+        // barrel, the shell route wildcard, and the curated styles asset wildcard.
         expect(exportsMap['.']).toBeUndefined();
         for (const key of Object.keys(exportsMap)) {
             expect(
@@ -107,6 +122,7 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
                     key === './components/chat' ||
                     key === './components/r3f' ||
                     key === './game' ||
+                    key === './i18n' ||
                     key === './shell/*' ||
                     key === './styles/*.css',
             ).toBe(true);

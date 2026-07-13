@@ -17,15 +17,26 @@ import {
 import type { GameHudProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { entityId } from '@chimera-engine/electron/preload/api-types.js';
 import { EscapeStackProvider } from '@chimera-engine/renderer/components/ui';
+import { I18nProvider } from '@chimera-engine/renderer/i18n';
 import { tacticsGridCoordinate } from '../simulation/actions.js';
 import type { BufferedTacticsAction } from '../simulation/commitment/contract.js';
 import { TacticsGameHud } from './TacticsGameHud';
 import { useCommitmentBuffer } from './useCommitmentBuffer';
 
-// The HUD renders the shared Drawer (in-match chat), which routes Escape-to-close
-// through the overlay stack; wrap every render (and its rerenders) in the provider.
+// The HUD mounts the shared ChatPanel + SaveGameButton (which read their copy
+// through useTranslate(), throwing outside a provider) inside the shared Drawer
+// (Escape-to-close routes through the overlay stack). Wrap every render (and its
+// rerenders) in both providers; the inert I18nProvider resolves engine English.
+function HudProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
+    return (
+        <I18nProvider>
+            <EscapeStackProvider>{children}</EscapeStackProvider>
+        </I18nProvider>
+    );
+}
+
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
-    baseRender(ui, { wrapper: EscapeStackProvider });
+    baseRender(ui, { wrapper: HudProviders });
 
 beforeEach(() => {
     // The HUD now mounts the shared ChatPanel, which resolves past its

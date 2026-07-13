@@ -18,6 +18,9 @@ import {
     type SendAction,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
+import { GAME_RESULT_KEYS, GAME_SHELL_KEYS, HUD_KEYS } from '../../i18n/engine-keys.js';
+import { useTranslate } from '../../i18n/useTranslate.js';
+import type { TranslateFn } from '../../i18n/i18n-context.js';
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
 import type { LeaveGame } from '../../bridge/useLeaveGame.js';
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
@@ -318,7 +321,7 @@ function GameShellFrame(
         canRedo,
         canEndTurn = true,
         isGameOver = false,
-        gameOverMessage = 'Game Over',
+        gameOverMessage,
         gameResult,
         gameResultBanner: GameResultBanner = DefaultGameResultBanner,
         localPlayerId,
@@ -328,6 +331,7 @@ function GameShellFrame(
         onEndTurn,
         onSaveGame,
     } = props;
+    const t = useTranslate();
     // The result banner is an overlay on the live board. Once the player advances
     // to another screen (e.g. the post-game summary), suppress it so it does not
     // float on top of that screen. Control-lock semantics are unaffected.
@@ -403,10 +407,10 @@ function GameShellFrame(
         );
 
     return (
-        <main aria-label="Game" style={gameShellRootStyle}>
+        <main aria-label={t(GAME_SHELL_KEYS.mainAriaLabel)} style={gameShellRootStyle}>
             <section
                 data-testid="game-canvas"
-                aria-label="Game canvas"
+                aria-label={t(GAME_SHELL_KEYS.canvasAriaLabel)}
                 style={{ minHeight: 'calc(var(--ch-space-md) * 20)', position: 'relative' }}
             >
                 <React.Suspense fallback={null}>{children}</React.Suspense>
@@ -418,7 +422,11 @@ function GameShellFrame(
                         />
                     </React.Suspense>
                 )}
-                {shouldShowFallbackResult && <DefaultGameOverBanner message={gameOverMessage} />}
+                {shouldShowFallbackResult && (
+                    <DefaultGameOverBanner
+                        message={gameOverMessage ?? t(GAME_RESULT_KEYS.gameOver)}
+                    />
+                )}
             </section>
             {hud}
             <PerfHud />
@@ -458,10 +466,11 @@ function DefaultGameHud({
     handleRedo,
     handleEndTurn,
 }: GameHudControlsProps): React.ReactElement {
+    const t = useTranslate();
     return (
-        <footer aria-label="Game HUD" style={gameShellHudStyle}>
+        <footer aria-label={t(GAME_SHELL_KEYS.hudAriaLabel)} style={gameShellHudStyle}>
             <div>
-                Tick <output data-testid="hud-tick">{tick}</output>
+                {t(HUD_KEYS.tick)} <output data-testid="hud-tick">{tick}</output>
             </div>
             <div style={gameShellActionsStyle}>
                 <button
@@ -470,7 +479,7 @@ function DefaultGameHud({
                     disabled={undoDisabled}
                     onClick={handleUndo}
                 >
-                    Undo
+                    {t(HUD_KEYS.undo)}
                 </button>
                 <button
                     data-testid="redo"
@@ -478,7 +487,7 @@ function DefaultGameHud({
                     disabled={redoDisabled}
                     onClick={handleRedo}
                 >
-                    Redo
+                    {t(HUD_KEYS.redo)}
                 </button>
                 <button
                     data-testid="end-turn"
@@ -486,7 +495,7 @@ function DefaultGameHud({
                     disabled={endTurnDisabled}
                     onClick={handleEndTurn}
                 >
-                    End Turn
+                    {t(HUD_KEYS.endTurn)}
                 </button>
             </div>
         </footer>
@@ -528,6 +537,7 @@ function DefaultGameResultBanner({
     gameResult,
     localPlayerId,
 }: GameResultBannerProps): React.ReactElement {
+    const t = useTranslate();
     const outcome = resolveGameResultOutcome(gameResult, localPlayerId);
 
     return (
@@ -538,7 +548,7 @@ function DefaultGameResultBanner({
             style={gameResultBannerStyle}
         >
             <span data-testid="game-result-text">
-                {resolveGameResultMessage(gameResult, localPlayerId)}
+                {resolveGameResultMessage(t, gameResult, localPlayerId)}
             </span>
         </div>
     );
@@ -558,16 +568,19 @@ function DefaultGameOverBanner({ message }: { readonly message: string }): React
 }
 
 function resolveGameResultMessage(
+    t: TranslateFn,
     gameResult: GameResult,
     localPlayerId: PlayerId | undefined,
 ): string {
     if (gameResult.winnerIds.length === 0) {
-        return 'Draw';
+        return t(GAME_RESULT_KEYS.draw);
     }
     if (localPlayerId === undefined) {
-        return 'Game ended';
+        return t(GAME_RESULT_KEYS.ended);
     }
-    return gameResult.winnerIds.includes(localPlayerId) ? 'You won' : 'You lose';
+    return gameResult.winnerIds.includes(localPlayerId)
+        ? t(GAME_RESULT_KEYS.won)
+        : t(GAME_RESULT_KEYS.lose);
 }
 
 export type {

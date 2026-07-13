@@ -29,6 +29,10 @@
             "types": "./dist/components/r3f/index.d.ts",
             "default": "./dist/components/r3f/index.js"
         },
+        "./i18n": {
+            "types": "./dist/i18n/index.d.ts",
+            "default": "./dist/i18n/index.js"
+        },
         "./game": {
             "types": "./dist/game/rendererGameRegistry.d.ts",
             "default": "./dist/game/rendererGameRegistry.js"
