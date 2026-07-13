@@ -31,12 +31,14 @@ describe('tactics renderer loaders', () => {
     it('loadTacticsRendererGameShell exposes the main menu buttons and an empty command registry', async () => {
         const shell = await loadTacticsRendererGameShell();
 
+        // Labels are `game.tactics.menu.*` translation-token keys; the engine
+        // renderer resolves each through `t()` at render.
         expect(shell.mainMenu?.buttons.map((button) => button.label)).toEqual([
-            'New Game',
-            'Load Game',
-            'Settings',
-            'Replays',
-            'Quit',
+            'game.tactics.menu.newGame',
+            'game.tactics.menu.loadGame',
+            'game.tactics.menu.settings',
+            'game.tactics.menu.replays',
+            'game.tactics.menu.quit',
         ]);
         expect(shell.menuCommands).toEqual({});
         expect(shell.shellBackground).toBeDefined();
@@ -45,7 +47,9 @@ describe('tactics renderer loaders', () => {
 
     it('loadTacticsRendererGameShell routes the Load Game button to /saves', async () => {
         const shell = await loadTacticsRendererGameShell();
-        const loadGameBtn = shell.mainMenu?.buttons.find((b) => b.label === 'Load Game');
+        const loadGameBtn = shell.mainMenu?.buttons.find(
+            (b) => b.label === 'game.tactics.menu.loadGame',
+        );
 
         expect(loadGameBtn).toBeDefined();
         expect(loadGameBtn?.action.type).toBe('navigate');
@@ -58,6 +62,27 @@ describe('tactics renderer loaders', () => {
         const shell = await loadTacticsRendererGameShell();
 
         expect(shell.cursor).toBe(tacticsManifest.cursor);
+    });
+
+    it('loadTacticsRendererGameShell contributes the English and Czech translation bundles', async () => {
+        const shell = await loadTacticsRendererGameShell();
+
+        // Declared languages mirror the manifest (English first = default).
+        expect(shell.translations?.languages).toEqual([
+            { code: 'en-US', label: 'English' },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ]);
+        // Both locale bundles are present and carry the game's own tokens…
+        expect(shell.translations?.bundles['en-US']?.['game.tactics.menu.newGame']).toBe(
+            'New Game',
+        );
+        expect(shell.translations?.bundles['cs-CZ']?.['game.tactics.menu.newGame']).toBe(
+            'Nová hra',
+        );
+        // …and the engine-token override (the required demo — Tactics relabels
+        // the shared chat panel).
+        expect(shell.translations?.bundles['en-US']?.['engine.chat.title']).toBe('Match chat');
+        expect(shell.translations?.bundles['cs-CZ']?.['engine.chat.title']).toBe('Zápasový chat');
     });
 
     it('loadTacticsRendererGameShell exposes the tactics font faces', async () => {

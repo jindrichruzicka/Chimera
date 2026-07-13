@@ -70,24 +70,28 @@ export const tacticsMainMenuDefinition: GameMainMenuDefinition = {
         offsetY: 85,
         gap: 16,
     },
+    // Button labels are `game.tactics.menu.*` translation tokens (mirrored in the
+    // Tactics bundles). They are stored as plain strings here — this data module is
+    // boundary-restricted (no renderer/i18n import), and the engine renderer
+    // resolves each label through `t()` at render (an identity for non-token text).
     buttons: [
         {
-            label: 'New Game',
+            label: 'game.tactics.menu.newGame',
             action: { type: 'open-lobby' },
             variant: 'primary',
         },
         {
-            label: 'Load Game',
+            label: 'game.tactics.menu.loadGame',
             action: { type: 'navigate', target: '/saves' },
             variant: 'secondary',
         },
         {
-            label: 'Settings',
+            label: 'game.tactics.menu.settings',
             action: { type: 'navigate', target: '/settings' },
             variant: 'secondary',
         },
         {
-            label: 'Replays',
+            label: 'game.tactics.menu.replays',
             action: { type: 'navigate', target: '/replays' },
             variant: 'secondary',
             // Disabled until at least one replay — deterministic OR perspective —
@@ -105,7 +109,7 @@ export const tacticsMainMenuDefinition: GameMainMenuDefinition = {
             },
         },
         {
-            label: 'Quit',
+            label: 'game.tactics.menu.quit',
             action: { type: 'quit' },
             variant: 'danger',
         },

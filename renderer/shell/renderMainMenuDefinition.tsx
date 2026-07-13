@@ -149,11 +149,12 @@ function defaultVariant(
 }
 
 /**
- * Resolve an engine-default button label. The engine default stores its labels
- * as `engine.menu.*` translation tokens (string-branded), so we resolve them
- * through the active `t()`; a game override re-keying those tokens wins.
+ * Resolve a button label through the active translator. Both the engine default
+ * (`engine.menu.*`) and a game-provided definition may store a translation-token
+ * key as the label; a label with no matching token falls back to itself, so a
+ * literal display string passes through unchanged.
  */
-function resolveEngineLabel(t: TranslateFn, label: string): string {
+function resolveButtonLabel(t: TranslateFn, label: string): string {
     return t(label as unknown as Parameters<TranslateFn>[0]);
 }
 
@@ -178,17 +179,16 @@ export function RenderMainMenuDefinition({
     const fadeOutThenNavigate = useScreenFadeNavigate();
     const t = useTranslate();
 
-    // When no game definition is supplied, the engine default is used and its
-    // button labels are `engine.menu.*` tokens that must be resolved through
-    // `t()`. A game-provided definition already carries final strings, so its
-    // labels are rendered verbatim (a game localises via its own bundle, not
-    // through the engine's token resolution here).
-    const usingEngineDefault = definition === undefined;
+    // Every button label is resolved through `t()`, whether it comes from the
+    // engine default (`engine.menu.*` tokens) or a game-provided definition (the
+    // game's own `game.<id>.menu.*` tokens). A label with no matching token
+    // falls back to itself, so a game that still passes a literal display string
+    // renders unchanged — the resolution is a no-op for non-token labels.
     const def = definition ?? ENGINE_DEFAULT_DEFINITION;
     const { layout, buttons } = def;
 
     const displayLabel = (button: GameMainMenuButton): string =>
-        usingEngineDefault ? resolveEngineLabel(t, button.label) : button.label;
+        resolveButtonLabel(t, button.label);
 
     // ── Disabled resolution ─────────────────────────────────────────────────────
     // Buttons may declare `disabled` as a plain boolean or as an async check

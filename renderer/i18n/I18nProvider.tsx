@@ -106,6 +106,13 @@ export function I18nProvider({
     const t = useCallback(
         (key: TranslationKey, params?: MessageParams): string => {
             const resolved = resolveTranslation(bundles, key, showTokens);
+            // A `missing`/`token-mode` template is the raw key or literal, not an
+            // authored ICU message: return it verbatim so a literal label a game
+            // passes through — or a raw token in debug mode — is never mangled by
+            // the formatter (e.g. an unescaped `{…}` dropped as an unknown param).
+            if (resolved.source === 'missing' || resolved.source === 'token-mode') {
+                return resolved.template;
+            }
             return formatMessage(resolved.template, params, effectiveLocale);
         },
         [bundles, showTokens, effectiveLocale],

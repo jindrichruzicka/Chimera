@@ -9,22 +9,26 @@
 
 import type { GameSettingsPageDefinition } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 
+// Tab/section/field/option labels are `game.tactics.settings.*` translation
+// tokens. They are stored as plain strings here — this data module is
+// boundary-restricted (no renderer/i18n import) — and the engine settings shell
+// resolves each label through `t()` at render (an identity for non-token text).
 const ANIMATION_SPEED_OPTIONS = [
-    { value: 'slow', label: 'Slow' },
-    { value: 'normal', label: 'Normal' },
-    { value: 'fast', label: 'Fast' },
-    { value: 'instant', label: 'Instant' },
+    { value: 'slow', label: 'game.tactics.settings.animSpeedSlow' },
+    { value: 'normal', label: 'game.tactics.settings.animSpeedNormal' },
+    { value: 'fast', label: 'game.tactics.settings.animSpeedFast' },
+    { value: 'instant', label: 'game.tactics.settings.animSpeedInstant' },
 ] as const;
 
 export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
     tabs: [
         {
             id: 'audio',
-            label: 'Audio',
+            label: 'game.tactics.settings.tabAudio',
             sections: [
                 {
                     id: 'audio',
-                    label: 'Audio',
+                    label: 'game.tactics.settings.tabAudio',
                     items: [
                         { kind: 'engine-field', fieldId: 'audio.masterVolume' },
                         { kind: 'engine-field', fieldId: 'audio.sfxVolume' },
@@ -35,11 +39,11 @@ export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
         },
         {
             id: 'display',
-            label: 'Display',
+            label: 'game.tactics.settings.tabDisplay',
             sections: [
                 {
                     id: 'display',
-                    label: 'Display',
+                    label: 'game.tactics.settings.tabDisplay',
                     items: [
                         { kind: 'engine-field', fieldId: 'display.fullscreen' },
                         { kind: 'engine-field', fieldId: 'display.vsync' },
@@ -51,31 +55,34 @@ export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
         },
         {
             id: 'gameplay',
-            label: 'Gameplay',
+            label: 'game.tactics.settings.tabGameplay',
             // A single section whose label matches the tab so no redundant caption
             // renders. Engine gameplay fields (e.g. gameplay.showPerfHud) are not
-            // surfaced here — they are edited only via the settings file.
+            // surfaced here — they are edited only via the settings file. The one
+            // exception is the language selector, surfaced first so players can pick
+            // the UI language from the settings page.
             sections: [
                 {
                     id: 'gameplay',
-                    label: 'Gameplay',
+                    label: 'game.tactics.settings.tabGameplay',
                     items: [
+                        { kind: 'engine-field', fieldId: 'gameplay.language' },
                         {
                             kind: 'game-field',
                             path: 'showGrid',
-                            label: 'Show Grid',
+                            label: 'game.tactics.settings.showGrid',
                             control: { type: 'toggle' },
                         },
                         {
                             kind: 'game-field',
                             path: 'animationSpeed',
-                            label: 'Animation Speed',
+                            label: 'game.tactics.settings.animationSpeed',
                             control: { type: 'select', options: ANIMATION_SPEED_OPTIONS },
                         },
                         {
                             kind: 'game-field',
                             path: 'showDamageNumbers',
-                            label: 'Show Damage Numbers',
+                            label: 'game.tactics.settings.showDamageNumbers',
                             control: { type: 'toggle' },
                         },
                     ],
@@ -84,16 +91,16 @@ export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
         },
         {
             id: 'ai',
-            label: 'AI',
+            label: 'game.tactics.settings.tabAi',
             sections: [
                 {
                     id: 'tactics-ai',
-                    label: 'AI',
+                    label: 'game.tactics.settings.tabAi',
                     items: [
                         {
                             kind: 'game-field',
                             path: 'aiThinkingDelayMs',
-                            label: 'AI Thinking Delay',
+                            label: 'game.tactics.settings.aiThinkingDelay',
                             control: { type: 'slider', min: 0, max: 5000, step: 100 },
                         },
                     ],
@@ -102,11 +109,11 @@ export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
         },
         {
             id: 'controls',
-            label: 'Controls',
+            label: 'game.tactics.settings.tabControls',
             sections: [
                 {
                     id: 'controls',
-                    label: 'Controls',
+                    label: 'game.tactics.settings.tabControls',
                     items: [{ kind: 'engine-field', fieldId: 'controls.bindings' }],
                 },
             ],

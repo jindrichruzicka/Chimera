@@ -31,6 +31,11 @@ describe('tacticsMainMenuDefinition shape', () => {
 });
 
 // ─── Button labels ────────────────────────────────────────────────────────────
+//
+// After i18n adoption the definition stores `game.tactics.menu.*`
+// translation-token KEYS as labels; the engine renderer resolves each through
+// `t()` at render. These tests assert the stored token keys, not the rendered
+// English text (that is covered by the bundle parity test + screen tests).
 
 describe('button labels', () => {
     function findButton(label: string) {
@@ -38,28 +43,34 @@ describe('button labels', () => {
     }
 
     it('includes a "New Game" button', () => {
-        expect(findButton('New Game')).toBeDefined();
+        expect(findButton('game.tactics.menu.newGame')).toBeDefined();
     });
 
     it('includes a "Load Game" button', () => {
-        expect(findButton('Load Game')).toBeDefined();
+        expect(findButton('game.tactics.menu.loadGame')).toBeDefined();
     });
 
     it('includes a "Settings" button', () => {
-        expect(findButton('Settings')).toBeDefined();
+        expect(findButton('game.tactics.menu.settings')).toBeDefined();
     });
 
     it('includes a "Quit" button', () => {
-        expect(findButton('Quit')).toBeDefined();
+        expect(findButton('game.tactics.menu.quit')).toBeDefined();
     });
 
     it('includes a "Replays" button', () => {
-        expect(findButton('Replays')).toBeDefined();
+        expect(findButton('game.tactics.menu.replays')).toBeDefined();
     });
 
     it('buttons appear in the correct order: New Game, Load Game, Settings, Replays, Quit', () => {
         const labels = tacticsMainMenuDefinition.buttons.map((b) => b.label);
-        expect(labels).toEqual(['New Game', 'Load Game', 'Settings', 'Replays', 'Quit']);
+        expect(labels).toEqual([
+            'game.tactics.menu.newGame',
+            'game.tactics.menu.loadGame',
+            'game.tactics.menu.settings',
+            'game.tactics.menu.replays',
+            'game.tactics.menu.quit',
+        ]);
     });
 });
 
@@ -73,12 +84,12 @@ describe('button actions', () => {
     }
 
     it('"New Game" opens the lobby through the shell context', () => {
-        const btn = findButton('New Game');
+        const btn = findButton('game.tactics.menu.newGame');
         expect(btn.action.type).toBe('open-lobby');
     });
 
     it('"Load Game" navigates to /saves', () => {
-        const btn = findButton('Load Game');
+        const btn = findButton('game.tactics.menu.loadGame');
         expect(btn.action.type).toBe('navigate');
         if (btn.action.type === 'navigate') {
             expect(btn.action.target).toBe('/saves');
@@ -86,7 +97,7 @@ describe('button actions', () => {
     });
 
     it('"Settings" navigates to /settings', () => {
-        const btn = findButton('Settings');
+        const btn = findButton('game.tactics.menu.settings');
         expect(btn.action.type).toBe('navigate');
         if (btn.action.type === 'navigate') {
             expect(btn.action.target).toBe('/settings');
@@ -94,7 +105,7 @@ describe('button actions', () => {
     });
 
     it('"Replays" navigates to /replays', () => {
-        const btn = findButton('Replays');
+        const btn = findButton('game.tactics.menu.replays');
         expect(btn.action.type).toBe('navigate');
         if (btn.action.type === 'navigate') {
             expect(btn.action.target).toBe('/replays');
@@ -102,7 +113,7 @@ describe('button actions', () => {
     });
 
     it('"Quit" has action type "quit"', () => {
-        const btn = findButton('Quit');
+        const btn = findButton('game.tactics.menu.quit');
         expect(btn.action.type).toBe('quit');
     });
 });
@@ -115,15 +126,15 @@ describe('button variants', () => {
     }
 
     it('"New Game" is primary variant', () => {
-        expect(findButton('New Game').variant).toBe('primary');
+        expect(findButton('game.tactics.menu.newGame').variant).toBe('primary');
     });
 
     it('"Quit" is danger variant', () => {
-        expect(findButton('Quit').variant).toBe('danger');
+        expect(findButton('game.tactics.menu.quit').variant).toBe('danger');
     });
 
     it('"Replays" is secondary variant', () => {
-        expect(findButton('Replays').variant).toBe('secondary');
+        expect(findButton('game.tactics.menu.replays').variant).toBe('secondary');
     });
 });
 
@@ -165,7 +176,9 @@ describe('Replays button disabled() check', () => {
     }
 
     function getDisabledCheck(): () => Promise<boolean> {
-        const btn = tacticsMainMenuDefinition.buttons.find((b) => b.label === 'Replays');
+        const btn = tacticsMainMenuDefinition.buttons.find(
+            (b) => b.label === 'game.tactics.menu.replays',
+        );
         if (!btn || typeof btn.disabled !== 'function') {
             throw new Error('Replays button is missing an async disabled() check');
         }

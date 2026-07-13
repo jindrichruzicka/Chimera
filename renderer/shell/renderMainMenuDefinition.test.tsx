@@ -398,6 +398,41 @@ describe('custom definition buttons', () => {
         }
     });
 
+    it('resolves a game-provided button label through the active translator (token → override)', () => {
+        // A game may store a translation-token key as its button label; the
+        // renderer resolves it through `t()`, so the game's own bundle (or an
+        // override) drives the visible text.
+        currentOverride = { 'game.example.menu.start': 'Nová hra' };
+        const def: GameMainMenuDefinition = {
+            buttons: [{ label: 'game.example.menu.start', action: { type: 'open-lobby' } }],
+        };
+        renderMenu(def);
+
+        expect(screen.getByRole('button', { name: 'Nová hra' })).toBeInTheDocument();
+    });
+
+    it('renders a plain (non-token) game button label verbatim (backward compatible)', () => {
+        // A label with no matching token falls back to itself, so games that
+        // still pass literal display strings keep working unchanged.
+        const def: GameMainMenuDefinition = {
+            buttons: [{ label: 'Leaderboard', action: { type: 'navigate', target: '/board' } }],
+        };
+        renderMenu(def);
+
+        expect(screen.getByRole('button', { name: 'Leaderboard' })).toBeInTheDocument();
+    });
+
+    it('renders a literal label containing ICU-significant characters verbatim', () => {
+        // A literal that happens to contain `{`/`#` must not be parsed as an ICU
+        // template — an unresolved (non-token) label is returned as written.
+        const def: GameMainMenuDefinition = {
+            buttons: [{ label: 'Buy {gold} #1', action: { type: 'quit' } }],
+        };
+        renderMenu(def);
+
+        expect(screen.getByRole('button', { name: 'Buy {gold} #1' })).toBeInTheDocument();
+    });
+
     it('empty buttons array renders no buttons', () => {
         const def: GameMainMenuDefinition = { buttons: [] };
         renderMenu(def);

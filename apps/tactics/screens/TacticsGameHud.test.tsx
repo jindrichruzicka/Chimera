@@ -20,16 +20,24 @@ import { EscapeStackProvider } from '@chimera-engine/renderer/components/ui';
 import { I18nProvider } from '@chimera-engine/renderer/i18n';
 import { tacticsGridCoordinate } from '../simulation/actions.js';
 import type { BufferedTacticsAction } from '../simulation/commitment/contract.js';
+import { tacticsBundleCs } from '../shell/translations/cs.js';
+import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsGameHud } from './TacticsGameHud';
 import { useCommitmentBuffer } from './useCommitmentBuffer';
 
-// The HUD mounts the shared ChatPanel + SaveGameButton (which read their copy
-// through useTranslate(), throwing outside a provider) inside the shared Drawer
-// (Escape-to-close routes through the overlay stack). Wrap every render (and its
-// rerenders) in both providers; the inert I18nProvider resolves engine English.
+const TACTICS_LANGUAGES = [
+    { code: 'en-US', label: 'English' },
+    { code: 'cs-CZ', label: 'Čeština' },
+] as const;
+
+// The HUD mounts the shared ChatPanel + SaveGameButton and renders its own
+// `game.tactics.*` tokens through useTranslate() (which throws outside a
+// provider), inside the shared Drawer (Escape-to-close routes through the overlay
+// stack). Wrap every render in both providers with the English Tactics bundle so
+// `game.tactics.*` resolve to English (an inert provider would render raw keys).
 function HudProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
     return (
-        <I18nProvider>
+        <I18nProvider gameOverride={tacticsBundleEn}>
             <EscapeStackProvider>{children}</EscapeStackProvider>
         </I18nProvider>
     );
@@ -154,6 +162,24 @@ describe('TacticsGameHud', () => {
         expect(screen.getByTestId('undo')).toBeTruthy();
         expect(screen.getByTestId('redo')).toBeTruthy();
         expect(screen.getByTestId('end-turn')).toBeTruthy();
+    });
+
+    it('renders the HUD in Czech when the Czech bundle is active', () => {
+        baseRender(
+            <I18nProvider
+                gameOverride={tacticsBundleCs}
+                languages={TACTICS_LANGUAGES}
+                locale="cs-CZ"
+            >
+                <EscapeStackProvider>
+                    <TacticsGameHud {...makeHudProps()} />
+                </EscapeStackProvider>
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('end-turn')).toHaveTextContent('Ukončit tah');
+        expect(screen.getByTestId('undo')).toHaveTextContent('Zpět');
+        expect(screen.getByTestId('tactics-turn-status')).toHaveTextContent('Tvůj tah');
     });
 
     it('keeps the in-match chat collapsed by default so it cannot cover the board', () => {

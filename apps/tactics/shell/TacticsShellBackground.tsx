@@ -1,7 +1,10 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 
+import { useTranslate } from '@chimera-engine/renderer/i18n';
+
 import { tacticsManifest } from '../manifest';
+import { SHELL_KEYS } from './translations/keys';
 
 const menuBackgroundStyles = `
 .menu-bg {
@@ -54,6 +57,7 @@ const menuBackgroundStyles = `
 `;
 
 export function TacticsShellBackground(): React.ReactElement {
+    const t = useTranslate();
     const pathname = usePathname();
     const isMainMenu = normalizeRoutePath(pathname) === '/main-menu';
 
@@ -70,7 +74,7 @@ export function TacticsShellBackground(): React.ReactElement {
                         {tacticsManifest.displayName}
                     </h1>
                     <p data-testid="tactics-shell-background-subtitle" className="subtitle">
-                        Chimera testing stub
+                        {t(SHELL_KEYS.subtitle)}
                     </p>
                 </div>
             )}

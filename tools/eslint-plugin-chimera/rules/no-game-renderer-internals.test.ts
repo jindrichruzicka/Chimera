@@ -123,6 +123,16 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
             code: `import { SETTINGS_KEYS } from '@chimera-engine/renderer/i18n/index.js';`,
         },
+        {
+            // A game i18n token-catalogue (translations/*.ts) may import the
+            // public i18n barrel for the `translationKey` brand factory.
+            filename: 'apps/tactics/shell/translations/keys.ts',
+            code: `import { translationKey } from '@chimera-engine/renderer/i18n';`,
+        },
+        {
+            filename: 'apps/tactics/screens/translations/keys.ts',
+            code: `import { translationKey } from '@chimera-engine/renderer/i18n/index.js';`,
+        },
     ],
     invalid: [
         {
@@ -227,6 +237,20 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             filename: 'apps/tactics/shell/TacticsShellSidebar.tsx',
             code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // A game i18n catalogue is allowed ONLY the i18n barrel — any other
+            // renderer internal stays forbidden even from translations/*.ts.
+            filename: 'apps/tactics/shell/translations/keys.ts',
+            code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // The catalogue carve-out is narrow to translations/*.ts — a generic
+            // shell .ts helper is still a non-surface and may not import the barrel.
+            filename: 'apps/tactics/shell/tacticsShellHelpers.ts',
+            code: `import { translationKey } from '@chimera-engine/renderer/i18n';`,
+            errors: [{ messageId: 'gameRendererImportOutsideSurface' }],
         },
         {
             // chat exposes only its barrel; deep file imports stay forbidden.

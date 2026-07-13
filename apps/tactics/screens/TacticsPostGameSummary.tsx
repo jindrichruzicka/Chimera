@@ -19,6 +19,8 @@ import {
     type PerspectiveReplayExportBridge,
     type ReplayExportBridge,
 } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
+import { useTranslate, type TranslateFn, type TranslationKey } from '@chimera-engine/renderer/i18n';
+import { SUMMARY_KEYS } from '../shell/translations/keys.js';
 import styles from './TacticsPostGameSummary.module.css';
 
 interface SummaryCopy {
@@ -28,32 +30,39 @@ interface SummaryCopy {
     readonly message: string;
 }
 
-const SUMMARY_COPY = {
-    win: {
-        badgeLabel: 'Victory',
-        badgeVariant: 'success',
-        captionTone: 'success',
-        message: 'Mission accomplished. Your formation controls the field.',
-    },
-    loss: {
-        badgeLabel: 'Defeat',
-        badgeVariant: 'error',
-        captionTone: 'error',
-        message: 'Operation failed. Regroup and prepare a new strategy.',
-    },
-    draw: {
-        badgeLabel: 'Stalemate',
-        badgeVariant: 'warning',
-        captionTone: 'neutral',
-        message: 'No decisive winner. Tactical parity achieved.',
-    },
-    unknown: {
-        badgeLabel: 'Concluded',
-        badgeVariant: 'neutral',
-        captionTone: 'muted',
-        message: 'Game completed. Final battlefield report is available.',
-    },
-} as const satisfies Readonly<Record<GameResultOutcome, SummaryCopy>>;
+// The presentation (badge variant + caption tone) is fixed per outcome; the badge
+// label and message are tokens resolved at render through `t`, so the copy stays
+// localisable while the non-text styling stays a plain const.
+const SUMMARY_PRESENTATION = {
+    win: { badgeVariant: 'success', captionTone: 'success' },
+    loss: { badgeVariant: 'error', captionTone: 'error' },
+    draw: { badgeVariant: 'warning', captionTone: 'neutral' },
+    unknown: { badgeVariant: 'neutral', captionTone: 'muted' },
+} as const satisfies Readonly<
+    Record<GameResultOutcome, { badgeVariant: BadgeVariant; captionTone: CaptionTone }>
+>;
+
+const SUMMARY_BADGE_KEYS = {
+    win: SUMMARY_KEYS.badgeVictory,
+    loss: SUMMARY_KEYS.badgeDefeat,
+    draw: SUMMARY_KEYS.badgeStalemate,
+    unknown: SUMMARY_KEYS.badgeConcluded,
+} as const satisfies Readonly<Record<GameResultOutcome, TranslationKey>>;
+
+const SUMMARY_MESSAGE_KEYS = {
+    win: SUMMARY_KEYS.messageWin,
+    loss: SUMMARY_KEYS.messageLoss,
+    draw: SUMMARY_KEYS.messageDraw,
+    unknown: SUMMARY_KEYS.messageUnknown,
+} as const satisfies Readonly<Record<GameResultOutcome, TranslationKey>>;
+
+function resolveSummaryCopy(outcome: GameResultOutcome, t: TranslateFn): SummaryCopy {
+    return {
+        badgeLabel: t(SUMMARY_BADGE_KEYS[outcome]),
+        message: t(SUMMARY_MESSAGE_KEYS[outcome]),
+        ...SUMMARY_PRESENTATION[outcome],
+    };
+}
 
 function resolveOutcome(
     snapshot: GameScreenProps['snapshot'],
@@ -154,6 +163,7 @@ function requirePostGameReplayBridge(isHost: boolean): PostGameReplayBridge {
  * deterministic replay, or a joined client's own perspective replay.
  */
 function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.ReactElement {
+    const t = useTranslate();
     const [status, setStatus] = React.useState<ReplayActionStatus>(REPLAY_ACTION_IDLE);
     const busy = status.kind === 'working';
 
@@ -170,9 +180,9 @@ function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.
             // `chimera:replay:navigate`; the summary unmounts, so no terminal
             // status is set here.
         } catch {
-            setStatus({ kind: 'error', message: 'Could not open replay.' });
+            setStatus({ kind: 'error', message: t(SUMMARY_KEYS.replayError) });
         }
-    }, [isHost]);
+    }, [isHost, t]);
 
     return (
         <div className={styles['actions']} data-testid="post-game-actions">
@@ -192,7 +202,7 @@ function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.
                 size="sm"
                 variant="primary"
             >
-                Replay
+                {t(SUMMARY_KEYS.replayButton)}
             </Button>
         </div>
     );
@@ -203,8 +213,9 @@ export function TacticsPostGameSummary({
     localPlayerId,
     isHost,
 }: GameScreenProps): React.ReactElement {
+    const t = useTranslate();
     const outcome = resolveOutcome(snapshot, localPlayerId);
-    const summary = SUMMARY_COPY[outcome];
+    const summary = resolveSummaryCopy(outcome, t);
     // An absent role means no networked lobby (a purely local game), where the
     // local player is effectively the host that recorded the authoritative replay.
     const isHostPlayer = isHost ?? true;
@@ -214,7 +225,7 @@ export function TacticsPostGameSummary({
             <Panel
                 className={styles['panel']}
                 data-testid="post-game-summary-panel"
-                title="Post-Game Summary"
+                title={t(SUMMARY_KEYS.panelTitle)}
                 variant="raised"
             >
                 <div className={styles['header']}>

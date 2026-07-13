@@ -18,11 +18,14 @@ import type {
 import { TACTICS_DEFAULTS, tacticsSettingsSchema } from '../settings-schema';
 import { tacticsSettingsPageDefinition } from './settings-page';
 
+// After i18n adoption the definition stores `game.tactics.settings.*`
+// translation-token KEYS as labels/option labels; the engine settings shell
+// resolves each through `t()` at render. These tests assert the stored token keys.
 const EXPECTED_ANIMATION_SPEED_OPTIONS = [
-    { value: 'slow', label: 'Slow' },
-    { value: 'normal', label: 'Normal' },
-    { value: 'fast', label: 'Fast' },
-    { value: 'instant', label: 'Instant' },
+    { value: 'slow', label: 'game.tactics.settings.animSpeedSlow' },
+    { value: 'normal', label: 'game.tactics.settings.animSpeedNormal' },
+    { value: 'fast', label: 'game.tactics.settings.animSpeedFast' },
+    { value: 'instant', label: 'game.tactics.settings.animSpeedInstant' },
 ] as const;
 
 function findTab(tabId: string): SettingsTabDefinition {
@@ -70,11 +73,11 @@ describe('tacticsSettingsPageDefinition', () => {
 
     it('defines the expected five tabs in order', () => {
         expect(tacticsSettingsPageDefinition.tabs.map((tab) => [tab.id, tab.label])).toEqual([
-            ['audio', 'Audio'],
-            ['display', 'Display'],
-            ['gameplay', 'Gameplay'],
-            ['ai', 'AI'],
-            ['controls', 'Controls'],
+            ['audio', 'game.tactics.settings.tabAudio'],
+            ['display', 'game.tactics.settings.tabDisplay'],
+            ['gameplay', 'game.tactics.settings.tabGameplay'],
+            ['ai', 'game.tactics.settings.tabAi'],
+            ['controls', 'game.tactics.settings.tabControls'],
         ]);
     });
 
@@ -97,8 +100,10 @@ describe('tacticsSettingsPageDefinition', () => {
         expect(gameFieldsForTab('display')).toEqual([]);
     });
 
-    it('defines only the Tactics-specific gameplay fields (engine fields are file-edited)', () => {
-        expect(engineFieldsForTab('gameplay')).toEqual([]);
+    it('surfaces the language selector plus the Tactics-specific gameplay game fields', () => {
+        // The engine language field leads the Gameplay tab so players can pick the
+        // UI language here; the remaining gameplay engine fields stay file-edited.
+        expect(engineFieldsForTab('gameplay')).toEqual(['gameplay.language']);
         expect(gameFieldsForTab('gameplay')).toEqual([
             'showGrid',
             'animationSpeed',
@@ -106,10 +111,15 @@ describe('tacticsSettingsPageDefinition', () => {
         ]);
     });
 
+    it('surfaces the language selector as the FIRST gameplay item', () => {
+        const [first] = tabItems('gameplay');
+        expect(first).toEqual({ kind: 'engine-field', fieldId: 'gameplay.language' });
+    });
+
     it('uses the TacticsSettings animationSpeed union as select options', () => {
         const item = findGameField('animationSpeed');
 
-        expect(item.label).toBe('Animation Speed');
+        expect(item.label).toBe('game.tactics.settings.animationSpeed');
         expect(item.control).toEqual({
             type: 'select',
             options: EXPECTED_ANIMATION_SPEED_OPTIONS,

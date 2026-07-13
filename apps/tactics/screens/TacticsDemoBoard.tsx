@@ -4,6 +4,7 @@ import { Canvas } from '@react-three/fiber';
 import React, { useState } from 'react';
 import { OrthographicCamera, Vector3 } from 'three';
 import { PerfProbe } from '@chimera-engine/renderer/components/r3f';
+import { useTranslate } from '@chimera-engine/renderer/i18n';
 import type { GameScreenProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import {
     TACTICS_ATTACK_ACTION,
@@ -39,6 +40,7 @@ import {
     toOptimisticBase,
     useCommitmentBuffer,
 } from './useCommitmentBuffer.js';
+import { BOARD_KEYS } from '../shell/translations/keys.js';
 
 const boardSceneStyle: React.CSSProperties = {
     position: 'absolute',
@@ -81,6 +83,7 @@ export function TacticsDemoBoard({
     content,
     reveal,
 }: GameScreenProps): React.ReactElement | null {
+    const t = useTranslate();
     // Interpret the generic content prop into this game's colour hex maps. Empty
     // until content loads, so the resolvers fall back to the default hexes.
     const palette = paletteFromCollections(content ?? {});
@@ -142,7 +145,7 @@ export function TacticsDemoBoard({
     if (localPlayerId === undefined) {
         return (
             <div
-                aria-label="Tactics board loading"
+                aria-label={t(BOARD_KEYS.loadingAriaLabel)}
                 data-testid="tactics-board-loading"
                 style={boardFallbackStyle}
             />
@@ -161,7 +164,7 @@ export function TacticsDemoBoard({
     if (units.length === 0) {
         return (
             <div
-                aria-label="No visible tactics units"
+                aria-label={t(BOARD_KEYS.emptyAriaLabel)}
                 data-testid="tactics-board-empty"
                 style={boardFallbackStyle}
             />
@@ -243,7 +246,7 @@ export function TacticsDemoBoard({
     const revealedTurn = parseRevealedTurn(reveal);
 
     return (
-        <div aria-label="Tactics board" style={boardSceneStyle}>
+        <div aria-label={t(BOARD_KEYS.ariaLabel)} style={boardSceneStyle}>
             {revealedTurn !== null && (
                 <div
                     data-testid="tactics-reveal"
@@ -251,9 +254,10 @@ export function TacticsDemoBoard({
                     data-has-attack={String(bufferHasAttack(revealedTurn.actions))}
                     style={revealOverlayStyle}
                 >
-                    {`Revealed ${revealedTurn.playerId}: ${revealedTurn.actions
-                        .map((action) => action.type)
-                        .join(', ')}`}
+                    {t(BOARD_KEYS.revealed, {
+                        player: revealedTurn.playerId,
+                        actions: revealedTurn.actions.map((action) => action.type).join(', '),
+                    })}
                 </div>
             )}
             <Canvas camera={camera}>

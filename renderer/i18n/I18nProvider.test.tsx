@@ -103,6 +103,28 @@ describe('I18nProvider + useTranslate', () => {
         expect(screen.getByTestId('out').textContent).toBe('engine.nonexistent.key');
     });
 
+    it('returns an unresolved literal verbatim, never parsing it as an ICU template', () => {
+        // A game that passes a literal display string (not a token) reaches the
+        // provider as a `missing` key. It must render exactly as written — even
+        // when it happens to contain ICU-significant characters — rather than
+        // being mangled by the message formatter (e.g. dropped `{gold}`).
+        render(
+            <I18nProvider>
+                <Translated tKey="Cost: {gold}" />
+            </I18nProvider>,
+        );
+        expect(screen.getByTestId('out').textContent).toBe('Cost: {gold}');
+    });
+
+    it('returns a token containing ICU-significant characters verbatim in token-mode', () => {
+        render(
+            <I18nProvider showTokens>
+                <Translated tKey="game.demo.{weird}#token" />
+            </I18nProvider>,
+        );
+        expect(screen.getByTestId('out').textContent).toBe('game.demo.{weird}#token');
+    });
+
     it('returns raw tokens for known keys when token-mode is on', () => {
         const gameOverride: TranslationBundle = { 'engine.chat.title': 'Comms' };
         render(

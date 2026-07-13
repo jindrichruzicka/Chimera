@@ -15,28 +15,44 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EscapeStackProvider } from '@chimera-engine/renderer/components/ui';
+import { I18nProvider } from '@chimera-engine/renderer/i18n';
+import type { TranslationBundle } from '@chimera-engine/renderer/i18n';
+import { tacticsBundleCs } from '../shell/translations/cs.js';
+import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsInGameMenu } from './TacticsInGameMenu.js';
+
+const TACTICS_LANGUAGES = [
+    { code: 'en-US', label: 'English' },
+    { code: 'cs-CZ', label: 'Čeština' },
+] as const;
 
 afterEach(() => {
     cleanup();
 });
 
-function renderMenu(props: Partial<React.ComponentProps<typeof TacticsInGameMenu>> = {}): {
+function renderMenu(
+    props: Partial<React.ComponentProps<typeof TacticsInGameMenu>> = {},
+    bundle: TranslationBundle = tacticsBundleEn,
+    locale = 'en-US',
+): {
     closeMenu: ReturnType<typeof vi.fn>;
     leaveGame: ReturnType<typeof vi.fn>;
 } {
     const closeMenu = vi.fn();
     const leaveGame = vi.fn();
-    // Modal registers an Escape layer, so it needs an EscapeStackProvider ancestor.
+    // The dialog copy resolves through useTranslate() (throws outside a provider),
+    // and the Modal registers an Escape layer needing an EscapeStackProvider.
     render(
-        <EscapeStackProvider>
-            <TacticsInGameMenu
-                closeMenu={closeMenu}
-                leaveGame={leaveGame}
-                isHost={false}
-                {...props}
-            />
-        </EscapeStackProvider>,
+        <I18nProvider gameOverride={bundle} languages={TACTICS_LANGUAGES} locale={locale}>
+            <EscapeStackProvider>
+                <TacticsInGameMenu
+                    closeMenu={closeMenu}
+                    leaveGame={leaveGame}
+                    isHost={false}
+                    {...props}
+                />
+            </EscapeStackProvider>
+        </I18nProvider>,
     );
     return { closeMenu, leaveGame };
 }
@@ -75,5 +91,14 @@ describe('TacticsInGameMenu', () => {
         const prompt = screen.getByTestId('tactics-leave-prompt').textContent ?? '';
         expect(prompt).toMatch(/main menu/i);
         expect(prompt).not.toMatch(/lobby/i);
+    });
+
+    it('renders the dialog title and actions in Czech when the Czech bundle is active', () => {
+        renderMenu({ isHost: true }, tacticsBundleCs, 'cs-CZ');
+
+        expect(screen.getByRole('dialog', { name: 'Opustit bitvu?' })).toBeTruthy();
+        expect(screen.getByTestId('tactics-leave-cancel')).toHaveTextContent('Zrušit');
+        expect(screen.getByTestId('tactics-leave-confirm')).toHaveTextContent('Opustit bitvu');
+        expect(screen.getByTestId('tactics-leave-prompt').textContent).toContain('lobby');
     });
 });

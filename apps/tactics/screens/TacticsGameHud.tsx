@@ -13,10 +13,12 @@ import {
     type BadgeVariant,
 } from '@chimera-engine/renderer/components/ui';
 import { ChatPanel } from '@chimera-engine/renderer/components/chat';
+import { CHAT_KEYS, useTranslate, type TranslateFn } from '@chimera-engine/renderer/i18n';
 import {
     TACTICS_COMMIT_ACTION,
     readTacticsTurnMode,
 } from '@chimera-engine/tactics/simulation/constants.js';
+import { HUD_KEYS } from '../shell/translations/keys.js';
 import {
     parseTacticsAllSeatsCommitted,
     parseTacticsSeatCommitted,
@@ -56,7 +58,9 @@ export function TacticsGameHud({
     handleEndTurn,
     saveGame,
 }: GameHudProps): React.ReactElement {
-    const turnStatus = resolveTacticsTurnStatus(snapshot.isMyTurn);
+    const t = useTranslate();
+    const turnStatus = resolveTacticsTurnStatus(snapshot.isMyTurn, t);
+    const chatTitle = t(CHAT_KEYS.title);
     const [chatOpen, setChatOpen] = useState<boolean>(false);
 
     // ── Commitment battle mode ──────────────────────────────────────────────
@@ -117,7 +121,7 @@ export function TacticsGameHud({
 
     return (
         <>
-            <footer aria-label="Game HUD" style={tacticsHudStyle}>
+            <footer aria-label={t(HUD_KEYS.hudAriaLabel)} style={tacticsHudStyle}>
                 <Panel
                     data-testid="tactics-hud-panel"
                     style={tacticsHudPanelStyle}
@@ -134,7 +138,7 @@ export function TacticsGameHud({
                             </Badge>
                             <div style={tacticsHudTickGroupStyle}>
                                 <Caption style={tacticsHudLabelStyle} tone="muted">
-                                    Tactics Tick
+                                    {t(HUD_KEYS.tick)}
                                 </Caption>
                                 <output data-testid="hud-tick" style={tacticsHudTickStyle}>
                                     {tick}
@@ -155,7 +159,7 @@ export function TacticsGameHud({
                                     }
                                 >
                                     <Caption style={tacticsHudLabelStyle} tone="muted">
-                                        Stamina
+                                        {t(HUD_KEYS.stamina)}
                                     </Caption>
                                     <output data-testid="hud-stamina" style={tacticsHudTickStyle}>
                                         {stamina.current}/{stamina.max}
@@ -168,7 +172,7 @@ export function TacticsGameHud({
                                     data-state="waiting"
                                     data-testid="tactics-commit-status"
                                 >
-                                    Waiting for other player(s)…
+                                    {t(HUD_KEYS.waitingForCommitments)}
                                 </span>
                             )}
                         </div>
@@ -177,7 +181,10 @@ export function TacticsGameHud({
                             orientation="vertical"
                             style={tacticsHudDividerStyle}
                         />
-                        <div aria-label="Tactics actions" style={tacticsHudActionsStyle}>
+                        <div
+                            aria-label={t(HUD_KEYS.actionsAriaLabel)}
+                            style={tacticsHudActionsStyle}
+                        >
                             <Button
                                 data-testid="undo"
                                 disabled={resolvedUndoDisabled}
@@ -186,7 +193,7 @@ export function TacticsGameHud({
                                 style={tacticsHudButtonStyle}
                                 variant="secondary"
                             >
-                                Undo
+                                {t(HUD_KEYS.undo)}
                             </Button>
                             {!isCommitment && (
                                 <Button
@@ -197,7 +204,7 @@ export function TacticsGameHud({
                                     style={tacticsHudButtonStyle}
                                     variant="secondary"
                                 >
-                                    Redo
+                                    {t(HUD_KEYS.redo)}
                                 </Button>
                             )}
                             <Button
@@ -208,7 +215,7 @@ export function TacticsGameHud({
                                 style={tacticsHudButtonStyle}
                                 variant="primary"
                             >
-                                End Turn
+                                {t(HUD_KEYS.endTurn)}
                             </Button>
                             {/* Host-only save: the shell withholds saveGame
                                 from clients, so presence IS the gate. Disabled while
@@ -245,7 +252,7 @@ export function TacticsGameHud({
                     style={tacticsHudButtonStyle}
                     variant="secondary"
                 >
-                    {chatOpen ? 'Hide chat' : 'Chat'}
+                    {chatOpen ? t(HUD_KEYS.hideChat) : t(HUD_KEYS.chat)}
                 </Button>
             </div>
             <Drawer
@@ -256,9 +263,13 @@ export function TacticsGameHud({
                 }}
                 open={chatOpen}
                 placement="right"
-                title={TACTICS_CHAT_TITLE}
+                title={chatTitle}
             >
-                <ChatPanel title={TACTICS_CHAT_TITLE} />
+                {/* No title prop: the panel falls back to t(engine.chat.title),
+                    which the Tactics bundle re-keys ('Match chat' / 'Zápasový
+                    chat'). The wrapping Drawer's caption reads the same token so
+                    the visible title and the panel's accessible name stay in sync. */}
+                <ChatPanel />
             </Drawer>
         </>
     );
@@ -266,16 +277,12 @@ export function TacticsGameHud({
 
 const TACTICS_CHAT_DRAWER_ID = 'tactics-chat-drawer';
 
-/** Caption for the in-match chat: the visible Drawer title and the ChatPanel's
- *  accessible label, kept in sync from a single source. */
-const TACTICS_CHAT_TITLE = 'Match chat';
-
-function resolveTacticsTurnStatus(isMyTurn: boolean): TacticsTurnStatus {
+function resolveTacticsTurnStatus(isMyTurn: boolean, t: TranslateFn): TacticsTurnStatus {
     if (isMyTurn) {
-        return { label: 'Your turn', variant: 'success' };
+        return { label: t(HUD_KEYS.turnYours), variant: 'success' };
     }
 
-    return { label: 'Waiting', variant: 'warning' };
+    return { label: t(HUD_KEYS.turnWaiting), variant: 'warning' };
 }
 
 const tacticsHudStyle: React.CSSProperties = {

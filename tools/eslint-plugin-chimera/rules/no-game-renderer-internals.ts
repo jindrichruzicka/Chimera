@@ -76,6 +76,19 @@ function isGameRendererSurface(filename: string): boolean {
     );
 }
 
+// A game's i18n token-catalogue module: apps/<name>/{screens,shell}/translations/*.ts.
+// These plain-.ts catalogues build the game's TranslationKey constants and so
+// legitimately need the runtime brand factory (`translationKey`), which lives in
+// the public i18n barrel — unlike a generic shell/screens .ts helper (a
+// non-surface), which stays blocked. The permission is narrow: only the i18n
+// barrel is allowed here (enforced by isPublicI18nBarrelImport at the call site),
+// keeping every other renderer internal off-limits.
+function isGameI18nCatalogue(filename: string): boolean {
+    return /(?:^|\/)apps\/[^/]+\/(?:screens|shell)\/translations\/.*\.ts$/u.test(
+        normalizePath(filename),
+    );
+}
+
 function isRendererPath(value: string): boolean {
     const segments = normalizePath(value).split('/').filter(Boolean);
 
@@ -204,6 +217,17 @@ const rule: Rule.RuleModule = {
 
         function checkImport(node: Rule.Node, source: string): void {
             if (!isRendererImport(context.filename, source)) {
+                return;
+            }
+
+            // A game i18n token-catalogue (translations/*.ts) may import ONLY the
+            // public i18n barrel — the sole renderer dependency a catalogue needs
+            // (the `translationKey` brand factory) — and nothing else.
+            if (isGameI18nCatalogue(context.filename)) {
+                if (isPublicI18nBarrelImport(source)) {
+                    return;
+                }
+                context.report({ node, messageId: 'gameRendererInternalImport' });
                 return;
             }
 

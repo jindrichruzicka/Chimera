@@ -34,6 +34,7 @@ import {
     Toggle,
     ToggleButton,
 } from '@chimera-engine/renderer/components/ui';
+import { useTranslate } from '@chimera-engine/renderer/i18n';
 import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
     readTacticsTurnMode,
@@ -45,6 +46,7 @@ import {
     TACTICS_MAX_PLAYERS,
 } from '../lobby/lobby-setup.js';
 import { paletteFromCollections } from '../content/tacticsContent.js';
+import { LOBBY_KEYS } from './translations/keys.js';
 import styles from './TacticsLobbyScreen.module.css';
 
 /**
@@ -68,6 +70,7 @@ export function TacticsLobbyScreen({
     removeAiPlayer,
     onToggleReady,
 }: GameLobbyScreenProps): React.ReactElement {
+    const t = useTranslate();
     // The selectable colours come from the content database (delivered as the
     // generic `content` prop); interpret them into this game's palette. Empty
     // until content loads, so the Selects fall back to the seeded default names.
@@ -103,21 +106,23 @@ export function TacticsLobbyScreen({
             <section className={styles['panel']}>
                 <div className={styles['heading-row']}>
                     <Heading level={2} size="lg">
-                        Battle Setup
+                        {t(LOBBY_KEYS.battleSetup)}
                     </Heading>
                     <Badge variant={isHost ? 'success' : 'neutral'}>
-                        {isHost ? 'Host' : 'Player'}
+                        {isHost ? t(LOBBY_KEYS.roleHost) : t(LOBBY_KEYS.rolePlayer)}
                     </Badge>
                 </div>
                 {isHost ? (
                     <div className={styles['address']}>
-                        <span className={styles['address-label']}>Lobby address</span>
+                        <span className={styles['address-label']}>
+                            {t(LOBBY_KEYS.addressLabel)}
+                        </span>
                         <div className={styles['address-row']}>
                             <code className={styles['address-code']} data-testid="lobby-address">
                                 {lobbyState.info.sessionId}
                             </code>
                             <IconButton
-                                aria-label="Copy lobby address"
+                                aria-label={t(LOBBY_KEYS.copyAddressAriaLabel)}
                                 data-testid="lobby-address-copy"
                                 onClick={() => {
                                     copyLobbyAddress(lobbyState.info.sessionId);
@@ -132,7 +137,7 @@ export function TacticsLobbyScreen({
                     className={styles['board-color-select']}
                     data-testid="tactics-board-color-select"
                     disabled={!isHost}
-                    label="Board colour"
+                    label={t(LOBBY_KEYS.boardColour)}
                     onValueChange={(value) => {
                         setMatchSetting('boardColor', value);
                     }}
@@ -143,7 +148,7 @@ export function TacticsLobbyScreen({
                     checked={commitmentEnabled}
                     data-testid="tactics-commitment-scheme-toggle"
                     disabled={!isHost}
-                    label="Simultaneous turns"
+                    label={t(LOBBY_KEYS.simultaneousTurns)}
                     onCheckedChange={(next) => {
                         setMatchSetting(
                             TACTICS_TURN_MODE_SETTING,
@@ -152,13 +157,16 @@ export function TacticsLobbyScreen({
                     }}
                 />
                 <p className={styles['ready-summary']}>
-                    Ready: {readyCount}/{lobbyState.players.length}
+                    {t(LOBBY_KEYS.readySummary, {
+                        ready: readyCount,
+                        total: lobbyState.players.length,
+                    })}
                 </p>
             </section>
 
             <section className={styles['panel']}>
                 <Heading level={3} size="md">
-                    Players
+                    {t(LOBBY_KEYS.players)}
                 </Heading>
                 <ul className={styles['roster']}>
                     {lobbyState.players.map((player) => {
@@ -180,16 +188,20 @@ export function TacticsLobbyScreen({
                                 />
                                 <span className={styles['player-name']}>
                                     {player.displayName}
-                                    {isLocal ? <span className={styles['you']}> (You)</span> : null}
+                                    {isLocal ? (
+                                        <span className={styles['you']}> {t(LOBBY_KEYS.you)}</span>
+                                    ) : null}
                                 </span>
                                 <Badge variant={player.ready ? 'success' : 'warning'}>
-                                    {player.ready ? 'Ready' : 'Not Ready'}
+                                    {player.ready ? t(LOBBY_KEYS.ready) : t(LOBBY_KEYS.notReady)}
                                 </Badge>
                                 <Select
                                     data-testid={`tactics-player-color-select-${player.playerId}`}
                                     disabled={!isLocal}
                                     hideLabel
-                                    label={`${player.displayName} colour`}
+                                    label={t(LOBBY_KEYS.playerColourAriaLabel, {
+                                        name: player.displayName,
+                                    })}
                                     onValueChange={(value) => {
                                         setPlayerAttribute(player.playerId, 'color', value);
                                     }}
@@ -205,7 +217,7 @@ export function TacticsLobbyScreen({
                                         }}
                                         pressed={player.ready}
                                     >
-                                        Ready
+                                        {t(LOBBY_KEYS.readyToggle)}
                                     </ToggleButton>
                                 ) : null}
                             </li>
@@ -218,11 +230,11 @@ export function TacticsLobbyScreen({
                 <section className={styles['panel']}>
                     <div className={styles['heading-row']}>
                         <Heading level={3} size="md">
-                            AI Players
+                            {t(LOBBY_KEYS.aiPlayers)}
                         </Heading>
                         {isHost ? (
                             <IconButton
-                                aria-label="Add AI player"
+                                aria-label={t(LOBBY_KEYS.addAiAriaLabel)}
                                 data-testid="tactics-add-ai"
                                 disabled={isFull || aiActionPending}
                                 onClick={() => {
@@ -236,7 +248,7 @@ export function TacticsLobbyScreen({
                         ) : null}
                     </div>
                     {agentSlots.length === 0 ? (
-                        <p className={styles['ready-summary']}>No AI players added.</p>
+                        <p className={styles['ready-summary']}>{t(LOBBY_KEYS.noAiPlayers)}</p>
                     ) : (
                         <ul className={styles['roster']}>
                             {agentSlots.map((slot) => (
@@ -251,14 +263,16 @@ export function TacticsLobbyScreen({
                                         className={styles['ai-badge']}
                                         data-testid={`tactics-ai-badge-${slot.slotIndex}`}
                                     >
-                                        AI
+                                        {t(LOBBY_KEYS.aiBadge)}
                                     </span>
                                     <span className={styles['player-name']}>
-                                        AI Player {slot.slotIndex}
+                                        {t(LOBBY_KEYS.aiPlayerName, { n: slot.slotIndex })}
                                     </span>
                                     {isHost ? (
                                         <IconButton
-                                            aria-label={`Remove AI Player ${slot.slotIndex}`}
+                                            aria-label={t(LOBBY_KEYS.removeAiAriaLabel, {
+                                                n: slot.slotIndex,
+                                            })}
                                             data-testid={`tactics-remove-ai-${slot.slotIndex}`}
                                             disabled={aiActionPending}
                                             onClick={() => {

@@ -15,6 +15,11 @@ import { TACTICS_GAME_ID } from './simulation/constants.js';
  * `logoScreen` points a packaged boot at `renderer/app/logo-screen/`,
  * a thin re-export of the engine default logo page; dev boots skip it and go
  * straight to the main menu.
+ *
+ * `languages` opts Tactics into the i18n system with English + Czech. English
+ * is first, so it is the default when the persisted locale matches neither. The
+ * per-locale bundles are contributed through the renderer shell registration
+ * (see `renderer/loaders.ts` → `translations`).
  */
 export const tacticsManifest: GameManifest = {
     gameId: TACTICS_GAME_ID,
@@ -26,4 +31,8 @@ export const tacticsManifest: GameManifest = {
         disabled: { image: 'cursors/disabled.png' },
     },
     logoScreen: { route: '/logo-screen' },
+    languages: [
+        { code: 'en-US', label: 'English' },
+        { code: 'cs-CZ', label: 'Čeština' },
+    ],
 };

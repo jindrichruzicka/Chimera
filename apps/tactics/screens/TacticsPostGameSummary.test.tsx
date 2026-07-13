@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render as baseRender, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,7 +17,25 @@ import {
     type PerspectiveReplayExportBridge,
     type ReplayExportBridge,
 } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
+import { I18nProvider } from '@chimera-engine/renderer/i18n';
+import { tacticsBundleCs } from '../shell/translations/cs.js';
+import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsPostGameSummary } from './TacticsPostGameSummary.js';
+
+const TACTICS_LANGUAGES = [
+    { code: 'en-US', label: 'English' },
+    { code: 'cs-CZ', label: 'Čeština' },
+] as const;
+
+// The summary renders its badge/message/panel/replay copy through useTranslate(),
+// which throws outside a provider. Wrap in the English Tactics bundle so
+// `game.tactics.*` resolve to the pre-tokenisation text.
+function EnProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
+    return <I18nProvider gameOverride={tacticsBundleEn}>{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EnProviders });
 
 afterEach(() => {
     cleanup();
@@ -190,6 +208,24 @@ describe('TacticsPostGameSummary', () => {
             'neutral',
         );
         expect(screen.getByTestId('post-game-summary-badge')).toHaveTextContent('Concluded');
+    });
+
+    it('renders the summary in Czech when the Czech bundle is active', () => {
+        baseRender(
+            <I18nProvider
+                gameOverride={tacticsBundleCs}
+                languages={TACTICS_LANGUAGES}
+                locale="cs-CZ"
+            >
+                <TacticsPostGameSummary {...makeSummaryProps()} />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByRole('region', { name: 'Shrnutí po hře' })).toBeTruthy();
+        expect(screen.getByTestId('post-game-summary-badge')).toHaveTextContent('Vítězství');
+        expect(screen.getByTestId('post-game-summary-message')).toHaveTextContent(
+            'Mise splněna. Tvá formace ovládá pole.',
+        );
     });
 });
 

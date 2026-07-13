@@ -737,7 +737,7 @@ function renderSettingsItem({
             // handing final display strings to the presentational control.
             return (
                 <SettingsControl
-                    control={resolveEngineControl(t, definition.control)}
+                    control={resolveControlLabels(t, definition.control)}
                     defaultValue={definition.defaultValue}
                     formatValue={makeValueFormatter(t, definition.formatKind)}
                     key={item.fieldId}
@@ -752,13 +752,14 @@ function renderSettingsItem({
             );
         }
         case 'game-field':
-            // A game field carries final display strings (its own localisation),
-            // rendered verbatim; only the shared key-binding Caption needs `t`.
+            // A game field's label and (for a select) its option labels may be
+            // the game's own translation-token keys, so they resolve through
+            // `t()`; a literal display string falls back to itself unchanged.
             return (
                 <SettingsControl
-                    control={item.control}
+                    control={resolveControlLabels(t, item.control)}
                     key={item.path}
-                    label={item.label}
+                    label={resolveLabel(t, item.label)}
                     onUpdate={onUpdate}
                     path={item.path}
                     t={t}
@@ -928,10 +929,11 @@ function resolveLabel(t: TranslateFn, label: string): string {
 
 /**
  * Resolve a control's option labels through `t()` for `select` controls whose
- * options carry engine tokens (the engine field descriptors). Other control
- * kinds have no display strings and pass through unchanged.
+ * options may carry translation tokens (engine field descriptors and game
+ * fields alike). Other control kinds have no display strings and pass through
+ * unchanged; a literal option label falls back to itself.
  */
-function resolveEngineControl(
+function resolveControlLabels(
     t: TranslateFn,
     control: SettingsControlDefinition,
 ): SettingsControlDefinition {

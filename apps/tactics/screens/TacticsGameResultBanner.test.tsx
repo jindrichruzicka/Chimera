@@ -1,11 +1,29 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { playerId } from '@chimera-engine/electron/preload/api-types.js';
+import { I18nProvider } from '@chimera-engine/renderer/i18n';
+import { tacticsBundleCs } from '../shell/translations/cs.js';
+import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsGameResultBanner } from './TacticsGameResultBanner.js';
+
+const TACTICS_LANGUAGES = [
+    { code: 'en-US', label: 'English' },
+    { code: 'cs-CZ', label: 'Čeština' },
+] as const;
+
+// The banner renders its outcome/hint/icon copy through useTranslate(), which
+// throws outside a provider. Wrap in the English Tactics bundle so `game.tactics.*`
+// resolve to the text the component rendered before tokenisation.
+function EnProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
+    return <I18nProvider gameOverride={tacticsBundleEn}>{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EnProviders });
 
 afterEach(() => {
     cleanup();
@@ -149,5 +167,28 @@ describe('TacticsGameResultBanner', () => {
         render(<TacticsGameResultBanner gameResult={{ winnerIds: [playerId('p2')] }} />);
 
         expect(screen.getByRole('img', { name: 'Concluded' })).toBeTruthy();
+    });
+
+    it('renders the victory message and hint in Czech when the Czech bundle is active', () => {
+        const localPlayerId = playerId('p1');
+
+        baseRender(
+            <I18nProvider
+                gameOverride={tacticsBundleCs}
+                languages={TACTICS_LANGUAGES}
+                locale="cs-CZ"
+            >
+                <TacticsGameResultBanner
+                    localPlayerId={localPlayerId}
+                    gameResult={{ winnerIds: [localPlayerId] }}
+                />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Taktické vítězství');
+        expect(screen.getByTestId('game-result-hint').textContent).toBe(
+            'Pokračuj stisknutím Enter',
+        );
+        expect(screen.getByRole('img', { name: 'Vítězství' })).toBeTruthy();
     });
 });

@@ -3,6 +3,8 @@
 import React from 'react';
 import type { InGameMenuProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { Modal } from '@chimera-engine/renderer/components/ui';
+import { useTranslate } from '@chimera-engine/renderer/i18n';
+import { IN_GAME_MENU_KEYS } from '../shell/translations/keys.js';
 
 /**
  * Tactics Leave-game confirmation dialog (§4.33). Adopted via the
@@ -21,9 +23,10 @@ export function TacticsInGameMenu({
     leaveGame,
     isHost,
 }: InGameMenuProps): React.ReactElement {
+    const t = useTranslate();
     const prompt = isHost
-        ? 'Leaving ends the battle for everyone and returns all players to the lobby.'
-        : 'Leaving disconnects you from the battle and returns you to the main menu.';
+        ? t(IN_GAME_MENU_KEYS.leavePromptHost)
+        : t(IN_GAME_MENU_KEYS.leavePromptClient);
 
     // Cancel resumes the match: the Modal's `onClose` covers Escape and the
     // Cancel action (no `onClick` → dismiss only), both funnelling to `closeMenu`.
@@ -31,12 +34,12 @@ export function TacticsInGameMenu({
     return (
         <Modal
             open
-            title="Leave the battle?"
+            title={t(IN_GAME_MENU_KEYS.leaveTitle)}
             onClose={closeMenu}
             actions={[
-                { label: 'Cancel', testId: 'tactics-leave-cancel' },
+                { label: t(IN_GAME_MENU_KEYS.cancel), testId: 'tactics-leave-cancel' },
                 {
-                    label: 'Leave battle',
+                    label: t(IN_GAME_MENU_KEYS.leaveConfirm),
                     variant: 'danger',
                     testId: 'tactics-leave-confirm',
                     onClick: leaveGame,

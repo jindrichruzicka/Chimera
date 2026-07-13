@@ -435,6 +435,65 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
         expect(screen.getByLabelText(/ai assist/i)).toBeTruthy();
     });
 
+    it('resolves a game-field label and its select options through the active translator', async () => {
+        // A game may store token keys as its game-field label and select-option
+        // labels; the settings renderer resolves them through `t()`, so the
+        // game's own bundle (here an override) drives the visible text.
+        const customGameId = 'token-labelled-game';
+        const customDefinition: GameSettingsPageDefinition = {
+            tabs: [
+                {
+                    id: 'combat',
+                    label: 'game.example.settings.tabCombat',
+                    sections: [
+                        {
+                            id: 'rules',
+                            label: 'game.example.settings.tabCombat',
+                            items: [
+                                {
+                                    kind: 'game-field',
+                                    path: 'tactics.difficulty',
+                                    label: 'game.example.settings.difficulty',
+                                    control: {
+                                        type: 'select',
+                                        options: [
+                                            {
+                                                value: 'normal',
+                                                label: 'game.example.settings.normal',
+                                            },
+                                            { value: 'hard', label: 'game.example.settings.hard' },
+                                        ],
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+        mockLoadRendererGame.mockResolvedValue(makeRendererGame(customDefinition));
+        useSettingsStore.setState({
+            settings: {
+                [customGameId]: { ...makeSettings(), tactics: { difficulty: 'normal' } },
+            },
+            activeGameId: customGameId,
+        });
+
+        renderWithOverride(<SettingsPage />, {
+            'game.example.settings.tabCombat': 'Boj',
+            'game.example.settings.difficulty': 'Obtížnost',
+            'game.example.settings.normal': 'Normální',
+            'game.example.settings.hard': 'Těžká',
+        });
+
+        expect(await screen.findByRole('tab', { name: 'Boj' })).toBeTruthy();
+        // The game-field label resolves through the translator.
+        expect(screen.getByLabelText('Obtížnost')).toBeTruthy();
+        // …and so do its select options.
+        expect(screen.getByRole('option', { name: 'Normální' })).toBeTruthy();
+        expect(screen.getByRole('option', { name: 'Těžká' })).toBeTruthy();
+    });
+
     it('uses URL game context when no active lobby game is stored', async () => {
         const customGameId = 'custom-url-settings-game';
         const customDefinition: GameSettingsPageDefinition = {

@@ -14,13 +14,31 @@
  */
 
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playerId, type LobbyState } from '@chimera-engine/electron/preload/api-types.js';
 import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
+import { I18nProvider } from '@chimera-engine/renderer/i18n';
+import { tacticsBundleCs } from './translations/cs.js';
+import { tacticsBundleEn } from './translations/en.js';
 import { TacticsLobbyScreen } from './TacticsLobbyScreen.js';
+
+const TACTICS_LANGUAGES = [
+    { code: 'en-US', label: 'English' },
+    { code: 'cs-CZ', label: 'Čeština' },
+] as const;
+
+// The lobby screen renders its labels through useTranslate() (throws outside a
+// provider). Wrap every render in the English Tactics bundle so `game.tactics.*`
+// resolve to the pre-tokenisation text the assertions expect.
+function EnProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
+    return <I18nProvider gameOverride={tacticsBundleEn}>{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EnProviders });
 
 const HOST_ID = playerId('host');
 const CLIENT_ID = playerId('p2');
@@ -86,6 +104,27 @@ function stubClipboard(): ReturnType<typeof vi.fn> {
 }
 
 describe('TacticsLobbyScreen', () => {
+    it('renders the lobby chrome in Czech when the Czech bundle is active', () => {
+        baseRender(
+            <I18nProvider
+                gameOverride={tacticsBundleCs}
+                languages={TACTICS_LANGUAGES}
+                locale="cs-CZ"
+            >
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        lobbyState: makeLobbyState({ agentSlots: [{ slotIndex: 1, kind: 'ai' }] }),
+                    })}
+                />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByRole('heading', { name: 'Nastavení bitvy' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Hráči' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Přidat hráče AI' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Odebrat hráče AI 1' })).toBeInTheDocument();
+    });
+
     it('renders one roster row per player with name, ready badge, and colour swatch', () => {
         render(<TacticsLobbyScreen {...makeProps()} />);
 

@@ -9,9 +9,16 @@
 // returned `shell.fonts`, keeping the renderer-internal `GameFontLoader` out of
 // this game package (it is not a public `@chimera-engine/renderer` barrel).
 
-import type { LoadedRendererGame, LoadedRendererGameShell } from '@chimera-engine/renderer/game';
+import type {
+    GameTranslations,
+    LoadedRendererGame,
+    LoadedRendererGameShell,
+} from '@chimera-engine/renderer/game';
+import { resolveGameLanguages } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
 import { tacticsManifest } from '../manifest.js';
+import { tacticsBundleEn } from '../shell/translations/en.js';
+import { tacticsBundleCs } from '../shell/translations/cs.js';
 
 export async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
     const [screenModule, assetManifestModule, shell] = await Promise.all([
@@ -51,5 +58,18 @@ export async function loadTacticsRendererGameShell(): Promise<LoadedRendererGame
         // seam (`loadRendererGameShell`) turns it into `--ch-cursor-*` token
         // overrides at registry init — this package never touches the DOM.
         cursor: tacticsManifest.cursor,
+        translations: TACTICS_TRANSLATIONS,
     };
 }
+
+// The game's contributed i18n bundles. `languages` mirrors the manifest's
+// declared list (the renderer seam cross-checks the bundle locales against it);
+// the per-locale `bundles` re-key `game.tactics.*` (and override `engine.chat.*`)
+// so the engine's `<I18nProvider>` layers them over its English default.
+const TACTICS_TRANSLATIONS: GameTranslations = {
+    languages: resolveGameLanguages(tacticsManifest) ?? [],
+    bundles: {
+        'en-US': tacticsBundleEn,
+        'cs-CZ': tacticsBundleCs,
+    },
+};

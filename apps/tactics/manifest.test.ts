@@ -59,4 +59,11 @@ describe('tacticsManifest', () => {
             "export { default } from '@chimera-engine/renderer/shell/logo-screen/page';",
         );
     });
+
+    it('declares English and Czech UI languages, English first (default)', () => {
+        expect(tacticsManifest.languages).toEqual([
+            { code: 'en-US', label: 'English' },
+            { code: 'cs-CZ', label: 'Čeština' },
+        ]);
+    });
 });

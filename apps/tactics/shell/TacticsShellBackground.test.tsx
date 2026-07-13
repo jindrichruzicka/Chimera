@@ -1,11 +1,29 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { I18nProvider } from '@chimera-engine/renderer/i18n';
 import { TacticsShellBackground } from './TacticsShellBackground';
 import { tacticsManifest } from '../manifest';
+import { tacticsBundleCs } from './translations/cs';
+import { tacticsBundleEn } from './translations/en';
+
+const TACTICS_LANGUAGES = [
+    { code: 'en-US', label: 'English' },
+    { code: 'cs-CZ', label: 'Čeština' },
+] as const;
+
+// The subtitle resolves through useTranslate() (throws outside a provider). Wrap
+// every render in the English Tactics bundle so `game.tactics.shell.subtitle`
+// resolves to the pre-tokenisation text.
+function EnProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
+    return <I18nProvider gameOverride={tacticsBundleEn}>{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EnProviders });
 
 const { navigationState } = vi.hoisted(() => ({
     navigationState: {
@@ -117,6 +135,22 @@ describe('TacticsShellBackground', () => {
         );
         expect(screen.getByTestId('tactics-shell-background-subtitle').textContent).toBe(
             'Chimera testing stub',
+        );
+    });
+
+    it('renders the subtitle in Czech when the Czech bundle is active', () => {
+        baseRender(
+            <I18nProvider
+                gameOverride={tacticsBundleCs}
+                languages={TACTICS_LANGUAGES}
+                locale="cs-CZ"
+            >
+                <TacticsShellBackground />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('tactics-shell-background-subtitle').textContent).toBe(
+            'Testovací výplň Chimera',
         );
     });
 

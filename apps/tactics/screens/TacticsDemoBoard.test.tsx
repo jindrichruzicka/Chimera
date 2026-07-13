@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { OrthographicCamera } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -20,8 +20,20 @@ import {
     TACTICS_REVEAL_TILE_ACTION,
 } from '@chimera-engine/tactics/simulation/constants.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
+import { I18nProvider } from '@chimera-engine/renderer/i18n';
+import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
 import { useCommitmentBuffer } from './useCommitmentBuffer';
+
+// The board renders its fallback aria-labels + the reveal overlay through
+// useTranslate() (throws outside a provider). Wrap every render in the English
+// Tactics bundle so `game.tactics.*` resolve to the pre-tokenisation text.
+function EnProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
+    return <I18nProvider gameOverride={tacticsBundleEn}>{children}</I18nProvider>;
+}
+
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EnProviders });
 
 // Colour hexes now arrive via the generic `content` prop (loaded from the content
 // database). Mirrors apps/tactics/data/{player,board}-colors. Hexes are lifted to
@@ -625,5 +637,30 @@ describe('TacticsDemoBoard', () => {
 
         expect(screen.getByTestId('tactics-board-empty')).toBeInTheDocument();
         expect(screen.queryByTestId('tactics-r3f-canvas')).not.toBeInTheDocument();
+    });
+
+    it('labels the board in Czech when the Czech bundle is active', async () => {
+        const { tacticsBundleCs } = await import('../shell/translations/cs.js');
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        baseRender(
+            <I18nProvider
+                gameOverride={tacticsBundleCs}
+                languages={[
+                    { code: 'en-US', label: 'English' },
+                    { code: 'cs-CZ', label: 'Čeština' },
+                ]}
+                locale="cs-CZ"
+            >
+                <TacticsDemoBoard
+                    snapshot={makeSnapshot()}
+                    localPlayerId={localPlayerId}
+                    sendAction={sendAction}
+                />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByLabelText('Herní pole Tactics')).toBeInTheDocument();
     });
 });
