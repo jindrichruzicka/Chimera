@@ -270,6 +270,9 @@ describe('ReplaysPage', () => {
         await waitFor(() => {
             expect(screen.getAllByTestId('replay-delete-btn')).toHaveLength(2);
         });
+        for (const deleteButton of screen.getAllByTestId('replay-delete-btn')) {
+            expect(deleteButton).toHaveAttribute('data-ch-dismiss-button');
+        }
     });
 
     it('opens a confirm dialog on delete click without deleting or opening the replay', async () => {

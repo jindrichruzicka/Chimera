@@ -222,15 +222,15 @@ renderer/audio/
 
 ### Component Categories
 
-| Category       | Examples                                                 |
-| -------------- | -------------------------------------------------------- |
-| **Actions**    | `Button`, `IconButton`, `ToggleButton`, `SaveGameButton` |
-| **Overlays**   | `Modal`, `Drawer`, `Tooltip`, `Popover`                  |
-| **Containers** | `Panel`, `Card`, `Divider`, `ScrollArea`, `Tabs`         |
-| **Forms**      | `Slider`, `Toggle`, `TextInput`, `Select`, `NumberInput` |
-| **Feedback**   | `ProgressBar`, `Spinner`, `Badge`                        |
-| **Typography** | `Heading`, `Label`, `Caption`                            |
-| **Media**      | `PreloadedImage`                                         |
+| Category       | Examples                                                                  |
+| -------------- | ------------------------------------------------------------------------- |
+| **Actions**    | `Button`, `IconButton`, `DismissButton`, `ToggleButton`, `SaveGameButton` |
+| **Overlays**   | `Modal`, `Drawer`, `Tooltip`, `Popover`                                   |
+| **Containers** | `Panel`, `Card`, `Divider`, `ScrollArea`, `Tabs`                          |
+| **Forms**      | `Slider`, `Toggle`, `TextInput`, `Select`, `NumberInput`                  |
+| **Feedback**   | `ProgressBar`, `Spinner`, `Badge`                                         |
+| **Typography** | `Heading`, `Label`, `Caption`                                             |
+| **Media**      | `PreloadedImage`                                                          |
 
 All components are **unstyled except for CSS tokens**. No hardcoded hex values.
 

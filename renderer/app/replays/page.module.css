@@ -49,18 +49,10 @@
     outline-offset: calc(var(--ch-focus-ring-width) * -1);
 }
 
-/* Ghost delete control that shifts to the danger tokens on hover/focus, so the
-   × delete glyph only reads red when the user targets it. Overriding the IconButton's
-   local custom properties keeps this tokens-only (Invariant #91). */
+/* Layout only — the hover/focus danger treatment lives in the shared
+   DismissButton. */
 .deleteBtn {
     flex: 0 0 auto;
-}
-
-.deleteBtn:hover,
-.deleteBtn:focus-visible {
-    --ch-icon-button-color: var(--ch-button-color-danger);
-    --ch-icon-button-bg-hover: var(--ch-button-bg-danger-hover);
-    --ch-icon-button-border-color-hover: var(--ch-button-border-danger-hover);
 }
 
 .error {

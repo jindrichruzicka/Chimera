@@ -22,7 +22,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { ReplayListItem } from '@chimera-engine/simulation/bridge/api-types.js';
-import { Badge, Caption, IconButton, Modal } from '../../components/ui';
+import { Badge, Caption, DismissButton, Modal } from '../../components/ui';
 import { REPLAYS_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import { useReplayApi } from '../../hooks/useReplayApi';
@@ -67,8 +67,8 @@ function perspectiveLabel(path: string): string {
 /**
  * Compact trailing delete control for a replay row. Rendered as a **sibling** of
  * the open button (a `<button>` may not nest another), so clicking it never
- * triggers the row's open handler. Ghost at rest; the icon shifts to the danger
- * tokens on hover/focus (Invariant #91: tokens only).
+ * triggers the row's open handler. The shared DismissButton owns the
+ * ghost-at-rest, danger-on-hover treatment.
  */
 function DeleteReplayButton({
     onDelete,
@@ -78,15 +78,12 @@ function DeleteReplayButton({
     readonly label: string;
 }): React.ReactElement {
     return (
-        <IconButton
-            variant="ghost"
+        <DismissButton
             className={styles['deleteBtn']}
             aria-label={label}
             data-testid="replay-delete-btn"
             onClick={onDelete}
-        >
-            <span aria-hidden="true">&times;</span>
-        </IconButton>
+        />
     );
 }
 

@@ -112,7 +112,7 @@ describe('Drawer', () => {
         expect(closeButton).toHaveFocus();
     });
 
-    it('renders the close affordance as a compact ghost icon button', () => {
+    it('renders the close affordance as the shared dismiss button', () => {
         render(
             <Drawer open title="Inventory" onClose={vi.fn()}>
                 Drawer content
@@ -121,6 +121,7 @@ describe('Drawer', () => {
 
         const closeButton = screen.getByRole('button', { name: /^close$/i });
         expect(closeButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
+        expect(closeButton).toHaveAttribute('data-ch-dismiss-button');
         expect(closeButton).toHaveTextContent('×');
         expect(closeButton).not.toHaveTextContent('Close');
     });

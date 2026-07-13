@@ -5,7 +5,7 @@ import type { CSSProperties, HTMLAttributes } from 'react';
 import { COMMON_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import { useEscapeLayer } from '../shell/EscapeStack';
-import { IconButton } from './IconButton';
+import { DismissButton } from './DismissButton';
 import styles from './Drawer.module.css';
 import { useExitPresence } from './useExitPresence';
 
@@ -161,14 +161,11 @@ export function Drawer({
                     <h2 className={styles['title']} id={titleId}>
                         {title}
                     </h2>
-                    <IconButton
+                    <DismissButton
                         aria-label={resolvedCloseLabel}
                         className={styles['closeButton']}
                         onClick={onClose}
-                        variant="ghost"
-                    >
-                        <span aria-hidden="true">&times;</span>
-                    </IconButton>
+                    />
                 </div>
                 <div className={styles['body']}>{children}</div>
             </div>

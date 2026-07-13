@@ -159,7 +159,11 @@ describe('SavesPage — rows', () => {
         renderPage();
 
         expect(screen.getAllByTestId('save-load-btn')).toHaveLength(2);
-        expect(screen.getAllByTestId('save-delete-btn')).toHaveLength(2);
+        const deleteButtons = screen.getAllByTestId('save-delete-btn');
+        expect(deleteButtons).toHaveLength(2);
+        for (const deleteButton of deleteButtons) {
+            expect(deleteButton).toHaveAttribute('data-ch-dismiss-button');
+        }
     });
 
     it('titles a row with its label when present', () => {
