@@ -368,6 +368,51 @@ describe('ReplaysPage', () => {
     });
 });
 
+// Deterministic replays are a debug-only artifact (kept on disk for debugging,
+// Invariant #71). In the packaged production app they are hidden from the
+// browser — players only see perspective replays from their own point of view —
+// while the files themselves are never touched.
+describe('ReplaysPage — deterministic replays hidden in the packaged production build', () => {
+    beforeEach(() => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '1');
+    });
+
+    // `vi.stubEnv` is not cleared by the file-wide `restoreAllMocks` afterEach, so
+    // unstub here to keep the packaged flag from leaking into later suites.
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    it('does not list deterministic replays or even query for them', async () => {
+        const list = vi.fn(() => Promise.resolve([makeItem({ gameVersion: '1.2.3' })]));
+        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_PATH]));
+        installBridge({ list, perspectiveList });
+
+        renderPage();
+
+        // Perspective replays still resolve and render for the player.
+        await waitFor(() => {
+            expect(screen.getByText(/persp-1\.chimera-perspective-replay/)).toBeInTheDocument();
+        });
+        // The deterministic surface is neither queried nor rendered.
+        expect(list).not.toHaveBeenCalled();
+        expect(screen.queryByText(/1\.2\.3/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/^deterministic$/i)).not.toBeInTheDocument();
+    });
+
+    it('shows the empty state when only deterministic replays exist on disk', async () => {
+        const list = vi.fn(() => Promise.resolve([makeItem()]));
+        installBridge({ list, perspectiveList: vi.fn(() => Promise.resolve([])) });
+
+        renderPage();
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/no replays saved yet/i)).toBeInTheDocument();
+        });
+        expect(list).not.toHaveBeenCalled();
+    });
+});
+
 describe('ReplaysPage — Escape behaviour (chrome-less Modal conversion)', () => {
     it('closes back to the main menu on Escape, carrying the active gameId', () => {
         installBridge({});

@@ -3,11 +3,13 @@
 /**
  * Replay Browser (§4.28).
  *
- * Lists saved replays for the active game — **both** deterministic and
- * perspective kinds, each row carrying a type badge. Deterministic replays come
- * from `window.__chimera.replay.list` (rich metadata); perspective replays come
- * from `window.__chimera.replay.perspective.list`, which returns opaque path
- * handles only (their metadata is read on open, Invariant #98).
+ * Lists saved replays for the active game, each row carrying a type badge.
+ * Perspective replays (the player's own point of view) come from
+ * `window.__chimera.replay.perspective.list`, which returns opaque path handles
+ * only (their metadata is read on open, Invariant #98), and are always shown.
+ * Deterministic replays (`window.__chimera.replay.list`, rich metadata) are a
+ * debug-only artifact — always written to disk (Invariant #71), but surfaced
+ * here only outside the packaged production app (see `deterministicReplayGate`).
  *
  * Opening a deterministic replay calls `openInPlayer`, which main answers with a
  * `navigate` push handled app-wide by `ReplayNavigationBridge`. That shared push
@@ -26,6 +28,7 @@ import { Badge, Caption, DismissButton, Modal } from '../../components/ui';
 import { REPLAYS_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import { useReplayApi } from '../../hooks/useReplayApi';
+import { areDeterministicReplaysVisible } from './deterministicReplayGate';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useToastStore } from '../../state/toastStore.js';
 import styles from './page.module.css';
@@ -192,11 +195,24 @@ export default function ReplaysPage(): React.ReactElement {
     const [state, setState] = React.useState<LoadState>({ status: 'loading' });
     const [pendingDelete, setPendingDelete] = React.useState<PendingDelete | null>(null);
 
+    // Deterministic replays are a debug-only artifact — always kept on disk, but
+    // surfaced in the browser only outside the packaged production app (players
+    // just see their own perspective replays). Resolved once at mount.
+    const showDeterministic = React.useMemo(() => areDeterministicReplaysVisible(), []);
+
     // Shared fetch for both replay kinds; the mount effect (with an unmount guard)
-    // and the post-delete reload both funnel through it.
+    // and the post-delete reload both funnel through it. The deterministic list is
+    // skipped entirely when hidden — no IPC round-trip, no rows — so `items` stays
+    // empty and the on-disk files are left untouched.
     const fetchReplays = React.useCallback(
-        () => Promise.all([replayApi.list(gameId), replayApi.perspective.list(gameId)]),
-        [replayApi, gameId],
+        () =>
+            Promise.all([
+                showDeterministic
+                    ? replayApi.list(gameId)
+                    : Promise.resolve([] as readonly ReplayListItem[]),
+                replayApi.perspective.list(gameId),
+            ]),
+        [replayApi, gameId, showDeterministic],
     );
 
     React.useEffect(() => {

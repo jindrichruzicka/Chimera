@@ -182,6 +182,8 @@ The button is disabled while the request is in flight, with inline error feedbac
 
 **Main-menu Replays button** — a game's `gameMainMenuDefinition` (e.g. in `games/<game>/shell/main-menu.ts`) contributes a **Replays** button (navigates to `/replays`). Its `disabled` predicate is async and **fail-safe**: it resolves to `true` (disabled) when `replay.perspective.list('<game>')` is empty _or_ the bridge is unavailable. The definition is contributed through the renderer game registry (not a shell-page import) and uses token-mapped layout (invariants #80/#91/#94).
 
+**Deterministic replays are debug-only in the browser** — the replay browser always lists **perspective** replays (the player's own point of view). Deterministic replays are a debug artifact: still written to disk (Invariant #71) and openable from disk, but surfaced in the browser only outside the packaged production app. The gate is `renderer/app/replays/deterministicReplayGate.ts` — `areDeterministicReplaysVisible()` returns `false` when `NEXT_PUBLIC_CHIMERA_PACKAGED === '1'` (set only by the `package:tactics*` scripts, mirroring the component-gallery gate). When hidden, the page skips the `replay.list()` IPC entirely; nothing on disk is touched.
+
 ---
 
 ## Perspective Replay (`PerspectiveReplayFile`)
