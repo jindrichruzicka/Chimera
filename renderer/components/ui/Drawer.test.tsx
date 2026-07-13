@@ -5,13 +5,27 @@ import { cleanup, fireEvent, render as baseRender, screen } from '@testing-libra
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EscapeStackProvider } from '../shell/EscapeStack';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { Drawer } from './Drawer';
 import drawerCss from './Drawer.module.css?raw';
 
-// Drawer routes Escape-to-close through the shared overlay stack, so every render
-// must sit inside an EscapeStackProvider (useEscapeLayer throws otherwise).
+// Drawer resolves its default close label through useTranslate() and routes
+// Escape through the shared overlay stack, so every render needs BOTH providers
+// (each hook throws without its own).
+function OverlayTestProviders({
+    children,
+}: {
+    readonly children: React.ReactNode;
+}): React.ReactElement {
+    return (
+        <I18nProvider>
+            <EscapeStackProvider>{children}</EscapeStackProvider>
+        </I18nProvider>
+    );
+}
+
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
-    baseRender(ui, { wrapper: EscapeStackProvider });
+    baseRender(ui, { wrapper: OverlayTestProviders });
 
 afterEach(() => {
     cleanup();
@@ -294,5 +308,38 @@ describe('Drawer motion', () => {
         expect(drawerCss).toMatch(
             /\.title\s*\{[^}]*-webkit-text-stroke:\s*var\(--ch-title-outline-width\)\s*var\(--ch-title-outline-color\);/s,
         );
+    });
+});
+
+describe('Drawer — close-label i18n default', () => {
+    it('derives the default close label from the engine.common.close token (locale-following)', () => {
+        baseRender(
+            <I18nProvider
+                locale="cs-CZ"
+                languages={[
+                    { code: 'en-US', label: 'English' },
+                    { code: 'cs-CZ', label: 'Čeština' },
+                ]}
+                gameOverride={{ 'engine.common.close': 'Zavřít' }}
+            >
+                <EscapeStackProvider>
+                    <Drawer open title="Inventář" onClose={vi.fn()}>
+                        obsah
+                    </Drawer>
+                </EscapeStackProvider>
+            </I18nProvider>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Zavřít' })).toBeInTheDocument();
+    });
+
+    it('lets an explicit closeLabel prop win over the token default', () => {
+        render(
+            <Drawer open title="Inventory" onClose={vi.fn()} closeLabel="Dismiss">
+                content
+            </Drawer>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
     });
 });

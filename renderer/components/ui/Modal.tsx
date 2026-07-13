@@ -3,6 +3,8 @@
 import React, { useEffect, useId, useRef } from 'react';
 import type { CSSProperties, HTMLAttributes } from 'react';
 import type { ButtonVariant } from '../../theme/types';
+import { COMMON_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { useEscapeLayer } from '../shell/EscapeStack';
 import { Button } from './Button';
 import styles from './Modal.module.css';
@@ -73,8 +75,6 @@ export type ModalProps = Readonly<
     }
 >;
 
-const DEFAULT_ACTIONS: readonly ModalAction[] = [{ label: 'Close', variant: 'primary' }];
-
 const focusableSelector = [
     'button:not([disabled])',
     'a[href]',
@@ -97,6 +97,7 @@ export function Modal({
     style,
     ...dialogProps
 }: ModalProps): React.ReactElement | null {
+    const t = useTranslate();
     const titleId = useId();
     const dialogRef = useRef<HTMLDivElement | null>(null);
     const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -172,7 +173,8 @@ export function Modal({
         .join(' ');
     // `undefined` keeps the default lone Close; an explicit `[]` means the
     // surface's controls live in the body and no action row renders.
-    const controls = actions ?? DEFAULT_ACTIONS;
+    // Default single-action row: label follows the active locale.
+    const controls = actions ?? [{ label: t(COMMON_KEYS.close), variant: 'primary' as const }];
 
     // Run the action, then close unless it opted out (`dismiss: false`). A
     // throwing dismissing action must never wedge the dialog open — and since

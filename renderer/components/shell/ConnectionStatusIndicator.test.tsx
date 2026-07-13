@@ -80,6 +80,30 @@ describe('ConnectionStatusIndicator', () => {
         );
     });
 
+    it('translates the interpolated status word through its per-status token', () => {
+        // The {status} slot is itself a token (never the raw wire identifier), so
+        // a game override localises the whole aria-label — no mixed-language text.
+        installSystemBridge(
+            () => undefined,
+            () => undefined,
+        );
+
+        baseRender(
+            <I18nProvider
+                gameOverride={{
+                    'engine.connection.statusAriaLabel': 'Stav připojení: {status}',
+                    'engine.connection.statusConnected': 'připojeno',
+                }}
+            >
+                <ConnectionStatusIndicator />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('connection-status').getAttribute('aria-label')).toBe(
+            'Stav připojení: připojeno',
+        );
+    });
+
     it('updates status metadata and color when onConnectionStatus emits', () => {
         let listener: StatusListener | null = null;
         installSystemBridge(

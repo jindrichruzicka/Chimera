@@ -21,6 +21,9 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import { createPerfStore } from './perfStore';
 import { createSettingsStore } from '../../../state/settingsStore';
+// The HUD row labels resolve through useTranslate(), which throws outside a
+// provider — every render wraps in an (engine-English) I18nProvider.
+import { I18nProvider } from '../../../i18n/I18nProvider';
 import type { PerfStoreState } from './perfStore';
 import type { SettingsStoreState } from '../../../state/settingsStore';
 
@@ -141,21 +144,33 @@ afterEach(() => {
 describe('PerfHud — visibility', () => {
     it('is hidden by default when visible=false and settings showPerfHud=false', async () => {
         const { PerfHud } = await importPerfHud();
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.queryByTestId('perf-hud')).toBeNull();
     });
 
     it('is visible when perfStore.visible is true', async () => {
         const { PerfHud } = await importPerfHud();
         perfStore.getState().setVisible(true);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-hud')).toBeTruthy();
     });
 
     it('is visible when settings.gameplay.showPerfHud is true', async () => {
         const { PerfHud } = await importPerfHud();
         applySettings(true);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-hud')).toBeTruthy();
     });
 
@@ -163,14 +178,22 @@ describe('PerfHud — visibility', () => {
         const { PerfHud } = await importPerfHud();
         perfStore.getState().setVisible(true);
         applySettings(true);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-hud')).toBeTruthy();
     });
 
     it('registers engine:toggle-perf-hud input action on mount', async () => {
         const { useInputAction } = await import('../../../input/useInputAction.js');
         const { PerfHud } = await importPerfHud();
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(vi.mocked(useInputAction as Mock)).toHaveBeenCalledWith(
             'engine:toggle-perf-hud',
             expect.any(Function),
@@ -179,38 +202,70 @@ describe('PerfHud — visibility', () => {
 
     it('toggling via F3 makes the HUD visible when previously hidden', async () => {
         const { PerfHud } = await importPerfHud();
-        const { rerender } = render(<PerfHud />);
+        const { rerender } = render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.queryByTestId('perf-hud')).toBeNull();
 
         fireToggle();
-        rerender(<PerfHud />);
+        rerender(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
 
         expect(screen.getByTestId('perf-hud')).toBeTruthy();
     });
 
     it('toggling twice restores hidden state', async () => {
         const { PerfHud } = await importPerfHud();
-        const { rerender } = render(<PerfHud />);
+        const { rerender } = render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
 
         fireToggle();
-        rerender(<PerfHud />);
+        rerender(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-hud')).toBeTruthy();
 
         fireToggle();
-        rerender(<PerfHud />);
+        rerender(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.queryByTestId('perf-hud')).toBeNull();
     });
 
     it('ignores release events so one key press toggles once', async () => {
         const { PerfHud } = await importPerfHud();
-        const { rerender } = render(<PerfHud />);
+        const { rerender } = render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
 
         fireToggle(true);
-        rerender(<PerfHud />);
+        rerender(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-hud')).toBeTruthy();
 
         fireToggle(false);
-        rerender(<PerfHud />);
+        rerender(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-hud')).toBeTruthy();
     });
 });
@@ -230,7 +285,11 @@ describe('PerfHud — metrics rendered', () => {
         });
         perfStore.getState().setSimTick(42);
         perfStore.getState().setPingMs(35);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
     }
 
     it('renders FPS metric', async () => {
@@ -293,7 +352,11 @@ describe('PerfHud — metric values', () => {
         perfStore
             .getState()
             .setPerfFrame({ fps: 55, frameMsAvg: 18, frameMsP95: 20, drawCalls: 0, triangles: 0 });
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-fps').textContent).toContain('55');
     });
 
@@ -301,7 +364,11 @@ describe('PerfHud — metric values', () => {
         const { PerfHud } = await importPerfHud();
         perfStore.getState().setVisible(true);
         perfStore.getState().setSimTick(999);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-sim-tick').textContent).toContain('999');
     });
 
@@ -309,7 +376,11 @@ describe('PerfHud — metric values', () => {
         const { PerfHud } = await importPerfHud();
         perfStore.getState().setVisible(true);
         perfStore.getState().setPingMs(42);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-ping').textContent).toContain('42');
     });
 
@@ -317,21 +388,33 @@ describe('PerfHud — metric values', () => {
         const { PerfHud } = await importPerfHud();
         perfStore.getState().setVisible(true);
         // pingMs is null by default
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-ping').textContent).toContain('—');
     });
 
     it('displays "—" for null actionRoundTripMs', async () => {
         const { PerfHud } = await importPerfHud();
         perfStore.getState().setVisible(true);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-action-rtt').textContent).toContain('—');
     });
 
     it('displays "—" for null heapMb', async () => {
         const { PerfHud } = await importPerfHud();
         perfStore.getState().setVisible(true);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-heap').textContent).toContain('—');
     });
 
@@ -341,7 +424,11 @@ describe('PerfHud — metric values', () => {
         perfStore
             .getState()
             .setPerfFrame({ fps: 60, frameMsAvg: 16, frameMsP95: 18, drawCalls: 99, triangles: 0 });
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-draw-calls').textContent).toContain('99');
     });
 
@@ -355,7 +442,11 @@ describe('PerfHud — metric values', () => {
             drawCalls: 0,
             triangles: 75000,
         });
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
         expect(screen.getByTestId('perf-triangles').textContent).toContain('75000');
     });
 });
@@ -369,7 +460,11 @@ describe('PerfHud — FPS colour status', () => {
         perfStore
             .getState()
             .setPerfFrame({ fps, frameMsAvg: 16, frameMsP95: 18, drawCalls: 0, triangles: 0 });
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
     }
 
     it('FPS row has data-status="good" when fps >= 55', async () => {
@@ -409,7 +504,11 @@ describe('PerfHud — design token discipline', () => {
     it('container uses CSS variable tokens for positioning and background', async () => {
         const { PerfHud } = await importPerfHud();
         perfStore.getState().setVisible(true);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
 
         const hud = screen.getByTestId('perf-hud');
         const style = hud.getAttribute('style') ?? '';
@@ -421,11 +520,56 @@ describe('PerfHud — design token discipline', () => {
     it('line-height uses a CSS variable token, not a bare number', async () => {
         const { PerfHud } = await importPerfHud();
         perfStore.getState().setVisible(true);
-        render(<PerfHud />);
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
 
         const hud = screen.getByTestId('perf-hud');
         const style = hud.getAttribute('style') ?? '';
         // lineHeight must reference a var(--ch-*) token, not a bare numeric literal
         expect(style).not.toMatch(/line-height: [0-9]/);
+    });
+});
+
+// ── Tests: row labels are engine translation tokens ───────────────────────────
+
+describe('PerfHud — i18n row labels', () => {
+    it('renders the engine-English labels byte-identical to the pre-tokenised HUD', async () => {
+        const { PerfHud } = await importPerfHud();
+        perfStore.getState().setVisible(true);
+        perfStore
+            .getState()
+            .setPerfFrame({ fps: 55, frameMsAvg: 18, frameMsP95: 20, drawCalls: 7, triangles: 9 });
+        render(
+            <I18nProvider>
+                <PerfHud />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('perf-fps').textContent).toBe('FPS: 55');
+        expect(screen.getByTestId('perf-draw-calls').textContent).toBe('Draw calls: 7');
+        expect(screen.getByTestId('perf-heap').textContent).toBe('Heap: —');
+    });
+
+    it('re-keys a row label through a game override bundle (locale switch)', async () => {
+        const { PerfHud } = await importPerfHud();
+        perfStore.getState().setVisible(true);
+        perfStore.getState().setSimTick(42);
+        render(
+            <I18nProvider
+                locale="cs-CZ"
+                languages={[
+                    { code: 'en-US', label: 'English' },
+                    { code: 'cs-CZ', label: 'Čeština' },
+                ]}
+                gameOverride={{ 'engine.perfHud.simTick': 'Takt simulace: {value}' }}
+            >
+                <PerfHud />
+            </I18nProvider>,
+        );
+
+        expect(screen.getByTestId('perf-sim-tick').textContent).toBe('Takt simulace: 42');
     });
 });

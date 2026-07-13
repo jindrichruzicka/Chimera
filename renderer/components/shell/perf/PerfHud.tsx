@@ -20,6 +20,8 @@
 
 import React, { useCallback } from 'react';
 
+import { PERF_HUD_KEYS } from '../../../i18n/engine-keys.js';
+import { useTranslate } from '../../../i18n/useTranslate.js';
 import type { InputEvent } from '../../../input/InputAction.js';
 import { useInputAction } from '../../../input/useInputAction.js';
 import { useSettingsStore } from '../../../state/settingsStore.js';
@@ -48,6 +50,7 @@ function fmtInt(value: number | null, suffix = ''): string {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function PerfHud(): React.ReactElement | null {
+    const t = useTranslate();
     // Narrow selectors: each field re-renders the HUD only when it changes (§5.2).
     const fps = usePerfStore((s) => s.sample.fps);
     const frameMsAvg = usePerfStore((s) => s.sample.frameMsAvg);
@@ -103,20 +106,38 @@ export function PerfHud(): React.ReactElement | null {
         userSelect: 'none',
     };
 
+    // Row labels are engine translation tokens; {value} carries the
+    // pre-formatted reading so the numeric scaling/units stay here.
     return (
         <div data-testid="perf-hud" style={overlayStyle}>
             <div data-testid="perf-fps" data-status={fpsStat}>
-                FPS: {Math.round(fps)}
+                {t(PERF_HUD_KEYS.fps, { value: Math.round(fps) })}
             </div>
-            <div data-testid="perf-frame-ms-avg">Frame avg: {fmt(frameMsAvg, ' ms')}</div>
-            <div data-testid="perf-frame-ms-p95">Frame p95: {fmt(frameMsP95, ' ms')}</div>
-            <div data-testid="perf-sim-tick">Sim tick: {simTick}</div>
-            <div data-testid="perf-actions-sec">Actions/s: {Math.round(actionsPerSec)}</div>
-            <div data-testid="perf-action-rtt">Action RTT: {fmtInt(actionRoundTripMs, ' ms')}</div>
-            <div data-testid="perf-ping">Ping: {fmtInt(pingMs, ' ms')}</div>
-            <div data-testid="perf-heap">Heap: {fmt(heapMb, ' MB')}</div>
-            <div data-testid="perf-draw-calls">Draw calls: {drawCalls}</div>
-            <div data-testid="perf-triangles">Triangles: {triangles}</div>
+            <div data-testid="perf-frame-ms-avg">
+                {t(PERF_HUD_KEYS.frameAvg, { value: fmt(frameMsAvg, ' ms') })}
+            </div>
+            <div data-testid="perf-frame-ms-p95">
+                {t(PERF_HUD_KEYS.frameP95, { value: fmt(frameMsP95, ' ms') })}
+            </div>
+            <div data-testid="perf-sim-tick">{t(PERF_HUD_KEYS.simTick, { value: simTick })}</div>
+            <div data-testid="perf-actions-sec">
+                {t(PERF_HUD_KEYS.actionsPerSec, { value: Math.round(actionsPerSec) })}
+            </div>
+            <div data-testid="perf-action-rtt">
+                {t(PERF_HUD_KEYS.actionRtt, { value: fmtInt(actionRoundTripMs, ' ms') })}
+            </div>
+            <div data-testid="perf-ping">
+                {t(PERF_HUD_KEYS.ping, { value: fmtInt(pingMs, ' ms') })}
+            </div>
+            <div data-testid="perf-heap">
+                {t(PERF_HUD_KEYS.heap, { value: fmt(heapMb, ' MB') })}
+            </div>
+            <div data-testid="perf-draw-calls">
+                {t(PERF_HUD_KEYS.drawCalls, { value: drawCalls })}
+            </div>
+            <div data-testid="perf-triangles">
+                {t(PERF_HUD_KEYS.triangles, { value: triangles })}
+            </div>
         </div>
     );
 }

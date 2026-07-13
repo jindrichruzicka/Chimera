@@ -8,21 +8,21 @@
  * app relaunch (settings repository round-trip), and that a game with no declared
  * `languages` is inert (no selector, no settings Language row).
  *
+ * Engine strings switch too: the Tactics CS bundle re-keys the FULL engine
+ * token catalogue (parity-locked in
+ * `apps/tactics/shell/translations/translations.test.tsx`), so the settings
+ * dialog title, its Close action, and the Language field label are asserted in
+ * Czech after the switch — engine tokens resolved through the game override
+ * (Invariant #112 fallback chain, documented in §4.39).
+ *
  * What this spec deliberately does NOT cover — and why (no silent gap):
- *   - The `engine.chat.title` engine-token OVERRIDE ("Match chat" → "Zápasový
- *     chat") is the one engine-namespaced token Tactics re-keys per locale. It
- *     renders only in-match, inside the collapsed ChatPanel mounted by
+ *   - The `engine.chat.title` engine-token override ("Match chat" → "Zápasový
+ *     chat") renders only in-match, inside the collapsed ChatPanel mounted by
  *     `TacticsGameHud`. Re-driving it here would require the heavier direct-game
  *     fixture, entering a match, and expanding the chat drawer; instead the
  *     override-as-default-label contract is asserted in
  *     `renderer/components/chat/ChatPanel.test.tsx`, and the per-locale switch is
- *     covered by the Tactics translation parity test
- *     (`apps/tactics/shell/translations/translations.test.tsx`). Invariant #112
- *     (override → engine → raw, override-never-deletes) is documented in §4.39.
- *   - The engine ships an English-only bundle, so switching to `cs-CZ` leaves
- *     un-overridden engine strings in English (fallback chain). The visible
- *     Czech surface a menu-scoped spec can assert is therefore the game tokens
- *     (`game.tactics.menu.*`), which is what the assertions below target.
+ *     covered by the Tactics translation parity test.
  *   - Debug token-mode is gated on the runtime debug flag, not on CHIMERA_E2E,
  *     and is covered by unit tests — excluded here per the same rule.
  *
@@ -71,6 +71,14 @@ const NEW_GAME_EN = 'New Game';
 const NEW_GAME_CS = 'Nová hra';
 const SETTINGS_EN = 'Settings';
 const SETTINGS_CS = 'Nastavení';
+
+// Engine-token strings re-keyed per locale by the Tactics CS bundle — the
+// engine ships English only, so the Czech renders prove the game override
+// layer of the fallback chain on live engine UI (settings modal chrome).
+const MODAL_TITLE_CS = 'Nastavení'; // engine.settings.modalTitle
+const CLOSE_CS = 'Zavřít'; // engine.settings.close
+const LANGUAGE_LABEL_CS = 'Jazyk'; // engine.settings.language
+const END_TURN_DESCRIPTION_CS = 'Ukončit aktuální tah'; // game.tactics.actions.endTurn
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -154,6 +162,25 @@ test.describe('i18n language switch (F71)', () => {
             expect(await settingsPage.currentLanguage()).toBe(LOCALE_EN);
 
             await settingsPage.selectLanguage(LOCALE_CS);
+
+            // ENGINE strings re-render in Czech in the still-open dialog: the
+            // modal title, the Close action, and the Language field label are
+            // engine tokens resolved through the Tactics CS override bundle.
+            await expect(
+                menuWindow.getByTestId('settings-dialog').getByRole('heading', {
+                    name: MODAL_TITLE_CS,
+                }),
+            ).toBeVisible();
+            await expect(settingsPage.closeButton).toHaveText(CLOSE_CS);
+            await expect(settingsPage.languageSelect).toHaveAccessibleName(LANGUAGE_LABEL_CS);
+
+            // The Controls panel resolves the game's tokenized input-action
+            // description too ('End current turn' → 'Ukončit aktuální tah').
+            await settingsPage.clickTabById('controls');
+            await expect(settingsPage.bindingDescription('game:end-turn')).toHaveText(
+                END_TURN_DESCRIPTION_CS,
+            );
+
             await settingsPage.close();
             await expect(menuWindow).toHaveURL(/\/main-menu\/?\?gameId=tactics$/);
 
@@ -169,14 +196,10 @@ test.describe('i18n language switch (F71)', () => {
                 .poll(() => readPersistedLanguage(menuWindow, TACTICS_GAME_ID))
                 .toBe(LOCALE_CS);
 
-            // Relaunch the whole app: the locale must survive the settings
-            // repository round-trip. Persistence is proven where the runtime
-            // surfaces the per-game locale — the on-disk repository (read through
-            // the preload bridge) and the Settings page, which hydrates the
-            // active game's persisted settings on open. (The cold main-menu route
-            // does not itself hydrate per-game settings, so its game-token labels
-            // render in the default English until a lobby/settings load runs; that
-            // is existing behaviour, not part of this persistence assertion.)
+            // Relaunch the whole app: the persisted locale must apply on the COLD
+            // boot to the main menu itself — SettingsBootstrap hydrates the URL
+            // `?gameId=` game's persisted settings, so the menu renders Czech
+            // without opening any other surface first.
             const relaunchConfig = await captureRelaunchConfig(liveApp);
             await liveApp.close();
 
@@ -189,22 +212,21 @@ test.describe('i18n language switch (F71)', () => {
             // Repository round-trip: the persisted locale is still Czech on disk.
             expect(await readPersistedLanguage(relaunchedWindow, TACTICS_GAME_ID)).toBe(LOCALE_CS);
 
-            // And the Settings page (which hydrates the tactics game context on
-            // open) shows the persisted Czech locale in the Language field.
+            // The cold main menu renders the persisted Czech directly.
             const relaunchedMenu = new MainMenuPage(relaunchedWindow);
             await relaunchedMenu.goto({ gameId: TACTICS_GAME_ID });
             await expect
                 .poll(() => relaunchedMenu.getButtonLabels(), { timeout: 15_000 })
-                .toContain(NEW_GAME_EN);
-            await relaunchedMenu.clickButtonByLabel(SETTINGS_EN);
+                .toContain(NEW_GAME_CS);
+
+            // And the Settings page shows the persisted locale in the Language
+            // field. The menu is Czech, so navigate by the Czech label; tabs are
+            // clicked by locale-independent testid ("Gameplay" → "Hratelnost").
+            await relaunchedMenu.clickButtonByLabel(SETTINGS_CS);
             await expect(relaunchedWindow).toHaveURL(/\/settings\/?\?gameId=tactics$/);
 
             const relaunchedSettings = new SettingsPage(relaunchedWindow);
             await expect(relaunchedWindow.getByTestId('settings-dialog')).toBeVisible();
-            // Click the Gameplay tab by its locale-independent testid: opening the
-            // settings page hydrates the persisted tactics locale, which flips the
-            // tab labels to Czech ("Gameplay" → "Hratelnost"), so a role+name click
-            // would race the re-translation.
             await relaunchedSettings.clickTabById('gameplay');
             await expect(relaunchedSettings.languageSelect).toBeVisible();
             await expect

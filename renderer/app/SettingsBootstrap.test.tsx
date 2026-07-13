@@ -28,6 +28,21 @@ vi.mock('../state/settingsStoreBootstrap', () => ({
     bootstrapSettingsStore: vi.fn(() => vi.fn()),
 }));
 
+// The URL-gameId hydration effect re-resolves `window.location.search` on every
+// pathname change; the tests drive the URL via history.replaceState and keep the
+// pathname constant (mirrors the TokenModeI18nProvider test setup).
+vi.mock('next/navigation', () => ({
+    usePathname: () => '/main-menu',
+}));
+
+function setUrlGameId(gameId: string | null): void {
+    window.history.replaceState(
+        {},
+        '',
+        gameId === null ? '/main-menu' : `/main-menu?gameId=${gameId}`,
+    );
+}
+
 const END_TURN_ACTION: InputAction = {
     id: 'game:end-turn',
     description: 'End current turn',
@@ -95,6 +110,7 @@ beforeEach(() => {
     document.body.appendChild(container);
     root = createRoot(container);
     mounted = true;
+    setUrlGameId(null);
     useLobbyStore.getState().applyLobbyState(null);
     useSettingsStore.setState({ settings: {}, activeGameId: null });
     loadRendererGameMock.mockReset();
@@ -161,5 +177,80 @@ describe('SettingsBootstrap', () => {
         expect(useSettingsStore.getState().activeGameId).toBeNull();
         expect(get).not.toHaveBeenCalledWith('tactics');
         expect(loadRendererGameMock).not.toHaveBeenCalled();
+    });
+
+    // The persisted locale (gameplay.language) must apply on a COLD boot to the
+    // main menu: with no lobby active, the URL `?gameId=` context alone must
+    // hydrate that game's persisted settings into the store so consumers like
+    // useActiveGameTranslations read the real locale instead of the default.
+    it('hydrates the URL-resolved shell game settings on the menu route without a lobby', async () => {
+        const tacticsSettings = makeSettings(0.75);
+        const get = vi.fn(async (gameId: string) =>
+            gameId === 'tactics' ? tacticsSettings : makeSettings(),
+        );
+        const settings = makeSettingsApi(get);
+        (globalThis as { __chimera?: { settings: SettingsAPI } }).__chimera = { settings };
+        setUrlGameId('tactics');
+
+        await act(async () => {
+            root.render(<SettingsBootstrap />);
+        });
+        await act(async () => {
+            await flushPromiseJobs();
+        });
+
+        expect(get).toHaveBeenCalledWith('tactics');
+        expect(useSettingsStore.getState().settings['tactics']).toBe(tacticsSettings);
+        // URL-only context is settings hydration ONLY: it neither claims the
+        // active-game slot (lobby semantics) nor registers input actions.
+        expect(useSettingsStore.getState().activeGameId).toBeNull();
+        expect(loadRendererGameMock).not.toHaveBeenCalled();
+    });
+
+    it('does not hydrate URL settings when the URL carries no gameId', async () => {
+        const get = vi.fn(async () => makeSettings());
+        const settings = makeSettingsApi(get);
+        (globalThis as { __chimera?: { settings: SettingsAPI } }).__chimera = { settings };
+
+        await act(async () => {
+            root.render(<SettingsBootstrap />);
+        });
+        await act(async () => {
+            await flushPromiseJobs();
+        });
+
+        expect(get).not.toHaveBeenCalled();
+        expect(useSettingsStore.getState().settings).toEqual({});
+    });
+
+    it('hydrates both the URL game and the lobby game when they differ', async () => {
+        const urlGameSettings = makeSettings(0.25);
+        const lobbyGameSettings = makeSettings(0.75);
+        const get = vi.fn(async (gameId: string) => {
+            if (gameId === 'chess') return urlGameSettings;
+            if (gameId === 'tactics') return lobbyGameSettings;
+            return makeSettings();
+        });
+        const settings = makeSettingsApi(get);
+        (globalThis as { __chimera?: { settings: SettingsAPI } }).__chimera = { settings };
+        setUrlGameId('chess');
+        useLobbyStore.getState().applyLobbyState(makeLobbyState('tactics'));
+        const inputActionRegistry = createInputActionRegistry();
+
+        await act(async () => {
+            root.render(
+                <InputActionRegistryContext.Provider value={inputActionRegistry}>
+                    <SettingsBootstrap />
+                </InputActionRegistryContext.Provider>,
+            );
+        });
+        await act(async () => {
+            await flushPromiseJobs();
+        });
+
+        expect(useSettingsStore.getState().settings['chess']).toBe(urlGameSettings);
+        expect(useSettingsStore.getState().settings['tactics']).toBe(lobbyGameSettings);
+        // The lobby game (not the URL game) owns the active-game slot.
+        expect(useSettingsStore.getState().activeGameId).toBe('tactics');
     });
 });

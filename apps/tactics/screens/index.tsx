@@ -35,8 +35,17 @@ const TACTICS_EVENT_AUDIO_BINDING = {
     },
 } as const;
 
+// Description and category are game.tactics.actions.* translation tokens: the
+// settings Controls panel resolves both through t() (a literal falls back to
+// itself), so the row follows the active locale. The category doubles as the
+// grouping key — grouping compares the raw token string, which stays stable.
 export const TACTICS_INPUT_ACTIONS = [
-    { id: 'game:end-turn', description: 'End current turn', category: 'Game', oneShot: true },
+    {
+        id: 'game:end-turn',
+        description: 'game.tactics.actions.endTurn',
+        category: 'game.tactics.actions.categoryGame',
+        oneShot: true,
+    },
 ] as const;
 
 export const TacticsGameScreenRegistry: GameScreenRegistry = {

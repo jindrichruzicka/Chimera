@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ConnectionStatus } from '@chimera-engine/simulation/bridge/api-types.js';
 import { CONNECTION_KEYS } from '../../i18n/engine-keys';
+import type { TranslationKey } from '../../i18n/translation-bundle';
 import { useTranslate } from '../../i18n/useTranslate';
 
 // Optimistic initial state; replaced by the first onConnectionStatus event.
@@ -33,12 +34,21 @@ const STATUS_STYLES: Record<
     },
 };
 
+// The {status} slot resolves through per-status tokens: the raw ConnectionStatus
+// values are wire identifiers, not display strings. Their English templates equal
+// the identifiers, so en-US stays 'Connection status: connected' byte-identical.
+const STATUS_TOKENS: Record<ConnectionStatus, TranslationKey> = {
+    connected: CONNECTION_KEYS.statusConnected,
+    connecting: CONNECTION_KEYS.statusConnecting,
+    disconnected: CONNECTION_KEYS.statusDisconnected,
+    error: CONNECTION_KEYS.statusError,
+};
+
 export function ConnectionStatusIndicator(): React.ReactElement {
     const t = useTranslate();
     const [status, setStatus] = useState<ConnectionStatus>(DEFAULT_STATUS);
     const statusStyle = STATUS_STYLES[status];
-    // The raw status word is passed through so en-US stays 'Connection status: connected'.
-    const statusLabel = t(CONNECTION_KEYS.statusAriaLabel, { status });
+    const statusLabel = t(CONNECTION_KEYS.statusAriaLabel, { status: t(STATUS_TOKENS[status]) });
 
     useEffect(() => {
         if (!window.__chimera?.system) {

@@ -136,6 +136,12 @@ export const SHELL_KEYS = {
     subtitle: translationKey('game.tactics.shell.subtitle'),
 } as const;
 
+/** Input-action metadata rendered in the settings Controls panel. */
+export const ACTIONS_KEYS = {
+    endTurn: translationKey('game.tactics.actions.endTurn'),
+    categoryGame: translationKey('game.tactics.actions.categoryGame'),
+} as const;
+
 // The grouped maps share leaf names across areas (`cancel`, `ready`, `settings`,
 // …), so a spread aggregate keyed by leaf name would silently collapse them. Key
 // the flat aggregate by each token's *full* string instead — unique by
@@ -151,6 +157,7 @@ const ALL_AREA_MAPS = [
     MENU_KEYS,
     SETTINGS_KEYS,
     SHELL_KEYS,
+    ACTIONS_KEYS,
 ] as const;
 
 /**

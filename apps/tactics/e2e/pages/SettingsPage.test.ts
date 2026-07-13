@@ -118,8 +118,14 @@ describe('SettingsPage', () => {
         expect(settingsPage.closeButton).toBeDefined();
         expect(settingsPage.masterVolumeInput).toBeDefined();
         expect(settingsPage.resetDefaultsButton).toBeDefined();
+        expect(settingsPage.languageSelect).toBeDefined();
 
-        expect(requestedTestIds).toEqual(['settings-close', 'master-volume', 'reset-to-defaults']);
+        expect(requestedTestIds).toEqual([
+            'settings-close',
+            'master-volume',
+            'reset-to-defaults',
+            'settings-language',
+        ]);
     });
 
     it('clicks close', async () => {
@@ -188,29 +194,31 @@ describe('SettingsPage', () => {
         expect(filledValues).toEqual([{ testId: 'label:AI Thinking Delay', value: '1200' }]);
     });
 
-    it('binds the Language field by its combobox role and accessible name', () => {
-        const { page, requestedRoles } = buildPageDouble();
-
-        const settingsPage = new SettingsPage(page);
-
-        expect(settingsPage.languageSelect).toBeDefined();
-        expect(requestedRoles).toContainEqual({ role: 'combobox', name: 'Language', exact: true });
-    });
-
     it('selects a UI language by its BCP-47 code', async () => {
         const { page, selectedOptions } = buildPageDouble();
         const settingsPage = new SettingsPage(page);
 
         await settingsPage.selectLanguage('cs-CZ');
 
-        expect(selectedOptions).toEqual([{ locator: 'combobox:Language', value: 'cs-CZ' }]);
+        expect(selectedOptions).toEqual([{ locator: 'settings-language', value: 'cs-CZ' }]);
     });
 
     it('reads the current Language code', async () => {
         const { page } = buildPageDouble();
         const settingsPage = new SettingsPage(page);
 
-        expect(await settingsPage.currentLanguage()).toBe('combobox:Language:value');
+        expect(await settingsPage.currentLanguage()).toBe('settings-language:value');
+    });
+
+    it('locates the action-row description by its testid', () => {
+        const { page, requestedLocators, requestedTestIds } = buildPageDouble();
+        const settingsPage = new SettingsPage(page);
+
+        expect(settingsPage.bindingDescription('game:end-turn')).toBeDefined();
+        expect(requestedLocators).toContain(
+            '[data-testid="binding-action-row"][data-action-id="game:end-turn"]',
+        );
+        expect(requestedTestIds).toContain('binding-description');
     });
 
     it('reads a binding value from the action row', async () => {

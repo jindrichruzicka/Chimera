@@ -149,9 +149,14 @@ resolves the active game from the URL `?gameId=` (falling back to `settingsStore
 lazy-loads the shell to get `translations`, reads the persisted locale reactively, and picks
 `gameOverride = bundles[locale]` — so a locale change **live-switches without a reload**.
 
-The Tactics reference wiring (`apps/tactics/renderer/loaders.ts`) contributes EN + CS bundles; the
-Czech bundle re-keys `engine.chat.title` ("Match chat" → "Zápasový chat"), demonstrating a per-locale
-engine-token override.
+The Tactics reference wiring (`apps/tactics/renderer/loaders.ts`) contributes EN + CS bundles. The
+Czech bundle re-keys the **full engine token catalogue** — every `engine.*` token gets a Czech
+template, so the whole engine UI (settings chrome, saves, lobby, replays, toasts, HUD scaffold)
+renders Czech under `cs-CZ`; the parity test
+(`apps/tactics/shell/translations/translations.test.tsx`) locks that coverage against the real
+catalogue, so an engine token added later fails the reference game's tests until translated. The EN
+bundle re-keys only `engine.chat.title` ("Match chat") — un-overridden engine tokens fall through to
+the engine's own English, so engine copy edits reach the EN locale without touching the game bundle.
 
 ---
 
@@ -171,7 +176,15 @@ context, loads declared languages through the `translations.languages` seam, rea
 gameplay: { language: code } })` → `chimera:settings:update` IPC → the main-process settings
 repository. The settings page (`renderer/app/settings/page.tsx`) special-cases the
 `gameplay.language` field to render `<SettingsLanguageSelector>` in place of a generic control, so
-the row disappears entirely for single-language games (§4.13, Invariant #111).
+the row disappears entirely for single-language games (§4.13, Invariant #111). The control carries
+the stable `settings-language` testid because its accessible name is itself translated.
+
+**Cold-boot application:** `SettingsBootstrap` (`renderer/app/SettingsBootstrap.tsx`) hydrates the
+URL `?gameId=` shell game's persisted settings into `settingsStore` on every navigation (pathname-
+keyed, mirroring `useActiveGameTranslations`' URL resolution), so the persisted locale applies the
+moment the main menu boots — not only after a lobby starts or the settings page is opened. The
+URL-only context is hydration **only**: the lobby effect remains the sole owner of `activeGameId`
+and input-action registration.
 
 ---
 

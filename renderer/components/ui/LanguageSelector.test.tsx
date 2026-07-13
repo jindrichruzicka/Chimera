@@ -76,6 +76,42 @@ describe('LanguageSelector', () => {
         expect(onLanguageChange).toHaveBeenCalledWith('cs-CZ');
     });
 
+    // The accessible name is a translation token ("Language"/"Jazyk"), so E2E
+    // needs a locale-independent handle: the optional testId lands on the
+    // control itself in both variants.
+    it('forwards testId to the select control (select variant)', () => {
+        render(
+            <LanguageSelector
+                languages={LANGUAGES}
+                value="en-US"
+                onLanguageChange={() => undefined}
+                testId="settings-language"
+            />,
+        );
+
+        expect(screen.getByRole('combobox', { name: 'Language' })).toHaveAttribute(
+            'data-testid',
+            'settings-language',
+        );
+    });
+
+    it('forwards testId to the radiogroup root (inline variant)', () => {
+        render(
+            <LanguageSelector
+                languages={LANGUAGES}
+                value="en-US"
+                onLanguageChange={() => undefined}
+                testId="hud-language"
+                variant="inline"
+            />,
+        );
+
+        expect(screen.getByRole('radiogroup', { name: 'Language' })).toHaveAttribute(
+            'data-testid',
+            'hud-language',
+        );
+    });
+
     it('renders null when the game declares fewer than two languages', () => {
         const { container } = render(
             <LanguageSelector

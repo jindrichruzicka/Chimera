@@ -105,6 +105,9 @@ export function SettingsLanguageSelector({
             languages={languages}
             value={value}
             onLanguageChange={handleLanguageChange}
+            // Locale-independent E2E handle: the field's accessible name is
+            // itself translated ("Language" → "Jazyk").
+            testId="settings-language"
             {...(className === undefined ? {} : { className })}
             {...(variant === undefined ? {} : { variant })}
         />

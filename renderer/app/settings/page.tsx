@@ -444,7 +444,7 @@ export default function SettingsPage(): React.ReactElement {
                     <section className={styles['controls-category']} key={category}>
                         {actionsByCategory.size > 1 && (
                             <Heading level={3} size="md">
-                                {category}
+                                {resolveLabel(t, category)}
                             </Heading>
                         )}
                         <div className={styles['binding-list']}>
@@ -459,8 +459,13 @@ export default function SettingsPage(): React.ReactElement {
                                         data-testid="binding-action-row"
                                         key={action.id}
                                     >
-                                        <span className={styles['action-description']}>
-                                            {action.description}
+                                        <span
+                                            className={styles['action-description']}
+                                            data-testid="binding-description"
+                                        >
+                                            {/* May be a game/engine translation token; a
+                                                literal description falls back to itself. */}
+                                            {resolveLabel(t, action.description)}
                                         </span>
                                         <span
                                             className={styles['binding-value']}
@@ -473,12 +478,17 @@ export default function SettingsPage(): React.ReactElement {
                                         {status !== undefined && !status.ok && status.conflict && (
                                             <span className={styles['conflict-status']}>
                                                 {t(SETTINGS_KEYS.conflictWith)}
-                                                {inputManager
-                                                    .getActions()
-                                                    .find(
-                                                        (candidate) =>
-                                                            candidate.id === status.conflict,
-                                                    )?.description ?? status.conflict}
+                                                {/* Descriptions may be translation tokens
+                                                    (engine actions surface here too). */}
+                                                {resolveLabel(
+                                                    t,
+                                                    inputManager
+                                                        .getActions()
+                                                        .find(
+                                                            (candidate) =>
+                                                                candidate.id === status.conflict,
+                                                        )?.description ?? status.conflict,
+                                                )}
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"

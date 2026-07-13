@@ -258,6 +258,13 @@ export const engineBundleEn: TranslationBundle = {
 
     // ── connection status ───────────────────────────────────────────────────────
     'engine.connection.statusAriaLabel': 'Connection status: {status}',
+    // Per-status display words for the {status} slot. The English values equal
+    // the ConnectionStatus enum identifiers on purpose — the en-US aria output
+    // stays byte-identical to the pre-tokenised rendering.
+    'engine.connection.statusConnected': 'connected',
+    'engine.connection.statusDisconnected': 'disconnected',
+    'engine.connection.statusConnecting': 'connecting',
+    'engine.connection.statusError': 'error',
 
     // ── game shell landmarks ────────────────────────────────────────────────────
     'engine.gameShell.mainAriaLabel': 'Game',
@@ -276,6 +283,27 @@ export const engineBundleEn: TranslationBundle = {
     'engine.hud.undo': 'Undo',
     'engine.hud.redo': 'Redo',
     'engine.hud.endTurn': 'End Turn',
+
+    // ── performance HUD (§4.16) ─────────────────────────────────────────────────
+    // {value} carries the pre-formatted reading (number + unit); the component
+    // keeps the numeric scaling, mirroring the settings value formatters.
+    'engine.perfHud.fps': 'FPS: {value}',
+    'engine.perfHud.frameAvg': 'Frame avg: {value}',
+    'engine.perfHud.frameP95': 'Frame p95: {value}',
+    'engine.perfHud.simTick': 'Sim tick: {value}',
+    'engine.perfHud.actionsPerSec': 'Actions/s: {value}',
+    'engine.perfHud.actionRtt': 'Action RTT: {value}',
+    'engine.perfHud.ping': 'Ping: {value}',
+    'engine.perfHud.heap': 'Heap: {value}',
+    'engine.perfHud.drawCalls': 'Draw calls: {value}',
+    'engine.perfHud.triangles': 'Triangles: {value}',
+
+    // ── engine-reserved input-action descriptions (§4.26) ───────────────────────
+    'engine.actions.undo': 'Undo last action',
+    'engine.actions.redo': 'Redo last undone action',
+    'engine.actions.toggleMenu': 'Toggle game menu',
+    'engine.actions.togglePerfHud': 'Toggle performance HUD',
+    'engine.actions.toggleDebugInspector': 'Toggle debug inspector',
 
     // ── common ────────────────────────────────────────────────────────────────
     'engine.common.close': 'Close',

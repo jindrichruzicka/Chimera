@@ -18,29 +18,34 @@ import { InputManagerContext } from '../input/InputManagerContext.js';
 import { DeviceInfoProvider, type DeviceInfoSystemApi } from '../device/DeviceInfoProvider.js';
 import { EscapeStackProvider } from '../components/shell/EscapeStack.js';
 
+// Descriptions are engine translation tokens (engine.actions.*): engine actions
+// are hidden from the player-rebindable Controls panel, but a description can
+// still surface through the rebind-conflict message, which resolves it through
+// t() with a literal-falls-back-to-itself contract. The category stays a
+// literal — it is a grouping key that never renders for engine actions.
 const ENGINE_INPUT_ACTIONS: readonly InputAction[] = [
-    { id: 'engine:undo', description: 'Undo last action', category: 'Engine', oneShot: true },
+    { id: 'engine:undo', description: 'engine.actions.undo', category: 'Engine', oneShot: true },
     {
         id: 'engine:redo',
-        description: 'Redo last undone action',
+        description: 'engine.actions.redo',
         category: 'Engine',
         oneShot: true,
     },
     {
         id: 'engine:toggle-menu',
-        description: 'Toggle game menu',
+        description: 'engine.actions.toggleMenu',
         category: 'Engine',
         oneShot: true,
     },
     {
         id: 'engine:toggle-perf-hud',
-        description: 'Toggle performance HUD',
+        description: 'engine.actions.togglePerfHud',
         category: 'Engine',
         oneShot: true,
     },
     {
         id: 'engine:toggle-debug-inspector',
-        description: 'Toggle debug inspector',
+        description: 'engine.actions.toggleDebugInspector',
         category: 'Engine',
         oneShot: true,
     },

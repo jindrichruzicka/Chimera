@@ -7,12 +7,13 @@ export class SettingsPage {
     readonly masterVolumeInput: Locator;
     readonly resetDefaultsButton: Locator;
     /**
-     * The gameplay Language `<Select>` (native `<select>`, role `combobox`). It
-     * carries no testid — `<SettingsLanguageSelector>` renders the pure
-     * `<LanguageSelector>` primitive, which sources its accessible name from the
-     * resolved `engine.settings.language` token ("Language" in English). The
-     * selector self-hides for single-language games, so this locator resolves to
-     * zero elements when the active game declares fewer than two languages.
+     * The gameplay Language `<Select>` (native `<select>`, role `combobox`),
+     * located by the stable `settings-language` testid because its accessible
+     * name is itself a translation ("Language" → "Jazyk") and flips with the
+     * locale under test. The id is rendered by `SettingsLanguageSelector.tsx`,
+     * which the testid-alignment guard scans alongside the settings page. The
+     * selector self-hides for single-language games, so this locator resolves
+     * to zero elements when the active game declares fewer than two languages.
      */
     readonly languageSelect: Locator;
 
@@ -20,7 +21,7 @@ export class SettingsPage {
         this.closeButton = page.getByTestId('settings-close');
         this.masterVolumeInput = page.getByTestId('master-volume').filter({ visible: true });
         this.resetDefaultsButton = page.getByTestId('reset-to-defaults');
-        this.languageSelect = page.getByRole('combobox', { name: 'Language', exact: true });
+        this.languageSelect = page.getByTestId('settings-language');
     }
 
     public async close(): Promise<void> {
@@ -71,6 +72,11 @@ export class SettingsPage {
 
     public bindingValue(actionId: InputActionId): Locator {
         return this.bindingRow(actionId).getByTestId('binding-value');
+    }
+
+    /** The action row's human-readable description (a resolved translation). */
+    public bindingDescription(actionId: InputActionId): Locator {
+        return this.bindingRow(actionId).getByTestId('binding-description');
     }
 
     public async readBinding(actionId: InputActionId): Promise<string> {

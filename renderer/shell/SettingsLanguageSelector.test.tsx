@@ -102,6 +102,17 @@ describe('SettingsLanguageSelector', () => {
         expect(mockUpdate).toHaveBeenCalledWith(GAME_ID, { gameplay: { language: 'cs-CZ' } });
     });
 
+    it('marks the control with the stable settings-language testid', () => {
+        // The accessible name is itself translated ("Language" → "Jazyk"), so
+        // E2E locates the settings Language field by this locale-independent id.
+        render(<SettingsLanguageSelector gameId={GAME_ID} languages={LANGUAGES} />);
+
+        expect(screen.getByRole('combobox', { name: 'Language' })).toHaveAttribute(
+            'data-testid',
+            'settings-language',
+        );
+    });
+
     it('renders null when the game declares fewer than two languages', () => {
         const { container } = render(
             <SettingsLanguageSelector gameId={GAME_ID} languages={[LANGUAGES[0]!]} />,

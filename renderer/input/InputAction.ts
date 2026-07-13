@@ -25,9 +25,18 @@ export type InputActionId = `engine:${string}` | `game:${string}`;
 export interface InputAction {
     /** Unique identifier for this action. */
     readonly id: InputActionId;
-    /** Human-readable description shown in the keybinding settings UI. */
+    /**
+     * Shown in the keybinding settings UI. Either a translation token (e.g.
+     * `game.tactics.actions.endTurn`) or a literal string — display sites
+     * resolve it through `t()`, and a literal falls back to itself unchanged.
+     */
     readonly description: string;
-    /** Groups related actions together in the rebind UI ("Movement", "UI", …). */
+    /**
+     * Groups related actions together in the rebind UI. Doubles as the grouping
+     * key (compared verbatim) and, when more than one category renders, as the
+     * group heading — a translation token or a literal, resolved like
+     * {@link InputAction.description}.
+     */
     readonly category: string;
     /**
      * When true the action fires once on key press.

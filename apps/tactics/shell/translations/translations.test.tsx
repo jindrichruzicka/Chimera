@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { GameLanguage } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import {
+    engineBundleEn,
     I18nProvider,
     resolveTranslation,
     translationKey,
@@ -35,6 +36,13 @@ import { TACTICS_KEYS } from './keys.js';
 const catalogueKeys = new Set<string>(Object.values(TACTICS_KEYS));
 const enKeys = new Set<string>(Object.keys(tacticsBundleEn));
 const csKeys = new Set<string>(Object.keys(tacticsBundleCs));
+const engineCatalogueKeys = new Set<string>(Object.keys(engineBundleEn));
+
+const isEngineKey = (key: string): boolean => key.startsWith('engine.');
+const enGameKeys = [...enKeys].filter((key) => !isEngineKey(key));
+const csGameKeys = [...csKeys].filter((key) => !isEngineKey(key));
+const enEngineKeys = [...enKeys].filter(isEngineKey);
+const csEngineKeys = [...csKeys].filter(isEngineKey);
 
 const TACTICS_LANGUAGES: readonly GameLanguage[] = [
     { code: 'en-US', label: 'English' },
@@ -83,15 +91,42 @@ describe('tactics bundle ↔ catalogue parity', () => {
         expect(missing).toEqual([]);
     });
 
-    it('has no English bundle key absent from the catalogue (only the engine override is exempt)', () => {
-        const orphans = [...enKeys].filter(
-            (key) => !catalogueKeys.has(key) && key !== 'engine.chat.title',
-        );
+    it('has no game-token bundle key absent from the catalogue', () => {
+        const orphans = [...enGameKeys, ...csGameKeys].filter((key) => !catalogueKeys.has(key));
         expect(orphans).toEqual([]);
     });
 
-    it('declares exactly the same key set in the EN and CS bundles', () => {
-        expect([...enKeys].sort()).toEqual([...csKeys].sort());
+    it('declares exactly the same game-token key set in the EN and CS bundles', () => {
+        expect(enGameKeys.sort()).toEqual(csGameKeys.sort());
+    });
+
+    it('validates every engine.* key in either bundle against the real engine catalogue', () => {
+        // Typo guard: a mistyped engine override would silently never render
+        // (the raw key has no consumer), so every re-key must name a real token.
+        const unknown = [...enEngineKeys, ...csEngineKeys].filter(
+            (key) => !engineCatalogueKeys.has(key),
+        );
+        expect(unknown).toEqual([]);
+    });
+
+    it('re-keys the FULL engine catalogue in Czech (fully-translated reference game)', () => {
+        // The engine ships English only; the Czech locale renders engine UI in
+        // Czech solely through these re-keys — so the CS bundle must cover every
+        // engine token. An engine token added later fails here until translated.
+        const missing = [...engineCatalogueKeys].filter((key) => !csKeys.has(key));
+        expect(missing).toEqual([]);
+    });
+
+    it('re-keys engine tokens in EN only deliberately (chat title), falling back to engine English otherwise', () => {
+        // The EN bundle must NOT mirror the whole engine catalogue: un-overridden
+        // tokens fall through to the engine's own English, so engine copy edits
+        // reach the EN locale without touching this bundle.
+        expect(enEngineKeys).toEqual(['engine.chat.title']);
+    });
+
+    it('carries every EN engine re-key in CS too', () => {
+        const missing = enEngineKeys.filter((key) => !csKeys.has(key));
+        expect(missing).toEqual([]);
     });
 
     it('carries the engine.chat.title override in both locales', () => {
@@ -207,5 +242,70 @@ describe('tactics bundle ICU templates (rendered through the provider)', () => {
                 n: 3,
             }),
         ).toBe('Remove AI Player 3');
+    });
+});
+
+describe('tactics Czech engine re-keys (rendered through the provider)', () => {
+    it('resolves the settings modal chrome tokens to Czech', () => {
+        expect(renderTactics('cs-CZ', tacticsBundleCs, 'engine.settings.modalTitle')).toBe(
+            'Nastavení',
+        );
+        cleanup();
+        expect(renderTactics('cs-CZ', tacticsBundleCs, 'engine.settings.close')).toBe('Zavřít');
+        cleanup();
+        expect(renderTactics('cs-CZ', tacticsBundleCs, 'engine.settings.language')).toBe('Jazyk');
+    });
+
+    it('keeps un-overridden engine tokens on engine English under the EN locale', () => {
+        // The EN bundle deliberately re-keys only the chat title: the modal
+        // chrome falls through the override layer to the engine default.
+        expect(renderTactics('en-US', tacticsBundleEn, 'engine.settings.modalTitle')).toBe(
+            'Settings',
+        );
+    });
+
+    it('selects the Czech plural categories one/few/other for turn counts', () => {
+        // Intl.PluralRules('cs-CZ'): 1 → one, 2–4 → few, 0 and 5+ → other.
+        expect(
+            renderTactics('cs-CZ', tacticsBundleCs, 'engine.settings.formatTurns', { n: 1 }),
+        ).toBe('1 tah');
+        cleanup();
+        expect(
+            renderTactics('cs-CZ', tacticsBundleCs, 'engine.settings.formatTurns', { n: 3 }),
+        ).toBe('3 tahy');
+        cleanup();
+        expect(
+            renderTactics('cs-CZ', tacticsBundleCs, 'engine.settings.formatTurns', { n: 5 }),
+        ).toBe('5 tahů');
+    });
+
+    it('selects the Czech many category for fractional counts', () => {
+        // Czech puts decimals in the 'many' category (2.5 tahu); '#' renders via
+        // String(n), so the digits stay period-separated.
+        expect(
+            renderTactics('cs-CZ', tacticsBundleCs, 'engine.settings.formatTurns', { n: 2.5 }),
+        ).toBe('2.5 tahu');
+    });
+
+    it('formats percentages with the Czech non-breaking space before the sign', () => {
+        // The expected string spells \u00A0 explicitly: an invisible NBSP-vs-
+        // space mixup in this source file would silently invert the assertion.
+        expect(
+            renderTactics('cs-CZ', tacticsBundleCs, 'engine.settings.formatPercent', { n: 80 }),
+        ).toBe('80\u00A0%');
+    });
+
+    it('pluralizes replay tick counts in Czech', () => {
+        expect(
+            renderTactics('cs-CZ', tacticsBundleCs, 'engine.replays.ticksSuffix', { n: 1 }),
+        ).toBe('1 takt');
+        cleanup();
+        expect(
+            renderTactics('cs-CZ', tacticsBundleCs, 'engine.replays.ticksSuffix', { n: 4 }),
+        ).toBe('4 takty');
+        cleanup();
+        expect(
+            renderTactics('cs-CZ', tacticsBundleCs, 'engine.replays.ticksSuffix', { n: 12 }),
+        ).toBe('12 taktů');
     });
 });

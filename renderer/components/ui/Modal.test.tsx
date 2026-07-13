@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render as baseRender, screen } from '@testing-libra
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EscapeStackProvider, useEscapeLayer } from '../shell/EscapeStack';
+import { I18nProvider } from '../../i18n/I18nProvider';
 import { Modal } from './Modal';
 import modalCss from './Modal.module.css?raw';
 
@@ -16,10 +17,23 @@ function StealTopLayer(): null {
     return null;
 }
 
-// Modal routes Escape-to-close through the shared overlay stack, so every render
-// must sit inside an EscapeStackProvider (useEscapeLayer throws otherwise).
+// Modal resolves its default action label through useTranslate() and routes
+// Escape through the shared overlay stack, so every render needs BOTH providers
+// (each hook throws without its own).
+function OverlayTestProviders({
+    children,
+}: {
+    readonly children: React.ReactNode;
+}): React.ReactElement {
+    return (
+        <I18nProvider>
+            <EscapeStackProvider>{children}</EscapeStackProvider>
+        </I18nProvider>
+    );
+}
+
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
-    baseRender(ui, { wrapper: EscapeStackProvider });
+    baseRender(ui, { wrapper: OverlayTestProviders });
 
 afterEach(() => {
     cleanup();
@@ -489,5 +503,28 @@ describe('Modal motion', () => {
         fireEvent.animationEnd(dialog);
 
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+});
+
+describe('Modal — default action i18n', () => {
+    it('derives the default Close action label from the engine.common.close token', () => {
+        baseRender(
+            <I18nProvider
+                locale="cs-CZ"
+                languages={[
+                    { code: 'en-US', label: 'English' },
+                    { code: 'cs-CZ', label: 'Čeština' },
+                ]}
+                gameOverride={{ 'engine.common.close': 'Zavřít' }}
+            >
+                <EscapeStackProvider>
+                    <Modal open title="Dialog" onClose={vi.fn()}>
+                        obsah
+                    </Modal>
+                </EscapeStackProvider>
+            </I18nProvider>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Zavřít' })).toBeInTheDocument();
     });
 });

@@ -22,6 +22,7 @@ export {
 } from './translation-bundle';
 export { engineBundleEn } from './engine-bundle.en';
 export {
+    ACTIONS_KEYS,
     CHAT_KEYS,
     COMMON_KEYS,
     CONNECTION_KEYS,
@@ -33,6 +34,7 @@ export {
     IN_GAME_MENU_KEYS,
     LOBBY_KEYS,
     MENU_KEYS,
+    PERF_HUD_KEYS,
     REPLAYS_KEYS,
     RESTORE_KEYS,
     SAVE_GAME_KEYS,

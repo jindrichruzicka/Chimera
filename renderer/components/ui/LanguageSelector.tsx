@@ -36,6 +36,13 @@ export interface LanguageSelectorProps {
     /** Called with the chosen language code when the player picks a language. */
     readonly onLanguageChange: (code: string) => void;
     readonly className?: string;
+    /**
+     * Optional `data-testid` for the control (the `<select>` in the default
+     * variant, the radiogroup root in the inline variant). The accessible name
+     * is itself a translation ("Language"/"Jazyk"), so tests need this
+     * locale-independent handle.
+     */
+    readonly testId?: string;
     /** `'select'` (default) or `'inline'` (segmented buttons) presentation. */
     readonly variant?: 'select' | 'inline';
 }
@@ -45,6 +52,7 @@ export function LanguageSelector({
     value,
     onLanguageChange,
     className,
+    testId,
     variant = 'select',
 }: LanguageSelectorProps): React.ReactElement | null {
     const t = useTranslate();
@@ -60,7 +68,12 @@ export function LanguageSelector({
         return (
             <div className={rootClassName}>
                 <span className={styles['inlineLabel']}>{label}</span>
-                <div className={styles['inlineGroup']} role="radiogroup" aria-label={label}>
+                <div
+                    className={styles['inlineGroup']}
+                    role="radiogroup"
+                    aria-label={label}
+                    {...(testId === undefined ? {} : { 'data-testid': testId })}
+                >
                     {languages.map((language) => (
                         <ToggleButton
                             key={language.code}
@@ -85,6 +98,7 @@ export function LanguageSelector({
                 label: language.label,
             }))}
             value={value}
+            {...(testId === undefined ? {} : { 'data-testid': testId })}
         />
     );
 }

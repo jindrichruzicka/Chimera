@@ -8,8 +8,12 @@
 //
 // Every `game.tactics.*` value here MUST be byte-identical to the string the
 // corresponding component rendered before tokenisation, so adopting i18n leaves
-// en-US visually unchanged. A paired parity test keeps this bundle in exact key
-// parity with the `cs.ts` translation and the `keys.ts` catalogue.
+// en-US visually unchanged. A paired parity test keeps the `game.tactics.*` key
+// set in exact parity with the `cs.ts` translation and the `keys.ts` catalogue.
+// Engine tokens differ deliberately: this bundle re-keys ONLY `engine.chat.title`
+// (un-overridden tokens fall through to the engine's own English, so engine copy
+// edits reach en-US without touching this file), while `cs.ts` re-keys the FULL
+// engine catalogue — Czech has no engine-side bundle to fall back to.
 //
 // Boundary-restricted pure data (§3): zero imports — no renderer runtime (not
 // even the TranslationBundle type), no React, no simulation/ai, no Electron. The
@@ -125,4 +129,8 @@ export const tacticsBundleEn: Readonly<Record<string, string>> = {
 
     // ── shell background ────────────────────────────────────────────────────────
     'game.tactics.shell.subtitle': 'Chimera testing stub',
+
+    // ── input actions (settings Controls panel) ─────────────────────────────────
+    'game.tactics.actions.endTurn': 'End current turn',
+    'game.tactics.actions.categoryGame': 'Game',
 };

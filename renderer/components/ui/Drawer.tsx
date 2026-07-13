@@ -2,6 +2,8 @@
 
 import React, { useEffect, useId, useRef } from 'react';
 import type { CSSProperties, HTMLAttributes } from 'react';
+import { COMMON_KEYS } from '../../i18n/engine-keys';
+import { useTranslate } from '../../i18n/useTranslate';
 import { useEscapeLayer } from '../shell/EscapeStack';
 import { IconButton } from './IconButton';
 import styles from './Drawer.module.css';
@@ -15,6 +17,11 @@ export type DrawerProps = Readonly<
         readonly title: React.ReactNode;
         readonly onClose: () => void;
         readonly children: React.ReactNode;
+        /**
+         * Accessible name of the close button. Defaults to the translated
+         * `engine.common.close` token, so it follows the active locale; pass a
+         * literal only to override the engine wording.
+         */
         readonly closeLabel?: string;
         readonly placement?: DrawerPlacement;
         readonly style?: CSSProperties;
@@ -43,11 +50,14 @@ export function Drawer({
     onClose,
     children,
     className,
-    closeLabel = 'Close',
+    closeLabel,
     placement = 'right',
     style,
     ...drawerProps
 }: DrawerProps): React.ReactElement | null {
+    const t = useTranslate();
+    // Locale-following default: an explicit prop still wins.
+    const resolvedCloseLabel = closeLabel ?? t(COMMON_KEYS.close);
     const titleId = useId();
     const drawerRef = useRef<HTMLDivElement | null>(null);
     const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -152,7 +162,7 @@ export function Drawer({
                         {title}
                     </h2>
                     <IconButton
-                        aria-label={closeLabel}
+                        aria-label={resolvedCloseLabel}
                         className={styles['closeButton']}
                         onClick={onClose}
                         variant="ghost"

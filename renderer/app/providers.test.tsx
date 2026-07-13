@@ -319,31 +319,31 @@ describe('Providers — InputManager lifecycle', () => {
         expect(seededActions).toEqual([
             {
                 id: 'engine:undo',
-                description: 'Undo last action',
+                description: 'engine.actions.undo',
                 category: 'Engine',
                 oneShot: true,
             },
             {
                 id: 'engine:redo',
-                description: 'Redo last undone action',
+                description: 'engine.actions.redo',
                 category: 'Engine',
                 oneShot: true,
             },
             {
                 id: 'engine:toggle-menu',
-                description: 'Toggle game menu',
+                description: 'engine.actions.toggleMenu',
                 category: 'Engine',
                 oneShot: true,
             },
             {
                 id: 'engine:toggle-perf-hud',
-                description: 'Toggle performance HUD',
+                description: 'engine.actions.togglePerfHud',
                 category: 'Engine',
                 oneShot: true,
             },
             {
                 id: 'engine:toggle-debug-inspector',
-                description: 'Toggle debug inspector',
+                description: 'engine.actions.toggleDebugInspector',
                 category: 'Engine',
                 oneShot: true,
             },

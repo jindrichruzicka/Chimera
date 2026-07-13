@@ -5,6 +5,7 @@ import { cleanup, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { EscapeStackProvider } from '../../shell/EscapeStack';
+import { I18nProvider } from '../../../i18n/I18nProvider';
 import {
     Badge,
     Card,
@@ -20,10 +21,24 @@ import {
     Tooltip,
 } from '../index';
 
-// Modal/Drawer route Escape-to-close through the shared overlay stack; the
-// wrapper is applied to rerenders too, so the Modal/Drawer cases are covered.
+// Modal/Drawer route Escape-to-close through the shared overlay stack AND
+// resolve their default close labels through useTranslate(), so the wrapper
+// supplies both providers; it is applied to rerenders too, so the Modal/Drawer
+// cases are covered.
+function UiContractProviders({
+    children,
+}: {
+    readonly children: React.ReactNode;
+}): React.ReactElement {
+    return (
+        <I18nProvider>
+            <EscapeStackProvider>{children}</EscapeStackProvider>
+        </I18nProvider>
+    );
+}
+
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
-    baseRender(ui, { wrapper: EscapeStackProvider });
+    baseRender(ui, { wrapper: UiContractProviders });
 
 afterEach(() => {
     cleanup();

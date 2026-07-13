@@ -283,6 +283,12 @@ export const CRASH_KEYS = {
 /** Connection-status indicator. */
 export const CONNECTION_KEYS = {
     statusAriaLabel: translationKey('engine.connection.statusAriaLabel'),
+    // Per-status display words interpolated into statusAriaLabel — the raw
+    // ConnectionStatus enum values are wire identifiers, not display strings.
+    statusConnected: translationKey('engine.connection.statusConnected'),
+    statusDisconnected: translationKey('engine.connection.statusDisconnected'),
+    statusConnecting: translationKey('engine.connection.statusConnecting'),
+    statusError: translationKey('engine.connection.statusError'),
 } as const;
 
 /** GameShell landmark accessible names. */
@@ -307,6 +313,37 @@ export const HUD_KEYS = {
     undo: translationKey('engine.hud.undo'),
     redo: translationKey('engine.hud.redo'),
     endTurn: translationKey('engine.hud.endTurn'),
+} as const;
+
+/**
+ * Performance HUD metric rows (§4.16). Each template interpolates the
+ * pre-formatted `{value}` (the numeric scaling/units stay with the component,
+ * mirroring the settings value formatters).
+ */
+export const PERF_HUD_KEYS = {
+    fps: translationKey('engine.perfHud.fps'),
+    frameAvg: translationKey('engine.perfHud.frameAvg'),
+    frameP95: translationKey('engine.perfHud.frameP95'),
+    simTick: translationKey('engine.perfHud.simTick'),
+    actionsPerSec: translationKey('engine.perfHud.actionsPerSec'),
+    actionRtt: translationKey('engine.perfHud.actionRtt'),
+    ping: translationKey('engine.perfHud.ping'),
+    heap: translationKey('engine.perfHud.heap'),
+    drawCalls: translationKey('engine.perfHud.drawCalls'),
+    triangles: translationKey('engine.perfHud.triangles'),
+} as const;
+
+/**
+ * Engine-reserved input-action descriptions (§4.26). Engine actions are hidden
+ * from the player-rebindable Controls panel, but their descriptions can still
+ * surface (the rebind-conflict message), so they resolve through tokens.
+ */
+export const ACTIONS_KEYS = {
+    undo: translationKey('engine.actions.undo'),
+    redo: translationKey('engine.actions.redo'),
+    toggleMenu: translationKey('engine.actions.toggleMenu'),
+    togglePerfHud: translationKey('engine.actions.togglePerfHud'),
+    toggleDebugInspector: translationKey('engine.actions.toggleDebugInspector'),
 } as const;
 
 /** Cross-cutting UI primitives shared across surfaces. */
@@ -337,6 +374,8 @@ const ALL_AREA_MAPS = [
     GAME_SHELL_KEYS,
     GAME_RESULT_KEYS,
     HUD_KEYS,
+    PERF_HUD_KEYS,
+    ACTIONS_KEYS,
     COMMON_KEYS,
 ] as const;
 
