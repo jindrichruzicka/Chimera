@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { chatBubbleIcon } from './chatBubble';
+import { saveIcon } from './save';
 
 /**
  * The visual definition of one icon: its coordinate space and the SVG children
@@ -25,6 +26,7 @@ export interface IconGlyph {
  */
 export const ICON_REGISTRY = {
     'chat-bubble': chatBubbleIcon,
+    save: saveIcon,
 } satisfies Record<string, IconGlyph>;
 
 export type IconName = keyof typeof ICON_REGISTRY;

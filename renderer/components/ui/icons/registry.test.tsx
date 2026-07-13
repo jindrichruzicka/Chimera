@@ -14,6 +14,10 @@ describe('ICON_REGISTRY', () => {
         expect(Object.keys(ICON_REGISTRY)).toContain('chat-bubble');
     });
 
+    it('registers the save glyph', () => {
+        expect(Object.keys(ICON_REGISTRY)).toContain('save');
+    });
+
     it('defines every glyph with a non-empty viewBox and a renderable content element', () => {
         for (const [name, glyph] of Object.entries(ICON_REGISTRY)) {
             expect(typeof glyph.viewBox, name).toBe('string');

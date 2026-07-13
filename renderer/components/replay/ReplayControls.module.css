@@ -15,6 +15,17 @@
     margin-inline-end: var(--ch-space-xs);
 }
 
+/*
+ * Hover and keyboard focus swap the glyph to the ghost-hover colour so the save
+ * icon lights up like the ghost transport buttons beside it (accent in tactics,
+ * a no-op wherever the game leaves ghost-hover equal to the resting colour). The
+ * icon-button transition already animates `color`, so the shift fades in.
+ */
+.save:hover,
+.save:focus-visible {
+    --ch-icon-button-color: var(--ch-button-color-ghost-hover);
+}
+
 .scrubber {
     flex: 1 1 auto;
     min-width: var(--ch-space-xl);

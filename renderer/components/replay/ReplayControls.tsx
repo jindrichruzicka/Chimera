@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { Button, Caption, IconButton, Select, Slider, type SelectOption } from '../ui';
+import { Button, Caption, Icon, IconButton, Select, Slider, type SelectOption } from '../ui';
 import { REPLAYS_KEYS } from '../../i18n/engine-keys';
 import type { TranslationKey } from '../../i18n/translation-bundle';
 import { useTranslate } from '../../i18n/useTranslate';
@@ -118,7 +118,7 @@ export function ReplayControls({
                     disabled={save.saving || save.saved}
                     onClick={save.onSave}
                 >
-                    <span aria-hidden="true">💾</span>
+                    <Icon name="save" />
                 </IconButton>
             )}
             <Button
