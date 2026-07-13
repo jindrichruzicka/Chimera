@@ -163,10 +163,14 @@
     --ch-opacity-disabled: 0.6;
     --ch-opacity-full: 1;
 
+    --ch-size-icon: 20px;
+    --ch-icon-size: var(--ch-size-icon);
+
     --ch-size-icon-button: 36px;
     --ch-icon-button-size: var(--ch-size-icon-button);
     --ch-icon-button-radius: var(--ch-radius-md);
     --ch-icon-button-font-size: var(--ch-font-size-md);
+    --ch-icon-button-glyph-size: var(--ch-size-icon);
     --ch-icon-button-bg: var(--ch-button-bg-secondary);
     --ch-icon-button-bg-hover: var(--ch-button-bg-secondary-hover);
     --ch-icon-button-color: var(--ch-color-text-secondary);

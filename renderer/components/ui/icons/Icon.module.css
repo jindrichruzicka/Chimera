@@ -1,0 +1,15 @@
+/*
+ * Standalone <Icon> sizing and colour. Fully tokenized (Invariant #86): the box
+ * is --ch-icon-size and the glyph inherits its host's text colour through
+ * `fill: currentColor`, so an icon tracks whatever colour token its context
+ * resolves. Inside an IconButton the more specific `.icon-button svg` rule takes
+ * over the sizing — both resolve to the same --ch-size-icon primitive by default.
+ */
+.icon {
+    block-size: var(--ch-icon-size);
+    display: inline-block;
+    fill: currentColor;
+    flex: none;
+    inline-size: var(--ch-icon-size);
+    vertical-align: middle;
+}

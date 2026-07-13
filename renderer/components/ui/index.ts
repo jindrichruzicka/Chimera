@@ -14,6 +14,8 @@ export { Drawer } from './Drawer';
 export type { DrawerPlacement, DrawerProps } from './Drawer';
 export { Heading } from './Heading';
 export type { HeadingLevel, HeadingProps, HeadingSize, HeadingTone } from './Heading';
+export { Icon } from './icons';
+export type { IconGlyph, IconName, IconProps } from './icons';
 export { IconButton } from './IconButton';
 export type { IconButtonProps } from './IconButton';
 export { Label } from './Label';

@@ -70,4 +70,14 @@ describe('DismissButton', () => {
         const hardcoded = css.replace(/var\([^)]+\)/g, '').match(/\b\d+px\b/g);
         expect(hardcoded).toBeNull();
     });
+
+    it('renders its glyph as a text span, never an svg (so IconButton svg sizing cannot reach it)', () => {
+        // Pins the boundary that lets IconButton's `.icon-button svg` rule size
+        // SVG glyphs without disturbing this button's `&times;` text glyph.
+        render(<DismissButton aria-label="Close" />);
+
+        const button = screen.getByRole('button', { name: 'Close' });
+        expect(button.querySelector('span')).not.toBeNull();
+        expect(button.querySelector('svg')).toBeNull();
+    });
 });

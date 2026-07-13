@@ -151,4 +151,33 @@ describe('IconButton', () => {
         // could clip into a stray sliver.
         expect(css).not.toContain('var(--ch-focus-ring-offset)');
     });
+
+    it('renders an svg glyph child while keeping the aria-label as the accessible name', () => {
+        render(
+            <IconButton aria-label="Chat">
+                <svg data-testid="glyph" viewBox="0 0 24 24" />
+            </IconButton>,
+        );
+
+        const button = screen.getByRole('button', { name: 'Chat' });
+        expect(button.querySelector('svg')).not.toBeNull();
+        // Icon-only control: the accessible name is the button's aria-label; the
+        // decorative svg exposes no name of its own.
+        expect(screen.queryByRole('img')).toBeNull();
+    });
+
+    it('sizes an svg glyph child via a token and colours it via currentColor', () => {
+        const svgRule = /\.icon-button svg\s*\{([^}]*)\}/s.exec(css)?.[1];
+
+        expect(svgRule).toBeDefined();
+        expect(svgRule).toContain('inline-size: var(--ch-icon-button-glyph-size)');
+        expect(svgRule).toContain('block-size: var(--ch-icon-button-glyph-size)');
+        expect(svgRule).toContain('fill: currentColor');
+        expect(tokensCss).toContain('--ch-icon-button-glyph-size:');
+        expect(tokensCss).toContain('--ch-size-icon:');
+    });
+
+    it('still sizes non-svg glyph children via font-size (text glyphs like DismissButton are unaffected)', () => {
+        expect(css).toContain('font-size: var(--ch-icon-button-font-size);');
+    });
 });

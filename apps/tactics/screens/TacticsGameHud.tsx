@@ -8,6 +8,8 @@ import {
     Caption,
     Divider,
     Drawer,
+    Icon,
+    IconButton,
     Panel,
     SaveGameButton,
     type BadgeVariant,
@@ -241,19 +243,22 @@ export function TacticsGameHud({
                 Closing the Drawer (toggle, close button, Escape, or backdrop) drives
                 the same state, keeping the toggle's expanded affordance in sync. */}
             <div data-testid="tactics-chat-dock" style={tacticsHudChatDockStyle}>
-                <Button
+                {/* Icon-only toggle: the chat-bubble glyph replaces the former
+                    "Chat"/"Hide chat" label, which now supplies the accessible
+                    name via aria-label (the decorative Icon carries none). Outlined
+                    (secondary) chrome matches the footer action buttons. */}
+                <IconButton
                     aria-controls={chatOpen ? TACTICS_CHAT_DRAWER_ID : undefined}
                     aria-expanded={chatOpen}
+                    aria-label={chatOpen ? t(HUD_KEYS.hideChat) : t(HUD_KEYS.chat)}
                     data-testid="tactics-chat-toggle"
                     onClick={() => {
                         setChatOpen((open) => !open);
                     }}
-                    size="sm"
-                    style={tacticsHudButtonStyle}
                     variant="secondary"
                 >
-                    {chatOpen ? t(HUD_KEYS.hideChat) : t(HUD_KEYS.chat)}
-                </Button>
+                    <Icon name="chat-bubble" />
+                </IconButton>
             </div>
             <Drawer
                 data-testid="tactics-chat-drawer"
@@ -360,9 +365,13 @@ const tacticsHudButtonStyle: CompactButtonStyle = {
 // owns its own placement so the engine shell stays agnostic and the board stays
 // fully clickable while chat is collapsed. The shared Drawer owns the expanded
 // chat surface's sizing and overlay, so the dock only anchors the corner toggle.
+// The trailing inset reuses the raised HUD Panel's own content-box inset —
+// horizontal padding (--ch-space-sm) plus its border (--ch-button-border-width) —
+// so the toggle's right edge lines up with the footer action row instead of
+// floating in the viewport gutter.
 const tacticsHudChatDockStyle: React.CSSProperties = {
     position: 'fixed',
-    insetInlineEnd: 'var(--ch-space-md)',
+    insetInlineEnd: 'calc(var(--ch-space-sm) + var(--ch-button-border-width))',
     insetBlockEnd: 'calc(var(--ch-space-xl) * 2)',
     display: 'flex',
     flexDirection: 'column',

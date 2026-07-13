@@ -240,6 +240,68 @@ describe('TacticsGameHud', () => {
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
     });
 
+    describe('in-match chat toggle (icon button)', () => {
+        it('is an icon-only outlined button showing the chat-bubble glyph, with no visible text', () => {
+            render(<TacticsGameHud {...makeHudProps()} />);
+
+            const toggle = screen.getByTestId('tactics-chat-toggle');
+            expect(toggle.querySelector('svg[data-ch-icon="chat-bubble"]')).not.toBeNull();
+            expect(toggle).not.toHaveTextContent('Chat');
+            // Outlined chrome shared with the footer secondary buttons.
+            expect(toggle).toHaveAttribute('data-ch-icon-button-variant', 'secondary');
+        });
+
+        it('takes its accessible name from aria-label and keeps the disclosure wiring', () => {
+            render(<TacticsGameHud {...makeHudProps()} />);
+
+            const toggle = screen.getByRole('button', { name: 'Chat' });
+            expect(toggle).toHaveAttribute('data-testid', 'tactics-chat-toggle');
+            expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        });
+
+        it('switches its accessible name to "Hide chat" when opened, staying icon-only', async () => {
+            render(<TacticsGameHud {...makeHudProps()} />);
+
+            fireEvent.click(screen.getByTestId('tactics-chat-toggle'));
+
+            const toggle = await screen.findByRole('button', { name: 'Hide chat' });
+            expect(toggle).toHaveAttribute('aria-expanded', 'true');
+            expect(toggle.querySelector('svg[data-ch-icon="chat-bubble"]')).not.toBeNull();
+            expect(toggle).not.toHaveTextContent('Hide chat');
+        });
+
+        it('labels the toggle from the active Czech bundle', () => {
+            baseRender(
+                <I18nProvider
+                    gameOverride={tacticsBundleCs}
+                    languages={TACTICS_LANGUAGES}
+                    locale="cs-CZ"
+                >
+                    <EscapeStackProvider>
+                        <TacticsGameHud {...makeHudProps()} />
+                    </EscapeStackProvider>
+                </I18nProvider>,
+            );
+
+            expect(screen.getByRole('button', { name: 'Chat' })).toHaveAttribute(
+                'data-testid',
+                'tactics-chat-toggle',
+            );
+            fireEvent.click(screen.getByTestId('tactics-chat-toggle'));
+            expect(screen.getByRole('button', { name: 'Skrýt chat' })).toBeTruthy();
+        });
+
+        it('aligns the toggle dock to the footer action row content edge (not the viewport gutter)', () => {
+            render(<TacticsGameHud {...makeHudProps()} />);
+
+            const style = screen.getByTestId('tactics-chat-dock').getAttribute('style') ?? '';
+            // Matches the raised Panel's content-box inset (padding --ch-space-sm +
+            // border --ch-button-border-width), not the old free-floating --ch-space-md.
+            expect(style).toContain('calc(var(--ch-space-sm) + var(--ch-button-border-width))');
+            expect(style).not.toContain('var(--ch-space-md)');
+        });
+    });
+
     it('renders engine controls with shared UI button primitives', () => {
         render(<TacticsGameHud {...makeHudProps()} />);
 

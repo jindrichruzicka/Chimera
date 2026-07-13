@@ -20,6 +20,21 @@
     width: var(--ch-icon-button-size);
 }
 
+/*
+ * An SVG glyph child (e.g. <Icon />) sizes to the button's own glyph token and
+ * inherits the button colour via currentColor. Scoped to `svg`, so it spares
+ * non-svg glyph children — DismissButton's <span>&times;</span> keeps sizing via
+ * the `font-size` above. Its (0,1,1) specificity intentionally wins over
+ * Icon.module.css's `.icon` (0,1,0); both resolve to --ch-size-icon by default,
+ * so an in-button glyph matches a standalone one.
+ */
+.icon-button svg {
+    block-size: var(--ch-icon-button-glyph-size);
+    fill: currentColor;
+    flex-shrink: 0;
+    inline-size: var(--ch-icon-button-glyph-size);
+}
+
 .icon-button:not(:disabled):hover {
     background: var(--ch-icon-button-bg-hover);
     border-color: var(--ch-icon-button-border-color-hover);
