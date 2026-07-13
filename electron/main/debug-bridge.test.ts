@@ -21,6 +21,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
     DEBUG_CHANNEL,
+    DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL,
     DEBUG_TOGGLE_INSPECTOR_CHANNEL,
     DEBUG_PUSH_CHANNEL,
 } from '@chimera-engine/simulation/foundation/constants.js';
@@ -97,6 +98,12 @@ class FakeIpcMain {
 
     emitToggle(): void {
         for (const listener of this.listeners.get(DEBUG_TOGGLE_INSPECTOR_CHANNEL) ?? []) {
+            listener();
+        }
+    }
+
+    emitTokenModeToggle(): void {
+        for (const listener of this.listeners.get(DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL) ?? []) {
             listener();
         }
     }
@@ -274,10 +281,11 @@ describe('startDebugBridge — startup', () => {
         expect(h.created).toHaveLength(0);
     });
 
-    it('registers the chimera:debug invoke handler and the toggle listener', () => {
+    it('registers the chimera:debug invoke handler and both toggle listeners', () => {
         const h = makeBridge();
         expect(h.ipc.handlers.has(DEBUG_CHANNEL)).toBe(true);
         expect(h.ipc.listeners.get(DEBUG_TOGGLE_INSPECTOR_CHANNEL) ?? []).toHaveLength(1);
+        expect(h.ipc.listeners.get(DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL) ?? []).toHaveLength(1);
     });
 });
 
@@ -431,49 +439,39 @@ describe('debug-bridge — request validation', () => {
         });
     });
 
-    it('SET_I18N_TOKEN_MODE ACKs and forwards the flag to the game renderer without an attached session', async () => {
+    it('toggle-i18n-token-mode flips the bridge-level flag and forwards each new value', () => {
         const tokenModeCalls: boolean[] = [];
         const h = makeBridge({ onI18nTokenModeChange: (enabled) => tokenModeCalls.push(enabled) });
-        const win = openInspector(h);
 
-        expect(
-            await invoke(h, win.webContents, { type: 'SET_I18N_TOKEN_MODE', enabled: true }),
-        ).toEqual({ type: 'ACK' });
-        expect(
-            await invoke(h, win.webContents, { type: 'SET_I18N_TOKEN_MODE', enabled: false }),
-        ).toEqual({ type: 'ACK' });
+        h.ipc.emitTokenModeToggle();
+        h.ipc.emitTokenModeToggle();
+        h.ipc.emitTokenModeToggle();
 
-        expect(tokenModeCalls).toEqual([true, false]);
+        expect(tokenModeCalls).toEqual([true, false, true]);
     });
 
-    it('SET_I18N_TOKEN_MODE ACKs even when no game-renderer sink is wired', async () => {
+    it('toggle-i18n-token-mode works without an Inspector window or attached session', () => {
+        const tokenModeCalls: boolean[] = [];
+        const h = makeBridge({ onI18nTokenModeChange: (enabled) => tokenModeCalls.push(enabled) });
+
+        h.ipc.emitTokenModeToggle();
+
+        expect(h.created).toHaveLength(0);
+        expect(tokenModeCalls).toEqual([true]);
+    });
+
+    it('toggle-i18n-token-mode is a no-op when no game-renderer sink is wired', () => {
+        const h = makeBridge();
+
+        expect(() => h.ipc.emitTokenModeToggle()).not.toThrow();
+    });
+
+    it('rejects the retired SET_I18N_TOKEN_MODE request as malformed', async () => {
         const h = makeBridge();
         const win = openInspector(h);
 
         expect(
-            await invoke(h, win.webContents, { type: 'SET_I18N_TOKEN_MODE', enabled: true }),
-        ).toEqual({ type: 'ACK' });
-    });
-
-    it('rejects SET_I18N_TOKEN_MODE from a foreign sender (Invariant #29)', async () => {
-        const tokenModeCalls: boolean[] = [];
-        const h = makeBridge({ onI18nTokenModeChange: (enabled) => tokenModeCalls.push(enabled) });
-        openInspector(h);
-        const foreign = new FakeWebContents();
-
-        expect(
-            (await invoke(h, foreign, { type: 'SET_I18N_TOKEN_MODE', enabled: true })).type,
-        ).toBe('ERROR');
-        expect(tokenModeCalls).toEqual([]);
-    });
-
-    it('rejects SET_I18N_TOKEN_MODE with a non-boolean enabled field', async () => {
-        const h = makeBridge();
-        const win = openInspector(h);
-
-        expect(
-            (await invoke(h, win.webContents, { type: 'SET_I18N_TOKEN_MODE', enabled: 'yes' }))
-                .type,
+            (await invoke(h, win.webContents, { type: 'SET_I18N_TOKEN_MODE', enabled: true })).type,
         ).toBe('ERROR');
     });
 
@@ -1007,7 +1005,7 @@ describe('debug-bridge — turn memento re-capture after rewind', () => {
 // ─── stop() ───────────────────────────────────────────────────────────────────
 
 describe('debug-bridge — stop', () => {
-    it('removes both IPC registrations and closes an open window', () => {
+    it('removes all IPC registrations and closes an open window', () => {
         const h = makeBridge();
         const win = openInspector(h);
 
@@ -1015,6 +1013,7 @@ describe('debug-bridge — stop', () => {
 
         expect(h.ipc.handlers.has(DEBUG_CHANNEL)).toBe(false);
         expect(h.ipc.listeners.get(DEBUG_TOGGLE_INSPECTOR_CHANNEL) ?? []).toHaveLength(0);
+        expect(h.ipc.listeners.get(DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL) ?? []).toHaveLength(0);
         expect(win.closeCalls).toBe(1);
     });
 });

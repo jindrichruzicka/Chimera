@@ -49,6 +49,12 @@ const ENGINE_INPUT_ACTIONS: readonly InputAction[] = [
         category: 'Engine',
         oneShot: true,
     },
+    {
+        id: 'engine:toggle-i18n-token-mode',
+        description: 'engine.actions.toggleI18nTokenMode',
+        category: 'Engine',
+        oneShot: true,
+    },
 ];
 
 export interface ProvidersProps {

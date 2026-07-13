@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DEBUG_TOGGLE_INSPECTOR_CHANNEL } from '@chimera-engine/simulation/foundation/constants.js';
+import {
+    DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL,
+    DEBUG_TOGGLE_INSPECTOR_CHANNEL,
+} from '@chimera-engine/simulation/foundation/constants.js';
 import {
     SYSTEM_CONNECTION_STATUS_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANNEL,
@@ -348,6 +351,28 @@ describe('createSystemApi', () => {
             const api = createSystemApi(stub.port);
 
             await expect(api.toggleDebugInspector()).resolves.toBeUndefined();
+        });
+    });
+
+    describe('toggleI18nTokenMode()', () => {
+        it('sends on the chimera:debug:toggle-i18n-token-mode channel and performs no invoke', async () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+
+            await api.toggleI18nTokenMode();
+
+            expect(stub.sends).toEqual([DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL]);
+            expect(stub.invocations).toEqual([]);
+        });
+
+        it('resolves without throwing when no IPC handler is registered (production no-op)', async () => {
+            // Same production contract as toggleDebugInspector: the debug
+            // bridge never starts outside debug mode, so the send targets an
+            // unregistered channel and must stay a harmless no-op.
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+
+            await expect(api.toggleI18nTokenMode()).resolves.toBeUndefined();
         });
     });
 });

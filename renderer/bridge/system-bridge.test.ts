@@ -24,6 +24,7 @@ describe('getSystemBridge', () => {
             onDeviceInfoChange: vi.fn(),
             onI18nTokenMode: vi.fn(),
             toggleDebugInspector: vi.fn(),
+            toggleI18nTokenMode: vi.fn(),
         } satisfies SystemAPI;
 
         expect(getSystemBridge({ __chimera: { system } })).toBe(system);

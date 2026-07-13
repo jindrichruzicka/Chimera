@@ -18,6 +18,7 @@ function makeBridge(
             onDeviceInfoChange: () => () => undefined,
             onI18nTokenMode: () => () => undefined,
             toggleDebugInspector: () => Promise.resolve(),
+            toggleI18nTokenMode: () => Promise.resolve(),
         },
     };
 }

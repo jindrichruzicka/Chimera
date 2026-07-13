@@ -97,31 +97,13 @@ describe('DebugInspectorPage', () => {
         expect(screen.getByTestId('action-log-panel')).toBeVisible();
     });
 
-    describe('Show translation tokens toggle', () => {
-        it('renders the toggle, unchecked by default', () => {
-            installPageBridge();
-            render(<DebugInspectorPage />);
+    it('renders no translation-token toggle (token mode moved to the global F4 hotkey)', () => {
+        installPageBridge();
+        render(<DebugInspectorPage />);
 
-            const toggle = screen.getByRole('switch', { name: 'Show translation tokens' });
-            expect(toggle).toBeInTheDocument();
-            expect(toggle).not.toBeChecked();
-        });
-
-        it('drives setI18nTokenMode when toggled on and off', async () => {
-            const user = userEvent.setup();
-            const api = installPageBridge();
-            render(<DebugInspectorPage />);
-
-            const toggle = screen.getByRole('switch', { name: 'Show translation tokens' });
-
-            await user.click(toggle);
-            expect(api.setI18nTokenMode).toHaveBeenLastCalledWith(true);
-            expect(toggle).toBeChecked();
-
-            await user.click(toggle);
-            expect(api.setI18nTokenMode).toHaveBeenLastCalledWith(false);
-            expect(toggle).not.toBeChecked();
-        });
+        expect(
+            screen.queryByRole('switch', { name: 'Show translation tokens' }),
+        ).not.toBeInTheDocument();
     });
 
     it('reveals the Performance panel when its tab is activated', async () => {

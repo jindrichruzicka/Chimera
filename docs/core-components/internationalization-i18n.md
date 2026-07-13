@@ -1,6 +1,6 @@
 ---
 title: 'Internationalization (i18n)'
-description: 'The renderer-only i18n runtime: I18nProvider, useTranslate(), the ICU-subset message formatter, the game override → engine English → raw fallback chain, the manifest languages opt-in, the registry translations seam, <LanguageSelector>, the gameplay.language settings field, and the debug token-mode toggle.'
+description: 'The renderer-only i18n runtime: I18nProvider, useTranslate(), the ICU-subset message formatter, the game override → engine English → raw fallback chain, the manifest languages opt-in, the registry translations seam, <LanguageSelector>, the gameplay.language settings field, and the F4 debug token-mode hotkey.'
 tags: [i18n, localization, translation, icu, renderer, invariants]
 ---
 
@@ -190,14 +190,17 @@ and input-action registration.
 
 ## Debug token-mode
 
-The Runtime Debug Layer (§4.12) exposes a **"Show translation tokens"** Inspector toggle that makes
-every `t()` call render its raw token in the game window — a translator-facing coverage audit. The
-round-trip is a cross-layer push:
+The Runtime Debug Layer (§4.12) exposes a global **F4 hotkey** that makes every `t()` call render
+its raw token in the game window — a translator-facing coverage audit. The handler
+(`I18nTokenModeToggle`, the `engine:toggle-i18n-token-mode` engine input action) mounts app-level in
+`AppShell` — not in `GameShell` — so token mode flips on every shell route (main menu, settings,
+lobby) as well as in-game. The round-trip is a cross-layer push:
 
-1. Inspector toggle → `bridge.api.setI18nTokenMode(enabled)` (`chimera:debug`, `SET_I18N_TOKEN_MODE`
-   — boolean only, Invariant #28; relayed bridge-level as a display concern, inheriting the
-   sender-validation of Invariant #29 and the debug gate of Invariant #27).
-2. Main pushes `chimera:system:i18n-token-mode` to the game window.
+1. F4 → `system.toggleI18nTokenMode()` — a data-free fire-and-forget send on
+   `chimera:debug:toggle-i18n-token-mode` (Invariant #28; same contract as the F9
+   `chimera:debug:toggle-inspector` send). The debug bridge owns the boolean and flips it per press
+   (debug gate of Invariant #27: in production nothing listens, the send is a true no-op).
+2. Main pushes the new value over `chimera:system:i18n-token-mode` to the game window.
 3. `DebugI18nBootstrap` updates `debugI18nStore.showTranslationTokens`.
 4. `TokenModeI18nProvider` forwards the flag to `<I18nProvider showTokens>` →
    `resolveTranslation(..., showTokens=true)` returns each raw key.

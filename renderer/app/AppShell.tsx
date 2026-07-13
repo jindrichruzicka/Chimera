@@ -5,6 +5,7 @@ import { ProfileRejectedToastBridge } from '../components/lobby/ProfileRejectedT
 import { ReplayExportToastBridge } from '../components/replay/ReplayExportToastBridge';
 import { ReplayNavigationBridge } from '../components/replay/ReplayNavigationBridge';
 import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusIndicator';
+import { I18nTokenModeToggle } from '../components/shell/debug/I18nTokenModeToggle';
 import { RestoreWaitingOverlay } from '../components/shell/RestoreWaitingOverlay';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { ScreenFadeRoot } from '../components/shell/ScreenFadeRoot';
@@ -28,8 +29,9 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                 {/*
                  * Opt-in i18n runtime. The TokenModeI18nProvider wrapper feeds
                  * <I18nProvider> the `showTokens` debug flag from debugI18nStore
-                 * (flipped by the Debug Inspector's "Show translation tokens"
-                 * toggle via DebugI18nBootstrap). With the flag off — its default,
+                 * (flipped by the global F4 hotkey — I18nTokenModeToggle —
+                 * round-tripped through the main-process debug bridge back into
+                 * DebugI18nBootstrap). With the flag off — its default,
                  * and always in production — it resolves engine English at zero
                  * cost, so single-language / no-i18n games are unaffected.
                  * Settings locale, declared languages, and the game override
@@ -49,6 +51,12 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                     <ScreenFadeRoot>
                         <GameRegistrationBootstrap />
                         <DebugI18nBootstrap />
+                        {/*
+                         * App-level (not GameShell) so F4 flips token mode on
+                         * every shell route — main menu, settings, lobby —
+                         * where the F9 Inspector toggle is unavailable.
+                         */}
+                        <I18nTokenModeToggle />
                         <LoggingBootstrap />
                         <SettingsBootstrap />
                         <LobbyStoreBootstrap />

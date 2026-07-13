@@ -16,6 +16,13 @@
 export const DEBUG_CHANNEL = 'chimera:debug';
 /** Data-free window-management send channel — no simulation data crosses it. */
 export const DEBUG_TOGGLE_INSPECTOR_CHANNEL = 'chimera:debug:toggle-inspector';
+/**
+ * Data-free display-command send channel: flips the game renderer's i18n
+ * token mode (raw tokens instead of translated strings) for translation
+ * auditing. The bridge owns the boolean and pushes each new value back to the
+ * game window over `chimera:system:i18n-token-mode`.
+ */
+export const DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL = 'chimera:debug:toggle-i18n-token-mode';
 /** Main → Inspector push channel carrying `LIVE_TICK` responses. */
 export const DEBUG_PUSH_CHANNEL = 'chimera:debug:push';
 

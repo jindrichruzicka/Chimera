@@ -59,6 +59,7 @@ import { z } from 'zod';
 import {
     DEBUG_CHANNEL,
     DEBUG_PUSH_CHANNEL,
+    DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL,
     DEBUG_TOGGLE_INSPECTOR_CHANNEL,
 } from '@chimera-engine/simulation/foundation/constants.js';
 import {
@@ -208,11 +209,11 @@ export interface StartDebugBridgeOptions {
      */
     readonly getNetworkDiagnostics?: () => NetworkDiagnostics;
     /**
-     * Sink for the data-free `SET_I18N_TOKEN_MODE` command: relays the boolean to
-     * the game renderer (the real wiring in `index.ts` sends it over the
+     * Sink for the data-free i18n token-mode toggle: relays the flipped boolean
+     * to the game renderer (the real wiring in `index.ts` sends it over the
      * `chimera:system:*` push channel to the main game window). Late-bound so the
      * game window need not exist at bridge-start time. Absent (e.g. unit harnesses)
-     * ⇒ the request still ACKs; the flip is simply a no-op.
+     * ⇒ the flip is simply a no-op.
      */
     readonly onI18nTokenModeChange?: (enabled: boolean) => void;
     /** Ring buffer capacity override (Invariant #30: always explicit-fixed). */
@@ -275,7 +276,6 @@ const debugRequestSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('GET_NETWORK_DIAGNOSTICS') }).strict(),
     z.object({ type: z.literal('SUBSCRIBE_LIVE') }).strict(),
     z.object({ type: z.literal('UNSUBSCRIBE_LIVE') }).strict(),
-    z.object({ type: z.literal('SET_I18N_TOKEN_MODE'), enabled: z.boolean() }).strict(),
 ]);
 
 // ─── Default Inspector window factory ─────────────────────────────────────────
@@ -452,6 +452,19 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
         });
     };
 
+    // ── i18n token mode (§4.39) ────────────────────────────────────────────
+    // Bridge-level boolean flipped by the game window's F4 hotkey
+    // (`chimera:debug:toggle-i18n-token-mode`, a data-free send — Invariant
+    // #28). The bridge owns the state so successive presses alternate even
+    // though the sender carries no payload; each new value flows back to the
+    // game renderer through the late-bound sink.
+    let i18nTokenModeEnabled = false;
+
+    const handleTokenModeToggle = (): void => {
+        i18nTokenModeEnabled = !i18nTokenModeEnabled;
+        onI18nTokenModeChange?.(i18nTokenModeEnabled);
+    };
+
     // ── chimera:debug request handling (Invariant #29) ─────────────────────
     const isInspectorSender = (event: DebugInvokeEvent): boolean =>
         inspectorWindow !== null &&
@@ -475,13 +488,7 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
         state: SessionState,
         request: Exclude<
             DebugRequest,
-            {
-                type:
-                    | 'SUBSCRIBE_LIVE'
-                    | 'UNSUBSCRIBE_LIVE'
-                    | 'GET_NETWORK_DIAGNOSTICS'
-                    | 'SET_I18N_TOKEN_MODE';
-            }
+            { type: 'SUBSCRIBE_LIVE' | 'UNSUBSCRIBE_LIVE' | 'GET_NETWORK_DIAGNOSTICS' }
         >,
     ): DebugResponse => {
         const { inspector, latestTick } = state;
@@ -546,12 +553,6 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
             subscribers.delete(event.sender.id);
             return { type: 'ACK' };
         }
-        // Token mode is a game-renderer display concern, unrelated to any
-        // attached session — relay it bridge-level, before the session gate.
-        if (parsed.data.type === 'SET_I18N_TOKEN_MODE') {
-            onI18nTokenModeChange?.(parsed.data.enabled);
-            return { type: 'ACK' };
-        }
         // Connection diagnostics are bridge-level (§6, §11): they read host/OS
         // facts, not session state, so they resolve while hosting in the lobby
         // before any game is running — served before the session gate below.
@@ -570,13 +571,7 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
         // absent (not undefined-assigned) keys so no assertion is needed.
         const request: Exclude<
             DebugRequest,
-            {
-                type:
-                    | 'SUBSCRIBE_LIVE'
-                    | 'UNSUBSCRIBE_LIVE'
-                    | 'GET_NETWORK_DIAGNOSTICS'
-                    | 'SET_I18N_TOKEN_MODE';
-            }
+            { type: 'SUBSCRIBE_LIVE' | 'UNSUBSCRIBE_LIVE' | 'GET_NETWORK_DIAGNOSTICS' }
         > =
             parsed.data.type === 'GET_ACTION_LOG'
                 ? {
@@ -596,6 +591,7 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
 
     ipcMain.handle(DEBUG_CHANNEL, handleDebugRequest);
     ipcMain.on(DEBUG_TOGGLE_INSPECTOR_CHANNEL, handleToggle);
+    ipcMain.on(DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL, handleTokenModeToggle);
 
     // ── Session bookkeeping ────────────────────────────────────────────────
     const recordSnapshot = (
@@ -759,6 +755,7 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
     const stop = (): void => {
         ipcMain.removeHandler(DEBUG_CHANNEL);
         ipcMain.removeListener(DEBUG_TOGGLE_INSPECTOR_CHANNEL, handleToggle);
+        ipcMain.removeListener(DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL, handleTokenModeToggle);
         if (inspectorWindow !== null && !inspectorWindow.isDestroyed()) {
             inspectorWindow.close();
         }

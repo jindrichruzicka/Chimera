@@ -499,6 +499,14 @@ describe('window.__chimera.system — contract', () => {
         expect(invokeCalls).toEqual([]);
     });
 
+    it('toggleI18nTokenMode() sends to chimera:debug:toggle-i18n-token-mode with no payload and resolves', async () => {
+        // Same data-free contract as toggleDebugInspector: the F4 hotkey send
+        // carries nothing; the flipped value comes back as a system push.
+        await expect(api.system.toggleI18nTokenMode()).resolves.toBeUndefined();
+        expect(sendCalls).toEqual([{ channel: 'chimera:debug:toggle-i18n-token-mode', args: [] }]);
+        expect(invokeCalls).toEqual([]);
+    });
+
     it('onConnectionStatus() registers on chimera:system:connection-status; Unsubscribe removes it', () => {
         const calls: unknown[] = [];
         const unsubscribe = api.system.onConnectionStatus((status) => {

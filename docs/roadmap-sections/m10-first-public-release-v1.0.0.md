@@ -73,8 +73,9 @@ persistence through the existing `gameplay.language` setting (§4.13). The engin
 base English bundle for its own strings; games may **override any engine token** (e.g.
 relabel the chat panel) and add their own. A `<LanguageSelector>` engine component (hidden
 by default; games place it where they want) and a settings **Language** field drive the
-choice, and a debug-inspector **"Show translation tokens"** toggle renders raw tokens for
-auditing. The runtime formats with an **ICU subset** (`{param}`, `{n, plural, …}`,
+choice, and a global **F4** debug hotkey renders raw tokens for auditing (shipped in #869
+as a debug-inspector toggle, moved to the app-wide hotkey in #874 so it also works outside
+a game). The runtime formats with an **ICU subset** (`{param}`, `{n, plural, …}`,
 `{g, select, …}`). **Tactics** fully adopts the system as the reference: English + Czech,
 all UI + game messages translated, Language as the first Gameplay settings entry.
 

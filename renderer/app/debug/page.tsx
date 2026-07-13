@@ -35,7 +35,7 @@ import { DiffViewPanel } from '../../components/debug/DiffViewPanel';
 import { NetworkPanel } from '../../components/debug/NetworkPanel';
 import { PerformancePanel } from '../../components/debug/PerformancePanel';
 import { ProjectionExplorerPanel } from '../../components/debug/ProjectionExplorerPanel';
-import { Caption, Tabs, Toggle } from '../../components/ui';
+import { Caption, Tabs } from '../../components/ui';
 
 type BridgeState =
     | { readonly kind: 'pending' }
@@ -59,17 +59,10 @@ const tabsStyle: React.CSSProperties = {
     minBlockSize: 0,
 };
 
-const controlRowStyle: React.CSSProperties = {
-    display: 'flex',
-    flex: '0 0 auto',
-    alignItems: 'center',
-};
-
 export default function DebugInspectorPage(): React.ReactElement {
     const [bridge, setBridge] = useState<BridgeState>({ kind: 'pending' });
     const [selectedTick, setSelectedTick] = useState<number | null>(null);
     const [activeTab, setActiveTab] = useState('actions');
-    const [showTokens, setShowTokens] = useState(false);
 
     useEffect(() => {
         const api = getDebugBridge();
@@ -104,72 +97,51 @@ export default function DebugInspectorPage(): React.ReactElement {
             )}
 
             {bridge.kind === 'ready' && (
-                <>
-                    {/*
-                     * Global display control (not per-panel): flips the game
-                     * renderer's i18n token mode so every translated string shows
-                     * its raw token, for auditing coverage. Data-free (a boolean),
-                     * relayed to the game window over the sanctioned debug surface
-                     * (Invariant #28).
-                     */}
-                    <div style={controlRowStyle}>
-                        <Toggle
-                            checked={showTokens}
-                            label="Show translation tokens"
-                            onCheckedChange={(next) => {
-                                setShowTokens(next);
-                                void bridge.api.setI18nTokenMode(next);
-                            }}
-                        />
-                    </div>
-                    <Tabs
-                        activeTabId={activeTab}
-                        ariaLabel="Inspector panels"
-                        onActiveTabChange={setActiveTab}
-                        style={tabsStyle}
-                        tabs={[
-                            {
-                                id: 'actions',
-                                label: 'Action Log',
-                                panel: (
-                                    <ActionLogPanel
-                                        api={bridge.api}
-                                        onEntriesLoaded={handleEntriesLoaded}
-                                        onNavigateToSnapshot={handleNavigateToSnapshot}
-                                        selectedTick={selectedTick}
-                                    />
-                                ),
-                            },
-                            {
-                                id: 'snapshot',
-                                label: 'Snapshot',
-                                panel: (
-                                    <ProjectionExplorerPanel
-                                        api={bridge.api}
-                                        selectedTick={selectedTick}
-                                    />
-                                ),
-                            },
-                            {
-                                id: 'diff',
-                                label: 'Diff',
-                                panel: (
-                                    <DiffViewPanel api={bridge.api} selectedTick={selectedTick} />
-                                ),
-                            },
-                            {
-                                id: 'performance',
-                                label: 'Performance',
-                                panel: <PerformancePanel api={bridge.api} />,
-                            },
-                            {
-                                id: 'network',
-                                label: 'Network',
-                                panel: <NetworkPanel api={bridge.api} />,
-                            },
-                        ]}
-                    />
-                </>
+                <Tabs
+                    activeTabId={activeTab}
+                    ariaLabel="Inspector panels"
+                    onActiveTabChange={setActiveTab}
+                    style={tabsStyle}
+                    tabs={[
+                        {
+                            id: 'actions',
+                            label: 'Action Log',
+                            panel: (
+                                <ActionLogPanel
+                                    api={bridge.api}
+                                    onEntriesLoaded={handleEntriesLoaded}
+                                    onNavigateToSnapshot={handleNavigateToSnapshot}
+                                    selectedTick={selectedTick}
+                                />
+                            ),
+                        },
+                        {
+                            id: 'snapshot',
+                            label: 'Snapshot',
+                            panel: (
+                                <ProjectionExplorerPanel
+                                    api={bridge.api}
+                                    selectedTick={selectedTick}
+                                />
+                            ),
+                        },
+                        {
+                            id: 'diff',
+                            label: 'Diff',
+                            panel: <DiffViewPanel api={bridge.api} selectedTick={selectedTick} />,
+                        },
+                        {
+                            id: 'performance',
+                            label: 'Performance',
+                            panel: <PerformancePanel api={bridge.api} />,
+                        },
+                        {
+                            id: 'network',
+                            label: 'Network',
+                            panel: <NetworkPanel api={bridge.api} />,
+                        },
+                    ]}
+                />
             )}
         </main>
     );

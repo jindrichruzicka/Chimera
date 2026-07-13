@@ -344,6 +344,7 @@ export const ACTIONS_KEYS = {
     toggleMenu: translationKey('engine.actions.toggleMenu'),
     togglePerfHud: translationKey('engine.actions.togglePerfHud'),
     toggleDebugInspector: translationKey('engine.actions.toggleDebugInspector'),
+    toggleI18nTokenMode: translationKey('engine.actions.toggleI18nTokenMode'),
 } as const;
 
 /** Cross-cutting UI primitives shared across surfaces. */

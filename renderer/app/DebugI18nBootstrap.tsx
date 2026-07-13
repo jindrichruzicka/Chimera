@@ -4,8 +4,8 @@
 //
 // Headless subscription wiring the debug i18n token-mode push to the renderer
 // store. On mount it subscribes to `system.onI18nTokenMode` — the main-process
-// debug bridge pushes the flag here after the Inspector's "Show translation
-// tokens" toggle changes — and flips `debugI18nStore.showTranslationTokens`,
+// debug bridge pushes the flag here after each F4 token-mode toggle
+// (I18nTokenModeToggle) — and flips `debugI18nStore.showTranslationTokens`,
 // which the TokenModeI18nProvider forwards to <I18nProvider showTokens>.
 //
 // In production the debug bridge never starts, so nothing is ever pushed and

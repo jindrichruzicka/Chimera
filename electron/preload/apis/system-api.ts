@@ -12,7 +12,10 @@
 // `chimera:debug*` channels (§4.12), shared with `debug-bridge.ts` so the
 // debug module graph never leaks into this preload (Invariant #27).
 
-import { DEBUG_TOGGLE_INSPECTOR_CHANNEL } from '@chimera-engine/simulation/foundation/constants.js';
+import {
+    DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL,
+    DEBUG_TOGGLE_INSPECTOR_CHANNEL,
+} from '@chimera-engine/simulation/foundation/constants.js';
 import type { ConnectionStatus, DeviceInfo, SystemAPI, Unsubscribe } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush, subscribeValidatedPush } from '../shared/listener.js';
@@ -45,7 +48,7 @@ export const SYSTEM_DEVICE_INFO_CHANGE_CHANNEL = 'chimera:system:device-info-cha
 /**
  * `ipcRenderer.on` target for {@link SystemAPI.onI18nTokenMode}. The main
  * process's debug bridge pushes the boolean flag via `webContents.send` on this
- * channel when the Inspector's "Show translation tokens" toggle changes. In
+ * channel after each `toggleI18nTokenMode()` send (the global F4 hotkey). In
  * production the debug bridge never starts, so nothing is ever pushed here and
  * the subscription is an idle no-op (Invariant #27).
  */
@@ -133,6 +136,11 @@ export function createSystemApi(ipc: SystemApiIpcPort, notifyQuit?: QuitNotifier
             // no-op — see the SystemAPI JSDoc for why this must never be an
             // `invoke`.
             ipc.send(DEBUG_TOGGLE_INSPECTOR_CHANNEL);
+            return Promise.resolve();
+        },
+        toggleI18nTokenMode: () => {
+            // Same fire-and-forget contract as toggleDebugInspector.
+            ipc.send(DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL);
             return Promise.resolve();
         },
     };

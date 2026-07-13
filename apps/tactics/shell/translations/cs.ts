@@ -293,6 +293,7 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.actions.toggleMenu': 'Přepnout herní menu',
     'engine.actions.togglePerfHud': 'Přepnout výkonnostní HUD',
     'engine.actions.toggleDebugInspector': 'Přepnout ladicí inspektor',
+    'engine.actions.toggleI18nTokenMode': 'Přepnout zobrazení překladových tokenů',
 
     // ── common ────────────────────────────────────────────────────────────────
     'engine.common.close': 'Zavřít',

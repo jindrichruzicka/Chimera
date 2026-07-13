@@ -304,6 +304,7 @@ export const engineBundleEn: TranslationBundle = {
     'engine.actions.toggleMenu': 'Toggle game menu',
     'engine.actions.togglePerfHud': 'Toggle performance HUD',
     'engine.actions.toggleDebugInspector': 'Toggle debug inspector',
+    'engine.actions.toggleI18nTokenMode': 'Toggle translation token display',
 
     // ── common ────────────────────────────────────────────────────────────────
     'engine.common.close': 'Close',

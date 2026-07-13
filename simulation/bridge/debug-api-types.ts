@@ -93,14 +93,6 @@ export interface ChimeraDebugApi {
     /** Stop live-tick pushes for this window (`UNSUBSCRIBE_LIVE` → `ACK`). */
     unsubscribeLive(): Promise<void>;
     /**
-     * Flip the game renderer's i18n token mode (`SET_I18N_TOKEN_MODE` → `ACK`):
-     * when `enabled`, every `useTranslate()` call in the game window renders its
-     * raw token instead of the translated string, for auditing translation
-     * coverage. Data-free (a boolean only, Invariant #28); the main bridge relays
-     * it to the game window over the sanctioned push channel.
-     */
-    setI18nTokenMode(enabled: boolean): Promise<void>;
-    /**
      * Listen for `LIVE_TICK` pushes on `chimera:debug:push`. Delivery also
      * requires an active {@link subscribeLive} registration on the main
      * side. Returns an {@link Unsubscribe} removing exactly this listener.

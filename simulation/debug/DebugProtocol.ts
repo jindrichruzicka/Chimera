@@ -112,11 +112,7 @@ export type DebugRequest =
     | { readonly type: 'GET_PERF_STATS' }
     | { readonly type: 'GET_NETWORK_DIAGNOSTICS' }
     | { readonly type: 'SUBSCRIBE_LIVE' }
-    | { readonly type: 'UNSUBSCRIBE_LIVE' }
-    // Data-free display command (Invariant #28): flip the game renderer's i18n
-    // token mode (raw tokens instead of translated strings) for translation
-    // auditing. Carries only a boolean; the bridge relays it to the game window.
-    | { readonly type: 'SET_I18N_TOKEN_MODE'; readonly enabled: boolean };
+    | { readonly type: 'UNSUBSCRIBE_LIVE' };
 
 /** Main → Inspector Window (responses + live pushes). */
 export type DebugResponse<TState extends BaseGameSnapshot = BaseGameSnapshot> =

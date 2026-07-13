@@ -1087,12 +1087,12 @@ export interface SystemAPI {
      */
     onDeviceInfoChange(cb: (info: DeviceInfo) => void): Unsubscribe;
     /**
-     * Fires when the Debug Inspector's "Show translation tokens" toggle changes
-     * (§4.12, Invariant #28 — a data-free boolean). The main-process debug bridge
-     * pushes it here after an Inspector `SET_I18N_TOKEN_MODE` request; the renderer
-     * flips its i18n token-mode flag. In production the bridge never starts, so
-     * this never fires and the flag stays `false` (Invariant #27). Returns an
-     * unsubscribe function.
+     * Fires when the i18n token mode changes (§4.12, Invariant #28 — a
+     * data-free boolean). The main-process debug bridge pushes the new value
+     * here after a `chimera:debug:toggle-i18n-token-mode` send (the global F4
+     * hotkey); the renderer flips its i18n token-mode flag. In production the
+     * bridge never starts, so this never fires and the flag stays `false`
+     * (Invariant #27). Returns an unsubscribe function.
      */
     onI18nTokenMode(cb: (enabled: boolean) => void): Unsubscribe;
     /**
@@ -1102,8 +1102,18 @@ export interface SystemAPI {
      * in production the send is a harmless no-op and the promise still
      * resolves. Must never become an `invoke`: that would reject with
      * "No handler registered" even in debug mode, where the listener is
-     * `on`, not `handle`. Invariant 28: this is the game renderer's ONLY
-     * debug-related surface, and it carries no data in either direction.
+     * `on`, not `handle`. Invariant 28: the game renderer's debug surface is
+     * only this and {@link toggleI18nTokenMode}, and neither carries data.
      */
     toggleDebugInspector(): Promise<void>;
+    /**
+     * Flip the game renderer's i18n token mode (§4.12, §4.39): every
+     * `useTranslate()` call renders its raw token instead of the translated
+     * string, for auditing translation coverage. Data-free fire-and-forget
+     * `send` on `chimera:debug:toggle-i18n-token-mode`, with the same
+     * production-no-op and never-an-`invoke` contract as
+     * {@link toggleDebugInspector}; the flipped value flows back via
+     * {@link onI18nTokenMode}.
+     */
+    toggleI18nTokenMode(): Promise<void>;
 }

@@ -1327,7 +1327,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }),
             // Late-bound like getNetworkDiagnostics: `mainWindow` is created
             // further below and only ever read here at IPC-request time. Relays
-            // the Inspector's token-mode toggle to the game window over the
+            // each F4 token-mode flip back to the game window over the
             // sanctioned system push channel (Invariant #28 — boolean only).
             onI18nTokenModeChange: (enabled) => {
                 const win = mainWindow;
