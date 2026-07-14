@@ -243,14 +243,14 @@ describe('TacticsGameHud', () => {
     });
 
     describe('in-match chat toggle (icon button)', () => {
-        it('is an icon-only outlined button showing the chat-bubble glyph, with no visible text', () => {
+        it('is a borderless icon-only button showing the chat-bubble glyph, with no visible text', () => {
             render(<TacticsGameHud {...makeHudProps()} />);
 
             const toggle = screen.getByTestId('tactics-chat-toggle');
             expect(toggle.querySelector('svg[data-ch-icon="chat-bubble"]')).not.toBeNull();
             expect(toggle).not.toHaveTextContent('Chat');
-            // Outlined chrome shared with the footer secondary buttons.
-            expect(toggle).toHaveAttribute('data-ch-icon-button-variant', 'secondary');
+            // Chrome-less ghost variant: no border, just the glyph over the board.
+            expect(toggle).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
         });
 
         it('takes its accessible name from aria-label and keeps the disclosure wiring', () => {

@@ -239,8 +239,8 @@ export function TacticsGameHud({
             <div className={styles['chat-dock']} data-testid="tactics-chat-dock">
                 {/* Icon-only toggle: the chat-bubble glyph replaces the former
                     "Chat"/"Hide chat" label, which now supplies the accessible
-                    name via aria-label (the decorative Icon carries none). Outlined
-                    (secondary) chrome matches the footer action buttons. */}
+                    name via aria-label (the decorative Icon carries none). Ghost
+                    (borderless) chrome so the glyph floats over the board. */}
                 <IconButton
                     aria-controls={chatOpen ? TACTICS_CHAT_DRAWER_ID : undefined}
                     aria-expanded={chatOpen}
@@ -249,7 +249,7 @@ export function TacticsGameHud({
                     onClick={() => {
                         setChatOpen((open) => !open);
                     }}
-                    variant="secondary"
+                    variant="ghost"
                 >
                     <Icon name="chat-bubble" />
                 </IconButton>
