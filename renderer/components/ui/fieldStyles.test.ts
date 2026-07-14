@@ -64,7 +64,7 @@ describe.each(fieldModules)(
 
         it('brightens the border on hover as an affordance', () => {
             expect(extractDeclarations(css, hoverSelector)).toContain(
-                'border-color: var(--ch-color-border-subtle)',
+                'border-color: var(--ch-color-border-strong)',
             );
         });
 

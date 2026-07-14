@@ -377,7 +377,7 @@ const tacticsHudChatDockStyle: React.CSSProperties = {
     flexDirection: 'column',
     alignItems: 'flex-end',
     gap: 'var(--ch-space-xs)',
-    zIndex: 1,
+    zIndex: 'var(--ch-z-raised)',
 };
 
 export default TacticsGameHud;

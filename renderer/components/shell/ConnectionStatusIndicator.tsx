@@ -84,7 +84,7 @@ export function ConnectionStatusIndicator(): React.ReactElement {
                 transition:
                     'background-color var(--ch-duration-fast) var(--ch-easing-standard), opacity var(--ch-duration-fast) var(--ch-easing-standard)',
                 pointerEvents: 'none',
-                zIndex: 1000,
+                zIndex: 'var(--ch-z-status)',
             }}
         />
     );

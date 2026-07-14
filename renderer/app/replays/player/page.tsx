@@ -70,10 +70,10 @@ const boardStyle: React.CSSProperties = { flex: '1 1 auto', minHeight: 0, positi
 const errorStyle: React.CSSProperties = {
     padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
     margin: 'var(--ch-space-md)',
-    background: 'var(--ch-color-error-surface-muted)',
-    border: 'var(--ch-border-width-sm) solid var(--ch-color-error-border-muted)',
+    background: 'var(--ch-color-error-surface)',
+    border: 'var(--ch-border-width-sm) solid var(--ch-color-error-border)',
     borderRadius: 'var(--ch-radius-sm)',
-    color: 'var(--ch-color-error-text-muted)',
+    color: 'var(--ch-color-error-text)',
 };
 
 function clamp(value: number, min: number, max: number): number {

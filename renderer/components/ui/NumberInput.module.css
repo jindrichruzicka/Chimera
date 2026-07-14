@@ -35,7 +35,7 @@
 }
 
 .control:hover:not(:disabled) {
-    border-color: var(--ch-color-border-subtle);
+    border-color: var(--ch-color-border-strong);
 }
 
 /* Single highlighted border; the transparent outline overlaps the border so
@@ -64,7 +64,7 @@
 }
 
 .error {
-    color: var(--ch-color-error);
+    color: var(--ch-color-error-text);
     font-size: var(--ch-font-size-sm);
     line-height: var(--ch-line-height-relaxed);
 }

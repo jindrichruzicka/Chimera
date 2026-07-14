@@ -11,13 +11,13 @@
     cursor: var(--ch-cursor-pointer, pointer);
     display: inline-flex;
     font-size: var(--ch-icon-button-font-size);
-    height: var(--ch-icon-button-size);
+    height: var(--ch-size-icon-button);
     justify-content: center;
     line-height: var(--ch-line-height-tight);
     padding: var(--ch-space-none);
     transition: var(--ch-icon-button-transition);
     user-select: none;
-    width: var(--ch-icon-button-size);
+    width: var(--ch-size-icon-button);
 }
 
 /*
@@ -39,6 +39,7 @@
     background: var(--ch-icon-button-bg-hover);
     border-color: var(--ch-icon-button-border-color-hover);
     box-shadow: var(--ch-icon-button-shadow-hover);
+    color: var(--ch-icon-button-color-hover);
 }
 
 .icon-button:not(:disabled):active {
@@ -49,6 +50,7 @@
     background: var(--ch-icon-button-bg-hover);
     border-color: var(--ch-focus-ring-color);
     box-shadow: var(--ch-icon-button-shadow-hover);
+    color: var(--ch-icon-button-color-hover);
     outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
     outline-offset: calc(var(--ch-focus-ring-width) * -1);
 }

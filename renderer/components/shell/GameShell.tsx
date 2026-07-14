@@ -529,7 +529,7 @@ const gameResultBannerStyle: React.CSSProperties = {
     display: 'grid',
     placeItems: 'center',
     fontSize: 'var(--ch-font-size-lg)',
-    fontWeight: 700,
+    fontWeight: 'var(--ch-font-weight-bold)',
     pointerEvents: 'none',
 };
 

@@ -70,7 +70,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                         <React.Suspense fallback={null}>
                             <ShellBackgroundHost />
                         </React.Suspense>
-                        <div style={{ position: 'relative', zIndex: 1 }}>
+                        <div style={{ position: 'relative', zIndex: 'var(--ch-z-raised)' }}>
                             <ConnectionStatusIndicator />
                             <RootErrorBoundary>{children}</RootErrorBoundary>
                             {/*

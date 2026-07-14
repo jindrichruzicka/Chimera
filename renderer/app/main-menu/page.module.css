@@ -6,9 +6,9 @@
 
 .component-gallery-icon {
     align-items: center;
-    block-size: var(--ch-icon-button-size);
+    block-size: var(--ch-size-icon-button);
     display: inline-flex;
-    inline-size: var(--ch-icon-button-size);
+    inline-size: var(--ch-size-icon-button);
     justify-content: center;
     line-height: var(--ch-line-height-tight);
     pointer-events: none;

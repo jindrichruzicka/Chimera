@@ -45,7 +45,7 @@
 .graphSvg {
     background: var(--ch-color-surface-raised);
     block-size: calc(var(--ch-space-xl) * 4);
-    border: var(--ch-border-width-sm) solid var(--ch-color-border-subtle);
+    border: var(--ch-border-width-sm) solid var(--ch-color-border-strong);
     border-radius: var(--ch-radius-sm);
     inline-size: 100%;
 }
@@ -57,6 +57,6 @@
 }
 
 .error {
-    color: var(--ch-color-error-text-muted);
+    color: var(--ch-color-error-text);
     margin: var(--ch-space-none);
 }

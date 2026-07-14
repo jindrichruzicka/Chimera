@@ -62,12 +62,14 @@ describe('Caption', () => {
 
     it('forwards token override styles', () => {
         render(
-            <Caption style={{ color: 'var(--ch-color-error)' }} tone="error">
+            <Caption style={{ color: 'var(--ch-color-error-text)' }} tone="error">
                 Missing field.
             </Caption>,
         );
 
-        expect(screen.getByText('Missing field.')).toHaveStyle({ color: 'var(--ch-color-error)' });
+        expect(screen.getByText('Missing field.')).toHaveStyle({
+            color: 'var(--ch-color-error-text)',
+        });
     });
 
     it('uses tokenized typography and tone styles', () => {
@@ -76,7 +78,7 @@ describe('Caption', () => {
         expect(css).toContain('font-size: var(--ch-font-size-sm);');
         expect(css).toContain('color: var(--ch-color-text-primary);');
         expect(css).toContain('color: var(--ch-color-text-secondary);');
-        expect(css).toContain('color: var(--ch-color-error);');
+        expect(css).toContain('color: var(--ch-color-error-text);');
         expect(css).toContain('color: var(--ch-color-success);');
     });
 

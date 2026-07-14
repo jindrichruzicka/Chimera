@@ -72,42 +72,60 @@ function expectNeutralToken(value: string, minLightness: number, maxLightness: n
     expect(color.lightness).toBeLessThanOrEqual(maxLightness);
 }
 
+function hexChannelToLinear(channel: number): number {
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(value: string): number {
+    const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/iu.exec(value);
+
+    if (!match) {
+        throw new Error(`Expected a six-digit hex color token, received ${value}`);
+    }
+
+    const [red, green, blue] = [match[1]!, match[2]!, match[3]!].map((channel) =>
+        hexChannelToLinear(hexChannelToNumber(channel)),
+    );
+
+    return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+}
+
+function contrastRatio(first: string, second: string): number {
+    const lighter = Math.max(relativeLuminance(first), relativeLuminance(second));
+    const darker = Math.min(relativeLuminance(first), relativeLuminance(second));
+
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
 const expectedTokens = [
     '--ch-color-surface',
     '--ch-color-surface-raised',
     '--ch-color-surface-overlay',
+    '--ch-color-surface-hover',
+    '--ch-color-surface-selected',
     '--ch-color-scrim',
     '--ch-color-overlay-backdrop',
     '--ch-color-accent',
     '--ch-color-accent-hover',
+    '--ch-color-accent-strong',
     '--ch-color-text-primary',
     '--ch-color-text-secondary',
     '--ch-color-text-disabled',
     '--ch-color-border',
-    '--ch-color-border-subtle',
+    '--ch-color-border-strong',
     '--ch-color-border-muted',
     '--ch-color-success',
     '--ch-color-success-border',
     '--ch-color-success-surface',
-    '--ch-color-success-surface-muted',
     '--ch-color-success-text',
-    '--ch-color-success-text-strong',
     '--ch-color-warning',
     '--ch-color-warning-border',
     '--ch-color-warning-surface',
     '--ch-color-warning-text',
     '--ch-color-error',
     '--ch-color-error-border',
-    '--ch-color-error-border-muted',
-    '--ch-color-error-border-strong',
     '--ch-color-error-surface',
-    '--ch-color-error-surface-muted',
-    '--ch-color-error-surface-soft',
-    '--ch-color-error-surface-strong',
     '--ch-color-error-text',
-    '--ch-color-error-text-muted',
-    '--ch-color-error-text-deep',
-    '--ch-color-error-text-strong',
     '--ch-color-transparent',
     '--ch-space-screen-reader',
     '--ch-space-status-padding-y',
@@ -133,9 +151,12 @@ const expectedTokens = [
     '--ch-font-size-md',
     '--ch-font-size-lg',
     '--ch-font-size-xl',
+    '--ch-font-weight-regular',
     '--ch-font-weight-semibold',
+    '--ch-font-weight-bold',
     '--ch-line-height-relaxed',
     '--ch-line-height-tight',
+    '--ch-line-height-none',
     '--ch-text-fill-top',
     '--ch-text-fill-bottom',
     '--ch-text-outline-width',
@@ -209,17 +230,17 @@ const expectedTokens = [
     '--ch-button-padding-md',
     '--ch-button-padding-lg',
     '--ch-opacity-disabled',
+    '--ch-opacity-soft',
     '--ch-opacity-full',
     '--ch-size-icon',
-    '--ch-icon-size',
     '--ch-size-icon-button',
-    '--ch-icon-button-size',
     '--ch-icon-button-radius',
     '--ch-icon-button-font-size',
     '--ch-icon-button-glyph-size',
     '--ch-icon-button-bg',
     '--ch-icon-button-bg-hover',
     '--ch-icon-button-color',
+    '--ch-icon-button-color-hover',
     '--ch-icon-button-border-color',
     '--ch-icon-button-border-color-hover',
     '--ch-icon-button-shadow',
@@ -250,11 +271,19 @@ const expectedTokens = [
     '--ch-cursor-default',
     '--ch-cursor-pointer',
     '--ch-cursor-disabled',
+    '--ch-z-base',
+    '--ch-z-raised',
     '--ch-z-tooltip',
     '--ch-z-modal',
+    '--ch-z-toast',
+    '--ch-z-status',
+    '--ch-z-scene-fade',
+    '--ch-z-screen-fade',
     '--ch-shadow-sm',
     '--ch-shadow-md',
     '--ch-shadow-lg',
+    '--ch-glow-accent',
+    '--ch-glow-danger',
     '--ch-duration-fast',
     '--ch-duration-normal',
     '--ch-duration-slow',
@@ -334,13 +363,11 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-drawer-slide-distance')).toBe('100%');
     });
 
-    it('uses a neutral engine shell palette for the default theme tokens', () => {
+    it('uses a neutral engine shell palette for the surface, text, and border tokens', () => {
         const css = readTokensCss();
         const surface = extractTokenValue(css, '--ch-color-surface');
         const raised = extractTokenValue(css, '--ch-color-surface-raised');
         const overlay = extractTokenValue(css, '--ch-color-surface-overlay');
-        const accent = extractTokenValue(css, '--ch-color-accent');
-        const accentHover = extractTokenValue(css, '--ch-color-accent-hover');
         const textPrimary = extractTokenValue(css, '--ch-color-text-primary');
         const textSecondary = extractTokenValue(css, '--ch-color-text-secondary');
         const border = extractTokenValue(css, '--ch-color-border');
@@ -348,29 +375,83 @@ describe('renderer design tokens', () => {
         expectNeutralToken(surface, 0.04, 0.1);
         expectNeutralToken(raised, 0.08, 0.16);
         expectNeutralToken(overlay, 0.12, 0.2);
-        expectNeutralToken(accent, 0.22, 0.34);
-        expectNeutralToken(accentHover, 0.28, 0.4);
         expectNeutralToken(textPrimary, 0.9, 1);
         expectNeutralToken(textSecondary, 0.55, 0.72);
         expectNeutralToken(border, 0.22, 0.34);
         expect(parseHexColor(surface).lightness).toBeLessThan(parseHexColor(raised).lightness);
         expect(parseHexColor(raised).lightness).toBeLessThan(parseHexColor(overlay).lightness);
-        expect(parseHexColor(accent).lightness).toBeLessThan(parseHexColor(accentHover).lightness);
     });
 
-    it('declares modern button shape and elevation tokens without changing palette tokens', () => {
+    it('gives the accent ramp a restrained cool tint distinct from the neutral borders', () => {
+        const css = readTokensCss();
+        const accent = parseHexColor(extractTokenValue(css, '--ch-color-accent'));
+        const accentHover = parseHexColor(extractTokenValue(css, '--ch-color-accent-hover'));
+        const accentStrong = parseHexColor(extractTokenValue(css, '--ch-color-accent-strong'));
+
+        // The accent is deliberately tinted (unlike the neutral shell) but stays
+        // restrained: a cool steel hue, never a saturated brand colour.
+        for (const color of [accent, accentHover, accentStrong]) {
+            expect(color.hue).toBeGreaterThanOrEqual(190);
+            expect(color.hue).toBeLessThanOrEqual(250);
+            expect(color.saturation).toBeGreaterThanOrEqual(0.15);
+            expect(color.saturation).toBeLessThanOrEqual(0.5);
+        }
+        expect(accent.lightness).toBeLessThan(accentHover.lightness);
+        expect(accentHover.lightness).toBeLessThan(accentStrong.lightness);
+    });
+
+    it('orders the z-index ladder from shell background to screen fade', () => {
+        const css = readTokensCss();
+        const ladder = [
+            '--ch-z-base',
+            '--ch-z-raised',
+            '--ch-z-tooltip',
+            '--ch-z-modal',
+            '--ch-z-toast',
+            '--ch-z-status',
+            '--ch-z-scene-fade',
+            '--ch-z-screen-fade',
+        ].map((token) => Number.parseInt(extractTokenValue(css, token), 10));
+
+        for (const [index, layer] of ladder.entries()) {
+            expect(Number.isNaN(layer)).toBe(false);
+            if (index > 0) expect(layer).toBeGreaterThan(ladder[index - 1]!);
+        }
+    });
+
+    it('declares modern button shape and elevation tokens', () => {
         const css = readTokensCss();
 
         expect(extractTokenValue(css, '--ch-button-radius')).toBe('var(--ch-radius-md)');
-        expect(extractTokenValue(css, '--ch-button-shadow')).toContain('rgba(0, 0, 0');
-        expect(extractTokenValue(css, '--ch-button-shadow-hover')).toContain('rgba(128, 128, 128');
+        expect(extractTokenValue(css, '--ch-button-shadow')).toBe('var(--ch-shadow-sm)');
+        expect(extractTokenValue(css, '--ch-button-shadow-hover')).toContain(
+            'var(--ch-glow-accent)',
+        );
         expect(extractTokenValue(css, '--ch-button-shadow-hover-danger')).toContain(
-            'rgba(220, 38, 38',
+            'var(--ch-glow-danger)',
         );
         expect(extractTokenValue(css, '--ch-button-transform')).toBe('scale(1)');
-        expect(extractTokenValue(css, '--ch-button-transform-hover')).toBe('scale(1.05)');
-        expect(extractTokenValue(css, '--ch-color-accent')).toBe('#3f3f46');
-        expect(extractTokenValue(css, '--ch-color-error')).toBe('#dc2626');
+        expect(extractTokenValue(css, '--ch-button-transform-hover')).toBe('scale(1.02)');
+        expect(extractTokenValue(css, '--ch-button-transform-active')).toBe('scale(0.98)');
+        expect(extractTokenValue(css, '--ch-color-accent')).toBe('#44607c');
+        expect(extractTokenValue(css, '--ch-color-error')).toBe('#cf2222');
+    });
+
+    it('brightens ghost and icon-button text on hover so chrome-less controls give feedback', () => {
+        const css = readTokensCss();
+
+        // Ghost stays chrome-less (no bg/border/shadow on hover), so the text
+        // itself must carry the hover cue: secondary tone at rest, primary on
+        // hover. Same for the icon-button glyph.
+        expect(extractTokenValue(css, '--ch-button-color-ghost')).toBe(
+            'var(--ch-color-text-secondary)',
+        );
+        expect(extractTokenValue(css, '--ch-button-color-ghost-hover')).toBe(
+            'var(--ch-color-text-primary)',
+        );
+        expect(extractTokenValue(css, '--ch-icon-button-color-hover')).toBe(
+            'var(--ch-color-text-primary)',
+        );
     });
 
     it('keeps the ghost variant chrome-less: transparent surfaces and no elevation', () => {
@@ -446,6 +527,76 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-button-padding-sm')).toBe('0.375rem 1.5rem');
         expect(extractTokenValue(css, '--ch-button-padding-md')).toBe('0.5rem 2rem');
         expect(extractTokenValue(css, '--ch-button-padding-lg')).toBe('0.75rem 2.5rem');
+    });
+
+    describe('WCAG contrast contract', () => {
+        const css = readTokensCss();
+        const token = (name: string): string => extractTokenValue(css, name);
+        const surfaces = [
+            '--ch-color-surface',
+            '--ch-color-surface-raised',
+            '--ch-color-surface-overlay',
+        ];
+
+        it('keeps primary and secondary text at AA on every shell surface', () => {
+            for (const surface of surfaces) {
+                expect(
+                    contrastRatio(token('--ch-color-text-primary'), token(surface)),
+                ).toBeGreaterThanOrEqual(4.5);
+                expect(
+                    contrastRatio(token('--ch-color-text-secondary'), token(surface)),
+                ).toBeGreaterThanOrEqual(4.5);
+            }
+        });
+
+        it('keeps primary text at AA on the accent, accent-hover, and error fills', () => {
+            for (const fill of [
+                '--ch-color-accent',
+                '--ch-color-accent-hover',
+                '--ch-color-error',
+            ]) {
+                expect(
+                    contrastRatio(token('--ch-color-text-primary'), token(fill)),
+                ).toBeGreaterThanOrEqual(4.5);
+            }
+        });
+
+        it('keeps semantic state text at AA on every shell surface and its own state surface', () => {
+            for (const state of ['success', 'warning', 'error'] as const) {
+                const text = token(`--ch-color-${state}-text`);
+                for (const surface of surfaces) {
+                    expect(contrastRatio(text, token(surface))).toBeGreaterThanOrEqual(4.5);
+                }
+                expect(
+                    contrastRatio(text, token(`--ch-color-${state}-surface`)),
+                ).toBeGreaterThanOrEqual(4.5);
+            }
+        });
+
+        it('keeps the strong accent legible as a graphical indicator against chrome', () => {
+            // Spinner segment vs its border ring, meter fill vs raised track:
+            // WCAG 1.4.11 non-text contrast.
+            expect(
+                contrastRatio(token('--ch-color-accent-strong'), token('--ch-color-border')),
+            ).toBeGreaterThanOrEqual(3);
+            expect(
+                contrastRatio(
+                    token('--ch-color-accent-strong'),
+                    token('--ch-color-surface-raised'),
+                ),
+            ).toBeGreaterThanOrEqual(3);
+        });
+
+        it('keeps semantic state borders visible against the raised surface', () => {
+            for (const state of ['success', 'warning', 'error'] as const) {
+                expect(
+                    contrastRatio(
+                        token(`--ch-color-${state}-border`),
+                        token('--ch-color-surface-raised'),
+                    ),
+                ).toBeGreaterThanOrEqual(2);
+            }
+        });
     });
 
     it('wires icon-button and toggle-button surfaces to the secondary button tokens', () => {

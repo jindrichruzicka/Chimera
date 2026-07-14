@@ -8,7 +8,7 @@
     pointer-events: none;
     position: fixed;
     right: var(--ch-space-md);
-    z-index: var(--ch-z-modal);
+    z-index: var(--ch-z-toast);
 }
 
 .toast {
@@ -62,7 +62,7 @@
 }
 
 .info {
-    --_toast-border-color: var(--ch-color-border-subtle);
+    --_toast-border-color: var(--ch-color-border-strong);
 }
 
 .success {

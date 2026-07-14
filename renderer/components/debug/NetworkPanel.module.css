@@ -60,6 +60,6 @@
 }
 
 .error {
-    color: var(--ch-color-error-text-muted);
+    color: var(--ch-color-error-text);
     margin: var(--ch-space-none);
 }

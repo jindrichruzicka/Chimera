@@ -84,7 +84,7 @@
 
 .conflict-status {
     align-items: center;
-    color: var(--ch-color-error);
+    color: var(--ch-color-error-text);
     display: flex;
     flex-wrap: wrap;
     font-size: var(--ch-font-size-sm);

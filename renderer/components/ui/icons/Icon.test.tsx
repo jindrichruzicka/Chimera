@@ -59,12 +59,11 @@ describe('Icon', () => {
 
     it('sizes via a token and colours via currentColor with no hardcoded values (invariant #86)', () => {
         expect(css).toContain('fill: currentColor');
-        expect(css).toContain('var(--ch-icon-size)');
+        expect(css).toContain('var(--ch-size-icon)');
         expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
         const hardcoded = css.replace(/var\([^)]+\)/g, '').match(/\b\d+px\b/g);
         expect(hardcoded).toBeNull();
 
         expect(tokensCss).toContain('--ch-size-icon:');
-        expect(tokensCss).toContain('--ch-icon-size: var(--ch-size-icon);');
     });
 });

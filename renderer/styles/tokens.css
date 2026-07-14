@@ -1,39 +1,49 @@
 :root {
+    /* ── Shell neutrals ──
+     * The engine shell stays a deliberately unbranded near-greyscale dark
+     * ladder (surface < raised < overlay). Hover/selected are translucent
+     * state layers so they compose over any surface tier — hover is a plain
+     * white veil, selected carries the accent tint. */
     --ch-color-surface: #111113;
     --ch-color-surface-raised: #1b1b1f;
     --ch-color-surface-overlay: #27272a;
+    --ch-color-surface-hover: rgba(244, 244, 245, 0.06);
+    --ch-color-surface-selected: rgba(125, 163, 201, 0.16);
     --ch-color-scrim: #000000;
     --ch-color-overlay-backdrop: #27272a;
-    --ch-color-accent: #3f3f46;
-    --ch-color-accent-hover: #52525b;
+    /* ── Accent ramp ──
+     * A restrained cool-steel tint — the one deliberate departure from the
+     * neutral shell, so interactive fills and indicators read against the
+     * grey chrome. accent/accent-hover carry text-primary at AA; the strong
+     * step is for graphical indicators (spinner segment, meter fills) that
+     * need 3:1 against borders and tracks. */
+    --ch-color-accent: #44607c;
+    --ch-color-accent-hover: #4d6c8c;
+    --ch-color-accent-strong: #7da3c9;
     --ch-color-text-primary: #f4f4f5;
     --ch-color-text-secondary: #a1a1aa;
     --ch-color-text-disabled: #71717a;
+    /* Border emphasis orders muted < border < strong. */
     --ch-color-border: #3f3f46;
-    --ch-color-border-subtle: #52525b;
+    --ch-color-border-strong: #52525b;
     --ch-color-border-muted: #27272a;
-    --ch-color-success: #16a34a;
-    --ch-color-success-border: #86efac;
-    --ch-color-success-surface: #f0fdf4;
-    --ch-color-success-surface-muted: #d4edda;
-    --ch-color-success-text: #166534;
-    --ch-color-success-text-strong: #155724;
+    /* ── Semantic states ──
+     * One symmetric dark-native quartet per state: base (fills that carry
+     * text-primary; warning is the amber exception and pairs with dark text),
+     * text (AA on every shell surface and on the state surface), surface
+     * (tinted box background), border (box boundary). */
+    --ch-color-success: #15803d;
+    --ch-color-success-border: #347a4f;
+    --ch-color-success-surface: #12261a;
+    --ch-color-success-text: #4ade80;
     --ch-color-warning: #d97706;
-    --ch-color-warning-border: #fcd34d;
-    --ch-color-warning-surface: #fffbeb;
-    --ch-color-warning-text: #92400e;
-    --ch-color-error: #dc2626;
-    --ch-color-error-border: #fca5a5;
-    --ch-color-error-border-muted: #f5c2c0;
-    --ch-color-error-border-strong: #f87171;
-    --ch-color-error-surface: #fef2f2;
-    --ch-color-error-surface-muted: #fdecea;
-    --ch-color-error-surface-soft: #f8d7da;
-    --ch-color-error-surface-strong: #fee2e2;
-    --ch-color-error-text: #991b1b;
-    --ch-color-error-text-muted: #611a15;
-    --ch-color-error-text-deep: #721c24;
-    --ch-color-error-text-strong: #7f1d1d;
+    --ch-color-warning-border: #996523;
+    --ch-color-warning-surface: #2a2012;
+    --ch-color-warning-text: #fbbf24;
+    --ch-color-error: #cf2222;
+    --ch-color-error-border: #8f3030;
+    --ch-color-error-surface: #2b1517;
+    --ch-color-error-text: #f58c8c;
     --ch-color-transparent: transparent;
 
     --ch-space-screen-reader: 1px;
@@ -63,7 +73,10 @@
     --ch-font-size-md: 14px;
     --ch-font-size-lg: 18px;
     --ch-font-size-xl: 24px;
+    --ch-font-weight-regular: 400;
     --ch-font-weight-semibold: 600;
+    --ch-font-weight-bold: 700;
+    --ch-line-height-none: 1;
     --ch-line-height-tight: 1.1;
     --ch-line-height-relaxed: 1.6;
 
@@ -103,8 +116,10 @@
     --ch-button-color-primary-hover: var(--ch-button-color-primary);
     --ch-button-color-secondary: var(--ch-color-text-primary);
     --ch-button-color-secondary-hover: var(--ch-button-color-secondary);
+    /* Ghost hover feedback lives in the text itself (chrome-less contract):
+       secondary tone at rest, primary on hover. */
     --ch-button-color-ghost: var(--ch-color-text-secondary);
-    --ch-button-color-ghost-hover: var(--ch-button-color-ghost);
+    --ch-button-color-ghost-hover: var(--ch-color-text-primary);
     --ch-button-color-danger: var(--ch-color-text-primary);
     --ch-button-color-danger-hover: var(--ch-button-color-danger);
 
@@ -137,15 +152,16 @@
     --ch-button-line-height-sm: 1.5rem;
     --ch-button-line-height-md: 1.75rem;
     --ch-button-line-height-lg: 2rem;
-    --ch-button-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-    --ch-button-shadow-hover: 0 25px 50px -12px rgba(128, 128, 128, 0.5);
-    --ch-button-shadow-hover-danger: 0 25px 50px -12px rgba(220, 38, 38, 0.5);
+    --ch-button-shadow: var(--ch-shadow-sm);
+    --ch-button-shadow-hover: var(--ch-shadow-md), var(--ch-glow-accent);
+    --ch-button-shadow-hover-danger: var(--ch-shadow-md), var(--ch-glow-danger);
     /* Ghost is a text-only button: no elevation in either state. */
     --ch-button-shadow-ghost: none;
     --ch-button-shadow-hover-ghost: var(--ch-button-shadow-ghost);
+    /* Subtle scale steps: lift on hover, settle on press. */
     --ch-button-transform: scale(1);
-    --ch-button-transform-hover: scale(1.05);
-    --ch-button-transform-active: scale(0.97);
+    --ch-button-transform-hover: scale(1.02);
+    --ch-button-transform-active: scale(0.98);
     --ch-button-transition:
         background-color var(--ch-duration-fast) var(--ch-easing-standard),
         border-color var(--ch-duration-fast) var(--ch-easing-standard),
@@ -161,19 +177,19 @@
     --ch-button-padding-md: 0.5rem 2rem;
     --ch-button-padding-lg: 0.75rem 2.5rem;
     --ch-opacity-disabled: 0.6;
+    --ch-opacity-soft: 0.4;
     --ch-opacity-full: 1;
 
     --ch-size-icon: 20px;
-    --ch-icon-size: var(--ch-size-icon);
 
     --ch-size-icon-button: 36px;
-    --ch-icon-button-size: var(--ch-size-icon-button);
     --ch-icon-button-radius: var(--ch-radius-md);
     --ch-icon-button-font-size: var(--ch-font-size-md);
     --ch-icon-button-glyph-size: var(--ch-size-icon);
     --ch-icon-button-bg: var(--ch-button-bg-secondary);
     --ch-icon-button-bg-hover: var(--ch-button-bg-secondary-hover);
     --ch-icon-button-color: var(--ch-color-text-secondary);
+    --ch-icon-button-color-hover: var(--ch-color-text-primary);
     --ch-icon-button-border-color: var(--ch-button-border-secondary);
     --ch-icon-button-border-color-hover: var(--ch-button-border-secondary-hover);
     --ch-icon-button-shadow: var(--ch-shadow-sm);
@@ -230,12 +246,26 @@
     --ch-cursor-pointer: pointer;
     --ch-cursor-disabled: not-allowed;
 
+    /* ── Z-index ladder ──
+     * The complete stacking contract, lowest to highest: shell background,
+     * raised in-page chrome (HUD docks, toggle thumbs), tooltip/popover,
+     * modal/drawer, toasts (must clear open modals), connection status
+     * (visible through everything interactive), scene fade, app screen fade. */
+    --ch-z-base: 0;
+    --ch-z-raised: 1;
     --ch-z-tooltip: 90;
     --ch-z-modal: 100;
+    --ch-z-toast: 110;
+    --ch-z-status: 120;
+    --ch-z-scene-fade: 130;
+    --ch-z-screen-fade: 140;
 
-    --ch-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
-    --ch-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.36);
-    --ch-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.44);
+    /* Layered ambient + key shadows; glows pair with them for hover accents. */
+    --ch-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.22);
+    --ch-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.26);
+    --ch-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.38), 0 12px 32px rgba(0, 0, 0, 0.32);
+    --ch-glow-accent: 0 0 16px rgba(77, 108, 140, 0.35);
+    --ch-glow-danger: 0 0 16px rgba(207, 34, 34, 0.35);
 
     --ch-duration-fast: 120ms;
     --ch-duration-normal: 250ms;

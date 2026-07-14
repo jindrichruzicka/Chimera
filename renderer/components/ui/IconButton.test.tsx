@@ -132,8 +132,9 @@ describe('IconButton', () => {
 
     it('uses a discrete icon button size token without fractional calc', () => {
         expect(tokensCss).toContain('--ch-size-icon-button:');
-        expect(tokensCss).toContain('--ch-icon-button-size: var(--ch-size-icon-button);');
-        expect(tokensCss).not.toContain('--ch-icon-button-size: calc(var(--ch-space-xl) * 0.9);');
+        expect(css).toContain('height: var(--ch-size-icon-button);');
+        expect(css).toContain('width: var(--ch-size-icon-button);');
+        expect(tokensCss).not.toContain('--ch-size-icon-button: calc(');
     });
 
     it('active transform token is a scale-down (not aliased to hover) for press affordance', () => {

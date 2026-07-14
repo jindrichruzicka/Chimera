@@ -40,7 +40,7 @@
 
 .table th,
 .table td {
-    border-block-end: var(--ch-border-width-sm) solid var(--ch-color-border-subtle);
+    border-block-end: var(--ch-border-width-sm) solid var(--ch-color-border-strong);
     padding: var(--ch-space-xs) var(--ch-space-sm);
 }
 
@@ -51,6 +51,6 @@
 }
 
 .error {
-    color: var(--ch-color-error-text-muted);
+    color: var(--ch-color-error-text);
     margin: var(--ch-space-none);
 }

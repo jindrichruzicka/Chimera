@@ -46,7 +46,7 @@
 
 .tab:not(:disabled):hover {
     background-color: var(--ch-color-surface-overlay);
-    border-color: var(--ch-color-border-subtle);
+    border-color: var(--ch-color-border-strong);
     color: var(--ch-color-text-primary);
 }
 
@@ -67,7 +67,7 @@
 
 .tab-active {
     background-color: var(--ch-color-surface-raised);
-    border-color: var(--ch-color-border-subtle);
+    border-color: var(--ch-color-border-strong);
     box-shadow: var(--ch-shadow-sm);
     color: var(--ch-color-text-primary);
 }

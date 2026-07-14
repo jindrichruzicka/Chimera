@@ -45,5 +45,5 @@ const transitionOverlayStyle: React.CSSProperties = {
     inset: 0,
     pointerEvents: 'none',
     backgroundColor: 'var(--ch-color-surface-overlay)',
-    zIndex: 9999,
+    zIndex: 'var(--ch-z-scene-fade)',
 };

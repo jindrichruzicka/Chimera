@@ -18,7 +18,7 @@ type LoadedShellBackground = Readonly<{
 const hostStyle = {
     position: 'fixed',
     inset: 'var(--ch-space-none)',
-    zIndex: 0,
+    zIndex: 'var(--ch-z-base)',
     pointerEvents: 'none',
     overflow: 'hidden',
     backgroundColor: 'var(--ch-color-surface)',

@@ -30,7 +30,7 @@ const screenFadeOverlayStyle: React.CSSProperties = {
     // (--ch-color-surface-overlay, the in-game overlay's colour, is dark-grey
     // #27272a — too light for a true fade-to-black, hence the dedicated token.)
     backgroundColor: 'var(--ch-color-scrim)',
-    // Just above the in-game TransitionOverlay (z-index 9999) so a route fade
-    // covers the game scene's own fade as well.
-    zIndex: 10000,
+    // --ch-z-screen-fade sits above the in-game TransitionOverlay's
+    // --ch-z-scene-fade so a route fade covers the game scene's own fade as well.
+    zIndex: 'var(--ch-z-screen-fade)',
 };

@@ -2,7 +2,7 @@
    shared chrome-less Modal — this module styles only the lobby content. */
 
 .error {
-    color: var(--ch-color-error);
+    color: var(--ch-color-error-text);
     font-size: var(--ch-font-size-md);
     line-height: var(--ch-line-height-tight);
 }

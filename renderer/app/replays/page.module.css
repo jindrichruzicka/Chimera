@@ -13,7 +13,7 @@
    tokens only). */
 .rowItem {
     align-items: center;
-    border-block-end: var(--ch-border-width-sm) solid var(--ch-color-border-subtle);
+    border-block-end: var(--ch-border-width-sm) solid var(--ch-color-border-strong);
     display: flex;
     gap: var(--ch-space-sm);
     padding-inline-end: var(--ch-space-md);
@@ -21,7 +21,7 @@
 }
 
 .rowItem:hover {
-    background: var(--ch-color-surface-raised);
+    background: var(--ch-color-surface-hover);
 }
 
 /* The open button fills the row; focus-visible draws the shared inset ring.
@@ -56,10 +56,10 @@
 }
 
 .error {
-    background: var(--ch-color-error-surface-muted);
-    border: var(--ch-border-width-sm) solid var(--ch-color-error-border-muted);
+    background: var(--ch-color-error-surface);
+    border: var(--ch-border-width-sm) solid var(--ch-color-error-border);
     border-radius: var(--ch-radius-sm);
-    color: var(--ch-color-error-text-muted);
+    color: var(--ch-color-error-text);
     margin-bottom: var(--ch-space-md);
     padding: calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md);
 }
