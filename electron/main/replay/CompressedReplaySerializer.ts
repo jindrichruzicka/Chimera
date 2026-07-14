@@ -133,6 +133,8 @@ interface EncodedPerspectiveReplay {
     readonly players: PerspectiveReplayFile['players'];
     readonly keyframeInterval: number;
     readonly frames: readonly EncodedFrame[];
+    /** Optional user-entered replay name, stamped at export. Absent when unnamed. */
+    readonly name?: string;
 }
 
 /** A plain (non-null, non-array) object — eligible for recursive diffing. */
@@ -304,6 +306,9 @@ export async function serializePerspectiveReplayCompressed(
         players: file.players,
         keyframeInterval,
         frames: encodeFrameStream(file.frames, keyframeInterval),
+        // Persist the user-entered name only when present, so an unnamed replay's
+        // envelope carries no `name` key.
+        ...(file.name !== undefined ? { name: file.name } : {}),
     };
     return gzipAsync(Buffer.from(JSON.stringify(envelope), 'utf8'));
 }
@@ -361,6 +366,9 @@ export async function deserializePerspectiveReplayCompressed(
         durationTicks: envelope.durationTicks,
         players: envelope.players,
         frames: decodeFrameStream(envelope.frames),
+        // Restore the user-entered name only when the envelope carried one, so an
+        // unnamed replay round-trips to a file with no `name` key.
+        ...(envelope.name !== undefined ? { name: envelope.name } : {}),
     };
 
     return parsePerspectiveReplayFile(assembled);

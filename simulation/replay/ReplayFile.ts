@@ -56,11 +56,14 @@ export interface ReplayPlayerMetadata {
  * Non-gameplay metadata recorded alongside the action log.
  * `recordedAt` is an ISO-8601 date string set at recording start.
  * `durationTicks` is an integer tick count (invariant #42).
+ * `name` is the optional user-entered replay name, supplied at export (the
+ * player's save icon), not at recording start — absent for unnamed/legacy files.
  */
 export interface ReplayMetadata {
     readonly recordedAt: string;
     readonly durationTicks: number;
     readonly players: readonly ReplayPlayerMetadata[];
+    readonly name?: string;
 }
 
 // ─── ReplayFile ───────────────────────────────────────────────────────────────
@@ -274,6 +277,15 @@ function validateMetadata(meta: Record<string, unknown>): void {
 
     for (let i = 0; i < players.length; i++) {
         validateReplayPlayerMetadata(players[i], i, 'metadata.players');
+    }
+
+    // Optional user-entered name (set at export). Absent is valid; present must
+    // be a string. Kept lenient on content so any legacy/unicode name round-trips.
+    const name = meta['name'];
+    if (name !== undefined && typeof name !== 'string') {
+        throw new ReplayParseError(
+            `metadata.name must be a string when present, got ${JSON.stringify(name)}`,
+        );
     }
 }
 

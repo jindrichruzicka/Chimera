@@ -31,6 +31,12 @@ import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
 
 const HOST_COLOR = 'green';
 
+// The reserved sentinel that opens the in-memory recording of the just-finished
+// match (mirrors `CURRENT_MATCH_REPLAY_PATH` in
+// `simulation/foundation/replay-bridge-contract.ts`; hardcoded here because the
+// Playwright spec runner does not resolve the `@chimera-engine/*` alias).
+const CURRENT_MATCH_REPLAY_PATH = '::chimera-current-match::';
+
 // Renderer bridge slice (window.__chimera) reached through page.evaluate. The
 // e2e root tsconfig is DOM-less, so only the fields this spec reads are typed.
 interface ReplaySetupSnapshot {
@@ -41,6 +47,7 @@ interface ReplaySetupSnapshot {
 interface ChimeraReplayGlobal {
     readonly __chimera: {
         readonly replay: {
+            openInPlayer(path: string, saveable: boolean): Promise<void>;
             snapshotAt(tick: number): Promise<ReplaySetupSnapshot>;
         };
     };
@@ -99,9 +106,28 @@ test.describe('Tactics replay initial colour', () => {
         await expect.poll(() => hostGame.activeScreenKey(), { timeout: 15_000 }).toBe('summary');
         await expect(hostGame.postGameSummary).toBeVisible();
 
-        await hostGame.replayButton.click();
+        // The post-game summary now opens the PERSPECTIVE player (host and client
+        // alike), but this regression is specific to the DETERMINISTIC replay's
+        // initial-frame reconstruction — a perspective replay stores already-projected
+        // frames and never reconstructs setup from `seed`. Open the deterministic
+        // in-memory recording directly through the still-exposed deterministic bridge
+        // (recorded in this non-packaged e2e build exactly as before).
+        await hostWindow.evaluate(
+            (sentinel) =>
+                (globalThis as unknown as ChimeraReplayGlobal).__chimera.replay.openInPlayer(
+                    sentinel,
+                    true,
+                ),
+            CURRENT_MATCH_REPLAY_PATH,
+        );
         const player = new ReplayPlayerPage(hostWindow);
         await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+        // Confirm the deterministic surface opened (exact match: the perspective
+        // group's label is a superstring of this one), so snapshotAt(0) below reads
+        // the reconstructed deterministic frame.
+        await expect(
+            hostWindow.getByRole('group', { name: 'Replay playback controls', exact: true }),
+        ).toBeVisible();
 
         // ── The regression guard ────────────────────────────────────────────────
         // The very first reconstructed replay frame (renderer tick 0 → the base

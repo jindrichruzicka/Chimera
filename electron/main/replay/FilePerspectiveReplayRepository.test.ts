@@ -145,7 +145,7 @@ describe('FilePerspectiveReplayRepository — integration', () => {
 
         const listed = await repo.list('tactics');
 
-        expect(listed).toStrictEqual([savedPath]);
+        expect(listed).toStrictEqual([{ path: savedPath }]);
     });
 
     it('delete rejects a path that escapes the perspective directory', async () => {

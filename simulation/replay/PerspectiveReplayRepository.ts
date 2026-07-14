@@ -32,6 +32,29 @@ import type { PerspectiveReplayFile } from './PerspectiveReplayFile.js';
 // rather than duplicated.
 export { ReplayNotFoundError } from './ReplayRepository.js';
 
+// ─── PerspectiveReplayListItem ────────────────────────────────────────────────
+
+/**
+ * One stored perspective replay projected for `list()`: the opaque storage
+ * `path` plus the optional user-entered `name`. Deliberately narrow — a
+ * perspective replay's per-frame `PlayerSnapshot`s and its `viewerId` are read
+ * only when it is opened (invariant #98), so the browser listing never carries
+ * them. The `name` is user metadata (set at export), not sensitive projected
+ * state, so surfacing it at list time is compatible with invariant #98.
+ *
+ * Reading it at list time is zero extra I/O: the file repository already
+ * deserializes each file to read `recordedAt` for the newest-first sort.
+ *
+ * Re-exported from `@chimera-engine/simulation/bridge/api-types` so the renderer
+ * and preload consume it through the bridge surface alongside {@link ReplayListItem}.
+ */
+export interface PerspectiveReplayListItem {
+    /** Opaque storage path (the same handle returned by `save()` / accepted by `load()`). */
+    readonly path: string;
+    /** Optional user-entered replay name; absent for unnamed/legacy files. */
+    readonly name?: string;
+}
+
 // ─── PerspectiveReplayRepository ──────────────────────────────────────────────
 
 /**
@@ -56,10 +79,12 @@ export interface PerspectiveReplayRepository {
     load(filePath: string): Promise<PerspectiveReplayFile>;
 
     /**
-     * List the stored perspective replay paths for `gameId`, sorted newest-first
-     * (by `recordedAt` descending, with a stable path tiebreak).
+     * List the stored perspective replays for `gameId` as {@link PerspectiveReplayListItem}s
+     * (`{ path, name? }`), sorted newest-first (by `recordedAt` descending, with a
+     * stable path tiebreak). The `name` is projected in the same single-pass read
+     * that computes the sort key — zero extra I/O.
      */
-    list(gameId: string): Promise<string[]>;
+    list(gameId: string): Promise<PerspectiveReplayListItem[]>;
 
     /**
      * Permanently delete the perspective replay at `filePath`.

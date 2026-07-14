@@ -343,6 +343,17 @@ describe('serializePerspectiveReplayCompressed', () => {
         expect(result).toStrictEqual(file);
     });
 
+    it('round-trips the user-entered top-level name', async () => {
+        const file = makePerspectiveFile(consecutiveFrames(5), { name: 'My Point of View' });
+
+        const result = await deserializePerspectiveReplayCompressed(
+            await serializePerspectiveReplayCompressed(file),
+        );
+
+        expect(result.name).toBe('My Point of View');
+        expect(result).toStrictEqual(file);
+    });
+
     it('round-trips frames carrying nested, array, and null variation', async () => {
         const frames: PerspectiveReplayFrame[] = [
             { tick: 0, snapshot: snap(0, { gameResult: null }) },

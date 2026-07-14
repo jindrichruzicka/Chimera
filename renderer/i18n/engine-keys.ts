@@ -185,9 +185,7 @@ export const REPLAYS_KEYS = {
     empty: translationKey('engine.replays.empty'),
     loadFailedError: translationKey('engine.replays.loadFailedError'),
     deterministicBadge: translationKey('engine.replays.deterministicBadge'),
-    perspectiveBadge: translationKey('engine.replays.perspectiveBadge'),
     ticksSuffix: translationKey('engine.replays.ticksSuffix'),
-    singleViewer: translationKey('engine.replays.singleViewer'),
     openDeterministicAriaLabel: translationKey('engine.replays.openDeterministicAriaLabel'),
     deleteDeterministicAriaLabel: translationKey('engine.replays.deleteDeterministicAriaLabel'),
     openPerspectiveAriaLabel: translationKey('engine.replays.openPerspectiveAriaLabel'),
@@ -210,6 +208,13 @@ export const REPLAYS_KEYS = {
     controlsGroupPerspective: translationKey('engine.replays.controlsGroupPerspective'),
     saveReplay: translationKey('engine.replays.saveReplay'),
     replaySavedLabel: translationKey('engine.replays.replaySavedLabel'),
+    // Save-name dialog (opened from the player's save icon).
+    saveDialogTitle: translationKey('engine.replays.saveDialogTitle'),
+    saveNameLabel: translationKey('engine.replays.saveNameLabel'),
+    saveCancel: translationKey('engine.replays.saveCancel'),
+    saveConfirm: translationKey('engine.replays.saveConfirm'),
+    // Fallback title for a replay with no stored name (also all legacy replays).
+    untitledReplay: translationKey('engine.replays.untitledReplay'),
     seekStart: translationKey('engine.replays.seekStart'),
     stepBack: translationKey('engine.replays.stepBack'),
     pause: translationKey('engine.replays.pause'),

@@ -8,14 +8,16 @@
 // boundary.
 
 import { describe, expect, it } from 'vitest';
+import { MAX_SAVE_LABEL_LENGTH } from '../api-types.js';
 import {
     ActionRejectionSchema,
     DeviceInfoSchema,
     LobbyInfoSchema,
-    PerspectiveReplayPathListSchema,
+    PerspectiveReplayListSchema,
     PerspectiveReplayPlaybackInfoSchema,
     PlatformInfoSchema,
     PreloadIpcValidationError,
+    ReplayListSchema,
     ResolvedSettingsSchema,
     RestoreStatusEventSchema,
     SaveSlotListSchema,
@@ -288,22 +290,70 @@ describe('PerspectiveReplayPlaybackInfoSchema', () => {
     });
 });
 
-describe('PerspectiveReplayPathListSchema', () => {
+describe('PerspectiveReplayListSchema', () => {
     it('accepts an empty array', () => {
-        expect(PerspectiveReplayPathListSchema.parse([])).toEqual([]);
+        expect(PerspectiveReplayListSchema.parse([])).toEqual([]);
     });
 
-    it('accepts an array of non-empty path strings', () => {
-        const paths = ['/p/a.chimera-perspective-replay', '/p/b.chimera-perspective-replay'];
-        expect(PerspectiveReplayPathListSchema.parse(paths)).toEqual(paths);
+    it('accepts items with an optional name (present and absent)', () => {
+        const items = [
+            { path: '/p/a.chimera-perspective-replay', name: 'My Point of View' },
+            { path: '/p/b.chimera-perspective-replay' },
+        ];
+        expect(PerspectiveReplayListSchema.parse(items)).toEqual(items);
     });
 
     it('rejects a non-array value', () => {
-        expect(() => PerspectiveReplayPathListSchema.parse('not-an-array')).toThrow();
+        expect(() => PerspectiveReplayListSchema.parse('not-an-array')).toThrow();
     });
 
-    it('rejects an array containing an empty string', () => {
-        expect(() => PerspectiveReplayPathListSchema.parse(['/p/a', ''])).toThrow();
+    it('rejects an item with an empty path', () => {
+        expect(() => PerspectiveReplayListSchema.parse([{ path: '' }])).toThrow();
+    });
+
+    it('rejects a bare string element (paths are no longer the item shape)', () => {
+        expect(() =>
+            PerspectiveReplayListSchema.parse(['/p/a.chimera-perspective-replay']),
+        ).toThrow();
+    });
+
+    it('degrades an over-long name to undefined instead of rejecting the whole list', () => {
+        // A crafted/legacy replay file could carry a name past the request-path
+        // bound; the response boundary must not ship it verbatim to the renderer,
+        // nor brick the whole list. The row falls back to "Untitled replay".
+        const [item] = PerspectiveReplayListSchema.parse([
+            {
+                path: '/p/a.chimera-perspective-replay',
+                name: 'x'.repeat(MAX_SAVE_LABEL_LENGTH + 1),
+            },
+        ]);
+        expect(item?.path).toBe('/p/a.chimera-perspective-replay');
+        expect(item?.name).toBeUndefined();
+    });
+});
+
+describe('ReplayListSchema', () => {
+    const baseItem = {
+        path: '/r/a.chimera-replay',
+        gameId: 'tactics',
+        gameVersion: '1.2.3',
+        engineVersion: '0.9.0',
+        recordedAt: '2026-07-14T12:00:00.000Z',
+        durationTicks: 42,
+        playerIds: ['alice', 'bob'],
+    };
+
+    it('accepts items with an optional name (present and absent)', () => {
+        const items = [{ ...baseItem, name: 'Grand Finale' }, { ...baseItem }];
+        expect(ReplayListSchema.parse(items)).toEqual(items);
+    });
+
+    it('degrades an over-long name to undefined instead of rejecting the whole list', () => {
+        const [item] = ReplayListSchema.parse([
+            { ...baseItem, name: 'x'.repeat(MAX_SAVE_LABEL_LENGTH + 1) },
+        ]);
+        expect(item?.path).toBe(baseItem.path);
+        expect(item?.name).toBeUndefined();
     });
 });
 

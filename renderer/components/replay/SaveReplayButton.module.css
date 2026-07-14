@@ -1,0 +1,27 @@
+/*
+ * The save icon sits at the far left of the transport bar, set slightly apart
+ * from the playback controls so it reads as a distinct action rather than another
+ * transport key. Moved here (from ReplayControls.module.css) alongside the
+ * IconButton it styles.
+ */
+.save {
+    flex: 0 0 auto;
+    margin-inline-end: var(--ch-space-xs);
+}
+
+/*
+ * Hover and keyboard focus swap the glyph to the ghost-hover colour so the save
+ * icon lights up like the ghost transport buttons beside it (accent in tactics,
+ * a no-op wherever the game leaves ghost-hover equal to the resting colour). The
+ * icon-button transition already animates `color`, so the shift fades in.
+ */
+.save:hover,
+.save:focus-visible {
+    --ch-icon-button-color: var(--ch-button-color-ghost-hover);
+}
+
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-sm);
+}

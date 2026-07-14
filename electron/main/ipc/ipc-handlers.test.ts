@@ -121,6 +121,7 @@ import type {
     EngineAction,
     HostLobbyParams,
     JoinLobbyParams,
+    PerspectiveReplayListItem,
     PerspectiveReplayPlaybackInfo,
     PlayerProfile,
     PlayerSnapshot,
@@ -2770,10 +2771,22 @@ describe('registerReplayHandlers', () => {
             });
 
             const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
-            await Promise.resolve(handler?.({}, 'save'));
+            await Promise.resolve(handler?.({}, { intent: 'save' }));
 
             expect(notifyExported).toHaveBeenCalledOnce();
             expect(notifyExported).toHaveBeenCalledWith(saved);
+        });
+
+        it('forwards the user-entered name to exportCurrentMatch', async () => {
+            const stub = makeReplayIpcMainStub();
+            const saved = nodePath.join(REPLAY_DIR, 'tactics', 'saved.chimera-replay');
+            const exportCurrentMatch = vi.fn((_name?: string) => Promise.resolve(saved));
+            registerReplay({ ipcMain: stub.ipcMain, exportCurrentMatch });
+
+            const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
+            await Promise.resolve(handler?.({}, { intent: 'save', name: 'Grand Finale' }));
+
+            expect(exportCurrentMatch).toHaveBeenCalledWith('Grand Finale');
         });
 
         it('does NOT push notifyExported when the intent is "view" but still resolves the saved path', async () => {
@@ -2788,7 +2801,7 @@ describe('registerReplayHandlers', () => {
 
             const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
             // The view path still needs the returned path for `openInPlayer`.
-            await expect(Promise.resolve(handler?.({}, 'view'))).resolves.toBe(saved);
+            await expect(Promise.resolve(handler?.({}, { intent: 'view' }))).resolves.toBe(saved);
 
             expect(notifyExported).not.toHaveBeenCalled();
         });
@@ -3229,21 +3242,28 @@ describe('registerPerspectiveReplayHandlers', () => {
     describe('chimera:replay:perspective:list', () => {
         it('validates the gameId and delegates to replay.list', async () => {
             const stub = makeReplayIpcMainStub();
-            const paths = [
-                nodePath.join(PERSPECTIVE_REPLAY_DIR, 'tactics', 'a.chimera-perspective-replay'),
+            const items: PerspectiveReplayListItem[] = [
+                {
+                    path: nodePath.join(
+                        PERSPECTIVE_REPLAY_DIR,
+                        'tactics',
+                        'a.chimera-perspective-replay',
+                    ),
+                    name: 'My Point of View',
+                },
             ];
             registerPerspectiveReplay({
                 ipcMain: stub.ipcMain,
-                replay: { ...makeNoopPerspectiveReplayPort(), list: () => Promise.resolve(paths) },
+                replay: { ...makeNoopPerspectiveReplayPort(), list: () => Promise.resolve(items) },
             });
 
             const handler = stub.handled.get(PERSPECTIVE_REPLAY_LIST_CHANNEL);
-            await expect(Promise.resolve(handler?.({}, 'tactics'))).resolves.toStrictEqual(paths);
+            await expect(Promise.resolve(handler?.({}, 'tactics'))).resolves.toStrictEqual(items);
         });
 
         it('rejects a malformed gameId before touching the port', () => {
             const stub = makeReplayIpcMainStub();
-            const list = vi.fn(() => Promise.resolve([] as string[]));
+            const list = vi.fn(() => Promise.resolve([] as PerspectiveReplayListItem[]));
             registerPerspectiveReplay({
                 ipcMain: stub.ipcMain,
                 replay: { ...makeNoopPerspectiveReplayPort(), list },
@@ -3270,6 +3290,22 @@ describe('registerPerspectiveReplayHandlers', () => {
 
             const handler = stub.handled.get(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL);
             await expect(Promise.resolve(handler?.({}))).resolves.toBe(saved);
+        });
+
+        it('forwards the user-entered name to exportCurrent', async () => {
+            const stub = makeReplayIpcMainStub();
+            const saved = nodePath.join(
+                PERSPECTIVE_REPLAY_DIR,
+                'tactics',
+                'saved.chimera-perspective-replay',
+            );
+            const exportCurrent = vi.fn((_name?: string) => Promise.resolve(saved));
+            registerPerspectiveReplay({ ipcMain: stub.ipcMain, exportCurrent });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL);
+            await Promise.resolve(handler?.({}, { name: 'Client POV' }));
+
+            expect(exportCurrent).toHaveBeenCalledWith('Client POV');
         });
 
         it('rejects when there is no active perspective recording', async () => {

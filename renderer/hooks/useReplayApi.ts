@@ -17,6 +17,7 @@
 
 import { useMemo } from 'react';
 import type {
+    PerspectiveReplayListItem,
     PerspectiveReplayPlaybackInfo,
     PlayerSnapshot,
     ReplayAPI,
@@ -59,15 +60,16 @@ export function getReplayBridge(source: unknown = globalThis): ReplayAPI | null 
  * `closePlayback`.
  */
 export interface PerspectiveReplayApi {
-    list(gameId: string): Promise<string[]>;
+    list(gameId: string): Promise<PerspectiveReplayListItem[]>;
     /**
      * Finalise the joined client's retained perspective recording and resolve with
      * the saved path — the SOLE persistence gate (the match is not written at
      * game-over). Idempotent: a repeat save press returns the same path. Backs the
      * replay player's save icon for a perspective replay opened from the post-game
-     * summary; rejects when no session is active.
+     * summary; rejects when no session is active. `name` (optional) is the
+     * user-entered replay name from the save dialog.
      */
-    exportCurrent(): Promise<string>;
+    exportCurrent(name?: string): Promise<string>;
     openPlayback(path: string): Promise<PerspectiveReplayPlaybackInfo>;
     snapshotAt(tick: number): Promise<PlayerSnapshot>;
     closePlayback(): Promise<void>;
@@ -83,9 +85,10 @@ export interface ReplayApi {
      * inline error by the post-game summary actions.
      *
      * `intent` (default `'save'`) gates the "Replay saved" toast: `'save'`
-     * raises it, `'view'` suppresses it. See {@link ReplayExportIntent}.
+     * raises it, `'view'` suppresses it. See {@link ReplayExportIntent}. `name`
+     * (optional) is the user-entered replay name from the save dialog.
      */
-    exportCurrentMatch(intent?: ReplayExportIntent): Promise<string>;
+    exportCurrentMatch(intent?: ReplayExportIntent, name?: string): Promise<string>;
     openInPlayer(path: string): Promise<void>;
     delete(path: string): Promise<void>;
     onNavigate(listener: (payload: ReplayNavigatePayload) => void): Unsubscribe;
@@ -127,8 +130,10 @@ export function useReplayApi(): ReplayApi {
             // promise (mirrors `useSavesApi`); `onNavigate` stays synchronous
             // because it must return an `Unsubscribe` immediately.
             list: async (gameId: string): Promise<ReplayListItem[]> => requireBridge().list(gameId),
-            exportCurrentMatch: async (intent?: ReplayExportIntent): Promise<string> =>
-                requireBridge().exportCurrentMatch(intent),
+            exportCurrentMatch: async (
+                intent?: ReplayExportIntent,
+                name?: string,
+            ): Promise<string> => requireBridge().exportCurrentMatch(intent, name),
             openInPlayer: async (path: string): Promise<void> => requireBridge().openInPlayer(path),
             delete: async (path: string): Promise<void> => requireBridge().delete(path),
             onNavigate: (listener: (payload: ReplayNavigatePayload) => void): Unsubscribe =>
@@ -143,10 +148,10 @@ export function useReplayApi(): ReplayApi {
                 requireBridge().snapshotRange(from, to),
             closePlayback: async (): Promise<void> => requireBridge().closePlayback(),
             perspective: {
-                list: async (gameId: string): Promise<string[]> =>
+                list: async (gameId: string): Promise<PerspectiveReplayListItem[]> =>
                     requireBridge().perspective.list(gameId),
-                exportCurrent: async (): Promise<string> =>
-                    requireBridge().perspective.exportCurrent(),
+                exportCurrent: async (name?: string): Promise<string> =>
+                    requireBridge().perspective.exportCurrent(name),
                 openPlayback: async (path: string): Promise<PerspectiveReplayPlaybackInfo> =>
                     requireBridge().perspective.openPlayback(path),
                 snapshotAt: async (tick: number): Promise<PlayerSnapshot> =>

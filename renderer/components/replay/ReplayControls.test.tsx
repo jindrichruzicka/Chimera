@@ -6,17 +6,22 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider';
+import { EscapeStackProvider } from '../shell/EscapeStack';
 import { ReplayControls } from './ReplayControls';
 import css from './ReplayControls.module.css?raw';
 
 // The controls render their labels through `useTranslate()`, which throws
-// outside an I18nProvider; wrap every render.
+// outside an I18nProvider; wrap every render. The save affordance's name dialog
+// (a shared Modal) routes Escape through the overlay stack, so an
+// EscapeStackProvider is required too (useEscapeLayer throws otherwise).
 function render(
     ui: React.ReactElement,
     gameOverride?: Record<string, string>,
 ): ReturnType<typeof baseRender> {
     return baseRender(
-        <I18nProvider {...(gameOverride === undefined ? {} : { gameOverride })}>{ui}</I18nProvider>,
+        <I18nProvider {...(gameOverride === undefined ? {} : { gameOverride })}>
+            <EscapeStackProvider>{ui}</EscapeStackProvider>
+        </I18nProvider>,
     );
 }
 
@@ -45,7 +50,7 @@ function renderControls(
         isPlaying: boolean;
         playbackSpeed: number;
         kind: 'deterministic' | 'perspective';
-        save: { onSave: () => void; saving: boolean; saved: boolean };
+        save: { onSave: (name: string) => void; saving: boolean; saved: boolean };
     }> = {},
     handlers: Handlers = makeHandlers(),
     gameOverride?: Record<string, string>,
@@ -189,7 +194,7 @@ describe('ReplayControls', () => {
             expect(screen.queryByTestId('replay-save-btn')).toBeNull();
         });
 
-        it('renders a save icon and calls onSave when clicked', async () => {
+        it('renders a save icon that opens the name dialog and calls onSave on confirm', async () => {
             const onSave = vi.fn();
             renderControls({ save: { onSave, saving: false, saved: false } });
 
@@ -200,8 +205,15 @@ describe('ReplayControls', () => {
             // The affordance is the registry save glyph, not an emoji fallback.
             expect(button.querySelector('svg[data-ch-icon="save"]')).not.toBeNull();
 
+            // Clicking opens the name dialog (it does NOT save directly);
+            // confirming then persists with the entered (here empty) name.
             await userEvent.click(button);
+            expect(screen.getByTestId('replay-save-name-dialog')).toBeInTheDocument();
+            expect(onSave).not.toHaveBeenCalled();
+
+            await userEvent.click(screen.getByTestId('replay-save-name-confirm'));
             expect(onSave).toHaveBeenCalledOnce();
+            expect(onSave).toHaveBeenCalledWith('');
         });
 
         it('disables the save icon while saving', () => {
@@ -217,15 +229,6 @@ describe('ReplayControls', () => {
             const button = screen.getByRole('button', { name: /replay saved/i });
             expect(button).toBeDisabled();
             expect(screen.queryByRole('button', { name: /^save replay$/i })).toBeNull();
-        });
-
-        it('shifts the save icon to the ghost-hover colour on hover and keyboard focus', () => {
-            // Mirrors the ghost transport buttons beside it: the icon colour swaps
-            // to the game's ghost-hover token (accent in tactics) on hover/focus.
-            const rule = /\.save:hover,\s*\.save:focus-visible\s*\{([^}]*)\}/s.exec(css)?.[1];
-
-            expect(rule).toBeDefined();
-            expect(rule).toContain('--ch-icon-button-color: var(--ch-button-color-ghost-hover)');
         });
 
         it('CSS carries no hardcoded colour values (invariant #86)', () => {

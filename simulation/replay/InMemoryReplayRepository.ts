@@ -53,6 +53,9 @@ export class InMemoryReplayRepository implements ReplayRepository {
             recordedAt: file.metadata.recordedAt,
             durationTicks: file.metadata.durationTicks,
             playerIds: file.metadata.players.map((p) => p.playerId),
+            // Project the user-entered name only when present, so an unnamed
+            // replay yields no `name` key rather than `name: undefined`.
+            ...(file.metadata.name !== undefined ? { name: file.metadata.name } : {}),
         }));
         return Promise.resolve(items);
     }

@@ -40,11 +40,14 @@ function makeIpcStub(): {
 
 describe('createPerspectiveReplayApi', () => {
     describe('list()', () => {
-        it('invokes chimera:replay:perspective:list with the gameId and resolves to the paths', async () => {
+        it('invokes chimera:replay:perspective:list with the gameId and resolves to the items', async () => {
             const stub = makeIpcStub();
             const expected = [
-                '/perspective-replays/tactics/a.chimera-perspective-replay',
-                '/perspective-replays/tactics/b.chimera-perspective-replay',
+                {
+                    path: '/perspective-replays/tactics/a.chimera-perspective-replay',
+                    name: 'My Point of View',
+                },
+                { path: '/perspective-replays/tactics/b.chimera-perspective-replay' },
             ];
             stub.invokeResults.set(PERSPECTIVE_REPLAY_LIST_CHANNEL, expected);
             const api = createPerspectiveReplayApi(stub.port);
@@ -67,7 +70,7 @@ describe('createPerspectiveReplayApi', () => {
     });
 
     describe('exportCurrent()', () => {
-        it('invokes chimera:replay:perspective:export-current with no argument and resolves to the saved path', async () => {
+        it('invokes chimera:replay:perspective:export-current with an empty payload and resolves to the saved path', async () => {
             const stub = makeIpcStub();
             stub.invokeResults.set(
                 PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
@@ -77,10 +80,29 @@ describe('createPerspectiveReplayApi', () => {
 
             const result = await api.exportCurrent();
 
+            // No name → an empty payload; main fail-safe-defaults it to unnamed.
             expect(stub.invocations).toEqual([
-                { channel: PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL, args: [] },
+                { channel: PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL, args: [{}] },
             ]);
             expect(result).toBe('/perspective-replays/tactics/a.chimera-perspective-replay');
+        });
+
+        it('carries the user-entered name in the export payload', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(
+                PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
+                '/perspective-replays/tactics/a.chimera-perspective-replay',
+            );
+            const api = createPerspectiveReplayApi(stub.port);
+
+            await api.exportCurrent('Client POV');
+
+            expect(stub.invocations).toEqual([
+                {
+                    channel: PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
+                    args: [{ name: 'Client POV' }],
+                },
+            ]);
         });
 
         it('rejects with PreloadIpcValidationError when main returns a non-string path', async () => {

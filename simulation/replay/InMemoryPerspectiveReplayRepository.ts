@@ -14,7 +14,10 @@
  */
 
 import type { PerspectiveReplayFile } from './PerspectiveReplayFile.js';
-import type { PerspectiveReplayRepository } from './PerspectiveReplayRepository.js';
+import type {
+    PerspectiveReplayListItem,
+    PerspectiveReplayRepository,
+} from './PerspectiveReplayRepository.js';
 import { ReplayNotFoundError } from './PerspectiveReplayRepository.js';
 
 /**
@@ -45,7 +48,7 @@ export class InMemoryPerspectiveReplayRepository implements PerspectiveReplayRep
         return Promise.resolve(structuredClone(file));
     }
 
-    list(gameId: string): Promise<string[]> {
+    list(gameId: string): Promise<PerspectiveReplayListItem[]> {
         const matches = [...this.store.entries()].filter(([, file]) => file.gameId === gameId);
 
         matches.sort(([pathA, a], [pathB, b]) => {
@@ -57,7 +60,14 @@ export class InMemoryPerspectiveReplayRepository implements PerspectiveReplayRep
             return pathA < pathB ? 1 : -1;
         });
 
-        return Promise.resolve(matches.map(([path]) => path));
+        return Promise.resolve(
+            matches.map(([path, file]) => ({
+                path,
+                // Project the user-entered name only when present, so an unnamed
+                // replay yields no `name` key rather than `name: undefined`.
+                ...(file.name !== undefined ? { name: file.name } : {}),
+            })),
+        );
     }
 
     delete(filePath: string): Promise<void> {

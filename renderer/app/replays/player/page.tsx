@@ -375,19 +375,22 @@ function ReplayPlayerView(): React.ReactElement {
     // raises the "Replay saved" toast; the perspective export raises none — the
     // disabled "saved" icon is its only confirmation. Each surface uses its own
     // export so the deterministic replay stays host-only (Invariants #71 / #98).
-    const handleSaveReplay = React.useCallback(async (): Promise<void> => {
-        setSaveState('saving');
-        try {
-            if (kind === 'perspective') {
-                await replayApi.perspective.exportCurrent();
-            } else {
-                await replayApi.exportCurrentMatch('save');
+    const handleSaveReplay = React.useCallback(
+        async (name: string): Promise<void> => {
+            setSaveState('saving');
+            try {
+                if (kind === 'perspective') {
+                    await replayApi.perspective.exportCurrent(name);
+                } else {
+                    await replayApi.exportCurrentMatch('save', name);
+                }
+                setSaveState('saved');
+            } catch {
+                setSaveState('idle');
             }
-            setSaveState('saved');
-        } catch {
-            setSaveState('idle');
-        }
-    }, [kind, replayApi]);
+        },
+        [kind, replayApi],
+    );
 
     if (error !== null) {
         return (
@@ -432,7 +435,7 @@ function ReplayPlayerView(): React.ReactElement {
                 {...(saveable
                     ? {
                           save: {
-                              onSave: () => void handleSaveReplay(),
+                              onSave: (name: string) => void handleSaveReplay(name),
                               saving: saveState === 'saving',
                               saved: saveState === 'saved',
                           },

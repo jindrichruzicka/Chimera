@@ -47,6 +47,12 @@ export interface ReplayListingEntry {
     readonly durationTicks: number;
     /** Participating player ids, in recording order. */
     readonly playerIds: readonly PlayerId[];
+    /**
+     * Optional user-entered replay name (set at export via the player's save
+     * icon). Absent for unnamed/legacy files; the renderer shows a localized
+     * "Untitled replay" fallback in that case.
+     */
+    readonly name?: string;
 }
 
 // ─── ReplayNotFoundError ──────────────────────────────────────────────────────

@@ -19,11 +19,12 @@
 
 import type {
     PerspectiveReplayAPI,
+    PerspectiveReplayListItem,
     PerspectiveReplayPlaybackInfo,
     PlayerSnapshot,
 } from '../api-types.js';
 import {
-    PerspectiveReplayPathListSchema,
+    PerspectiveReplayListSchema,
     PerspectiveReplayPlaybackInfoSchema,
     ReplaySavedPathSchema,
     parseInvokeResponse,
@@ -76,22 +77,27 @@ export interface PerspectiveReplayApiIpcPort {
  */
 export function createPerspectiveReplayApi(ipc: PerspectiveReplayApiIpcPort): PerspectiveReplayAPI {
     return {
-        list: (gameId: string): Promise<string[]> =>
+        list: (gameId: string): Promise<PerspectiveReplayListItem[]> =>
             ipc.invoke(PERSPECTIVE_REPLAY_LIST_CHANNEL, gameId).then(
                 (value) =>
-                    // The declared contract is `Promise<string[]>` (mutable array)
-                    // whereas the schema returns `readonly string[]`. The parsed
-                    // array is a freshly-created copy no other caller holds, so the
-                    // cast is sound — mirrors `replay-api.ts`'s `list`.
+                    // The declared contract is `Promise<PerspectiveReplayListItem[]>`
+                    // (mutable array) whereas the schema returns the `readonly` view.
+                    // The parsed array is a freshly-created copy no other caller
+                    // holds, so the cast is sound — mirrors `replay-api.ts`'s `list`.
                     parseInvokeResponse(
-                        PerspectiveReplayPathListSchema,
+                        PerspectiveReplayListSchema,
                         PERSPECTIVE_REPLAY_LIST_CHANNEL,
                         value,
-                    ) as string[],
+                    ) as PerspectiveReplayListItem[],
             ),
-        exportCurrent: (): Promise<string> =>
+        // `name` (the user-entered replay name from the save dialog) is carried
+        // only when supplied; main fail-safe-defaults an absent/malformed payload
+        // to an unnamed export.
+        exportCurrent: (name?: string): Promise<string> =>
             ipc
-                .invoke(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL)
+                .invoke(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL, {
+                    ...(name !== undefined ? { name } : {}),
+                })
                 .then((value) =>
                     parseInvokeResponse(
                         ReplaySavedPathSchema,

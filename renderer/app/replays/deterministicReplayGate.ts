@@ -4,9 +4,13 @@
  *
  * Deterministic replays (`.chimera-replay`, Invariant #71) are a debug artifact:
  * they re-simulate from a seed + full action log and are useful for debugging,
- * but confusing to players. They are always written to disk; this gate only
- * decides whether the replay browser *surfaces* them. Perspective replays —
- * what the player recorded from their own point of view — are always shown.
+ * but confusing to players — and because they reconstruct every seat's hidden
+ * information, the trusted main process writes them to disk ONLY in a non-packaged
+ * build, never in the packaged production app (privacy — Invariants #71/#98). This
+ * gate is the renderer's matching browser-surfacing guard: it decides whether the
+ * replay browser *surfaces* any that exist (none do when packaged). Perspective
+ * replays — what the player recorded from their own point of view — are always
+ * shown.
  *
  * Visible in EVERY launch except the packaged production app: the VSCode build
  * tasks, a bare `electron apps/tactics`, a plain `next build`, and E2E builds

@@ -30,7 +30,10 @@ export {
 export type { ReplaySerializer, PerspectiveReplaySerializer } from './ReplaySerializer.js';
 export type { ReplayListingEntry, ReplayRepository } from './ReplayRepository.js';
 export { ReplayNotFoundError } from './ReplayRepository.js';
-export type { PerspectiveReplayRepository } from './PerspectiveReplayRepository.js';
+export type {
+    PerspectiveReplayListItem,
+    PerspectiveReplayRepository,
+} from './PerspectiveReplayRepository.js';
 export { InMemoryReplayRepository } from './InMemoryReplayRepository.js';
 export { InMemoryPerspectiveReplayRepository } from './InMemoryPerspectiveReplayRepository.js';
 export type {

@@ -305,7 +305,7 @@ describe('PerspectiveReplayManager — exportCurrent', () => {
         const autoSaved = await manager.finalise();
 
         await expect(manager.exportCurrent()).resolves.toBe(autoSaved);
-        expect(await manager.list('tactics')).toStrictEqual([autoSaved]);
+        expect((await manager.list('tactics')).map((i) => i.path)).toStrictEqual([autoSaved]);
     });
 
     it('is repeatable — twice returns the same path and writes one file', async () => {
@@ -317,7 +317,7 @@ describe('PerspectiveReplayManager — exportCurrent', () => {
         const second = await manager.exportCurrent();
 
         expect(second).toBe(first);
-        expect(await manager.list('tactics')).toStrictEqual([first]);
+        expect((await manager.list('tactics')).map((i) => i.path)).toStrictEqual([first]);
     });
 
     it('rejects when nothing has ever been recorded', async () => {
@@ -335,6 +335,82 @@ describe('PerspectiveReplayManager — exportCurrent', () => {
         manager.abort();
 
         await expect(manager.exportCurrent()).rejects.toThrow(/no recording|no saved replay/i);
+    });
+});
+
+// ── Naming (user-supplied replay name, stamped at export) ────────────────────
+
+describe('PerspectiveReplayManager — replay name', () => {
+    it('finalise stamps a supplied name onto the file', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+
+        const savedPath = await manager.finalise('My Point of View');
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.name).toBe('My Point of View');
+    });
+
+    it('exportCurrent forwards the name to the file it writes', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+
+        const savedPath = await manager.exportCurrent('Client POV');
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.name).toBe('Client POV');
+    });
+
+    it('omits name entirely when none is supplied (no name key on the file)', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+
+        const savedPath = await manager.finalise();
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.name).toBeUndefined();
+        expect('name' in loaded).toBe(false);
+    });
+
+    it('treats an empty-string name as unnamed (no name stamped)', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+
+        const savedPath = await manager.finalise('');
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.name).toBeUndefined();
+    });
+
+    it('surfaces the stored name through list', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+        await manager.finalise('Named POV');
+
+        const items = await manager.list('tactics');
+
+        expect(items[0]?.name).toBe('Named POV');
+    });
+
+    it('ignores a name on the idempotent already-saved branch (the first name wins)', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+
+        const first = await manager.exportCurrent('First POV');
+        // A repeat press with a different name must neither re-save nor re-stamp:
+        // the already-saved branch returns the cached path without touching the file.
+        const second = await manager.exportCurrent('Second POV');
+
+        expect(second).toBe(first);
+        expect((await manager.list('tactics')).map((i) => i.path)).toStrictEqual([first]);
+        const loaded = await manager.load(first);
+        expect(loaded.name).toBe('First POV');
     });
 });
 
@@ -375,6 +451,19 @@ describe('PerspectiveReplayManager — getCurrentFile', () => {
     it('throws when no recording is in progress', () => {
         const { manager } = makeManager();
         expect(() => manager.getCurrentFile()).toThrow(/no recording/);
+    });
+
+    it('never stamps a name onto the preview file (naming is an export-only concern)', () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+
+        // The preview shares assembleFile with finalise but passes no name, so the
+        // in-memory preview must never carry one.
+        const file = manager.getCurrentFile();
+
+        expect(file.name).toBeUndefined();
+        expect('name' in file).toBe(false);
     });
 });
 
@@ -473,7 +562,7 @@ describe('PerspectiveReplayManager — delegation', () => {
         manager.start(makeStartHeader({ recordedAt: '2026-06-01T00:00:00.000Z' }));
         const newer = await manager.finalise();
 
-        expect(await manager.list('tactics')).toStrictEqual([newer, older]);
+        expect((await manager.list('tactics')).map((i) => i.path)).toStrictEqual([newer, older]);
     });
 
     it('delete delegates to the repository', async () => {

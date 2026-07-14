@@ -101,9 +101,9 @@ describe('createReplayApi', () => {
             const result = await api.exportCurrentMatch();
 
             // The default is resolved preload-side so the wire always carries a
-            // concrete intent.
+            // concrete `{ intent }` payload (no name when unnamed).
             expect(stub.invocations).toEqual([
-                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: ['save'] },
+                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: [{ intent: 'save' }] },
             ]);
             expect(result).toBe('/replays/tactics/abc.chimera-replay');
         });
@@ -119,7 +119,7 @@ describe('createReplayApi', () => {
             await api.exportCurrentMatch('view');
 
             expect(stub.invocations).toEqual([
-                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: ['view'] },
+                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: [{ intent: 'view' }] },
             ]);
         });
 
@@ -134,7 +134,25 @@ describe('createReplayApi', () => {
             await api.exportCurrentMatch('save');
 
             expect(stub.invocations).toEqual([
-                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: ['save'] },
+                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: [{ intent: 'save' }] },
+            ]);
+        });
+
+        it('carries the user-entered name alongside the intent', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(
+                REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+                '/replays/tactics/abc.chimera-replay',
+            );
+            const api = createReplayApi(stub.port);
+
+            await api.exportCurrentMatch('save', 'Grand Finale');
+
+            expect(stub.invocations).toEqual([
+                {
+                    channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+                    args: [{ intent: 'save', name: 'Grand Finale' }],
+                },
             ]);
         });
 

@@ -10,11 +10,12 @@
  */
 
 import React from 'react';
-import { Button, Caption, Icon, IconButton, Select, Slider, type SelectOption } from '../ui';
+import { Button, Caption, Select, Slider, type SelectOption } from '../ui';
 import { REPLAYS_KEYS } from '../../i18n/engine-keys';
 import type { TranslationKey } from '../../i18n/translation-bundle';
 import { useTranslate } from '../../i18n/useTranslate';
 import type { ReplayKind } from './replayKind';
+import { SaveReplayButton } from './SaveReplayButton';
 import styles from './ReplayControls.module.css';
 
 /** The selectable playback rates and the token that labels each speed option. */
@@ -38,8 +39,11 @@ const GROUP_LABEL_KEY: Record<ReplayKind, TranslationKey> = {
  * library-opened replays, which are already on disk.
  */
 export interface ReplaySaveControl {
-    /** Save (finalise + keep) the current match's replay. */
-    readonly onSave: () => void;
+    /**
+     * Save (finalise + keep) the current match's replay under the user-entered
+     * `name` (trimmed; `''` when the name dialog was left blank).
+     */
+    readonly onSave: (name: string) => void;
     /** A save round-trip is in flight — the icon is disabled. */
     readonly saving: boolean;
     /** The replay has been saved — the icon stays disabled so it can't repeat. */
@@ -105,21 +109,7 @@ export function ReplayControls({
     return (
         <div className={styles['root']} role="group" aria-label={t(GROUP_LABEL_KEY[kind])}>
             {save !== undefined && (
-                <IconButton
-                    className={styles['save']}
-                    variant="ghost"
-                    // The accessible name doubles as the saved-state signal: a
-                    // perspective replay raises no toast, so the label switch (and
-                    // the disabled state) is the only confirmation a save landed.
-                    aria-label={
-                        save.saved ? t(REPLAYS_KEYS.replaySavedLabel) : t(REPLAYS_KEYS.saveReplay)
-                    }
-                    data-testid="replay-save-btn"
-                    disabled={save.saving || save.saved}
-                    onClick={save.onSave}
-                >
-                    <Icon name="save" />
-                </IconButton>
+                <SaveReplayButton onSave={save.onSave} saving={save.saving} saved={save.saved} />
             )}
             <Button
                 size="sm"

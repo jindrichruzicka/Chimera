@@ -417,6 +417,34 @@ describe('parseReplayFile — metadata validation', () => {
     });
 });
 
+// ─── parseReplayFile — metadata.name (user-supplied at export) ─────────────────
+
+describe('parseReplayFile — metadata.name', () => {
+    it('preserves a supplied name', () => {
+        const raw: unknown = makeReplayFile({ metadata: makeMetadata({ name: 'Grand Finale' }) });
+
+        const result = parseReplayFile(raw);
+
+        expect(result.metadata.name).toBe('Grand Finale');
+    });
+
+    it('leaves name undefined when absent (optional)', () => {
+        const raw: unknown = makeReplayFile();
+
+        const result = parseReplayFile(raw);
+
+        expect(result.metadata.name).toBeUndefined();
+    });
+
+    it('throws ReplayParseError when name is present but not a string', () => {
+        const raw: unknown = makeReplayFile({
+            metadata: makeMetadata({ name: 42 as unknown as string }),
+        });
+
+        expect(() => parseReplayFile(raw)).toThrowError(ReplayParseError);
+    });
+});
+
 // ─── parseReplayFile — non-object input ──────────────────────────────────────
 
 describe('parseReplayFile — non-object input', () => {

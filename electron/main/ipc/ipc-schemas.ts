@@ -182,6 +182,55 @@ export const ReplayExportIntentSchema: z.ZodType<ReplayExportIntent> = z
 export const ReplaySaveableFlagSchema: z.ZodType<boolean> = z.boolean().catch(false);
 
 /**
+ * The `chimera:replay:export-current-match` request payload: the toast-gating
+ * {@link ReplayExportIntent} plus the optional user-entered replay `name` from
+ * the player's save dialog.
+ */
+export interface ReplayExportRequest {
+    readonly intent: ReplayExportIntent;
+    readonly name?: string;
+}
+
+/**
+ * Schema for the {@link ReplayExportRequest}. Deliberately **non-throwing** via
+ * `.catch({ intent: 'save' })`: any malformed/absent payload — an unexpected bare
+ * value from an older renderer, or a `name` over the bound — fails safe to a
+ * named-less save (toast shown), so a hostile/buggy renderer can neither break
+ * the export nor silently suppress the toast (mirrors {@link ReplayExportIntentSchema}).
+ *
+ * `name` is bounded to {@link MAX_SAVE_LABEL_LENGTH} — the same limit as a save
+ * label, which the save dialog mirrors as its input `maxLength` so the UI can
+ * never produce a name the wire silently drops.
+ */
+export const ReplayExportRequestSchema = z
+    .object({
+        intent: ReplayExportIntentSchema,
+        name: z.string().max(MAX_SAVE_LABEL_LENGTH).optional(),
+    })
+    .catch({ intent: 'save' }) as unknown as z.ZodType<ReplayExportRequest>;
+
+/**
+ * The `chimera:replay:perspective:export-current` request payload: only the
+ * optional user-entered replay `name` (the perspective surface takes no intent —
+ * it raises no "Replay saved" toast).
+ */
+export interface PerspectiveReplayExportRequest {
+    readonly name?: string;
+}
+
+/**
+ * Schema for the {@link PerspectiveReplayExportRequest}. Non-throwing via
+ * `.catch({})`: a malformed/absent payload (or an over-long name) fails safe to
+ * an unnamed export rather than breaking the client's save. `name` is bounded to
+ * {@link MAX_SAVE_LABEL_LENGTH} (the save dialog mirrors the bound).
+ */
+export const PerspectiveReplayExportRequestSchema = z
+    .object({
+        name: z.string().max(MAX_SAVE_LABEL_LENGTH).optional(),
+    })
+    .catch({}) as unknown as z.ZodType<PerspectiveReplayExportRequest>;
+
+/**
  * Pattern for a single slot-ID component (`gameId` or `slotName`).
  * Mirrors `SLOT_COMPONENT_RE` in `FileSaveRepository` — duplicated
  * intentionally so the IPC schema layer has no import dependency on

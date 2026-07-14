@@ -3,13 +3,16 @@
 /**
  * Replay Browser (§4.28).
  *
- * Lists saved replays for the active game, each row carrying a type badge.
- * Perspective replays (the player's own point of view) come from
- * `window.__chimera.replay.perspective.list`, which returns opaque path handles
- * only (their metadata is read on open, Invariant #98), and are always shown.
- * Deterministic replays (`window.__chimera.replay.list`, rich metadata) are a
- * debug-only artifact — always written to disk (Invariant #71), but surfaced
- * here only outside the packaged production app (see `deterministicReplayGate`).
+ * Lists saved replays for the active game by the user-entered name (an "Untitled
+ * replay" fallback when unnamed). Perspective replays (the player's own point of
+ * view) come from `window.__chimera.replay.perspective.list`, which now carries
+ * the `name` alongside the opaque path — still no frames or `viewerId` until the
+ * replay is opened (Invariant #98 intact: the name is user metadata, not
+ * projected state) — and are always shown. Deterministic replays
+ * (`window.__chimera.replay.list`, rich metadata) are a debug-only artifact —
+ * written to disk by main only in a non-packaged build and never in the packaged
+ * production app (Invariants #71/#98), and surfaced here only outside that app
+ * (see `deterministicReplayGate`) and marked with a neutral "Deterministic" badge.
  *
  * Opening a deterministic replay calls `openInPlayer`, which main answers with a
  * `navigate` push handled app-wide by `ReplayNavigationBridge`. That shared push
@@ -23,7 +26,10 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import type { ReplayListItem } from '@chimera-engine/simulation/bridge/api-types.js';
+import type {
+    PerspectiveReplayListItem,
+    ReplayListItem,
+} from '@chimera-engine/simulation/bridge/api-types.js';
 import { Badge, Caption, DismissButton, Modal } from '../../components/ui';
 import { REPLAYS_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
@@ -47,7 +53,7 @@ type LoadState =
     | {
           readonly status: 'loaded';
           readonly items: readonly ReplayListItem[];
-          readonly perspectivePaths: readonly string[];
+          readonly perspectiveItems: readonly PerspectiveReplayListItem[];
       }
     | { readonly status: 'error'; readonly message: string };
 
@@ -60,11 +66,6 @@ const titleRowStyle: React.CSSProperties = {
 function formatRecordedAt(recordedAt: string): string {
     const date = new Date(recordedAt);
     return Number.isNaN(date.getTime()) ? recordedAt : date.toLocaleString();
-}
-
-/** Filename handle shown for a perspective replay (no metadata until opened). */
-function perspectiveLabel(path: string): string {
-    return path.split('/').pop() ?? path;
 }
 
 /**
@@ -101,6 +102,12 @@ function ReplayRow({
 }): React.ReactElement {
     const t = useTranslate();
     const recorded = formatRecordedAt(item.recordedAt);
+    // The user-entered name is the row title; unnamed/legacy replays fall back to
+    // a localized "Untitled replay".
+    const title =
+        item.name !== undefined && item.name.length > 0
+            ? item.name
+            : t(REPLAYS_KEYS.untitledReplay);
     return (
         <li className={styles['rowItem']}>
             <button
@@ -110,24 +117,12 @@ function ReplayRow({
                 data-testid="replay-open-btn"
                 onClick={() => onOpen(item.path)}
             >
-                <div
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 'var(--ch-space-xs)',
-                    }}
-                >
-                    <span style={titleRowStyle}>
-                        <Badge variant="neutral">{t(REPLAYS_KEYS.deterministicBadge)}</Badge>
-                        <span>
-                            v{item.gameVersion} ·{' '}
-                            {t(REPLAYS_KEYS.ticksSuffix, { n: item.durationTicks })}
-                        </span>
-                    </span>
-                    <Caption tone="muted">
-                        {recorded} · {item.playerIds.join(', ')}
-                    </Caption>
-                </div>
+                {/* Compact, same shape as a perspective row: just the name, with a
+                    neutral "Deterministic" badge as the sole distinguishing mark. */}
+                <span style={titleRowStyle}>
+                    <Badge variant="neutral">{t(REPLAYS_KEYS.deterministicBadge)}</Badge>
+                    <span>{title}</span>
+                </span>
             </button>
             <DeleteReplayButton
                 label={t(REPLAYS_KEYS.deleteDeterministicAriaLabel, { recorded })}
@@ -138,42 +133,36 @@ function ReplayRow({
 }
 
 function PerspectiveReplayRow({
-    path,
+    item,
     onOpen,
     onDelete,
 }: {
-    readonly path: string;
+    readonly item: PerspectiveReplayListItem;
     readonly onOpen: (path: string) => void;
     readonly onDelete: (path: string) => void;
 }): React.ReactElement {
     const t = useTranslate();
-    const label = perspectiveLabel(path);
+    // Show the user-entered name only (no badge, no caption); unnamed/legacy
+    // replays fall back to a localized "Untitled replay". The whole row stays
+    // clickable to open, and the delete control is a sibling button.
+    const title =
+        item.name !== undefined && item.name.length > 0
+            ? item.name
+            : t(REPLAYS_KEYS.untitledReplay);
     return (
         <li className={styles['rowItem']}>
             <button
                 type="button"
                 className={styles['row']}
-                aria-label={t(REPLAYS_KEYS.openPerspectiveAriaLabel, { label })}
+                aria-label={t(REPLAYS_KEYS.openPerspectiveAriaLabel, { label: title })}
                 data-testid="replay-open-btn"
-                onClick={() => onOpen(path)}
+                onClick={() => onOpen(item.path)}
             >
-                <div
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 'var(--ch-space-xs)',
-                    }}
-                >
-                    <span style={titleRowStyle}>
-                        <Badge variant="success">{t(REPLAYS_KEYS.perspectiveBadge)}</Badge>
-                        <span>{label}</span>
-                    </span>
-                    <Caption tone="muted">{t(REPLAYS_KEYS.singleViewer)}</Caption>
-                </div>
+                <span>{title}</span>
             </button>
             <DeleteReplayButton
-                label={t(REPLAYS_KEYS.deletePerspectiveAriaLabel, { label })}
-                onDelete={() => onDelete(path)}
+                label={t(REPLAYS_KEYS.deletePerspectiveAriaLabel, { label: title })}
+                onDelete={() => onDelete(item.path)}
             />
         </li>
     );
@@ -195,9 +184,10 @@ export default function ReplaysPage(): React.ReactElement {
     const [state, setState] = React.useState<LoadState>({ status: 'loading' });
     const [pendingDelete, setPendingDelete] = React.useState<PendingDelete | null>(null);
 
-    // Deterministic replays are a debug-only artifact — always kept on disk, but
-    // surfaced in the browser only outside the packaged production app (players
-    // just see their own perspective replays). Resolved once at mount.
+    // Deterministic replays are a debug-only artifact — written to disk by main
+    // only in a non-packaged build (never in the packaged production app), and
+    // surfaced in the browser only outside that app (players just see their own
+    // perspective replays). Resolved once at mount.
     const showDeterministic = React.useMemo(() => areDeterministicReplaysVisible(), []);
 
     // Shared fetch for both replay kinds; the mount effect (with an unmount guard)
@@ -219,9 +209,9 @@ export default function ReplaysPage(): React.ReactElement {
         let active = true;
         setState({ status: 'loading' });
         fetchReplays()
-            .then(([items, perspectivePaths]) => {
+            .then(([items, perspectiveItems]) => {
                 if (active) {
-                    setState({ status: 'loaded', items, perspectivePaths });
+                    setState({ status: 'loaded', items, perspectiveItems });
                 }
             })
             .catch((error: unknown) => {
@@ -243,8 +233,8 @@ export default function ReplaysPage(): React.ReactElement {
     const reloadReplays = React.useCallback(async (): Promise<void> => {
         setState({ status: 'loading' });
         try {
-            const [items, perspectivePaths] = await fetchReplays();
-            setState({ status: 'loaded', items, perspectivePaths });
+            const [items, perspectiveItems] = await fetchReplays();
+            setState({ status: 'loaded', items, perspectiveItems });
         } catch (error: unknown) {
             setState({
                 status: 'error',
@@ -325,7 +315,7 @@ export default function ReplaysPage(): React.ReactElement {
     const isEmpty =
         state.status === 'loaded' &&
         state.items.length === 0 &&
-        state.perspectivePaths.length === 0;
+        state.perspectiveItems.length === 0;
 
     // The page renders as the shared chrome-less Modal; closing (footer button
     // or Escape) routes back to the main menu. The delete-confirm Modal nests
@@ -377,10 +367,10 @@ export default function ReplaysPage(): React.ReactElement {
                             onDelete={handleRequestDeleteDeterministic}
                         />
                     ))}
-                    {state.perspectivePaths.map((path) => (
+                    {state.perspectiveItems.map((item) => (
                         <PerspectiveReplayRow
-                            key={path}
-                            path={path}
+                            key={item.path}
+                            item={item}
                             onOpen={handleOpenPerspective}
                             onDelete={handleRequestDeletePerspective}
                         />

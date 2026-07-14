@@ -89,6 +89,8 @@ import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSession
 import { runRevealSync } from './runtime/RevealOrchestrator.js';
 import { FileReplayRepository } from './replay/FileReplayRepository.js';
 import { ReplayManager } from './replay/replay-manager.js';
+import { exportPerspectiveWithDeterministicCoSave } from './replay/exportMatchReplays.js';
+import { createDeterministicReplayPort } from './replay/deterministicReplayPort.js';
 import {
     ReplayPlaybackManager,
     createVisibilityRulesResolver,
@@ -1556,10 +1558,18 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // match is NOT persisted at game-over — the recording is retained and
             // written only on an explicit save (`replayManager.exportCurrentMatch`),
             // or discarded via `abortRecording` at teardown (§4.28).
-            const replayPort: ReplayPort = {
-                startRecording: (header) => replayManager.startRecording(header),
-                recordAction: (entry) => replayManager.recordAction(entry),
-            };
+            //
+            // Deterministic replays reconstruct the full global state from
+            // seed + actions (every seat's hidden info), so a packaged production
+            // build never records them at all — the port is `undefined` there, so
+            // there is nothing to leak via a shareable replay file (Invariants
+            // #71/#98). The host's own PERSPECTIVE recording (below) stays ungated:
+            // it is already fog-filtered and privacy-safe. Dev/e2e builds record the
+            // deterministic replay as before (a debug artifact).
+            const replayPort: ReplayPort | undefined = createDeterministicReplayPort(
+                app.isPackaged,
+                replayManager,
+            );
 
             // Runtime Debug Layer per-session attach (§4.12).
             // Both getters are lazy: `projector` and `replay` are declared
@@ -1610,7 +1620,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                                 simulationHostRef.current?.onGameEnd(snapshot, result);
                             },
                         },
-                        replayPort,
+                        // Absent in a packaged build (deterministic recording is
+                        // disabled there); the pipeline already guards
+                        // `replayPort !== undefined`, so `recordAction` is simply
+                        // skipped — no "no recording in progress" throw.
+                        ...(replayPort === undefined ? {} : { replayPort }),
                         logger: lobbyLogger,
                         // Inject the loaded ContentDatabase into PipelineContext.db so
                         // reducers can read this game's content (Invariant #46: absent
@@ -1646,42 +1660,53 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // and `startRecording` below never trips its "already in progress" guard.
             const startSessionRecordings = (): void => {
                 const playerDirectorySnapshot = playerDirectory.snapshot();
-                try {
-                    replayPort.startRecording({
-                        engineVersion: app.getVersion(),
-                        gameId: HOSTED_GAME_ID,
-                        gameVersion: HOSTED_GAME_VERSION,
-                        gameConfig: {
-                            hostPlayerId: metadata.hostId,
-                            playerIds: initialPlayerIds,
-                            phase: 'lobby',
-                            ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
-                        },
-                        seed: sessionSeed,
-                        recordedAt: new Date().toISOString(),
-                        // Source display names from the host PlayerDirectory (all
-                        // connected clients' sanitised profiles). Synthetic AI slots
-                        // and not-yet-registered clients fall back to the stringified
-                        // playerId — cosmetic replay metadata only, never gameplay
-                        // state (invariant #59 unaffected).
-                        players: buildReplayPlayers(
-                            initialPlayerSlots,
-                            (id) => playerDirectorySnapshot[id]?.displayName,
-                        ),
-                    });
-                } catch (err: unknown) {
-                    lobbyLogger.error(
-                        'replay startRecording failed',
-                        err instanceof Error ? err : new Error(String(err)),
-                        { gameId: HOSTED_GAME_ID },
-                    );
+                // Deterministic recording is disabled in packaged builds
+                // (`replayPort` is undefined there), so there is nothing to start.
+                if (replayPort !== undefined) {
+                    try {
+                        replayPort.startRecording({
+                            engineVersion: app.getVersion(),
+                            gameId: HOSTED_GAME_ID,
+                            gameVersion: HOSTED_GAME_VERSION,
+                            gameConfig: {
+                                hostPlayerId: metadata.hostId,
+                                playerIds: initialPlayerIds,
+                                phase: 'lobby',
+                                ...(Object.keys(initialEntities).length > 0
+                                    ? { initialEntities }
+                                    : {}),
+                            },
+                            seed: sessionSeed,
+                            recordedAt: new Date().toISOString(),
+                            // Source display names from the host PlayerDirectory (all
+                            // connected clients' sanitised profiles). Synthetic AI slots
+                            // and not-yet-registered clients fall back to the stringified
+                            // playerId — cosmetic replay metadata only, never gameplay
+                            // state (invariant #59 unaffected).
+                            players: buildReplayPlayers(
+                                initialPlayerSlots,
+                                (id) => playerDirectorySnapshot[id]?.displayName,
+                            ),
+                        });
+                    } catch (err: unknown) {
+                        lobbyLogger.error(
+                            'replay startRecording failed',
+                            err instanceof Error ? err : new Error(String(err)),
+                            { gameId: HOSTED_GAME_ID },
+                        );
+                    }
                 }
 
                 // The host's *perspective* recording is locked to the seat the
                 // renderer is bound to at start (`metadata.hostId`, see
                 // `bindHostRendererRecipient` below); after a pass-and-play handoff
                 // the egress sees snapshots for other seats, which the manager skips
-                // by the lock (invariant #98).
+                // by the lock (invariant #98). Consequence: in the e2e-only
+                // pass-and-play (local multi-seat) mode the host's post-game
+                // perspective preview/replay reflects only the host seat's own POV —
+                // other seats' turns are omitted. Accepted limitation of that mode;
+                // single-seat local play and networked play are unaffected (one
+                // seat per process, fully recorded).
                 if (perspectiveReplayPort.isRecording()) {
                     // Host/joined-client exclusion violated: another recording is
                     // already live. Skip rather than start over it (which would
@@ -3067,7 +3092,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         replay: replayManager,
         playback: replayPlaybackManager,
         replayDir,
-        exportCurrentMatch: () => {
+        exportCurrentMatch: (name) => {
             if (activeSession === null) {
                 return Promise.reject(
                     new Error(
@@ -3076,7 +3101,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     ),
                 );
             }
-            return replayManager.exportCurrentMatch();
+            return replayManager.exportCurrentMatch(name);
         },
         // The deterministic surface always opens the deterministic player; the
         // kind is bound here (the composition root knows which surface it is
@@ -3107,14 +3132,15 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         replay: perspectiveReplayManager,
         playback: perspectiveReplayPlaybackManager,
         perspectiveReplayDir,
-        exportCurrent: () => {
+        exportCurrent: (name) => {
             // Perspective replays are privacy-safe (one locked viewer's already
             // fog-filtered frames, Invariant #98), so a joined client may export
             // its OWN perspective — unlike the deterministic replay, which stays
             // host-only (`activeSession`). Allow either an active hosted session
-            // (host's perspective) or an active joined session (client's). The
-            // client's recording is finalised to disk at game-over, so the
-            // idempotent manager returns its saved path here.
+            // (host's perspective) or an active joined session (client's). Neither
+            // host nor client finalises at game-over: the recording is retained in
+            // memory and this idempotent export finalises it on the first save press
+            // (a repeat press returns the already-written path).
             if (activeSession === null && !joinedSessionActive) {
                 return Promise.reject(
                     new Error(
@@ -3123,7 +3149,27 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     ),
                 );
             }
-            return perspectiveReplayManager.exportCurrent();
+            // A single post-game save persists the player's OWN perspective and, in
+            // a non-packaged build actively recording one, co-saves the deterministic
+            // debug copy (a host in dev). A joined client is not recording the
+            // deterministic replay, and a packaged build never records it, so both
+            // get the perspective only. The perspective path is returned unchanged.
+            return exportPerspectiveWithDeterministicCoSave(
+                {
+                    perspective: perspectiveReplayManager,
+                    deterministic: replayManager,
+                    isPackaged: app.isPackaged,
+                    // The perspective replay is already saved by the time the dev-only
+                    // deterministic co-save runs; a co-save failure must not fail the
+                    // user's save, so it is logged (not surfaced) and swallowed.
+                    onCoSaveError: (error) =>
+                        logger.warn(
+                            'perspective save: dev-only deterministic co-save failed (ignored)',
+                            { error: error instanceof Error ? error.message : String(error) },
+                        ),
+                },
+                name,
+            );
         },
         navigateToPlayer: (path, saveable) => navigateToReplayPlayer(path, 'perspective', saveable),
     });

@@ -202,6 +202,9 @@ export class FileReplayRepository implements ReplayRepository {
                         recordedAt: file.metadata.recordedAt,
                         durationTicks: file.metadata.durationTicks,
                         playerIds: file.metadata.players.map((player) => player.playerId),
+                        // Project the user-entered name only when present (zero extra
+                        // I/O — this file was already deserialized for the sort key).
+                        ...(file.metadata.name !== undefined ? { name: file.metadata.name } : {}),
                     };
                 }),
             );

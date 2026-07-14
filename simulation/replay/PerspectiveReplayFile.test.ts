@@ -341,6 +341,35 @@ describe('parsePerspectiveReplayFile — frame viewerId lock', () => {
     });
 });
 
+// ─── parsePerspectiveReplayFile — name (user-supplied at export) ─────────────────
+
+describe('parsePerspectiveReplayFile — name', () => {
+    it('preserves a supplied top-level name', () => {
+        const raw: unknown = makePerspectiveReplayFile({ name: 'My Point of View' });
+
+        const parsed = parsePerspectiveReplayFile(raw);
+
+        expect(parsed.name).toBe('My Point of View');
+    });
+
+    it('leaves name undefined when absent (optional)', () => {
+        const raw: unknown = makePerspectiveReplayFile();
+
+        const parsed = parsePerspectiveReplayFile(raw);
+
+        expect(parsed.name).toBeUndefined();
+    });
+
+    it('throws ReplayParseError when name is present but not a string', () => {
+        const raw: unknown = {
+            ...makePerspectiveReplayFile(),
+            name: 7,
+        };
+
+        expect(() => parsePerspectiveReplayFile(raw)).toThrowError(ReplayParseError);
+    });
+});
+
 // ─── ReplayParseError reuse ─────────────────────────────────────────────────────
 
 describe('parsePerspectiveReplayFile — error type', () => {

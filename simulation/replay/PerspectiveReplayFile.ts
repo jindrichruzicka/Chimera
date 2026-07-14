@@ -82,6 +82,13 @@ export interface PerspectiveReplayFrame {
  */
 export interface PerspectiveReplayFile extends PerspectiveReplayHeader {
     readonly frames: readonly PerspectiveReplayFrame[];
+    /**
+     * Optional user-entered replay name, supplied at export (the player's save
+     * icon), not at recording start — hence it lives on the file, not the
+     * {@link PerspectiveReplayHeader} captured when recording begins. Absent for
+     * unnamed/legacy files.
+     */
+    readonly name?: string;
 }
 
 // ─── parsePerspectiveReplayFile ─────────────────────────────────────────────────
@@ -204,6 +211,14 @@ export function parsePerspectiveReplayFile(raw: unknown): PerspectiveReplayFile 
     let previousTick = -1;
     for (let i = 0; i < frames.length; i++) {
         previousTick = validateFrame(frames[i], i, viewerId, previousTick);
+    }
+
+    // ── name (optional user-entered name, set at export not recording start) ──
+    const name = obj['name'];
+    if (name !== undefined && typeof name !== 'string') {
+        throw new ReplayParseError(
+            `Perspective replay file 'name' must be a string when present, got ${JSON.stringify(name)}`,
+        );
     }
 
     // Cast: all required fields have been structurally validated above.

@@ -66,11 +66,15 @@ export interface ReplayListBridge {
  */
 export interface PerspectiveReplayListBridge {
     /**
-     * List stored perspective-replay file paths for `gameId`, newest-first.
-     * Returns opaque path handles — a perspective replay's metadata is read only
-     * when it is opened (invariants #3 / #98 — no gameplay state crosses here).
+     * List stored perspective-replay entries for `gameId`, newest-first. The item
+     * shape is intentionally opaque (`unknown`) — a game shell only consumes the
+     * presence/count of entries here — so this slice stays free of the
+     * `PerspectiveReplayListItem` type while remaining assignable from it. A
+     * perspective replay's per-frame snapshots and `viewerId` are still read only
+     * on open (invariants #3 / #98 — no gameplay state crosses here). Mirrors
+     * {@link ReplayListBridge.list}.
      */
-    list(gameId: string): Promise<readonly string[]>;
+    list(gameId: string): Promise<readonly unknown[]>;
 }
 
 /**

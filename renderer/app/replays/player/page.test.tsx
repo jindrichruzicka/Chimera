@@ -56,18 +56,23 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { I18nProvider } from '../../../i18n/I18nProvider';
+import { EscapeStackProvider } from '../../../components/shell/EscapeStack';
 import { useUiStore } from '../../../state/uiStore';
 import { resetGameContentCache } from '../../../state/useGameContent';
 import ReplayPlayerPage from './page';
 
 // The player and its ReplayControls render user-facing strings through
-// `useTranslate()`, which throws outside an I18nProvider; wrap every render.
+// `useTranslate()`, which throws outside an I18nProvider; wrap every render. The
+// save affordance's name dialog (a shared Modal) also needs an EscapeStackProvider
+// (useEscapeLayer throws otherwise).
 function render(
     ui: React.ReactElement,
     gameOverride?: Record<string, string>,
 ): ReturnType<typeof baseRender> {
     return baseRender(
-        <I18nProvider {...(gameOverride === undefined ? {} : { gameOverride })}>{ui}</I18nProvider>,
+        <I18nProvider {...(gameOverride === undefined ? {} : { gameOverride })}>
+            <EscapeStackProvider>{ui}</EscapeStackProvider>
+        </I18nProvider>,
     );
 }
 
@@ -410,7 +415,7 @@ describe('ReplayPlayerPage', () => {
             expect(screen.queryByTestId('replay-save-btn')).toBeNull();
         });
 
-        it('saves the current match and disables the icon (deterministic)', async () => {
+        it('names and saves the current match and disables the icon (deterministic)', async () => {
             window.history.replaceState(
                 {},
                 '',
@@ -425,12 +430,15 @@ describe('ReplayPlayerPage', () => {
             const save = screen.getByTestId('replay-save-btn');
             expect(save).toBeEnabled();
 
+            // Clicking opens the name dialog; typing + confirming persists the name.
             await userEvent.click(save);
+            await userEvent.type(screen.getByTestId('replay-save-name-input'), 'Grand Finale');
+            await userEvent.click(screen.getByTestId('replay-save-name-confirm'));
 
             await waitFor(() => {
                 expect(screen.getByRole('button', { name: /replay saved/i })).toBeDisabled();
             });
-            expect(exportCurrentMatch).toHaveBeenCalledWith('save');
+            expect(exportCurrentMatch).toHaveBeenCalledWith('save', 'Grand Finale');
         });
     });
 
@@ -558,13 +566,17 @@ describe('ReplayPlayerPage', () => {
             render(<ReplayPlayerPage />);
             await screen.findByTestId('game-shell');
 
+            // Open the name dialog, enter a name, and confirm.
             await userEvent.click(screen.getByTestId('replay-save-btn'));
+            await userEvent.type(screen.getByTestId('replay-save-name-input'), 'Client POV');
+            await userEvent.click(screen.getByTestId('replay-save-name-confirm'));
 
             await waitFor(() => {
                 expect(screen.getByRole('button', { name: /replay saved/i })).toBeDisabled();
             });
             // The deterministic replay stays host-only (Invariants #71 / #98).
             expect(exportCurrent).toHaveBeenCalledTimes(1);
+            expect(exportCurrent).toHaveBeenCalledWith('Client POV');
             expect(exportCurrentMatch).not.toHaveBeenCalled();
         });
     });

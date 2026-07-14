@@ -36,6 +36,7 @@ export interface ReplayFile {
         readonly recordedAt: string; // ISO-8601
         readonly durationTicks: number;
         readonly players: ReadonlyArray<{ playerId: PlayerId; displayName: string }>;
+        readonly name?: string; // user-entered at export (save icon); absent = unnamed
     };
 }
 
@@ -106,10 +107,11 @@ export class ReplayManager {
     ) {}
 
     // ── Recording lifecycle ──
+    isRecording(): boolean; // whether a match recording is in progress (co-save gate)
     startRecording(header: ReplayHeader): void; // throws if already recording
     recordAction(entry: RecordedAction): void; // throws if no recording in progress
-    finaliseRecording(): Promise<string>; // assemble ReplayFile + atomic write; returns path
-    exportCurrentMatch(): Promise<string>; // idempotent: finalise OR return last saved path
+    finaliseRecording(name?: string): Promise<string>; // assemble ReplayFile + atomic write; returns path
+    exportCurrentMatch(name?: string): Promise<string>; // idempotent: finalise (stamps name) OR return last saved path
     abortRecording(): void; // discard in-progress recording (idempotent teardown)
 
     // ── Persistence ──
@@ -124,7 +126,7 @@ The manager owns only the `ReplayFile` / repository / migrator contracts — no 
 
 **Lifecycle.** `startRecording(header)` → repeated `recordAction(entry)` → `finaliseRecording()`. Finalise assembles the complete `ReplayFile` (`formatVersion: 1`, header fields, accumulated `actions`, and `metadata.durationTicks` computed as the max recorded tick), then writes it. Recording state is cleared in a `finally` block, so a failed write leaves no stale state.
 
-**`exportCurrentMatch()`** is the idempotent "ensure this match's replay is on disk and give me its path". It backs the post-game summary buttons, which mount only after the host pipeline has already auto-finalised at game-over: if a recording is still in progress it finalises; if the match was already finalised it returns the remembered `lastSavedPath` (no second file is written); if nothing was recorded it throws. `abortRecording()` discards an in-progress recording without persisting and is a safe no-op at session teardown.
+**`exportCurrentMatch()`** is the idempotent "ensure this match's replay is on disk and give me its path". The match is **not** finalised at game-over — the recording is retained in memory and this method performs the first (and, being idempotent, only) write when the player's save icon is pressed: if a recording is still in progress it finalises; if the match was already saved it returns the remembered `lastSavedPath` (no second file is written); if nothing was recorded it throws. `abortRecording()` discards an in-progress recording without persisting and is a safe no-op at session teardown. `isRecording()` reports whether a recording is in progress — the post-game co-save helper reads it to skip the deterministic write when there is nothing to save.
 
 **Atomic write.** `FileReplayRepository.save()` writes to `<dest>.tmp`, `fsync`s, then `rename`s atomically. Each file gets a fresh UUID, so an existing replay is never overwritten; a crash between write and rename leaves only a `.tmp` artefact, never a half-written `.chimera-replay`.
 
@@ -140,9 +142,9 @@ The four core `window.__chimera.replay` methods (bridge factory in `electron/pre
 // window.__chimera.replay  — channel constants live in preload/apis/replay-api.ts (#5)
 
 interface ReplayAPI {
-    list(gameId: string): Promise<ReplayListItem[]>; // chimera:replay:list
-    // intent defaults to 'save' (raises the "Replay saved" toast); 'view' suppresses it
-    exportCurrentMatch(intent?: ReplayExportIntent): Promise<string>; // chimera:replay:export-current-match → saved path
+    list(gameId: string): Promise<ReplayListItem[]>; // chimera:replay:list (each item carries an optional user-entered `name`)
+    // intent defaults to 'save' (raises the "Replay saved" toast); 'view' suppresses it. `name` = the user-entered replay name
+    exportCurrentMatch(intent?: ReplayExportIntent, name?: string): Promise<string>; // chimera:replay:export-current-match → saved path
     // saveable defaults to false; true (a just-finished match) makes the player show its save icon
     openInPlayer(path: string, saveable?: boolean): Promise<void>; // chimera:replay:open-in-player
     delete(path: string): Promise<void>; // chimera:replay:delete
@@ -178,11 +180,11 @@ The canonical preload `ReplayAPI extends ReplayExportBridge` and `PerspectiveRep
 
 The button is disabled while the request is in flight, with inline error feedback. The bridge is read off `globalThis.__chimera.replay` as a `ReplayExportBridge` — no `electron/*` / `renderer/*` import (invariants #92/#96).
 
-**Replay player save icon** — saving is no longer a summary button. The replay player (`renderer/app/replays/player/page.tsx`) renders a compact save `IconButton` at the far left of `ReplayControls`, shown **only** for a just-finished match (`?saveable=1`, threaded from the post-game **Replay** action through the navigate push) — never for a replay opened from the Replays library, which is already on disk and whose session-gated current-match export would not apply. Clicking it calls `exportCurrentMatch('save')` (deterministic) or `perspective.exportCurrent()` (perspective), then disables so the same replay cannot be re-saved; the deterministic save raises the "Replay saved" toast (§4.30), while the perspective save's confirmation is the disabled icon state.
+**Replay player save icon** — saving is no longer a summary button. The replay player (`renderer/app/replays/player/page.tsx`) renders a compact save `IconButton` (the `SaveReplayButton`, `renderer/components/replay/`) at the far left of `ReplayControls`, shown **only** for a just-finished match (`?saveable=1`, threaded from the post-game **Replay** action through the navigate push) — never for a replay opened from the Replays library, which is already on disk and whose session-gated current-match export would not apply. Clicking it opens a name dialog (mirroring the save-game flow); confirming calls `exportCurrentMatch('save', name)` (deterministic) or `perspective.exportCurrent(name)` (perspective) with the entered name (bounded to `MAX_SAVE_LABEL_LENGTH`; blank persists an unnamed replay), then disables so the same replay cannot be re-saved. The deterministic save raises the "Replay saved" toast (§4.30), while the perspective save's confirmation is the disabled icon state. The Replays browser lists both kinds by that name (a localized "Untitled replay" fallback when absent), keeping the neutral "Deterministic" badge on deterministic rows.
 
 **Main-menu Replays button** — a game's `gameMainMenuDefinition` (e.g. in `games/<game>/shell/main-menu.ts`) contributes a **Replays** button (navigates to `/replays`). Its `disabled` predicate is async and **fail-safe**: it resolves to `true` (disabled) when `replay.perspective.list('<game>')` is empty _or_ the bridge is unavailable. The definition is contributed through the renderer game registry (not a shell-page import) and uses token-mapped layout (invariants #80/#91/#94).
 
-**Deterministic replays are debug-only in the browser** — the replay browser always lists **perspective** replays (the player's own point of view). Deterministic replays are a debug artifact: still written to disk (Invariant #71) and openable from disk, but surfaced in the browser only outside the packaged production app. The gate is `renderer/app/replays/deterministicReplayGate.ts` — `areDeterministicReplaysVisible()` returns `false` when `NEXT_PUBLIC_CHIMERA_PACKAGED === '1'` (set only by the `package:tactics*` scripts, mirroring the component-gallery gate). When hidden, the page skips the `replay.list()` IPC entirely; nothing on disk is touched.
+**Deterministic replays are debug-only, and never written in a packaged build** — the replay browser always lists **perspective** replays (the player's own point of view). Deterministic replays are a debug artifact: because they reconstruct the full global state from `seed + actions` (every seat's hidden information — e.g. an opponent's whole deck in a CCG), the trusted main process **records and writes them only in a non-packaged build, never in the packaged production app** — the recorder's `replayPort` is `undefined` when `app.isPackaged`, so nothing is ever recorded or persisted there (privacy; Invariants #71/#98, which constrain the file _format_ but do not mandate that the file be written). In a non-packaged build a single post-game save co-saves the deterministic copy alongside the player's perspective (`exportPerspectiveWithDeterministicCoSave`). The renderer's matching browser-surfacing guard is `renderer/app/replays/deterministicReplayGate.ts` — `areDeterministicReplaysVisible()` returns `false` when `NEXT_PUBLIC_CHIMERA_PACKAGED === '1'` (set only by the `package:tactics*` scripts, mirroring the component-gallery gate). When hidden, the page skips the `replay.list()` IPC entirely; and in a packaged build there is nothing on disk to list anyway.
 
 ---
 
@@ -215,8 +217,11 @@ export interface PerspectiveReplayFrame {
 
 export interface PerspectiveReplayFile extends PerspectiveReplayHeader {
     readonly frames: ReadonlyArray<PerspectiveReplayFrame>;
+    readonly name?: string; // user-entered at export (save icon); absent = unnamed
 }
 ```
+
+The `name` lives on the file (not the `PerspectiveReplayHeader`) because it is supplied at **export** — the player's save icon — not at recording start. It is validated as a string when present but is optional. Surfacing it at list time is compatible with Invariant #98: a name is user metadata, not projected state, so it carries no per-frame snapshot or `viewerId` — those are still read only when the replay is opened.
 
 `parsePerspectiveReplayFile()` is pure (zero I/O, no `Date.now()`) and rejects a file as **malformed** when (Invariant #98):
 

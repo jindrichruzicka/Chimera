@@ -1,16 +1,24 @@
 /**
  * F44 / T9 — replay.spec.ts (#663)
  *
- * End-to-end coverage of the Tactics replay lifecycle in the packaged app,
- * exercised through the real renderer + main IPC path (not mocks):
+ * End-to-end coverage of the Tactics replay lifecycle, exercised through the real
+ * renderer + main IPC path (not mocks):
  *   1. the post-game summary surfaces the Replay button (saving moved to the player);
- *   2. the replay player's save icon confirms success and persists a deterministic replay;
+ *   2. the replay player's save icon confirms success; the host previews and saves
+ *      its OWN perspective replay, and a non-packaged (dev/e2e) build ALSO co-saves
+ *      the deterministic debug copy alongside it;
  *   3. the main-menu Replays button is disabled with no replays;
  *   4. it enables after a match and opens the replay browser;
  *   5. replaying a finished match plays back to its final tick.
  *
+ * These run under the unpacked `.e2e-build` (NOT packaged), so the deterministic
+ * replay is still recorded and — as the co-save — still lands on disk; a packaged
+ * production build records/writes NO deterministic replay at all (privacy — that
+ * branch is asserted by the `exportMatchReplays` helper unit test, not here, since
+ * e2e cannot run `app.isPackaged`).
+ *
  * Invariants asserted:
- *   #71 — the saved deterministic replay file carries `seed` + `actions` and no
+ *   #71 — the co-saved deterministic replay file carries `seed` + `actions` and no
  *         projected snapshots (verified by reading the file off disk).
  *   #3  — the replay player only ever receives a projected `PlayerSnapshot`
  *         (identified by `viewerId`), never a raw `GameSnapshot`.
@@ -79,6 +87,11 @@ interface ChimeraReplayGlobal {
         readonly replay: {
             list(gameId: string): Promise<readonly ReplayListEntry[]>;
             snapshotAt(tick: number): Promise<ReplayPlayerSnapshot>;
+            // The post-game player is now the PERSPECTIVE surface (host and client
+            // alike), so the just-finished match is queried through this sub-namespace.
+            readonly perspective: {
+                snapshotAt(tick: number): Promise<ReplayPlayerSnapshot>;
+            };
         };
         readonly game: {
             sendAction(action: unknown): void;
@@ -123,19 +136,22 @@ async function listDeterministicReplays(window: Page): Promise<readonly ReplayLi
 
 /**
  * Save the just-finished match from the post-game summary → replay player → save
- * icon. Persisting is the SOLE gate now (the match is not written at game-over):
- * this seeds one deterministic replay, which is what enables the main-menu Replays
- * button and gives the library a row.
+ * icon. Persisting is the SOLE gate now (the match is not written at game-over).
+ * The host post-game player is the PERSPECTIVE surface, so one save press persists
+ * the host's own perspective replay AND — in this non-packaged e2e build — co-saves
+ * the deterministic debug copy alongside it. Either enables the main-menu Replays
+ * button; both appear as rows in the library.
  */
 async function saveDeterministicReplayFromSummary(
     hostWindow: Page,
     hostGame: GamePage,
+    name = '',
 ): Promise<void> {
     await hostGame.replayButton.click();
     const player = new ReplayPlayerPage(hostWindow);
     await expect(player.playButton).toBeVisible({ timeout: 30_000 });
     await expect(player.saveButton).toBeEnabled();
-    await player.save();
+    await player.save(name);
 }
 
 /** Read a saved replay file off disk and project the fields invariant #71 cares about. */
@@ -179,25 +195,32 @@ test.describe('Tactics replay lifecycle', () => {
         await expect(hostWindow.getByTestId('post-game-save-replay-btn')).toHaveCount(0);
     });
 
-    test('the player save icon confirms success and persists a replay with seed + actions', async ({
+    test('the player save icon confirms success and co-saves a deterministic replay with seed + actions', async ({
         hostWindow,
     }) => {
         const hostGame = new GamePage(hostWindow);
         await playToGameOver(hostGame);
         await goToPostGameSummary(hostWindow, hostGame);
 
-        // Open the finished match in the player (saveable), then save via its icon.
+        // Open the finished match in the player (saveable). The host post-game
+        // surface is now the PERSPECTIVE player, so its save icon persists the
+        // host's own perspective replay — and, because this is a non-packaged e2e
+        // build, the trusted main process co-saves the deterministic debug copy
+        // alongside it (a packaged production build would write neither the
+        // deterministic recording nor this co-save).
         await hostGame.replayButton.click();
         const player = new ReplayPlayerPage(hostWindow);
         await expect(player.playButton).toBeVisible({ timeout: 30_000 });
         await expect(player.saveButton).toBeEnabled();
         await player.save();
 
+        // The co-saved deterministic replay lands on disk (the save icon confirms
+        // only after main has awaited BOTH writes).
         const replays = await listDeterministicReplays(hostWindow);
         expect(replays.length).toBeGreaterThan(0);
         const [firstReplay] = replays;
         if (firstReplay === undefined) {
-            throw new Error('expected at least one saved deterministic replay');
+            throw new Error('expected the co-saved deterministic replay on disk');
         }
 
         // Invariant #71: the deterministic file holds seed + actions and no
@@ -225,10 +248,11 @@ test.describe('Tactics replay lifecycle', () => {
     }) => {
         const hostGame = new GamePage(hostWindow);
         // A finished match saves nothing on its own; the Replays button gates on a
-        // saved replay (deterministic OR perspective), so persist one explicitly.
+        // saved replay (deterministic OR perspective), so persist one explicitly —
+        // here under a user-entered name, which must surface as the row title.
         await playToGameOver(hostGame);
         await goToPostGameSummary(hostWindow, hostGame);
-        await saveDeterministicReplayFromSummary(hostWindow, hostGame);
+        await saveDeterministicReplayFromSummary(hostWindow, hostGame, 'Grand Finale');
 
         const mainMenu = new MainMenuPage(hostWindow);
         await mainMenu.goto({ gameId: TACTICS_GAME_ID });
@@ -237,6 +261,12 @@ test.describe('Tactics replay lifecycle', () => {
         await mainMenu.replaysButton.click();
 
         await expect(hostWindow.getByTestId('replays-page')).toBeVisible();
+        // The entered name identifies the rows in the library. A dev/e2e host save
+        // now persists BOTH the perspective replay and the co-saved deterministic
+        // debug copy (deterministic replays are visible in the e2e/dev build; hidden
+        // only when packaged), so the name appears on two rows.
+        await expect(hostWindow.getByText('Grand Finale')).toHaveCount(2);
+        await expect(hostWindow.getByText('Grand Finale').first()).toBeVisible();
     });
 
     test('main-menu Replays button stays disabled after a match that is not saved', async ({
@@ -269,11 +299,18 @@ test.describe('Tactics replay lifecycle', () => {
         });
         expect(liveResult).not.toBeNull();
 
-        // The Replay button exports the finished match and opens it in the player.
+        // The Replay button opens the finished match in the player. The host
+        // post-game surface is now the PERSPECTIVE player (build-agnostic; the
+        // deterministic decision lives in main).
         await hostGame.replayButton.click();
 
         const player = new ReplayPlayerPage(hostWindow);
         await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+        // The controls are labelled for the perspective kind (the navigate push
+        // carried kind=perspective).
+        await expect(
+            hostWindow.getByRole('group', { name: 'Perspective replay playback controls' }),
+        ).toBeVisible();
         // Regression guard: opening from the post-game summary must not carry the
         // summary screen into the player (it would show an invalid Replay button).
         await expect(hostWindow.getByTestId('post-game-summary')).toHaveCount(0);
@@ -290,10 +327,13 @@ test.describe('Tactics replay lifecycle', () => {
 
         // Invariant #3: the player only ever receives a projected PlayerSnapshot
         // (identified by `viewerId`), never a raw GameSnapshot — and the replayed
-        // outcome matches the original match.
+        // outcome matches the original match. Queried through the PERSPECTIVE
+        // playback namespace, which is the session this post-game player opened.
         const replaySnapshot = await hostWindow.evaluate(
             (tick) =>
-                (globalThis as unknown as ChimeraReplayGlobal).__chimera.replay.snapshotAt(tick),
+                (
+                    globalThis as unknown as ChimeraReplayGlobal
+                ).__chimera.replay.perspective.snapshotAt(tick),
             totalTicks,
         );
         expect(typeof replaySnapshot.viewerId).toBe('string');

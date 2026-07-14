@@ -176,6 +176,21 @@ describe('JSON round-trip', () => {
         expect(result.gameConfig).toStrictEqual({ mapSize: 16, fog: true });
     });
 
+    it('round-trip preserves the user-entered metadata.name', () => {
+        const file = makeReplayFile({
+            metadata: {
+                recordedAt: '2026-06-02T10:00:00.000Z',
+                durationTicks: 50,
+                players: [{ playerId: toPlayerId('p1'), displayName: 'Player One' }],
+                name: 'Grand Finale',
+            },
+        });
+
+        const result = deserializeReplay(serializeReplay(file));
+
+        expect(result.metadata.name).toBe('Grand Finale');
+    });
+
     it('round-trip works with empty actions array', () => {
         const file = makeReplayFile({ actions: [] });
 

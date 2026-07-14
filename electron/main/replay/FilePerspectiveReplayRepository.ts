@@ -31,6 +31,7 @@ import * as path from 'path';
 import { randomUUID } from 'node:crypto';
 import type {
     PerspectiveReplayFile,
+    PerspectiveReplayListItem,
     PerspectiveReplayRepository,
     PerspectiveReplaySerializer,
 } from '@chimera-engine/simulation/replay/index.js';
@@ -128,19 +129,26 @@ export class FilePerspectiveReplayRepository implements PerspectiveReplayReposit
         return this.serializer.deserialize(raw);
     }
 
-    async list(gameId: string): Promise<string[]> {
-        return (await this.readSortedListings(gameId)).map((entry) => entry.path);
+    async list(gameId: string): Promise<PerspectiveReplayListItem[]> {
+        return (await this.readSortedListings(gameId)).map((entry) => ({
+            path: entry.path,
+            // Carry the user-entered name only when present, so an unnamed replay
+            // yields no `name` key (the renderer shows an "Untitled replay" fallback).
+            ...(entry.name !== undefined ? { name: entry.name } : {}),
+        }));
     }
 
     /**
      * Read every `.chimera-perspective-replay` file under `<baseDir>/<gameId>`,
-     * projecting each to its `{ path, recordedAt }`, sorted newest-first by
+     * projecting each to its `{ path, recordedAt, name? }`, sorted newest-first by
      * `recordedAt` with a stable path tiebreak. Reads are chunked by
-     * {@link LIST_CONCURRENCY} to bound open file descriptors.
+     * {@link LIST_CONCURRENCY} to bound open file descriptors. The `name` is read
+     * from the same deserialized file as `recordedAt`, so surfacing it at list
+     * time is zero extra I/O.
      */
     private async readSortedListings(
         gameId: string,
-    ): Promise<{ path: string; recordedAt: string }[]> {
+    ): Promise<{ path: string; recordedAt: string; name?: string }[]> {
         FilePerspectiveReplayRepository.validateGameId(gameId);
 
         const dir = path.join(this.resolvedBase, gameId);
@@ -153,14 +161,20 @@ export class FilePerspectiveReplayRepository implements PerspectiveReplayReposit
             .filter((name) => name.endsWith(FILE_EXT))
             .map((name) => path.join(dir, name));
 
-        const records: { path: string; recordedAt: string }[] = [];
+        const records: { path: string; recordedAt: string; name?: string }[] = [];
         for (let i = 0; i < replayPaths.length; i += LIST_CONCURRENCY) {
             const chunk = replayPaths.slice(i, i + LIST_CONCURRENCY);
             const chunkRecords = await Promise.all(
-                chunk.map(async (p): Promise<{ path: string; recordedAt: string }> => {
-                    const file = await this.serializer.deserialize(await fs.readFile(p));
-                    return { path: p, recordedAt: file.recordedAt };
-                }),
+                chunk.map(
+                    async (p): Promise<{ path: string; recordedAt: string; name?: string }> => {
+                        const file = await this.serializer.deserialize(await fs.readFile(p));
+                        return {
+                            path: p,
+                            recordedAt: file.recordedAt,
+                            ...(file.name !== undefined ? { name: file.name } : {}),
+                        };
+                    },
+                ),
             );
             records.push(...chunkRecords);
         }

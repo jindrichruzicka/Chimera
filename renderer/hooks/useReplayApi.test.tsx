@@ -104,6 +104,22 @@ describe('useReplayApi', () => {
         }
     });
 
+    it('forwards the entered name through both export methods', async () => {
+        const replay = makeReplayBridge();
+        Object.defineProperty(window, '__chimera', { configurable: true, value: { replay } });
+
+        try {
+            const { result } = renderHook(() => useReplayApi());
+            await result.current.exportCurrentMatch('save', 'Grand Finale');
+            await result.current.perspective.exportCurrent('Client POV');
+
+            expect(replay.exportCurrentMatch).toHaveBeenCalledWith('save', 'Grand Finale');
+            expect(replay.perspective.exportCurrent).toHaveBeenCalledWith('Client POV');
+        } finally {
+            Reflect.deleteProperty(window, '__chimera');
+        }
+    });
+
     it('delegates perspective.delete to the bridge (replay browser delete)', async () => {
         const replay = makeReplayBridge();
         Object.defineProperty(window, '__chimera', { configurable: true, value: { replay } });

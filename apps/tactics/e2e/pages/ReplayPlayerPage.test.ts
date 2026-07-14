@@ -53,12 +53,20 @@ describe('ReplayPlayerPage', () => {
         expect(player.seekToEndButton).toBeDefined();
         expect(player.stepBackButton).toBeDefined();
         expect(player.saveButton).toBeDefined();
+        expect(player.saveNameDialog).toBeDefined();
+        expect(player.saveNameInput).toBeDefined();
+        expect(player.saveNameConfirm).toBeDefined();
+        expect(player.saveNameCancel).toBeDefined();
         expect(requestedTestIds).toEqual([
             'replay-play-btn',
             'replay-pause-btn',
             'replay-tick-counter',
             'replay-scrubber',
             'replay-save-btn',
+            'replay-save-name-dialog',
+            'replay-save-name-input',
+            'replay-save-name-confirm',
+            'replay-save-name-cancel',
         ]);
         expect(requestedLabels).toEqual(['Playback speed']);
         expect(requestedRoles).toEqual(['button[Seek to end]', 'button[Step back]']);

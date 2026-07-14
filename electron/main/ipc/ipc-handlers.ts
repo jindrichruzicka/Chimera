@@ -94,6 +94,7 @@ import type {
     ChatScope,
     DeviceInfo,
     EngineAction,
+    PerspectiveReplayListItem,
     PerspectiveReplayPlaybackInfo,
     PlayerProfile,
     PlayerId,
@@ -126,7 +127,8 @@ import {
     SetMatchSettingPayloadSchema,
     SetPlayerAttributePayloadSchema,
     RemoveAiPayloadSchema,
-    ReplayExportIntentSchema,
+    ReplayExportRequestSchema,
+    PerspectiveReplayExportRequestSchema,
     ReplayPathSchema,
     ReplaySaveableFlagSchema,
     ReplaySnapshotRangeSchema,
@@ -1028,8 +1030,9 @@ export interface RegisterReplayHandlersOptions {
      * Finalise the in-progress recording to disk and resolve with the saved
      * file path. Injected by the wiring layer because it must reject when no
      * match is being hosted — a condition only the live session graph knows.
+     * `name` is the validated user-entered replay name (or `undefined`).
      */
-    readonly exportCurrentMatch: () => Promise<string>;
+    readonly exportCurrentMatch: (name?: string) => Promise<string>;
     /**
      * Push the validated replay path to the renderer (via
      * `chimera:replay:navigate`) so it can switch to the replay player route.
@@ -1096,21 +1099,21 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
         return replay.listItems(validated);
     });
 
-    ipcMain.handle(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, async (_event, intent) => {
-        // Fail-safe: a malformed/absent intent coerces to 'save' (toast shown),
-        // never throwing — see `ReplayExportIntentSchema`.
-        const validatedIntent = parseInvokeRequest(
-            ReplayExportIntentSchema,
+    ipcMain.handle(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, async (_event, request) => {
+        // Fail-safe: a malformed/absent payload coerces to `{ intent: 'save' }`
+        // (toast shown, unnamed), never throwing — see `ReplayExportRequestSchema`.
+        const { intent, name } = parseInvokeRequest(
+            ReplayExportRequestSchema,
             REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
-            intent,
+            request,
         );
-        const path = await exportCurrentMatch();
+        const path = await exportCurrentMatch(name);
         // Push the saved path so a renderer listener can raise the "Replay saved"
         // toast (§4.30) — but only for the save intent, and only on success (a
         // rejected export throws before here). The "Replay" (view) action exports
         // solely to obtain a stable on-disk path for `openInPlayer`; raising a
         // "saved" toast then would be misleading (Invariant #74).
-        if (validatedIntent !== 'view') {
+        if (intent !== 'view') {
             notifyExported(path);
         }
         return path;
@@ -1225,7 +1228,7 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
  * these read channels.
  */
 export interface PerspectiveReplayIpcPort {
-    list(gameId: string): Promise<string[]>;
+    list(gameId: string): Promise<PerspectiveReplayListItem[]>;
     delete(path: string): Promise<void>;
 }
 
@@ -1269,9 +1272,10 @@ export interface RegisterPerspectiveReplayHandlersOptions {
      * Finalise the in-progress perspective recording to disk and resolve with
      * the saved file path. Injected by the wiring layer because it must reject
      * when no perspective recording is active — a condition only the live
-     * session graph knows.
+     * session graph knows. `name` is the validated user-entered replay name (or
+     * `undefined`).
      */
-    readonly exportCurrent: () => Promise<string>;
+    readonly exportCurrent: (name?: string) => Promise<string>;
     /**
      * Push the validated replay path to the renderer (via the shared
      * `chimera:replay:navigate`) so it can switch to the replay player route.
@@ -1319,7 +1323,16 @@ export function registerPerspectiveReplayHandlers(
         return replay.list(validated);
     });
 
-    ipcMain.handle(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL, () => exportCurrent());
+    ipcMain.handle(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL, (_event, request) => {
+        // Fail-safe: a malformed/absent payload coerces to an unnamed export,
+        // never throwing — see `PerspectiveReplayExportRequestSchema`.
+        const { name } = parseInvokeRequest(
+            PerspectiveReplayExportRequestSchema,
+            PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
+            request,
+        );
+        return exportCurrent(name);
+    });
 
     ipcMain.handle(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath, saveable) => {
         const validatedSaveable = parseInvokeRequest(

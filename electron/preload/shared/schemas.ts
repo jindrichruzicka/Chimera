@@ -23,7 +23,7 @@
 import { z } from 'zod';
 import type { AssetRef, TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import { toCommitmentId } from '@chimera-engine/simulation/projection/index.js';
-import { toSlotId, playerId } from '../api-types.js';
+import { MAX_SAVE_LABEL_LENGTH, toSlotId, playerId } from '../api-types.js';
 import type {
     ActionRejection,
     ChatMessage,
@@ -32,6 +32,7 @@ import type {
     LocalProfileSlot,
     LobbyInfo,
     LobbyState,
+    PerspectiveReplayListItem,
     PerspectiveReplayPlaybackInfo,
     PlayerProfile,
     RelayResult,
@@ -319,6 +320,11 @@ export const PredictableActionTypesSchema: z.ZodType<readonly string[]> = z.arra
  * `chimera:replay:list`. Structural validation only — the host projects these
  * from validated replay files; the gate catches main↔preload contract drift.
  */
+// `as unknown as`: the optional `name` (`.optional()` yields `name?: string |
+// undefined`) is incompatible with the interface's `name?: string` under
+// `exactOptionalPropertyTypes` + `satisfies` — the same established workaround as
+// `SaveRequestSchema` in `ipc-schemas.ts`. The runtime value is a real ZodObject,
+// so `.parse` is unaffected.
 export const ReplayListItemSchema = z.object({
     path: z.string().min(1),
     gameId: z.string(),
@@ -327,7 +333,13 @@ export const ReplayListItemSchema = z.object({
     recordedAt: z.string(),
     durationTicks: z.number().int(),
     playerIds: z.array(z.string()),
-}) satisfies z.ZodType<ReplayListItem>;
+    // Optional user-entered replay name (host projects it from the file's
+    // metadata only when present); absent for unnamed/legacy replays. Bounded to
+    // the same limit the request path enforces (a crafted/legacy file could carry
+    // a longer one); `.catch(undefined)` degrades an over-long/malformed name to
+    // "Untitled replay" rather than bricking the whole list.
+    name: z.string().max(MAX_SAVE_LABEL_LENGTH).optional().catch(undefined),
+}) as unknown as z.ZodType<ReplayListItem>;
 
 /** Schema for the array returned by `chimera:replay:list`. */
 export const ReplayListSchema: z.ZodType<readonly ReplayListItem[]> = z.array(ReplayListItemSchema);
@@ -355,13 +367,23 @@ export const ReplayPlaybackInfoSchema = z.object({
 }) satisfies z.ZodType<ReplayPlaybackInfo>;
 
 /**
- * Schema for the path array returned by `chimera:replay:perspective:list`.
- * A perspective replay's metadata is read only when it is opened, so `list`
- * yields opaque, non-empty path handles rather than the rich
- * {@link ReplayListItem}s of the deterministic surface.
+ * Schema for a single {@link PerspectiveReplayListItem} element of the array
+ * returned by `chimera:replay:perspective:list`. A perspective replay's frames
+ * and `viewerId` are read only when it is opened (invariant #98), so a list item
+ * carries just the opaque `path` and the optional user-entered `name`.
  */
-export const PerspectiveReplayPathListSchema: z.ZodType<readonly string[]> = z.array(
-    z.string().min(1),
+// `as unknown as`: same optional-`name` × `exactOptionalPropertyTypes` workaround
+// as {@link ReplayListItemSchema}. The runtime value is a real ZodObject.
+export const PerspectiveReplayListItemSchema = z.object({
+    path: z.string().min(1),
+    // Bounded + `.catch(undefined)` for the same reason as {@link ReplayListItemSchema.name}:
+    // an over-long/malformed name degrades to "Untitled replay" without bricking the list.
+    name: z.string().max(MAX_SAVE_LABEL_LENGTH).optional().catch(undefined),
+}) as unknown as z.ZodType<PerspectiveReplayListItem>;
+
+/** Schema for the array returned by `chimera:replay:perspective:list`. */
+export const PerspectiveReplayListSchema: z.ZodType<readonly PerspectiveReplayListItem[]> = z.array(
+    PerspectiveReplayListItemSchema,
 );
 
 /**

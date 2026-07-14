@@ -30,6 +30,7 @@ import type {
     ReplayExportBridge,
     ReplayExportIntent,
 } from '../foundation/replay-bridge-contract.js';
+import type { PerspectiveReplayListItem } from '../replay/PerspectiveReplayRepository.js';
 import type { AssetRef, TextureAsset } from '../content/AssetRef.js';
 import type { CommitmentId } from '../projection/index.js';
 import type {
@@ -552,7 +553,24 @@ export interface ReplayListItem {
     durationTicks: number;
     /** Participating player ids, in recording order. */
     playerIds: string[];
+    /**
+     * Optional user-entered replay name, set at export via the player's save
+     * icon; absent for unnamed/legacy files (the renderer shows a localized
+     * "Untitled replay" fallback).
+     */
+    name?: string;
 }
+
+/**
+ * One stored *perspective* replay projected for the renderer's replay browser
+ * (§4.28). Re-exported from `@chimera-engine/simulation/replay` — the same type the
+ * repository returns from `list()`. Deliberately narrow: only the opaque `path`
+ * and the optional user-entered `name`. A perspective replay's per-frame
+ * `PlayerSnapshot`s and its `viewerId` are read only when it is opened
+ * (invariant #98); `name` is user metadata, not sensitive projected state, so
+ * surfacing it at list time is compatible with #98.
+ */
+export type { PerspectiveReplayListItem };
 
 /**
  * Static playback metadata returned by {@link ReplayAPI.openPlayback} (§4.28).
@@ -637,8 +655,12 @@ export interface ReplayAPI extends ReplayExportBridge {
      * `intent` (default `'save'`) gates the "Replay saved" toast: `'save'`
      * raises it, `'view'` (export-for-path-only) suppresses it. See
      * {@link ReplayExportIntent}.
+     *
+     * `name` (optional) is the user-entered replay name from the player's save
+     * dialog; it is stamped into the file's metadata on the first (and only)
+     * save. An empty/omitted name persists an unnamed replay.
      */
-    exportCurrentMatch(intent?: ReplayExportIntent): Promise<string>;
+    exportCurrentMatch(intent?: ReplayExportIntent, name?: string): Promise<string>;
     /**
      * Ask main to open `path` in the replay player. Main validates the path is
      * inside the replay directory, then pushes `chimera:replay:navigate`; the
@@ -715,20 +737,26 @@ export interface ReplayAPI extends ReplayExportBridge {
 export interface PerspectiveReplayAPI
     extends PerspectiveReplayListBridge, PerspectiveReplayExportBridge {
     /**
-     * List stored perspective-replay file paths for `gameId`, newest-first.
-     * Unlike {@link ReplayAPI.list}, this returns opaque path handles — a
-     * perspective replay's metadata is read only when it is opened.
+     * List stored perspective replays for `gameId`, newest-first, as
+     * {@link PerspectiveReplayListItem}s (`{ path, name? }`). A perspective
+     * replay's per-frame snapshots and `viewerId` are still read only on open
+     * (invariant #98); only the user-entered `name` is surfaced alongside the
+     * opaque path so the browser can label rows.
      *
-     * Narrows the shared {@link PerspectiveReplayListBridge.list} return to a
-     * mutable `string[]` for the renderer's replay browser; assignable to the
-     * shared `readonly string[]` view consumed by game shell modules.
+     * Narrows the shared {@link PerspectiveReplayListBridge.list} return (opaque
+     * `readonly unknown[]`) to the concrete mutable item array for the renderer's
+     * replay browser; assignable to that opaque view consumed by game shell modules.
      */
-    list(gameId: string): Promise<string[]>;
+    list(gameId: string): Promise<PerspectiveReplayListItem[]>;
     /**
      * Finalise the in-progress perspective recording to disk and resolve with
      * the saved file path. Rejects when no perspective recording is active.
+     *
+     * `name` (optional) is the user-entered replay name from the player's save
+     * dialog, stamped into the file on the first (and only) save; empty/omitted
+     * persists an unnamed replay.
      */
-    exportCurrent(): Promise<string>;
+    exportCurrent(name?: string): Promise<string>;
     /**
      * Ask main to open `path` in the replay player. Main validates the path is
      * inside the perspective-replay directory, then pushes the shared

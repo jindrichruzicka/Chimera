@@ -7,6 +7,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
     PerspectiveReplayAPI,
+    PerspectiveReplayListItem,
     ReplayAPI,
     ReplayListItem,
 } from '@chimera-engine/simulation/bridge/api-types.js';
@@ -24,6 +25,11 @@ vi.mock('next/navigation', () => ({
 }));
 
 const PERSPECTIVE_PATH = '/replays/tactics/persp-1.chimera-perspective-replay';
+/** A named perspective list item (the browser shows the name, not the filename). */
+const PERSPECTIVE_ITEM: PerspectiveReplayListItem = {
+    path: PERSPECTIVE_PATH,
+    name: 'My Point of View',
+};
 
 function makeItem(overrides: Partial<ReplayListItem> = {}): ReplayListItem {
     return {
@@ -100,12 +106,17 @@ describe('ReplaysPage', () => {
         expect(await screen.findByText('Recordings')).toBeInTheDocument();
     });
 
-    it('lists deterministic replays with their metadata and a Deterministic badge', async () => {
+    it('lists deterministic replays compactly — name + Deterministic badge, no metadata line', async () => {
         const list = vi.fn(() =>
             Promise.resolve([
-                makeItem({ path: '/replays/tactics/a.chimera-replay', gameVersion: '1.2.3' }),
+                makeItem({
+                    path: '/replays/tactics/a.chimera-replay',
+                    name: 'Opening Gambit',
+                    gameVersion: '1.2.3',
+                }),
                 makeItem({
                     path: '/replays/tactics/b.chimera-replay',
+                    name: 'Endgame',
                     playerIds: ['alice', 'bob'],
                 }),
             ]),
@@ -115,37 +126,74 @@ describe('ReplaysPage', () => {
         renderPage();
 
         await waitFor(() => {
-            expect(screen.getByText(/1\.2\.3/)).toBeInTheDocument();
+            expect(screen.getByText('Opening Gambit')).toBeInTheDocument();
         });
         expect(list).toHaveBeenCalledWith('tactics');
-        expect(screen.getByText(/alice/)).toBeInTheDocument();
-        expect(screen.getAllByText(/^deterministic$/i).length).toBeGreaterThan(0);
+        expect(screen.getByText('Endgame')).toBeInTheDocument();
+        expect(screen.getAllByText(/^deterministic$/i)).toHaveLength(2);
+        // Compact row: the version/ticks/players metadata line is gone — the row is
+        // now the same shape as a perspective row (just the name + a badge).
+        expect(screen.queryByText(/1\.2\.3/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/alice/)).not.toBeInTheDocument();
     });
 
-    it('lists perspective replays with a filename label and a Perspective badge', async () => {
-        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_PATH]));
+    it('lists perspective replays by name with no Perspective badge or caption', async () => {
+        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_ITEM]));
         installBridge({ perspectiveList });
 
         renderPage();
 
         await waitFor(() => {
-            expect(screen.getByText(/persp-1\.chimera-perspective-replay/)).toBeInTheDocument();
+            expect(screen.getByText('My Point of View')).toBeInTheDocument();
         });
         expect(perspectiveList).toHaveBeenCalledWith('tactics');
-        expect(screen.getByText(/^perspective$/i)).toBeInTheDocument();
+        // The "Perspective" badge and the "Single-viewer replay" caption are gone.
+        expect(screen.queryByText(/^perspective$/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/single-viewer/i)).not.toBeInTheDocument();
+        // The filename is no longer surfaced — only the user-entered name.
+        expect(screen.queryByText(/persp-1\.chimera-perspective-replay/)).not.toBeInTheDocument();
+    });
+
+    it('falls back to a localized "Untitled replay" for an unnamed perspective replay', async () => {
+        const perspectiveList = vi.fn(() => Promise.resolve([{ path: PERSPECTIVE_PATH }]));
+        installBridge({ perspectiveList });
+
+        renderPage();
+
+        await waitFor(() => {
+            expect(screen.getByText('Untitled replay')).toBeInTheDocument();
+        });
+    });
+
+    it('falls back to a localized "Untitled replay" for an unnamed deterministic replay', async () => {
+        // The deterministic row carries its own inline fallback (separate from the
+        // perspective row's), so it needs its own guard: an unnamed `makeItem()`
+        // must render "Untitled replay" as its title, not an empty string or path.
+        const list = vi.fn(() => Promise.resolve([makeItem()]));
+        installBridge({ list });
+
+        renderPage();
+
+        await waitFor(() => {
+            expect(screen.getByText('Untitled replay')).toBeInTheDocument();
+        });
+        // Still the deterministic surface (badge present), not a perspective row.
+        expect(screen.getAllByText(/^deterministic$/i).length).toBeGreaterThan(0);
     });
 
     it('lists both replay kinds together for the active game', async () => {
-        const list = vi.fn(() => Promise.resolve([makeItem()]));
-        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_PATH]));
+        const list = vi.fn(() => Promise.resolve([makeItem({ name: 'Grand Finale' })]));
+        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_ITEM]));
         installBridge({ list, perspectiveList });
 
         renderPage();
 
         await waitFor(() => {
-            expect(screen.getByText(/^perspective$/i)).toBeInTheDocument();
+            expect(screen.getByText('My Point of View')).toBeInTheDocument();
         });
+        // The deterministic row keeps its neutral badge and shows the name title.
         expect(screen.getAllByText(/^deterministic$/i).length).toBeGreaterThan(0);
+        expect(screen.getByText('Grand Finale')).toBeInTheDocument();
         expect(list).toHaveBeenCalledWith('tactics');
         expect(perspectiveList).toHaveBeenCalledWith('tactics');
     });
@@ -220,7 +268,7 @@ describe('ReplaysPage', () => {
     it('opens a perspective replay by routing with kind=perspective, carrying the active gameId', async () => {
         // The active `?gameId=` (set in beforeEach) must ride along onto the player
         // route — otherwise leaving the replay drops back to the engine-default menu.
-        installBridge({ perspectiveList: vi.fn(() => Promise.resolve([PERSPECTIVE_PATH])) });
+        installBridge({ perspectiveList: vi.fn(() => Promise.resolve([PERSPECTIVE_ITEM])) });
 
         renderPage();
 
@@ -262,7 +310,7 @@ describe('ReplaysPage', () => {
     it('renders a delete button on every row of both kinds', async () => {
         installBridge({
             list: vi.fn(() => Promise.resolve([makeItem()])),
-            perspectiveList: vi.fn(() => Promise.resolve([PERSPECTIVE_PATH])),
+            perspectiveList: vi.fn(() => Promise.resolve([PERSPECTIVE_ITEM])),
         });
 
         renderPage();
@@ -337,7 +385,7 @@ describe('ReplaysPage', () => {
         const perspectiveDelete = vi.fn(() => Promise.resolve());
         const perspectiveList = vi
             .fn()
-            .mockResolvedValueOnce([PERSPECTIVE_PATH])
+            .mockResolvedValueOnce([PERSPECTIVE_ITEM])
             .mockResolvedValue([]);
         installBridge({ perspectiveList, perspectiveDelete });
 
@@ -385,14 +433,14 @@ describe('ReplaysPage — deterministic replays hidden in the packaged productio
 
     it('does not list deterministic replays or even query for them', async () => {
         const list = vi.fn(() => Promise.resolve([makeItem({ gameVersion: '1.2.3' })]));
-        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_PATH]));
+        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_ITEM]));
         installBridge({ list, perspectiveList });
 
         renderPage();
 
         // Perspective replays still resolve and render for the player.
         await waitFor(() => {
-            expect(screen.getByText(/persp-1\.chimera-perspective-replay/)).toBeInTheDocument();
+            expect(screen.getByText('My Point of View')).toBeInTheDocument();
         });
         // The deterministic surface is neither queried nor rendered.
         expect(list).not.toHaveBeenCalled();

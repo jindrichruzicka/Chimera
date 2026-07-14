@@ -30,6 +30,21 @@ import { readyAndStart } from '../helpers/lobby-match';
 
 const TACTICS_GAME_ID = 'tactics';
 
+// The reserved sentinel that opens the in-memory recording of the just-finished
+// match (mirrors `CURRENT_MATCH_REPLAY_PATH` in
+// `simulation/foundation/replay-bridge-contract.ts`; hardcoded here because the
+// Playwright spec runner does not resolve the `@chimera-engine/*` alias).
+const CURRENT_MATCH_REPLAY_PATH = '::chimera-current-match::';
+
+/** Minimal shape of the deterministic replay bridge this spec drives directly. */
+interface ChimeraDeterministicReplayGlobal {
+    readonly __chimera: {
+        readonly replay: {
+            openInPlayer(path: string, saveable: boolean): Promise<void>;
+        };
+    };
+}
+
 // Cross-process return-to-lobby and match restarts run an order slower on CI.
 const NAV_TIMEOUT_MS = 20_000;
 const SHELL_LOAD_TIMEOUT_MS = 15_000;
@@ -65,15 +80,35 @@ async function goToPostGameSummary(hostWindow: Page, hostGame: GamePage): Promis
 }
 
 /**
- * Open the just-finished match's deterministic replay from the post-game summary
- * and assert it plays back to its final tick without surfacing a StaleActionError.
+ * Open the just-finished match's DETERMINISTIC replay and assert it plays back to
+ * its final tick without surfacing a StaleActionError.
+ *
+ * This regression is specific to the deterministic replay's initial-snapshot
+ * reconstruction: only the deterministic surface re-runs recorded actions through
+ * the ActionPipeline (perspective playback serves already-projected frames and can
+ * never raise a StaleActionError). The post-game summary now opens the PERSPECTIVE
+ * player for host and client alike, so the deterministic in-memory recording is
+ * opened directly through the still-exposed deterministic bridge — recorded in this
+ * non-packaged e2e build exactly as before.
  */
 async function openReplayAndAssertPlaysToEnd(hostWindow: Page, hostGame: GamePage): Promise<void> {
     await goToPostGameSummary(hostWindow, hostGame);
-    await hostGame.replayButton.click();
+    await hostWindow.evaluate(
+        (sentinel) =>
+            (
+                globalThis as unknown as ChimeraDeterministicReplayGlobal
+            ).__chimera.replay.openInPlayer(sentinel, true),
+        CURRENT_MATCH_REPLAY_PATH,
+    );
 
     const player = new ReplayPlayerPage(hostWindow);
     await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+    // Confirm the deterministic surface opened (the navigate push carried
+    // kind=deterministic), so the pipeline-reconstruction path is the one exercised.
+    // Exact match: the perspective group's label is a superstring of this one.
+    await expect(
+        hostWindow.getByRole('group', { name: 'Replay playback controls', exact: true }),
+    ).toBeVisible();
 
     // Bounded playback: jump to one tick before the end, then Play the final tick.
     await player.seekToPenultimateTick();

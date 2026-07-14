@@ -114,12 +114,16 @@ export function createReplayApi(ipc: ReplayApiIpcPort): ReplayAPI {
                         value,
                     ) as ReplayListItem[],
             ),
-        // Resolve the default here so the wire always carries a concrete intent
-        // (`'save' | 'view'`); main also fail-safe-defaults, giving defence in
-        // depth against an omitted argument.
-        exportCurrentMatch: (intent: ReplayExportIntent = 'save'): Promise<string> =>
+        // Resolve the intent default here so the wire always carries a concrete
+        // `{ intent }` payload; main also fail-safe-defaults, giving defence in
+        // depth against a malformed/omitted argument. `name` (the user-entered
+        // replay name from the save dialog) is carried only when supplied.
+        exportCurrentMatch: (intent: ReplayExportIntent = 'save', name?: string): Promise<string> =>
             ipc
-                .invoke(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, intent)
+                .invoke(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, {
+                    intent,
+                    ...(name !== undefined ? { name } : {}),
+                })
                 .then((value) =>
                     parseInvokeResponse(
                         ReplaySavedPathSchema,

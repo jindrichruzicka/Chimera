@@ -162,6 +162,24 @@ export function runReplayRepositoryContractTests(
             expect(tacticsItems[0]?.gameId).toBe('tactics');
         });
 
+        it('listItems projects the user-entered metadata.name when present', async () => {
+            const repo = factory();
+            await repo.save(
+                makeReplayFile('tactics', '2026-06-01T00:00:00.000Z', {
+                    metadata: {
+                        recordedAt: '2026-06-01T00:00:00.000Z',
+                        durationTicks: 1,
+                        players: [{ playerId: toPlayerId('p1'), displayName: 'Player One' }],
+                        name: 'Grand Finale',
+                    },
+                }),
+            );
+
+            const items = await repo.listItems('tactics');
+
+            expect(items[0]?.name).toBe('Grand Finale');
+        });
+
         // ── delete ────────────────────────────────────────────────────────────
 
         it('delete removes the replay from list', async () => {

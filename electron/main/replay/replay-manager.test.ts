@@ -141,6 +141,36 @@ describe('ReplayManager — recording', () => {
     });
 });
 
+// ── isRecording (recording-in-progress predicate) ───────────────────────────
+
+describe('ReplayManager — isRecording', () => {
+    it('is false before any recording starts', () => {
+        const { manager } = makeManager();
+        expect(manager.isRecording()).toBe(false);
+    });
+
+    it('is true while a recording is in progress', () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        expect(manager.isRecording()).toBe(true);
+    });
+
+    it('is false again after the recording is finalised', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+        await manager.finaliseRecording();
+        expect(manager.isRecording()).toBe(false);
+    });
+
+    it('is false again after the recording is aborted', () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.abortRecording();
+        expect(manager.isRecording()).toBe(false);
+    });
+});
+
 // ── exportCurrentMatch (idempotent post-game export) ─────────────────────────
 
 describe('ReplayManager — exportCurrentMatch', () => {
@@ -203,6 +233,83 @@ describe('ReplayManager — exportCurrentMatch', () => {
     });
 });
 
+// ── Naming (user-supplied replay name, stamped at export) ────────────────────
+
+describe('ReplayManager — replay name', () => {
+    it('finaliseRecording stamps a supplied name into metadata', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        const savedPath = await manager.finaliseRecording('Grand Finale');
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.metadata.name).toBe('Grand Finale');
+    });
+
+    it('exportCurrentMatch forwards the name to the file it writes', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        const savedPath = await manager.exportCurrentMatch('My Match');
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.metadata.name).toBe('My Match');
+    });
+
+    it('omits name entirely when none is supplied (no name key on metadata)', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        const savedPath = await manager.finaliseRecording();
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.metadata.name).toBeUndefined();
+        expect('name' in loaded.metadata).toBe(false);
+    });
+
+    it('treats an empty-string name as unnamed (no name stamped)', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        const savedPath = await manager.finaliseRecording('');
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.metadata.name).toBeUndefined();
+    });
+
+    it('surfaces the stored name through listItems', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+        await manager.finaliseRecording('Named Replay');
+
+        const items = await manager.listItems('tactics');
+
+        expect(items[0]?.name).toBe('Named Replay');
+    });
+
+    it('ignores a name on the idempotent already-saved branch (the first name wins)', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        const first = await manager.exportCurrentMatch('First');
+        // A repeat press with a different name must neither re-save nor re-stamp:
+        // the save icon disables after the first save, and the already-saved branch
+        // returns the cached path without touching the file.
+        const second = await manager.exportCurrentMatch('Second');
+
+        expect(second).toBe(first);
+        expect(await manager.list('tactics')).toStrictEqual([first]);
+        const loaded = await manager.load(first);
+        expect(loaded.metadata.name).toBe('First');
+    });
+});
+
 // ── getCurrentMatchFile (in-memory preview, no write) ────────────────────────
 
 describe('ReplayManager — getCurrentMatchFile', () => {
@@ -257,6 +364,20 @@ describe('ReplayManager — getCurrentMatchFile', () => {
     it('throws when no recording is in progress', () => {
         const { manager } = makeManager();
         expect(() => manager.getCurrentMatchFile()).toThrow(/no recording/);
+    });
+
+    it('never stamps a name onto the preview file (naming is an export-only concern)', () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        // The preview shares assembleFile with finalise but passes no name, so the
+        // in-memory preview must never carry one — a regression that threaded a
+        // name into the preview assembly would surface it with no save.
+        const file = manager.getCurrentMatchFile();
+
+        expect(file.metadata.name).toBeUndefined();
+        expect('name' in file.metadata).toBe(false);
     });
 });
 

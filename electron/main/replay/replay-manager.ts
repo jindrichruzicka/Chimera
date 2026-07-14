@@ -75,6 +75,16 @@ export class ReplayManager {
     // ── Recording ─────────────────────────────────────────────────────────────
 
     /**
+     * Whether a match recording is currently in progress. Lets the post-game
+     * co-save export helper skip the deterministic write when nothing is recorded
+     * (a joined client, or a packaged build where the deterministic recorder never
+     * started), mirroring `PerspectiveReplayManager.isRecording()`.
+     */
+    isRecording(): boolean {
+        return this.recording !== null;
+    }
+
+    /**
      * Begin recording a new match. Must be called before `recordAction`.
      * @throws {Error} if a recording is already in progress.
      */
@@ -110,14 +120,14 @@ export class ReplayManager {
      * @returns the saved file path.
      * @throws {Error} if no recording is in progress.
      */
-    async finaliseRecording(): Promise<string> {
+    async finaliseRecording(name?: string): Promise<string> {
         this.log.debug('finaliseRecording');
         const state = this.recording;
         if (state === null) {
             throw new Error('ReplayManager.finaliseRecording: no recording in progress');
         }
 
-        const file = ReplayManager.assembleFile(state);
+        const file = ReplayManager.assembleFile(state, name);
 
         try {
             const savedPath = await this.repository.save(file);
@@ -145,16 +155,22 @@ export class ReplayManager {
      *     second file is written);
      *   - nothing recorded or saved yet → throw.
      *
+     * `name` (optional) is the user-entered replay name from the player's save
+     * dialog; it is stamped only on the first save (the in-progress branch). A
+     * repeat "already saved" press returns the remembered path unchanged — the
+     * name was captured on that first (and only) save, which is the only save
+     * because the save icon disables once it lands.
+     *
      * @throws {Error} when no recording is in progress and none was finalised
      *   for the current match.
      */
-    async exportCurrentMatch(): Promise<string> {
+    async exportCurrentMatch(name?: string): Promise<string> {
         this.log.debug('exportCurrentMatch', {
             recording: this.recording !== null,
             hasSaved: this.lastSavedPath !== null,
         });
         if (this.recording !== null) {
-            return this.finaliseRecording();
+            return this.finaliseRecording(name);
         }
         if (this.lastSavedPath !== null) {
             return this.lastSavedPath;
@@ -245,6 +261,9 @@ export class ReplayManager {
             recordedAt: entry.recordedAt,
             durationTicks: entry.durationTicks,
             playerIds: [...entry.playerIds],
+            // Carry the user-entered name only when present, so an unnamed replay
+            // yields no `name` key (the renderer shows an "Untitled replay" fallback).
+            ...(entry.name !== undefined ? { name: entry.name } : {}),
         }));
     }
 
@@ -259,9 +278,11 @@ export class ReplayManager {
     /**
      * Build the `ReplayFile` for a recording state (shared by
      * {@link finaliseRecording} and {@link getCurrentMatchFile}). Pure — reads the
-     * state, writes nothing.
+     * state, writes nothing. `name` (the user-entered replay name from the save
+     * dialog) is stamped into metadata only when non-empty; the preview path
+     * ({@link getCurrentMatchFile}) always omits it.
      */
-    private static assembleFile(state: RecordingState): ReplayFile {
+    private static assembleFile(state: RecordingState, name?: string): ReplayFile {
         return {
             formatVersion: FORMAT_VERSION,
             engineVersion: state.header.engineVersion,
@@ -274,6 +295,7 @@ export class ReplayManager {
                 recordedAt: state.header.recordedAt,
                 durationTicks: ReplayManager.computeDurationTicks(state.actions),
                 players: state.header.players,
+                ...(name !== undefined && name.length > 0 ? { name } : {}),
             },
         };
     }

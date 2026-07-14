@@ -4232,25 +4232,34 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
         expect(broadcastsWithPhase('playing').length).toBeGreaterThan(0);
     });
 
-    it('re-arms replay and perspective recording so the restarted match records', async () => {
+    it('re-arms the perspective recording on restart, and (packaged) never arms the deterministic recorder', async () => {
         const replayStartSpy = vi.spyOn(ReplayManager.prototype, 'startRecording');
         const replayAbortSpy = vi.spyOn(ReplayManager.prototype, 'abortRecording');
         const perspStartSpy = vi.spyOn(PerspectiveReplayManager.prototype, 'start');
         const perspAbortSpy = vi.spyOn(PerspectiveReplayManager.prototype, 'abort');
         try {
             const options = await startHostedMatch();
-            // Each recording was armed exactly once at host time.
-            const replayStartsBefore = replayStartSpy.mock.calls.length;
+            // The perspective recording was armed exactly once at host time.
             const perspStartsBefore = perspStartSpy.mock.calls.length;
 
             options.onReturnToLobbyRequested?.(makeLobbyState());
 
-            // The abandoned recordings are discarded, then fresh ones armed for
-            // the next match (re-arm, not finalise).
+            // The abandoned recordings are discarded, then a fresh perspective one
+            // is armed for the next match (re-arm, not finalise).
             expect(replayAbortSpy).toHaveBeenCalled();
             expect(perspAbortSpy).toHaveBeenCalled();
-            expect(replayStartSpy.mock.calls.length).toBe(replayStartsBefore + 1);
             expect(perspStartSpy.mock.calls.length).toBe(perspStartsBefore + 1);
+            // This suite's electron mock reports app.isPackaged === true, so the
+            // deterministic recorder is disabled AT THE SOURCE
+            // (`createDeterministicReplayPort` returns undefined): it never starts —
+            // neither at host time nor on re-arm — so the deterministic replay can
+            // never be recorded, written, or leaked in a packaged production build
+            // (privacy — Invariants #71/#98). The privacy-safe perspective recording
+            // is unaffected. Both directions of the gate decision are unit-tested in
+            // deterministicReplayPort.test.ts; the dev/e2e enabled branch's
+            // end-to-end arming + write is covered by the replay E2E's deterministic
+            // co-save (replay.spec.ts).
+            expect(replayStartSpy).not.toHaveBeenCalled();
         } finally {
             replayStartSpy.mockRestore();
             replayAbortSpy.mockRestore();

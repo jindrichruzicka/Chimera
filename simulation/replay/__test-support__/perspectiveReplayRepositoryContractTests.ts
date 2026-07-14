@@ -144,7 +144,7 @@ export function runPerspectiveReplayRepositoryContractTests(
 
         // ── list ordering & filtering ──────────────────────────────────────────
 
-        it('list returns saved paths newest-first by recordedAt', async () => {
+        it('list returns saved items newest-first by recordedAt', async () => {
             const repo = factory();
             const oldPath = await repo.save(
                 makePerspectiveReplayFile('tactics', '2026-01-01T00:00:00.000Z'),
@@ -156,9 +156,28 @@ export function runPerspectiveReplayRepositoryContractTests(
                 makePerspectiveReplayFile('tactics', '2026-03-01T00:00:00.000Z'),
             );
 
-            const paths = await repo.list('tactics');
+            const items = await repo.list('tactics');
 
-            expect(paths).toStrictEqual([newPath, midPath, oldPath]);
+            expect(items.map((item) => item.path)).toStrictEqual([newPath, midPath, oldPath]);
+        });
+
+        it('list projects the stored name — present verbatim, absent as undefined', async () => {
+            const repo = factory();
+            const namedPath = await repo.save(
+                makePerspectiveReplayFile('tactics', '2026-06-01T00:00:00.000Z', {
+                    name: 'My Point of View',
+                }),
+            );
+            const unnamedPath = await repo.save(
+                makePerspectiveReplayFile('tactics', '2026-01-01T00:00:00.000Z'),
+            );
+
+            const items = await repo.list('tactics');
+
+            const named = items.find((item) => item.path === namedPath);
+            const unnamed = items.find((item) => item.path === unnamedPath);
+            expect(named?.name).toBe('My Point of View');
+            expect(unnamed?.name).toBeUndefined();
         });
 
         it('list filters by gameId and excludes other games', async () => {

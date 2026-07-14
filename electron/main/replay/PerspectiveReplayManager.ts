@@ -34,6 +34,7 @@ import type {
     PerspectiveReplayFile,
     PerspectiveReplayFrame,
     PerspectiveReplayHeader,
+    PerspectiveReplayListItem,
     PerspectiveReplayRepository,
 } from '@chimera-engine/simulation/replay/index.js';
 import type { Logger } from '../logging/logger.js';
@@ -175,14 +176,14 @@ export class PerspectiveReplayManager {
      * @returns the saved file path.
      * @throws {Error} if no recording is in progress.
      */
-    async finalise(): Promise<string> {
+    async finalise(name?: string): Promise<string> {
         this.log.debug('finalise');
         const state = this.recording;
         if (state === null) {
             throw new Error('PerspectiveReplayManager.finalise: no recording in progress');
         }
 
-        const file = PerspectiveReplayManager.assembleFile(state);
+        const file = PerspectiveReplayManager.assembleFile(state, name);
 
         try {
             const savedPath = await this.repository.save(file);
@@ -205,16 +206,20 @@ export class PerspectiveReplayManager {
      *     file is written);
      *   - nothing recorded or saved yet → throw.
      *
+     * `name` (optional) is the user-entered replay name from the player's save
+     * dialog, stamped only on the first save (the in-progress branch); a repeat
+     * "already saved" press returns the remembered path unchanged.
+     *
      * @throws {Error} when no recording is in progress and none was finalised
      *   for the current match.
      */
-    async exportCurrent(): Promise<string> {
+    async exportCurrent(name?: string): Promise<string> {
         this.log.debug('exportCurrent', {
             recording: this.recording !== null,
             hasSaved: this.lastSavedPath !== null,
         });
         if (this.recording !== null) {
-            return this.finalise();
+            return this.finalise(name);
         }
         if (this.lastSavedPath !== null) {
             return this.lastSavedPath;
@@ -290,8 +295,13 @@ export class PerspectiveReplayManager {
         return file;
     }
 
-    /** List all stored perspective replay paths for `gameId`, newest-first. */
-    list(gameId: string): Promise<string[]> {
+    /**
+     * List stored perspective replays for `gameId`, newest-first, as
+     * {@link PerspectiveReplayListItem}s (`{ path, name? }`). Delegates to the
+     * repository, which reads the `name` in the same single pass that computes the
+     * newest-first sort key (invariant #98 intact — no frames/viewerId cross here).
+     */
+    list(gameId: string): Promise<PerspectiveReplayListItem[]> {
         this.log.debug('list', { gameId });
         return this.repository.list(gameId);
     }
@@ -307,13 +317,16 @@ export class PerspectiveReplayManager {
     /**
      * Build the `PerspectiveReplayFile` for a recording state (shared by
      * {@link finalise} and {@link getCurrentFile}). Pure — reads the state, writes
-     * nothing.
+     * nothing. `name` (the user-entered replay name from the save dialog) is
+     * stamped onto the file only when non-empty; the preview path
+     * ({@link getCurrentFile}) always omits it.
      */
-    private static assembleFile(state: RecordingState): PerspectiveReplayFile {
+    private static assembleFile(state: RecordingState, name?: string): PerspectiveReplayFile {
         return {
             ...state.header,
             durationTicks: PerspectiveReplayManager.computeDurationTicks(state.frames),
             frames: state.frames,
+            ...(name !== undefined && name.length > 0 ? { name } : {}),
         };
     }
 

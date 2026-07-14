@@ -261,25 +261,33 @@ describe('TacticsPostGameSummary — replay actions', () => {
         const exportCurrentMatch = vi.fn(() =>
             Promise.resolve('/replays/tactics/done.chimera-replay'),
         );
-        const { openInPlayer } = installReplayBridge({ exportCurrentMatch });
+        const bridges = installReplayBridge({ exportCurrentMatch });
         const user = userEvent.setup();
         render(<TacticsPostGameSummary {...makeSummaryProps()} />);
 
         await user.click(screen.getByTestId('post-game-replay-btn'));
 
         await waitFor(() => {
-            // The current-match sentinel opens the in-memory recording; `true` marks
-            // the just-finished match so the player shows its save icon.
-            expect(openInPlayer).toHaveBeenCalledWith(CURRENT_MATCH_REPLAY_PATH, true);
+            // The post-game preview now always opens the player's OWN perspective
+            // recording (host and client alike); the current-match sentinel opens
+            // the in-memory recording and `true` marks it saveable so the player
+            // shows its save icon. The build-specific deterministic decision lives
+            // entirely in main.
+            expect(bridges.perspective.openInPlayer).toHaveBeenCalledWith(
+                CURRENT_MATCH_REPLAY_PATH,
+                true,
+            );
         });
-        // Nothing is written to disk on Replay — the export (save) only happens when
-        // the player's save icon is pressed.
+        // Nothing is written to disk on Replay — no export on either surface.
         expect(exportCurrentMatch).not.toHaveBeenCalled();
+        expect(bridges.perspective.exportCurrent).not.toHaveBeenCalled();
     });
 
     it('renders the replay error to the left of the action buttons', async () => {
         installReplayBridge({
-            openInPlayer: vi.fn(() => Promise.reject(new Error('player unavailable'))),
+            perspective: {
+                openInPlayer: vi.fn(() => Promise.reject(new Error('player unavailable'))),
+            },
         });
         const user = userEvent.setup();
         render(<TacticsPostGameSummary {...makeSummaryProps()} />);
@@ -333,7 +341,7 @@ describe('TacticsPostGameSummary — client perspective replay', () => {
         });
     });
 
-    it('a host still uses the authoritative deterministic replay', async () => {
+    it('a host also opens its OWN perspective replay (build-agnostic; the deterministic decision lives in main)', async () => {
         const bridges = installReplayBridge();
         const user = userEvent.setup();
         render(<TacticsPostGameSummary {...makeSummaryProps({ isHost: true })} />);
@@ -341,10 +349,15 @@ describe('TacticsPostGameSummary — client perspective replay', () => {
         await user.click(screen.getByTestId('post-game-replay-btn'));
 
         await waitFor(() => {
-            expect(bridges.openInPlayer).toHaveBeenCalledWith(CURRENT_MATCH_REPLAY_PATH, true);
+            expect(bridges.perspective.openInPlayer).toHaveBeenCalledWith(
+                CURRENT_MATCH_REPLAY_PATH,
+                true,
+            );
         });
-        // Previewing the just-finished match writes nothing — no export on either
-        // surface until the player's save icon is pressed.
+        // The host no longer previews the deterministic replay from the summary —
+        // the deterministic file is a main-side co-save (dev only), never surfaced
+        // here. Previewing writes nothing on either surface.
+        expect(bridges.openInPlayer).not.toHaveBeenCalled();
         expect(bridges.exportCurrentMatch).not.toHaveBeenCalled();
         expect(bridges.perspective.exportCurrent).not.toHaveBeenCalled();
     });
