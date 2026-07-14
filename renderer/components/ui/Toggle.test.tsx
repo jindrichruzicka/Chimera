@@ -100,6 +100,17 @@ describe('Toggle', () => {
         expect(css).toContain("[data-checked='true'] .track");
     });
 
+    it('rings the thumb with the surface colour so it stays legible on the accent track', () => {
+        const thumbRule = /\.thumb\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+
+        expect(thumbRule).toContain(
+            'border: var(--ch-border-width-sm) solid var(--ch-color-surface)',
+        );
+        // The ring must draw inside the box so the thumb's overall size (and
+        // its translateX travel) is unchanged.
+        expect(thumbRule).toContain('box-sizing: border-box');
+    });
+
     it('sizes the label to match the compact input-field label size', () => {
         const labelRule = /\.label\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
         expect(labelRule).toContain('font-size: var(--ch-font-size-sm)');

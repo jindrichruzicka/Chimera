@@ -8,6 +8,11 @@ function readOverrideCss(): string {
     return readFileSync(overrideFilePath, 'utf8');
 }
 
+function readTokenValue(css: string, token: string): string | null {
+    const match = new RegExp(`${token}:\\s*([^;]+);`).exec(css);
+    return match?.[1]?.trim() ?? null;
+}
+
 describe('tactics token overrides', () => {
     it('keeps the ghost button chrome-less: no background, border, or shadow overrides', () => {
         const css = readOverrideCss();
@@ -28,5 +33,41 @@ describe('tactics token overrides', () => {
 
     it('themes keyboard focus with the tactics gold accent', () => {
         expect(readOverrideCss()).toContain('--ch-focus-ring-color: var(--ch-color-accent);');
+    });
+
+    it('keeps a muted text-secondary tier distinct from text-primary', () => {
+        const css = readOverrideCss();
+
+        const primary = readTokenValue(css, '--ch-color-text-primary');
+        const secondary = readTokenValue(css, '--ch-color-text-secondary');
+
+        expect(primary).not.toBeNull();
+        expect(secondary).not.toBeNull();
+        expect(secondary).not.toBe(primary);
+    });
+
+    it('keeps a real accent hover step above the accent base', () => {
+        const css = readOverrideCss();
+
+        const accent = readTokenValue(css, '--ch-color-accent');
+        const accentHover = readTokenValue(css, '--ch-color-accent-hover');
+
+        expect(accent).not.toBeNull();
+        expect(accentHover).not.toBeNull();
+        expect(accentHover).not.toBe(accent);
+    });
+
+    it('themes the luminous accent-strong tier for fills and spinner segments', () => {
+        expect(readTokenValue(readOverrideCss(), '--ch-color-accent-strong')).not.toBeNull();
+    });
+
+    it('themes the hover glows and leaves the composed button hover shadows alone', () => {
+        const css = readOverrideCss();
+
+        // The engine composes --ch-button-shadow-hover(-danger) from shadow-md
+        // plus the glow tokens, so the game themes the glow, not the shadow.
+        expect(readTokenValue(css, '--ch-glow-accent')).not.toBeNull();
+        expect(readTokenValue(css, '--ch-glow-danger')).not.toBeNull();
+        expect(css).not.toMatch(/--ch-button-shadow-hover[\w-]*:/);
     });
 });

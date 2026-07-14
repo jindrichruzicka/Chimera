@@ -24,6 +24,8 @@ import { tacticsBundleCs } from '../shell/translations/cs.js';
 import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsGameHud } from './TacticsGameHud';
 import { useCommitmentBuffer } from './useCommitmentBuffer';
+import styles from './TacticsGameHud.module.css';
+import css from './TacticsGameHud.module.css?raw';
 
 const TACTICS_LANGUAGES = [
     { code: 'en-US', label: 'English' },
@@ -294,12 +296,32 @@ describe('TacticsGameHud', () => {
         it('aligns the toggle dock to the footer action row content edge (not the viewport gutter)', () => {
             render(<TacticsGameHud {...makeHudProps()} />);
 
-            const style = screen.getByTestId('tactics-chat-dock').getAttribute('style') ?? '';
+            expect(screen.getByTestId('tactics-chat-dock')).toHaveClass(
+                styles['chat-dock'] ?? 'chat-dock',
+            );
+
+            const dockRule = /\.chat-dock\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
             // Matches the raised Panel's content-box inset (padding --ch-space-sm +
             // border --ch-button-border-width), not the old free-floating --ch-space-md.
-            expect(style).toContain('calc(var(--ch-space-sm) + var(--ch-button-border-width))');
-            expect(style).not.toContain('var(--ch-space-md)');
+            expect(dockRule).toContain('calc(var(--ch-space-sm) + var(--ch-button-border-width))');
+            expect(dockRule).not.toContain('var(--ch-space-md)');
         });
+    });
+
+    it('styles the HUD through tokenized module classes instead of inline constants', () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        // The tick readout weight and the dimmed stamina state live in the
+        // module, tokenized, rather than in inline style objects.
+        const tickRule = /\.tick\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(tickRule).toContain('font-weight: var(--ch-font-weight-bold)');
+
+        expect(css).toContain(".stamina-group[data-dimmed='true']");
+
+        const troughMatch = /to\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(troughMatch).toContain('opacity: var(--ch-opacity-soft)');
+
+        expect(screen.getByTestId('hud-tick')).toHaveClass(styles['tick'] ?? 'tick');
     });
 
     it('renders engine controls with shared UI button primitives', () => {

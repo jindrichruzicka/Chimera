@@ -9,6 +9,8 @@ import { TacticsShellBackground } from './TacticsShellBackground';
 import { tacticsManifest } from '../manifest';
 import { tacticsBundleCs } from './translations/cs';
 import { tacticsBundleEn } from './translations/en';
+import styles from './TacticsShellBackground.module.css';
+import css from './TacticsShellBackground.module.css?raw';
 
 const TACTICS_LANGUAGES = [
     { code: 'en-US', label: 'English' },
@@ -48,49 +50,53 @@ afterEach(() => {
 });
 
 describe('TacticsShellBackground', () => {
-    it('renders a game-owned shell background surface', () => {
-        render(<TacticsShellBackground />);
+    it('renders a game-owned shell background surface styled by the CSS module', () => {
+        const { container } = render(<TacticsShellBackground />);
 
         const background = screen.getByTestId('tactics-shell-background');
         expect(background).toBeTruthy();
-        expect(background).toHaveClass('menu-bg');
+        expect(background).toHaveClass(styles['menu-bg'] ?? 'menu-bg');
+        // The background is a CSS module now — no raw <style> injection.
+        expect(container.querySelector('style')).toBeNull();
     });
 
     it('defines the menu background selector', () => {
-        render(<TacticsShellBackground />);
+        const menuBgRule = /\.menu-bg\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
 
-        const styles = document.querySelector('style')?.textContent ?? '';
-
-        expect(styles).toContain('.menu-bg {');
-        expect(styles).toContain('position: absolute;');
-        expect(styles).toContain('top: 0;');
-        expect(styles).toContain('left: 0;');
-        expect(styles).toContain('width: 100%;');
-        expect(styles).toContain('height: 100%;');
-        expect(styles).toContain(
+        expect(menuBgRule).toContain('position: absolute;');
+        expect(menuBgRule).toContain('top: 0;');
+        expect(menuBgRule).toContain('left: 0;');
+        expect(menuBgRule).toContain('width: 100%;');
+        expect(menuBgRule).toContain('height: 100%;');
+        expect(menuBgRule).toContain(
             'background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a12 70%);',
         );
-        expect(styles).toContain('z-index: 0;');
+        expect(menuBgRule).toContain('z-index: var(--ch-z-base);');
     });
 
-    it('defines the pulsing menu background glow', () => {
-        render(<TacticsShellBackground />);
+    it('defines the pulsing menu background glow with a game-namespaced, token-timed animation', () => {
+        const glowRule = /\.menu-bg::before\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
 
-        const styles = document.querySelector('style')?.textContent ?? '';
-
-        expect(styles).toContain('.menu-bg::before {');
-        expect(styles).toContain("content: '';");
-        expect(styles).toContain('position: absolute;');
-        expect(styles).toContain('top: 50%;');
-        expect(styles).toContain('left: 50%;');
-        expect(styles).toContain('transform: translate(-50%, -50%);');
-        expect(styles).toContain('width: 400px;');
-        expect(styles).toContain('height: 400px;');
-        expect(styles).toContain(
+        expect(glowRule).toContain("content: '';");
+        expect(glowRule).toContain('position: absolute;');
+        expect(glowRule).toContain('top: 50%;');
+        expect(glowRule).toContain('left: 50%;');
+        expect(glowRule).toContain('transform: translate(-50%, -50%);');
+        expect(glowRule).toContain('width: 400px;');
+        expect(glowRule).toContain('height: 400px;');
+        expect(glowRule).toContain(
             'background: radial-gradient(circle, rgba(147, 51, 234, 0.15) 0%, transparent 70%);',
         );
-        expect(styles).toContain('animation: pulse 4s ease-in-out infinite;');
-        expect(styles).toContain('@keyframes pulse');
+        // Composed from the motion tokens (4000ms = slow × 10), so the pulse
+        // collapses to 0ms under prefers-reduced-motion like every other
+        // animation; the keyframe name is game-namespaced. Whitespace is
+        // flattened because prettier wraps long declaration values.
+        expect(glowRule.replace(/\s+/g, ' ')).toContain(
+            'animation: tactics-menu-pulse calc(var(--ch-duration-slow) * 10) var(--ch-easing-standard) infinite;',
+        );
+        expect(css).toContain('@keyframes tactics-menu-pulse');
+        expect(css).not.toMatch(/\b\d+m?s\b/);
+        expect(css).not.toContain('ease-in-out');
     });
 
     it('renders game title and subtitle on the main-menu overlay', () => {
@@ -112,17 +118,18 @@ describe('TacticsShellBackground', () => {
     it('positions the main-menu overlay above the animated background', () => {
         render(<TacticsShellBackground />);
 
-        expect(screen.getByTestId('tactics-shell-background')).toHaveClass('menu-bg');
+        expect(screen.getByTestId('tactics-shell-background')).toHaveClass(
+            styles['menu-bg'] ?? 'menu-bg',
+        );
         expect(screen.getByTestId('tactics-shell-background-main-menu-overlay')).toHaveClass(
-            'main-menu-overlay',
+            styles['main-menu-overlay'] ?? 'main-menu-overlay',
         );
 
-        const styles = document.querySelector('style')?.textContent ?? '';
+        const overlayRule = /\.main-menu-overlay\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
 
-        expect(styles).toContain('.main-menu-overlay {');
-        expect(styles).toContain('position: absolute;');
-        expect(styles).toContain('inset: 0;');
-        expect(styles).toContain('z-index: 1;');
+        expect(overlayRule).toContain('position: absolute;');
+        expect(overlayRule).toContain('inset: 0;');
+        expect(overlayRule).toContain('z-index: var(--ch-z-raised);');
     });
 
     it('renders game title and subtitle when the main-menu route has a trailing slash', () => {
@@ -155,26 +162,28 @@ describe('TacticsShellBackground', () => {
     });
 
     it('shifts the main-menu overlay content 160px above center', () => {
-        render(<TacticsShellBackground />);
+        const overlayRule = /\.main-menu-overlay\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
 
-        const styles = document.querySelector('style')?.textContent ?? '';
-
-        expect(styles).toContain('transform: translateY(-160px);');
+        expect(overlayRule).toContain('transform: translateY(-160px);');
     });
 
-    it('defines .game-title and .subtitle CSS rules', () => {
-        render(<TacticsShellBackground />);
+    it('defines the hero title and subtitle rules, drawing the title font from the button token', () => {
+        const titleRule = /\.game-title\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
 
-        const styles = document.querySelector('style')?.textContent ?? '';
+        // The display font routes through the theme token (Cinzel in tactics)
+        // instead of a hardcoded family literal.
+        expect(titleRule).toContain('font-family: var(--ch-font-ui-button);');
+        expect(css).not.toContain("'Cinzel'");
+        expect(titleRule).toContain('font-size: 4rem;');
+        expect(titleRule).toContain('font-weight: 900;');
+        expect(titleRule).toContain('letter-spacing: 3px;');
+        expect(titleRule).toContain(
+            'background: linear-gradient(135deg, #f4d03f, #e67e22, #f4d03f);',
+        );
 
-        expect(styles).toContain('.game-title {');
-        expect(styles).toContain("font-family: 'Cinzel', serif;");
-        expect(styles).toContain('font-size: 4rem;');
-        expect(styles).toContain('font-weight: 900;');
-        expect(styles).toContain('background: linear-gradient(135deg, #f4d03f, #e67e22, #f4d03f);');
-        expect(styles).toContain('.subtitle {');
-        expect(styles).toContain('font-size: 1.2rem;');
-        expect(styles).toContain('color: #9b8ec4;');
-        expect(styles).toContain('font-style: italic;');
+        const subtitleRule = /\.subtitle\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(subtitleRule).toContain('font-size: 1.2rem;');
+        expect(subtitleRule).toContain('color: #9b8ec4;');
+        expect(subtitleRule).toContain('font-style: italic;');
     });
 });

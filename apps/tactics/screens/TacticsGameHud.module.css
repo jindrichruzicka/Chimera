@@ -1,13 +1,79 @@
 /*
  * TacticsGameHud.module.css
  *
- * The HUD itself is styled with inline `React.CSSProperties`; this module exists
- * only for the one thing inline styles cannot express — the `@keyframes` opacity
- * pulse on the commitment-mode "Waiting for other player(s)…" message (#730).
- * Durations/easings come from the shared motion tokens, which collapse to
- * `0ms`/`linear` under `prefers-reduced-motion` (renderer/styles/tokens.css), so
- * the pulse is automatically disabled for reduced-motion users.
+ * Tokenized styling for the tactics HUD footer — status row, action row, the
+ * fixed chat dock, and the commitment-mode "waiting" pulse. Durations/easings
+ * come from the shared motion tokens, which collapse to `0ms`/`linear` under
+ * `prefers-reduced-motion` (renderer/styles/tokens.css), so the pulse is
+ * automatically disabled for reduced-motion users.
  */
+
+.hud {
+    font-family: var(--ch-font-ui);
+}
+
+.panel {
+    padding: 0 var(--ch-space-sm);
+}
+
+.body {
+    align-items: center;
+    display: flex;
+    gap: var(--ch-space-md);
+    justify-content: space-between;
+}
+
+.status {
+    align-items: center;
+    display: flex;
+    gap: var(--ch-space-sm);
+    min-width: max-content;
+}
+
+.badge {
+    padding: 0 var(--ch-space-sm);
+}
+
+.tick-group,
+.stamina-group {
+    align-items: baseline;
+    display: flex;
+    gap: var(--ch-space-xs);
+}
+
+.stamina-group[data-dimmed='true'] {
+    opacity: var(--ch-opacity-disabled);
+}
+
+.label {
+    line-height: var(--ch-line-height-tight);
+}
+
+.tick {
+    color: var(--ch-color-text-primary);
+    font-size: var(--ch-font-size-md);
+    font-weight: var(--ch-font-weight-bold);
+}
+
+.divider {
+    align-self: center;
+    min-height: var(--ch-space-lg);
+}
+
+.actions {
+    display: flex;
+    gap: var(--ch-space-xs);
+}
+
+/* Compact footer buttons: the shared Button reads these custom properties, so
+   redefining them here shrinks the control without forking its chrome. */
+.action-button {
+    --ch-button-font-size: var(--ch-font-size-sm);
+    --ch-button-line-height: var(--ch-line-height-tight);
+    --ch-button-min-width: auto;
+    --ch-button-padding: var(--ch-space-xs) var(--ch-space-sm);
+    margin-block: var(--ch-space-xs);
+}
 
 .waiting-message {
     color: var(--ch-color-text-secondary);
@@ -22,6 +88,25 @@
         opacity: var(--ch-opacity-full);
     }
     to {
-        opacity: 0.4;
+        opacity: var(--ch-opacity-soft);
     }
+}
+
+/* A fixed dock on the trailing edge, kept clear of the HUD footer. The toggle
+   owns its own placement so the engine shell stays agnostic and the board stays
+   fully clickable while chat is collapsed. The shared Drawer owns the expanded
+   chat surface's sizing and overlay, so the dock only anchors the corner toggle.
+   The trailing inset reuses the raised HUD Panel's own content-box inset —
+   horizontal padding (--ch-space-sm) plus its border (--ch-button-border-width) —
+   so the toggle's right edge lines up with the footer action row instead of
+   floating in the viewport gutter. */
+.chat-dock {
+    align-items: flex-end;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
+    inset-block-end: calc(var(--ch-space-xl) * 2);
+    inset-inline-end: calc(var(--ch-space-sm) + var(--ch-button-border-width));
+    position: fixed;
+    z-index: var(--ch-z-raised);
 }

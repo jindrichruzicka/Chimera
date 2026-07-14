@@ -200,6 +200,14 @@ describe('TacticsLobbyScreen', () => {
             fireEvent.click(screen.getByTestId('lobby-address-copy'));
             expect(writeText).toHaveBeenCalledWith('127.0.0.1:7777:abc123');
         });
+
+        it('shows the shared copy icon on the copy affordance, named by its aria-label', () => {
+            render(<TacticsLobbyScreen {...makeProps()} />);
+
+            const copyButton = screen.getByTestId('lobby-address-copy');
+            expect(copyButton.querySelector('svg[data-ch-icon="copy"]')).not.toBeNull();
+            expect(copyButton).toHaveAccessibleName('Copy lobby address');
+        });
     });
 
     describe('board colour (host-authored)', () => {
@@ -316,7 +324,7 @@ describe('TacticsLobbyScreen', () => {
     });
 
     describe('AI players (host-only)', () => {
-        it('renders icon-only Add/Remove controls with +/− glyphs and accessible names', () => {
+        it('renders icon-only Add/Remove controls with shared icon glyphs and accessible names', () => {
             render(
                 <TacticsLobbyScreen
                     {...makeProps({
@@ -325,15 +333,16 @@ describe('TacticsLobbyScreen', () => {
                 />,
             );
 
-            // Icon button: a "+" glyph, full accessible name carried by aria-label.
+            // Icon button: the shared plus glyph, full accessible name carried
+            // by aria-label (the decorative Icon carries none).
             const addButton = screen.getByTestId('tactics-add-ai');
-            expect(addButton).toHaveTextContent('+');
+            expect(addButton.querySelector('svg[data-ch-icon="plus"]')).not.toBeNull();
             expect(addButton).toHaveAccessibleName('Add AI player');
             expect(addButton).toHaveAttribute('data-ch-icon-button-variant');
 
-            // Remove is a "−" icon button keeping its distinct accessible name.
+            // Remove is the shared minus glyph keeping its distinct accessible name.
             const removeButton = screen.getByTestId('tactics-remove-ai-1');
-            expect(removeButton).toHaveTextContent('−');
+            expect(removeButton.querySelector('svg[data-ch-icon="minus"]')).not.toBeNull();
             expect(removeButton).toHaveAccessibleName('Remove AI Player 1');
             expect(removeButton).toHaveAttribute('data-ch-icon-button-variant');
         });

@@ -123,26 +123,22 @@ export function TacticsGameHud({
 
     return (
         <>
-            <footer aria-label={t(HUD_KEYS.hudAriaLabel)} style={tacticsHudStyle}>
-                <Panel
-                    data-testid="tactics-hud-panel"
-                    style={tacticsHudPanelStyle}
-                    variant="raised"
-                >
-                    <div style={tacticsHudBodyStyle}>
-                        <div style={tacticsHudStatusStyle}>
+            <footer aria-label={t(HUD_KEYS.hudAriaLabel)} className={styles['hud']}>
+                <Panel className={styles['panel']} data-testid="tactics-hud-panel" variant="raised">
+                    <div className={styles['body']}>
+                        <div className={styles['status']}>
                             <Badge
+                                className={styles['badge']}
                                 data-testid="tactics-turn-status"
-                                style={tacticsHudBadgeStyle}
                                 variant={turnStatus.variant}
                             >
                                 {turnStatus.label}
                             </Badge>
-                            <div style={tacticsHudTickGroupStyle}>
-                                <Caption style={tacticsHudLabelStyle} tone="muted">
+                            <div className={styles['tick-group']}>
+                                <Caption className={styles['label']} tone="muted">
                                     {t(HUD_KEYS.tick)}
                                 </Caption>
-                                <output data-testid="hud-tick" style={tacticsHudTickStyle}>
+                                <output className={styles['tick']} data-testid="hud-tick">
                                     {tick}
                                 </output>
                             </div>
@@ -152,18 +148,14 @@ export function TacticsGameHud({
                                 entirely when the projection carries no stamina. */}
                             {stamina !== null && (
                                 <div
+                                    className={styles['stamina-group']}
                                     data-dimmed={snapshot.isMyTurn ? undefined : 'true'}
                                     data-testid="hud-stamina-group"
-                                    style={
-                                        snapshot.isMyTurn
-                                            ? tacticsHudStaminaGroupStyle
-                                            : tacticsHudStaminaGroupDimmedStyle
-                                    }
                                 >
-                                    <Caption style={tacticsHudLabelStyle} tone="muted">
+                                    <Caption className={styles['label']} tone="muted">
                                         {t(HUD_KEYS.stamina)}
                                     </Caption>
-                                    <output data-testid="hud-stamina" style={tacticsHudTickStyle}>
+                                    <output className={styles['tick']} data-testid="hud-stamina">
                                         {stamina.current}/{stamina.max}
                                     </output>
                                 </div>
@@ -179,42 +171,42 @@ export function TacticsGameHud({
                             )}
                         </div>
                         <Divider
+                            className={styles['divider']}
                             data-testid="tactics-hud-divider"
                             orientation="vertical"
-                            style={tacticsHudDividerStyle}
                         />
                         <div
                             aria-label={t(HUD_KEYS.actionsAriaLabel)}
-                            style={tacticsHudActionsStyle}
+                            className={styles['actions']}
                         >
                             <Button
+                                className={styles['action-button']}
                                 data-testid="undo"
                                 disabled={resolvedUndoDisabled}
                                 onClick={resolvedHandleUndo}
                                 size="sm"
-                                style={tacticsHudButtonStyle}
                                 variant="secondary"
                             >
                                 {t(HUD_KEYS.undo)}
                             </Button>
                             {!isCommitment && (
                                 <Button
+                                    className={styles['action-button']}
                                     data-testid="redo"
                                     disabled={redoDisabled}
                                     onClick={handleRedo}
                                     size="sm"
-                                    style={tacticsHudButtonStyle}
                                     variant="secondary"
                                 >
                                     {t(HUD_KEYS.redo)}
                                 </Button>
                             )}
                             <Button
+                                className={styles['action-button']}
                                 data-testid="end-turn"
                                 disabled={resolvedEndTurnDisabled}
                                 onClick={resolvedHandleEndTurn}
                                 size="sm"
-                                style={tacticsHudButtonStyle}
                                 variant="primary"
                             >
                                 {t(HUD_KEYS.endTurn)}
@@ -222,13 +214,15 @@ export function TacticsGameHud({
                             {/* Host-only save: the shell withholds saveGame
                                 from clients, so presence IS the gate. Disabled while
                                 the commitment buffer holds unsent moves — a save
-                                captured now would miss them. */}
+                                captured now would miss them. SaveGameButton styles
+                                its trigger only through the `style` prop, so the
+                                compact values ride an inline constant here. */}
                             {saveGame !== undefined && (
                                 <SaveGameButton
                                     data-testid="hud-save-btn"
                                     disabled={buffer.length > 0}
                                     onSave={saveGame}
-                                    style={tacticsHudButtonStyle}
+                                    style={compactSaveButtonStyle}
                                 />
                             )}
                         </div>
@@ -242,7 +236,7 @@ export function TacticsGameHud({
                 pins to the bottom-right; opening it slides the dismissible Drawer in.
                 Closing the Drawer (toggle, close button, Escape, or backdrop) drives
                 the same state, keeping the toggle's expanded affordance in sync. */}
-            <div data-testid="tactics-chat-dock" style={tacticsHudChatDockStyle}>
+            <div className={styles['chat-dock']} data-testid="tactics-chat-dock">
                 {/* Icon-only toggle: the chat-bubble glyph replaces the former
                     "Chat"/"Hide chat" label, which now supplies the accessible
                     name via aria-label (the decorative Icon carries none). Outlined
@@ -290,94 +284,14 @@ function resolveTacticsTurnStatus(isMyTurn: boolean, t: TranslateFn): TacticsTur
     return { label: t(HUD_KEYS.turnWaiting), variant: 'warning' };
 }
 
-const tacticsHudStyle: React.CSSProperties = {
-    fontFamily: 'var(--ch-font-ui)',
-};
-
-const tacticsHudPanelStyle: React.CSSProperties = {
-    padding: '0 var(--ch-space-sm)',
-};
-
-const tacticsHudBodyStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 'var(--ch-space-md)',
-};
-
-const tacticsHudStatusStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--ch-space-sm)',
-    minWidth: 'max-content',
-};
-
-const tacticsHudBadgeStyle: React.CSSProperties = {
-    padding: '0 var(--ch-space-sm)',
-};
-
-const tacticsHudTickGroupStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: 'var(--ch-space-xs)',
-};
-
-const tacticsHudStaminaGroupStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: 'var(--ch-space-xs)',
-};
-
-const tacticsHudStaminaGroupDimmedStyle: React.CSSProperties = {
-    ...tacticsHudStaminaGroupStyle,
-    opacity: 'var(--ch-opacity-disabled)',
-};
-
-const tacticsHudLabelStyle: React.CSSProperties = {
-    lineHeight: 'var(--ch-line-height-tight)',
-};
-
-const tacticsHudTickStyle: React.CSSProperties = {
-    color: 'var(--ch-color-text-primary)',
-    fontSize: 'var(--ch-font-size-md)',
-    fontWeight: 700,
-};
-
-const tacticsHudDividerStyle: React.CSSProperties = {
-    alignSelf: 'center',
-    minHeight: 'var(--ch-space-lg)',
-};
-
-const tacticsHudActionsStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: 'var(--ch-space-xs)',
-};
-
-const tacticsHudButtonStyle: CompactButtonStyle = {
+// Mirrors the module's `.action-button` compact values for the one control
+// whose only styling seam is the `style` prop.
+const compactSaveButtonStyle: CompactButtonStyle = {
     '--ch-button-font-size': 'var(--ch-font-size-sm)',
     '--ch-button-line-height': 'var(--ch-line-height-tight)',
     '--ch-button-min-width': 'auto',
     '--ch-button-padding': 'var(--ch-space-xs) var(--ch-space-sm)',
     marginBlock: 'var(--ch-space-xs)',
-};
-
-// A fixed dock on the trailing edge, kept clear of the HUD footer. The toggle
-// owns its own placement so the engine shell stays agnostic and the board stays
-// fully clickable while chat is collapsed. The shared Drawer owns the expanded
-// chat surface's sizing and overlay, so the dock only anchors the corner toggle.
-// The trailing inset reuses the raised HUD Panel's own content-box inset —
-// horizontal padding (--ch-space-sm) plus its border (--ch-button-border-width) —
-// so the toggle's right edge lines up with the footer action row instead of
-// floating in the viewport gutter.
-const tacticsHudChatDockStyle: React.CSSProperties = {
-    position: 'fixed',
-    insetInlineEnd: 'calc(var(--ch-space-sm) + var(--ch-button-border-width))',
-    insetBlockEnd: 'calc(var(--ch-space-xl) * 2)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: 'var(--ch-space-xs)',
-    zIndex: 'var(--ch-z-raised)',
 };
 
 export default TacticsGameHud;

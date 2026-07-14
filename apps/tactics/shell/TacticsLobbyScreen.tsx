@@ -29,6 +29,7 @@ import React from 'react';
 import {
     Badge,
     Heading,
+    Icon,
     IconButton,
     Select,
     Toggle,
@@ -128,7 +129,7 @@ export function TacticsLobbyScreen({
                                     copyLobbyAddress(lobbyState.info.sessionId);
                                 }}
                             >
-                                ⧉
+                                <Icon name="copy" />
                             </IconButton>
                         </div>
                     </div>
@@ -243,7 +244,7 @@ export function TacticsLobbyScreen({
                                 type="button"
                                 variant="secondary"
                             >
-                                +
+                                <Icon name="plus" />
                             </IconButton>
                         ) : null}
                     </div>
@@ -281,7 +282,7 @@ export function TacticsLobbyScreen({
                                             type="button"
                                             variant="danger"
                                         >
-                                            −
+                                            <Icon name="minus" />
                                         </IconButton>
                                     ) : null}
                                 </li>

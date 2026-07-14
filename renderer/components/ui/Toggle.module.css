@@ -62,9 +62,14 @@
 
 .thumb {
     background-color: var(--ch-color-text-secondary);
+    /* Surface-coloured ring keeps the checked thumb legible on the accent
+       track in themes where thumb and track colours sit close in luminance.
+       border-box keeps the ring inside the thumb's existing geometry. */
+    border: var(--ch-border-width-sm) solid var(--ch-color-surface);
     border-radius: var(--ch-radius-pill);
     block-size: calc(var(--ch-space-lg) - var(--ch-space-xs));
     box-shadow: var(--ch-shadow-sm);
+    box-sizing: border-box;
     display: block;
     inline-size: calc(var(--ch-space-lg) - var(--ch-space-xs));
     transition: var(--ch-button-transition);

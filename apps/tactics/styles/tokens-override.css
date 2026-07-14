@@ -9,19 +9,30 @@
 :root {
     --ch-color-surface: rgba(16, 16, 29, 0.9);
     --ch-color-surface-raised: rgba(26, 26, 46, 0.9);
+    --ch-color-surface-hover: rgba(201, 168, 76, 0.08);
+    --ch-color-surface-selected: rgba(201, 168, 76, 0.18);
     --ch-color-overlay-backdrop: rgba(16, 16, 29, 0.76);
     --ch-color-text-primary: #e0d6c8;
-    --ch-color-text-secondary: #e0d6c8;
+    --ch-color-text-secondary: #b3a68f;
     --ch-color-accent: #c9a84c;
-    --ch-color-accent-hover: #c9a84c;
+    --ch-color-accent-hover: #ddc172;
+    --ch-color-accent-strong: #e3c778;
+
+    /* Warm ink borders replacing the engine zinc, cohesive with the navy
+       surfaces. */
+    --ch-color-border: #413d52;
+    --ch-color-border-strong: #565070;
+    --ch-color-border-muted: #2a2740;
 
     /* Keyboard focus rings in tactics gold. Safe here because the tactics
        primary-button focus visibility comes from the hover backdrop, not the
        border alone. */
     --ch-focus-ring-color: var(--ch-color-accent);
 
-    --ch-button-color-primary: var(--ch-color-accent-hover);
-    --ch-button-color-primary-hover: var(--ch-color-accent-hover);
+    /* Resting gold text on the translucent fill; on hover the button
+       "ignites" and the text flips to ink. */
+    --ch-button-color-primary: #ddc172;
+    --ch-button-color-primary-hover: #10101d;
     --ch-button-color-secondary: var(--ch-color-text-secondary);
     --ch-button-color-secondary-hover: var(--ch-color-accent-hover);
     --ch-button-color-ghost: var(--ch-color-text-secondary);
@@ -36,8 +47,8 @@
     );
     --ch-button-bg-primary-hover: linear-gradient(
         135deg,
-        rgba(201, 168, 76, 0.5),
-        rgba(230, 126, 34, 0.5)
+        rgba(201, 168, 76, 0.85),
+        rgba(230, 126, 34, 0.85)
     );
     --ch-button-bg-secondary: rgba(26, 26, 46, 0.9);
     --ch-button-bg-secondary-hover: rgba(201, 168, 76, 0.15);
@@ -46,13 +57,15 @@
 
     --ch-button-border-primary: #c9a84c;
     --ch-button-border-primary-hover: #c9a84c;
-    --ch-button-border-secondary: rgba(201, 168, 76, 0.4);
+    --ch-button-border-secondary: rgba(201, 168, 76, 0.6);
     --ch-button-border-secondary-hover: #c9a84c;
-    --ch-button-border-danger: rgba(201, 168, 76, 0.4);
+    --ch-button-border-danger: rgba(201, 168, 76, 0.6);
     --ch-button-border-danger-hover: #c9a84c;
 
-    --ch-button-shadow-hover: 0 4px 20px rgba(201, 168, 76, 0.2);
-    --ch-button-shadow-hover-danger: 0 4px 20px rgba(201, 168, 76, 0.2);
+    /* The engine composes the button hover shadows from shadow-md plus these
+       glows, so the game themes the glow rather than the whole shadow. */
+    --ch-glow-accent: 0 0 16px rgba(201, 168, 76, 0.3);
+    --ch-glow-danger: 0 0 16px rgba(201, 168, 76, 0.3);
 
     --ch-toggle-button-color-pressed: var(--ch-button-bg-secondary);
     --ch-toggle-button-color-pressed-hover: var(--ch-button-bg-secondary);

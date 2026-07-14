@@ -108,7 +108,7 @@
     flex: none;
     font-size: var(--ch-font-size-sm);
     font-weight: var(--ch-font-weight-semibold);
-    line-height: 1;
+    line-height: var(--ch-line-height-none);
     padding: var(--ch-space-xs) var(--ch-space-sm);
 }
 
