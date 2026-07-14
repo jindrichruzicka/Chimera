@@ -270,7 +270,24 @@
     --ch-duration-fast: 120ms;
     --ch-duration-normal: 250ms;
     --ch-duration-slow: 400ms;
+    /* Directional easing vocabulary: standard for in-place state changes,
+       decelerate for elements entering the screen, accelerate for exits. */
     --ch-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --ch-easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+    --ch-easing-accelerate: cubic-bezier(0.4, 0, 1, 1);
+
+    /* ── Feedback motion ──
+     * Spinner rotation and toast entrances follow the same name/duration/
+     * easing token pattern as the overlays, so games can retime or retarget
+     * them; the reduced-name variant is the fade the ToastHost swaps in when
+     * the OS prefers reduced motion. */
+    --ch-spinner-anim-name: ch-spinner-rotate;
+    --ch-spinner-anim-duration: var(--ch-duration-slow);
+    --ch-spinner-anim-easing: var(--ch-easing-standard);
+    --ch-toast-anim-enter-name: ch-toast-enter;
+    --ch-toast-anim-enter-reduced-name: ch-toast-fade-in;
+    --ch-toast-anim-enter-duration: var(--ch-duration-normal);
+    --ch-toast-anim-enter-easing: var(--ch-easing-decelerate);
 
     /* ── Overlay motion ──
      * Open/close animations for the shared Modal and Drawer. The *-name tokens
@@ -280,24 +297,24 @@
      * overlay motion to instant. */
     --ch-backdrop-anim-enter-name: ch-backdrop-enter;
     --ch-backdrop-anim-enter-duration: var(--ch-duration-normal);
-    --ch-backdrop-anim-enter-easing: var(--ch-easing-standard);
+    --ch-backdrop-anim-enter-easing: var(--ch-easing-decelerate);
     --ch-backdrop-anim-exit-name: ch-backdrop-exit;
     --ch-backdrop-anim-exit-duration: var(--ch-duration-fast);
-    --ch-backdrop-anim-exit-easing: var(--ch-easing-standard);
+    --ch-backdrop-anim-exit-easing: var(--ch-easing-accelerate);
 
     --ch-modal-anim-enter-name: ch-modal-enter;
     --ch-modal-anim-enter-duration: var(--ch-duration-normal);
-    --ch-modal-anim-enter-easing: var(--ch-easing-standard);
+    --ch-modal-anim-enter-easing: var(--ch-easing-decelerate);
     --ch-modal-anim-exit-name: ch-modal-exit;
     --ch-modal-anim-exit-duration: var(--ch-duration-fast);
-    --ch-modal-anim-exit-easing: var(--ch-easing-standard);
+    --ch-modal-anim-exit-easing: var(--ch-easing-accelerate);
 
     --ch-drawer-anim-enter-name: ch-drawer-enter;
     --ch-drawer-anim-enter-duration: var(--ch-duration-normal);
-    --ch-drawer-anim-enter-easing: var(--ch-easing-standard);
+    --ch-drawer-anim-enter-easing: var(--ch-easing-decelerate);
     --ch-drawer-anim-exit-name: ch-drawer-exit;
     --ch-drawer-anim-exit-duration: var(--ch-duration-fast);
-    --ch-drawer-anim-exit-easing: var(--ch-easing-standard);
+    --ch-drawer-anim-exit-easing: var(--ch-easing-accelerate);
     --ch-drawer-slide-distance: 100%;
 }
 
@@ -307,5 +324,7 @@
         --ch-duration-normal: 0ms;
         --ch-duration-slow: 0ms;
         --ch-easing-standard: linear;
+        --ch-easing-decelerate: linear;
+        --ch-easing-accelerate: linear;
     }
 }

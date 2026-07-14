@@ -34,13 +34,29 @@ export const SCREEN_FADE_MS = SCREEN_FADE_FAST_MS;
 export type ScreenFadeSpeed = 'fast' | 'slow';
 
 /**
+ * The FadeProvider animates in JS, so the CSS reduced-motion collapse of the
+ * `--ch-duration-*` tokens never reaches these fades; the duration source has
+ * to honour the preference itself. Checked per call because the OS setting
+ * can change while the app runs.
+ */
+function prefersReducedMotion(): boolean {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        return false;
+    }
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
  * The screen-fade duration to use right now: 0 when running under the
- * Playwright e2e build (so navigation is instant, regardless of speed),
- * otherwise the {@link SCREEN_FADE_FAST_MS} / {@link SCREEN_FADE_SLOW_MS}
- * duration for `speed` (defaults to `'fast'`).
+ * Playwright e2e build or when the user prefers reduced motion (so navigation
+ * is instant, regardless of speed), otherwise the {@link SCREEN_FADE_FAST_MS}
+ * / {@link SCREEN_FADE_SLOW_MS} duration for `speed` (defaults to `'fast'`).
  */
 export function screenFadeMs(speed: ScreenFadeSpeed = 'fast'): number {
     if (process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1') {
+        return 0;
+    }
+    if (prefersReducedMotion()) {
         return 0;
     }
     return speed === 'slow' ? SCREEN_FADE_SLOW_MS : SCREEN_FADE_FAST_MS;

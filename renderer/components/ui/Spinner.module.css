@@ -6,7 +6,8 @@
 }
 
 .indicator {
-    animation: ch-spinner-rotate var(--ch-duration-slow) var(--ch-easing-standard) infinite;
+    animation: var(--ch-spinner-anim-name) var(--ch-spinner-anim-duration)
+        var(--ch-spinner-anim-easing) infinite;
     border-color: var(--ch-color-border);
     border-radius: var(--ch-radius-pill);
     border-style: solid;
@@ -15,16 +16,4 @@
     display: inline-block;
     height: var(--ch-space-lg);
     width: var(--ch-space-lg);
-}
-
-@keyframes ch-spinner-rotate {
-    from {
-        opacity: var(--ch-spinner-opacity-min);
-        transform: rotate(0deg);
-    }
-
-    to {
-        opacity: var(--ch-opacity-full);
-        transform: rotate(360deg);
-    }
 }

@@ -288,6 +288,15 @@ const expectedTokens = [
     '--ch-duration-normal',
     '--ch-duration-slow',
     '--ch-easing-standard',
+    '--ch-easing-decelerate',
+    '--ch-easing-accelerate',
+    '--ch-spinner-anim-name',
+    '--ch-spinner-anim-duration',
+    '--ch-spinner-anim-easing',
+    '--ch-toast-anim-enter-name',
+    '--ch-toast-anim-enter-reduced-name',
+    '--ch-toast-anim-enter-duration',
+    '--ch-toast-anim-enter-easing',
     '--ch-backdrop-anim-enter-name',
     '--ch-backdrop-anim-enter-duration',
     '--ch-backdrop-anim-enter-easing',
@@ -332,6 +341,35 @@ describe('renderer design tokens', () => {
         expect(css).toContain('--ch-duration-normal: 0ms;');
         expect(css).toContain('--ch-duration-slow: 0ms;');
         expect(css).toContain('--ch-easing-standard: linear;');
+        expect(css).toContain('--ch-easing-decelerate: linear;');
+        expect(css).toContain('--ch-easing-accelerate: linear;');
+    });
+
+    it('declares directional easing primitives for entrances and exits', () => {
+        const css = readTokensCss();
+
+        expect(extractTokenValue(css, '--ch-easing-standard')).toBe('cubic-bezier(0.4, 0, 0.2, 1)');
+        expect(extractTokenValue(css, '--ch-easing-decelerate')).toBe('cubic-bezier(0, 0, 0.2, 1)');
+        expect(extractTokenValue(css, '--ch-easing-accelerate')).toBe('cubic-bezier(0.4, 0, 1, 1)');
+    });
+
+    it('parameterises the spinner and toast animations through motion tokens', () => {
+        const css = readTokensCss();
+
+        expect(extractTokenValue(css, '--ch-spinner-anim-name')).toBe('ch-spinner-rotate');
+        expect(extractTokenValue(css, '--ch-spinner-anim-duration')).toBe(
+            'var(--ch-duration-slow)',
+        );
+        expect(extractTokenValue(css, '--ch-toast-anim-enter-name')).toBe('ch-toast-enter');
+        expect(extractTokenValue(css, '--ch-toast-anim-enter-reduced-name')).toBe(
+            'ch-toast-fade-in',
+        );
+        expect(extractTokenValue(css, '--ch-toast-anim-enter-duration')).toBe(
+            'var(--ch-duration-normal)',
+        );
+        expect(extractTokenValue(css, '--ch-toast-anim-enter-easing')).toBe(
+            'var(--ch-easing-decelerate)',
+        );
     });
 
     it('parameterises overlay motion through the shared duration and easing primitives', () => {
@@ -344,8 +382,9 @@ describe('renderer design tokens', () => {
             expect(extractTokenValue(css, `--ch-${component}-anim-exit-name`)).toBe(
                 `ch-${component}-exit`,
             );
-            // Enter is deliberate, exit is quick; both collapse to 0ms under
-            // the reduced-motion block because they reference the primitives.
+            // Enter is deliberate and decelerates in; exit is quick and
+            // accelerates away. Both collapse to 0ms/linear under the
+            // reduced-motion block because they reference the primitives.
             expect(extractTokenValue(css, `--ch-${component}-anim-enter-duration`)).toBe(
                 'var(--ch-duration-normal)',
             );
@@ -353,10 +392,10 @@ describe('renderer design tokens', () => {
                 'var(--ch-duration-fast)',
             );
             expect(extractTokenValue(css, `--ch-${component}-anim-enter-easing`)).toBe(
-                'var(--ch-easing-standard)',
+                'var(--ch-easing-decelerate)',
             );
             expect(extractTokenValue(css, `--ch-${component}-anim-exit-easing`)).toBe(
-                'var(--ch-easing-standard)',
+                'var(--ch-easing-accelerate)',
             );
         }
 

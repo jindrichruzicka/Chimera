@@ -12,7 +12,8 @@
 }
 
 .toast {
-    animation: toast-enter var(--ch-duration-normal) var(--ch-easing-standard);
+    animation: var(--ch-toast-anim-enter-name) var(--ch-toast-anim-enter-duration)
+        var(--ch-toast-anim-enter-easing);
     background: var(--ch-color-surface-raised);
     border-color: var(--_toast-border-color);
     border-radius: var(--ch-radius-md);
@@ -31,7 +32,7 @@
 }
 
 .reducedMotion .toast {
-    animation-name: toast-fade-in;
+    animation-name: var(--ch-toast-anim-enter-reduced-name);
 }
 
 .copy {
@@ -75,26 +76,4 @@
 
 .error {
     --_toast-border-color: var(--ch-color-error-border);
-}
-
-@keyframes toast-enter {
-    from {
-        opacity: var(--ch-opacity-disabled);
-        transform: translateY(var(--ch-space-md));
-    }
-
-    to {
-        opacity: var(--ch-opacity-full);
-        transform: translateY(var(--ch-space-none));
-    }
-}
-
-@keyframes toast-fade-in {
-    from {
-        opacity: var(--ch-opacity-disabled);
-    }
-
-    to {
-        opacity: var(--ch-opacity-full);
-    }
 }

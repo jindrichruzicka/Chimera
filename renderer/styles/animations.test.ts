@@ -1,9 +1,16 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 function readRendererFile(relativePath: string): string {
     return readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), 'utf8');
+}
+
+function collectModuleCssFiles(rootDir: string): readonly string[] {
+    return readdirSync(rootDir, { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.module.css'))
+        .map((entry) => join(entry.parentPath, entry.name));
 }
 
 function extractKeyframeNames(css: string): readonly string[] {
@@ -13,7 +20,7 @@ function extractKeyframeNames(css: string): readonly string[] {
 }
 
 describe('renderer overlay animations stylesheet', () => {
-    it('declares exactly the six global overlay keyframes', () => {
+    it('declares exactly the nine global engine keyframes', () => {
         const names = extractKeyframeNames(readRendererFile('./animations.css'));
 
         expect(new Set(names)).toEqual(
@@ -24,24 +31,43 @@ describe('renderer overlay animations stylesheet', () => {
                 'ch-modal-exit',
                 'ch-drawer-enter',
                 'ch-drawer-exit',
+                'ch-spinner-rotate',
+                'ch-toast-enter',
+                'ch-toast-fade-in',
             ]),
         );
-        expect(names).toHaveLength(6);
+        expect(names).toHaveLength(9);
     });
 
-    it('backs every *-anim-*-name token with a keyframe declared here', () => {
+    it('backs every *-anim-*name token with a keyframe declared here', () => {
         const tokens = readRendererFile('./tokens.css');
         const declaredKeyframes = new Set(
             extractKeyframeNames(readRendererFile('./animations.css')),
         );
         const nameTokenValues = Array.from(
-            tokens.matchAll(/--ch-[\w-]+-anim-(?:enter|exit)-name:\s*([\w-]+);/g),
+            tokens.matchAll(/--ch-[\w-]+-anim-[\w-]*name:\s*([\w-]+);/g),
             (match) => match[1],
         ).filter((v): v is string => v !== undefined);
 
-        expect(nameTokenValues.length).toBeGreaterThan(0);
+        // Covers the overlay enter/exit names plus the continuous spinner and
+        // toast names (including the reduced-motion toast variant).
+        expect(nameTokenValues.length).toBeGreaterThanOrEqual(9);
         for (const value of nameTokenValues) {
             expect(declaredKeyframes).toContain(value);
+        }
+    });
+
+    it('keeps every keyframe global: no renderer CSS module declares its own', () => {
+        // CSS Modules hash keyframe names, which would break the *-anim-*name
+        // token indirection, so engine keyframes live only in this stylesheet.
+        const componentRoots = ['../components', '../app'].map((dir) =>
+            fileURLToPath(new URL(dir, import.meta.url)),
+        );
+
+        for (const root of componentRoots) {
+            for (const file of collectModuleCssFiles(root)) {
+                expect(readFileSync(file, 'utf8')).not.toContain('@keyframes');
+            }
         }
     });
 
