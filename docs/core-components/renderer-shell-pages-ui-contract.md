@@ -864,8 +864,8 @@ export type LogoVideoScreenProps = Readonly<{
 The component drives the app-level `FadeControl` through `useOptionalFade()`: it snaps the screen
 fade to black before first paint (`fadeOut(0)` in a layout effect, the main-menu boot pattern),
 eases in with `fadeIn(screenFadeMs())`, then on the **first** of — watchdog timeout, video
-`ended`, any click or keydown (skip-on-input), video `error`, or an autoplay rejection — it fades
-back to black and calls `onDone` exactly once. The error and rejection triggers make the screen
+`ended`, a keydown (skip-on-input; a mouse click deliberately does **not** skip), video `error`, or
+an autoplay rejection — it fades back to black and calls `onDone` exactly once. The error and rejection triggers make the screen
 fail open: a missing or corrupt video can never brick a packaged boot. Without a mounted
 `FadeProvider` the component degrades to the same flow with no fade (unit tests render it bare).
 The watchdog is a safety net for a stalled load — `ended` is the primary exit — but it also

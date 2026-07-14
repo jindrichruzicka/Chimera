@@ -108,19 +108,25 @@ test.describe('Game logo screen (§4.37 / #858)', () => {
             timeout: NAV_TIMEOUT_MS,
         });
 
-        // LogoVideoScreen wires the skip to a `window` 'click' listener, so
-        // dispatch the event on `window` directly instead of `locator.click()`.
-        // The real brand video reaches its `ended`/`error` exit fast enough to
-        // race a locator click (the screen fades out and detaches mid-action);
-        // a synchronous `window`-level dispatch lands the skip the instant the
-        // screen is up, before any auto-advance can win. The e2e tsconfig ships
-        // no DOM lib, so browser globals are reached through a structural cast.
+        // LogoVideoScreen wires the skip to a `window` 'keydown' listener only
+        // (a mouse click must NOT skip), so dispatch the event on `window`
+        // directly instead of a keyboard action on a locator. The real brand
+        // video reaches its `ended`/`error` exit fast enough to race a keyboard
+        // action (the screen fades out and detaches mid-action); a synchronous
+        // `window`-level dispatch lands the skip the instant the screen is up,
+        // before any auto-advance can win. The e2e tsconfig ships no DOM lib, so
+        // browser globals are reached through a structural cast.
         await mainWindow.evaluate(() => {
             const browser = globalThis as unknown as {
                 dispatchEvent: (event: unknown) => boolean;
-                MouseEvent: new (type: string, init?: { bubbles?: boolean }) => unknown;
+                KeyboardEvent: new (
+                    type: string,
+                    init?: { bubbles?: boolean; key?: string },
+                ) => unknown;
             };
-            browser.dispatchEvent(new browser.MouseEvent('click', { bubbles: true }));
+            browser.dispatchEvent(
+                new browser.KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }),
+            );
         });
 
         await expect(mainWindow).toHaveURL(/\/main-menu\/?\?gameId=tactics$/, {

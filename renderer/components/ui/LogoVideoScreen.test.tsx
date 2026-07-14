@@ -56,15 +56,13 @@ describe('LogoVideoScreen', () => {
         expect(onDone).toHaveBeenCalledTimes(1);
     });
 
-    it('calls onDone exactly once when the user clicks to skip', async () => {
+    it('does not skip when the user clicks — only key presses skip', async () => {
         render(<LogoVideoScreen src={VIDEO_SRC} onDone={onDone} />);
 
         fireEvent.click(window);
-        await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
-
-        fireEvent.click(window);
+        // Give any pending fade-out a chance to settle before asserting.
         await act(async () => {});
-        expect(onDone).toHaveBeenCalledTimes(1);
+        expect(onDone).not.toHaveBeenCalled();
     });
 
     it('calls onDone exactly once when the user presses a key to skip', async () => {
@@ -147,7 +145,6 @@ describe('LogoVideoScreen — watchdog timeout', () => {
     it('collapses competing triggers into a single onDone', async () => {
         render(<LogoVideoScreen src={VIDEO_SRC} durationMs={3000} onDone={onDone} />);
 
-        fireEvent.click(window);
         fireEvent.ended(screen.getByTestId('logo-video'));
         fireEvent.keyDown(window, { key: 'Enter' });
         await act(async () => {
@@ -208,7 +205,7 @@ describe('LogoVideoScreen — app-level screen fade', () => {
             await vi.advanceTimersByTimeAsync(800);
         });
 
-        fireEvent.click(window);
+        fireEvent.keyDown(window, { key: 'Enter' });
         // The exit is asynchronous: the fade-out must complete before onDone.
         expect(onDone).not.toHaveBeenCalled();
 

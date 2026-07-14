@@ -51,12 +51,12 @@ export function LogoVideoScreen({
     }, []);
 
     React.useEffect(() => {
+        // Skip-on-input is keydown only: a stray mouse click must never dismiss
+        // the brand screen, so no 'click' listener is wired here.
         const timeoutId = window.setTimeout(beginExit, durationMs);
-        window.addEventListener('click', beginExit);
         window.addEventListener('keydown', beginExit);
         return () => {
             window.clearTimeout(timeoutId);
-            window.removeEventListener('click', beginExit);
             window.removeEventListener('keydown', beginExit);
         };
     }, [durationMs, beginExit]);

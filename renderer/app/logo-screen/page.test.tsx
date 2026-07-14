@@ -42,7 +42,7 @@ describe('LogoScreenPage', () => {
         setLogoScreenUrl('?gameId=tactics');
         render(<LogoScreenPage />);
 
-        fireEvent.click(window);
+        fireEvent.keyDown(window, { key: 'Enter' });
 
         await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/main-menu?gameId=tactics'));
         expect(mockPush).toHaveBeenCalledTimes(1);
@@ -51,7 +51,7 @@ describe('LogoScreenPage', () => {
     it('continues to the main menu without a gameId when none is present', async () => {
         render(<LogoScreenPage />);
 
-        fireEvent.click(window);
+        fireEvent.keyDown(window, { key: 'Enter' });
 
         await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/main-menu'));
     });
@@ -60,7 +60,6 @@ describe('LogoScreenPage', () => {
         setLogoScreenUrl('?gameId=tactics');
         render(<LogoScreenPage />);
 
-        fireEvent.click(window);
         fireEvent.ended(screen.getByTestId('logo-video'));
         fireEvent.keyDown(window, { key: 'Enter' });
 
