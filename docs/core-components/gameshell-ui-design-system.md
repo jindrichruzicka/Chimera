@@ -277,7 +277,7 @@ pictures that appear after initial navigation, and keep sources near display siz
 
 Game-owned renderer surfaces may use the shared component library for HUDs,
 in-match menus, result banners, post-game summaries, and similar UI. The library
-exposes **two** public barrels, and those are the only renderer import surfaces a
+exposes **three** public barrels, and those are the only renderer import surfaces a
 game may use:
 
 ```typescript
@@ -286,15 +286,19 @@ import { Button, Card, Heading } from '@chimera-engine/renderer/components/ui/in
 
 // Tier 2 — the shared chat component (§4.35.1):
 import { ChatPanel } from '@chimera-engine/renderer/components/chat';
+
+// Tier 3 — engine components a game mounts inside its own <Canvas> (§4.16):
+import { PerfProbe } from '@chimera-engine/renderer/components/r3f';
 ```
 
 This allowance applies only to React components under `games/<name>/screens/*.tsx`
 and React shell contributions under `games/<name>/shell/*.tsx`. Game actions,
 state, projection, AI, content, and non-React shell definition files must not
 import renderer code. Game renderer surfaces also must not import renderer stores,
-IPC bridges, `shell/` components, R3F components, asset managers, hooks,
-stylesheets, or individual component files behind either barrel — only the two
-barrels above. Token overrides remain the mechanism for game visual customization.
+IPC bridges, `shell/` components, R3F components outside the r3f barrel, asset
+managers, hooks, stylesheets, or individual component files behind any barrel —
+only the three barrels above. Token overrides remain the mechanism for game
+visual customization.
 
 ### 4.35.1 Chat Component (`renderer/components/chat/`)
 
@@ -370,23 +374,54 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 
 ### Design Token Naming: `--ch-<category>-<variant>`
 
+The catalogue below is representative, not exhaustive — per-variant button
+colour/background/border tokens, the IconButton and ToggleButton groups, and layout calibration
+tokens follow the same naming pattern. The authoritative inventory is `renderer/styles/tokens.css`
+itself, locked token-for-token by `renderer/styles/tokens.test.ts`.
+
 ```css
 /* renderer/styles/tokens.css — engine defaults */
 
-/* ── Colour ─────────────────────────────────────────────── */
+/* ── Colour ─────────────────────────────────────────────────
+ * Neutral shell ladder (surface < raised < overlay) plus translucent state
+ * layers that compose over any tier: hover is a plain white veil, selected
+ * carries the accent tint. */
 --ch-color-surface: #111113;
 --ch-color-surface-raised: #1b1b1f;
 --ch-color-surface-overlay: #27272a;
+--ch-color-surface-hover: rgba(244, 244, 245, 0.06);
+--ch-color-surface-selected: rgba(125, 163, 201, 0.16);
+--ch-color-scrim: #000000;
 --ch-color-overlay-backdrop: #27272a; /* Modal full-screen scrim; games override for a see-through backdrop */
---ch-color-accent: #3f3f46;
---ch-color-accent-hover: #52525b;
+
+/* Accent ramp — a restrained cool-steel tint, the one deliberate departure
+ * from the neutral shell. accent is the resting interactive fill and
+ * accent-hover its hover step (both carry text-primary at AA; accent-hover
+ * also paints the active tab chrome and the primary button border);
+ * accent-strong is for graphical indicators (spinner segment, slider/meter
+ * fills) that need 3:1 against borders and tracks. */
+--ch-color-accent: #44607c;
+--ch-color-accent-hover: #4d6c8c;
+--ch-color-accent-strong: #7da3c9;
+
 --ch-color-text-primary: #f4f4f5;
 --ch-color-text-secondary: #a1a1aa;
 --ch-color-text-disabled: #71717a;
+
+/* Border emphasis orders muted < border < strong. */
+--ch-color-border-muted: #27272a;
 --ch-color-border: #3f3f46;
---ch-color-success: #16a34a;
---ch-color-warning: #d97706;
---ch-color-error: #dc2626;
+--ch-color-border-strong: #52525b;
+
+/* Semantic states — one symmetric dark-native quartet per state. The base
+ * token is the solid fill that carries text-primary (warning is the amber
+ * exception and pairs with dark text); -text holds AA on every shell surface
+ * and on its own state surface; -surface is the tinted box background;
+ * -border the box boundary. Compose surface + border + text for state boxes,
+ * use base for solid fills, and -text alone for inline state copy. */
+--ch-color-success: #15803d; /* + -text / -surface / -border */
+--ch-color-warning: #d97706; /* + same quartet */
+--ch-color-error: #cf2222; /* + same quartet */
 
 /* ── Spacing ─────────────────────────────────────────────── */
 --ch-space-xs: 4px;
@@ -399,6 +434,7 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 --ch-radius-sm: 4px;
 --ch-radius-md: 8px;
 --ch-radius-lg: 12px;
+--ch-radius-pill: 999px;
 
 /* ── Typography ──────────────────────────────────────────── */
 --ch-font-ui: 'Inter', system-ui, sans-serif;
@@ -408,6 +444,12 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 --ch-font-size-md: 14px;
 --ch-font-size-lg: 18px;
 --ch-font-size-xl: 24px;
+--ch-font-weight-regular: 400;
+--ch-font-weight-semibold: 600;
+--ch-font-weight-bold: 700;
+--ch-line-height-none: 1;
+--ch-line-height-tight: 1.1;
+--ch-line-height-relaxed: 1.6;
 
 /* ── Text Treatment ─────────────────────────────────────────
  * Gradient fill + outline for the typography roles. The base --ch-text-*
@@ -429,28 +471,58 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 --ch-label-fill-top: var(--ch-text-fill-top); /* + same quartet */
 --ch-caption-fill-top: var(--ch-text-fill-top); /* + same quartet */
 
-/* ── Shadows ─────────────────────────────────────────────── */
---ch-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
---ch-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.36);
---ch-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.44);
+/* ── Opacity ─────────────────────────────────────────────── */
+--ch-opacity-soft: 0.4; /* de-emphasised chrome */
+--ch-opacity-disabled: 0.6; /* disabled controls */
+--ch-opacity-full: 1;
 
-/* ── Button Shape & Elevation ────────────────────────────── */
---ch-button-radius: var(--ch-radius-pill);
+/* ── Z-Index ─────────────────────────────────────────────────
+ * The complete stacking contract, lowest to highest — tokens.test.ts asserts
+ * the ladder stays strictly increasing: shell background, raised in-page
+ * chrome (HUD docks, toggle thumbs), tooltip/popover, modal/drawer, toasts
+ * (must clear open modals), connection status (visible through everything
+ * interactive), scene fade, app screen fade. */
+--ch-z-base: 0;
+--ch-z-raised: 1;
+--ch-z-tooltip: 90;
+--ch-z-modal: 100;
+--ch-z-toast: 110;
+--ch-z-status: 120;
+--ch-z-scene-fade: 130;
+--ch-z-screen-fade: 140;
+
+/* ── Shadows & Glows ─────────────────────────────────────────
+ * Layered ambient + key shadows; the glows pair with them for hover accents
+ * (button hover shadows compose as shadow-md + glow, see below). */
+--ch-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.22);
+--ch-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.26);
+--ch-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.38), 0 12px 32px rgba(0, 0, 0, 0.32);
+--ch-glow-accent: 0 0 16px rgba(77, 108, 140, 0.35);
+--ch-glow-danger: 0 0 16px rgba(207, 34, 34, 0.35);
+
+/* ── Button Shape & Elevation (representative) ──────────────
+ * The full group also carries per-variant color/bg/border (+ -hover) tokens
+ * and a sm|md|lg size scale (font-size / line-height / padding / min-width),
+ * plus the parallel IconButton and ToggleButton groups — see tokens.css. */
+--ch-button-radius: var(--ch-radius-md);
 --ch-button-font-weight: 700;
---ch-button-font-size-sm: 1rem;
---ch-button-font-size-md: 1.125rem;
---ch-button-font-size-lg: 1.25rem;
---ch-button-line-height-sm: 1.5rem;
---ch-button-line-height-md: 1.75rem;
---ch-button-line-height-lg: 2rem;
---ch-button-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
---ch-button-shadow-hover: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
---ch-button-shadow-hover-danger: 0 25px 50px -12px rgba(220, 38, 38, 0.5);
+--ch-button-shadow: var(--ch-shadow-sm);
+--ch-button-shadow-hover: var(--ch-shadow-md), var(--ch-glow-accent);
+--ch-button-shadow-hover-danger: var(--ch-shadow-md), var(--ch-glow-danger);
 --ch-button-transform: scale(1);
---ch-button-transform-hover: scale(1.05);
---ch-button-padding-sm: 0.375rem 1.5rem;
---ch-button-padding-md: 0.5rem 2rem;
---ch-button-padding-lg: 0.75rem 2.5rem;
+--ch-button-transform-hover: scale(1.02);
+--ch-button-transform-active: scale(0.98);
+
+/* ── Slider ──────────────────────────────────────────────────
+ * Custom-drawn range input: a slim pill track whose filled portion uses the
+ * strong accent (3:1+ against the track) under a round thumb ringed with the
+ * surface colour so it stays crisp over both halves. */
+--ch-slider-track-size: 6px;
+--ch-slider-track-color: var(--ch-color-border);
+--ch-slider-fill-color: var(--ch-color-accent-strong);
+--ch-slider-thumb-size: 16px;
+--ch-slider-thumb-color: var(--ch-color-text-primary);
+--ch-slider-thumb-border-color: var(--ch-color-surface);
 
 /* ── Cursors ─────────────────────────────────────────────────
  * Every engine cursor style routes through these tokens, so a game can
@@ -467,21 +539,47 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 --ch-duration-fast: 120ms;
 --ch-duration-normal: 250ms;
 --ch-duration-slow: 400ms;
+/* Directional easing vocabulary: standard for in-place state changes,
+ * decelerate for elements entering the screen, accelerate for exits. */
 --ch-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+--ch-easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+--ch-easing-accelerate: cubic-bezier(0.4, 0, 1, 1);
+
+/* ── Feedback Motion ─────────────────────────────────────────
+ * Spinner rotation and toast entrances follow the same name/duration/easing
+ * pattern as the overlays; the -reduced-name variant is the plain fade the
+ * ToastHost swaps in when the OS prefers reduced motion. */
+--ch-spinner-anim-name: ch-spinner-rotate; /* + -duration (slow) / -easing */
+--ch-toast-anim-enter-name: ch-toast-enter;
+--ch-toast-anim-enter-reduced-name: ch-toast-fade-in;
+--ch-toast-anim-enter-duration: var(--ch-duration-normal);
+--ch-toast-anim-enter-easing: var(--ch-easing-decelerate);
 
 /* ── Overlay Motion (see "Motion & Animation" below) ────────
  * Modal/Drawer open-close animations. Per component (backdrop, modal, drawer)
  * and per phase (enter, exit) there are -name / -duration / -easing tokens;
- * names point at global keyframes in renderer/styles/animations.css, durations
- * reference the duration primitives (enter = normal, exit = fast). */
+ * names point at global keyframes in renderer/styles/animations.css. Enters
+ * decelerate in over the normal duration; exits accelerate away over the
+ * fast one. */
 --ch-backdrop-anim-enter-name: ch-backdrop-enter;
 --ch-backdrop-anim-enter-duration: var(--ch-duration-normal);
---ch-backdrop-anim-enter-easing: var(--ch-easing-standard);
---ch-backdrop-anim-exit-name: ch-backdrop-exit; /* + -duration (fast) / -easing */
+--ch-backdrop-anim-enter-easing: var(--ch-easing-decelerate);
+--ch-backdrop-anim-exit-name: ch-backdrop-exit; /* + -duration (fast) / -easing (accelerate) */
 --ch-modal-anim-enter-name: ch-modal-enter; /* + exit triple */
 --ch-drawer-anim-enter-name: ch-drawer-enter; /* + exit triple */
 --ch-drawer-slide-distance: 100%;
 ```
+
+### Contrast Contract
+
+`renderer/styles/tokens.test.ts` computes WCAG contrast ratios from the literal token values, so a
+palette regression fails unit tests before it ships: primary and secondary text hold AA (4.5:1) on
+every shell surface tier; primary text holds AA on the accent, accent-hover, and error fills; each
+semantic state's `-text` holds AA on every shell surface and on its own state surface; the strong
+accent holds 3:1 non-text contrast (WCAG 1.4.11) against the border and raised-surface chrome it
+draws over; and the semantic state borders stay visible against the raised surface. Game overrides
+load outside these tests — a game that overrides colour tokens owns the same contrast obligations
+itself.
 
 ### Game Token Overrides
 
@@ -514,19 +612,25 @@ Engine UI motion comes in two layers, both fully token-parameterised (invariant 
 1. **Component transitions** — hover/press/toggle feedback on the primitives, composed from the
    `--ch-duration-*` / `--ch-easing-*` primitives (e.g. `--ch-button-transition`; button press uses
    `:active` → `--ch-button-transform-active`).
-2. **Overlay open-close animations** — `Modal` and `Drawer` play enter/exit animations driven by the
+2. **Keyframe animations** — `Modal` and `Drawer` play enter/exit animations driven by the
    `--ch-<component>-anim-<enter|exit>-<name|duration|easing>` tokens above (the drawer slides from
-   its placement edge, the modal scales in as the shared backdrop fades).
+   its placement edge, the modal scales in as the shared backdrop fades; enters use the decelerate
+   easing, exits accelerate). The `Spinner` rotation and toast entrance run through the same token
+   pattern (`--ch-spinner-anim-*`, `--ch-toast-anim-enter-*`, including the reduced-motion
+   `--ch-toast-anim-enter-reduced-name` fade).
 
 **Keyframe contract.** `renderer/styles/animations.css` (imported by the root layout after
-`tokens.css`) declares six **global** keyframes: `ch-backdrop-enter/exit` (opacity fade),
+`tokens.css`) declares nine **global** keyframes: `ch-backdrop-enter/exit` (opacity fade),
 `ch-modal-enter/exit` (transform-only scale — the backdrop owns opacity so the panel is never
-double-faded), and `ch-drawer-enter/exit` (translate). These names are global on purpose: the
-`*-anim-*-name` tokens reference them, and CSS-module keyframes are name-hashed, which would break
-that indirection — token-referenced keyframes must never live in a `*.module.css`. The drawer pair
-reads private per-placement offsets (`--_ch-drawer-slide-x/y`) that `Drawer.module.css` sets per
-placement class from the public `--ch-drawer-slide-distance` token, so all four placements share one
-keyframe pair. `--_ch`-prefixed properties are engine-private wiring — not overridable surface.
+double-faded), `ch-drawer-enter/exit` (translate), `ch-spinner-rotate` (continuous rotation with an
+opacity pulse), `ch-toast-enter` (rise + fade), and `ch-toast-fade-in` (the reduced-motion toast
+fade). These names are global on purpose: the `*-anim-*-name` tokens reference them, and CSS-module
+keyframes are name-hashed, which would break that indirection —
+`renderer/styles/animations.test.ts` ratchets this by failing if any renderer `*.module.css`
+declares an `@keyframes` of its own. The drawer pair reads private per-placement offsets
+(`--_ch-drawer-slide-x/y`) that `Drawer.module.css` sets per placement class from the public
+`--ch-drawer-slide-distance` token, so all four placements share one keyframe pair.
+`--_ch`-prefixed properties are engine-private wiring — not overridable surface.
 
 **Exit presence.** Closing keeps the overlay mounted until every animated element's exit animation
 finishes (`useExitPresence`, internal to `Modal`/`Drawer` — the `open`/`onClose` API is unchanged).
@@ -559,10 +663,13 @@ When no exit animation is computable — `prefers-reduced-motion`, a `0ms` game 
 ```
 
 **Reduced motion.** Engine durations reference the `--ch-duration-*` primitives, which the
-`@media (prefers-reduced-motion: reduce)` block in `tokens.css` zeroes — all engine motion collapses
-to instant automatically. A game override that sets **literal** durations (`300ms` instead of
-`var(--ch-duration-*)`) outranks that block (game overrides load later in the cascade) and must ship
-its own reduced-motion block.
+`@media (prefers-reduced-motion: reduce)` block in `tokens.css` zeroes (and flattens the easings to
+`linear`) — all engine motion collapses to instant automatically. A game override that sets
+**literal** durations (`300ms` instead of `var(--ch-duration-*)`) outranks that block (game
+overrides load later in the cascade) and must ship its own reduced-motion block. The JS-driven app
+screen fades (route transitions and the boot sequence) sit outside the CSS cascade entirely, so
+their duration source (`renderer/components/shell/screenFadeDuration.ts`) checks the preference
+itself and returns `0` when reduced motion is requested.
 
 ### Component API Shape
 
@@ -599,12 +706,12 @@ renderer/
 
 ### Invariants
 
-| #    | Rule                                                                                                                                                                                                                                                                                                                                                                          |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #85  | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                                                                                                                                         |
-| #86  | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                                                                                                                              |
-| #96  | Game renderer surfaces may import the shared component library only through its public barrels — `@chimera-engine/renderer/components/ui` (primitives) and `@chimera-engine/renderer/components/chat` (the shared chat component); all other renderer internals stay off-limits.                                                                                              |
-| #109 | Engine UI motion is declared as global `ch-*` keyframes in `renderer/styles/animations.css`, parameterised exclusively by `--ch-*` motion tokens; games customise motion only by overriding those tokens (retiming, `0ms`-disabling, or retargeting `*-name` tokens at game-namespaced keyframes), and all engine motion collapses to instant under `prefers-reduced-motion`. |
+| #    | Rule                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #85  | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                                                                                                                                                          |
+| #86  | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                                                                                                                                               |
+| #96  | Game renderer surfaces may import the shared component library only through its three public barrels — `@chimera-engine/renderer/components/ui` (primitives), `@chimera-engine/renderer/components/chat` (the shared chat component), and `@chimera-engine/renderer/components/r3f` (engine components a game mounts inside its own `<Canvas>`); all other renderer internals stay off-limits. |
+| #109 | Engine UI motion is declared as global `ch-*` keyframes in `renderer/styles/animations.css`, parameterised exclusively by `--ch-*` motion tokens; games customise motion only by overriding those tokens (retiming, `0ms`-disabling, or retargeting `*-name` tokens at game-namespaced keyframes), and all engine motion collapses to instant under `prefers-reduced-motion`.                  |
 
 ---
 
