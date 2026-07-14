@@ -292,7 +292,7 @@ test.describe('Component Gallery', () => {
         await expectButtonBackgroundToMatchToken(gallery.primaryButton, '--ch-color-accent');
     });
 
-    test('keyboard-focused tab shows the accent focus border with no clipped halo', async ({
+    test('keyboard-focused tab shows the focus-ring border with no clipped halo', async ({
         mainWindow,
     }) => {
         const gallery = new ComponentGalleryPage(mainWindow);
@@ -339,9 +339,10 @@ test.describe('Component Gallery', () => {
             };
         });
 
-        // The focus indicator is the tab's own accent border; the outline is a
-        // transparent inset ring, so nothing paints outside the tab for the
-        // tablist scroll container to clip into a stray sliver.
+        // The focus indicator is the tab's own border recolored to the
+        // focus-ring token; the outline is a transparent inset ring, so
+        // nothing paints outside the tab for the tablist scroll container to
+        // clip into a stray sliver.
         expect(styles.actualBorderColor).toBe(styles.expectedBorderColor);
         expect(styles.outlineColor).toBe('rgba(0, 0, 0, 0)');
         expect(styles.outlineOffset).toBe('-2px');

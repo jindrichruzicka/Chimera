@@ -379,12 +379,13 @@ Tabs tablist) can never clip the indicator into a stray sliver. There is
 deliberately no offset token for an outside halo ring.
 
 Two forms, both driven by `--ch-focus-ring-width` and `--ch-focus-ring-color`.
-The engine default ring color is `--ch-color-text-secondary` — deliberately
+The engine default ring color is the Chimera brand sky `#38bdf8` — deliberately
 **not** `--ch-color-accent-hover`, which already paints the active tab chrome
 and the primary button border in the engine palette, so an accent-hover ring
-would be invisible on exactly the states keyboard users land on. Games theme
-the ring by overriding `--ch-focus-ring-color` (Tactics points it at its gold
-`--ch-color-accent`):
+would be invisible on exactly the states keyboard users land on. The sky holds
+3:1+ non-text contrast on both accent fills and every shell surface. Games
+theme the ring by overriding `--ch-focus-ring-color` (Tactics points it at its
+gold `--ch-color-accent`):
 
 - **Bordered components** (Tabs, Button, IconButton, ToggleButton, Toggle
   track, TextInput, NumberInput, Select shell) recolor their existing border to
@@ -396,8 +397,9 @@ outline-offset: calc(var(--ch-focus-ring-width) * -1)`) so forced-colors
   draw the same inset outline in `var(--ch-focus-ring-color)` instead.
 
 Accent-on-accent collisions get a second cue: `Button`/`IconButton` focus also
-applies the hover backdrop (background + shadow) so primary variants — whose
-resting border already matches the focus-ring color — still light up;
+applies the hover backdrop (background + shadow) so primary variants still
+light up in palettes that point the ring at the accent (as Tactics does),
+where the resting primary border matches the focus-ring color;
 `ToggleButton` raises only the hover shadow (a backdrop swap would visually
 un-press a focused pressed toggle); the checked `Toggle` track swaps its focus
 border to `--ch-color-text-primary`.
@@ -430,19 +432,20 @@ itself, locked token-for-token by `renderer/styles/tokens.test.ts`.
 --ch-color-surface-raised: #1b1b1f;
 --ch-color-surface-overlay: #27272a;
 --ch-color-surface-hover: rgba(244, 244, 245, 0.06);
---ch-color-surface-selected: rgba(125, 163, 201, 0.16);
+--ch-color-surface-selected: rgba(167, 139, 250, 0.16);
 --ch-color-scrim: #000000;
 --ch-color-overlay-backdrop: #27272a; /* Modal full-screen scrim; games override for a see-through backdrop */
 
-/* Accent ramp — a restrained cool-steel tint, the one deliberate departure
- * from the neutral shell. accent is the resting interactive fill and
- * accent-hover its hover step (both carry text-primary at AA; accent-hover
- * also paints the active tab chrome and the primary button border);
- * accent-strong is for graphical indicators (spinner segment, slider/meter
- * fills) that need 3:1 against borders and tracks. */
---ch-color-accent: #44607c;
---ch-color-accent-hover: #4d6c8c;
---ch-color-accent-strong: #7da3c9;
+/* Accent ramp — the Chimera brand violet rgb(167, 139, 250), the one
+ * deliberate departure from the neutral shell. accent is the resting
+ * interactive fill and accent-hover its hover step (both keep the brand hue
+ * darkened until they carry text-primary at AA; accent-hover also paints the
+ * active tab chrome and the primary button border); accent-strong is the
+ * brand colour verbatim, for graphical indicators (spinner segment,
+ * slider/meter fills) that need 3:1 against borders and tracks. */
+--ch-color-accent: #4d3399;
+--ch-color-accent-hover: #583bb0;
+--ch-color-accent-strong: #a78bfa;
 
 --ch-color-text-primary: #f4f4f5;
 --ch-color-text-secondary: #a1a1aa;
@@ -454,14 +457,17 @@ itself, locked token-for-token by `renderer/styles/tokens.test.ts`.
 --ch-color-border-strong: #52525b;
 
 /* Semantic states — one symmetric dark-native quartet per state. The base
- * token is the solid fill that carries text-primary (warning is the amber
- * exception and pairs with dark text); -text holds AA on every shell surface
- * and on its own state surface; -surface is the tinted box background;
- * -border the box boundary. Compose surface + border + text for state boxes,
- * use base for solid fills, and -text alone for inline state copy. */
+ * token is the solid fill that carries text-primary (warning is the exception
+ * and pairs with dark text); -text holds AA on every shell surface and on its
+ * own state surface; -surface is the tinted box background; -border the box
+ * boundary. Compose surface + border + text for state boxes, use base for
+ * solid fills, and -text alone for inline state copy. Warning is the Chimera
+ * brand orange rgb(249, 115, 22) verbatim; error and success draw from the
+ * same palette family as the brand colours (700-step bases, vivid 400-step
+ * texts), and all three quartets share one border/surface lightness recipe. */
 --ch-color-success: #15803d; /* + -text / -surface / -border */
---ch-color-warning: #d97706; /* + same quartet */
---ch-color-error: #cf2222; /* + same quartet */
+--ch-color-warning: #f97316; /* + same quartet */
+--ch-color-error: #b91c1c; /* + same quartet */
 
 /* ── Spacing ─────────────────────────────────────────────── */
 --ch-space-xs: 4px;
@@ -537,8 +543,8 @@ itself, locked token-for-token by `renderer/styles/tokens.test.ts`.
 --ch-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.22);
 --ch-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.26);
 --ch-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.38), 0 12px 32px rgba(0, 0, 0, 0.32);
---ch-glow-accent: 0 0 16px rgba(77, 108, 140, 0.35);
---ch-glow-danger: 0 0 16px rgba(207, 34, 34, 0.35);
+--ch-glow-accent: 0 0 16px rgba(88, 59, 176, 0.35);
+--ch-glow-danger: 0 0 16px rgba(185, 28, 28, 0.35);
 
 /* ── Button Shape & Elevation (representative) ──────────────
  * The full group also carries per-variant color/bg/border (+ -hover) tokens

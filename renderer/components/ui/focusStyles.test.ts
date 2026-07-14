@@ -86,10 +86,11 @@ describe.each([
 });
 
 /**
- * Accent-on-accent collisions: the focus-ring color equals the resting accent
- * border of primary buttons and the checked Toggle track in both the engine
- * and Tactics palettes, so those states need a second cue beyond the border
- * recolor.
+ * Accent-on-accent collisions: in palettes that point the focus ring at the
+ * accent (as Tactics does), the ring color equals the resting accent border of
+ * primary buttons and the checked Toggle track, so those states need a second
+ * cue beyond the border recolor. The cue is palette-independent so game
+ * overrides can never lose keyboard focus visibility.
  */
 describe('focus visibility on accent-colored resting states', () => {
     it('Button focus applies the hover backdrop so primary buttons still light up', () => {

@@ -76,7 +76,7 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending, t }:
                 {isLocalPlayer ? <Badge variant="neutral">{t(LOBBY_KEYS.you)}</Badge> : null}
             </span>
             <div className={styles['controls']}>
-                {/* 'warning' (amber) is intentional over 'error' (red): not-ready is a
+                {/* 'warning' (orange) is intentional over 'error' (red): not-ready is a
                     pending/neutral state, not a fault condition. */}
                 <Badge variant={player.ready ? 'success' : 'warning'}>
                     {player.ready ? t(LOBBY_KEYS.ready) : t(LOBBY_KEYS.notReady)}
