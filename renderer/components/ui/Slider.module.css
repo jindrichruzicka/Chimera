@@ -12,6 +12,21 @@
     font-weight: var(--ch-font-weight-semibold);
 }
 
+/* Removes the label from view while leaving it in the accessibility tree, so a
+   field whose purpose is obvious from context keeps a programmatic name (mirrors
+   Select.module.css's .labelHidden). */
+.labelHidden {
+    block-size: var(--ch-space-screen-reader);
+    border: var(--ch-space-none);
+    clip: rect(0, 0, 0, 0);
+    inline-size: var(--ch-space-screen-reader);
+    margin: calc(var(--ch-space-screen-reader) * -1);
+    overflow: hidden;
+    padding: var(--ch-space-none);
+    position: absolute;
+    white-space: nowrap;
+}
+
 .input {
     accent-color: var(--ch-color-accent);
     cursor: var(--ch-cursor-pointer, pointer);

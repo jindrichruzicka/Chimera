@@ -108,88 +108,107 @@ export function ReplayControls({
 
     return (
         <div className={styles['root']} role="group" aria-label={t(GROUP_LABEL_KEY[kind])}>
-            {save !== undefined && (
-                <SaveReplayButton onSave={save.onSave} saving={save.saving} saved={save.saved} />
-            )}
-            <Button
-                size="sm"
-                variant="ghost"
-                aria-label={t(REPLAYS_KEYS.seekStart)}
-                disabled={atStart}
-                onClick={() => onSeek(0)}
-            >
-                ⏮
-            </Button>
-            <Button
-                size="sm"
-                variant="ghost"
-                aria-label={t(REPLAYS_KEYS.stepBack)}
-                disabled={atStart}
-                onClick={() => onStep(-1)}
-            >
-                ◀
-            </Button>
-            {isPlaying ? (
-                <Button
-                    size="sm"
-                    variant="primary"
-                    aria-label={t(REPLAYS_KEYS.pause)}
-                    data-testid="replay-pause-btn"
-                    onClick={onPause}
-                >
-                    {t(REPLAYS_KEYS.pause)}
-                </Button>
-            ) : (
-                <Button
-                    size="sm"
-                    variant="primary"
-                    aria-label={t(REPLAYS_KEYS.play)}
-                    data-testid="replay-play-btn"
-                    disabled={atEnd}
-                    onClick={onPlay}
-                >
-                    {t(REPLAYS_KEYS.play)}
-                </Button>
-            )}
-            <Button
-                size="sm"
-                variant="ghost"
-                aria-label={t(REPLAYS_KEYS.stepForward)}
-                disabled={atEnd}
-                onClick={() => onStep(1)}
-            >
-                ▶
-            </Button>
-            <Button
-                size="sm"
-                variant="ghost"
-                aria-label={t(REPLAYS_KEYS.seekEnd)}
-                disabled={atEnd}
-                onClick={() => onSeek(totalTicks)}
-            >
-                ⏭
-            </Button>
-            <Slider
-                className={styles['scrubber']}
-                label={t(REPLAYS_KEYS.scrubberLabel)}
-                data-testid="replay-scrubber"
-                min={0}
-                max={totalTicks}
-                step={1}
-                value={currentTick}
-                onChange={onSeek}
-            />
-            <Caption
-                tone="muted"
-                data-testid="replay-tick-counter"
-            >{`${currentTick} / ${totalTicks}`}</Caption>
-            <Select
-                className={styles['speed']}
-                label={t(REPLAYS_KEYS.speedLabel)}
-                options={speedOptions}
-                value={String(playbackSpeed)}
-                onValueChange={(value) => onSpeedChange(Number(value))}
-            />
+            <div className={styles['transportRow']} data-ch-replay-row="transport">
+                <div className={styles['transportStart']}>
+                    {save !== undefined && (
+                        <SaveReplayButton
+                            onSave={save.onSave}
+                            saving={save.saving}
+                            saved={save.saved}
+                        />
+                    )}
+                </div>
+                <div className={styles['transport']}>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={t(REPLAYS_KEYS.seekStart)}
+                        disabled={atStart}
+                        onClick={() => onSeek(0)}
+                    >
+                        ⏮
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={t(REPLAYS_KEYS.stepBack)}
+                        disabled={atStart}
+                        onClick={() => onStep(-1)}
+                    >
+                        ◁
+                    </Button>
+                    {isPlaying ? (
+                        <Button
+                            className={styles['play']}
+                            size="sm"
+                            variant="ghost"
+                            aria-label={t(REPLAYS_KEYS.pause)}
+                            data-testid="replay-pause-btn"
+                            onClick={onPause}
+                        >
+                            ⏸
+                        </Button>
+                    ) : (
+                        <Button
+                            className={styles['play']}
+                            size="sm"
+                            variant="ghost"
+                            aria-label={t(REPLAYS_KEYS.play)}
+                            data-testid="replay-play-btn"
+                            disabled={atEnd}
+                            onClick={onPlay}
+                        >
+                            ▶
+                        </Button>
+                    )}
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={t(REPLAYS_KEYS.stepForward)}
+                        disabled={atEnd}
+                        onClick={() => onStep(1)}
+                    >
+                        ▷
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={t(REPLAYS_KEYS.seekEnd)}
+                        disabled={atEnd}
+                        onClick={() => onSeek(totalTicks)}
+                    >
+                        ⏭
+                    </Button>
+                </div>
+                <div className={styles['transportEnd']}>
+                    <Select
+                        className={styles['speed']}
+                        label={t(REPLAYS_KEYS.speedLabel)}
+                        hideLabel
+                        options={speedOptions}
+                        value={String(playbackSpeed)}
+                        onValueChange={(value) => onSpeedChange(Number(value))}
+                    />
+                </div>
+            </div>
+            <div className={styles['scrubberRow']} data-ch-replay-row="scrubber">
+                <Slider
+                    className={styles['scrubber']}
+                    label={t(REPLAYS_KEYS.scrubberLabel)}
+                    hideLabel
+                    data-testid="replay-scrubber"
+                    min={0}
+                    max={totalTicks}
+                    step={1}
+                    value={currentTick}
+                    onChange={onSeek}
+                />
+                <Caption
+                    className={styles['tickCounterHidden']}
+                    tone="muted"
+                    data-testid="replay-tick-counter"
+                >{`${currentTick} / ${totalTicks}`}</Caption>
+            </div>
         </div>
     );
 }

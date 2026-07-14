@@ -1,16 +1,100 @@
+/*
+ * The replay transport is a slim panel strip pinned above the board (§4.28): a
+ * raised surface with a hairline bottom border and a low shadow so it reads as a
+ * toolbar floating over the replay, not part of it. Two stacked rows — a
+ * label-free transport row above a full-width scrubber row — keep the controls
+ * compact while giving the playhead the whole width to travel.
+ */
 .root {
+    background: var(--ch-color-surface-raised);
+    border-block-end: var(--ch-border-width-sm) solid var(--ch-color-border-muted);
+    box-shadow: var(--ch-shadow-sm);
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--ch-space-sm);
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
     padding: var(--ch-space-sm) var(--ch-space-md);
+}
+
+/*
+ * Transport row: three balanced zones — save at the inline-start, the transport
+ * cluster centred, the speed picker at the inline-end. The 1fr side columns keep
+ * the transport cluster optically centred regardless of how wide the save/speed
+ * ends grow, and let either end collapse to nothing when its control is absent.
+ */
+.transportRow {
+    align-items: center;
+    display: grid;
+    gap: var(--ch-space-sm);
+    grid-template-columns: 1fr auto 1fr;
+}
+
+.transportStart {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-inline-size: 0;
+}
+
+/* The centred cluster of transport keys (seek/step/play). */
+.transport {
+    display: flex;
+    align-items: center;
+    gap: var(--ch-space-xs);
+    justify-content: center;
+}
+
+.transportEnd {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-inline-size: 0;
+}
+
+/*
+ * The Play/Pause key is a ghost like every other transport button, so it carries
+ * no heavy fill; a slightly larger glyph is all that marks it as the primary
+ * action.
+ */
+.play {
+    font-size: var(--ch-font-size-lg);
+}
+
+/*
+ * Scrubber row: the playhead slider stretches to fill the whole strip. The
+ * `<current> / <total>` tick counter is not shown — the playhead position is the
+ * visible progress signal — so the counter is kept only as a visually-hidden
+ * element for assistive tech and E2E progress reads (see .tickCounterHidden).
+ */
+.scrubberRow {
+    align-items: center;
+    display: flex;
+    gap: var(--ch-space-sm);
 }
 
 .scrubber {
     flex: 1 1 auto;
-    min-width: var(--ch-space-xl);
+    min-inline-size: 0;
+}
+
+/*
+ * The tick counter carries the live position for screen readers and E2E, but is
+ * removed from view (mirrors the visually-hidden label utility). Kept in the DOM
+ * so the accessible/testable progress signal survives the visual redesign.
+ */
+.tickCounterHidden {
+    block-size: var(--ch-space-screen-reader);
+    border: var(--ch-space-none);
+    clip: rect(0, 0, 0, 0);
+    inline-size: var(--ch-space-screen-reader);
+    margin: calc(var(--ch-space-screen-reader) * -1);
+    overflow: hidden;
+    padding: var(--ch-space-none);
+    position: absolute;
+    white-space: nowrap;
 }
 
 .speed {
     flex: 0 0 auto;
+    min-inline-size: 0;
 }

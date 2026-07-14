@@ -9,6 +9,12 @@ export type SliderProps = Readonly<
         readonly label: React.ReactNode;
         readonly value: number;
         readonly onChange?: (value: number) => void;
+        /**
+         * Visually hides the label while keeping it as the field's accessible
+         * name. Use when surrounding context already makes the field's purpose
+         * obvious (e.g. the replay scrubber on its own labelled panel).
+         */
+        readonly hideLabel?: boolean;
         readonly style?: CSSProperties;
     }
 >;
@@ -17,6 +23,7 @@ export function Slider({
     label,
     value,
     onChange,
+    hideLabel = false,
     className,
     style,
     id,
@@ -25,6 +32,9 @@ export function Slider({
     const generatedId = useId();
     const inputId = id ?? generatedId;
     const classNames = [styles['root'], className].filter(Boolean).join(' ');
+    const labelClassNames = [styles['label'], hideLabel ? styles['labelHidden'] : null]
+        .filter(Boolean)
+        .join(' ');
 
     function handleChange(event: ChangeEvent<HTMLInputElement>): void {
         onChange?.(event.currentTarget.valueAsNumber);
@@ -32,7 +42,7 @@ export function Slider({
 
     return (
         <label className={classNames} htmlFor={inputId} style={style}>
-            <span className={styles['label']}>{label}</span>
+            <span className={labelClassNames}>{label}</span>
             <input
                 {...sliderProps}
                 className={styles['input']}

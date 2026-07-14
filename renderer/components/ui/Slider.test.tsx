@@ -39,4 +39,26 @@ describe('Slider', () => {
             'outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color)',
         );
     });
+
+    it('keeps the label as the accessible name but hides it visually when hideLabel is set', () => {
+        render(<Slider label="Music volume" min={0} max={100} value={40} hideLabel />);
+
+        // Still the field's accessible name…
+        expect(screen.getByRole('slider', { name: 'Music volume' })).toBeInTheDocument();
+        // …but the label element carries the visually-hidden class (jsdom applies
+        // no CSS, so the presence of the class is the testable signal).
+        expect(screen.getByText('Music volume').className).toContain('labelHidden');
+    });
+
+    it('leaves the label visible by default', () => {
+        render(<Slider label="Music volume" min={0} max={100} value={40} />);
+        expect(screen.getByText('Music volume').className).not.toContain('labelHidden');
+    });
+
+    it('defines a tokenized, visually-hidden label rule', () => {
+        expect(sliderCss).toContain('.labelHidden');
+        expect(sliderCss).toContain('position: absolute');
+        expect(sliderCss).toContain('overflow: hidden');
+        expect(sliderCss).toContain('var(--ch-space-screen-reader)');
+    });
 });

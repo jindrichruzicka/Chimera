@@ -84,9 +84,13 @@ describe('ReplayControls', () => {
         expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
     });
 
-    it('shows the current and total ticks', () => {
+    // The `<current> / <total>` counter is no longer shown on the panel, but it
+    // stays in the DOM (visually hidden) as the accessible/E2E progress signal.
+    it('keeps the current/total tick count in the DOM as a visually-hidden signal', () => {
         renderControls({ currentTick: 4, totalTicks: 10 });
-        expect(screen.getByText(/4\s*\/\s*10/)).toBeDefined();
+        const counter = screen.getByTestId('replay-tick-counter');
+        expect(counter).toHaveTextContent('4 / 10');
+        expect(counter.className).toContain('tickCounterHidden');
     });
 
     describe('play / pause toggle', () => {
@@ -151,6 +155,62 @@ describe('ReplayControls', () => {
         it('shows the selected speed when not 1x', () => {
             renderControls({ playbackSpeed: 4 });
             expect(screen.getByRole('combobox', { name: /speed/i })).toHaveValue('4');
+        });
+    });
+
+    describe('modernised layout', () => {
+        // The redesign renders every transport control as a ghost — the Play/Pause
+        // button no longer carries the heavy `primary` (gold) fill; it only reads as
+        // the primary action through its glyph and a slightly larger size.
+        it('renders the Play/Pause button as a ghost, not a primary button', () => {
+            const paused = renderControls({ isPlaying: false, currentTick: 2 });
+            expect(screen.getByTestId('replay-play-btn')).toHaveAttribute(
+                'data-ch-button-variant',
+                'ghost',
+            );
+
+            cleanup();
+            renderControls({ isPlaying: true, currentTick: 2 }, paused);
+            expect(screen.getByTestId('replay-pause-btn')).toHaveAttribute(
+                'data-ch-button-variant',
+                'ghost',
+            );
+        });
+
+        // The scrubber and speed labels are dropped from view but kept as each
+        // control's accessible name, so the panel stays label-free yet screen-reader
+        // navigable. jsdom applies no CSS, so the visually-hidden class on the label
+        // element is the testable signal.
+        it('keeps the scrubber and speed labels as accessible names only', () => {
+            renderControls({ currentTick: 4, totalTicks: 10 }, makeHandlers(), {
+                'engine.replays.scrubberLabel': 'Replay position',
+                'engine.replays.speedLabel': 'Playback speed',
+            });
+
+            // Still reachable by accessible name…
+            expect(screen.getByRole('slider', { name: 'Replay position' })).toBeInTheDocument();
+            expect(screen.getByRole('combobox', { name: 'Playback speed' })).toBeInTheDocument();
+
+            // …but each label element carries the visually-hidden class.
+            expect(screen.getByText('Replay position').className).toContain('labelHidden');
+            expect(screen.getByText('Playback speed').className).toContain('labelHidden');
+        });
+
+        // The scrubber lives on its own full-width second row of the panel while the
+        // transport/save/speed sit on the top row, so a test can find the two rows.
+        it('lays the panel out as a transport row above a full-width scrubber row', () => {
+            renderControls({ currentTick: 4, totalTicks: 10 });
+
+            const scrubber = screen.getByTestId('replay-scrubber');
+            const scrubberRow = scrubber.closest('[data-ch-replay-row="scrubber"]');
+            const transportRow = screen
+                .getByTestId('replay-play-btn')
+                .closest('[data-ch-replay-row="transport"]');
+
+            expect(scrubberRow).not.toBeNull();
+            expect(transportRow).not.toBeNull();
+            // The scrubber is not on the transport row.
+            expect(transportRow?.contains(scrubber)).toBe(false);
         });
     });
 
