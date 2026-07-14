@@ -26,7 +26,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { SaveSlotMeta, SlotId } from '@chimera-engine/simulation/bridge/api-types.js';
-import { Caption, DismissButton, Modal } from '../../components/ui';
+import { Caption, Icon, IconButton, Modal } from '../../components/ui';
 import { useSavesApi } from '../../hooks/useSavesApi.js';
 import { SAVES_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
@@ -44,8 +44,8 @@ function formatSavedAt(savedAt: number): string {
 /**
  * Compact trailing delete control for a save row. Rendered as a **sibling** of
  * the load button (a `<button>` may not nest another), so clicking it never
- * triggers the row's load handler. The shared DismissButton owns the
- * ghost-at-rest, danger-on-hover treatment.
+ * triggers the row's load handler. A ghost icon button carrying the close
+ * glyph; the ghost variant grows the glyph on hover for feedback.
  */
 function DeleteSaveButton({
     onDelete,
@@ -55,12 +55,15 @@ function DeleteSaveButton({
     readonly label: string;
 }): React.ReactElement {
     return (
-        <DismissButton
+        <IconButton
             className={styles['deleteBtn']}
             aria-label={label}
             data-testid="save-delete-btn"
             onClick={onDelete}
-        />
+            variant="ghost"
+        >
+            <Icon name="close" />
+        </IconButton>
     );
 }
 

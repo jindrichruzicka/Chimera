@@ -15,6 +15,7 @@
     justify-content: center;
     line-height: var(--ch-line-height-tight);
     padding: var(--ch-space-none);
+    transform: var(--ch-button-transform);
     transition: var(--ch-icon-button-transition);
     user-select: none;
     width: var(--ch-size-icon-button);
@@ -40,6 +41,7 @@
     border-color: var(--ch-icon-button-border-color-hover);
     box-shadow: var(--ch-icon-button-shadow-hover);
     color: var(--ch-icon-button-color-hover);
+    transform: var(--ch-icon-button-transform-hover);
 }
 
 .icon-button:not(:disabled):active {
@@ -53,6 +55,7 @@
     color: var(--ch-icon-button-color-hover);
     outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
     outline-offset: calc(var(--ch-focus-ring-width) * -1);
+    transform: var(--ch-icon-button-transform-hover);
 }
 
 .icon-button:disabled {
@@ -85,6 +88,8 @@
     --ch-icon-button-color: var(--ch-button-color-ghost);
     --ch-icon-button-shadow: var(--ch-button-shadow-ghost);
     --ch-icon-button-shadow-hover: var(--ch-button-shadow-hover-ghost);
+    /* Chrome-less, so the hover cue is a pronounced grow rather than a panel. */
+    --ch-icon-button-transform-hover: var(--ch-button-transform-hover-ghost);
 }
 
 .danger {

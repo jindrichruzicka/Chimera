@@ -50,8 +50,7 @@
     outline-offset: calc(var(--ch-focus-ring-width) * -1);
 }
 
-/* Layout only — the hover/focus danger treatment lives in the shared
-   DismissButton. */
+/* Layout only — the ghost icon button owns its own hover/focus feedback. */
 .deleteBtn {
     flex: 0 0 auto;
 }

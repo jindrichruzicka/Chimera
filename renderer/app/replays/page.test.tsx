@@ -319,7 +319,8 @@ describe('ReplaysPage', () => {
             expect(screen.getAllByTestId('replay-delete-btn')).toHaveLength(2);
         });
         for (const deleteButton of screen.getAllByTestId('replay-delete-btn')) {
-            expect(deleteButton).toHaveAttribute('data-ch-dismiss-button');
+            expect(deleteButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
+            expect(deleteButton.querySelector('svg[data-ch-icon="close"]')).not.toBeNull();
         }
     });
 

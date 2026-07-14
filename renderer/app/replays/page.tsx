@@ -30,7 +30,7 @@ import type {
     PerspectiveReplayListItem,
     ReplayListItem,
 } from '@chimera-engine/simulation/bridge/api-types.js';
-import { Badge, Caption, DismissButton, Modal } from '../../components/ui';
+import { Badge, Caption, Icon, IconButton, Modal } from '../../components/ui';
 import { REPLAYS_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import { useReplayApi } from '../../hooks/useReplayApi';
@@ -71,8 +71,8 @@ function formatRecordedAt(recordedAt: string): string {
 /**
  * Compact trailing delete control for a replay row. Rendered as a **sibling** of
  * the open button (a `<button>` may not nest another), so clicking it never
- * triggers the row's open handler. The shared DismissButton owns the
- * ghost-at-rest, danger-on-hover treatment.
+ * triggers the row's open handler. A ghost icon button carrying the close
+ * glyph; the ghost variant grows the glyph on hover for feedback.
  */
 function DeleteReplayButton({
     onDelete,
@@ -82,12 +82,15 @@ function DeleteReplayButton({
     readonly label: string;
 }): React.ReactElement {
     return (
-        <DismissButton
+        <IconButton
             className={styles['deleteBtn']}
             aria-label={label}
             data-testid="replay-delete-btn"
             onClick={onDelete}
-        />
+            variant="ghost"
+        >
+            <Icon name="close" />
+        </IconButton>
     );
 }
 

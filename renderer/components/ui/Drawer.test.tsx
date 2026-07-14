@@ -112,7 +112,7 @@ describe('Drawer', () => {
         expect(closeButton).toHaveFocus();
     });
 
-    it('renders the close affordance as the shared dismiss button', () => {
+    it('renders the close affordance as a ghost icon button carrying the close glyph', () => {
         render(
             <Drawer open title="Inventory" onClose={vi.fn()}>
                 Drawer content
@@ -121,7 +121,6 @@ describe('Drawer', () => {
 
         const closeButton = screen.getByRole('button', { name: /^close$/i });
         expect(closeButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
-        expect(closeButton).toHaveAttribute('data-ch-dismiss-button');
         expect(closeButton.querySelector('svg[data-ch-icon="close"]')).not.toBeNull();
         expect(closeButton).not.toHaveTextContent('Close');
     });

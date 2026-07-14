@@ -152,6 +152,16 @@ describe('Button', () => {
         expect(css.indexOf('.ghost:disabled')).toBeGreaterThan(css.indexOf('.button:disabled'));
     });
 
+    it('grows the ghost variant more than other variants on hover for stronger feedback', () => {
+        const css = buttonCss;
+
+        // Ghost has no bg/border/shadow feedback, so it redirects the shared
+        // hover-transform token to the larger ghost scale.
+        expect(css).toMatch(
+            /\.ghost\s*{[^}]*--ch-button-transform-hover:\s*var\(--ch-button-transform-hover-ghost\);/s,
+        );
+    });
+
     it('uses the dedicated active transform token for pressed feedback', () => {
         const css = buttonCss;
 

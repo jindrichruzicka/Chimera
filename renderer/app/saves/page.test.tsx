@@ -162,7 +162,8 @@ describe('SavesPage — rows', () => {
         const deleteButtons = screen.getAllByTestId('save-delete-btn');
         expect(deleteButtons).toHaveLength(2);
         for (const deleteButton of deleteButtons) {
-            expect(deleteButton).toHaveAttribute('data-ch-dismiss-button');
+            expect(deleteButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
+            expect(deleteButton.querySelector('svg[data-ch-icon="close"]')).not.toBeNull();
         }
     });
 

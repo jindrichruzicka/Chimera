@@ -219,6 +219,7 @@ const expectedTokens = [
     '--ch-button-shadow-hover-ghost',
     '--ch-button-transform',
     '--ch-button-transform-hover',
+    '--ch-button-transform-hover-ghost',
     '--ch-button-transform-active',
     '--ch-button-transition',
     '--ch-button-min-width-sm',
@@ -245,6 +246,7 @@ const expectedTokens = [
     '--ch-icon-button-border-color-hover',
     '--ch-icon-button-shadow',
     '--ch-icon-button-shadow-hover',
+    '--ch-icon-button-transform-hover',
     '--ch-icon-button-transition',
     '--ch-toggle-button-radius',
     '--ch-toggle-button-font-size',
@@ -497,6 +499,27 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-icon-button-color-hover')).toBe(
             'var(--ch-color-text-primary)',
         );
+    });
+
+    it('grows the ghost hover scale well beyond the standard button lift for stronger feedback', () => {
+        const css = readTokensCss();
+        const scaleOf = (value: string): number => {
+            const match = /scale\(([\d.]+)\)/.exec(value);
+            if (!match?.[1]) throw new Error(`Expected a scale() transform, received ${value}`);
+            return Number.parseFloat(match[1]);
+        };
+
+        // Ghost has no bg/border/shadow feedback, so a much larger hover scale
+        // carries the affordance. Icon buttons default to the identity hover
+        // transform; the ghost variant redirects both to the ghost scale.
+        const ghost = scaleOf(extractTokenValue(css, '--ch-button-transform-hover-ghost'));
+        const standard = scaleOf(extractTokenValue(css, '--ch-button-transform-hover'));
+        expect(ghost).toBeGreaterThanOrEqual(1.12);
+        expect(ghost - standard).toBeGreaterThanOrEqual(0.08);
+        expect(extractTokenValue(css, '--ch-icon-button-transform-hover')).toBe(
+            'var(--ch-button-transform)',
+        );
+        expect(extractTokenValue(css, '--ch-icon-button-transition')).toContain('transform ');
     });
 
     it('keeps the ghost variant chrome-less: transparent surfaces and no elevation', () => {

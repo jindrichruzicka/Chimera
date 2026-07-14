@@ -128,6 +128,23 @@ describe('IconButton', () => {
     it('uses a dedicated active transform token for pressed feedback', () => {
         expect(tokensCss).toContain('--ch-button-transform-active:');
         expect(css).toContain('transform: var(--ch-button-transform-active);');
+        // The :active rule must follow :hover so the press transform wins at
+        // equal specificity while the pointer is down.
+        expect(css.indexOf('.icon-button:not(:disabled):active')).toBeGreaterThan(
+            css.indexOf('.icon-button:not(:disabled):hover'),
+        );
+    });
+
+    it('grows on hover via the icon-button hover transform token, enlarged for the ghost variant', () => {
+        // The base hover applies the identity-by-default hover transform; the
+        // ghost variant redirects it to the larger ghost scale so the
+        // chrome-less dismiss/close crosses give strong feedback.
+        expect(css).toMatch(
+            /\.icon-button:not\(:disabled\):hover\s*{[^}]*transform:\s*var\(--ch-icon-button-transform-hover\);/s,
+        );
+        expect(css).toMatch(
+            /\.ghost\s*{[^}]*--ch-icon-button-transform-hover:\s*var\(--ch-button-transform-hover-ghost\);/s,
+        );
     });
 
     it('uses a discrete icon button size token without fractional calc', () => {
@@ -178,7 +195,7 @@ describe('IconButton', () => {
         expect(tokensCss).toContain('--ch-size-icon:');
     });
 
-    it('still sizes non-svg glyph children via font-size (text glyphs like DismissButton are unaffected)', () => {
+    it('still sizes non-svg glyph children via font-size (plain text glyphs are unaffected)', () => {
         expect(css).toContain('font-size: var(--ch-icon-button-font-size);');
     });
 });

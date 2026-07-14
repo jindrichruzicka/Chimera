@@ -6,8 +6,6 @@ export { Caption } from './Caption';
 export type { CaptionProps, CaptionTone } from './Caption';
 export { Card } from './Card';
 export type { CardElevation, CardElement, CardPadding, CardProps, CardSurface } from './Card';
-export { DismissButton } from './DismissButton';
-export type { DismissButtonProps } from './DismissButton';
 export { Divider } from './Divider';
 export type { DividerOrientation, DividerProps } from './Divider';
 export { Drawer } from './Drawer';

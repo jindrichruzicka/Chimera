@@ -82,6 +82,8 @@
     --ch-button-hover-color: var(--ch-button-color-ghost-hover);
     --ch-button-shadow: var(--ch-button-shadow-ghost);
     --ch-button-shadow-hover: var(--ch-button-shadow-hover-ghost);
+    /* Chrome-less, so the hover cue is a pronounced grow rather than a panel. */
+    --ch-button-transform-hover: var(--ch-button-transform-hover-ghost);
 }
 
 .ghost:disabled {

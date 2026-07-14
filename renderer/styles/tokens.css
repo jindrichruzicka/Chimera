@@ -158,9 +158,13 @@
     /* Ghost is a text-only button: no elevation in either state. */
     --ch-button-shadow-ghost: none;
     --ch-button-shadow-hover-ghost: var(--ch-button-shadow-ghost);
-    /* Subtle scale steps: lift on hover, settle on press. */
+    /* Subtle scale steps: lift on hover, settle on press. Ghost is the
+       exception — with no bg/border/shadow chrome, it grows much more on hover
+       so the feedback still reads (Button and IconButton ghost variants point
+       their hover transform at this token). */
     --ch-button-transform: scale(1);
     --ch-button-transform-hover: scale(1.02);
+    --ch-button-transform-hover-ghost: scale(1.15);
     --ch-button-transform-active: scale(0.98);
     --ch-button-transition:
         background-color var(--ch-duration-fast) var(--ch-easing-standard),
@@ -194,11 +198,15 @@
     --ch-icon-button-border-color-hover: var(--ch-button-border-secondary-hover);
     --ch-icon-button-shadow: var(--ch-shadow-sm);
     --ch-icon-button-shadow-hover: var(--ch-shadow-md);
+    /* Identity by default (non-ghost icon buttons do not grow); the ghost
+       variant redirects this to the larger ghost hover scale. */
+    --ch-icon-button-transform-hover: var(--ch-button-transform);
     --ch-icon-button-transition:
         background-color var(--ch-duration-fast) var(--ch-easing-standard),
         border-color var(--ch-duration-fast) var(--ch-easing-standard),
         box-shadow var(--ch-duration-fast) var(--ch-easing-standard),
-        color var(--ch-duration-fast) var(--ch-easing-standard);
+        color var(--ch-duration-fast) var(--ch-easing-standard),
+        transform var(--ch-duration-fast) var(--ch-easing-standard);
 
     --ch-toggle-button-radius: var(--ch-radius-md);
     --ch-toggle-button-font-size: var(--ch-font-size-sm);
