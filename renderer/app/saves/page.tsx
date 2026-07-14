@@ -34,7 +34,7 @@ import type { TranslateFn } from '../../i18n/i18n-context';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useSaveStore } from '../../state/saveStore.js';
 import { useToastStore } from '../../state/toastStore.js';
-import styles from './page.module.css';
+import styles from '../../components/shell/listBrowser.module.css';
 
 function formatSavedAt(savedAt: number): string {
     const date = new Date(savedAt);

@@ -2,9 +2,12 @@
    shared chrome-less Modal — this module styles only the lobby content. */
 
 .error {
+    background: var(--ch-color-error-surface);
+    border: var(--ch-border-width-sm) solid var(--ch-color-error-border);
+    border-radius: var(--ch-radius-sm);
     color: var(--ch-color-error-text);
-    font-size: var(--ch-font-size-md);
-    line-height: var(--ch-line-height-tight);
+    margin-bottom: var(--ch-space-md);
+    padding: calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md);
 }
 
 .entry-panel {
@@ -84,7 +87,9 @@
     white-space: nowrap;
 }
 
-@media (max-width: calc(var(--ch-space-xl) * 12)) {
+/* var()/calc() is invalid in a media condition, so the breakpoint is the
+   resolved token math (--ch-space-xl × 12) written out as a px literal. */
+@media (max-width: 480px) {
     .detail-row {
         grid-template-columns: 1fr;
     }

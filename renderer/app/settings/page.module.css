@@ -100,7 +100,9 @@
     line-height: var(--ch-line-height-tight);
 }
 
-@media (max-width: calc(var(--ch-space-xl) * 12)) {
+/* var()/calc() is invalid in a media condition, so the breakpoint is the
+   resolved token math (--ch-space-xl × 12) written out as a px literal. */
+@media (max-width: 480px) {
     .binding-row {
         grid-template-columns: 1fr;
     }

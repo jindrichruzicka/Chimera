@@ -49,7 +49,9 @@
     justify-content: flex-end;
 }
 
-@media (max-width: calc(var(--ch-space-xl) * 10)) {
+/* var()/calc() is invalid in a media condition, so the breakpoint is the
+   resolved token math (--ch-space-xl × 10) written out as a px literal. */
+@media (max-width: 400px) {
     .row {
         align-items: stretch;
         grid-template-columns: 1fr;

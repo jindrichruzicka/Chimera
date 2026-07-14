@@ -33,6 +33,7 @@ import { useOptionalInputActionRegistry } from '../../input/InputActionRegistryC
 import { useActiveScreen } from '../../state/uiStore.js';
 import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
+import { Button } from '../ui/Button.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
 import { DebugInspectorToggle } from './debug/DebugInspectorToggle.js';
 import { FadeProvider } from './FadeContext.js';
@@ -473,30 +474,33 @@ function DefaultGameHud({
                 {t(HUD_KEYS.tick)} <output data-testid="hud-tick">{tick}</output>
             </div>
             <div style={gameShellActionsStyle}>
-                <button
+                <Button
                     data-testid="undo"
-                    type="button"
+                    variant="secondary"
+                    size="sm"
                     disabled={undoDisabled}
                     onClick={handleUndo}
                 >
                     {t(HUD_KEYS.undo)}
-                </button>
-                <button
+                </Button>
+                <Button
                     data-testid="redo"
-                    type="button"
+                    variant="secondary"
+                    size="sm"
                     disabled={redoDisabled}
                     onClick={handleRedo}
                 >
                     {t(HUD_KEYS.redo)}
-                </button>
-                <button
+                </Button>
+                <Button
                     data-testid="end-turn"
-                    type="button"
+                    variant="secondary"
+                    size="sm"
                     disabled={endTurnDisabled}
                     onClick={handleEndTurn}
                 >
                     {t(HUD_KEYS.endTurn)}
-                </button>
+                </Button>
             </div>
         </footer>
     );

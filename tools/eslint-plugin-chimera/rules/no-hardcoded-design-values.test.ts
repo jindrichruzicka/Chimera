@@ -121,6 +121,25 @@ cssRuleTester.run('chimera/no-hardcoded-design-values css modules', rule, {
     --ch-space-md: 16px;
 }`,
         },
+        {
+            // Media-query conditions are environment predicates, not themable
+            // design values — and `var()`/`calc(var())` never resolves inside a
+            // media prelude, so a px literal is the only working form.
+            filename: 'renderer/app/lobby/page.module.css',
+            code: `@media (max-width: 480px) {
+    .detail-row {
+        grid-template-columns: 1fr;
+    }
+}`,
+        },
+        {
+            filename: 'renderer/components/shell/PlayerList.module.css',
+            code: `@container (min-width: 400px) {
+    .row {
+        grid-template-columns: minmax(var(--ch-space-none), 1fr) max-content;
+    }
+}`,
+        },
     ],
     invalid: [
         {
@@ -151,6 +170,17 @@ cssRuleTester.run('chimera/no-hardcoded-design-values css modules', rule, {
     border-color: hsl(0 0% 100%);
 }`,
             errors: [{ messageId: 'hardcodedDesignValue' }, { messageId: 'hardcodedDesignValue' }],
+        },
+        {
+            // The prelude exemption is narrow: declarations inside the media
+            // block are still design values and stay flagged.
+            filename: 'renderer/components/ui/Panel.module.css',
+            code: `@media (max-width: 480px) {
+    .panel {
+        padding: 16px;
+    }
+}`,
+            errors: [{ messageId: 'hardcodedDesignValue' }],
         },
     ],
 });

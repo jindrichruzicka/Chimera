@@ -73,9 +73,15 @@
     gap: var(--ch-space-sm);
 }
 
+/* Same boxed treatment as the shell pages, with tighter padding for the
+   compact drawer-hosted composer column. */
 .error {
+    background: var(--ch-color-error-surface);
+    border: var(--ch-border-width-sm) solid var(--ch-color-error-border);
+    border-radius: var(--ch-radius-sm);
     color: var(--ch-color-error-text);
     font-size: var(--ch-font-size-sm);
     inline-size: 100%;
     margin: var(--ch-space-none);
+    padding: var(--ch-space-sm);
 }

@@ -434,6 +434,17 @@ describe('GameShell page object locators', () => {
         expect(style).toContain('font-family: var(--ch-font-ui)');
     });
 
+    it('renders the fallback HUD controls through the shared Button primitive', () => {
+        render(<GameShell tick={1} canUndo canRedo />);
+
+        for (const testId of ['undo', 'redo', 'end-turn']) {
+            const control = screen.getByTestId(testId);
+            expect(control.tagName).toBe('BUTTON');
+            expect(control.getAttribute('data-ch-button-variant')).toBe('secondary');
+            expect(control.getAttribute('data-ch-button-size')).toBe('sm');
+        }
+    });
+
     it('wires HUD controls through game-agnostic callbacks', () => {
         const onUndo = vi.fn();
         const onRedo = vi.fn();

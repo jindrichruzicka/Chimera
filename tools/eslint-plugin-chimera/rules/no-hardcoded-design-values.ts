@@ -126,6 +126,15 @@ function shouldReportStringNode(node: NodeLike, value: string): boolean {
     return isInStyleContext(node);
 }
 
+/**
+ * Media and container query conditions are environment predicates, not
+ * themable design values — and `var()`/`calc(var())` never resolves inside a
+ * query prelude, so px literals are the only working form there.
+ */
+function isEnvironmentPredicateAtrule(node: NodeLike | undefined): boolean {
+    return typeof node?.name === 'string' && /^(?:media|container)$/iu.test(node.name);
+}
+
 function getCssDimensionValue(node: NodeLike): string | undefined {
     if (typeof node.value !== 'string' && typeof node.value !== 'number') return undefined;
     if (typeof node.unit !== 'string') return undefined;
@@ -159,6 +168,12 @@ const rule: Rule.RuleModule = {
         }
 
         if (isCssModuleFile(context.filename)) {
+            // Dimensions sit inside a query prelude exactly when we are within a
+            // media/container at-rule but not within any declaration (rule bodies
+            // nest their sizes under Declaration nodes; preludes never do).
+            let environmentAtruleDepth = 0;
+            let declarationDepth = 0;
+
             function reportCssValue(node: NodeLike, kind: LiteralKind, value: string): void {
                 context.report({
                     node: node as Rule.Node,
@@ -168,7 +183,25 @@ const rule: Rule.RuleModule = {
             }
 
             return {
+                Atrule(node: Rule.Node) {
+                    if (isEnvironmentPredicateAtrule(asNode(node))) environmentAtruleDepth += 1;
+                },
+
+                'Atrule:exit'(node: Rule.Node) {
+                    if (isEnvironmentPredicateAtrule(asNode(node))) environmentAtruleDepth -= 1;
+                },
+
+                Declaration() {
+                    declarationDepth += 1;
+                },
+
+                'Declaration:exit'() {
+                    declarationDepth -= 1;
+                },
+
                 Dimension(node: Rule.Node) {
+                    if (environmentAtruleDepth > 0 && declarationDepth === 0) return;
+
                     const nodeLike = asNode(node);
                     if (!nodeLike) return;
 

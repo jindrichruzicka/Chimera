@@ -37,7 +37,7 @@ import { useReplayApi } from '../../hooks/useReplayApi';
 import { areDeterministicReplaysVisible } from './deterministicReplayGate';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useToastStore } from '../../state/toastStore.js';
-import styles from './page.module.css';
+import styles from '../../components/shell/listBrowser.module.css';
 
 /** Which replay surface a pending deletion targets (deterministic vs perspective). */
 type ReplayKind = 'deterministic' | 'perspective';

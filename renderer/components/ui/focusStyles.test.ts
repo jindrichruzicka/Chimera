@@ -27,8 +27,7 @@ const borderedFocusRules = [
 
 const insetRingFocusRules = [
     { fileName: 'Slider.module.css', focusSelector: '.input:focus-visible' },
-    { fileName: '../../app/saves/page.module.css', focusSelector: '.row:focus-visible' },
-    { fileName: '../../app/replays/page.module.css', focusSelector: '.row:focus-visible' },
+    { fileName: '../shell/listBrowser.module.css', focusSelector: '.row:focus-visible' },
 ] as const;
 
 function readModuleCss(fileName: string): string {

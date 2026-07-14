@@ -1,5 +1,6 @@
-/* The page surface (backdrop, title, geometry, Close action) is owned by the
-   shared chrome-less Modal — this module styles only the replay list. */
+/* Shared list-browser surface for the saves and replays pages. The page surface
+   (backdrop, title, geometry, Close action) is owned by the shared chrome-less
+   Modal — this module styles only the row list. */
 
 .list {
     list-style: none;
@@ -7,10 +8,10 @@
     padding: 0;
 }
 
-/* One list row: the open <button> plus a trailing delete control. The divider
-   and the hover tint live here so both span the row's full width — the tint would
-   otherwise stop at the open button and leave the delete slot dark (Invariant #91:
-   tokens only). */
+/* One list row: the primary-action <button> plus a trailing delete control. The
+   divider and the hover tint live here so both span the row's full width — the
+   tint would otherwise stop at the primary button and leave the delete slot dark
+   (Invariant #91: tokens only). */
 .rowItem {
     align-items: center;
     border-block-end: var(--ch-border-width-sm) solid var(--ch-color-border-strong);
@@ -24,9 +25,9 @@
     background: var(--ch-color-surface-hover);
 }
 
-/* The open button fills the row; focus-visible draws the shared inset ring.
-   `min-inline-size: 0` lets long labels truncate instead of forcing the delete
-   control off the row. */
+/* The primary-action button fills the row; focus-visible draws the shared inset
+   ring. `min-inline-size: 0` lets long labels truncate instead of forcing the
+   delete control off the row. */
 .row {
     align-items: center;
     appearance: none;
