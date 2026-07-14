@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
-import type { ComponentType } from 'react';
+import { createElement, type ComponentType } from 'react';
 import type {
     GameMainMenuDefinition,
     GameFontFace,
@@ -12,6 +12,7 @@ import type {
     GameCursorRole,
     GameLanguage,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import type { GameIconSet } from '../components/ui/icons/registry.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
 import {
     _resetRendererGameRegistryForTest,
@@ -376,6 +377,97 @@ describe('rendererGameRegistry', () => {
         });
     });
 
+    describe('shell.icons game-contribution seam (#113)', () => {
+        const goodGlyph: GameIconSet[string] = {
+            viewBox: '0 0 24 24',
+            content: createElement('path', { d: 'M0 0h24v24H0z' }),
+        };
+
+        let warnSpy: ReturnType<typeof vi.spyOn>;
+
+        beforeEach(() => {
+            warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        });
+
+        afterEach(() => {
+            warnSpy.mockRestore();
+        });
+
+        function registerIconsShell(icons: GameIconSet): void {
+            const shell = fakeShell({ icons });
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(fakeGame({ shell })),
+                loadShell: () => Promise.resolve(shell),
+                isDefault: true,
+            });
+        }
+
+        it('exposes the contributed icons on the loaded shell, unmodified', async () => {
+            const icons: GameIconSet = { 'game.fake.banner': goodGlyph };
+            registerIconsShell(icons);
+
+            const loaded = await loadRendererGameShell('fake');
+
+            // Passed through by reference — the registry never clones or merges.
+            expect(loaded.icons).toBe(icons);
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('leaves icons undefined when the shell contributes none', async () => {
+            registerFake();
+
+            const loaded = await loadRendererGameShell('fake');
+
+            expect(loaded.icons).toBeUndefined();
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('warns and still loads when a glyph is malformed (missing viewBox)', async () => {
+            registerIconsShell({
+                'game.fake.bad': { content: createElement('path') },
+            } as unknown as GameIconSet);
+
+            await expect(loadRendererGameShell('fake')).resolves.toBeDefined();
+
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            expect(String(warnSpy.mock.calls[0]?.[0])).toContain('game.fake.bad');
+        });
+
+        it('warns and does not throw when the icons set is not a plain object', async () => {
+            registerIconsShell(null as unknown as GameIconSet);
+
+            await expect(loadRendererGameShell('fake')).resolves.toBeDefined();
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+        });
+
+        it('warns for a malformed glyph when icons arrive via loadRendererGame', async () => {
+            const shell = fakeShell({
+                icons: {
+                    'game.fake.bad': { viewBox: '', content: createElement('path') },
+                } as unknown as GameIconSet,
+            });
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(fakeGame({ shell })),
+                loadShell: () => Promise.resolve(shell),
+                isDefault: true,
+            });
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+        });
+
+        it('a shell without icons warns nothing', async () => {
+            registerFake();
+
+            await loadRendererGameShell('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+    });
+
     it('rejects unknown game ids', async () => {
         registerFake();
 
@@ -475,6 +567,11 @@ describe('rendererGameRegistry', () => {
             expectTypeOf<ShellShape['translations']>().toEqualTypeOf<
                 GameTranslations | undefined
             >();
+        });
+
+        it('shell.icons is typed as GameIconSet | undefined (#113)', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['icons']>().toEqualTypeOf<GameIconSet | undefined>();
         });
 
         it('shell.menuCommands lookup is typed as (() => void) | undefined', () => {

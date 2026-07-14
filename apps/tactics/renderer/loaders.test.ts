@@ -64,6 +64,14 @@ describe('tactics renderer loaders', () => {
         expect(shell.cursor).toBe(tacticsManifest.cursor);
     });
 
+    it('loadTacticsRendererGameShell contributes the game.tactics.* icon glyphs (#113)', async () => {
+        const shell = await loadTacticsRendererGameShell();
+
+        expect(Object.keys(shell.icons ?? {})).toContain('game.tactics.banner');
+        const banner = shell.icons?.['game.tactics.banner'];
+        expect(typeof banner?.viewBox).toBe('string');
+    });
+
     it('loadTacticsRendererGameShell contributes the English and Czech translation bundles', async () => {
         const shell = await loadTacticsRendererGameShell();
 

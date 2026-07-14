@@ -3,9 +3,11 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Icon } from './Icon';
 import { Icon as BarrelIcon } from '../index';
+import { IconProvider } from './IconProvider';
+import type { IconGlyph } from './registry';
 import css from './Icon.module.css?raw';
 import tokensCss from '../../../styles/tokens.css?raw';
 
@@ -55,6 +57,61 @@ describe('Icon', () => {
 
     it('is exported through the components/ui barrel (invariant #96)', () => {
         expect(BarrelIcon).toBe(Icon);
+    });
+
+    it('renders nothing and does not throw for an unknown name', () => {
+        // The unguarded ICON_REGISTRY[name] lookup crashed on any unknown name
+        // before the game-icon seam added the guard; a missing glyph must degrade.
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        const { container } = render(<Icon name="does-not-exist" />);
+
+        expect(container.querySelector('svg')).toBeNull();
+        warn.mockRestore();
+    });
+
+    it('renders a game-contributed glyph supplied through IconProvider', () => {
+        const glyph: IconGlyph = { viewBox: '0 0 10 10', content: <path d="M0 0h10v10H0z" /> };
+
+        const { container } = render(
+            <IconProvider gameIcons={{ 'game.demo.flag': glyph }}>
+                <Icon name="game.demo.flag" />
+            </IconProvider>,
+        );
+
+        const svg = container.querySelector('svg[data-ch-icon="game.demo.flag"]');
+        expect(svg).not.toBeNull();
+        expect(svg?.getAttribute('viewBox')).toBe('0 0 10 10');
+        expect(svg?.querySelector('path')).not.toBeNull();
+    });
+
+    it('lets a game re-skin a built-in by re-keying its name (game-first lookup)', () => {
+        const glyph: IconGlyph = { viewBox: '0 0 99 99', content: <rect height="1" width="1" /> };
+
+        const { container } = render(
+            <IconProvider gameIcons={{ save: glyph }}>
+                <Icon name="save" />
+            </IconProvider>,
+        );
+
+        const svg = container.querySelector('svg[data-ch-icon="save"]');
+        // The game glyph's viewBox wins over the engine save glyph (0 0 24 24).
+        expect(svg?.getAttribute('viewBox')).toBe('0 0 99 99');
+        expect(svg?.querySelector('rect')).not.toBeNull();
+    });
+
+    it('falls back to the engine registry when the provider set lacks the name', () => {
+        const glyph: IconGlyph = { viewBox: '0 0 10 10', content: <path d="M0 0h10v10H0z" /> };
+
+        const { container } = render(
+            <IconProvider gameIcons={{ 'game.demo.flag': glyph }}>
+                <Icon name="save" />
+            </IconProvider>,
+        );
+
+        const svg = container.querySelector('svg[data-ch-icon="save"]');
+        // Engine save glyph renders (viewBox 0 0 24 24), not the game flag.
+        expect(svg?.getAttribute('viewBox')).toBe('0 0 24 24');
     });
 
     it('sizes via a token and colours via currentColor with no hardcoded values (invariant #86)', () => {

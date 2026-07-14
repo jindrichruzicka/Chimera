@@ -14,12 +14,11 @@
 // without a reload. A game-context change (new gameId) reloads the shell.
 
 import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
 
 import type { GameLanguage } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
 import { loadRendererGameShell } from '../game/rendererGameRegistry';
-import { resolveShellGameId } from '../shell/resolveMainMenuGameId';
+import { useActiveShellGameId } from '../shell/useActiveShellGameId';
 import { useSettingsStore } from '../state/settingsStore';
 import type { TranslationBundle } from './translation-bundle';
 
@@ -52,28 +51,6 @@ const EMPTY_LOADED: LoadedTranslations = {
     languages: NO_LANGUAGES,
     bundles: {},
 };
-
-/**
- * The active game id for i18n: the URL `?gameId=` (present on the menu/settings
- * routes) wins, falling back to the store's `activeGameId` (set on lobby/game
- * entry). `null` ⇒ no game context ⇒ pure engine English.
- *
- * The URL is read from `window.location.search` in an effect keyed on the
- * pathname (re-read on every navigation), NOT via `useSearchParams()`: that hook
- * forces a Suspense boundary under `output: 'export'`, and this provider mounts
- * ABOVE any boundary. `usePathname()` carries no such constraint.
- */
-function useActiveGameId(): string | null {
-    const pathname = usePathname();
-    const activeGameId = useSettingsStore((state) => state.activeGameId);
-    const [urlGameId, setUrlGameId] = useState<string | null>(null);
-
-    useEffect(() => {
-        setUrlGameId(resolveShellGameId(new URLSearchParams(window.location.search)));
-    }, [pathname]);
-
-    return urlGameId ?? activeGameId;
-}
 
 /**
  * Resolve the active game's declared languages + per-locale override bundles,
@@ -139,7 +116,7 @@ function usePersistedLocale(gameId: string | null): string {
  * zero cost and renders identically to mounting `<I18nProvider>` bare.
  */
 export function useActiveGameTranslations(): ActiveGameI18n {
-    const gameId = useActiveGameId();
+    const gameId = useActiveShellGameId();
     const loaded = useLoadedTranslations(gameId);
     const locale = usePersistedLocale(gameId);
     const gameOverride = loaded.bundles[locale];

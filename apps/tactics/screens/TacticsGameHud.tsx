@@ -127,6 +127,13 @@ export function TacticsGameHud({
                 <Panel className={styles['panel']} data-testid="tactics-hud-panel" variant="raised">
                     <div className={styles['body']}>
                         <div className={styles['status']}>
+                            {/* Game-contributed brand glyph, resolved through the
+                                engine <Icon> via the app-wide <IconProvider>
+                                (shell.icons seam). Decorative (aria-hidden) — pure
+                                branding, so it carries no user-facing string —
+                                proving a game's own icon renders with the engine's
+                                currentColor + token sizing, exactly like a built-in. */}
+                            <Icon data-testid="tactics-hud-emblem" name="game.tactics.banner" />
                             <Badge
                                 className={styles['badge']}
                                 data-testid="tactics-turn-status"

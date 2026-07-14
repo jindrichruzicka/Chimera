@@ -681,6 +681,7 @@ renderer/
 ├── shell/
 │   ├── renderMainMenuDefinition.tsx # Engine renderer for GameMainMenuDefinition
 │   ├── SettingsLanguageSelector.tsx # Store-connected wrapper mounting <LanguageSelector> for gameplay.language (§4.37.10)
+│   ├── useActiveShellGameId.ts # Shared active-gameId resolver (i18n + icons; usePathname, export-safe)
 │   └── resolveMainMenuGameId.ts     # URL game context resolver for main menu
 ├── styles/
 │   └── tokens.css              # Engine default --ch-* tokens (§4.35)
@@ -695,7 +696,8 @@ renderer/
 │   │   └── ShellBackgroundHost.tsx # Persistent shell-route background host
 │   └── ui/
 │       ├── Button.tsx          # Shared across shell pages and match screens
-│       └── LogoVideoScreen.tsx # Boot logo video splash building block (§4.37.15)
+│       ├── LogoVideoScreen.tsx # Boot logo video splash building block (§4.37.15)
+│       └── icons/              # <Icon>, ICON_REGISTRY, IconProvider/ActiveGameIconProvider, useActiveGameIcons — game glyphs via shell.icons (§4.37.16)
 └── app/
     ├── layout.tsx              # Imports tokens.css globally
     ├── logo-screen/
@@ -894,24 +896,59 @@ unmuted no-gesture autoplay works because Electron's default `autoplayPolicy` is
 
 ---
 
+## 4.37.16 Game-Contributed UI Icons
+
+A game adds its own glyphs to the engine `<Icon>` by contributing a `GameIconSet` through
+`LoadedRendererGameShell.icons`. Unlike the hardware cursor (image files declared in the
+`GameManifest` and resolved via the `chimera://` protocol), UI icons are **inline SVG React
+content** — the same `IconGlyph` shape the engine's own `ICON_REGISTRY` uses — so they travel on the
+renderer shell payload, not the manifest, alongside `translations`/`shellBackground`.
+
+```typescript
+export interface LoadedRendererGameShell {
+    readonly icons?: GameIconSet; // Readonly<Record<string, IconGlyph>>, keyed `game.<gameId>.<name>`
+}
+
+// apps/<game>/shell/icons.tsx — authored on the engine glyph contract (no `fill`)
+export const gameIcons = {
+    'game.<id>.banner': { viewBox: '0 0 24 24', content: <path d="…" /> },
+} as const satisfies GameIconSet;
+```
+
+The set reaches `<Icon>` through the same registry indirection as translations, with **no DOM
+dispatch** (unlike fonts/images/cursor, an inline glyph needs no async decode): `useActiveGameIcons`
+reads `shell.icons` from `loadRendererGameShell`, and the app-wide `ActiveGameIconProvider` (mounted
+in `AppShell`) publishes it to `IconContext`. `<Icon>` resolves **game-first, engine-fallback**
+(`gameIcons?.[name] ?? ICON_REGISTRY[name]`), so a game glyph renders with the engine's
+`fill: currentColor` + `--ch-size-icon` styling — identical to a built-in, including inside an
+`<IconButton>` — and a game may re-skin a built-in by re-keying it. An unknown name (no engine or
+game glyph) renders nothing and dev-warns rather than crashing; the loader dev-warns on a malformed
+set. The public `components/ui` barrel exposes `Icon`, `IconProvider`, and the `GameIconSet` type but
+deliberately **withholds** `ICON_REGISTRY` — games consume icons only through `<Icon name>`
+(invariants #96, #113). By convention a game namespaces its keys `game.<gameId>.<name>` so a glyph
+never silently overrides an engine built-in.
+
+---
+
 ## Invariants
 
-| #    | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #34  | `SettingsManager.registerSchema()` must be called for a game before `getSettings()` or `updateSettings()` is called. Calling `getSettings` for an unregistered `gameId` returns only engine defaults and logs a warning; a settings page definition selects presentation fields only.                                                                                                                                               |
-| #35  | Game-defined settings keys must not shadow the engine top-level namespaces (`audio`, `display`, `gameplay`, `controls`). `game-field.path` entries must be backed by the registered game settings schema; presentation metadata never admits unregistered settings keys.                                                                                                                                                            |
-| #36  | Settings remain outside simulation state and the `ActionPipeline`. The settings page edits values through the renderer settings store and `window.__chimera.settings`; any game parameter that affects simulation outcomes belongs in match config transmitted during lobby setup.                                                                                                                                                  |
-| #80  | `GameShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code. Shell-page customization follows the same registry-indirection principle through renderer registry loaders.                                                                                                                                    |
-| #85  | Game token override files may only redefine tokens declared in `renderer/styles/tokens.css`. Introducing new `--ch-*` custom property names in a game's override file is a module-boundary violation.                                                                                                                                                                                                                               |
-| #91  | Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`.                                                                                                                                                                                                                      |
-| #92  | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.                                                                                                                                                                                                                                                                    |
-| #93  | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).                                                                                                                                                                                                                                                            |
-| #94  | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.                                                                                                                                                                                                                                  |
-| #96  | Game renderer surfaces may import the shared component library only through its three public barrels — `@chimera-engine/renderer/components/ui`, `@chimera-engine/renderer/components/chat`, and `@chimera-engine/renderer/components/r3f`; shell pages continue to receive game customization through renderer registry indirection.                                                                                               |
-| #99  | Lobby match settings are host-authored; per-player attributes are owner-authored. `LobbyManager.setMatchSetting()` rejects a non-hosted session; `setPlayerAttribute()` rejects any seat but the caller's own and (for a joined client) forwards the own-seat intent to the host, which applies it to the connection-derived sender seat. The two IPC channels are the sole write path; changes broadcast to every peer. (§4.37.12) |
-| #100 | Game `LobbyScreen` components perform no privileged writes directly — they call the engine-provided `setMatchSetting` / `setPlayerAttribute` props (routed renderer API → IPC → `LobbyManager`) and never write `lobbyStore`, call `LobbyManager`, or open IPC channels themselves. (§4.37.12)                                                                                                                                      |
-| #101 | `GameSnapshot.setup` / `PlayerSnapshot.setup` is public host config passed through `StateProjector.project()` verbatim — no owner-only or per-viewer fields — so every viewer's projected snapshot carries an identical `setup`. (§4.37.12)                                                                                                                                                                                         |
-| #109 | Engine UI motion (Modal/Drawer open-close, button press) is parameterised exclusively by `--ch-*` motion tokens backed by global `ch-*` keyframes in `renderer/styles/animations.css`; games customise it only through token overrides, and all engine motion collapses to instant under `prefers-reduced-motion`. (§4.35 Motion & Animation)                                                                                       |
+| #    | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #34  | `SettingsManager.registerSchema()` must be called for a game before `getSettings()` or `updateSettings()` is called. Calling `getSettings` for an unregistered `gameId` returns only engine defaults and logs a warning; a settings page definition selects presentation fields only.                                                                                                                                                                                                                               |
+| #35  | Game-defined settings keys must not shadow the engine top-level namespaces (`audio`, `display`, `gameplay`, `controls`). `game-field.path` entries must be backed by the registered game settings schema; presentation metadata never admits unregistered settings keys.                                                                                                                                                                                                                                            |
+| #36  | Settings remain outside simulation state and the `ActionPipeline`. The settings page edits values through the renderer settings store and `window.__chimera.settings`; any game parameter that affects simulation outcomes belongs in match config transmitted during lobby setup.                                                                                                                                                                                                                                  |
+| #80  | `GameShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code. Shell-page customization follows the same registry-indirection principle through renderer registry loaders.                                                                                                                                                                                                                    |
+| #85  | Game token override files may only redefine tokens declared in `renderer/styles/tokens.css`. Introducing new `--ch-*` custom property names in a game's override file is a module-boundary violation.                                                                                                                                                                                                                                                                                                               |
+| #91  | Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`.                                                                                                                                                                                                                                                                                                      |
+| #92  | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.                                                                                                                                                                                                                                                                                                                                                    |
+| #93  | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).                                                                                                                                                                                                                                                                                                                                            |
+| #94  | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.                                                                                                                                                                                                                                                                                                                  |
+| #96  | Game renderer surfaces may import the shared component library only through its three public barrels — `@chimera-engine/renderer/components/ui`, `@chimera-engine/renderer/components/chat`, and `@chimera-engine/renderer/components/r3f`; shell pages continue to receive game customization through renderer registry indirection.                                                                                                                                                                               |
+| #99  | Lobby match settings are host-authored; per-player attributes are owner-authored. `LobbyManager.setMatchSetting()` rejects a non-hosted session; `setPlayerAttribute()` rejects any seat but the caller's own and (for a joined client) forwards the own-seat intent to the host, which applies it to the connection-derived sender seat. The two IPC channels are the sole write path; changes broadcast to every peer. (§4.37.12)                                                                                 |
+| #100 | Game `LobbyScreen` components perform no privileged writes directly — they call the engine-provided `setMatchSetting` / `setPlayerAttribute` props (routed renderer API → IPC → `LobbyManager`) and never write `lobbyStore`, call `LobbyManager`, or open IPC channels themselves. (§4.37.12)                                                                                                                                                                                                                      |
+| #101 | `GameSnapshot.setup` / `PlayerSnapshot.setup` is public host config passed through `StateProjector.project()` verbatim — no owner-only or per-viewer fields — so every viewer's projected snapshot carries an identical `setup`. (§4.37.12)                                                                                                                                                                                                                                                                         |
+| #109 | Engine UI motion (Modal/Drawer open-close, button press) is parameterised exclusively by `--ch-*` motion tokens backed by global `ch-*` keyframes in `renderer/styles/animations.css`; games customise it only through token overrides, and all engine motion collapses to instant under `prefers-reduced-motion`. (§4.35 Motion & Animation)                                                                                                                                                                       |
+| #113 | Game-contributed UI icons reach `<Icon>` only through the `LoadedRendererGameShell.icons` (`GameIconSet`) registry payload → `useActiveGameIcons` → `ActiveGameIconProvider`/`IconContext`; the engine `<Icon>`/`ICON_REGISTRY` never import `apps/*`/`games/*`, the public barrel withholds `ICON_REGISTRY`, resolution is game-first/engine-fallback, an unknown name renders nothing (dev-warns), and game glyphs carry no `fill` (currentColor), rendering like a built-in inside an `<IconButton>`. (§4.37.16) |
 
 ---
 
@@ -922,5 +959,5 @@ unmuted no-gesture autoplay works because Electron's default `autoplayPolicy` is
 - [Renderer State Stores](renderer-state-stores.md) — store catalogue, `lobbyConfig`, `useLobbyApi()`
 - [Scene Transitions & Fade](scene-transitions-fade.md) — `TransitionOverlay`, `useFade()`
 - [Customizable Lobby Contract](customizable-lobby-contract.md) — §4.37.12 game-customizable lobby screen, host-authored match config, `snapshot.setup` projection
-- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #34–#36, #80, #85, #91–#94, #99–#101, #109
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #34–#36, #80, #85, #91–#94, #99–#101, #109, #113
 - [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v0.8.0.md) — F51 game-customizable main menu, F52 game-customizable settings page, F53 customizable lobby

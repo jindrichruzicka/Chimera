@@ -5,5 +5,7 @@
 // icons only through `<Icon name>`).
 export { Icon } from './Icon';
 export type { IconProps } from './Icon';
+export { IconProvider } from './IconProvider';
+export type { IconProviderProps } from './IconProvider';
 export { ICON_REGISTRY } from './registry';
-export type { IconGlyph, IconName } from './registry';
+export type { GameIconSet, IconGlyph, IconName } from './registry';

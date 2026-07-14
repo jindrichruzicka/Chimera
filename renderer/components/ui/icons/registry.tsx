@@ -52,3 +52,17 @@ export const ICON_REGISTRY = {
 } satisfies Record<string, IconGlyph>;
 
 export type IconName = keyof typeof ICON_REGISTRY;
+
+/**
+ * A game's contributed glyphs, keyed by the name a game passes to `<Icon name>`.
+ * Same shape as the engine's own {@link ICON_REGISTRY} entries: each value is an
+ * {@link IconGlyph} whose `content` carries no `fill` (colour comes from
+ * `fill: currentColor`), so a game glyph tracks its host control's colour token
+ * and `--ch-size-icon` sizing exactly like a built-in — including inside an
+ * `<IconButton>`. Reaches `<Icon>` only through the registry shell seam
+ * (`LoadedRendererGameShell.icons`) and the `IconProvider` context, never a
+ * `renderer/` → `apps/*` import (Invariants #80/#94/#113). By convention a game
+ * namespaces its keys `game.<gameId>.<name>` so a key never silently overrides
+ * an engine built-in (which the game-first lookup in `<Icon>` would otherwise do).
+ */
+export type GameIconSet = Readonly<Record<string, IconGlyph>>;

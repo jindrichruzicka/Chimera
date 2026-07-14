@@ -17,12 +17,22 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
 // No game-specific shell yet — the engine renders its default main menu,
 // settings, lobby, and background. To customise them, add a `shell/` directory
 // and return its definitions here (`mainMenu`, `menuCommands`, `settings`,
-// `shellBackground`, `LobbyScreen`, `fonts`); every field is optional.
+// `shellBackground`, `LobbyScreen`, `fonts`, `icons`); every field is optional.
 export function load__GamePascal__RendererGameShell(): Promise<LoadedRendererGameShell> {
     return Promise.resolve({
         // The manifest's cursor declaration, forwarded verbatim: the renderer
         // seam turns it into `--ch-cursor-*` token overrides. Undeclared (the
         // manifest example commented out) ⇒ undefined ⇒ strict no-op.
         cursor: __gameCamel__Manifest.cursor,
+        // Game-contributed UI icon glyphs, keyed `game.<gameId>.<name>`. Author
+        // them on the engine `IconGlyph` contract (a `viewBox` + fill-based
+        // `content` with no `fill`) and the engine `<Icon name="game.…">` renders
+        // them with currentColor + token sizing, exactly like a built-in —
+        // including inside an `<IconButton>`. Add e.g. a `shell/icons.tsx`:
+        //   import type { GameIconSet } from '@chimera-engine/renderer/components/ui';
+        //   export const __gameCamel__Icons = {
+        //       'game.__gameCamel__.banner': { viewBox: '0 0 24 24', content: <path d="…" /> },
+        //   } as const satisfies GameIconSet;
+        // then forward it here: `icons: __gameCamel__Icons,`.
     });
 }

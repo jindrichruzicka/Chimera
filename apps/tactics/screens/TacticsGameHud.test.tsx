@@ -16,10 +16,11 @@ import {
 } from '@chimera-engine/tactics/simulation/constants.js';
 import type { GameHudProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { entityId } from '@chimera-engine/electron/preload/api-types.js';
-import { EscapeStackProvider } from '@chimera-engine/renderer/components/ui';
+import { EscapeStackProvider, IconProvider } from '@chimera-engine/renderer/components/ui';
 import { I18nProvider } from '@chimera-engine/renderer/i18n';
 import { tacticsGridCoordinate } from '../simulation/actions.js';
 import type { BufferedTacticsAction } from '../simulation/commitment/contract.js';
+import { tacticsIcons } from '../shell/icons.js';
 import { tacticsBundleCs } from '../shell/translations/cs.js';
 import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsGameHud } from './TacticsGameHud';
@@ -40,7 +41,9 @@ const TACTICS_LANGUAGES = [
 function HudProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
     return (
         <I18nProvider gameOverride={tacticsBundleEn}>
-            <EscapeStackProvider>{children}</EscapeStackProvider>
+            <IconProvider gameIcons={tacticsIcons}>
+                <EscapeStackProvider>{children}</EscapeStackProvider>
+            </IconProvider>
         </I18nProvider>
     );
 }
@@ -166,6 +169,17 @@ describe('TacticsGameHud', () => {
         expect(screen.getByTestId('end-turn')).toBeTruthy();
     });
 
+    it('renders the game-contributed banner glyph through the engine <Icon> (#113)', () => {
+        // The game supplies its own glyph via the shell.icons seam; the engine
+        // <Icon> resolves `game.tactics.banner` from the IconProvider set and
+        // renders it as a tokenized currentColor SVG, exactly like a built-in.
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        const emblem = screen.getByTestId('tactics-hud-emblem');
+        expect(emblem.tagName.toLowerCase()).toBe('svg');
+        expect(emblem).toHaveAttribute('data-ch-icon', 'game.tactics.banner');
+    });
+
     it('renders the HUD in Czech when the Czech bundle is active', () => {
         baseRender(
             <I18nProvider
@@ -173,9 +187,11 @@ describe('TacticsGameHud', () => {
                 languages={TACTICS_LANGUAGES}
                 locale="cs-CZ"
             >
-                <EscapeStackProvider>
-                    <TacticsGameHud {...makeHudProps()} />
-                </EscapeStackProvider>
+                <IconProvider gameIcons={tacticsIcons}>
+                    <EscapeStackProvider>
+                        <TacticsGameHud {...makeHudProps()} />
+                    </EscapeStackProvider>
+                </IconProvider>
             </I18nProvider>,
         );
 

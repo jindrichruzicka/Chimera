@@ -11,6 +11,7 @@ import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { ScreenFadeRoot } from '../components/shell/ScreenFadeRoot';
 import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
 import { ToastHost } from '../components/shell/ToastHost';
+import { ActiveGameIconProvider } from '../components/ui/icons/ActiveGameIconProvider';
 import { TokenModeI18nProvider } from '../i18n/TokenModeI18nProvider';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { DebugI18nBootstrap } from './DebugI18nBootstrap';
@@ -40,47 +41,60 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                  */}
                 <TokenModeI18nProvider>
                     {/*
-                     * App-level fade for cross-screen route transitions
-                     * (main-menu ↔ lobby ↔ game). Lives above {children} so its
-                     * opacity survives Next.js soft navigation; the bootstraps
-                     * (GameStoreBootstrap drives the lobby⇄game fades) and the
-                     * pages all consume this provider via useFade(). Distinct from
-                     * GameShell's own inner FadeProvider, which only fades in-game
-                     * scene swaps.
+                     * Game-contributed UI icons: ActiveGameIconProvider resolves
+                     * the active game's `icons` set from the registry shell seam
+                     * and publishes it to <Icon> via IconContext, so a game glyph
+                     * (<Icon name="game.<id>.*">) renders with the engine's
+                     * currentColor + token sizing — inside an <IconButton> or on
+                     * its own. Inert (engine icons only) for a no-icon game, and
+                     * mounted above {children} + the game screens so every <Icon>
+                     * resolves a game glyph. Ordering vs i18n is irrelevant
+                     * (independent contexts).
                      */}
-                    <ScreenFadeRoot>
-                        <GameRegistrationBootstrap />
-                        <DebugI18nBootstrap />
+                    <ActiveGameIconProvider>
                         {/*
-                         * App-level (not GameShell) so F4 flips token mode on
-                         * every shell route — main menu, settings, lobby —
-                         * where the F9 Inspector toggle is unavailable.
+                         * App-level fade for cross-screen route transitions
+                         * (main-menu ↔ lobby ↔ game). Lives above {children} so its
+                         * opacity survives Next.js soft navigation; the bootstraps
+                         * (GameStoreBootstrap drives the lobby⇄game fades) and the
+                         * pages all consume this provider via useFade(). Distinct from
+                         * GameShell's own inner FadeProvider, which only fades in-game
+                         * scene swaps.
                          */}
-                        <I18nTokenModeToggle />
-                        <LoggingBootstrap />
-                        <SettingsBootstrap />
-                        <LobbyStoreBootstrap />
-                        <GameStoreBootstrap />
-                        <SaveStoreBootstrap />
-                        <ReplayNavigationBridge />
-                        <ReplayExportToastBridge />
-                        <PlayerConnectionToastBridge />
-                        <PlayerLeftToastBridge />
-                        <ProfileRejectedToastBridge />
-                        <React.Suspense fallback={null}>
-                            <ShellBackgroundHost />
-                        </React.Suspense>
-                        <div style={{ position: 'relative', zIndex: 'var(--ch-z-raised)' }}>
-                            <ConnectionStatusIndicator />
-                            <RootErrorBoundary>{children}</RootErrorBoundary>
+                        <ScreenFadeRoot>
+                            <GameRegistrationBootstrap />
+                            <DebugI18nBootstrap />
                             {/*
-                             * App-level so the waiting modal survives the
-                             * /saves → /game route hop mid-restore.
+                             * App-level (not GameShell) so F4 flips token mode on
+                             * every shell route — main menu, settings, lobby —
+                             * where the F9 Inspector toggle is unavailable.
                              */}
-                            <RestoreWaitingOverlay />
-                            <ToastHost />
-                        </div>
-                    </ScreenFadeRoot>
+                            <I18nTokenModeToggle />
+                            <LoggingBootstrap />
+                            <SettingsBootstrap />
+                            <LobbyStoreBootstrap />
+                            <GameStoreBootstrap />
+                            <SaveStoreBootstrap />
+                            <ReplayNavigationBridge />
+                            <ReplayExportToastBridge />
+                            <PlayerConnectionToastBridge />
+                            <PlayerLeftToastBridge />
+                            <ProfileRejectedToastBridge />
+                            <React.Suspense fallback={null}>
+                                <ShellBackgroundHost />
+                            </React.Suspense>
+                            <div style={{ position: 'relative', zIndex: 'var(--ch-z-raised)' }}>
+                                <ConnectionStatusIndicator />
+                                <RootErrorBoundary>{children}</RootErrorBoundary>
+                                {/*
+                                 * App-level so the waiting modal survives the
+                                 * /saves → /game route hop mid-restore.
+                                 */}
+                                <RestoreWaitingOverlay />
+                                <ToastHost />
+                            </div>
+                        </ScreenFadeRoot>
+                    </ActiveGameIconProvider>
                 </TokenModeI18nProvider>
             </ThemeProvider>
         </Providers>

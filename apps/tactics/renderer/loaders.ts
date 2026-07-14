@@ -38,14 +38,21 @@ export async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
 export async function loadTacticsRendererGameShell(): Promise<LoadedRendererGameShell> {
     await import('../styles/register-token-overrides.js');
 
-    const [mainMenuModule, settingsPageModule, backgroundModule, lobbyScreenModule, fontsModule] =
-        await Promise.all([
-            import('../shell/main-menu.js'),
-            import('../shell/settings-page.js'),
-            import('../shell/TacticsShellBackground.js'),
-            import('../shell/TacticsLobbyScreen.js'),
-            import('../shell/fonts.js'),
-        ]);
+    const [
+        mainMenuModule,
+        settingsPageModule,
+        backgroundModule,
+        lobbyScreenModule,
+        fontsModule,
+        iconsModule,
+    ] = await Promise.all([
+        import('../shell/main-menu.js'),
+        import('../shell/settings-page.js'),
+        import('../shell/TacticsShellBackground.js'),
+        import('../shell/TacticsLobbyScreen.js'),
+        import('../shell/fonts.js'),
+        import('../shell/icons.js'),
+    ]);
 
     return {
         mainMenu: mainMenuModule.tacticsMainMenuDefinition,
@@ -59,6 +66,10 @@ export async function loadTacticsRendererGameShell(): Promise<LoadedRendererGame
         // overrides at registry init — this package never touches the DOM.
         cursor: tacticsManifest.cursor,
         translations: TACTICS_TRANSLATIONS,
+        // Game-contributed UI glyphs, forwarded verbatim. The engine `<Icon>`
+        // resolves `game.tactics.*` names against these via the app-wide
+        // `<IconProvider>` — no DOM dispatch here (unlike cursor/fonts).
+        icons: iconsModule.tacticsIcons,
     };
 }
 

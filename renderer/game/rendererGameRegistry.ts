@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import { isValidElement, type ComponentType } from 'react';
 import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import type { GameScreenRegistry } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type {
@@ -13,6 +13,7 @@ import type {
     GameLanguage,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import type { GameIconSet } from '../components/ui/icons/registry.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
 import type { InputAction } from '../input/InputAction.js';
 import { loadGameFonts } from './GameFontLoader';
@@ -83,6 +84,18 @@ export interface LoadedRendererGameShell {
      * matches no declared language.
      */
     readonly translations?: GameTranslations;
+    /**
+     * Optional game-contributed UI icon glyphs (see {@link GameIconSet}). The
+     * app root feeds these into the app-wide `<IconProvider>` through this
+     * registry seam (via `useActiveGameIcons`), so `<Icon name="game.<id>.*">`
+     * resolves a game glyph with the engine's currentColor + `--ch-size-icon`
+     * styling — behaving exactly like a built-in inside an `<IconButton>`.
+     * Absent ⇒ engine icons only. Passed through the loaded shell unmodified;
+     * unlike fonts/images/cursor it needs no async decode, so the loader performs
+     * no dispatch — the provider reads `shell.icons` directly. The loader only
+     * dev-warns on a malformed set.
+     */
+    readonly icons?: GameIconSet;
 }
 
 export interface LoadedRendererGame {
@@ -200,6 +213,33 @@ function warnOnUndeclaredTranslationLocales(gameId: string, translations: GameTr
     }
 }
 
+/**
+ * Light, dev-time validation for a game's contributed icons. Like the sibling
+ * translations guard, this is a typo-catching safety net, never a hard error:
+ * every check degrades to a `console.warn` and the shell still loads (`<Icon>`'s
+ * own render guard covers a bad entry). Warns when the set is not a plain object,
+ * and for each entry missing a non-empty string `viewBox` or a valid React
+ * `content` element.
+ */
+function warnOnMalformedGameIcons(gameId: string, icons: GameIconSet): void {
+    if (typeof icons !== 'object' || icons === null) {
+        console.warn(
+            `[chimera] game '${gameId}' contributed an icons set that is not an object; ignoring.`,
+        );
+        return;
+    }
+    for (const [name, glyph] of Object.entries(icons)) {
+        const shape = glyph !== null && typeof glyph === 'object' ? glyph : undefined;
+        const viewBox = (shape as { viewBox?: unknown } | undefined)?.viewBox;
+        const content = (shape as { content?: unknown } | undefined)?.content;
+        if (typeof viewBox !== 'string' || viewBox.length === 0 || !isValidElement(content)) {
+            console.warn(
+                `[chimera] game '${gameId}' contributed a malformed icon glyph '${name}'; <Icon> will render nothing for it.`,
+            );
+        }
+    }
+}
+
 export async function loadRendererGame(gameId: string): Promise<LoadedRendererGame> {
     const loader = rendererGameLoaders.get(gameId);
     if (loader === undefined) {
@@ -218,6 +258,9 @@ export async function loadRendererGame(gameId: string): Promise<LoadedRendererGa
     }
     if (game.shell?.translations !== undefined) {
         warnOnUndeclaredTranslationLocales(gameId, game.shell.translations);
+    }
+    if (game.shell?.icons !== undefined) {
+        warnOnMalformedGameIcons(gameId, game.shell.icons);
     }
     return game;
 }
@@ -240,6 +283,9 @@ export async function loadRendererGameShell(gameId: string): Promise<LoadedRende
     }
     if (shell.translations !== undefined) {
         warnOnUndeclaredTranslationLocales(gameId, shell.translations);
+    }
+    if (shell.icons !== undefined) {
+        warnOnMalformedGameIcons(gameId, shell.icons);
     }
     return shell;
 }

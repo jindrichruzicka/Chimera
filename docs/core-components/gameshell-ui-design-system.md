@@ -319,6 +319,46 @@ renders chat. A game mounts it from one of its own renderer surfaces — Tactics
 renders it inside `TacticsGameHud` (a sibling of the HUD footer), and the panel
 owns its own positioning.
 
+### 4.35.2 Icon System & Game-Contributed Icons (`renderer/components/ui/icons/`)
+
+`<Icon name>` renders a named glyph as a tokenized, `currentColor` SVG. A glyph is
+an `IconGlyph` — `{ viewBox, content }` where `content` is fill-based SVG children
+that carry **no `fill`** (colour comes from the shared `.icon { fill: currentColor }`
+rule, sized by `--ch-size-icon`), so a glyph tracks its host control's colour token
+and hover/focus states (Invariant #86). The engine ships ~13 built-ins in
+`ICON_REGISTRY`; `IconName = keyof typeof ICON_REGISTRY` is derived structurally
+(no hand-maintained union). Inside an `<IconButton>` the glyph is passed as
+children and picks up the button's colour + `--ch-icon-button-glyph-size`.
+
+A game contributes **its own** glyphs — the icon analog of the `translations` seam:
+
+- **Author** a `GameIconSet` (`Readonly<Record<string, IconGlyph>>`) on the same
+  fill-based contract, keys namespaced `game.<gameId>.<name>` (e.g.
+  `apps/tactics/shell/icons.tsx`).
+- **Contribute** it via `LoadedRendererGameShell.icons`, forwarded verbatim from the
+  game's `loaders.ts` (§4.37.16). Because glyphs are inline React content — not
+  image files — they travel on the renderer shell payload, **not** the manifest
+  (unlike the hardware cursor).
+- **Resolve**: `useActiveGameIcons` reads `shell.icons` from the registry, and the
+  app-wide `ActiveGameIconProvider` (mounted in `AppShell`) publishes it to
+  `IconContext`. `<Icon>` reads the context and resolves **game-first,
+  engine-fallback** (`gameIcons?.[name] ?? ICON_REGISTRY[name]`).
+
+So `<Icon name="game.tactics.banner" />` renders the game's glyph with the engine's
+`currentColor` + token sizing — identical to a built-in, including inside an
+`<IconButton>` — and a game may **re-skin** a built-in by re-keying its name. An
+**unknown** name (no engine or game glyph) renders nothing and dev-warns rather than
+crashing (the previously unguarded `ICON_REGISTRY[name]` lookup would throw). The
+`name` prop is typed `IconName | (string & {})`: built-in names keep autocomplete and
+typo-checking, while a game name is any string, validated at runtime by the guard.
+
+The public `components/ui` barrel exposes `Icon`, `IconProvider`, and the
+`GameIconSet`/`IconGlyph`/`IconName` types, but deliberately **withholds**
+`ICON_REGISTRY` — games consume icons only through `<Icon name>` (Invariants #96,
+#113). `IconContext` uses the `null` default but exposes no throwing consumer hook:
+bare `<Icon>` with no provider degrades to the engine registry (the carve-out on
+Invariant #83). See §4.37.16 for the full registry-payload contract.
+
 ### Primitive State Attributes
 
 UI primitives expose stable `data-ch-*` attributes for public visual state that
@@ -706,12 +746,13 @@ renderer/
 
 ### Invariants
 
-| #    | Rule                                                                                                                                                                                                                                                                                                                                                                                           |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #85  | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                                                                                                                                                          |
-| #86  | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                                                                                                                                               |
-| #96  | Game renderer surfaces may import the shared component library only through its three public barrels — `@chimera-engine/renderer/components/ui` (primitives), `@chimera-engine/renderer/components/chat` (the shared chat component), and `@chimera-engine/renderer/components/r3f` (engine components a game mounts inside its own `<Canvas>`); all other renderer internals stay off-limits. |
-| #109 | Engine UI motion is declared as global `ch-*` keyframes in `renderer/styles/animations.css`, parameterised exclusively by `--ch-*` motion tokens; games customise motion only by overriding those tokens (retiming, `0ms`-disabling, or retargeting `*-name` tokens at game-namespaced keyframes), and all engine motion collapses to instant under `prefers-reduced-motion`.                  |
+| #    | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #85  | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                                                                                                                                                                                                                                                   |
+| #86  | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                                                                                                                                                                                                                                        |
+| #96  | Game renderer surfaces may import the shared component library only through its three public barrels — `@chimera-engine/renderer/components/ui` (primitives), `@chimera-engine/renderer/components/chat` (the shared chat component), and `@chimera-engine/renderer/components/r3f` (engine components a game mounts inside its own `<Canvas>`); all other renderer internals stay off-limits.                                                                                          |
+| #109 | Engine UI motion is declared as global `ch-*` keyframes in `renderer/styles/animations.css`, parameterised exclusively by `--ch-*` motion tokens; games customise motion only by overriding those tokens (retiming, `0ms`-disabling, or retargeting `*-name` tokens at game-namespaced keyframes), and all engine motion collapses to instant under `prefers-reduced-motion`.                                                                                                           |
+| #113 | Game-contributed UI icons reach `<Icon>` only through the `LoadedRendererGameShell.icons` (`GameIconSet`) registry payload → `useActiveGameIcons` → `ActiveGameIconProvider`/`IconContext`; the engine icon module never imports `apps/*`, the public barrel withholds `ICON_REGISTRY`, resolution is game-first/engine-fallback, unknown names render nothing (dev-warn), and game glyphs carry no `fill` so they render like a built-in inside an `<IconButton>` (§4.35.2, §4.37.16). |
 
 ---
 
