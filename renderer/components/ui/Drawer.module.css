@@ -111,6 +111,25 @@
     justify-content: space-between;
 }
 
+/* With the title visually hidden, only the close button remains in flow, so
+   pin it to the inline-end corner where it normally sits. */
+.headerTitleHidden {
+    justify-content: flex-end;
+}
+
+/* Visually hidden, still read by assistive tech: keeps the dialog's
+   aria-labelledby target without a visible caption bar. */
+.titleHidden {
+    block-size: var(--ch-space-screen-reader);
+    clip: rect(0, 0, 0, 0);
+    inline-size: var(--ch-space-screen-reader);
+    margin: calc(var(--ch-space-screen-reader) * -1);
+    overflow: hidden;
+    padding: var(--ch-space-none);
+    position: absolute;
+    white-space: nowrap;
+}
+
 /* Title role of the text treatment tokens: glyph-clipped gradient fill with
  * an optional stroke, inert by default (see renderer/styles/tokens.css). */
 .title {

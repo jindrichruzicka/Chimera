@@ -154,6 +154,14 @@ describe('ChatPanel', () => {
         expect(screen.getByTestId('chat-panel')).toHaveAttribute('aria-label', 'Match chat');
     });
 
+    it('hides the composer label visually while keeping the input accessible', async () => {
+        render(<ChatPanel />);
+        await waitUntilReady();
+
+        expect(screen.getByLabelText('Message')).toBe(screen.getByTestId('chat-body-input'));
+        expect(screen.getByText('Message').className).toContain('labelHidden');
+    });
+
     it('applies the title to the unavailable placeholder too', () => {
         delete (window as unknown as { __chimera?: unknown }).__chimera;
 

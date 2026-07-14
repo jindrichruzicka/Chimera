@@ -247,6 +247,9 @@ export function ChatPanel({ title }: ChatPanelProps = {}): React.ReactElement {
                 <TextInput
                     autoComplete="off"
                     data-testid="chat-body-input"
+                    // The placeholder already names the field, so the label is
+                    // kept for assistive tech but hidden from view.
+                    hideLabel
                     label={t(CHAT_KEYS.inputLabel)}
                     onKeyDown={handleBodyKeyDown}
                     onValueChange={setBody}

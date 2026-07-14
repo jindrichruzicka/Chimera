@@ -16,6 +16,20 @@
     line-height: var(--ch-line-height-tight);
 }
 
+/* Visually hidden, still read by assistive tech (mirrors Slider/Select
+   .labelHidden): the input keeps its accessible name without a visible label. */
+.labelHidden {
+    block-size: var(--ch-space-screen-reader);
+    border: var(--ch-space-none);
+    clip: rect(0, 0, 0, 0);
+    inline-size: var(--ch-space-screen-reader);
+    margin: calc(var(--ch-space-screen-reader) * -1);
+    overflow: hidden;
+    padding: var(--ch-space-none);
+    position: absolute;
+    white-space: nowrap;
+}
+
 .control {
     background-color: var(--ch-color-surface-raised);
     border-color: var(--ch-color-border);

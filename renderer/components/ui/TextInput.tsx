@@ -8,6 +8,12 @@ export type TextInputProps = Readonly<
     Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'style' | 'type' | 'value'> & {
         readonly error?: React.ReactNode;
         readonly helperText?: React.ReactNode;
+        /**
+         * Visually hide the label while keeping it as the input's accessible
+         * name (for surfaces where a placeholder or surrounding context already
+         * names the field). Mirrors `Slider`/`Select` `hideLabel`.
+         */
+        readonly hideLabel?: boolean;
         readonly invalid?: boolean;
         readonly label: React.ReactNode;
         readonly onValueChange?: (value: string) => void;
@@ -20,6 +26,7 @@ export function TextInput({
     className,
     error,
     helperText,
+    hideLabel = false,
     id,
     invalid = false,
     label,
@@ -42,6 +49,9 @@ export function TextInput({
         .filter(Boolean)
         .join(' ');
     const classNames = [styles['root'], className].filter(Boolean).join(' ');
+    const labelClassNames = [styles['label'], hideLabel ? styles['labelHidden'] : null]
+        .filter(Boolean)
+        .join(' ');
 
     function handleChange(event: ChangeEvent<HTMLInputElement>): void {
         onValueChange?.(event.currentTarget.value);
@@ -49,7 +59,7 @@ export function TextInput({
 
     return (
         <div className={classNames} style={style}>
-            <label className={styles['label']} htmlFor={inputId}>
+            <label className={labelClassNames} htmlFor={inputId}>
                 {label}
             </label>
             <input

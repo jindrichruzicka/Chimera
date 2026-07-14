@@ -16,6 +16,12 @@ export type DrawerProps = Readonly<
     Omit<HTMLAttributes<HTMLDivElement>, 'style' | 'title'> & {
         readonly open: boolean;
         readonly title: React.ReactNode;
+        /**
+         * Visually hide the title while keeping it as the dialog's accessible
+         * name (`aria-labelledby`), for panels that don't want a visible caption
+         * bar. The close affordance stays in its top-inline-end corner.
+         */
+        readonly hideTitle?: boolean;
         readonly onClose: () => void;
         readonly children: React.ReactNode;
         /**
@@ -48,6 +54,7 @@ const placementClassByVariant = {
 export function Drawer({
     open,
     title,
+    hideTitle = false,
     onClose,
     children,
     className,
@@ -158,8 +165,17 @@ export function Drawer({
                 style={style}
                 tabIndex={-1}
             >
-                <div className={styles['header']}>
-                    <h2 className={styles['title']} id={titleId}>
+                <div
+                    className={[styles['header'], hideTitle ? styles['headerTitleHidden'] : null]
+                        .filter(Boolean)
+                        .join(' ')}
+                >
+                    <h2
+                        className={[styles['title'], hideTitle ? styles['titleHidden'] : null]
+                            .filter(Boolean)
+                            .join(' ')}
+                        id={titleId}
+                    >
                         {title}
                     </h2>
                     <IconButton

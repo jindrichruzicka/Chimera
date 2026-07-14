@@ -44,6 +44,32 @@ describe('Drawer', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it('keeps the title as the dialog accessible name but hides it visually when hideTitle is set', () => {
+        render(
+            <Drawer open hideTitle title="Match chat" onClose={vi.fn()}>
+                Chat body
+            </Drawer>,
+        );
+
+        // The dialog is still named via aria-labelledby → the hidden heading.
+        expect(screen.getByRole('dialog', { name: 'Match chat' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Match chat' }).className).toContain(
+            'titleHidden',
+        );
+    });
+
+    it('shows the drawer title by default', () => {
+        render(
+            <Drawer open title="Inventory" onClose={vi.fn()}>
+                Visible supplies
+            </Drawer>,
+        );
+
+        expect(screen.getByRole('heading', { name: 'Inventory' }).className).not.toContain(
+            'titleHidden',
+        );
+    });
+
     it('exposes an accessible dialog with a controlled placement while open', () => {
         render(
             <Drawer open placement="right" title="Inventory" onClose={vi.fn()}>

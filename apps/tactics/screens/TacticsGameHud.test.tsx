@@ -213,6 +213,18 @@ describe('TacticsGameHud', () => {
         expect(screen.getByLabelText('Game HUD').contains(chatPanel)).toBe(false);
     });
 
+    it('hides the chat drawer title visually while keeping the dialog named', async () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        fireEvent.click(screen.getByTestId('tactics-chat-toggle'));
+
+        // The dialog keeps its accessible name, but the visible caption is gone.
+        expect(await screen.findByRole('dialog', { name: 'Match chat' })).toBeTruthy();
+        expect(screen.getByRole('heading', { name: 'Match chat' }).className).toContain(
+            'titleHidden',
+        );
+    });
+
     it('collapses the chat drawer again when toggled off', async () => {
         render(<TacticsGameHud {...makeHudProps()} />);
 

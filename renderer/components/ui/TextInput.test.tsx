@@ -28,6 +28,25 @@ describe('TextInput', () => {
         expect(input).toHaveValue('Ada');
     });
 
+    it('keeps the label as the accessible name but hides it visually when hideLabel is set', () => {
+        render(<TextInput hideLabel label="Message" value="" />);
+
+        expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
+        expect(screen.getByText('Message').className).toContain('labelHidden');
+    });
+
+    it('shows the label by default', () => {
+        render(<TextInput label="Message" value="" />);
+
+        expect(screen.getByText('Message').className).not.toContain('labelHidden');
+    });
+
+    it('defines the visually-hidden label utility', () => {
+        expect(css).toContain('.labelHidden');
+        expect(css).toContain('position: absolute');
+        expectTokenizedCss(css);
+    });
+
     it('forwards text values when changed', () => {
         const onValueChange = vi.fn();
 

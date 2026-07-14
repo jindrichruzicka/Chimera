@@ -256,6 +256,7 @@ export function TacticsGameHud({
             </div>
             <Drawer
                 data-testid="tactics-chat-drawer"
+                hideTitle
                 id={TACTICS_CHAT_DRAWER_ID}
                 onClose={() => {
                     setChatOpen(false);
@@ -264,10 +265,11 @@ export function TacticsGameHud({
                 placement="right"
                 title={chatTitle}
             >
-                {/* No title prop: the panel falls back to t(engine.chat.title),
-                    which the Tactics bundle re-keys ('Match chat' / 'Zápasový
-                    chat'). The wrapping Drawer's caption reads the same token so
-                    the visible title and the panel's accessible name stay in sync. */}
+                {/* hideTitle: no visible caption bar, but chatTitle still names
+                    the dialog for assistive tech (via aria-labelledby). It falls
+                    back to t(engine.chat.title), which the Tactics bundle re-keys
+                    ('Match chat' / 'Zápasový chat'); the panel's own accessible
+                    name reads the same token, keeping the two in sync. */}
                 <ChatPanel />
             </Drawer>
         </>
