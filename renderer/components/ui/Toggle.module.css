@@ -53,6 +53,13 @@
     transition: var(--ch-toggle-button-transition);
 }
 
+/* Hover cue, mirroring the text-field border strengthen. :where() zeroes the
+   hover chain's specificity so the checked track's accent border and the
+   focus-visible recolor both still win. */
+.input:where(:hover:not(:disabled)) ~ .track {
+    border-color: var(--ch-color-border-strong);
+}
+
 .thumb {
     background-color: var(--ch-color-text-secondary);
     border-radius: var(--ch-radius-pill);

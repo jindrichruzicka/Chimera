@@ -1,6 +1,17 @@
 import type { ReactNode } from 'react';
 import { chatBubbleIcon } from './chatBubble';
+import { chevronDownIcon } from './chevronDown';
+import { closeIcon } from './close';
+import { copyIcon } from './copy';
+import { minusIcon } from './minus';
+import { pauseIcon } from './pause';
+import { playIcon } from './play';
+import { plusIcon } from './plus';
 import { saveIcon } from './save';
+import { seekEndIcon } from './seekEnd';
+import { seekStartIcon } from './seekStart';
+import { stepBackIcon } from './stepBack';
+import { stepForwardIcon } from './stepForward';
 
 /**
  * The visual definition of one icon: its coordinate space and the SVG children
@@ -26,7 +37,18 @@ export interface IconGlyph {
  */
 export const ICON_REGISTRY = {
     'chat-bubble': chatBubbleIcon,
+    'chevron-down': chevronDownIcon,
+    close: closeIcon,
+    copy: copyIcon,
+    minus: minusIcon,
+    pause: pauseIcon,
+    play: playIcon,
+    plus: plusIcon,
     save: saveIcon,
+    'seek-end': seekEndIcon,
+    'seek-start': seekStartIcon,
+    'step-back': stepBackIcon,
+    'step-forward': stepForwardIcon,
 } satisfies Record<string, IconGlyph>;
 
 export type IconName = keyof typeof ICON_REGISTRY;

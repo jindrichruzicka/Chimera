@@ -1,6 +1,14 @@
+/*
+ * Tinted state chips: each variant pairs its state surface with the state text
+ * and border from the same quartet, so every badge reads at AA without the
+ * solid fills that put white text on mid-tone state colours.
+ */
 .badge {
     align-items: center;
+    border-color: var(--_badge-border-color);
     border-radius: var(--ch-radius-sm);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
     color: var(--_badge-color);
     display: inline-flex;
     font-family: var(--ch-font-ui);
@@ -11,21 +19,25 @@
 }
 
 .neutral {
-    background-color: var(--ch-color-surface-raised);
+    background-color: var(--ch-color-surface-overlay);
+    --_badge-border-color: var(--ch-color-border-strong);
     --_badge-color: var(--ch-color-text-secondary);
 }
 
 .success {
-    background-color: var(--ch-color-success);
-    --_badge-color: var(--ch-color-text-primary);
+    background-color: var(--ch-color-success-surface);
+    --_badge-border-color: var(--ch-color-success-border);
+    --_badge-color: var(--ch-color-success-text);
 }
 
 .warning {
-    background-color: var(--ch-color-warning);
-    --_badge-color: var(--ch-color-surface);
+    background-color: var(--ch-color-warning-surface);
+    --_badge-border-color: var(--ch-color-warning-border);
+    --_badge-color: var(--ch-color-warning-text);
 }
 
 .error {
-    background-color: var(--ch-color-error);
-    --_badge-color: var(--ch-color-text-primary);
+    background-color: var(--ch-color-error-surface);
+    --_badge-border-color: var(--ch-color-error-border);
+    --_badge-color: var(--ch-color-error-text);
 }

@@ -54,10 +54,12 @@
 /*
  * The Play/Pause key is a ghost like every other transport button, so it carries
  * no heavy fill; a slightly larger glyph is all that marks it as the primary
- * action.
+ * action. The solid play/pause marks against the hollow step triangles carry
+ * the same filled-vs-outline language the old text glyphs had.
  */
-.play {
-    font-size: var(--ch-font-size-lg);
+.play svg {
+    block-size: var(--ch-space-lg);
+    inline-size: var(--ch-space-lg);
 }
 
 /*

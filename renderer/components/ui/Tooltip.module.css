@@ -20,8 +20,11 @@
        overflow:auto can no longer clip it. The transform lifts it to sit a small
        gap above the trigger, left-aligned to it. */
     position: fixed;
+    /* Long content wraps inside a bounded width instead of running off-screen
+       as one unbroken line. */
+    max-inline-size: calc(var(--ch-space-xl) * 8);
+    overflow-wrap: anywhere;
     transform: translateY(calc(-100% - var(--ch-space-sm)));
-    white-space: nowrap;
     z-index: var(--ch-z-tooltip);
 }
 

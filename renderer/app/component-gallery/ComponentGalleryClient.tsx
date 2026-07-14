@@ -12,6 +12,7 @@ import { Divider } from '../../components/ui/Divider';
 import { Drawer } from '../../components/ui/Drawer';
 import { ScrollArea } from '../../components/ui/ScrollArea';
 import { Heading } from '../../components/ui/Heading';
+import { Icon, ICON_REGISTRY, type IconName } from '../../components/ui/icons';
 import { IconButton } from '../../components/ui/IconButton';
 import { Label } from '../../components/ui/Label';
 import { Modal } from '../../components/ui/Modal';
@@ -77,6 +78,15 @@ function ActionsPanel(): React.ReactElement {
                 >
                     Toggle me
                 </ToggleButton>
+            </div>
+            <Label>Iconography</Label>
+            <div className={styles['iconGrid']} data-testid="gallery-iconography">
+                {(Object.keys(ICON_REGISTRY) as readonly IconName[]).map((name) => (
+                    <figure key={name} className={styles['iconSample']}>
+                        <Icon name={name} />
+                        <figcaption className={styles['iconSampleName']}>{name}</figcaption>
+                    </figure>
+                ))}
             </div>
         </div>
     );

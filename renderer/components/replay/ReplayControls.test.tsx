@@ -214,6 +214,43 @@ describe('ReplayControls', () => {
         });
     });
 
+    describe('transport iconography', () => {
+        // The transport keys draw registry glyphs, not unicode text: play and
+        // pause are the solid marks, the step keys the hollow triangles.
+        it('renders registry glyphs for every transport key when paused', () => {
+            renderControls({ isPlaying: false, currentTick: 5, totalTicks: 10 });
+
+            const glyphIn = (label: RegExp): string | null | undefined =>
+                screen
+                    .getByRole('button', { name: label })
+                    .querySelector('svg[data-ch-icon]')
+                    ?.getAttribute('data-ch-icon');
+
+            expect(glyphIn(/seek to start/i)).toBe('seek-start');
+            expect(glyphIn(/step back/i)).toBe('step-back');
+            expect(glyphIn(/step forward/i)).toBe('step-forward');
+            expect(glyphIn(/seek to end/i)).toBe('seek-end');
+            expect(
+                screen.getByTestId('replay-play-btn').querySelector('svg[data-ch-icon="play"]'),
+            ).not.toBeNull();
+        });
+
+        it('renders the pause glyph while playing', () => {
+            renderControls({ isPlaying: true, currentTick: 5, totalTicks: 10 });
+
+            expect(
+                screen.getByTestId('replay-pause-btn').querySelector('svg[data-ch-icon="pause"]'),
+            ).not.toBeNull();
+        });
+
+        it('sizes the play/pause glyph larger than the other transport keys', () => {
+            const rule = /\.play\s+svg\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+
+            expect(rule).toContain('block-size: var(--ch-space-lg)');
+            expect(rule).toContain('inline-size: var(--ch-space-lg)');
+        });
+    });
+
     describe('disabled states at the boundaries', () => {
         it('disables back/start (and the scrubber stays at 0) at tick 0', () => {
             renderControls({ currentTick: 0, totalTicks: 10 });

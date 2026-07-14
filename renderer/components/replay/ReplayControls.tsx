@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { Button, Caption, Select, Slider, type SelectOption } from '../ui';
+import { Button, Caption, Icon, Select, Slider, type SelectOption } from '../ui';
 import { REPLAYS_KEYS } from '../../i18n/engine-keys';
 import type { TranslationKey } from '../../i18n/translation-bundle';
 import { useTranslate } from '../../i18n/useTranslate';
@@ -126,7 +126,7 @@ export function ReplayControls({
                         disabled={atStart}
                         onClick={() => onSeek(0)}
                     >
-                        ⏮
+                        <Icon name="seek-start" />
                     </Button>
                     <Button
                         size="sm"
@@ -135,7 +135,7 @@ export function ReplayControls({
                         disabled={atStart}
                         onClick={() => onStep(-1)}
                     >
-                        ◁
+                        <Icon name="step-back" />
                     </Button>
                     {isPlaying ? (
                         <Button
@@ -146,7 +146,7 @@ export function ReplayControls({
                             data-testid="replay-pause-btn"
                             onClick={onPause}
                         >
-                            ⏸
+                            <Icon name="pause" />
                         </Button>
                     ) : (
                         <Button
@@ -158,7 +158,7 @@ export function ReplayControls({
                             disabled={atEnd}
                             onClick={onPlay}
                         >
-                            ▶
+                            <Icon name="play" />
                         </Button>
                     )}
                     <Button
@@ -168,7 +168,7 @@ export function ReplayControls({
                         disabled={atEnd}
                         onClick={() => onStep(1)}
                     >
-                        ▷
+                        <Icon name="step-forward" />
                     </Button>
                     <Button
                         size="sm"
@@ -177,7 +177,7 @@ export function ReplayControls({
                         disabled={atEnd}
                         onClick={() => onSeek(totalTicks)}
                     >
-                        ⏭
+                        <Icon name="seek-end" />
                     </Button>
                 </div>
                 <div className={styles['transportEnd']}>

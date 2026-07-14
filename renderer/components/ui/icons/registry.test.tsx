@@ -18,6 +18,22 @@ describe('ICON_REGISTRY', () => {
         expect(Object.keys(ICON_REGISTRY)).toContain('save');
     });
 
+    it.each([
+        'close',
+        'chevron-down',
+        'plus',
+        'minus',
+        'copy',
+        'play',
+        'pause',
+        'step-back',
+        'step-forward',
+        'seek-start',
+        'seek-end',
+    ] as const)('registers the %s glyph', (name) => {
+        expect(Object.keys(ICON_REGISTRY)).toContain(name);
+    });
+
     it('defines every glyph with a non-empty viewBox and a renderable content element', () => {
         for (const [name, glyph] of Object.entries(ICON_REGISTRY)) {
             expect(typeof glyph.viewBox, name).toBe('string');

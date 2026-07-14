@@ -27,11 +27,62 @@
     white-space: nowrap;
 }
 
+/*
+ * Token-skinned range input: the native widget is stripped (appearance: none)
+ * and redrawn as a slim pill track under a round thumb. The filled portion is
+ * a hard-stop gradient driven by --_ch-slider-fill, an engine-private custom
+ * property Slider.tsx sets inline from value/min/max.
+ */
 .input {
-    accent-color: var(--ch-color-accent);
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--ch-color-transparent);
     cursor: var(--ch-cursor-pointer, pointer);
     inline-size: 100%;
     min-inline-size: 0;
+}
+
+.input::-webkit-slider-runnable-track {
+    background: linear-gradient(
+        to right,
+        var(--ch-slider-fill-color) 0 var(--_ch-slider-fill, 0%),
+        var(--ch-slider-track-color) var(--_ch-slider-fill, 0%)
+    );
+    block-size: var(--ch-slider-track-size);
+    border-radius: var(--ch-radius-pill);
+}
+
+.input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: var(--ch-slider-thumb-color);
+    block-size: var(--ch-slider-thumb-size);
+    border: var(--ch-border-width-sm) solid var(--ch-slider-thumb-border-color);
+    border-radius: var(--ch-radius-pill);
+    inline-size: var(--ch-slider-thumb-size);
+    /* Centres the thumb on the slim track (negative when the thumb is taller). */
+    margin-block-start: calc((var(--ch-slider-track-size) - var(--ch-slider-thumb-size)) / 2);
+}
+
+.input::-moz-range-track {
+    background-color: var(--ch-slider-track-color);
+    block-size: var(--ch-slider-track-size);
+    border-radius: var(--ch-radius-pill);
+}
+
+.input::-moz-range-progress {
+    background-color: var(--ch-slider-fill-color);
+    block-size: var(--ch-slider-track-size);
+    border-radius: var(--ch-radius-pill);
+}
+
+.input::-moz-range-thumb {
+    background-color: var(--ch-slider-thumb-color);
+    block-size: var(--ch-slider-thumb-size);
+    border: var(--ch-border-width-sm) solid var(--ch-slider-thumb-border-color);
+    border-radius: var(--ch-radius-pill);
+    box-sizing: border-box;
+    inline-size: var(--ch-slider-thumb-size);
 }
 
 /* The native range input has no border to recolor, so keyboard focus draws a

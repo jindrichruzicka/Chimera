@@ -44,6 +44,27 @@
     gap: var(--ch-space-sm);
 }
 
+.iconGrid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-md);
+}
+
+.iconSample {
+    align-items: center;
+    color: var(--ch-color-text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
+    margin: var(--ch-space-none);
+}
+
+.iconSampleName {
+    color: var(--ch-color-text-secondary);
+    font-family: var(--ch-font-mono);
+    font-size: var(--ch-font-size-sm);
+}
+
 .scrollSample {
     height: calc(var(--ch-space-xl) * 3);
     overflow-y: auto;

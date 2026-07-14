@@ -122,7 +122,7 @@ describe('Drawer', () => {
         const closeButton = screen.getByRole('button', { name: /^close$/i });
         expect(closeButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
         expect(closeButton).toHaveAttribute('data-ch-dismiss-button');
-        expect(closeButton).toHaveTextContent('×');
+        expect(closeButton.querySelector('svg[data-ch-icon="close"]')).not.toBeNull();
         expect(closeButton).not.toHaveTextContent('Close');
     });
 

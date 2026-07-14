@@ -268,6 +268,12 @@ const expectedTokens = [
     '--ch-select-popup-overhang-mac',
     '--ch-select-popup-shortfall-mac',
     '--ch-spinner-opacity-min',
+    '--ch-slider-track-size',
+    '--ch-slider-track-color',
+    '--ch-slider-fill-color',
+    '--ch-slider-thumb-size',
+    '--ch-slider-thumb-color',
+    '--ch-slider-thumb-border-color',
     '--ch-cursor-default',
     '--ch-cursor-pointer',
     '--ch-cursor-disabled',
@@ -636,6 +642,23 @@ describe('renderer design tokens', () => {
                 ).toBeGreaterThanOrEqual(2);
             }
         });
+    });
+
+    it('declares the slider control tokens', () => {
+        const css = readTokensCss();
+
+        expect(extractTokenValue(css, '--ch-slider-track-size')).toBe('6px');
+        expect(extractTokenValue(css, '--ch-slider-track-color')).toBe('var(--ch-color-border)');
+        expect(extractTokenValue(css, '--ch-slider-fill-color')).toBe(
+            'var(--ch-color-accent-strong)',
+        );
+        expect(extractTokenValue(css, '--ch-slider-thumb-size')).toBe('16px');
+        expect(extractTokenValue(css, '--ch-slider-thumb-color')).toBe(
+            'var(--ch-color-text-primary)',
+        );
+        expect(extractTokenValue(css, '--ch-slider-thumb-border-color')).toBe(
+            'var(--ch-color-surface)',
+        );
     });
 
     it('wires icon-button and toggle-button surfaces to the secondary button tokens', () => {

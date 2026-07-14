@@ -237,6 +237,17 @@
     --ch-select-popup-shortfall-mac: 14px;
     --ch-spinner-opacity-min: 0.3;
 
+    /* ── Slider ──
+     * Custom-drawn range input: a slim pill track whose filled portion uses the
+     * strong accent (3:1+ against the track, WCAG 1.4.11) under a round thumb
+     * ringed with the surface colour so it stays crisp over both halves. */
+    --ch-slider-track-size: 6px;
+    --ch-slider-track-color: var(--ch-color-border);
+    --ch-slider-fill-color: var(--ch-color-accent-strong);
+    --ch-slider-thumb-size: 16px;
+    --ch-slider-thumb-color: var(--ch-color-text-primary);
+    --ch-slider-thumb-border-color: var(--ch-color-surface);
+
     /* ── Cursors ──
      * Every engine cursor style routes through these tokens; games replace the
      * OS cursor by overriding them from their token-override file (Invariant

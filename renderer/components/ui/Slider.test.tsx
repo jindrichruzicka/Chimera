@@ -61,4 +61,42 @@ describe('Slider', () => {
         expect(sliderCss).toContain('overflow: hidden');
         expect(sliderCss).toContain('var(--ch-space-screen-reader)');
     });
+
+    it('exposes the fill percent to the track paint as a private custom property', () => {
+        render(<Slider label="Music volume" min={0} max={200} value={50} />);
+
+        const slider = screen.getByRole('slider', { name: 'Music volume' });
+        expect(slider.style.getPropertyValue('--_ch-slider-fill')).toBe('25%');
+    });
+
+    it('defaults the fill percent to the native 0-100 range when min/max are omitted', () => {
+        render(<Slider label="Music volume" value={40} />);
+
+        const slider = screen.getByRole('slider', { name: 'Music volume' });
+        expect(slider.style.getPropertyValue('--_ch-slider-fill')).toBe('40%');
+    });
+
+    it('collapses a zero-span range to a 0% fill instead of dividing by zero', () => {
+        render(<Slider label="Music volume" min={5} max={5} value={5} />);
+
+        const slider = screen.getByRole('slider', { name: 'Music volume' });
+        expect(slider.style.getPropertyValue('--_ch-slider-fill')).toBe('0%');
+    });
+
+    it('skins the native range input from the slider tokens instead of accent-color', () => {
+        expect(sliderCss).not.toContain('accent-color');
+        expect(sliderCss).toContain('appearance: none');
+        expect(sliderCss).toContain('::-webkit-slider-runnable-track');
+        expect(sliderCss).toContain('::-webkit-slider-thumb');
+        expect(sliderCss).toContain('::-moz-range-track');
+        expect(sliderCss).toContain('::-moz-range-progress');
+        expect(sliderCss).toContain('::-moz-range-thumb');
+        expect(sliderCss).toContain('var(--ch-slider-track-size)');
+        expect(sliderCss).toContain('var(--ch-slider-track-color)');
+        expect(sliderCss).toContain('var(--ch-slider-fill-color)');
+        expect(sliderCss).toContain('var(--ch-slider-thumb-size)');
+        expect(sliderCss).toContain('var(--ch-slider-thumb-color)');
+        expect(sliderCss).toContain('var(--ch-slider-thumb-border-color)');
+        expect(sliderCss).toContain('var(--_ch-slider-fill, 0%)');
+    });
 });

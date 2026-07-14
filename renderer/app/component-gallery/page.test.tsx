@@ -19,6 +19,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EscapeStackProvider } from '../../components/shell/EscapeStack';
 import { ToastHost } from '../../components/shell/ToastHost';
+import { ICON_REGISTRY } from '../../components/ui/icons';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { useToastStore } from '../../state/toastStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
@@ -408,6 +409,22 @@ describe('ComponentGalleryClient — Actions section test IDs (issue #608)', () 
         expect(btn).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(btn);
         expect(btn).toHaveAttribute('aria-pressed', 'false');
+    });
+});
+
+// ── Iconography block inside the Actions tab ─────────────────────────────────
+
+describe('ComponentGalleryClient — Iconography block (Actions tab)', () => {
+    it('renders every registry icon with its name caption inside the Actions section', () => {
+        renderGallery();
+
+        const section = screen.getByTestId('component-gallery-actions');
+        const block = within(section).getByTestId('gallery-iconography');
+
+        for (const name of Object.keys(ICON_REGISTRY)) {
+            expect(block.querySelector(`svg[data-ch-icon="${name}"]`), name).toBeTruthy();
+            expect(within(block).getByText(name)).toBeTruthy();
+        }
     });
 });
 

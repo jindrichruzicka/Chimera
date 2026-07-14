@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { IconButton, type IconButtonProps } from './IconButton';
+import { Icon } from './icons';
 import styles from './DismissButton.module.css';
 
 /**
@@ -32,7 +33,7 @@ export function DismissButton({
             data-ch-dismiss-button=""
             variant="ghost"
         >
-            <span aria-hidden="true">&times;</span>
+            <Icon name="close" />
         </IconButton>
     );
 }

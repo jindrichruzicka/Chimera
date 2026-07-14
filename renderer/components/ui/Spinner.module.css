@@ -11,8 +11,10 @@
     border-color: var(--ch-color-border);
     border-radius: var(--ch-radius-pill);
     border-style: solid;
-    border-top-color: var(--ch-color-accent);
-    border-width: var(--ch-button-border-width);
+    /* The strong accent step keeps the rotating segment at 3:1+ against the
+       border ring (WCAG 1.4.11 non-text contrast). */
+    border-top-color: var(--ch-color-accent-strong);
+    border-width: var(--ch-border-width-sm);
     display: inline-block;
     height: var(--ch-space-lg);
     width: var(--ch-space-lg);

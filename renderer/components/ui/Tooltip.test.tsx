@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Tooltip } from './Tooltip';
+import tooltipCss from './Tooltip.module.css?raw';
 
 afterEach(() => {
     cleanup();
@@ -78,5 +79,11 @@ describe('Tooltip', () => {
         // rather than nested beside its trigger.
         expect(tooltip.parentElement).toBe(document.body);
         expect(tooltip).not.toContainElement(trigger);
+    });
+
+    it('wraps long content inside a bounded width instead of one unbroken line', () => {
+        expect(tooltipCss).not.toContain('white-space: nowrap');
+        expect(tooltipCss).toContain('max-inline-size: calc(var(--ch-space-xl) * 8)');
+        expect(tooltipCss).toContain('overflow-wrap: anywhere');
     });
 });

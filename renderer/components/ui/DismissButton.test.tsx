@@ -19,12 +19,14 @@ describe('DismissButton', () => {
         expect(screen.getByRole('button', { name: 'Delete save Alpha' })).toBeInTheDocument();
     });
 
-    it('renders the cross glyph hidden from assistive technology', () => {
+    it('renders the registry close glyph hidden from assistive technology', () => {
         render(<DismissButton aria-label="Close" />);
 
-        const glyph = screen.getByRole('button', { name: 'Close' }).querySelector('span');
+        const glyph = screen
+            .getByRole('button', { name: 'Close' })
+            .querySelector('svg[data-ch-icon="close"]');
+        expect(glyph).not.toBeNull();
         expect(glyph).toHaveAttribute('aria-hidden', 'true');
-        expect(glyph).toHaveTextContent('×');
     });
 
     it('renders as a ghost icon button carrying the shared dismiss marker', () => {
@@ -71,13 +73,13 @@ describe('DismissButton', () => {
         expect(hardcoded).toBeNull();
     });
 
-    it('renders its glyph as a text span, never an svg (so IconButton svg sizing cannot reach it)', () => {
-        // Pins the boundary that lets IconButton's `.icon-button svg` rule size
-        // SVG glyphs without disturbing this button's `&times;` text glyph.
+    it('renders its glyph as a registry svg, never the legacy text cross', () => {
+        // The svg glyph is sized by IconButton's `.icon-button svg` rule, so
+        // every dismiss cross matches the shared icon scale.
         render(<DismissButton aria-label="Close" />);
 
         const button = screen.getByRole('button', { name: 'Close' });
-        expect(button.querySelector('span')).not.toBeNull();
-        expect(button.querySelector('svg')).toBeNull();
+        expect(button.querySelector('svg')).not.toBeNull();
+        expect(button.textContent).not.toContain('×');
     });
 });

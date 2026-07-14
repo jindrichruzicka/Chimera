@@ -89,6 +89,17 @@ describe('Toggle', () => {
         expect(css).toContain('var(--ch-color-text-disabled)');
     });
 
+    it('cues hover on the enabled track by strengthening its border, like text fields do', () => {
+        const hoverRule =
+            /\.input:where\(:hover:not\(:disabled\)\)\s*~\s*\.track\s*\{[^}]*\}/s.exec(css)?.[0] ??
+            '';
+
+        expect(hoverRule).toContain('border-color: var(--ch-color-border-strong)');
+        // The checked track keeps its accent border: the higher-specificity
+        // [data-checked='true'] rule must still beat the :where()-wrapped hover.
+        expect(css).toContain("[data-checked='true'] .track");
+    });
+
     it('sizes the label to match the compact input-field label size', () => {
         const labelRule = /\.label\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
         expect(labelRule).toContain('font-size: var(--ch-font-size-sm)');
