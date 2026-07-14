@@ -170,26 +170,26 @@ describe('scaffoldGame', () => {
         JSON.parse(await readFile(path.join(repoRoot, 'tsconfig.build.json'), 'utf8'));
 
     it('scaffolds apps/<kebab> from the default blank template, substituting names + contents', async () => {
-        const result = await scaffoldGame({ repoRoot, name: 'My Card Game' });
+        const result = await scaffoldGame({ repoRoot, name: 'My Game' });
 
-        expect(result.appDir).toBe(path.join(repoRoot, 'apps', 'my-card-game'));
+        expect(result.appDir).toBe(path.join(repoRoot, 'apps', 'my-game'));
         expect(result.filesWritten.length).toBeGreaterThan(0);
 
-        const contentPath = path.join(result.appDir, 'content', 'myCardGameContent.ts');
+        const contentPath = path.join(result.appDir, 'content', 'myGameContent.ts');
         const content = await readFile(contentPath, 'utf8');
-        expect(content).toContain('myCardGameContent');
-        expect(content).toContain("My Card Game's content module");
-        expect(content).toContain("MY_CARD_GAME_GAME_ID = 'my-card-game'");
+        expect(content).toContain('myGameContent');
+        expect(content).toContain("My Game's content module");
+        expect(content).toContain("MY_GAME_GAME_ID = 'my-game'");
 
-        const boardPath = path.join(result.appDir, 'screens', 'MyCardGameBoard.tsx');
-        expect(await readFile(boardPath, 'utf8')).toContain('MyCardGameBoard');
+        const boardPath = path.join(result.appDir, 'screens', 'MyGameBoard.tsx');
+        expect(await readFile(boardPath, 'utf8')).toContain('MyGameBoard');
 
         const pkg = JSON.parse(await readFile(path.join(result.appDir, 'package.json'), 'utf8'));
-        expect(pkg.name).toBe('@chimera-engine/my-card-game');
+        expect(pkg.name).toBe('@chimera-engine/my-game');
     });
 
     it('does not copy the template node_modules and leaves no token markers behind', async () => {
-        const result = await scaffoldGame({ repoRoot, name: 'My Card Game' });
+        const result = await scaffoldGame({ repoRoot, name: 'My Game' });
 
         const files = await listFiles(result.appDir);
         expect(files.some((f) => f.includes('node_modules'))).toBe(false);
@@ -215,27 +215,25 @@ describe('scaffoldGame', () => {
         await mkdir(path.dirname(abs), { recursive: true });
         await writeFile(abs, bytes);
 
-        const result = await scaffoldGame({ repoRoot, name: 'My Card Game' });
+        const result = await scaffoldGame({ repoRoot, name: 'My Game' });
 
         const copied = await readFile(path.join(result.appDir, 'renderer', 'public', 'logo.bin'));
         expect(copied.equals(bytes)).toBe(true);
     });
 
     it('wires the new app into root package.json, tsconfig.build.json, and the typecheck script', async () => {
-        await scaffoldGame({ repoRoot, name: 'My Card Game' });
+        await scaffoldGame({ repoRoot, name: 'My Game' });
 
         const pkg = await readRootPkg();
-        expect(pkg.dependencies['@chimera-engine/my-card-game']).toBe('workspace:*');
+        expect(pkg.dependencies['@chimera-engine/my-game']).toBe('workspace:*');
         // Alphabetically ordered within the @chimera-engine/* block.
         const keys = Object.keys(pkg.dependencies);
         expect(keys).toEqual([...keys].sort());
-        expect(pkg.scripts['typecheck']).toContain(
-            'tsc --noEmit -p apps/my-card-game/tsconfig.json',
-        );
+        expect(pkg.scripts['typecheck']).toContain('tsc --noEmit -p apps/my-game/tsconfig.json');
 
         const tsconfig = await readRootTsconfig();
         expect(tsconfig.references).toContainEqual({
-            path: './apps/my-card-game/tsconfig.build.json',
+            path: './apps/my-game/tsconfig.build.json',
         });
     });
 
@@ -243,15 +241,15 @@ describe('scaffoldGame', () => {
         // F67/#814: a scaffolded app inherits the same package-from-monorepo flow as
         // apps/tactics' root `package:tactics` — build the packages + renderer + app bundle,
         // then run the app's electron-builder. The script is tokenised on the kebab name.
-        await scaffoldGame({ repoRoot, name: 'My Card Game' });
+        await scaffoldGame({ repoRoot, name: 'My Game' });
 
         const pkg = await readRootPkg();
-        const script = pkg.scripts['package:my-card-game'];
+        const script = pkg.scripts['package:my-game'];
         expect(script).toBeDefined();
         expect(script).toContain('pnpm build:packages');
-        expect(script).toContain('next build apps/my-card-game/renderer');
-        expect(script).toContain('pnpm --filter @chimera-engine/my-card-game build:app');
-        expect(script).toContain('pnpm --filter @chimera-engine/my-card-game run package');
+        expect(script).toContain('next build apps/my-game/renderer');
+        expect(script).toContain('pnpm --filter @chimera-engine/my-game build:app');
+        expect(script).toContain('pnpm --filter @chimera-engine/my-game run package');
     });
 
     it('resolves an arbitrary --template id with no CLI code change', async () => {
@@ -299,13 +297,13 @@ describe('scaffoldGame', () => {
     });
 
     it('refuses to overwrite an existing app', async () => {
-        await write('apps/my-card-game/keep.txt', 'do not clobber');
+        await write('apps/my-game/keep.txt', 'do not clobber');
 
-        await expect(scaffoldGame({ repoRoot, name: 'My Card Game' })).rejects.toThrow(/exists/i);
+        await expect(scaffoldGame({ repoRoot, name: 'My Game' })).rejects.toThrow(/exists/i);
 
-        expect(
-            await readFile(path.join(repoRoot, 'apps', 'my-card-game', 'keep.txt'), 'utf8'),
-        ).toBe('do not clobber');
+        expect(await readFile(path.join(repoRoot, 'apps', 'my-game', 'keep.txt'), 'utf8')).toBe(
+            'do not clobber',
+        );
     });
 
     it('rejects an invalid game name before any write', async () => {
@@ -329,14 +327,14 @@ describe('scaffoldGame', () => {
 
             const result = await scaffoldGame({
                 repoRoot,
-                name: 'My Card Game',
+                name: 'My Game',
                 mode: 'standalone',
                 outputRoot,
             });
 
             // App lands under outputRoot, not repoRoot.
-            expect(result.appDir).toBe(path.join(outputRoot, 'apps', 'my-card-game'));
-            expect(await readdir(path.join(repoRoot, 'apps'))).not.toContain('my-card-game');
+            expect(result.appDir).toBe(path.join(outputRoot, 'apps', 'my-game'));
+            expect(await readdir(path.join(repoRoot, 'apps'))).not.toContain('my-game');
 
             // The standalone project root is emitted.
             for (const file of [
@@ -361,14 +359,14 @@ describe('scaffoldGame', () => {
             expect(rootTsconfig.compilerOptions.strict).toBe(true);
             // The standalone root carries the per-game packaging flow too (#814).
             expect(rootPkg.scripts.package).toContain(
-                'pnpm --filter @chimera-engine/my-card-game run package',
+                'pnpm --filter @chimera-engine/my-game run package',
             );
 
             // The app's @chimera-engine/* deps are rewritten onto published ranges — no workspace:* survives.
             const appPkg = JSON.parse(
                 await readFile(path.join(result.appDir, 'package.json'), 'utf8'),
             );
-            expect(appPkg.name).toBe('@chimera-engine/my-card-game');
+            expect(appPkg.name).toBe('@chimera-engine/my-game');
             expect(appPkg.dependencies['@chimera-engine/simulation']).toMatch(/^\^\d+\.\d+\.\d+$/);
             expect(JSON.stringify(appPkg)).not.toContain('workspace:*');
 
@@ -389,7 +387,7 @@ describe('scaffoldGame', () => {
             expect(appE2eTsconfig).not.toContain('simulation/dist');
             expect(appE2eTsconfig).not.toContain('electron/dist');
             // The game's own path (standalone-valid) is kept.
-            expect(appE2eTsconfig).toContain('apps/my-card-game');
+            expect(appE2eTsconfig).toContain('apps/my-game');
 
             // The monorepo root is untouched: no dependency added, no tsconfig reference.
             expect(await readFile(path.join(repoRoot, 'package.json'), 'utf8')).toBe(pkgBefore);

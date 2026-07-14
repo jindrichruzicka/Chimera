@@ -22,13 +22,13 @@ describe('normalizeGameName', () => {
     });
 
     it('expands a multiword name into all six casings', () => {
-        expect(normalizeGameName('my card game')).toEqual<GameNames>({
-            kebab: 'my-card-game',
-            camel: 'myCardGame',
-            pascal: 'MyCardGame',
-            title: 'My Card Game',
-            constant: 'MY_CARD_GAME',
-            lower: 'mycardgame',
+        expect(normalizeGameName('my game')).toEqual<GameNames>({
+            kebab: 'my-game',
+            camel: 'myGame',
+            pascal: 'MyGame',
+            title: 'My Game',
+            constant: 'MY_GAME',
+            lower: 'mygame',
         });
     });
 
@@ -39,14 +39,14 @@ describe('normalizeGameName', () => {
     });
 
     it('is invariant to the input casing shape', () => {
-        const expected = normalizeGameName('my card game');
+        const expected = normalizeGameName('my game');
         for (const shape of [
-            'my-card-game',
-            'my_card_game',
-            'myCardGame',
-            'MyCardGame',
-            'MY_CARD_GAME',
-            '  my   card   game  ',
+            'my-game',
+            'my_game',
+            'myGame',
+            'MyGame',
+            'MY_GAME',
+            '  my   game  ',
         ]) {
             expect(normalizeGameName(shape)).toEqual(expected);
         }

@@ -16,7 +16,7 @@ npm create chimera-game@latest <name>        # or: pnpm create chimera-game <nam
 pnpm create:game <name> [--template <id>]     # wraps `… --workspace`
 ```
 
-- `<name>` — the game name in any casing (`my-card-game`, `My Card Game`, `myCardGame`, …). It
+- `<name>` — the game name in any casing (`my-game`, `My Game`, `myGame`, …). It
   is normalised into every casing the template needs (see the token table below). Must contain a
   letter, start with a letter, and use only letters, digits, and `-` `_` space separators.
 - `--template <id>` — which template to scaffold from. **Defaults to `blank`.** The id resolves
@@ -83,16 +83,16 @@ Grow a game inside this shape: new deterministic gameplay modules go under `simu
 
 Templates embed these placeholders in file contents and in file/directory names; the scaffolder
 replaces each with the corresponding casing of the game name. (The placeholder spellings double
-as a worked example of each casing.) Example column uses the input `my-card-game`.
+as a worked example of each casing.) Example column uses the input `my-game`.
 
-| Token               | Casing         | Example        |
-| ------------------- | -------------- | -------------- |
-| `__game_kebab__`    | kebab-case     | `my-card-game` |
-| `__gameCamel__`     | camelCase      | `myCardGame`   |
-| `__GamePascal__`    | PascalCase     | `MyCardGame`   |
-| `__Game Title__`    | Title Case     | `My Card Game` |
-| `__GAME_CONSTANT__` | CONSTANT_CASE  | `MY_CARD_GAME` |
-| `__gamelower__`     | lower (joined) | `mycardgame`   |
+| Token               | Casing         | Example   |
+| ------------------- | -------------- | --------- |
+| `__game_kebab__`    | kebab-case     | `my-game` |
+| `__gameCamel__`     | camelCase      | `myGame`  |
+| `__GamePascal__`    | PascalCase     | `MyGame`  |
+| `__Game Title__`    | Title Case     | `My Game` |
+| `__GAME_CONSTANT__` | CONSTANT_CASE  | `MY_GAME` |
+| `__gamelower__`     | lower (joined) | `mygame`  |
 
 Legitimate dunders such as `__dirname` / `__filename` are **not** tokens and are left untouched.
 

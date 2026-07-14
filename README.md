@@ -16,17 +16,17 @@
 One command scaffolds a complete, ready-to-run game project:
 
 ```sh
-pnpm create chimera-game my-card-game
-cd my-card-game
+pnpm create chimera-game my-game
+cd my-game
 ```
 
 Prove it works, play it, ship it:
 
 ```sh
-pnpm --filter @chimera-engine/my-card-game test       # unit tests — green out of the box
-pnpm exec next build apps/my-card-game/renderer       # build the UI
-pnpm --filter @chimera-engine/my-card-game build:app  # bundle the Electron main
-pnpm exec electron apps/my-card-game                  # play it
+pnpm --filter @chimera-engine/my-game test       # unit tests — green out of the box
+pnpm exec next build apps/my-game/renderer       # build the UI
+pnpm --filter @chimera-engine/my-game build:app  # bundle the Electron main
+pnpm exec electron apps/my-game                  # play it
 pnpm package                                          # distributable (.app / installer)
 ```
 
@@ -41,7 +41,7 @@ Hacking on the engine itself? Clone this repo, then `pnpm install && pnpm test`.
 Everything you write lives in one app folder:
 
 ```
-apps/my-card-game/
+apps/my-game/
 ├── simulation/          # game rules, actions, and state — pure & deterministic, no DOM/IPC
 ├── ai/                  # AI brains that play your game — same purity rules as simulation/
 ├── screens/             # React components for your game's UI

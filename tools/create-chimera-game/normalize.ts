@@ -12,17 +12,17 @@
 
 /** A game name expanded into every casing the blank template references. */
 export interface GameNames {
-    /** kebab-case — e.g. `my-card-game` / `tactics`. */
+    /** kebab-case — e.g. `my-game` / `tactics`. */
     kebab: string;
-    /** camelCase — e.g. `myCardGame` / `tactics`. */
+    /** camelCase — e.g. `myGame` / `tactics`. */
     camel: string;
-    /** PascalCase — e.g. `MyCardGame` / `Tactics`. */
+    /** PascalCase — e.g. `MyGame` / `Tactics`. */
     pascal: string;
-    /** Title Case — e.g. `My Card Game` / `Tactics`. */
+    /** Title Case — e.g. `My Game` / `Tactics`. */
     title: string;
-    /** CONSTANT_CASE — e.g. `MY_CARD_GAME` / `TACTICS`. */
+    /** CONSTANT_CASE — e.g. `MY_GAME` / `TACTICS`. */
     constant: string;
-    /** lower (no separators) — e.g. `mycardgame` / `tactics`. */
+    /** lower (no separators) — e.g. `mygame` / `tactics`. */
     lower: string;
 }
 
@@ -59,7 +59,7 @@ const capitalize = (word: string): string => word.charAt(0).toUpperCase() + word
  *
  * Rejects (with {@link InvalidGameNameError}) names that are empty, contain characters outside
  * `[A-Za-z0-9]` and `-` `_` space, lack any ASCII letter, or begin with a digit — the casings
- * are used as JavaScript identifiers (e.g. `myCardGameContribution`), which must start with a
+ * are used as JavaScript identifiers (e.g. `myGameContribution`), which must start with a
  * letter.
  */
 export function normalizeGameName(input: string): GameNames {

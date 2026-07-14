@@ -10,7 +10,7 @@ import { findLeftoverTokens, renameTokensInPath, substituteTokens } from './toke
  * / `__filename` dunders in boilerplate for unsubstituted placeholders.
  */
 describe('substituteTokens', () => {
-    const names = normalizeGameName('my card game');
+    const names = normalizeGameName('my game');
 
     it('replaces every named token in file contents', () => {
         const template = [
@@ -26,12 +26,12 @@ describe('substituteTokens', () => {
 
         expect(result).toBe(
             [
-                'id: my-card-game',
-                'const myCardGameContribution = {};',
-                'export class MyCardGameBoard {}',
-                'title: "My Card Game"',
-                'const MY_CARD_GAME = 1;',
-                'package: mycardgame',
+                'id: my-game',
+                'const myGameContribution = {};',
+                'export class MyGameBoard {}',
+                'title: "My Game"',
+                'const MY_GAME = 1;',
+                'package: mygame',
             ].join('\n'),
         );
         expect(findLeftoverTokens(result)).toEqual([]);
@@ -46,12 +46,12 @@ describe('substituteTokens', () => {
 });
 
 describe('renameTokensInPath', () => {
-    const names = normalizeGameName('my card game');
+    const names = normalizeGameName('my game');
 
     it('substitutes tokens within each path segment', () => {
         expect(
             renameTokensInPath('apps/__game_kebab__/renderer/__GamePascal__Board.tsx', names),
-        ).toBe('apps/my-card-game/renderer/MyCardGameBoard.tsx');
+        ).toBe('apps/my-game/renderer/MyGameBoard.tsx');
     });
 
     it('leaves a path without tokens untouched', () => {
