@@ -117,6 +117,16 @@ describe('IconButton', () => {
         );
     });
 
+    it('aligns the ghost hover glyph colour with the ghost Button hover token', () => {
+        // A ghost icon button must light up on hover exactly like the ghost text
+        // Button beside it: both resolve their hover colour from
+        // --ch-button-color-ghost-hover (the game accent in a themed game), not
+        // the generic icon-button-color-hover (which stays neutral text-primary).
+        expect(css).toMatch(
+            /\.ghost\s*{[^}]*--ch-icon-button-color-hover:\s*var\(--ch-button-color-ghost-hover\);/s,
+        );
+    });
+
     it('CSS does not contain hardcoded colour, spacing, or radius values (invariant #86)', () => {
         // No hex values
         expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);

@@ -171,13 +171,17 @@ describe('SaveReplayButton', () => {
         expect(screen.queryByTestId('replay-save-name-dialog')).not.toBeInTheDocument();
     });
 
-    it('shifts the save icon to the ghost-hover colour on hover and keyboard focus', () => {
-        // Mirrors the ghost transport buttons beside it: the icon colour swaps to
-        // the game's ghost-hover token (accent in tactics) on hover/focus.
-        const rule = /\.save:hover,\s*\.save:focus-visible\s*\{([^}]*)\}/s.exec(css)?.[1];
+    it('renders as a ghost icon button so its hover matches the ghost transport keys', () => {
+        // The ghost variant now owns the ghost-hover colour alignment centrally
+        // (IconButton .ghost sets --ch-icon-button-color-hover), so the save icon
+        // lights up like the ghost buttons beside it without a bespoke rule here.
+        render(<SaveReplayButton onSave={vi.fn()} saving={false} saved={false} />);
 
-        expect(rule).toBeDefined();
-        expect(rule).toContain('--ch-icon-button-color: var(--ch-button-color-ghost-hover)');
+        expect(screen.getByTestId('replay-save-btn')).toHaveAttribute(
+            'data-ch-icon-button-variant',
+            'ghost',
+        );
+        expect(css).not.toContain('.save:hover');
     });
 
     it('CSS carries no hardcoded colour values (invariant #86)', () => {

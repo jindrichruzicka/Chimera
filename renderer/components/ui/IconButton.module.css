@@ -86,6 +86,10 @@
     --ch-icon-button-border-color: var(--ch-button-border-ghost);
     --ch-icon-button-border-color-hover: var(--ch-button-border-ghost-hover);
     --ch-icon-button-color: var(--ch-button-color-ghost);
+    /* Track the ghost Button's hover colour, not the generic icon-button hover
+       colour, so a ghost icon (save, close, transport, delete) lights up with
+       the same accent a ghost text Button does in a themed game. */
+    --ch-icon-button-color-hover: var(--ch-button-color-ghost-hover);
     --ch-icon-button-shadow: var(--ch-button-shadow-ghost);
     --ch-icon-button-shadow-hover: var(--ch-button-shadow-hover-ghost);
     /* Chrome-less, so the hover cue is a pronounced grow rather than a panel. */
