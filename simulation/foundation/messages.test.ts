@@ -105,6 +105,12 @@ describe('shared/messages — ClientMessage', () => {
         const msg: ClientMessage = { type: 'LEAVE' };
         expect(msg.type).toBe('LEAVE');
     });
+
+    it('SPECTATE_TARGET_UPDATE message carries the followed target player id (#876)', () => {
+        const msg: ClientMessage = { type: 'SPECTATE_TARGET_UPDATE', targetPlayerId: 'p2' };
+        expect(msg.type).toBe('SPECTATE_TARGET_UPDATE');
+        expect(msg.targetPlayerId).toBe('p2');
+    });
 });
 
 // ─── ServerMessage ────────────────────────────────────────────────────────────
@@ -119,6 +125,19 @@ describe('shared/messages — ServerMessage', () => {
             lobbyState: { info: lobbyInfo, players: [] },
         };
         expect(msg.type).toBe('WELCOME');
+    });
+
+    it('WELCOME message may declare the joiner handshake role (#876)', () => {
+        const msg: ServerMessage = {
+            type: 'WELCOME',
+            playerId: toPlayerId('p1'),
+            lobbyState: { info: lobbyInfo, players: [] },
+            role: 'spectator',
+        };
+        expect(msg.type).toBe('WELCOME');
+        if (msg.type === 'WELCOME') {
+            expect(msg.role).toBe('spectator');
+        }
     });
 
     it('SNAPSHOT message has snapshot and checksum', () => {
@@ -232,6 +251,12 @@ describe('shared/messages — isClientMessage type guard', () => {
 
     it('returns true for LEAVE', () => {
         expect(isClientMessage({ type: 'LEAVE' })).toBe(true);
+    });
+
+    it('returns true for SPECTATE_TARGET_UPDATE (#876)', () => {
+        expect(isClientMessage({ type: 'SPECTATE_TARGET_UPDATE', targetPlayerId: 'p2' })).toBe(
+            true,
+        );
     });
 });
 

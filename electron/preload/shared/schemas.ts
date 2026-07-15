@@ -121,6 +121,9 @@ const LobbyPlayerEntrySchema = z.object({
     playerId: z.string(),
     displayName: z.string(),
     ready: z.boolean(),
+    // Seat role (spectator vs player) mirrored from the wire so the IPC boundary
+    // validates and preserves it instead of stripping it (Invariant #114).
+    role: z.enum(['player', 'spectator']).optional(),
 });
 
 const LobbyAgentSlotSchema = z.object({

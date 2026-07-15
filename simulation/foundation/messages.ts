@@ -104,6 +104,12 @@ export interface JoinSeatClaim {
  *                 "disconnected"/"reconnected" presence toasts (§4.30) never
  *                 fire on a deliberate leave. Carries no payload — the host
  *                 already knows which connection sent it.
+ * - SPECTATE_TARGET_UPDATE A spectator's request to re-point its followed seat.
+ *                 Owner-authored and out-of-band (Invariant #115): it is NOT an
+ *                 EngineAction, never advances `tick`, and never enters
+ *                 ActionHistory / saves / replays — mirroring CHAT / PROFILE_UPDATE.
+ *                 The host validates `targetPlayerId` is a currently-seated player
+ *                 before re-pointing the projection.
  */
 export type ClientMessage =
     | {
@@ -148,7 +154,8 @@ export type ClientMessage =
       }
     | { readonly type: 'CHAT'; readonly body: string; readonly scope: ChatScope }
     | { readonly type: 'PING'; readonly sentAt: number }
-    | { readonly type: 'LEAVE' };
+    | { readonly type: 'LEAVE' }
+    | { readonly type: 'SPECTATE_TARGET_UPDATE'; readonly targetPlayerId: string };
 
 // ─── Server → Client messages ─────────────────────────────────────────────────
 
@@ -156,7 +163,9 @@ export type ClientMessage =
  * All messages the LocalWebSocketProvider host may send to a connected client.
  *
  * - WELCOME       Response to JOIN. Confirms the client's assigned PlayerId and
- *                 the current full lobby state.
+ *                 the current full lobby state. `role` tells the joiner whether it
+ *                 was admitted as a seated 'player' or a read-only 'spectator'
+ *                 (Invariant #114); absent ⇒ 'player' for old hosts.
  * - SNAPSHOT      Full projected PlayerSnapshot for the receiving client.
  *                 GameSnapshot NEVER appears here (Invariant #1).
  * - TICK          Tiny authoritative clock update for idle ticks where no
@@ -164,7 +173,12 @@ export type ClientMessage =
  * - DELTA         Incremental event stream optimisation. Placeholder for now —
  *                 hosts always send full SNAPSHOT.
  * - REJECT        Signals that the host rejected an ACTION (stale tick, checksum
- *                 mismatch, etc.).
+ *                 mismatch, etc.) or a JOIN. Known join-time `reason` values
+ *                 include `match_in_progress` (the game declares no spectator
+ *                 support, or the host disabled it, so a running-match join is
+ *                 refused) and `spectators_disabled` (the game supports spectators
+ *                 but the host toggled them off) — see the exported
+ *                 `REJECT_REASON_*` constants below.
  * - CLOSE         Signals that the hosted session is terminating and the client
  *                 must disconnect.
  * - REVEAL        Discloses a committed hidden value for anti-tamper verification
@@ -186,6 +200,12 @@ export type ServerMessage =
           readonly type: 'WELCOME';
           readonly playerId: PlayerId;
           readonly lobbyState: LobbyState;
+          /**
+           * Whether the joiner was admitted as a seated 'player' or a read-only
+           * 'spectator' (Invariant #114). Optional on the wire: absent from old
+           * hosts, where the client parser defaults it to 'player'.
+           */
+          readonly role?: 'player' | 'spectator';
       }
     | { readonly type: 'SNAPSHOT'; readonly snapshot: PlayerSnapshot; readonly checksum: number }
     | { readonly type: 'TICK'; readonly tick: number }
@@ -209,6 +229,31 @@ export type ServerMessage =
     | { readonly type: 'LOBBY_STATE'; readonly state: LobbyState }
     | { readonly type: 'PROFILE_REJECT'; readonly reason: string };
 
+// ─── Shared REJECT.reason constants ───────────────────────────────────────────
+//
+// `REJECT.reason` is a free-form string on the wire, but spectator-related
+// join rejections use these fixed values so the producer (host admission gate)
+// and consumer (client connection) agree without stringly-typed drift.
+
+/**
+ * A running-match join was refused because the game declares no spectator
+ * support, or the host has spectators disabled — no phantom seat is minted
+ * (Invariant #114). Sent as `REJECT.reason` at JOIN time.
+ */
+export const REJECT_REASON_MATCH_IN_PROGRESS = 'match_in_progress';
+
+/**
+ * A running-match join was refused because, although the game supports
+ * spectators, the host left the "allow spectators" toggle off. Sent as
+ * `REJECT.reason` at JOIN time.
+ */
+export const REJECT_REASON_SPECTATORS_DISABLED = 'spectators_disabled';
+
+/** The known spectator-related `REJECT.reason` values. */
+export type SpectatorRejectReason =
+    | typeof REJECT_REASON_MATCH_IN_PROGRESS
+    | typeof REJECT_REASON_SPECTATORS_DISABLED;
+
 // ─── Type guards ──────────────────────────────────────────────────────────────
 
 /** All valid `ClientMessage.type` values. */
@@ -221,6 +266,7 @@ const CLIENT_MESSAGE_TYPES = new Set<string>([
     'CHAT',
     'PING',
     'LEAVE',
+    'SPECTATE_TARGET_UPDATE',
 ]);
 
 /** All valid `ServerMessage.type` values. */

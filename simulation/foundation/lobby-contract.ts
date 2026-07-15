@@ -44,6 +44,13 @@ export interface LobbyPlayerEntry {
     readonly displayName: string;
     readonly ready: boolean;
     /**
+     * Seat role. Absent ⇒ 'player' (backward-compatible). A 'spectator' entry is
+     * a read-only viewer that joined a running match; it is NEVER a member of the
+     * authoritative GameSnapshot.players roster (Invariant #114) — this flag exists
+     * only for lobby-roster / "who's watching" presentation.
+     */
+    readonly role?: 'player' | 'spectator';
+    /**
      * Owner-authored per-player match attributes (e.g. unit colour): each player
      * writes its own seat. Optional and backward-compatible: absent on games
      * with no lobby setup and on older clients.

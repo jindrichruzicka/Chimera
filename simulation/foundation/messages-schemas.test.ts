@@ -356,6 +356,57 @@ describe('ClientMessageSchema — LEAVE', () => {
     });
 });
 
+describe('ClientMessageSchema — SPECTATE_TARGET_UPDATE (spectator perspective switch, #876)', () => {
+    it('parses a valid SPECTATE_TARGET_UPDATE message', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'SPECTATE_TARGET_UPDATE',
+            targetPlayerId: 'p2',
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.type).toBe('SPECTATE_TARGET_UPDATE');
+        }
+    });
+
+    it('rejects SPECTATE_TARGET_UPDATE missing targetPlayerId', () => {
+        const result = ClientMessageSchema.safeParse({ type: 'SPECTATE_TARGET_UPDATE' });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects SPECTATE_TARGET_UPDATE with an empty targetPlayerId', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'SPECTATE_TARGET_UPDATE',
+            targetPlayerId: '',
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('accepts a targetPlayerId at the wire id cap', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'SPECTATE_TARGET_UPDATE',
+            targetPlayerId: 'p'.repeat(WIRE_MAX_JOIN_CLAIM_ID_LENGTH),
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects a targetPlayerId exceeding the wire id cap (coarse DoS bound)', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'SPECTATE_TARGET_UPDATE',
+            targetPlayerId: 'p'.repeat(WIRE_MAX_JOIN_CLAIM_ID_LENGTH + 1),
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects SPECTATE_TARGET_UPDATE with unknown extra fields (strict schema)', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'SPECTATE_TARGET_UPDATE',
+            targetPlayerId: 'p2',
+            extra: 'garbage',
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
 describe('ClientMessageSchema — invalid type', () => {
     it('rejects an unknown type', () => {
         const result = ClientMessageSchema.safeParse({ type: 'UNKNOWN', data: 'x' });
@@ -389,6 +440,41 @@ describe('ServerMessageSchema — WELCOME', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'WELCOME',
             lobbyState: { info: defaultLobbyInfo, players: [] },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('defaults the handshake role to "player" when the host omits it (old hosts, #876)', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'WELCOME',
+            playerId: toPlayerId('p1'),
+            lobbyState: { info: defaultLobbyInfo, players: [] },
+        });
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'WELCOME') {
+            expect(result.data.role).toBe('player');
+        }
+    });
+
+    it('parses a WELCOME that declares a spectator handshake role (#876)', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'WELCOME',
+            playerId: toPlayerId('p1'),
+            lobbyState: { info: defaultLobbyInfo, players: [] },
+            role: 'spectator',
+        });
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'WELCOME') {
+            expect(result.data.role).toBe('spectator');
+        }
+    });
+
+    it('rejects a WELCOME with an unknown handshake role (#876)', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'WELCOME',
+            playerId: toPlayerId('p1'),
+            lobbyState: { info: defaultLobbyInfo, players: [] },
+            role: 'observer',
         });
         expect(result.success).toBe(false);
     });
@@ -578,6 +664,68 @@ describe('ServerMessageSchema — LOBBY_STATE', () => {
             },
         });
         expect(result.success).toBe(false);
+    });
+});
+
+describe('LobbyPlayerEntry role (who-is-watching flag, #876)', () => {
+    const entryWith = (role?: unknown) => ({
+        type: 'LOBBY_STATE' as const,
+        state: {
+            info: defaultLobbyInfo,
+            players: [
+                {
+                    playerId: toPlayerId('p1'),
+                    displayName: 'Alice',
+                    ready: false,
+                    ...(role !== undefined ? { role } : {}),
+                },
+            ],
+        },
+    });
+
+    it('parses a roster entry that declares a spectator role', () => {
+        const result = ServerMessageSchema.safeParse(entryWith('spectator'));
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'LOBBY_STATE') {
+            expect(result.data.state.players[0]?.role).toBe('spectator');
+        }
+    });
+
+    it('parses a roster entry that omits role (backward-compatible)', () => {
+        const result = ServerMessageSchema.safeParse(entryWith());
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'LOBBY_STATE') {
+            expect(result.data.state.players[0]?.role).toBeUndefined();
+        }
+    });
+
+    it('rejects a roster entry with an unknown role value', () => {
+        const result = ServerMessageSchema.safeParse(entryWith('observer'));
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('wire schemas — parsing never mutates its input (#876)', () => {
+    it('leaves a frozen SPECTATE_TARGET_UPDATE input unchanged', () => {
+        const input = Object.freeze({ type: 'SPECTATE_TARGET_UPDATE', targetPlayerId: 'p2' });
+        const snapshot = { ...input };
+        const result = ClientMessageSchema.safeParse(input);
+        expect(result.success).toBe(true);
+        expect(input).toStrictEqual(snapshot);
+    });
+
+    it('leaves a frozen WELCOME input unchanged even when the role default is applied', () => {
+        const input = Object.freeze({
+            type: 'WELCOME',
+            playerId: toPlayerId('p1'),
+            lobbyState: Object.freeze({ info: defaultLobbyInfo, players: Object.freeze([]) }),
+        });
+        const snapshot = { ...input };
+        const result = ServerMessageSchema.safeParse(input);
+        expect(result.success).toBe(true);
+        // The `.default('player')` materialises on the parsed *output*, never on the input.
+        expect(input).toStrictEqual(snapshot);
+        expect(input).not.toHaveProperty('role');
     });
 });
 

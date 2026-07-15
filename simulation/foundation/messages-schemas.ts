@@ -173,6 +173,10 @@ const LobbyPlayerEntry = z.object({
     playerId: PlayerId,
     displayName: z.string(),
     ready: z.boolean(),
+    // Seat role for who-is-watching presentation. Absent ⇒ 'player'
+    // (backward-compatible); a 'spectator' entry is a read-only viewer and is
+    // NEVER part of the authoritative GameSnapshot.players roster (Invariant #114).
+    role: z.enum(['player', 'spectator']).optional(),
     // Owner-authored, per-player match attributes (e.g. unit colour): each player
     // writes its own seat. Optional and backward-compatible: absent on older
     // clients and on games with no lobby setup.
@@ -309,6 +313,18 @@ const LeaveMessage = z
     })
     .strict();
 
+const SpectateTargetUpdateMessage = z
+    .object({
+        type: z.literal('SPECTATE_TARGET_UPDATE'),
+        // The seat the spectator wants to follow. Non-empty, and capped to the
+        // same opaque-id length as `JoinSeatClaim.playerId` so a hostile client
+        // cannot push an unbounded string across the wire boundary (coarse DoS
+        // bound). The host further validates it is a currently-seated player
+        // before re-pointing (Invariant #115).
+        targetPlayerId: z.string().min(1).max(WIRE_MAX_JOIN_CLAIM_ID_LENGTH),
+    })
+    .strict();
+
 // ─── ClientMessageSchema ──────────────────────────────────────────────────────
 
 /**
@@ -326,6 +342,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     ChatClientMessage,
     PingMessage,
     LeaveMessage,
+    SpectateTargetUpdateMessage,
 ]);
 
 // Make TypeScript confirm the inferred type is compatible with ClientMessage.
@@ -342,6 +359,10 @@ const WelcomeMessage = z
         type: z.literal('WELCOME'),
         playerId: PlayerId,
         lobbyState: LobbyState,
+        // Whether the joiner was admitted as a seated 'player' or a read-only
+        // 'spectator' (Invariant #114). Defaults to 'player' when the host omits
+        // it, so an old host's WELCOME still yields a concrete role on parse.
+        role: z.enum(['player', 'spectator']).default('player'),
     })
     .strict();
 

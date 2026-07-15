@@ -13,6 +13,7 @@ import {
     ActionRejectionSchema,
     DeviceInfoSchema,
     LobbyInfoSchema,
+    LobbyStateSchema,
     PerspectiveReplayListSchema,
     PerspectiveReplayPlaybackInfoSchema,
     PlatformInfoSchema,
@@ -92,6 +93,38 @@ describe('LobbyInfoSchema', () => {
         expect(() =>
             LobbyInfoSchema.parse({ sessionId: 1, hostId: 'P1', gameId: 'tactics' }),
         ).toThrow();
+    });
+});
+
+describe('LobbyStateSchema — player role (spectator, #876)', () => {
+    const info = { sessionId: 'S1', hostId: 'P1', gameId: 'tactics' };
+
+    it('preserves a spectator role across the IPC boundary (not stripped)', () => {
+        const state = {
+            info,
+            players: [
+                { playerId: 'P2', displayName: 'Bob', ready: false, role: 'spectator' as const },
+            ],
+        };
+        const parsed = LobbyStateSchema.parse(state);
+        expect(parsed.players[0]?.role).toBe('spectator');
+    });
+
+    it('accepts a roster entry that omits role (backward-compatible)', () => {
+        const state = {
+            info,
+            players: [{ playerId: 'P1', displayName: 'Alice', ready: true }],
+        };
+        const parsed = LobbyStateSchema.parse(state);
+        expect(parsed.players[0]?.role).toBeUndefined();
+    });
+
+    it('rejects a roster entry with an unknown role value', () => {
+        const state = {
+            info,
+            players: [{ playerId: 'P1', displayName: 'Alice', ready: true, role: 'observer' }],
+        };
+        expect(() => LobbyStateSchema.parse(state)).toThrow();
     });
 });
 
