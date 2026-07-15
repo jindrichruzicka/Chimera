@@ -333,14 +333,12 @@ describe('renderer design tokens', () => {
         expect(new Set(declarations)).toEqual(new Set(expectedTokens));
     });
 
-    it('keeps the focus ring distinct from active chrome: ring color is the brand sky', () => {
+    it('keeps the focus ring distinct from active chrome: ring color is text-secondary', () => {
         // --ch-color-accent-hover doubles as the active tab chrome and primary
         // button border in the engine palette, so a ring wired to it would make
-        // keyboard focus invisible on exactly those states. The brand sky sits
-        // far from the violet accent chrome (3:1+ non-text contrast on both
-        // accent fills) while staying vivid on every shell surface. Games that
-        // want a different ring override --ch-focus-ring-color themselves.
-        expect(readTokensCss()).toContain('--ch-focus-ring-color: #38bdf8;');
+        // keyboard focus invisible on exactly those states. Games that want an
+        // accent-colored ring override --ch-focus-ring-color themselves.
+        expect(readTokensCss()).toContain('--ch-focus-ring-color: var(--ch-color-text-secondary);');
     });
 
     it('wires reduced motion preferences into instant linear motion tokens', () => {
@@ -431,38 +429,35 @@ describe('renderer design tokens', () => {
         expect(parseHexColor(raised).lightness).toBeLessThan(parseHexColor(overlay).lightness);
     });
 
-    it('anchors the accent ramp to the Chimera brand violet', () => {
+    it('keeps the accent ramp neutral, separated from the shell only by lightness', () => {
         const css = readTokensCss();
         const accent = parseHexColor(extractTokenValue(css, '--ch-color-accent'));
         const accentHover = parseHexColor(extractTokenValue(css, '--ch-color-accent-hover'));
         const accentStrong = parseHexColor(extractTokenValue(css, '--ch-color-accent-strong'));
 
-        // The ramp derives from the brand violet rgb(167, 139, 250): the strong
-        // step is the brand colour verbatim, and the darker interactive fills
-        // keep its hue, adjusting only lightness/saturation so text-primary
-        // holds AA on them (see the contrast contract below).
-        expect(extractTokenValue(css, '--ch-color-accent-strong')).toBe('#a78bfa');
+        // The engine accent is a neutral grey ramp with no brand tint: the
+        // resting and hover fills sit dark enough to carry text-primary at AA,
+        // and the strong step lifts to a light grey that still clears 3:1 as a
+        // graphical indicator against borders and tracks (see the contrast
+        // contract below). Games override the accent to add colour.
         for (const color of [accent, accentHover, accentStrong]) {
-            expect(color.hue).toBeGreaterThanOrEqual(250);
-            expect(color.hue).toBeLessThanOrEqual(260);
-            expect(color.saturation).toBeGreaterThanOrEqual(0.4);
-            expect(color.saturation).toBeLessThanOrEqual(0.95);
+            expect(color.saturation).toBeLessThanOrEqual(0.12);
         }
         expect(accent.lightness).toBeLessThan(accentHover.lightness);
         expect(accentHover.lightness).toBeLessThan(accentStrong.lightness);
     });
 
-    it('carries the brand accent into the selected tint and hover glow', () => {
+    it('carries the neutral accent into the selected tint and hover glow', () => {
         const css = readTokensCss();
 
         // The translucent selected layer and the button hover glow are the two
-        // places the accent appears as an rgba() value, so they must track the
+        // places the accent appears as an rgba() value, so they track the
         // ramp: selected tints with the strong step, the glow with the hover
         // step.
         expect(extractTokenValue(css, '--ch-color-surface-selected')).toBe(
-            'rgba(167, 139, 250, 0.16)',
+            'rgba(161, 161, 170, 0.16)',
         );
-        expect(extractTokenValue(css, '--ch-glow-accent')).toBe('0 0 16px rgba(88, 59, 176, 0.35)');
+        expect(extractTokenValue(css, '--ch-glow-accent')).toBe('0 0 16px rgba(82, 82, 91, 0.35)');
     });
 
     it('derives the warning quartet from the Chimera brand orange', () => {
@@ -479,15 +474,14 @@ describe('renderer design tokens', () => {
         }
     });
 
-    it('keeps the error and success quartets in the brand palette family', () => {
+    it('keeps the error and success quartets aligned with the warning recipe', () => {
         const css = readTokensCss();
 
-        // The brand colours are all members of one palette family (violet-400,
-        // orange-500, sky-400), so error and success draw from the same family
-        // rather than one-off reds and greens: bases sit at the 700 step (dark
-        // enough to carry text-primary at AA), texts at the vivid 400 step,
-        // and each quartet's border/surface follow the same lightness recipe
-        // as the warning quartet. The danger glow tracks the error base.
+        // Error and success are tuned as siblings of the warning quartet: bases
+        // sit at the 700 step (dark enough to carry text-primary at AA), texts
+        // at the vivid 400 step, and each quartet's border/surface follow the
+        // same lightness recipe as the warning quartet. The danger glow tracks
+        // the error base.
         expect(extractTokenValue(css, '--ch-color-error')).toBe('#b91c1c');
         expect(extractTokenValue(css, '--ch-color-error-text')).toBe('#f87171');
         expect(extractTokenValue(css, '--ch-color-success')).toBe('#15803d');
@@ -542,7 +536,7 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-button-transform')).toBe('scale(1)');
         expect(extractTokenValue(css, '--ch-button-transform-hover')).toBe('scale(1.02)');
         expect(extractTokenValue(css, '--ch-button-transform-active')).toBe('scale(0.98)');
-        expect(extractTokenValue(css, '--ch-color-accent')).toBe('#4d3399');
+        expect(extractTokenValue(css, '--ch-color-accent')).toBe('#3f3f46');
         expect(extractTokenValue(css, '--ch-color-error')).toBe('#b91c1c');
     });
 

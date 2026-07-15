@@ -8,19 +8,19 @@
     --ch-color-surface-raised: #1b1b1f;
     --ch-color-surface-overlay: #27272a;
     --ch-color-surface-hover: rgba(244, 244, 245, 0.06);
-    --ch-color-surface-selected: rgba(167, 139, 250, 0.16);
+    --ch-color-surface-selected: rgba(161, 161, 170, 0.16);
     --ch-color-scrim: #000000;
     --ch-color-overlay-backdrop: #27272a;
     /* ── Accent ramp ──
-     * The Chimera brand violet rgb(167, 139, 250) — the one deliberate
-     * departure from the neutral shell, so interactive fills and indicators
-     * read against the grey chrome. The strong step is the brand colour
-     * verbatim, for graphical indicators (spinner segment, meter fills) that
-     * need 3:1 against borders and tracks; accent/accent-hover keep its hue
-     * but darken until they carry text-primary at AA. */
-    --ch-color-accent: #4d3399;
-    --ch-color-accent-hover: #583bb0;
-    --ch-color-accent-strong: #a78bfa;
+     * A neutral grey ramp with no brand tint, separated from the shell only by
+     * lightness so interactive fills and indicators read against the chrome.
+     * accent/accent-hover are the resting and hover fills, dark enough to carry
+     * text-primary at AA; the strong step lifts to a light grey for graphical
+     * indicators (spinner segment, meter fills) that need 3:1 against borders
+     * and tracks. Games override the accent to add colour. */
+    --ch-color-accent: #3f3f46;
+    --ch-color-accent-hover: #52525b;
+    --ch-color-accent-strong: #a1a1aa;
     --ch-color-text-primary: #f4f4f5;
     --ch-color-text-secondary: #a1a1aa;
     --ch-color-text-disabled: #71717a;
@@ -33,10 +33,9 @@
      * text-primary; warning is the exception and pairs with dark text), text
      * (AA on every shell surface and on the state surface), surface (tinted
      * box background), border (box boundary). Warning is the Chimera brand
-     * orange rgb(249, 115, 22) verbatim; error and success draw from the same
-     * palette family as the brand colours (700-step bases, vivid 400-step
-     * texts), and all three quartets share one border/surface lightness
-     * recipe so the states read as siblings. */
+     * orange rgb(249, 115, 22) verbatim; error and success are tuned as its
+     * siblings (700-step bases, vivid 400-step texts), and all three quartets
+     * share one border/surface lightness recipe so the states read alike. */
     --ch-color-success: #15803d;
     --ch-color-success-border: #309154;
     --ch-color-success-surface: #112c1b;
@@ -236,13 +235,12 @@
         color var(--ch-duration-fast) var(--ch-easing-standard);
     /* Focus indicators draw at or inside the border-box (border recolor or
        inset outline) so overflow ancestors can never clip them; there is
-       deliberately no offset token for a halo ring. The ring is the Chimera
-       brand sky rgb(56, 189, 248): it must stay distinct from
-       --ch-color-accent-hover, which already paints the active tab chrome and
-       primary button border in this palette, and the sky holds 3:1+ non-text
-       contrast on both accent fills and every shell surface. */
+       deliberately no offset token for a halo ring. The ring color must stay
+       distinct from --ch-color-accent-hover, which already paints the active
+       tab chrome and primary button border in this palette; text-secondary is
+       a neutral grey that clears both. Games override the ring themselves. */
     --ch-focus-ring-width: 2px;
-    --ch-focus-ring-color: #38bdf8;
+    --ch-focus-ring-color: var(--ch-color-text-secondary);
     /* macOS NSMenu calibration for native <select> popups: AppKit anchors the
        menu from the element border-box, hanging ~12px past its inline-start
        edge and stopping ~14px short of its inline-end edge (measured on
@@ -290,7 +288,7 @@
     --ch-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.22);
     --ch-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.26);
     --ch-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.38), 0 12px 32px rgba(0, 0, 0, 0.32);
-    --ch-glow-accent: 0 0 16px rgba(88, 59, 176, 0.35);
+    --ch-glow-accent: 0 0 16px rgba(82, 82, 91, 0.35);
     --ch-glow-danger: 0 0 16px rgba(185, 28, 28, 0.35);
 
     --ch-duration-fast: 120ms;
