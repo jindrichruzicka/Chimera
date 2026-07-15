@@ -30,15 +30,19 @@ import type { PlayerId } from '@chimera-engine/simulation/contracts';
 import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
 import type {
     JoinGateResult,
+    JoinClassification,
+    JoinClassifierContext,
     LobbyPlayerEntry,
     LobbyState,
     SeatClaim,
 } from '../../MultiplayerProvider.js';
 import { resolveRestoredSeat } from '../../seat-claims.js';
 import type { SeatResolutionContext } from '../../seat-claims.js';
-import type {
-    ClientMessage,
-    ServerMessage,
+import { DEFAULT_MAX_SPECTATORS } from '../../spectator-policy.js';
+import {
+    REJECT_REASON_MATCH_IN_PROGRESS,
+    type ClientMessage,
+    type ServerMessage,
 } from '@chimera-engine/simulation/foundation/messages.js';
 import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
 import { ClientMessageSchema } from '@chimera-engine/simulation/foundation/messages-schemas.js';
@@ -49,7 +53,11 @@ import type { MessageBus } from './MessageBus.js';
 export type Unsubscribe = () => void;
 
 export type MessageCallback = (from: PlayerId, msg: ClientMessage) => void;
-export type PlayerCallback = (playerId: PlayerId, displayName: string) => void;
+export type PlayerCallback = (
+    playerId: PlayerId,
+    displayName: string,
+    role: 'player' | 'spectator',
+) => void;
 export type DisconnectCallback = (playerId: PlayerId, reason: DisconnectReason) => void;
 
 export type DisconnectReason = 'kicked' | 'timeout' | 'host_closed' | 'error' | 'normal';
@@ -59,6 +67,12 @@ export interface LobbyServerOptions {
     readonly port: number;
     readonly gameId: string;
     readonly maxPlayers: number;
+    /**
+     * Optional cap on concurrent spectators. Spectators never count against
+     * `maxPlayers`; a full player lobby still admits spectators up to this cap.
+     * Defaults to {@link DEFAULT_MAX_SPECTATORS}.
+     */
+    readonly maxSpectators?: number;
     /**
      * Optional host-set lobby password. When non-empty, every JOIN must
      * present a matching `password` (compared timing-safe) or is rejected with
@@ -104,6 +118,13 @@ export interface LobbyServerOptions {
 export class LobbyServer implements MessageBus {
     private readonly wss: WebSocketServer;
     private readonly connections = new Map<PlayerId, WebSocket>();
+    /**
+     * Read-only spectator connections, kept out of `connections` so they never
+     * count against the player-capacity gate. Bounded by `maxSpectators`.
+     * Admission only (Invariant #114) — the viewer registry + perspective
+     * broadcast are a later task; a spectator here holds no seat and no agent.
+     */
+    private readonly spectatorConnections = new Map<PlayerId, WebSocket>();
     private readonly _token: string;
     private _port = 0;
 
@@ -134,6 +155,7 @@ export class LobbyServer implements MessageBus {
     private readonly seatResolutionCtx: SeatResolutionContext;
 
     private readonly opts: LobbyServerOptions;
+    private readonly maxSpectators: number;
     private readonly logger: Logger | undefined;
     private idCounter = 0;
     private closed = false;
@@ -143,9 +165,18 @@ export class LobbyServer implements MessageBus {
      * Called synchronously during JOIN handling before WELCOME is sent.
      */
     private joinGate: ((pid: PlayerId, rawProfile: unknown) => JoinGateResult) | null = null;
+    /**
+     * Optional join classifier set by the host via `setJoinClassifier()`. Runs
+     * after the profile gate admits and decides player / spectator / reject. No
+     * classifier ⇒ every profile-admitted JOIN is a player (legacy behaviour).
+     */
+    private joinClassifier:
+        | ((pid: PlayerId, ctx: JoinClassifierContext) => JoinClassification)
+        | null = null;
 
     constructor(opts: LobbyServerOptions) {
         this.opts = opts;
+        this.maxSpectators = opts.maxSpectators ?? DEFAULT_MAX_SPECTATORS;
         this.logger = opts.logger;
         this._token = randomBytes(16).toString('hex');
 
@@ -284,6 +315,20 @@ export class LobbyServer implements MessageBus {
     }
 
     /**
+     * Register a join classifier. Called synchronously during the JOIN
+     * handshake, after the profile gate admits, to decide the role — `player`
+     * (default), `spectator`, or `reject`. A `spectator` result admits a
+     * read-only viewer that does not consume a player seat (bounded by
+     * `maxSpectators`); a `reject` result sends REJECT with the reason and
+     * closes. No classifier ⇒ every profile-admitted JOIN is a player.
+     */
+    setJoinClassifier(
+        classify: (pid: PlayerId, ctx: JoinClassifierContext) => JoinClassification,
+    ): void {
+        this.joinClassifier = classify;
+    }
+
+    /**
      * Gracefully close the server.
      * - Sends 'host_closed' to all connected clients
      * - Closes all ws connections
@@ -300,7 +345,7 @@ export class LobbyServer implements MessageBus {
             reason: 'host_closed',
         };
         const serialised = JSON.stringify(closeMsg);
-        const entries = [...this.connections.entries()];
+        const entries = [...this.connections.entries(), ...this.spectatorConnections.entries()];
         for (const [playerId, ws] of entries) {
             if (ws.readyState === WebSocket.OPEN) {
                 // Flush the CLOSE frame first, then close in the callback.
@@ -311,6 +356,7 @@ export class LobbyServer implements MessageBus {
             }
         }
         this.connections.clear();
+        this.spectatorConnections.clear();
 
         return new Promise<void>((resolve) => {
             this.wss.close(() => resolve());
@@ -392,18 +438,6 @@ export class LobbyServer implements MessageBus {
                     return;
                 }
 
-                if (this.connections.size >= this.opts.maxPlayers) {
-                    ws.send(
-                        JSON.stringify({
-                            type: 'REJECT',
-                            reason: 'lobby_full',
-                            tick: 0,
-                        } satisfies ServerMessage),
-                    );
-                    ws.close();
-                    return;
-                }
-
                 const pid = this.resolveJoinPlayerId(msg.reconnectPlayerId, msg.claims);
 
                 // Profile gate check (Invariant #61)
@@ -424,29 +458,98 @@ export class LobbyServer implements MessageBus {
                     displayName = gateResult.displayName;
                 }
 
-                this.connections.set(pid, ws);
-                // Only now is the identity consumed — marking any earlier would
-                // let a gate-rejected join burn a restored seat for the
-                // claimless fallback or open it to reconnect claims.
-                this.everConnected.add(pid);
-                if (this.restoredSeatSet.has(pid)) {
-                    this.claimedRestoredSeats.add(pid);
+                // Join classification (Invariant #114). Runs after the profile
+                // gate. With no classifier installed the result is `player`, so
+                // the player-capacity gate below still rejects a full lobby with
+                // `lobby_full` — its effect is unchanged, only its position moved
+                // (now after the profile gate + pid resolution) so a spectator can
+                // slip past a full player lobby. Position-only edge: on a full
+                // lobby the profile gate now runs first, so a rejected profile
+                // reports its own reason rather than `lobby_full` (both still
+                // reject + close). A retained/restored seat is a reconnect and is
+                // always a player, independent of match phase.
+                const reconnect = this.everConnected.has(pid) || this.restoredSeatSet.has(pid);
+                const classification: JoinClassification =
+                    this.joinClassifier !== null
+                        ? this.joinClassifier(pid, { reconnect })
+                        : { role: 'player' };
+
+                if ('reject' in classification) {
+                    ws.send(
+                        JSON.stringify({
+                            type: 'REJECT',
+                            reason: classification.reject,
+                            tick: 0,
+                        } satisfies ServerMessage),
+                    );
+                    ws.close();
+                    return;
                 }
+
+                const role = classification.role;
+
+                if (role === 'spectator') {
+                    // Spectators never consume a player seat; a separate cap
+                    // bounds them so a full player lobby still admits viewers.
+                    if (this.spectatorConnections.size >= this.maxSpectators) {
+                        ws.send(
+                            JSON.stringify({
+                                type: 'REJECT',
+                                reason: REJECT_REASON_MATCH_IN_PROGRESS,
+                                tick: 0,
+                            } satisfies ServerMessage),
+                        );
+                        ws.close();
+                        return;
+                    }
+                    this.spectatorConnections.set(pid, ws);
+                } else {
+                    // Player-capacity gate — unchanged semantics; only its
+                    // position moved (now after classification) so spectators
+                    // can slip past a full player lobby.
+                    if (this.connections.size >= this.opts.maxPlayers) {
+                        ws.send(
+                            JSON.stringify({
+                                type: 'REJECT',
+                                reason: 'lobby_full',
+                                tick: 0,
+                            } satisfies ServerMessage),
+                        );
+                        ws.close();
+                        return;
+                    }
+                    this.connections.set(pid, ws);
+                    // Only now is the identity consumed — marking any earlier
+                    // would let a gate-rejected join burn a restored seat for
+                    // the claimless fallback or open it to reconnect claims.
+                    this.everConnected.add(pid);
+                    if (this.restoredSeatSet.has(pid)) {
+                        this.claimedRestoredSeats.add(pid);
+                    }
+                }
+
                 playerId = pid;
                 authenticated = true;
-                this.logger?.info('player connected', { playerId: pid });
+                this.logger?.info(
+                    role === 'spectator' ? 'spectator connected' : 'player connected',
+                    { playerId: pid },
+                );
 
-                const lobbyState = this.buildWelcomeLobbyState(pid, displayName);
+                const lobbyState = this.buildWelcomeLobbyState(pid, displayName, role);
                 const welcomeMsg: ServerMessage = {
                     type: 'WELCOME',
                     playerId: pid,
                     lobbyState,
+                    // Omit role on a player WELCOME so it is byte-identical to
+                    // today; the client schema defaults an absent role to
+                    // 'player'. Spectators are told their role explicitly.
+                    ...(role === 'spectator' ? { role } : {}),
                 };
                 ws.send(JSON.stringify(welcomeMsg));
 
-                // Fire onPlayerConnected with the sanitised displayName
+                // Fire onPlayerConnected with the sanitised displayName + role
                 for (const cb of this.connectedCbs) {
-                    cb(pid, displayName);
+                    cb(pid, displayName, role);
                 }
                 return;
             }
@@ -474,6 +577,9 @@ export class LobbyServer implements MessageBus {
         const onClose = (): void => {
             if (playerId !== null) {
                 this.connections.delete(playerId);
+                // A spectator lives in `spectatorConnections`; delete is a no-op
+                // for the map that does not hold this pid.
+                this.spectatorConnections.delete(playerId);
                 const pid = playerId;
                 this.logger?.info('player disconnected', { playerId: pid, intentionalLeave });
                 // An explicit LEAVE → `'normal'` (deliberate). A bare socket close
@@ -494,7 +600,11 @@ export class LobbyServer implements MessageBus {
         });
     }
 
-    private buildWelcomeLobbyState(playerId: PlayerId, displayName: string): LobbyState {
+    private buildWelcomeLobbyState(
+        playerId: PlayerId,
+        displayName: string,
+        role: 'player' | 'spectator',
+    ): LobbyState {
         const baseState: LobbyState =
             this.latestLobbyState ??
             ({
@@ -506,6 +616,14 @@ export class LobbyServer implements MessageBus {
                 },
                 players: [],
             } satisfies LobbyState);
+
+        // A spectator holds no seat and is never added to the authoritative
+        // roster (the viewer registry / who's-watching UI is a later task). It
+        // still receives the current roster so it can see who is playing, but it
+        // does not mutate or persist the cached lobby state (Invariant #114).
+        if (role === 'spectator') {
+            return baseState;
+        }
 
         const playersById = new Map<PlayerId, LobbyPlayerEntry>();
         for (const entry of baseState.players) {
@@ -530,8 +648,12 @@ export class LobbyServer implements MessageBus {
      * shared `resolveRestoredSeat` so it cannot drift between providers; this
      * method only adds the fresh `player-N` mint.
      *
-     * Pure — hand-out bookkeeping happens at admission time only, so a
-     * profile-gate rejection cannot burn a seat.
+     * Seat-handout bookkeeping (`everConnected` / `claimedRestoredSeats`) is
+     * deferred to admission time, so a profile-gate or capacity rejection cannot
+     * burn a *restored* seat. It is not otherwise pure: a claimless mint advances
+     * `idCounter` here, so a claimless join later rejected (e.g. `lobby_full`)
+     * still consumes a `player-N` number — harmless, it only bumps the next
+     * mint's suffix.
      */
     private resolveJoinPlayerId(
         reconnectPlayerId: PlayerId | undefined,

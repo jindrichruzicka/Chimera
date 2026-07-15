@@ -34,6 +34,12 @@ import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 export interface ConnectResult {
     readonly playerId: PlayerId;
     readonly lobbyState: LobbyState;
+    /**
+     * Role the host admitted this connection under, from `WELCOME.role`. An
+     * absent wire field defaults to `'player'` (legacy hosts), so this is always
+     * concrete.
+     */
+    readonly role: 'player' | 'spectator';
 }
 
 // `JoinRejectedError` is defined on the provider abstraction so consumers can
@@ -381,7 +387,13 @@ export class ServerConnection {
                         for (const cb of this.messageCbs) cb(m);
                     });
                     ws.on('close', () => this.handleClose());
-                    resolve({ playerId: msg.playerId, lobbyState: msg.lobbyState });
+                    // `WELCOME.role` is defaulted to 'player' by the wire schema,
+                    // so an absent field (legacy host) reads as a normal player.
+                    resolve({
+                        playerId: msg.playerId,
+                        lobbyState: msg.lobbyState,
+                        role: msg.role ?? 'player',
+                    });
                     return;
                 }
                 if (msg.type === 'REJECT') {

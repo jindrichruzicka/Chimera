@@ -2048,6 +2048,31 @@ describe('LobbyManager — opponent presence (#687)', () => {
         await manager.closeLobby();
     });
 
+    it('does not seat or announce a spectator join (Invariant #114)', async () => {
+        const ctl = makeControllableProvider();
+        const events: PlayerConnectionEvent[] = [];
+        const manager = new LobbyManager(ctl.provider, createNoopLogger(), {
+            onPlayerConnectionChanged: (e) => events.push(e),
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        const before = manager.getCurrentState()?.players.length ?? 0;
+        const SPECTATOR = playerId('spectator-1');
+        ctl.fireHostPlayerJoined({
+            playerId: SPECTATOR,
+            displayName: 'Watcher',
+            ready: false,
+            role: 'spectator',
+        });
+
+        // A read-only viewer takes no lobby seat and raises no connection toast.
+        expect(manager.getCurrentState()?.players.length).toBe(before);
+        expect(manager.getCurrentState()?.players.map((p) => p.playerId)).not.toContain(SPECTATOR);
+        expect(events).toEqual([]);
+
+        await manager.closeLobby();
+    });
+
     it('also treats a max-retries "error" drop as a disconnect', async () => {
         const ctl = makeControllableProvider();
         const events: PlayerConnectionEvent[] = [];

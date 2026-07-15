@@ -74,6 +74,7 @@ afterEach(async () => {
 
 function makeServer(opts?: {
     maxPlayers?: number;
+    maxSpectators?: number;
     password?: string;
     matchId?: string;
     hostPlayerId?: PlayerId;
@@ -83,6 +84,7 @@ function makeServer(opts?: {
         port: 0,
         gameId: 'test',
         maxPlayers: opts?.maxPlayers ?? 4,
+        ...(opts?.maxSpectators === undefined ? {} : { maxSpectators: opts.maxSpectators }),
         ...(opts?.password === undefined ? {} : { password: opts.password }),
         ...(opts?.matchId === undefined ? {} : { matchId: opts.matchId }),
         ...(opts?.hostPlayerId === undefined ? {} : { hostPlayerId: opts.hostPlayerId }),
@@ -234,6 +236,118 @@ describe('LobbyServer — JOIN handshake', () => {
         });
         expect(rejected.type).toBe('REJECT');
         first.ws.close();
+    });
+});
+
+// ─── Spectator admission (join classifier — Invariant #114) ──────────────────
+
+describe('LobbyServer — spectator admission (Invariant #114)', () => {
+    it('admits a classified spectator with WELCOME { role: "spectator" }', async () => {
+        const server = makeServer();
+        server.setJoinClassifier(() => ({ role: 'spectator' }));
+        await server.ready();
+
+        const msg = await joinExpectingResponse(server);
+
+        expect(msg.type).toBe('WELCOME');
+        if (msg.type !== 'WELCOME') throw new Error('expected WELCOME');
+        expect(msg.role).toBe('spectator');
+    });
+
+    it('omits role on a normal WELCOME so the client defaults to player', async () => {
+        const server = makeServer();
+        await server.ready();
+
+        const msg = await joinExpectingResponse(server);
+
+        expect(msg.type).toBe('WELCOME');
+        if (msg.type !== 'WELCOME') throw new Error('expected WELCOME');
+        expect(msg.role).toBeUndefined();
+    });
+
+    it('rejects with match_in_progress when the classifier rejects', async () => {
+        const server = makeServer();
+        server.setJoinClassifier(() => ({ reject: 'match_in_progress' }));
+        await server.ready();
+
+        const msg = await joinExpectingResponse(server);
+
+        expect(msg.type).toBe('REJECT');
+        if (msg.type !== 'REJECT') throw new Error('expected REJECT');
+        expect(msg.reason).toBe('match_in_progress');
+    });
+
+    it('rejects with spectators_disabled when the classifier rejects', async () => {
+        const server = makeServer();
+        server.setJoinClassifier(() => ({ reject: 'spectators_disabled' }));
+        await server.ready();
+
+        const msg = await joinExpectingResponse(server);
+
+        expect(msg.type).toBe('REJECT');
+        if (msg.type !== 'REJECT') throw new Error('expected REJECT');
+        expect(msg.reason).toBe('spectators_disabled');
+    });
+
+    it('admits a spectator into a full player lobby (spectators do not consume player capacity)', async () => {
+        const server = makeServer({ maxPlayers: 1 });
+        await server.ready();
+
+        // Fill the single player seat with a normal (unclassified) player.
+        const player = await connectAndJoin(server);
+
+        // Now every further join is classified as a spectator.
+        server.setJoinClassifier(() => ({ role: 'spectator' }));
+        const msg = await joinExpectingResponse(server);
+
+        expect(msg.type).toBe('WELCOME');
+        if (msg.type !== 'WELCOME') throw new Error('expected WELCOME');
+        expect(msg.role).toBe('spectator');
+        player.ws.close();
+    });
+
+    it('still applies the player-capacity gate to classified players', async () => {
+        const server = makeServer({ maxPlayers: 1 });
+        server.setJoinClassifier(() => ({ role: 'player' }));
+        await server.ready();
+
+        const player = await connectAndJoin(server);
+        const msg = await joinExpectingResponse(server);
+
+        expect(msg.type).toBe('REJECT');
+        if (msg.type !== 'REJECT') throw new Error('expected REJECT');
+        expect(msg.reason).toBe('lobby_full');
+        player.ws.close();
+    });
+
+    it('enforces the maxSpectators cap', async () => {
+        const server = makeServer({ maxSpectators: 1 });
+        server.setJoinClassifier(() => ({ role: 'spectator' }));
+        await server.ready();
+
+        const firstSpectator = await connectAndJoin(server);
+        const msg = await joinExpectingResponse(server);
+
+        expect(msg.type).toBe('REJECT');
+        firstSpectator.ws.close();
+    });
+
+    it('lets a rejecting profile gate take precedence over lobby_full on a full lobby', async () => {
+        // The player-capacity gate now runs AFTER the profile gate + classification
+        // (so a spectator can slip past a full player lobby). Consequence pinned
+        // here: on a full lobby a rejected profile reports its own reason, not
+        // `lobby_full` — both still reject + close, only the reason differs.
+        const server = makeServer({ maxPlayers: 1 });
+        await server.ready();
+
+        const player = await connectAndJoin(server);
+        server.setJoinGate(() => ({ admitted: false, reason: 'profile:banned' }));
+        const msg = await joinExpectingResponse(server);
+
+        expect(msg.type).toBe('REJECT');
+        if (msg.type !== 'REJECT') throw new Error('expected REJECT');
+        expect(msg.reason).toBe('profile:banned');
+        player.ws.close();
     });
 });
 

@@ -26,6 +26,8 @@ import type {
     PlayerSnapshot,
     LobbyState,
     JoinGateResult,
+    JoinClassification,
+    JoinClassifierContext,
     LobbyPlayerEntry,
     SideChannelMessage,
     DisconnectReason,
@@ -33,11 +35,15 @@ import type {
     LobbyInfo,
 } from './MultiplayerProvider.js';
 import type { PlayerId, EngineAction } from '@chimera-engine/simulation/contracts';
-import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
+import {
+    REJECT_REASON_MATCH_IN_PROGRESS,
+    type WireCommitmentReveal,
+} from '@chimera-engine/simulation/foundation/messages.js';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 import { playerId as toPlayerId, JoinRejectedError } from './MultiplayerProvider.js';
 import { resolveRestoredSeat, sanitizeSeatClaims } from './seat-claims.js';
 import type { SeatResolutionContext } from './seat-claims.js';
+import { DEFAULT_MAX_SPECTATORS } from './spectator-policy.js';
 
 // ─── Internal types ───────────────────────────────────────────────────────────
 
@@ -92,6 +98,18 @@ class InMemoryChannel {
     /** Optional profile gate registered by the host via HostTransport.setProfileGate(). */
     profileGate: ((pid: PlayerId, rawProfile: unknown) => JoinGateResult) | null = null;
 
+    /** Optional join classifier registered by the host via HostTransport.setJoinClassifier(). */
+    joinClassifier: ((pid: PlayerId, ctx: JoinClassifierContext) => JoinClassification) | null =
+        null;
+
+    /**
+     * Read-only spectators (Invariant #114). Kept out of the player roster and
+     * the reconnect/claim ledger; bounded independently of player capacity. A
+     * spectator's `ClientRecord` still lives in `clients` for a well-formed
+     * transport, but membership here excludes it from the roster.
+     */
+    readonly spectators = new Set<PlayerId>();
+
     closed = false;
 
     // Restored-session seams — the resolution policy itself lives in the shared
@@ -141,6 +159,19 @@ class InMemoryChannel {
         this.clients.delete(playerId);
     }
 
+    /**
+     * Records that receive host BROADCASTS (lobby state, side-channel, reveal).
+     * Spectators are excluded — they hold no seat and, mirroring LobbyServer's
+     * `broadcast()` over `connections` (never `spectatorConnections`), must not
+     * receive the all-clients fan-out (Invariant #41 parity, Invariant #114).
+     */
+    *broadcastRecords(): IterableIterator<ClientRecord> {
+        for (const [pid, record] of this.clients) {
+            if (this.spectators.has(pid)) continue;
+            yield record;
+        }
+    }
+
     closeAll(): void {
         this.closed = true;
         for (const client of this.clients.values()) {
@@ -161,6 +192,7 @@ class InMemoryChannel {
             client.disconnectCbs.clear();
         }
         this.clients.clear();
+        this.spectators.clear();
     }
 }
 
@@ -206,14 +238,14 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
 
             broadcastLobbyState: (state: LobbyState): void => {
                 channel.latestLobbyState = state;
-                for (const client of channel.clients.values()) {
+                for (const client of channel.broadcastRecords()) {
                     for (const cb of client.lobbyStateCbs) cb(state);
                 }
             },
 
             sendSideChannel: (target: PlayerId | 'broadcast', msg: SideChannelMessage): void => {
                 if (target === 'broadcast') {
-                    for (const client of channel.clients.values()) {
+                    for (const client of channel.broadcastRecords()) {
                         for (const cb of client.sideChannelCbs) cb(msg);
                     }
                 } else {
@@ -226,7 +258,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
 
             sendReveal: (target: PlayerId | 'broadcast', reveal: WireCommitmentReveal): void => {
                 if (target === 'broadcast') {
-                    for (const client of channel.clients.values()) {
+                    for (const client of channel.broadcastRecords()) {
                         for (const cb of client.revealCbs) cb(reveal);
                     }
                 } else {
@@ -257,6 +289,12 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
                 gate: (pid: PlayerId, rawProfile: unknown) => JoinGateResult,
             ): void => {
                 channel.profileGate = gate;
+            },
+
+            setJoinClassifier: (
+                classify: (pid: PlayerId, ctx: JoinClassifierContext) => JoinClassification,
+            ): void => {
+                channel.joinClassifier = classify;
             },
         };
 
@@ -309,19 +347,47 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             displayName = gateResult.displayName;
         }
 
+        // Join classification (Invariant #114) — parity with LobbyServer. Runs
+        // after the profile gate; no classifier ⇒ player. A retained/restored
+        // seat is a reconnect and is always a player.
+        const reconnect =
+            channel.everConnected.has(clientPlayerId) || channel.restoredSeats.has(clientPlayerId);
+        const classification: JoinClassification =
+            channel.joinClassifier !== null
+                ? channel.joinClassifier(clientPlayerId, { reconnect })
+                : { role: 'player' };
+        if ('reject' in classification) {
+            return Promise.reject(new JoinRejectedError(classification.reject));
+        }
+        const role = classification.role;
+        if (role === 'spectator' && channel.spectators.size >= DEFAULT_MAX_SPECTATORS) {
+            // Spectator cap reached — a full gallery reads as a running match a
+            // fresh viewer cannot join (parity with LobbyServer's cap reject).
+            return Promise.reject(new JoinRejectedError(REJECT_REASON_MATCH_IN_PROGRESS));
+        }
+
         const record = channel.addClient(clientPlayerId);
-        // Only now is the identity consumed — marking any earlier would let a
-        // gate-rejected join burn a restored seat for the claimless fallback or
-        // open it to reconnect claims.
-        channel.everConnected.add(clientPlayerId);
-        if (channel.restoredSeats.has(clientPlayerId)) {
-            channel.claimedSeats.add(clientPlayerId);
+        if (role === 'spectator') {
+            // Spectators hold no seat: excluded from the roster and the
+            // reconnect/claim ledger, tracked only for the cap and roster skip.
+            channel.spectators.add(clientPlayerId);
+        } else {
+            // Only now is the identity consumed — marking any earlier would let a
+            // gate-rejected join burn a restored seat for the claimless fallback
+            // or open it to reconnect claims.
+            channel.everConnected.add(clientPlayerId);
+            if (channel.restoredSeats.has(clientPlayerId)) {
+                channel.claimedSeats.add(clientPlayerId);
+            }
         }
 
         const playerEntry: LobbyPlayerEntry = {
             playerId: clientPlayerId,
             displayName,
             ready: false,
+            // Carry the spectator role for the who's-watching flag; a player
+            // entry stays role-less (undefined ⇒ player).
+            ...(role === 'spectator' ? { role } : {}),
         };
 
         // Notify the host that this client has joined on the next macrotask so
@@ -359,6 +425,8 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
 
         const nextPlayers: LobbyPlayerEntry[] = [byId.get(info.hostId)!];
         for (const [existingClientId] of channel.clients) {
+            // Spectators never appear in the authoritative roster (Invariant #114).
+            if (channel.spectators.has(existingClientId)) continue;
             const existing = byId.get(existingClientId);
             if (existing !== undefined) {
                 nextPlayers.push(existing);
@@ -422,11 +490,13 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         const session: JoinedSession = {
             lobbyInfo: channel.lobbyInfo,
             localPlayerId: clientPlayerId,
+            role,
             initialLobbyState,
             transport,
             disconnect: (): Promise<void> => {
                 for (const cb of channel.playerLeftCbs) cb(clientPlayerId, 'normal');
                 channel.removeClient(clientPlayerId);
+                channel.spectators.delete(clientPlayerId);
                 return Promise.resolve();
             },
         };

@@ -149,6 +149,33 @@ LocalWebSocketProvider.joinLobby()
 
 `attemptConnect()` awaits `resolveEndpoint(url)` first, then passes the result to `socketFactory()`; the rest of the JOIN→WELCOME handshake is unchanged. `WebSocketLike` is the minimal structural subset of the `ws` `WebSocket` that `ServerConnection` consumes (`readyState`, `send`, `close`, and the `open`/`error`/`close`/`message` event methods); a real `ws` socket satisfies it, so the default factory needs no cast. Because the options flow straight through `LocalWebSocketProviderOptions = ServerConnectionOptions`, no provider or transport code changes to support the seam. The seam keeps `ws` confined to `networking/provider/local/` (coding-standards §9.1): it adds optional types/fields only, no new imports.
 
+### Join classifier — spectator admission (Invariant #114)
+
+`HostTransport.setJoinClassifier(classify)` is a second admission seam alongside `setProfileGate`. It runs **after** the profile gate admits a JOIN and decides the role:
+
+```ts
+type JoinClassification =
+    | { role: 'player' } // seated player (default; no classifier ⇒ this)
+    | { role: 'spectator' } // read-only viewer, no seat
+    | { reject: string }; // REJECT { reason } + close
+```
+
+The classifier is **host policy**, injected at the composition root (`electron/main/index.ts` `onSessionHosted`), where the host knows the live `GameSnapshot.phase`, the game's `resolveSpectatorSupport(manifest)` capability, and the `readAllowSpectators(matchSettings)` toggle — so `LobbyManager`/providers stay provider-agnostic (Invariant #38). The pure decision lives in `electron/main/lobby/joinClassifier.ts`:
+
+- `lobby` phase, or a reconnect (retained/restored seat) → `{ role: 'player' }` (unchanged).
+- running-match fresh join, game spectator-capable **and** host toggle on → `{ role: 'spectator' }`.
+- running-match fresh join, not spectator-capable → `{ reject: 'match_in_progress' }`.
+- running-match fresh join, capable but toggle off → `{ reject: 'spectators_disabled' }`.
+
+Admission mechanics (LobbyServer + parity in `InMemoryMultiplayerProvider`, Invariant #41):
+
+- A spectator is admitted into a **separate** `spectatorConnections` map, never `connections`, so it never counts against the `maxPlayers` gate — a full player lobby still admits spectators. The player-capacity gate therefore runs **after** classification.
+- Spectators are bounded by `maxSpectators` (default `DEFAULT_MAX_SPECTATORS = 8`, shared via `networking/provider/spectator-policy.ts`); over the cap → `REJECT match_in_progress`.
+- The joining client learns its role from `WELCOME.role` (defaulted to `'player'` by the wire schema for legacy hosts), surfaced as `JoinedSession.role`.
+- This is **admission only** (Invariant #114 half): a spectator is never added to `GameSnapshot.players`, the seat ledger, `registeredPlayers`/`activePlayers`, and gets no `HumanPlayerAgent`. The viewer registry and perspective-projection broadcast are a later task.
+
+Join-time REJECT reasons: `not_authenticated`, `invalid_token`, `invalid_password`, `lobby_full` (player capacity), `match_in_progress` (running match, spectators unavailable or gallery full), `spectators_disabled` (capable game, host toggle off), plus `profile:<AdmissionRejection>` from the profile gate.
+
 ---
 
 ## SteamNetworkProvider Stub

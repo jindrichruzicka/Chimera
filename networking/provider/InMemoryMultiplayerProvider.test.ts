@@ -21,6 +21,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { InMemoryMultiplayerProvider } from './InMemoryMultiplayerProvider.js';
 import { playerId as toPlayerId } from './MultiplayerProvider.js';
+import { DEFAULT_MAX_SPECTATORS } from './spectator-policy.js';
 
 import type {
     MultiplayerProvider,
@@ -537,6 +538,117 @@ describe('InMemoryMultiplayerProvider', () => {
             expect(() => {
                 for (const unsub of [...hostUnsubs, ...clientUnsubs]) unsub();
             }).not.toThrow();
+        });
+    });
+});
+
+// ─── Spectator admission (join classifier — Invariant #114) ──────────────────
+
+describe('InMemoryMultiplayerProvider — spectator admission (Invariant #114)', () => {
+    it('defaults JoinedSession.role to "player" with no classifier', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+        const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+
+        expect(joined.role).toBe('player');
+    });
+
+    it('admits a classified spectator with JoinedSession.role === "spectator"', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+        hosted.transport.setJoinClassifier(() => ({ role: 'spectator' }));
+
+        const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+
+        expect(joined.role).toBe('spectator');
+    });
+
+    it('rejects with match_in_progress when the classifier rejects', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+        hosted.transport.setJoinClassifier(() => ({ reject: 'match_in_progress' }));
+
+        await expect(provider.joinLobby({ address: hosted.lobbyCode })).rejects.toMatchObject({
+            reason: 'match_in_progress',
+        });
+    });
+
+    it('rejects with spectators_disabled when the classifier rejects', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+        hosted.transport.setJoinClassifier(() => ({ reject: 'spectators_disabled' }));
+
+        await expect(provider.joinLobby({ address: hosted.lobbyCode })).rejects.toMatchObject({
+            reason: 'spectators_disabled',
+        });
+    });
+
+    it('keeps a spectator out of the lobby roster and does not consume player capacity', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 1 });
+
+        // A normal player fills the single seat.
+        const player = await provider.joinLobby({ address: hosted.lobbyCode });
+
+        // Every further join is a spectator; a full player lobby still admits it.
+        hosted.transport.setJoinClassifier(() => ({ role: 'spectator' }));
+        const spectator = await provider.joinLobby({ address: hosted.lobbyCode });
+
+        expect(spectator.role).toBe('spectator');
+        const rosterIds = spectator.initialLobbyState.players.map((p) => p.playerId);
+        expect(rosterIds).toContain(player.localPlayerId);
+        expect(rosterIds).not.toContain(spectator.localPlayerId);
+    });
+
+    it('excludes spectators from host broadcasts (parity with LobbyServer.broadcast)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+        const player = await provider.joinLobby({ address: hosted.lobbyCode });
+        const playerStates: unknown[] = [];
+        player.transport.onLobbyStateChanged((s) => playerStates.push(s));
+
+        hosted.transport.setJoinClassifier(() => ({ role: 'spectator' }));
+        const spectator = await provider.joinLobby({ address: hosted.lobbyCode });
+        const spectatorStates: unknown[] = [];
+        spectator.transport.onLobbyStateChanged((s) => spectatorStates.push(s));
+
+        hosted.transport.broadcastLobbyState(player.initialLobbyState);
+
+        // The seated player receives the broadcast; the spectator (no seat) does not.
+        expect(playerStates).toHaveLength(1);
+        expect(spectatorStates).toHaveLength(0);
+    });
+
+    it('notifies the host of a joining spectator with role="spectator"', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+        hosted.transport.setJoinClassifier(() => ({ role: 'spectator' }));
+
+        const joined: LobbyPlayerEntry[] = [];
+        hosted.transport.onPlayerJoined((player) => joined.push(player));
+
+        await provider.joinLobby({ address: hosted.lobbyCode });
+        // playerJoinedCbs fire on the next macrotask.
+        await new Promise((r) => setTimeout(r, 0));
+
+        expect(joined).toHaveLength(1);
+        expect(joined[0]?.role).toBe('spectator');
+    });
+
+    it('enforces the maxSpectators cap', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+        hosted.transport.setJoinClassifier(() => ({ role: 'spectator' }));
+
+        for (let i = 0; i < DEFAULT_MAX_SPECTATORS; i += 1) {
+            const s = await provider.joinLobby({ address: hosted.lobbyCode });
+            expect(s.role).toBe('spectator');
+        }
+
+        await expect(provider.joinLobby({ address: hosted.lobbyCode })).rejects.toMatchObject({
+            reason: 'match_in_progress',
         });
     });
 });

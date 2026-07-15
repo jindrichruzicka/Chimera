@@ -247,6 +247,42 @@ export type JoinGateResult =
     | { readonly admitted: true; readonly displayName: string }
     | { readonly admitted: false; readonly reason: string };
 
+// ─── Join classifier (spectator admission) ────────────────────────────────────
+
+/**
+ * Result of the host-supplied join classifier registered via
+ * {@link HostTransport.setJoinClassifier}. Runs AFTER the profile gate admits
+ * and decides how a token+profile-valid JOIN is admitted:
+ *
+ * - `{ role: 'player' }`    → a seated player (today's behaviour; the default
+ *                             when no classifier is installed). Subject to the
+ *                             player-capacity gate.
+ * - `{ role: 'spectator' }` → a read-only session viewer. Does NOT consume a
+ *                             player seat; subject to a separate spectator cap.
+ * - `{ reject }`            → REJECT is sent with the given `reason` (e.g.
+ *                             `match_in_progress` / `spectators_disabled`) and
+ *                             the connection is closed.
+ *
+ * Spectator admission is host policy — the classifier reads match phase, the
+ * game's `resolveSpectatorSupport` capability, and the `allowSpectators`
+ * match-setting. Prepares Invariant #114 (spectators are read-only viewers,
+ * never in `GameSnapshot.players`).
+ */
+export type JoinClassification =
+    | { readonly role: 'player' }
+    | { readonly role: 'spectator' }
+    | { readonly reject: string };
+
+/** Context the transport hands the join classifier for a single JOIN. */
+export interface JoinClassifierContext {
+    /**
+     * The transport resolved this JOIN to a retained / restored seat — i.e. a
+     * reconnect, not a fresh join. Reconnects always classify as `player`
+     * (unchanged re-sync), independent of match phase.
+     */
+    readonly reconnect: boolean;
+}
+
 /**
  * Thrown by {@link MultiplayerProvider.joinLobby} when the host rejects the JOIN
  * handshake. Part of the provider contract (not a provider-internal type) so
@@ -339,6 +375,23 @@ export interface HostTransport {
      * to call `admit()`.
      */
     setProfileGate(gate: (pid: PlayerId, rawProfile: unknown) => JoinGateResult): void;
+    /**
+     * Register a join classifier that runs AFTER the profile gate admits a JOIN
+     * and decides its role — `player` (default), `spectator`, or `reject`. See
+     * {@link JoinClassification}.
+     *
+     * Called synchronously during the JOIN handshake. If no classifier is
+     * registered, every profile-admitted JOIN is a `player` (legacy behaviour).
+     * A `spectator` result admits a read-only viewer that does NOT consume a
+     * player seat; a `reject` result sends REJECT with the reason and closes.
+     *
+     * The classifier is host policy (match phase + game spectator capability +
+     * `allowSpectators` match-setting); the transport enforces the separate
+     * spectator cap and never counts spectators against player capacity.
+     */
+    setJoinClassifier(
+        classify: (pid: PlayerId, ctx: JoinClassifierContext) => JoinClassification,
+    ): void;
 }
 
 // ─── Client-side session ──────────────────────────────────────────────────────
@@ -351,6 +404,13 @@ export interface JoinedSession {
     readonly lobbyInfo: LobbyInfo;
     /** Provider-assigned identity of the local joined player. */
     readonly localPlayerId: PlayerId;
+    /**
+     * Role the host admitted this client under (from the JOIN classifier).
+     * `'player'` for a normal seated join (the default); `'spectator'` for a
+     * read-only viewer admitted to a running match. The renderer read-only UX
+     * (a later task) branches on this.
+     */
+    readonly role: 'player' | 'spectator';
     /**
      * Deterministic lobby snapshot captured at join success.
      * LobbyManager seeds renderer-facing state from this value immediately,

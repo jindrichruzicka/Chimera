@@ -224,6 +224,7 @@ describe('HostTransport', () => {
             onPlayerJoined: (_cb) => noopUnsub(),
             onPlayerLeft: (_cb) => noopUnsub(),
             setProfileGate: (_gate) => {},
+            setJoinClassifier: (_classify) => {},
         };
         expect(transport).toBeDefined();
     });
@@ -267,6 +268,7 @@ describe('HostedSession', () => {
             onPlayerJoined: () => noopUnsub(),
             onPlayerLeft: () => noopUnsub(),
             setProfileGate: (_gate) => {},
+            setJoinClassifier: (_classify) => {},
         };
         const session: HostedSession = {
             lobbyCode: 'ABCD',
@@ -302,6 +304,7 @@ describe('JoinedSession', () => {
         const session: JoinedSession = {
             lobbyInfo: { sessionId: 's1', hostId: playerId('p1'), gameId: 'tactics' },
             localPlayerId: playerId('p2'),
+            role: 'player',
             initialLobbyState: {
                 info: { sessionId: 's1', hostId: playerId('p1'), gameId: 'tactics' },
                 players: [

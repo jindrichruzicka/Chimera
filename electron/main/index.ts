@@ -79,10 +79,13 @@ import type { GameContent } from '@chimera-engine/simulation/foundation/game-con
 import {
     DEFAULT_WINDOW_TITLE,
     resolveGameLogoScreen,
+    resolveSpectatorSupport,
     resolveTickerHz,
     resolveWindowTitle,
     type GameManifest,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import { readAllowSpectators } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import { classifyJoin } from './lobby/joinClassifier.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
@@ -2419,7 +2422,34 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
             };
 
-            const unsubJoined = transport.onPlayerJoined(({ playerId: pid }) => {
+            // Classify each JOIN by match phase + spectator policy (Invariant
+            // #114): lobby / reconnect → player (unchanged); a fresh
+            // running-match join → spectator when the game declares the
+            // capability AND the host enabled it, else a clean REJECT. The
+            // policy is injected here — where the host knows the manifest and
+            // live snapshot — so LobbyManager/providers stay provider-agnostic
+            // (Invariant #38). Match settings come from the running snapshot's
+            // `setup` (projected verbatim, Invariant #101).
+            transport.setJoinClassifier((pid, ctx) =>
+                classifyJoin({
+                    phase: sessionRuntime.getSnapshot().phase,
+                    reconnect: ctx.reconnect || registeredPlayers.has(pid),
+                    spectatorSupport: resolveSpectatorSupport(hostedGame.manifest),
+                    allowSpectators: readAllowSpectators(
+                        sessionRuntime.getSnapshot().setup?.matchSettings,
+                    ),
+                }),
+            );
+
+            const unsubJoined = transport.onPlayerJoined(({ playerId: pid, role }) => {
+                if (role === 'spectator') {
+                    // Read-only viewer (Invariant #114): never seated. Not added
+                    // to activePlayers / registeredPlayers / the seat ledger, gets
+                    // no HumanPlayerAgent, and never advances the start gate — so
+                    // the phantom-seat path is skipped entirely. The viewer
+                    // registry + perspective broadcast are a later task.
+                    return;
+                }
                 activePlayers.add(pid);
                 const isReconnect = registeredPlayers.has(pid);
                 if (!isReconnect) {

@@ -46,6 +46,7 @@ function makeTransport(): HostTransport {
         onPlayerJoined: vi.fn(() => () => {}),
         onPlayerLeft: vi.fn(() => () => {}),
         setProfileGate: vi.fn(),
+        setJoinClassifier: vi.fn(),
     };
 }
 

@@ -105,7 +105,11 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
         const conn = new ServerConnection(this.opts);
         this.openConnections.add(conn);
 
-        const { playerId: assignedPlayerId, lobbyState } = await conn.connect(
+        const {
+            playerId: assignedPlayerId,
+            lobbyState,
+            role,
+        } = await conn.connect(
             `ws://${host}:${portStr}`,
             token,
             // Use the caller-provided profile if present; fall back to a minimal
@@ -139,6 +143,7 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
         return {
             lobbyInfo,
             localPlayerId: assignedPlayerId,
+            role,
             initialLobbyState: lobbyState,
             transport,
             disconnect,

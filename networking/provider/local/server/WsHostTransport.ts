@@ -18,6 +18,8 @@ import type {
     DisconnectReason,
     Unsubscribe,
     JoinGateResult,
+    JoinClassification,
+    JoinClassifierContext,
 } from '../../MultiplayerProvider.js';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 import type {
@@ -98,11 +100,15 @@ export class WsHostTransport implements HostTransport {
     }
 
     onPlayerJoined(cb: (player: LobbyPlayerEntry) => void): Unsubscribe {
-        return this.server.onPlayerConnected((playerId, displayName) => {
+        return this.server.onPlayerConnected((playerId, displayName, role) => {
             const entry: LobbyPlayerEntry = {
                 playerId,
                 displayName,
                 ready: false,
+                // Carry the spectator role so the host skips seat/agent
+                // registration for viewers. A player entry stays role-less
+                // (undefined ⇒ player) to keep the existing roster shape.
+                ...(role === 'spectator' ? { role } : {}),
             };
             cb(entry);
         });
@@ -114,6 +120,12 @@ export class WsHostTransport implements HostTransport {
 
     setProfileGate(gate: (pid: PlayerId, rawProfile: unknown) => JoinGateResult): void {
         this.server.setJoinGate(gate);
+    }
+
+    setJoinClassifier(
+        classify: (pid: PlayerId, ctx: JoinClassifierContext) => JoinClassification,
+    ): void {
+        this.server.setJoinClassifier(classify);
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

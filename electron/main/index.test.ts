@@ -164,6 +164,7 @@ const {
                 },
                 onPlayerLeft: () => () => {},
                 onActionReceived: () => () => {},
+                setJoinClassifier: () => {},
             };
             const teardown = lastCallbacks()?.onSessionHosted?.(transport, {
                 hostId: params.restore?.hostPlayerId ?? 'host-fallback',
@@ -1870,6 +1871,7 @@ describe('main', () => {
                               onActionReceived(
                                   cb: (from: string, action: unknown) => void,
                               ): () => void;
+                              setJoinClassifier(classify: unknown): void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -1892,6 +1894,7 @@ describe('main', () => {
                 onPlayerJoined: vi.fn(() => () => {}),
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
+                setJoinClassifier: vi.fn(),
             },
             { hostId: playerId('host-1'), maxPlayers: 1 },
         );
@@ -1916,6 +1919,7 @@ describe('main', () => {
                               onActionReceived(
                                   cb: (from: string, action: unknown) => void,
                               ): () => void;
+                              setJoinClassifier(classify: unknown): void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -1932,6 +1936,7 @@ describe('main', () => {
             onPlayerJoined: vi.fn(() => () => {}),
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
         };
 
         onSessionHosted?.(transport, { hostId: playerId('host-projector'), maxPlayers: 1 });
@@ -1981,6 +1986,7 @@ describe('main', () => {
             onPlayerJoined: vi.fn(() => () => {}),
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
         };
         const hostId = playerId('host-e2e-wiring');
 
@@ -2016,6 +2022,7 @@ describe('main', () => {
                               onActionReceived(
                                   cb: (from: string, action: unknown) => void,
                               ): () => void;
+                              setJoinClassifier(classify: unknown): void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -2032,6 +2039,7 @@ describe('main', () => {
             onPlayerJoined: vi.fn(() => () => {}),
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
         };
 
         onSessionHosted?.(transport, { hostId, maxPlayers: 1 });
@@ -2071,6 +2079,7 @@ describe('main', () => {
                               onActionReceived(
                                   cb: (from: string, action: unknown) => void,
                               ): () => void;
+                              setJoinClassifier(classify: unknown): void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -2088,6 +2097,7 @@ describe('main', () => {
                 onPlayerJoined: vi.fn(() => () => {}),
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
+                setJoinClassifier: vi.fn(),
             },
             { hostId, maxPlayers: 1 },
         );
@@ -2123,6 +2133,7 @@ describe('main', () => {
             readonly onPlayerJoined: ReturnType<typeof vi.fn>;
             readonly onPlayerLeft: ReturnType<typeof vi.fn>;
             readonly onActionReceived: ReturnType<typeof vi.fn>;
+            readonly setJoinClassifier: ReturnType<typeof vi.fn>;
         }
         const transport: ReconnectTransport = {
             onPlayerJoined: vi.fn(
@@ -2136,6 +2147,7 @@ describe('main', () => {
                 return () => {};
             }),
             onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
         };
         const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
             | {
@@ -2197,6 +2209,7 @@ describe('main', () => {
             readonly onPlayerJoined: ReturnType<typeof vi.fn>;
             readonly onPlayerLeft: ReturnType<typeof vi.fn>;
             readonly onActionReceived: ReturnType<typeof vi.fn>;
+            readonly setJoinClassifier: ReturnType<typeof vi.fn>;
         }
         const transport: FirstJoinTransport = {
             onPlayerJoined: vi.fn(
@@ -2207,6 +2220,7 @@ describe('main', () => {
             ),
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
         };
         const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
             | {
@@ -2299,6 +2313,7 @@ describe('main', () => {
                 actionReceivedRef.current = cb;
                 return () => {};
             }),
+            setJoinClassifier: vi.fn(),
         };
 
         const hostId = playerId('host-undo-start');
@@ -2382,6 +2397,7 @@ describe('main', () => {
                 actionReceivedRef.current = cb;
                 return () => {};
             }),
+            setJoinClassifier: vi.fn(),
         };
 
         options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
@@ -2461,6 +2477,7 @@ describe('main', () => {
                 actionReceivedRef.current = cb;
                 return () => {};
             }),
+            setJoinClassifier: vi.fn(),
         };
 
         options?.onSessionHosted?.(transport, {
@@ -2499,6 +2516,69 @@ describe('main', () => {
         });
     });
 
+    it('does not seat or register an agent for a spectator join (Invariant #114)', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockSimulationHostInstance.registerAgent.mockClear();
+        mockSimulationHostInstance.onGameStart.mockClear();
+
+        await main(makeTestContributions());
+
+        let capturedJoin:
+            | ((entry: {
+                  readonly playerId: ReturnType<typeof playerId>;
+                  readonly role?: 'player' | 'spectator';
+              }) => void)
+            | undefined;
+        interface SpectatorTransport {
+            readonly onPlayerJoined: ReturnType<typeof vi.fn>;
+            readonly onPlayerLeft: ReturnType<typeof vi.fn>;
+            readonly onActionReceived: ReturnType<typeof vi.fn>;
+            readonly setJoinClassifier: ReturnType<typeof vi.fn>;
+        }
+        const transport: SpectatorTransport = {
+            onPlayerJoined: vi.fn(
+                (
+                    cb: (entry: {
+                        readonly playerId: ReturnType<typeof playerId>;
+                        readonly role?: 'player' | 'spectator';
+                    }) => void,
+                ) => {
+                    capturedJoin = cb;
+                    return () => {};
+                },
+            ),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
+        };
+        const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | {
+                  onSessionHosted?: (
+                      transport: SpectatorTransport,
+                      metadata: {
+                          readonly hostId: ReturnType<typeof playerId>;
+                          readonly maxPlayers: number;
+                      },
+                  ) => void;
+              }
+            | undefined;
+
+        options?.onSessionHosted?.(transport, {
+            hostId: playerId('host-spectator'),
+            maxPlayers: 2,
+        });
+
+        // Only the spectator join happens after this point.
+        mockSimulationHostInstance.registerAgent.mockClear();
+        mockSimulationHostInstance.onGameStart.mockClear();
+        capturedJoin?.({ playerId: playerId('spectator-1'), role: 'spectator' });
+
+        // A read-only viewer is never seated: no HumanPlayerAgent registered and
+        // the start gate never advances (Invariant #114).
+        expect(mockSimulationHostInstance.registerAgent).not.toHaveBeenCalled();
+        expect(mockSimulationHostInstance.onGameStart).not.toHaveBeenCalled();
+    });
+
     it('registers configured AI slots before firing onGameStart', async () => {
         mockLobbyManagerCtor.mockClear();
         mockSimulationHostInstance.registerAgent.mockClear();
@@ -2520,6 +2600,7 @@ describe('main', () => {
                               onActionReceived(
                                   cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
                               ): () => void;
+                              setJoinClassifier(classify: unknown): void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -2541,6 +2622,7 @@ describe('main', () => {
                 onPlayerJoined: vi.fn(() => () => {}),
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
+                setJoinClassifier: vi.fn(),
             },
             {
                 hostId: playerId('host-ai'),
@@ -2902,6 +2984,7 @@ describe('main', () => {
                               onActionReceived(
                                   cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
                               ): () => void;
+                              setJoinClassifier(classify: unknown): void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -2918,6 +3001,7 @@ describe('main', () => {
             onPlayerJoined: vi.fn(() => () => {}),
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
         };
         onSessionHosted?.(fakeTransport, { hostId: playerId('host-1'), maxPlayers: 1 });
 
@@ -2999,6 +3083,7 @@ describe('main', () => {
                 }),
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
+                setJoinClassifier: vi.fn(),
             };
             const hostId = playerId('host-manifest');
             callbacks.onSessionHosted?.(transport, { hostId, maxPlayers });
@@ -3404,6 +3489,7 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
         onPlayerJoined: ReturnType<typeof vi.fn>;
         onPlayerLeft: ReturnType<typeof vi.fn>;
         onActionReceived: ReturnType<typeof vi.fn>;
+        setJoinClassifier: ReturnType<typeof vi.fn>;
     }
 
     function makeOrderingTransport(): OrderingTransport {
@@ -3417,6 +3503,7 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
             ),
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
         };
     }
 
@@ -3535,6 +3622,7 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
         onPlayerJoined: ReturnType<typeof vi.fn>;
         onPlayerLeft: ReturnType<typeof vi.fn>;
         onActionReceived: ReturnType<typeof vi.fn>;
+        setJoinClassifier: ReturnType<typeof vi.fn>;
     }
 
     function makeRejoinTransport(): RejoinTransport {
@@ -3552,6 +3640,7 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
                 return () => {};
             }),
             onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
         };
     }
 
@@ -3628,6 +3717,7 @@ describe('onSessionHosted session teardown: onGameEnd not called when gameResult
         onPlayerJoined: ReturnType<typeof vi.fn>;
         onPlayerLeft: ReturnType<typeof vi.fn>;
         onActionReceived: ReturnType<typeof vi.fn>;
+        setJoinClassifier: ReturnType<typeof vi.fn>;
     }
 
     function makeTeardownTransport(): TeardownTransport {
@@ -3639,6 +3729,7 @@ describe('onSessionHosted session teardown: onGameEnd not called when gameResult
                 _capturedActionCb = cb;
                 return () => {};
             }),
+            setJoinClassifier: vi.fn(),
         };
     }
 
@@ -3740,6 +3831,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         readonly onPlayerJoined: ReturnType<typeof vi.fn>;
         readonly onPlayerLeft: ReturnType<typeof vi.fn>;
         readonly onActionReceived: ReturnType<typeof vi.fn>;
+        readonly setJoinClassifier: ReturnType<typeof vi.fn>;
     }
     interface ClientTransport {
         readonly onReveal: ReturnType<typeof vi.fn>;
@@ -3778,6 +3870,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         onPlayerJoined: vi.fn(() => () => {}),
         onPlayerLeft: vi.fn(() => () => {}),
         onActionReceived: vi.fn(() => () => {}),
+        setJoinClassifier: vi.fn(),
     });
 
     const makeClientTransport = (): ClientTransport => ({
@@ -4047,6 +4140,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
         onPlayerJoined: ReturnType<typeof vi.fn>;
         onPlayerLeft: ReturnType<typeof vi.fn>;
         onActionReceived: ReturnType<typeof vi.fn>;
+        setJoinClassifier: ReturnType<typeof vi.fn>;
     }
     interface RtlLobbyState {
         readonly info: {
@@ -4092,6 +4186,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
                 capturedAction = cb;
                 return () => {};
             }),
+            setJoinClassifier: vi.fn(),
         };
     };
 
@@ -4330,6 +4425,7 @@ describe('main() — session restore wiring (#823)', () => {
                 onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
                 onPlayerLeft(cb: (id: string) => void): () => void;
                 onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+                setJoinClassifier(classify: unknown): void;
             },
             metadata: { hostId: ReturnType<typeof playerId>; maxPlayers: number },
         ) => (() => void) | void;
@@ -4578,6 +4674,7 @@ describe('main() — session restore wiring (#823)', () => {
                 },
                 onPlayerLeft: () => () => {},
                 onActionReceived: () => () => {},
+                setJoinClassifier: () => {},
             },
             { hostId: playerId('host-after-failed-restore'), maxPlayers: 2 },
         );
@@ -4643,6 +4740,7 @@ describe('main() — session restore wiring (#823)', () => {
                 }),
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
+                setJoinClassifier: vi.fn(),
             };
             const hostId = playerId('host-restwire');
             callbacks.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
