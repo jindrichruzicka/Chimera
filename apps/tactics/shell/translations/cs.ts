@@ -360,8 +360,6 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
 
     // ── lobby ───────────────────────────────────────────────────────────────────
     'game.tactics.lobby.battleSetup': 'Nastavení bitvy',
-    'game.tactics.lobby.roleHost': 'Hostitel',
-    'game.tactics.lobby.rolePlayer': 'Hráč',
     'game.tactics.lobby.addressLabel': 'Adresa lobby',
     'game.tactics.lobby.copyAddressAriaLabel': 'Kopírovat adresu lobby',
     'game.tactics.lobby.boardColour': 'Barva pole',

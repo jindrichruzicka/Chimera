@@ -84,8 +84,6 @@ export const BOARD_KEYS = {
 /** Custom lobby screen: setup panel, roster, ready toggle, AI section. */
 export const LOBBY_KEYS = {
     battleSetup: translationKey('game.tactics.lobby.battleSetup'),
-    roleHost: translationKey('game.tactics.lobby.roleHost'),
-    rolePlayer: translationKey('game.tactics.lobby.rolePlayer'),
     addressLabel: translationKey('game.tactics.lobby.addressLabel'),
     copyAddressAriaLabel: translationKey('game.tactics.lobby.copyAddressAriaLabel'),
     boardColour: translationKey('game.tactics.lobby.boardColour'),

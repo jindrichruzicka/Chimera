@@ -109,9 +109,6 @@ export function TacticsLobbyScreen({
                     <Heading level={2} size="lg">
                         {t(LOBBY_KEYS.battleSetup)}
                     </Heading>
-                    <Badge variant={isHost ? 'success' : 'neutral'}>
-                        {isHost ? t(LOBBY_KEYS.roleHost) : t(LOBBY_KEYS.rolePlayer)}
-                    </Badge>
                 </div>
                 {isHost ? (
                     <div className={styles['address']}>
@@ -128,6 +125,7 @@ export function TacticsLobbyScreen({
                                 onClick={() => {
                                     copyLobbyAddress(lobbyState.info.sessionId);
                                 }}
+                                variant="ghost"
                             >
                                 <Icon name="copy" />
                             </IconButton>
@@ -242,7 +240,7 @@ export function TacticsLobbyScreen({
                                     runAiAction(addAiPlayer);
                                 }}
                                 type="button"
-                                variant="secondary"
+                                variant="ghost"
                             >
                                 <Icon name="plus" />
                             </IconButton>
@@ -280,7 +278,7 @@ export function TacticsLobbyScreen({
                                                 runAiAction(() => removeAiPlayer(slot.slotIndex));
                                             }}
                                             type="button"
-                                            variant="danger"
+                                            variant="ghost"
                                         >
                                             <Icon name="minus" />
                                         </IconButton>

@@ -85,8 +85,6 @@ export const tacticsBundleEn: Readonly<Record<string, string>> = {
 
     // ── lobby ───────────────────────────────────────────────────────────────────
     'game.tactics.lobby.battleSetup': 'Battle Setup',
-    'game.tactics.lobby.roleHost': 'Host',
-    'game.tactics.lobby.rolePlayer': 'Player',
     'game.tactics.lobby.addressLabel': 'Lobby address',
     'game.tactics.lobby.copyAddressAriaLabel': 'Copy lobby address',
     'game.tactics.lobby.boardColour': 'Board colour',

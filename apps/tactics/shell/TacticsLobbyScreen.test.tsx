@@ -153,6 +153,18 @@ describe('TacticsLobbyScreen', () => {
         expect(bobRow?.textContent).toContain('(You)');
     });
 
+    it('renders no host/player role badge (removed in the modernized layout)', () => {
+        // Host view: the old "Host" role badge is gone.
+        const { rerender } = render(<TacticsLobbyScreen {...makeProps()} />);
+        expect(screen.queryByText('Host')).not.toBeInTheDocument();
+
+        // Client view: the old "Player" role badge is gone too.
+        rerender(
+            <TacticsLobbyScreen {...makeProps({ localPlayerId: CLIENT_ID, isHost: false })} />,
+        );
+        expect(screen.queryByText('Player')).not.toBeInTheDocument();
+    });
+
     describe('lobby address sharing (host-only)', () => {
         it('shows the host the joinable lobby address so it can be shared', () => {
             render(
@@ -207,6 +219,8 @@ describe('TacticsLobbyScreen', () => {
             const copyButton = screen.getByTestId('lobby-address-copy');
             expect(copyButton.querySelector('svg[data-ch-icon="copy"]')).not.toBeNull();
             expect(copyButton).toHaveAccessibleName('Copy lobby address');
+            // Borderless (ghost) affordance — a chrome-less icon button.
+            expect(copyButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
         });
     });
 
@@ -338,13 +352,14 @@ describe('TacticsLobbyScreen', () => {
             const addButton = screen.getByTestId('tactics-add-ai');
             expect(addButton.querySelector('svg[data-ch-icon="plus"]')).not.toBeNull();
             expect(addButton).toHaveAccessibleName('Add AI player');
-            expect(addButton).toHaveAttribute('data-ch-icon-button-variant');
+            // Borderless (ghost) affordance — a chrome-less icon button.
+            expect(addButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
 
             // Remove is the shared minus glyph keeping its distinct accessible name.
             const removeButton = screen.getByTestId('tactics-remove-ai-1');
             expect(removeButton.querySelector('svg[data-ch-icon="minus"]')).not.toBeNull();
             expect(removeButton).toHaveAccessibleName('Remove AI Player 1');
-            expect(removeButton).toHaveAttribute('data-ch-icon-button-variant');
+            expect(removeButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
         });
 
         it('renders an enabled Add-AI button for the host when the lobby is not full', () => {
