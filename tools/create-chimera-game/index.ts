@@ -425,7 +425,7 @@ if (process.env['VITEST'] === undefined) {
                 // Resolve the mode, where the project is written, and where (if anywhere) to install:
                 //   --workspace  → in-monorepo app, wired into repoRoot, install at repoRoot.
                 //   --out <dir>  → standalone project AT <dir>; the verify:scaffold gate owns install.
-                //   (default)    → standalone project at <cwd>/<kebab>, install there.
+                //   (default)    → standalone project IN <cwd> (the current directory), install there.
                 let scaffoldOptions: ScaffoldGameOptions;
                 let installCwd: string | undefined;
                 if (values.workspace) {
@@ -448,7 +448,19 @@ if (process.env['VITEST'] === undefined) {
                     };
                     installCwd = undefined;
                 } else {
-                    const projectRoot = path.join(process.cwd(), normalizeGameName(name).kebab);
+                    // Default: scaffold the self-contained project straight INTO the current
+                    // directory — the intended flow is "make a folder, open it, run this here", so
+                    // the app + project root land in <cwd> with no redundant <kebab>/ wrapper. Guard
+                    // against clobbering: a package.json in <cwd> means a project already lives here,
+                    // and we would overwrite its root (package.json / tsconfig.json / …), so refuse.
+                    const projectRoot = process.cwd();
+                    if (existsSync(path.join(projectRoot, 'package.json'))) {
+                        throw new Error(
+                            'The current directory already contains a package.json — refusing to ' +
+                                'scaffold over an existing project. Run this in an empty directory, ' +
+                                'or pass --out <dir> to target a different one.',
+                        );
+                    }
                     scaffoldOptions = {
                         repoRoot,
                         name,
@@ -491,8 +503,8 @@ if (process.env['VITEST'] === undefined) {
                     console.log('  pnpm typecheck');
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
                 } else {
-                    const rel = path.relative(process.cwd(), installCwd) || '.';
-                    console.log(`  cd ${rel}`);
+                    // Standalone default scaffolds into <cwd>, so the project is already the cwd —
+                    // no `cd` step to print.
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} test`);
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
                 }

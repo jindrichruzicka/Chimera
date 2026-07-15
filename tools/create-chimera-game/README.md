@@ -8,9 +8,11 @@ default) or **wires it into this monorepo** (`--workspace`).
 ## Usage
 
 ```bash
-# Standalone (default) — a self-contained project that installs @chimera-engine/* from npm.
+# Standalone (default) — scaffolds a self-contained project INTO THE CURRENT DIRECTORY, so make
+# and open your project folder first, then run it there. It installs @chimera-engine/* from npm.
 # Published as `create-chimera-game`, so end users run:
-npm create chimera-game@latest <name>        # or: pnpm create chimera-game <name>
+mkdir my-game && cd my-game
+npm create chimera-game@latest "My Game"     # or: pnpm create chimera-game "My Game"
 
 # In-monorepo (contributors adding an app like apps/tactics):
 pnpm create:game <name> [--template <id>]     # wraps `… --workspace`
@@ -26,11 +28,13 @@ pnpm create:game <name> [--template <id>]     # wraps `… --workspace`
 - `--out <dir>` — standalone mode, but emit into `<dir>` and skip `pnpm install` (the
   `verify:scaffold` gate drives this).
 
-Re-running against an existing `apps/<kebab>` errors instead of overwriting it.
+Re-running against an existing `apps/<kebab>` errors instead of overwriting it. The standalone
+default also refuses if the current directory already contains a `package.json`, so it never
+clobbers an existing project's root — run it in an empty directory.
 
 ### Modes
 
-**Standalone (default).** Creates a self-contained project at `<cwd>/<kebab>/` whose lone
+**Standalone (default).** Creates a self-contained project **in the current directory** whose lone
 workspace member is the app under `apps/<kebab>/`. It emits the project root the app needs to
 install + boot with no monorepo:
 
@@ -43,7 +47,7 @@ install + boot with no monorepo:
   and `CHIMERA_VERIFY_PACK_NODE_MODULES` wired into its `build:app` / `test:e2e` scripts so the
   Electron bundler resolves the host from the installed `@chimera-engine/electron`.
 
-Then `pnpm install` runs in the new project. Next: `cd <kebab>`, `pnpm --filter @chimera-engine/<kebab> test`,
+Then `pnpm install` runs in the current directory. Next: `pnpm --filter @chimera-engine/<kebab> test`,
 `pnpm --filter @chimera-engine/<kebab> build:app`.
 
 **In-monorepo (`--workspace`).** Writes the app under this repo's `apps/<kebab>/` and registers it
