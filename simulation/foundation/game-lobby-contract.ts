@@ -189,3 +189,28 @@ export function lookupFieldOption(
 export function optionLabel(options: readonly LobbyFieldOption[], value: string): string {
     return lookupFieldOption(options, value)?.label ?? value;
 }
+
+// ─── Reserved spectator match-setting ───────────────────────────────────────────
+
+/**
+ * Reserved, engine-owned match-setting key: the host toggle for allowing
+ * spectators. `engine.`-prefixed so it is namespaced away from any game's own
+ * match-setting vocabulary (the Invariant #107 spirit — the `engine.` prefix is
+ * the engine's, never a game's). Read by the host join classifier;
+ * `LobbyManager.setMatchSetting` stores it verbatim, so no lobby-write change is
+ * needed.
+ */
+export const ALLOW_SPECTATORS_SETTING = 'engine.allowSpectators';
+
+/** Default: spectating is OFF until the host turns it on. */
+export const ALLOW_SPECTATORS_DEFAULT = 'false';
+
+/**
+ * Pure reader: is spectating enabled for this match? `true` only when the
+ * reserved {@link ALLOW_SPECTATORS_SETTING} key is exactly `'true'`; `false`
+ * for absent / `'false'` / any other value (fail-safe closed). Never throws,
+ * never mutates.
+ */
+export function readAllowSpectators(matchSettings?: Readonly<Record<string, string>>): boolean {
+    return matchSettings?.[ALLOW_SPECTATORS_SETTING] === 'true';
+}

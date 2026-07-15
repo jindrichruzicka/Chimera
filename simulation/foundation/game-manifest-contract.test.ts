@@ -8,10 +8,12 @@ import {
     resolveGameCursor,
     resolveGameLanguages,
     resolveGameLogoScreen,
+    resolveSpectatorSupport,
     resolveTickerHz,
     resolveWindowTitle,
     type GameLanguage,
     type GameLogoScreen,
+    type GameSpectatorSupport,
     type GameManifest,
 } from './game-manifest-contract.js';
 
@@ -321,5 +323,42 @@ describe('firstLanguageCode', () => {
             ],
         });
         expect(firstLanguageCode(manifest)).toBe('cs-CZ');
+    });
+});
+
+describe('resolveSpectatorSupport', () => {
+    it('returns undefined when there is no manifest', () => {
+        expect(resolveSpectatorSupport(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined when the manifest declares no spectators — the game never admits spectators', () => {
+        expect(resolveSpectatorSupport(makeManifest())).toBeUndefined();
+    });
+
+    it("resolves a valid { mode: 'perspective' } declaration", () => {
+        const manifest = makeManifest({ spectators: { mode: 'perspective' } });
+        expect(resolveSpectatorSupport(manifest)).toEqual({ mode: 'perspective' });
+    });
+
+    it('rejects a malformed mode without throwing — a bad manifest must never brick a boot', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = { mode: 'public' } as unknown as GameSpectatorSupport;
+        expect(resolveSpectatorSupport(makeManifest({ spectators: malformed }))).toBeUndefined();
+    });
+
+    it('rejects a non-string mode without throwing', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = { mode: 42 } as unknown as GameSpectatorSupport;
+        expect(resolveSpectatorSupport(makeManifest({ spectators: malformed }))).toBeUndefined();
+    });
+
+    it('does not mutate the manifest spectators declaration and returns a fresh object', () => {
+        const spectators = { mode: 'perspective' } as const;
+        const manifest = makeManifest({ spectators });
+        const resolved = resolveSpectatorSupport(manifest);
+        expect(manifest.spectators).toEqual({ mode: 'perspective' });
+        expect(resolved).not.toBe(spectators);
     });
 });

@@ -36,6 +36,9 @@ import {
     resolvePlayerAttributeDefaults,
     lookupFieldOption,
     optionLabel,
+    readAllowSpectators,
+    ALLOW_SPECTATORS_SETTING,
+    ALLOW_SPECTATORS_DEFAULT,
 } from './game-lobby-contract.js';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
@@ -145,6 +148,34 @@ describe('optionLabel', () => {
 
     it('falls back to the raw value when the option is absent', () => {
         expect(optionLabel(teamOptions, 'green')).toBe('green');
+    });
+});
+
+// ─── readAllowSpectators (reserved engine match-setting reader) ──────────────────
+
+describe('readAllowSpectators', () => {
+    it('exposes the reserved engine-owned key and its OFF default', () => {
+        expect(ALLOW_SPECTATORS_SETTING).toBe('engine.allowSpectators');
+        expect(ALLOW_SPECTATORS_DEFAULT).toBe('false');
+    });
+
+    it('returns false when there are no match settings — fail-safe closed', () => {
+        expect(readAllowSpectators(undefined)).toBe(false);
+        expect(readAllowSpectators({})).toBe(false);
+    });
+
+    it("returns false when the setting is explicitly 'false'", () => {
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: 'false' })).toBe(false);
+    });
+
+    it("returns true only when the setting is exactly 'true'", () => {
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: 'true' })).toBe(true);
+    });
+
+    it('returns false for any non-true value — fail-safe closed', () => {
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: '1' })).toBe(false);
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: 'yes' })).toBe(false);
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: 'TRUE' })).toBe(false);
     });
 });
 

@@ -70,6 +70,21 @@ export interface GameLanguage {
     readonly label: string;
 }
 
+/**
+ * A game's spectator capability. Absent on the manifest ⇒ the game never admits
+ * spectators (behaviour-neutral opt-out): join-in-progress is always rejected.
+ * Pure data (Invariant #1); `mode` is opaque here — no admission or projection
+ * logic lives in this layer.
+ */
+export interface GameSpectatorSupport {
+    /**
+     * Visibility model. 'perspective' (the only v1 mode): a spectator follows a
+     * chosen seat and sees that seat's projected PlayerSnapshot, switchable via
+     * hotkey. Reserved for future 'public'/'omniscient' modes.
+     */
+    readonly mode: 'perspective';
+}
+
 /** Everything a game declares about itself, independent of platform layer. */
 export interface GameManifest {
     /** Stable game id; must equal the game's `gameId` (e.g. `'tactics'`). */
@@ -129,6 +144,14 @@ export interface GameManifest {
      * (Invariant #1); only the renderer interprets them.
      */
     readonly languages?: readonly GameLanguage[];
+    /**
+     * Optional spectator capability. Absent ⇒ join-in-progress is always
+     * rejected with `match_in_progress` (behaviour-neutral opt-out). Present ⇒
+     * the host MAY enable spectating per match via the reserved
+     * `engine.allowSpectators` match setting (see `game-lobby-contract.ts`).
+     * Pure data here — no admission or projection logic (Invariant #1).
+     */
+    readonly spectators?: GameSpectatorSupport;
 }
 
 /** Resolve the OS window title for a (possibly absent) game manifest. */
@@ -255,4 +278,21 @@ export function resolveGameLanguages(
  */
 export function firstLanguageCode(manifest: GameManifest | undefined): string | undefined {
     return resolveGameLanguages(manifest)?.[0]?.code;
+}
+
+/**
+ * Resolve a manifest's spectator capability. Returns `undefined` when there is
+ * no manifest, no `spectators` field, or a malformed `mode` (anything other
+ * than `'perspective'`) — all behaviour-neutral: the game admits no spectators
+ * and join-in-progress stays rejected. Never throws, so a bad manifest can
+ * never brick a boot. Never mutates the input — returns a fresh object.
+ */
+export function resolveSpectatorSupport(
+    manifest: GameManifest | undefined,
+): GameSpectatorSupport | undefined {
+    const mode: unknown = manifest?.spectators?.mode;
+    if (mode !== 'perspective') {
+        return undefined;
+    }
+    return { mode };
 }
