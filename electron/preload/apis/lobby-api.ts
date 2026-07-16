@@ -35,6 +35,7 @@ import { subscribePush } from '../shared/listener.js';
 import {
     LobbyInfoSchema,
     LocalPlayerIdSchema,
+    LocalRoleSchema,
     NullableLobbyStateSchema,
     parseInvokeResponse,
 } from '../shared/schemas.js';
@@ -62,6 +63,9 @@ export const LOBBY_RETURN_TO_LOBBY_CHANNEL = 'chimera:lobby:return-to-lobby';
 
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.getLocalPlayerId}. */
 export const LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL = 'chimera:lobby:get-local-player-id';
+
+/** `ipcRenderer.invoke` target for {@link LobbyAPI.getLocalRole}. */
+export const LOBBY_GET_LOCAL_ROLE_CHANNEL = 'chimera:lobby:get-local-role';
 
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.getCurrentState}. */
 export const LOBBY_GET_CURRENT_STATE_CHANNEL = 'chimera:lobby:get-current-state';
@@ -181,6 +185,12 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
                         LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
                         value,
                     ),
+                ),
+        getLocalRole: (): Promise<'player' | 'spectator'> =>
+            ipc
+                .invoke(LOBBY_GET_LOCAL_ROLE_CHANNEL)
+                .then((value) =>
+                    parseInvokeResponse(LocalRoleSchema, LOBBY_GET_LOCAL_ROLE_CHANNEL, value),
                 ),
         updatePlayerReadyState: (ready: boolean): Promise<void> =>
             ipc.invoke(LOBBY_UPDATE_READY_STATE_CHANNEL, ready).then(() => undefined),

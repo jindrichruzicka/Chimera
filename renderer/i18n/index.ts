@@ -40,5 +40,6 @@ export {
     SAVE_GAME_KEYS,
     SAVES_KEYS,
     SETTINGS_KEYS,
+    SPECTATE_KEYS,
     TOAST_KEYS,
 } from './engine-keys';

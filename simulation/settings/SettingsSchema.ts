@@ -75,6 +75,11 @@ export const ENGINE_DEFAULTS: EngineSettings = {
             'engine:toggle-perf-hud': { primary: 'F3' },
             'engine:toggle-i18n-token-mode': { primary: 'F4' },
             'engine:toggle-debug-inspector': { primary: 'F9' },
+            // `Tab` = "next seat" for the spectator perspective switch. The input
+            // layer does not preventDefault, so while spectating a Tab press both
+            // cycles the followed seat and traverses DOM focus — benign on the
+            // read-only spectator overlay, and the binding is rebindable.
+            'engine:spectate-cycle': { primary: 'Tab' },
         },
     },
 } as const;

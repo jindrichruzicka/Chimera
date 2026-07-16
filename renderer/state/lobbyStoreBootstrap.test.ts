@@ -45,6 +45,7 @@ function makeLobbyApi(onUpdateImpl?: (cb: (lobby: LobbyState) => void) => Unsubs
         join: vi.fn(),
         getCurrentState: vi.fn(async () => null),
         getLocalPlayerId: vi.fn(async () => null),
+        getLocalRole: vi.fn(async () => 'player' as const),
         leave: vi.fn(),
         startGame: vi.fn(),
         returnToLobby: vi.fn(),
@@ -83,6 +84,7 @@ beforeEach(() => {
     useLobbyStore.getState().applyLobbyState(null);
     useLobbyStore.getState().markInitialStateLoading();
     useLobbyUiStore.getState().clearLocalLobbyContext();
+    useLobbyUiStore.getState().setLocalRole('player');
 });
 
 // ── bootstrapLobbyStore ───────────────────────────────────────────────────────
@@ -417,6 +419,110 @@ describe('bootstrapLobbyStore()', () => {
 
         // Despite three updates, getLocalPlayerId must only have been called once
         expect(lobbyApi.getLocalPlayerId).toHaveBeenCalledOnce();
+    });
+
+    // ── Session role hydration (Invariant #114) ──────────────────────────────
+
+    it('hydrates the session role from getLocalRole on a lobby update', async () => {
+        let capturedLobbyUpdate: ((lobby: LobbyState) => void) | undefined;
+        const lobbyApi = makeLobbyApi((cb) => {
+            capturedLobbyUpdate = cb;
+            return vi.fn();
+        });
+        vi.mocked(lobbyApi.getLocalRole).mockResolvedValue('spectator');
+        const systemApi = makeSystemApi();
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        capturedLobbyUpdate!(makeLobbyState());
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(lobbyApi.getLocalRole).toHaveBeenCalled();
+        expect(useLobbyUiStore.getState().role).toBe('spectator');
+        // A spectator is absent from the roster, so it never gains a seat.
+        expect(useLobbyUiStore.getState().localPlayerId).toBeNull();
+    });
+
+    it('hydrates the session role only once across multiple updates', async () => {
+        let capturedLobbyUpdate: ((lobby: LobbyState) => void) | undefined;
+        const lobbyApi = makeLobbyApi((cb) => {
+            capturedLobbyUpdate = cb;
+            return vi.fn();
+        });
+        vi.mocked(lobbyApi.getLocalRole).mockResolvedValue('player');
+        const systemApi = makeSystemApi();
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        capturedLobbyUpdate!(makeLobbyState());
+        await Promise.resolve();
+        await Promise.resolve();
+        capturedLobbyUpdate!(makeLobbyState());
+        capturedLobbyUpdate!(makeLobbyState());
+        await Promise.resolve();
+
+        expect(lobbyApi.getLocalRole).toHaveBeenCalledOnce();
+    });
+
+    it('does not latch a stale role when a disconnect races an in-flight role hydration', async () => {
+        let capturedLobbyUpdate: ((lobby: LobbyState) => void) | undefined;
+        let capturedConnectionStatus:
+            | ((status: 'connected' | 'disconnected' | 'connecting' | 'error') => void)
+            | undefined;
+        const lobbyApi = makeLobbyApi((cb) => {
+            capturedLobbyUpdate = cb;
+            return vi.fn();
+        });
+        const systemApi = makeSystemApi((cb) => {
+            capturedConnectionStatus = cb;
+            return vi.fn();
+        });
+
+        // First hydrate: a spectator role whose IPC stays in flight until we resolve it.
+        let resolveRole: (role: 'player' | 'spectator') => void = () => undefined;
+        vi.mocked(lobbyApi.getLocalRole).mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    resolveRole = resolve;
+                }),
+        );
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        capturedLobbyUpdate!(makeLobbyState()); // dispatches getLocalRole (pending)
+
+        // A disconnect lands while the role IPC is still in flight.
+        capturedConnectionStatus!('disconnected');
+        expect(useLobbyUiStore.getState().role).toBe('player');
+
+        // The now-stale resolve must NOT re-apply the old role for the dead session.
+        resolveRole('spectator');
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(useLobbyUiStore.getState().role).toBe('player');
+
+        // …and a fresh session must still be able to re-hydrate (flag not stuck).
+        vi.mocked(lobbyApi.getLocalRole).mockResolvedValueOnce('player');
+        capturedLobbyUpdate!(makeLobbyState());
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(lobbyApi.getLocalRole).toHaveBeenCalledTimes(2);
+    });
+
+    it('resets the session role to "player" on disconnect', () => {
+        let capturedConnectionStatus:
+            | ((status: 'connected' | 'disconnected' | 'connecting' | 'error') => void)
+            | undefined;
+        const lobbyApi = makeLobbyApi();
+        const systemApi = makeSystemApi((cb) => {
+            capturedConnectionStatus = cb;
+            return vi.fn();
+        });
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        useLobbyUiStore.getState().setLocalRole('spectator');
+
+        capturedConnectionStatus!('disconnected');
+
+        expect(useLobbyUiStore.getState().role).toBe('player');
     });
 
     it('calls applyLobbyState with null when connection status is disconnected', () => {

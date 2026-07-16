@@ -36,7 +36,7 @@ import { useTranslate } from '../../i18n/useTranslate';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
-import { useLobbyUiStore } from '../../state/lobbyUiStore';
+import { useIsSpectator, useLobbyUiStore } from '../../state/lobbyUiStore';
 import { useSaveStore } from '../../state/saveStore';
 import { useToastStore } from '../../state/toastStore';
 import { useUiStore } from '../../state/uiStore';
@@ -67,6 +67,7 @@ export default function GamePage(): React.ReactElement | null {
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
     const leavingToMainMenu = useLobbyUiStore((state) => state.leavingToMainMenu);
+    const isSpectator = useIsSpectator();
     const restoreAbortPending = useSaveStore((state) => state.restoreAbortPending);
     const leavingRef = React.useRef(false);
     const gameId = lobbyState?.info.gameId ?? null;
@@ -84,6 +85,13 @@ export default function GamePage(): React.ReactElement | null {
     const sendActionToHost = useSendAction();
     const sendAction = React.useCallback(
         (action: EngineAction): void => {
+            // A spectator is a read-only session viewer (Invariant #114): it has
+            // no seat, so any action it could produce is structurally invalid.
+            // Gate the single renderer choke point so both the keyboard handlers
+            // and the HUD callbacks are inert in one place.
+            if (isSpectator) {
+                return;
+            }
             if (snapshot !== null && isTerminalSnapshot(snapshot)) {
                 return;
             }
@@ -91,7 +99,7 @@ export default function GamePage(): React.ReactElement | null {
             const actionTick = typeof currentTick === 'number' ? currentTick : action.tick;
             sendActionToHost({ ...action, tick: actionTick });
         },
-        [currentTick, sendActionToHost, snapshot],
+        [currentTick, isSpectator, sendActionToHost, snapshot],
     );
 
     // Client leave-to-main-menu. useLeaveGame() sets this flag before the
@@ -294,6 +302,7 @@ export default function GamePage(): React.ReactElement | null {
             canEndTurn={!isTerminalSnapshot(snapshot) && snapshot.isMyTurn}
             localPlayerId={resolvedPlayerId}
             isHost={isHost}
+            isSpectator={isSpectator}
             {...(process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1'
                 ? { fadeOutMs: 0, fadeInMs: 0 }
                 : {})}

@@ -308,6 +308,12 @@ export const engineBundleEn: TranslationBundle = {
     'engine.actions.togglePerfHud': 'Toggle performance HUD',
     'engine.actions.toggleDebugInspector': 'Toggle debug inspector',
     'engine.actions.toggleI18nTokenMode': 'Toggle translation token display',
+    'engine.actions.spectateCycle': 'Spectate next player',
+
+    // ── spectator HUD (Invariant #114) ──────────────────────────────────────────
+    'engine.spectate.following': 'Spectating {name}',
+    'engine.spectate.switchHint': 'Press {key} to switch',
+    'engine.spectate.switchAction': 'Switch view',
 
     // ── common ────────────────────────────────────────────────────────────────
     'engine.common.close': 'Close',

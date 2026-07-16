@@ -70,6 +70,27 @@ async function hydrateLocalPlayerFromMain(
     syncLocalPlayerFromLobbyState(localPlayerId, lobbyState);
 }
 
+async function hydrateSessionRoleFromMain(
+    lobbyApi: Pick<LobbyAPI, 'getLocalRole'>,
+    isActive: () => boolean,
+    isCurrent: () => boolean,
+): Promise<boolean> {
+    // The session role is fixed once assigned (host/join) — unlike the seat
+    // context it is keyed to the connection, not the roster, so a spectator
+    // (absent from `lobbyState.players`) still hydrates its role here
+    // (Invariant #114).
+    const role = await lobbyApi.getLocalRole();
+    // Drop a stale resolve: if a disconnect / fresher event landed while this
+    // IPC was in flight, applying the old role would re-latch a dead session's
+    // role and block the next session from re-hydrating. Mirrors the replay
+    // path's freshness guard rather than the coarser `active` flag alone.
+    if (!isActive() || !isCurrent()) {
+        return false;
+    }
+    useLobbyUiStore.getState().setLocalRole(role);
+    return true;
+}
+
 /**
  * Register the `onUpdate` push listener on the supplied lobby API and route
  * incoming lobby state events into the lobbyStore via `_applyLobbyState`.
@@ -80,7 +101,7 @@ async function hydrateLocalPlayerFromMain(
  * up when the component unmounts or the bridge is replaced.
  */
 export function bootstrapLobbyStore(
-    lobbyApi: Pick<LobbyAPI, 'getCurrentState' | 'getLocalPlayerId' | 'onUpdate'>,
+    lobbyApi: Pick<LobbyAPI, 'getCurrentState' | 'getLocalPlayerId' | 'getLocalRole' | 'onUpdate'>,
     systemApi: Pick<SystemAPI, 'onConnectionStatus'>,
 ): Unsubscribe {
     let active = true;
@@ -107,11 +128,38 @@ export function bootstrapLobbyStore(
         });
     }
 
+    // The session role is fetched once per session (fixed for its lifetime) and
+    // reset on disconnect so the next session re-hydrates. Gate with a resolved
+    // flag + in-flight flag so repeated lobby updates issue only one IPC call.
+    let roleHydrated = false;
+    let roleHydrateInFlight = false;
+    function tryHydrateRole(): void {
+        if (roleHydrated || roleHydrateInFlight) {
+            return;
+        }
+        roleHydrateInFlight = true;
+        // Pin the freshness epoch at dispatch so a disconnect / fresher event
+        // that lands mid-flight invalidates this hydrate (see the guard inside
+        // hydrateSessionRoleFromMain) rather than latching a stale role.
+        const dispatchEpoch = freshnessEpoch;
+        const isRoleHydrateCurrent = (): boolean => dispatchEpoch === freshnessEpoch;
+        void hydrateSessionRoleFromMain(lobbyApi, isActive, isRoleHydrateCurrent)
+            .then((didSet) => {
+                if (didSet) {
+                    roleHydrated = true;
+                }
+            })
+            .finally(() => {
+                roleHydrateInFlight = false;
+            });
+    }
+
     const unsubscribeLobby = lobbyApi.onUpdate((lobbyState) => {
         markFresherEvent();
         useLobbyStore.getState().applyLobbyState(lobbyState);
         syncLocalSeatsFromLobbyState(lobbyState);
         tryHydrateLocalPlayer(lobbyState);
+        tryHydrateRole();
     });
 
     void lobbyApi
@@ -127,6 +175,7 @@ export function bootstrapLobbyStore(
                 if (lobbyState !== null) {
                     syncLocalSeatsFromLobbyState(lobbyState);
                     tryHydrateLocalPlayer(lobbyState);
+                    tryHydrateRole();
                 }
             }
             useLobbyStore.getState().markInitialStateLoaded();
@@ -148,6 +197,13 @@ export function bootstrapLobbyStore(
             markFresherEvent();
             useLobbyStore.getState().applyLobbyState(null);
             useLobbyUiStore.getState().clearLocalLobbyContext();
+            // Role is session-scoped: reset it (and re-arm hydration) so a
+            // subsequent host/join session re-fetches its own role. Clear the
+            // in-flight flag too — a hydrate still pending from the dead session
+            // is now epoch-stale and must not block the next session's fetch.
+            useLobbyUiStore.getState().setLocalRole('player');
+            roleHydrated = false;
+            roleHydrateInFlight = false;
         }
     });
 

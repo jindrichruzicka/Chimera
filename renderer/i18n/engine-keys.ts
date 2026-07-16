@@ -350,6 +350,14 @@ export const ACTIONS_KEYS = {
     togglePerfHud: translationKey('engine.actions.togglePerfHud'),
     toggleDebugInspector: translationKey('engine.actions.toggleDebugInspector'),
     toggleI18nTokenMode: translationKey('engine.actions.toggleI18nTokenMode'),
+    spectateCycle: translationKey('engine.actions.spectateCycle'),
+} as const;
+
+/** Spectator HUD — read-only session viewer overlay (Invariant #114). */
+export const SPECTATE_KEYS = {
+    following: translationKey('engine.spectate.following'),
+    switchHint: translationKey('engine.spectate.switchHint'),
+    switchAction: translationKey('engine.spectate.switchAction'),
 } as const;
 
 /** Cross-cutting UI primitives shared across surfaces. */
@@ -382,6 +390,7 @@ const ALL_AREA_MAPS = [
     HUD_KEYS,
     PERF_HUD_KEYS,
     ACTIONS_KEYS,
+    SPECTATE_KEYS,
     COMMON_KEYS,
 ] as const;
 

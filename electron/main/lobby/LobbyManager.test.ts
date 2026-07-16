@@ -558,6 +558,76 @@ describe('LobbyManager.joinLobby', () => {
     });
 });
 
+// ── getLocalRole ─────────────────────────────────────────────────────────────
+
+describe('LobbyManager.getLocalRole', () => {
+    it('defaults to "player" before any session is active', () => {
+        const manager = makeManager();
+        expect(manager.getLocalRole()).toBe('player');
+    });
+
+    it('is "player" for a hosted session', async () => {
+        const manager = makeManager();
+        await manager.hostLobby(HOST_PARAMS);
+        expect(manager.getLocalRole()).toBe('player');
+    });
+
+    it('is "player" for an ordinary joined session', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        expect(joinManager.getLocalRole()).toBe('player');
+    });
+
+    it('reflects a joined session admitted as a spectator', async () => {
+        const base = makeProvider();
+        const hostManager = makeManager(base);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        // Wrap the provider so the join resolves with role: 'spectator'
+        // (the running-match spectator classification is exercised by
+        // joinClassifier.test.ts; here we only assert LobbyManager retains
+        // and exposes whatever role the provider reports).
+        const provider: MultiplayerProvider = {
+            hostLobby: (p) => base.hostLobby(p),
+            joinLobby: async (p) => ({
+                ...(await base.joinLobby(p)),
+                role: 'spectator' as const,
+            }),
+            dispose: () => base.dispose(),
+        };
+        const joinManager = new LobbyManager(provider, createNoopLogger());
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        expect(joinManager.getLocalRole()).toBe('spectator');
+    });
+
+    it('resets to "player" after closeLobby', async () => {
+        const base = makeProvider();
+        const hostManager = makeManager(base);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const provider: MultiplayerProvider = {
+            hostLobby: (p) => base.hostLobby(p),
+            joinLobby: async (p) => ({
+                ...(await base.joinLobby(p)),
+                role: 'spectator' as const,
+            }),
+            dispose: () => base.dispose(),
+        };
+        const joinManager = new LobbyManager(provider, createNoopLogger());
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+        expect(joinManager.getLocalRole()).toBe('spectator');
+
+        await joinManager.closeLobby();
+        expect(joinManager.getLocalRole()).toBe('player');
+    });
+});
+
 // ── sendAction ──────────────────────────────────────────────────────────────
 
 describe('LobbyManager.sendAction', () => {

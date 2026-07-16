@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
+    LOBBY_GET_LOCAL_ROLE_CHANNEL,
     LOBBY_GET_CURRENT_STATE_CHANNEL,
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
@@ -239,6 +240,29 @@ describe('createLobbyApi', () => {
             const api = createLobbyApi(stub.port);
 
             await expect(api.getLocalPlayerId()).resolves.toBeNull();
+        });
+    });
+
+    describe('getLocalRole()', () => {
+        it('invokes chimera:lobby:get-local-role and resolves to the session role', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(LOBBY_GET_LOCAL_ROLE_CHANNEL, 'spectator');
+            const api = createLobbyApi(stub.port);
+
+            const result = await api.getLocalRole();
+
+            expect(stub.invocations).toEqual([
+                { channel: LOBBY_GET_LOCAL_ROLE_CHANNEL, arg: undefined },
+            ]);
+            expect(result).toBe('spectator');
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns an unknown role', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(LOBBY_GET_LOCAL_ROLE_CHANNEL, 'admin');
+            const api = createLobbyApi(stub.port);
+
+            await expect(api.getLocalRole()).rejects.toBeInstanceOf(PreloadIpcValidationError);
         });
     });
 

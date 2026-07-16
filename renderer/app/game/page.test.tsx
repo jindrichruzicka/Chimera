@@ -49,6 +49,7 @@ const mockSave = vi.fn();
 let mockSnapshot: PlayerSnapshot | null = null;
 let mockCurrentTick: number | undefined = undefined;
 let mockLocalPlayerId: string | null = null;
+let mockRole: 'player' | 'spectator' = 'player';
 let mockLeavingToMainMenu = false;
 let mockRestoreAbortPending = false;
 let mockLobbyState: LobbyState | null = null;
@@ -84,11 +85,13 @@ vi.mock('../../state/lobbyUiStore', () => ({
         (
             selector: (state: {
                 readonly localPlayerId: string | null;
+                readonly role: 'player' | 'spectator';
                 readonly leavingToMainMenu: boolean;
             }) => unknown,
         ) =>
             selector({
                 localPlayerId: mockLocalPlayerId,
+                role: mockRole,
                 leavingToMainMenu: mockLeavingToMainMenu,
             }),
         {
@@ -98,6 +101,7 @@ vi.mock('../../state/lobbyUiStore', () => ({
             }),
         },
     ),
+    useIsSpectator: () => mockRole === 'spectator',
 }));
 
 vi.mock('../../state/lobbyStore', () => ({
@@ -284,6 +288,7 @@ beforeEach(() => {
     mockSnapshot = null;
     mockCurrentTick = undefined;
     mockLocalPlayerId = null;
+    mockRole = 'player';
     mockLeavingToMainMenu = false;
     mockLobbyState = makeLobbyState();
     mockHasLoadedInitialLobbyState = true;
@@ -583,6 +588,33 @@ describe('GamePage — action dispatch', () => {
             tick: 5,
             payload: {},
         });
+    });
+
+    it('suppresses all action dispatch for a spectator (read-only board, Invariant #114)', async () => {
+        mockRole = 'spectator';
+        mockLocalPlayerId = 'watcher-1';
+        mockSnapshot = makeSnapshot({ isMyTurn: true, undoMeta: { canUndo: true, canRedo: true } });
+        renderGamePage();
+
+        // Controls render disabled…
+        const endTurn = await screen.findByTestId('end-turn');
+        expect(endTurn).toBeDisabled();
+        expect(screen.getByTestId('undo')).toBeDisabled();
+        expect(screen.getByTestId('redo')).toBeDisabled();
+
+        // …clicking them dispatches nothing…
+        fireEvent.click(endTurn);
+        fireEvent.click(screen.getByTestId('undo'));
+        fireEvent.click(screen.getByTestId('redo'));
+
+        // …and neither do the raw keyboard handlers (the sendAction wrapper is gated).
+        act(() => {
+            inputActionCallbacks.get('game:end-turn')?.({ pressed: true });
+            inputActionCallbacks.get('engine:undo')?.({ pressed: true });
+            inputActionCallbacks.get('engine:redo')?.({ pressed: true });
+        });
+
+        expect(mockSendAction).not.toHaveBeenCalled();
     });
 
     it('dispatches with currentTick when it is newer than snapshot.tick', async () => {

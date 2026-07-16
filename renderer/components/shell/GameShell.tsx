@@ -39,6 +39,7 @@ import { DebugInspectorToggle } from './debug/DebugInspectorToggle.js';
 import { FadeProvider } from './FadeContext.js';
 import { InGameMenuHost } from './InGameMenuHost.js';
 import { PerfHud } from './perf/PerfHud.js';
+import { SpectatorHud } from './SpectatorHud.js';
 
 interface GameShellBaseProps {
     readonly children?: ReactNode;
@@ -58,6 +59,12 @@ interface GameShellBaseProps {
      * "role unknown — treat as host".
      */
     readonly isHost?: boolean;
+    /**
+     * When true, the local session is a read-only spectator (Invariant #114):
+     * the action controls (undo / redo / end-turn) are locked exactly like a
+     * game-over, so the board is observable but inert. Absent means "player".
+     */
+    readonly isSpectator?: boolean;
     readonly onUndo?: () => void | Promise<void>;
     readonly onRedo?: () => void | Promise<void>;
     readonly onEndTurn?: () => void | Promise<void>;
@@ -105,6 +112,8 @@ interface GameShellRegistryProps {
      * vs perspective replay to export).
      */
     readonly isHost?: boolean;
+    /** See {@link GameShellBaseProps.isSpectator}; forwarded to the frame. */
+    readonly isSpectator?: boolean;
     readonly canEndTurn?: boolean;
     /**
      * Overrides the in-game menu's leave action (see {@link InGameMenuHost}).
@@ -147,6 +156,7 @@ function RegistryGameShell({
     content,
     reveal,
     isHost,
+    isSpectator,
     canEndTurn,
     leaveGame,
     fadeOutMs,
@@ -183,6 +193,7 @@ function RegistryGameShell({
                             : { gameResultBanner: registry.gameResultBanner })}
                         {...(localPlayerId === undefined ? {} : { localPlayerId })}
                         {...(isHost === undefined ? {} : { isHost })}
+                        {...(isSpectator === undefined ? {} : { isSpectator })}
                         {...(onUndo === undefined ? {} : { onUndo })}
                         {...(onRedo === undefined ? {} : { onRedo })}
                         {...(onEndTurn === undefined ? {} : { onEndTurn })}
@@ -327,6 +338,7 @@ function GameShellFrame(
         gameResultBanner: GameResultBanner = DefaultGameResultBanner,
         localPlayerId,
         isHost,
+        isSpectator = false,
         onUndo,
         onRedo,
         onEndTurn,
@@ -341,7 +353,10 @@ function GameShellFrame(
     const hasResolvedResult = gameResult !== undefined && gameResult !== null;
     const shouldShowResolvedResult = hasResolvedResult && onBoardScreen;
     const shouldShowFallbackResult = !hasResolvedResult && isGameOver && onBoardScreen;
-    const controlsLocked = isGameOver || hasResolvedResult;
+    // A spectator locks the action controls exactly like game-over — the board
+    // is observable but inert (Invariant #114); dispatch is separately gated at
+    // the route's sendAction wrapper (defense in depth).
+    const controlsLocked = isGameOver || hasResolvedResult || isSpectator;
     const undoDisabled = controlsLocked || !canUndo || onUndo === undefined;
     const redoDisabled = controlsLocked || !canRedo || onRedo === undefined;
     const endTurnDisabled = controlsLocked || !canEndTurn || onEndTurn === undefined;
@@ -431,6 +446,7 @@ function GameShellFrame(
             </section>
             {hud}
             <PerfHud />
+            <SpectatorHud />
             <DebugInspectorToggle />
         </main>
     );

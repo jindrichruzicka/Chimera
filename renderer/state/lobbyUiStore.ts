@@ -18,6 +18,15 @@ export interface LobbyUiStoreState {
     readonly localSeatIds: readonly PlayerId[];
 
     /**
+     * The authoritative role of the local session (`'player'` | `'spectator'`),
+     * hydrated from the main process (Invariant #114). Distinct from the seat
+     * context above: a spectator has a role but no seat and is absent from the
+     * lobby roster, so it is reset explicitly on disconnect — not by
+     * {@link clearLocalLobbyContext}, which only clears seat metadata.
+     */
+    readonly role: 'player' | 'spectator';
+
+    /**
      * Renderer-only intent: the local player is leaving the active match for the
      * main menu (client leave path). Routing consumes and resets this flag after
      * navigating; it is independent of the IPC-mirrored lobby state.
@@ -27,8 +36,11 @@ export interface LobbyUiStoreState {
     /** Set local-only player and seat metadata after a successful host/join intent. */
     setLocalLobbyContext(localPlayerId: PlayerId | null, localSeatIds: readonly PlayerId[]): void;
 
-    /** Clear local-only metadata when leaving or disconnecting from a lobby. */
+    /** Clear local-only seat metadata when leaving or disconnecting from a lobby. */
     clearLocalLobbyContext(): void;
+
+    /** Set the authoritative session role, hydrated from the main process. */
+    setLocalRole(role: 'player' | 'spectator'): void;
 
     /** Set the leaving-to-main-menu intent flag (set on client leave, reset by routing). */
     setLeavingToMainMenu(leaving: boolean): void;
@@ -38,6 +50,7 @@ export function createLobbyUiStore(): StoreApi<LobbyUiStoreState> {
     return createStore<LobbyUiStoreState>()((set) => ({
         localPlayerId: null,
         localSeatIds: [],
+        role: 'player',
         leavingToMainMenu: false,
 
         setLocalLobbyContext(
@@ -57,6 +70,10 @@ export function createLobbyUiStore(): StoreApi<LobbyUiStoreState> {
             }));
         },
 
+        setLocalRole(role: 'player' | 'spectator'): void {
+            set(() => ({ role }));
+        },
+
         setLeavingToMainMenu(leaving: boolean): void {
             set(() => ({
                 leavingToMainMenu: leaving,
@@ -74,3 +91,12 @@ export function useLobbyUiStore<T>(selector: (state: LobbyUiStoreState) => T): T
 useLobbyUiStore.getState = lobbyUiStoreInstance.getState.bind(lobbyUiStoreInstance);
 useLobbyUiStore.setState = lobbyUiStoreInstance.setState.bind(lobbyUiStoreInstance);
 useLobbyUiStore.subscribe = lobbyUiStoreInstance.subscribe.bind(lobbyUiStoreInstance);
+
+/**
+ * True when the local session is a read-only spectator (Invariant #114). Narrow
+ * selector over {@link LobbyUiStoreState.role} so components re-render only on a
+ * role change, not on every seat-context update.
+ */
+export function useIsSpectator(): boolean {
+    return useLobbyUiStore((state) => state.role === 'spectator');
+}

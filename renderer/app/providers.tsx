@@ -55,6 +55,12 @@ const ENGINE_INPUT_ACTIONS: readonly InputAction[] = [
         category: 'Engine',
         oneShot: true,
     },
+    {
+        id: 'engine:spectate-cycle',
+        description: 'engine.actions.spectateCycle',
+        category: 'Engine',
+        oneShot: true,
+    },
 ];
 
 export interface ProvidersProps {

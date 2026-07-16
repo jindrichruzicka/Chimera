@@ -163,6 +163,15 @@ export class LobbyManager {
     private readonly log: Logger;
     private session: HostedSession | JoinedSession | null = null;
     private localPlayerId: PlayerId | null = null;
+    /**
+     * The authoritative role of the local session: `'player'` for a host or a
+     * seated joiner, `'spectator'` for a read-only session viewer admitted into
+     * a running match (Invariant #114). Captured from {@link JoinedSession.role}
+     * at join (host sessions are always `'player'`) and reset on close. Surfaced
+     * to the renderer via {@link getLocalRole} so it can render the board
+     * read-only and show the spectator HUD.
+     */
+    private localRole: 'player' | 'spectator' = 'player';
     private lobbyState: LobbyState | null = null;
     /**
      * Seat cap for the active hosted session (humans + AI together), captured
@@ -485,6 +494,7 @@ export class LobbyManager {
             gameId: params.gameId,
         };
         this.localPlayerId = info.hostId;
+        this.localRole = 'player';
         this.localSeatIds.clear();
         this.localSeatIds.add(info.hostId);
         // Capture the seat cap and any host-time AI slots so the synced lobby
@@ -831,6 +841,7 @@ export class LobbyManager {
         }
         this.session = session;
         this.localPlayerId = session.localPlayerId;
+        this.localRole = session.role;
         this.localSeatIds.clear();
         this.localSeatIds.add(session.localPlayerId);
         this.publishLobbyState(session.initialLobbyState);
@@ -881,6 +892,16 @@ export class LobbyManager {
 
     getLocalPlayerId(): PlayerId | null {
         return this.localPlayerId;
+    }
+
+    /**
+     * The authoritative role of the local session (`'player'` | `'spectator'`).
+     * Fixed for the session lifetime — set at host/join, reset to `'player'` on
+     * close. Read by the renderer (via IPC) to gate the read-only spectator UX
+     * (Invariant #114).
+     */
+    getLocalRole(): 'player' | 'spectator' {
+        return this.localRole;
     }
 
     getCurrentState(): LobbyState | null {
@@ -1365,6 +1386,7 @@ export class LobbyManager {
         const session = this.session;
         this.session = null;
         this.localPlayerId = null;
+        this.localRole = 'player';
         this.lobbyState = null;
         this.maxPlayers = 0;
         this.localSeatIds.clear();

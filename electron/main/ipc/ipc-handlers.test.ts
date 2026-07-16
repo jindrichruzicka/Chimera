@@ -11,6 +11,7 @@ import {
     LOBBY_HOST_CHANNEL,
     LOBBY_GET_CURRENT_STATE_CHANNEL,
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
+    LOBBY_GET_LOCAL_ROLE_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
@@ -634,6 +635,18 @@ describe('registerLobbyHandlers', () => {
         expect(spy).toHaveBeenCalledOnce();
     });
 
+    it('registers chimera:lobby:get-local-role as an invoke handler that calls lobbyManager.getLocalRole', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'getLocalRole').mockReturnValue('spectator');
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_GET_LOCAL_ROLE_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.({}))).resolves.toBe('spectator');
+        expect(spy).toHaveBeenCalledOnce();
+    });
+
     it('registers chimera:lobby:get-current-state as an invoke handler that calls lobbyManager.getCurrentState', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
@@ -788,6 +801,7 @@ describe('registerLobbyHandlers', () => {
         ['chimera:lobby:leave', LOBBY_LEAVE_CHANNEL],
         ['chimera:lobby:start-game', LOBBY_START_GAME_CHANNEL],
         ['chimera:lobby:get-local-player-id', LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL],
+        ['chimera:lobby:get-local-role', LOBBY_GET_LOCAL_ROLE_CHANNEL],
         ['chimera:lobby:get-current-state', LOBBY_GET_CURRENT_STATE_CHANNEL],
         ['chimera:lobby:add-ai', LOBBY_ADD_AI_CHANNEL],
         ['chimera:lobby:return-to-lobby', LOBBY_RETURN_TO_LOBBY_CHANNEL],
@@ -830,6 +844,7 @@ describe('registerLobbyHandlers', () => {
                 LOBBY_HOST_CHANNEL,
                 LOBBY_GET_CURRENT_STATE_CHANNEL,
                 LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
+                LOBBY_GET_LOCAL_ROLE_CHANNEL,
                 LOBBY_JOIN_CHANNEL,
                 LOBBY_LEAVE_CHANNEL,
                 LOBBY_START_GAME_CHANNEL,

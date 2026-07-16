@@ -168,6 +168,9 @@ export const LocalPlayerIdSchema: z.ZodType<PlayerId | null> = z
     .transform(playerId)
     .nullable();
 
+/** Schema for `chimera:lobby:get-local-role` invoke result (Invariant #114). */
+export const LocalRoleSchema = z.enum(['player', 'spectator']);
+
 /**
  * Schema for a single {@link SaveSlotMeta} returned by `chimera:saves:save`.
  * Typed via a `z.ZodType<SaveSlotMeta>` cast — see the schema header for why

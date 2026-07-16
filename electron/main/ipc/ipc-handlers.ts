@@ -24,6 +24,7 @@ import {
 } from '../../preload/apis/game-api.js';
 import {
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
+    LOBBY_GET_LOCAL_ROLE_CHANNEL,
     LOBBY_GET_CURRENT_STATE_CHANNEL,
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
@@ -171,6 +172,7 @@ export {
     LOBBY_HOST_CHANNEL,
     LOBBY_GET_CURRENT_STATE_CHANNEL,
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
+    LOBBY_GET_LOCAL_ROLE_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
@@ -635,6 +637,14 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
     ipcMain.handle(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, (_event, payload) => {
         parseInvokeRequest(EmptyPayloadSchema, LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, payload);
         return lobbyManager.getLocalPlayerId();
+    });
+
+    // Read-only: the authoritative role of the local session ('player' |
+    // 'spectator'). Lets the renderer gate the read-only spectator UX
+    // (Invariant #114). No payload — role is derived main-side.
+    ipcMain.handle(LOBBY_GET_LOCAL_ROLE_CHANNEL, (_event, payload) => {
+        parseInvokeRequest(EmptyPayloadSchema, LOBBY_GET_LOCAL_ROLE_CHANNEL, payload);
+        return lobbyManager.getLocalRole();
     });
 
     ipcMain.handle(LOBBY_GET_CURRENT_STATE_CHANNEL, (_event, payload) => {

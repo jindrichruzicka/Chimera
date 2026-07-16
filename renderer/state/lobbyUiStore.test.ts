@@ -28,6 +28,34 @@ describe('lobbyUiStore', () => {
         expect(store.getState().localSeatIds).toEqual([]);
     });
 
+    it('initializes with the "player" session role', () => {
+        const store = createLobbyUiStore();
+
+        expect(store.getState().role).toBe('player');
+    });
+
+    it('sets the session role to spectator', () => {
+        const store = createLobbyUiStore();
+
+        store.getState().setLocalRole('spectator');
+        expect(store.getState().role).toBe('spectator');
+
+        store.getState().setLocalRole('player');
+        expect(store.getState().role).toBe('player');
+    });
+
+    it('keeps the session role across clearLocalLobbyContext (a spectator has no seat)', () => {
+        const store = createLobbyUiStore();
+
+        store.getState().setLocalRole('spectator');
+        store.getState().clearLocalLobbyContext();
+
+        // clearLocalLobbyContext resets seat context only; role is a distinct,
+        // session-lifetime concern reset explicitly on disconnect.
+        expect(store.getState().role).toBe('spectator');
+        expect(store.getState().localPlayerId).toBeNull();
+    });
+
     it('initializes with the leaving-to-main-menu intent flag cleared', () => {
         const store = createLobbyUiStore();
 

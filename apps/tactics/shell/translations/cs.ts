@@ -297,6 +297,12 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.actions.togglePerfHud': 'Přepnout výkonnostní HUD',
     'engine.actions.toggleDebugInspector': 'Přepnout ladicí inspektor',
     'engine.actions.toggleI18nTokenMode': 'Přepnout zobrazení překladových tokenů',
+    'engine.actions.spectateCycle': 'Sledovat dalšího hráče',
+
+    // ── spectator HUD ───────────────────────────────────────────────────────────
+    'engine.spectate.following': 'Sleduje se {name}',
+    'engine.spectate.switchHint': 'Stiskni {key} pro přepnutí',
+    'engine.spectate.switchAction': 'Přepnout pohled',
 
     // ── common ────────────────────────────────────────────────────────────────
     'engine.common.close': 'Zavřít',

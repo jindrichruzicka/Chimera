@@ -43,6 +43,12 @@ vi.mock('./perf/PerfHud.js', () => ({
     PerfHud: () => <div data-testid="perf-hud-mock" />,
 }));
 
+// Mock SpectatorHud for the same reason — it subscribes via useInputAction and
+// reads the input manager for the switch-hotkey binding.
+vi.mock('./SpectatorHud.js', () => ({
+    SpectatorHud: () => <div data-testid="spectator-hud-mock" />,
+}));
+
 // Mock DebugInspectorToggle for the same reason — it subscribes via useInputAction.
 vi.mock('./debug/DebugInspectorToggle.js', () => ({
     DebugInspectorToggle: () => <div data-testid="debug-inspector-toggle-mock" />,
@@ -470,6 +476,37 @@ describe('GameShell page object locators', () => {
         expect(onEndTurn).toHaveBeenCalledOnce();
     });
 
+    it('disables all action controls for a spectator (Invariant #92/#114)', () => {
+        const onUndo = vi.fn();
+        const onRedo = vi.fn();
+        const onEndTurn = vi.fn();
+
+        render(
+            <GameShell
+                tick={7}
+                canUndo={true}
+                canRedo={true}
+                canEndTurn={true}
+                onUndo={onUndo}
+                onRedo={onRedo}
+                onEndTurn={onEndTurn}
+                isSpectator={true}
+            />,
+        );
+
+        for (const testId of ['undo', 'redo', 'end-turn']) {
+            expect(screen.getByTestId(testId).hasAttribute('disabled')).toBe(true);
+        }
+
+        fireEvent.click(screen.getByTestId('undo'));
+        fireEvent.click(screen.getByTestId('redo'));
+        fireEvent.click(screen.getByTestId('end-turn'));
+
+        expect(onUndo).not.toHaveBeenCalled();
+        expect(onRedo).not.toHaveBeenCalled();
+        expect(onEndTurn).not.toHaveBeenCalled();
+    });
+
     it('delegates HUD rendering to a game-provided component with engine-owned controls', () => {
         const onUndo = vi.fn();
         const onRedo = vi.fn();
@@ -791,6 +828,11 @@ describe('GameShell page object locators', () => {
     it('mounts DebugInspectorToggle inside the game shell frame', () => {
         render(<GameShell tick={1} canUndo={false} canRedo={false} />);
         expect(screen.getByTestId('debug-inspector-toggle-mock')).toBeTruthy();
+    });
+
+    it('mounts SpectatorHud inside the game shell frame', () => {
+        render(<GameShell tick={1} canUndo={false} canRedo={false} />);
+        expect(screen.getByTestId('spectator-hud-mock')).toBeTruthy();
     });
 
     it('shows the resolved result banner while the active screen is the board', () => {
