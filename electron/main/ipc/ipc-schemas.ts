@@ -603,3 +603,15 @@ export const ChatMuteRequestSchema = z
         playerId: PlayerIdSchema,
     })
     .strict();
+
+/**
+ * Schema for the `{ targetPlayerId }` payload accepted by
+ * `chimera:spectate:set-target` (Spectator Mode). Reuses
+ * {@link PlayerIdSchema} so the handler receives a branded `PlayerId` for the
+ * seat a spectator wants to follow.
+ */
+export const SpectateSetTargetPayloadSchema = z
+    .object({
+        targetPlayerId: PlayerIdSchema,
+    })
+    .strict();

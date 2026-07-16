@@ -1083,6 +1083,37 @@ export class LobbyManager {
     }
 
     /**
+     * Switch which seat the local spectator follows (Spectator Mode). A
+     * joined (non-host) spectator forwards the intent to the authoritative host
+     * over the transport; the host derives the spectator from the connection
+     * (never a client-supplied id), validates the target is currently seated,
+     * and re-points the viewer's perspective. Out-of-band / cosmetic — never an
+     * EngineAction, never advances `tick`, never recorded (Invariant #115).
+     *
+     * Fire-and-forget (returns `void`, mirroring the `chimera:spectate:set-target`
+     * IPC send): a hosted session (a host that is itself spectating is out of
+     * scope) and a session-less call are logged and ignored rather than
+     * throwing, so the caller's `ipcMain.on` listener never surfaces an error.
+     */
+    setSpectatorTarget(targetPlayerId: PlayerId): void {
+        const session = this.session;
+        if (session === null) {
+            this.log.warn('setSpectatorTarget: no active session; ignoring', { targetPlayerId });
+            return;
+        }
+        if ('close' in session) {
+            // Hosted session: the host owns its SpectatorRegistry directly; a
+            // host that is itself a spectator is out of scope.
+            this.log.warn(
+                'setSpectatorTarget: hosted session cannot switch a spectator target; ignoring',
+                { targetPlayerId },
+            );
+            return;
+        }
+        session.transport.sendSpectateTarget(targetPlayerId);
+    }
+
+    /**
      * Host-only: append an AI agent slot to the lobby roster and rebroadcast the
      * full {@link LobbyState}. Mirrors {@link setMatchSetting}'s host-only
      * guard (rejects a joined/non-host session). Rejects when the lobby is full

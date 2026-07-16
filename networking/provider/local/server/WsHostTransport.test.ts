@@ -99,6 +99,7 @@ describe('WsHostTransport — implements HostTransport', () => {
         expect(typeof transport.onActionReceived).toBe('function');
         expect(typeof transport.onReadyStateUpdate).toBe('function');
         expect(typeof transport.onPlayerAttributeUpdate).toBe('function');
+        expect(typeof transport.onSpectateTargetUpdate).toBe('function');
         expect(typeof transport.onSideChannelReceived).toBe('function');
         expect(typeof transport.onPlayerJoined).toBe('function');
         expect(typeof transport.onPlayerLeft).toBe('function');
@@ -352,6 +353,35 @@ describe('WsHostTransport — onActionReceived', () => {
 
         await actionObservedByServer;
         expect(received).toHaveLength(0);
+        ws.close();
+    });
+});
+
+// ─── onSpectateTargetUpdate ───────────────────────────────────────────────────
+
+describe('WsHostTransport — onSpectateTargetUpdate', () => {
+    it('fires with the connection-derived sender when a client sends SPECTATE_TARGET_UPDATE', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        const received = new Promise<{ from: PlayerId; targetPlayerId: PlayerId }>((resolve) => {
+            const unsubscribe = transport.onSpectateTargetUpdate((from, targetPlayerId) => {
+                unsubscribe();
+                resolve({ from, targetPlayerId });
+            });
+        });
+
+        ws.send(
+            JSON.stringify({
+                type: 'SPECTATE_TARGET_UPDATE',
+                targetPlayerId: 'seat-2',
+            } satisfies ClientMessage),
+        );
+
+        const { from, targetPlayerId } = await received;
+        expect(from).toBe(playerId);
+        expect(targetPlayerId).toBe('seat-2');
         ws.close();
     });
 });

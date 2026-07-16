@@ -238,6 +238,42 @@ describe('MessageRouter — player-attribute routing', () => {
     });
 });
 
+// ─── Spectate-target routing ──────────────────────────────────────────────────
+
+describe('MessageRouter — spectate-target routing', () => {
+    it('routes SPECTATE_TARGET_UPDATE messages to onSpectateTargetUpdate callbacks', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const received: {
+            readonly from: PlayerId;
+            readonly targetPlayerId: PlayerId;
+        }[] = [];
+        router.onSpectateTargetUpdate((from, targetPlayerId) =>
+            received.push({ from, targetPlayerId }),
+        );
+
+        // The host derives `from` from the connection — the wire frame carries
+        // only the requested target, never a client-supplied spectator id.
+        bus.emit(playerOne, { type: 'SPECTATE_TARGET_UPDATE', targetPlayerId: 'seat-2' });
+
+        expect(received).toEqual([{ from: playerOne, targetPlayerId: 'seat-2' }]);
+    });
+
+    it('onSpectateTargetUpdate Unsubscribe stops delivery', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const received: PlayerId[] = [];
+        const unsub = router.onSpectateTargetUpdate((_from, targetPlayerId) =>
+            received.push(targetPlayerId),
+        );
+        unsub();
+
+        bus.emit(playerOne, { type: 'SPECTATE_TARGET_UPDATE', targetPlayerId: 'seat-2' });
+
+        expect(received).toHaveLength(0);
+    });
+});
+
 // ─── PING → PONG ─────────────────────────────────────────────────────────────
 
 describe('MessageRouter — PING/PONG', () => {

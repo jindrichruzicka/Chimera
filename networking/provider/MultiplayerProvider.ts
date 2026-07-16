@@ -353,6 +353,16 @@ export interface HostTransport {
      * change to that seat and never trusts a client-supplied playerId.
      */
     onPlayerAttributeUpdate(cb: (from: PlayerId, key: string, value: string) => void): Unsubscribe;
+    /**
+     * Subscribe to spectator follow-target switches. `from` is the
+     * connection-derived PlayerId of the spectator (never a client-supplied id,
+     * Invariant #99); `targetPlayerId` is the seat the spectator wants to
+     * follow. The host validates the target is a currently-seated player before
+     * re-pointing the viewer's perspective. Out-of-band / cosmetic: never an
+     * EngineAction, never advances `tick`, never entered in ActionHistory,
+     * saves, or replays (Invariant #115, mirroring CHAT / PROFILE_UPDATE).
+     */
+    onSpectateTargetUpdate(cb: (from: PlayerId, targetPlayerId: PlayerId) => void): Unsubscribe;
     /** Subscribe to inbound side-channel messages from clients. */
     onSideChannelReceived(cb: (from: PlayerId, msg: SideChannelMessage) => void): Unsubscribe;
     /** Subscribe to player-joined notifications. */
@@ -434,6 +444,16 @@ export interface ClientTransport {
      * merged LobbyState; it never trusts a client-supplied playerId.
      */
     sendPlayerAttributeUpdate(key: string, value: string): void;
+    /**
+     * Send a spectator follow-target switch to the authoritative host: the
+     * `targetPlayerId` seat the local spectator wants to follow. The host
+     * derives the spectator's identity from this connection (never trusts a
+     * client-supplied id) and re-points the viewer's perspective after
+     * validating the target is seated. Out-of-band / cosmetic — never an
+     * EngineAction, never entered in ActionHistory, never replayed
+     * (Invariant #115, mirroring sendSideChannel).
+     */
+    sendSpectateTarget(targetPlayerId: PlayerId): void;
     /**
      * Send a non-authoritative side-channel message to the host. Mirror of
      * HostTransport.sendSideChannel — never an EngineAction, never entered in

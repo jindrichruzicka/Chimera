@@ -6,6 +6,7 @@
  * Responsibilities:
  *   - Subscribe to MessageBus.onMessage
  *   - Route ACTION → onActionReceived callbacks
+ *   - Route SPECTATE_TARGET_UPDATE → onSpectateTargetUpdate callbacks
  *   - Route CHAT / PROFILE_UPDATE → onSideChannelReceived as SideChannelMessage
  *   - Respond to PING with a PONG sent back via MessageBus.sendToPlayer
  *
@@ -29,6 +30,7 @@ import type { MessageBus } from './MessageBus.js';
 type ActionCb = (from: PlayerId, action: EngineAction) => void;
 type ReadyStateCb = (from: PlayerId, ready: boolean) => void;
 type PlayerAttributeCb = (from: PlayerId, key: string, value: string) => void;
+type SpectateTargetCb = (from: PlayerId, targetPlayerId: PlayerId) => void;
 type SideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
 
 // ─── MessageRouter ────────────────────────────────────────────────────────────
@@ -46,6 +48,7 @@ export class MessageRouter {
     private readonly actionCbs = new Set<ActionCb>();
     private readonly readyStateCbs = new Set<ReadyStateCb>();
     private readonly playerAttributeCbs = new Set<PlayerAttributeCb>();
+    private readonly spectateTargetCbs = new Set<SpectateTargetCb>();
     private readonly sideChannelCbs = new Set<SideChannelCb>();
     private readonly unsub: Unsubscribe;
 
@@ -79,6 +82,14 @@ export class MessageRouter {
         };
     }
 
+    /** Subscribe to SPECTATE_TARGET_UPDATE messages delivered by connected clients. */
+    onSpectateTargetUpdate(cb: SpectateTargetCb): Unsubscribe {
+        this.spectateTargetCbs.add(cb);
+        return (): void => {
+            this.spectateTargetCbs.delete(cb);
+        };
+    }
+
     /** Subscribe to side-channel messages (CHAT, PROFILE_UPDATE). */
     onSideChannelReceived(cb: SideChannelCb): Unsubscribe {
         this.sideChannelCbs.add(cb);
@@ -93,6 +104,7 @@ export class MessageRouter {
         this.actionCbs.clear();
         this.readyStateCbs.clear();
         this.playerAttributeCbs.clear();
+        this.spectateTargetCbs.clear();
         this.sideChannelCbs.clear();
     }
 
@@ -126,6 +138,14 @@ export class MessageRouter {
             case 'PLAYER_ATTRIBUTE_UPDATE':
                 for (const cb of this.playerAttributeCbs) {
                     cb(from, msg.key, msg.value);
+                }
+                break;
+
+            case 'SPECTATE_TARGET_UPDATE':
+                for (const cb of this.spectateTargetCbs) {
+                    // `from` is connection-derived; the wire carries only the
+                    // requested target seat, never a client-supplied spectator id.
+                    cb(from, msg.targetPlayerId as PlayerId);
                 }
                 break;
 

@@ -30,6 +30,7 @@ import {
     registerReplayHandlers,
     registerPerspectiveReplayHandlers,
     registerChatHandlers,
+    registerSpectatorHandlers,
     toRestoreStatusEvent,
 } from './ipc/ipc-handlers.js';
 import {
@@ -2586,6 +2587,38 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
             });
 
+            // A spectator switching which seat it follows
+            // (SPECTATE_TARGET_UPDATE). Out-of-band / cosmetic: never an
+            // EngineAction, never advances `tick`, never entered in
+            // ActionHistory / saves / replays (Invariant #115). The host derives
+            // the spectator from the connection (Invariant #99) and re-points
+            // only after validating the requested target is a currently-seated
+            // player — an unknown or non-seated target is ignored, leaving the
+            // perspective unchanged.
+            const unsubSpectateTarget = transport.onSpectateTargetUpdate((from, targetPlayerId) => {
+                if (!spectatorRegistry.has(from)) {
+                    lobbyLogger.warn(
+                        'hosted session: dropped spectate-target update from non-spectator',
+                        { playerId: from, targetPlayerId },
+                    );
+                    return;
+                }
+                const snapshot = sessionRuntime.getSnapshot();
+                if (!Object.prototype.hasOwnProperty.call(snapshot.players, targetPlayerId)) {
+                    lobbyLogger.warn(
+                        'hosted session: ignored spectate-target update to non-seated player',
+                        { playerId: from, targetPlayerId },
+                    );
+                    return;
+                }
+                // Re-point the viewer's follow target (SpectatorRegistry.add
+                // re-points an existing spectator) and immediately push the
+                // new-perspective projection so the switch is reflected without
+                // waiting for the next broadcast wave.
+                spectatorRegistry.add(from, targetPlayerId);
+                broadcasterRef.current?.broadcastSpectator(snapshot, from);
+            });
+
             return () => {
                 // Stop the heartbeat first so no tick fires during teardown.
                 realtimeTicker?.stop();
@@ -2600,6 +2633,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 unsubJoined();
                 unsubLeft();
                 unsubAction();
+                unsubSpectateTarget();
                 spectatorRegistry.clear();
                 clearUndoHistory([...activePlayers]);
                 // Discard any retained replay recording on session close.
@@ -3341,6 +3375,14 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         },
         unmute: (playerId) => {
             chatHub.unmute(playerId);
+        },
+    });
+
+    registerSpectatorHandlers({
+        ipcMain,
+        logger: logger.child({ module: 'spectate' }),
+        setSpectatorTarget: (targetPlayerId) => {
+            lobbyManager.setSpectatorTarget(targetPlayerId);
         },
     });
 

@@ -824,6 +824,23 @@ export interface ChatAPI {
     unmute(playerId: PlayerId): void;
 }
 
+/**
+ * Spectator perspective control (§4.1 / §4.3 — Spectator Mode). A read-only
+ * viewer that joined a running match uses this to switch which seat it follows.
+ * Fire-and-forget: the intent is forwarded to the authoritative host, which
+ * validates the target is currently seated and re-points the viewer's
+ * perspective — the switch is observed via the next projected snapshot, not a
+ * return value. Out-of-band / cosmetic: never an EngineAction, never advances
+ * `tick`, never recorded in saves / replays (Invariant #115).
+ */
+export interface SpectatorAPI {
+    /**
+     * Ask the host to follow `targetPlayerId`'s perspective. A non-seated or
+     * unknown target is ignored by the host and the perspective is unchanged.
+     */
+    setFollowedTarget(targetPlayerId: PlayerId): void;
+}
+
 /** Crash Reporter / Logging (§4.27). */
 export interface LogsAPI {
     /** Fire-and-forget: renderer emits a structured log entry to the main process. */
@@ -880,6 +897,7 @@ export interface ChimeraAPI {
     profile: ProfileAPI;
     replay: ReplayAPI;
     chat: ChatAPI;
+    spectate: SpectatorAPI;
     logs: LogsAPI;
     system: SystemAPI;
     /** Present only when the active MultiplayerProvider supports discovery. */

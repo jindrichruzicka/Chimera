@@ -88,6 +88,7 @@ import {
     CHAT_MUTE_CHANNEL,
     CHAT_UNMUTE_CHANNEL,
 } from '../../preload/apis/chat-api.js';
+import { SPECTATE_SET_TARGET_CHANNEL } from '../../preload/apis/spectator-api.js';
 import type {
     ActionRejection,
     ChatMessage,
@@ -126,6 +127,7 @@ import {
     LobbyReadyStateSchema,
     SetMatchSettingPayloadSchema,
     SetPlayerAttributePayloadSchema,
+    SpectateSetTargetPayloadSchema,
     RemoveAiPayloadSchema,
     ReplayExportRequestSchema,
     PerspectiveReplayExportRequestSchema,
@@ -211,6 +213,7 @@ export {
     CHAT_HISTORY_CHANNEL,
     CHAT_MUTE_CHANNEL,
     CHAT_UNMUTE_CHANNEL,
+    SPECTATE_SET_TARGET_CHANNEL,
 };
 
 /**
@@ -1891,4 +1894,71 @@ export function registerChatHandlers(options: RegisterChatHandlersOptions): void
 
     ipcMain.on(CHAT_MUTE_CHANNEL, onMutePlayerChannel(CHAT_MUTE_CHANNEL, mute));
     ipcMain.on(CHAT_UNMUTE_CHANNEL, onMutePlayerChannel(CHAT_UNMUTE_CHANNEL, unmute));
+}
+
+/** Shape of a main-side `ipcMain.on` listener for the spectate namespace. */
+export type SpectatorSendListener = (event: unknown, ...args: unknown[]) => void;
+
+/**
+ * Narrow slice of `Electron.IpcMain` required to register the spectate
+ * namespace. Only `on` is needed — `chimera:spectate:set-target` is a
+ * fire-and-forget send (the {@link SpectatorAPI} method returns `void`).
+ */
+export interface SpectatorHandlersIpcMain {
+    on(channel: string, handler: SpectatorSendListener): unknown;
+}
+
+export interface RegisterSpectatorHandlersOptions {
+    readonly ipcMain: SpectatorHandlersIpcMain;
+    /**
+     * Forward a spectator's own follow-target switch to the authoritative host.
+     * Wired to `LobbyManager.setSpectatorTarget` at the DIP point: a joined
+     * (non-host) session forwards over the transport, where the host validates
+     * the target is seated and re-points the viewer (Invariant #115).
+     */
+    readonly setSpectatorTarget: (targetPlayerId: PlayerId) => void;
+    /** Injected logger (Invariant #67). */
+    readonly logger?: Logger;
+}
+
+/**
+ * Register the `chimera:spectate:set-target` main-side channel (§4.1 / §4.3 —
+ * Spectator Mode).
+ *
+ * Fire-and-forget `on` send: a throw inside an `on` callback is silently
+ * dropped by Electron, so a malformed payload is logged and ignored (no state
+ * change) rather than surfacing on a rejection channel — mirroring the chat
+ * mute/unmute handlers.
+ *
+ * Invariant #5: the channel constant comes from `preload/apis/spectator-api.ts`;
+ * there is no parallel list in this file to drift out of sync. The message
+ * never touches the simulation (Invariant #115): it re-points a viewer's
+ * perspective, never dispatches an `EngineAction`.
+ */
+export function registerSpectatorHandlers(options: RegisterSpectatorHandlersOptions): void {
+    const { ipcMain, setSpectatorTarget } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:spectate:* handlers', {
+        channels: [SPECTATE_SET_TARGET_CHANNEL],
+    });
+
+    ipcMain.on(SPECTATE_SET_TARGET_CHANNEL, (_event, payload) => {
+        try {
+            const { targetPlayerId } = parseInvokeRequest(
+                SpectateSetTargetPayloadSchema,
+                SPECTATE_SET_TARGET_CHANNEL,
+                payload,
+            );
+            setSpectatorTarget(targetPlayerId);
+        } catch (err) {
+            if (err instanceof IpcRequestValidationError) {
+                logger.warn('ipc spectate payload rejected', {
+                    channel: SPECTATE_SET_TARGET_CHANNEL,
+                    issues: err.issues,
+                });
+                return;
+            }
+            throw err;
+        }
+    });
 }

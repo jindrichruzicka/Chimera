@@ -10,6 +10,7 @@ import {
     PlayerIdSchema,
     SetMatchSettingPayloadSchema,
     SetPlayerAttributePayloadSchema,
+    SpectateSetTargetPayloadSchema,
     LogEntrySchema,
     RendererLogEntrySchema,
     RestoreStatusEventSchema,
@@ -296,6 +297,34 @@ describe('SetPlayerAttributePayloadSchema', () => {
                 value: 'blue',
                 extra: 1,
             }).success,
+        ).toBe(false);
+    });
+});
+
+describe('SpectateSetTargetPayloadSchema', () => {
+    it('accepts a well-formed {targetPlayerId}', () => {
+        expect(SpectateSetTargetPayloadSchema.safeParse({ targetPlayerId: 'seat-2' }).success).toBe(
+            true,
+        );
+    });
+
+    it('rejects a missing or empty targetPlayerId', () => {
+        expect(SpectateSetTargetPayloadSchema.safeParse({}).success).toBe(false);
+        expect(SpectateSetTargetPayloadSchema.safeParse({ targetPlayerId: '' }).success).toBe(
+            false,
+        );
+    });
+
+    it('rejects a non-string targetPlayerId', () => {
+        expect(SpectateSetTargetPayloadSchema.safeParse({ targetPlayerId: 42 }).success).toBe(
+            false,
+        );
+    });
+
+    it('rejects unknown keys', () => {
+        expect(
+            SpectateSetTargetPayloadSchema.safeParse({ targetPlayerId: 'seat-2', extra: 1 })
+                .success,
         ).toBe(false);
     });
 });

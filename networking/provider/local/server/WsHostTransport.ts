@@ -95,6 +95,10 @@ export class WsHostTransport implements HostTransport {
         return this.router.onPlayerAttributeUpdate(cb);
     }
 
+    onSpectateTargetUpdate(cb: (from: PlayerId, targetPlayerId: PlayerId) => void): Unsubscribe {
+        return this.router.onSpectateTargetUpdate(cb);
+    }
+
     onSideChannelReceived(cb: (from: PlayerId, msg: SideChannelMessage) => void): Unsubscribe {
         return this.router.onSideChannelReceived(cb);
     }

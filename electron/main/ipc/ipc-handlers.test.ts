@@ -40,8 +40,10 @@ import {
     CHAT_HISTORY_CHANNEL,
     CHAT_MUTE_CHANNEL,
     CHAT_UNMUTE_CHANNEL,
+    SPECTATE_SET_TARGET_CHANNEL,
     mapPlatform,
     registerChatHandlers,
+    registerSpectatorHandlers,
     registerGameHandlers,
     registerLobbyHandlers,
     registerPerspectiveReplayHandlers,
@@ -90,6 +92,8 @@ import {
     type ChatHandlersIpcMain,
     type ChatInvokeHandler,
     type ChatSendListener,
+    type SpectatorHandlersIpcMain,
+    type SpectatorSendListener,
 } from './ipc-handlers.js';
 import {
     PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
@@ -3808,5 +3812,50 @@ describe('registerChatHandlers', () => {
             expect(() => listener?.({}, { playerId: '' })).not.toThrow();
             expect(ports.mute).not.toHaveBeenCalled();
         });
+    });
+});
+
+function makeSpectatorIpcMainStub(): {
+    readonly ipcMain: SpectatorHandlersIpcMain;
+    readonly listeners: Map<string, SpectatorSendListener>;
+} {
+    const listeners = new Map<string, SpectatorSendListener>();
+    const ipcMain: SpectatorHandlersIpcMain = {
+        on: (channel, handler) => {
+            listeners.set(channel, handler);
+        },
+    };
+    return { ipcMain, listeners };
+}
+
+describe('registerSpectatorHandlers', () => {
+    it('registers chimera:spectate:set-target as an on listener', () => {
+        const stub = makeSpectatorIpcMainStub();
+        registerSpectatorHandlers({ ipcMain: stub.ipcMain, setSpectatorTarget: vi.fn() });
+
+        expect([...stub.listeners.keys()]).toEqual([SPECTATE_SET_TARGET_CHANNEL]);
+    });
+
+    it('validates the payload and forwards the branded targetPlayerId', () => {
+        const stub = makeSpectatorIpcMainStub();
+        const setSpectatorTarget = vi.fn<(id: ReturnType<typeof playerId>) => void>();
+        registerSpectatorHandlers({ ipcMain: stub.ipcMain, setSpectatorTarget });
+
+        stub.listeners.get(SPECTATE_SET_TARGET_CHANNEL)?.({}, { targetPlayerId: 'seat-2' });
+
+        expect(setSpectatorTarget).toHaveBeenCalledWith(playerId('seat-2'));
+    });
+
+    it('silently ignores a malformed payload (no throw, no port call)', () => {
+        const stub = makeSpectatorIpcMainStub();
+        const setSpectatorTarget = vi.fn<(id: ReturnType<typeof playerId>) => void>();
+        registerSpectatorHandlers({ ipcMain: stub.ipcMain, setSpectatorTarget });
+
+        const listener = stub.listeners.get(SPECTATE_SET_TARGET_CHANNEL);
+        // A throw inside an `on` callback would be dropped by Electron; the
+        // handler swallows the validation error so it never escapes.
+        expect(() => listener?.({}, { targetPlayerId: '' })).not.toThrow();
+        expect(() => listener?.({}, { targetPlayerId: 'seat-2', extra: 1 })).not.toThrow();
+        expect(setSpectatorTarget).not.toHaveBeenCalled();
     });
 });

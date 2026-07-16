@@ -165,6 +165,7 @@ const {
                 onPlayerLeft: () => () => {},
                 onActionReceived: () => () => {},
                 setJoinClassifier: () => {},
+                onSpectateTargetUpdate: () => () => {},
             };
             const teardown = lastCallbacks()?.onSessionHosted?.(transport, {
                 hostId: params.restore?.hostPlayerId ?? 'host-fallback',
@@ -1736,6 +1737,7 @@ interface SpectatorSessionOptions {
             readonly onPlayerLeft: ReturnType<typeof vi.fn>;
             readonly onActionReceived: ReturnType<typeof vi.fn>;
             readonly setJoinClassifier: ReturnType<typeof vi.fn>;
+            readonly onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
         },
         metadata: {
             readonly hostId: ReturnType<typeof playerId>;
@@ -1776,6 +1778,7 @@ function makeSpectatorSessionHarness(): {
         readonly onPlayerLeft: ReturnType<typeof vi.fn>;
         readonly onActionReceived: ReturnType<typeof vi.fn>;
         readonly setJoinClassifier: ReturnType<typeof vi.fn>;
+        readonly onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
     };
     options: SpectatorSessionOptions | undefined;
     capturedJoinRef: {
@@ -1788,6 +1791,12 @@ function makeSpectatorSessionHarness(): {
         current?: (leftPlayerId: ReturnType<typeof playerId>, reason?: string) => void;
     };
     capturedActionRef: { current?: (from: string, action: unknown) => void };
+    capturedSpectateTargetRef: {
+        current?: (
+            from: ReturnType<typeof playerId>,
+            targetPlayerId: ReturnType<typeof playerId>,
+        ) => void;
+    };
 } {
     const capturedJoinRef: {
         current?: (entry: {
@@ -1799,6 +1808,12 @@ function makeSpectatorSessionHarness(): {
         current?: (leftPlayerId: ReturnType<typeof playerId>, reason?: string) => void;
     } = {};
     const capturedActionRef: { current?: (from: string, action: unknown) => void } = {};
+    const capturedSpectateTargetRef: {
+        current?: (
+            from: ReturnType<typeof playerId>,
+            targetPlayerId: ReturnType<typeof playerId>,
+        ) => void;
+    } = {};
 
     const transport = {
         onPlayerJoined: vi.fn(
@@ -1823,11 +1838,29 @@ function makeSpectatorSessionHarness(): {
             return () => {};
         }),
         setJoinClassifier: vi.fn(),
+        onSpectateTargetUpdate: vi.fn(
+            (
+                cb: (
+                    from: ReturnType<typeof playerId>,
+                    targetPlayerId: ReturnType<typeof playerId>,
+                ) => void,
+            ) => {
+                capturedSpectateTargetRef.current = cb;
+                return () => {};
+            },
+        ),
     };
 
     const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as SpectatorSessionOptions | undefined;
 
-    return { transport, options, capturedJoinRef, capturedLeftRef, capturedActionRef };
+    return {
+        transport,
+        options,
+        capturedJoinRef,
+        capturedLeftRef,
+        capturedActionRef,
+        capturedSpectateTargetRef,
+    };
 }
 
 describe('main', () => {
@@ -1985,6 +2018,9 @@ describe('main', () => {
                                   cb: (from: string, action: unknown) => void,
                               ): () => void;
                               setJoinClassifier(classify: unknown): void;
+                              onSpectateTargetUpdate(
+                                  cb: (from: string, targetPlayerId: string) => void,
+                              ): () => void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -2008,6 +2044,7 @@ describe('main', () => {
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
                 setJoinClassifier: vi.fn(),
+                onSpectateTargetUpdate: vi.fn(() => () => {}),
             },
             { hostId: playerId('host-1'), maxPlayers: 1 },
         );
@@ -2033,6 +2070,9 @@ describe('main', () => {
                                   cb: (from: string, action: unknown) => void,
                               ): () => void;
                               setJoinClassifier(classify: unknown): void;
+                              onSpectateTargetUpdate(
+                                  cb: (from: string, targetPlayerId: string) => void,
+                              ): () => void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -2050,6 +2090,7 @@ describe('main', () => {
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
 
         onSessionHosted?.(transport, { hostId: playerId('host-projector'), maxPlayers: 1 });
@@ -2103,6 +2144,7 @@ describe('main', () => {
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
         const hostId = playerId('host-e2e-wiring');
 
@@ -2139,6 +2181,9 @@ describe('main', () => {
                                   cb: (from: string, action: unknown) => void,
                               ): () => void;
                               setJoinClassifier(classify: unknown): void;
+                              onSpectateTargetUpdate(
+                                  cb: (from: string, targetPlayerId: string) => void,
+                              ): () => void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -2156,6 +2201,7 @@ describe('main', () => {
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
 
         onSessionHosted?.(transport, { hostId, maxPlayers: 1 });
@@ -2196,6 +2242,9 @@ describe('main', () => {
                                   cb: (from: string, action: unknown) => void,
                               ): () => void;
                               setJoinClassifier(classify: unknown): void;
+                              onSpectateTargetUpdate(
+                                  cb: (from: string, targetPlayerId: string) => void,
+                              ): () => void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -2214,6 +2263,7 @@ describe('main', () => {
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
                 setJoinClassifier: vi.fn(),
+                onSpectateTargetUpdate: vi.fn(() => () => {}),
             },
             { hostId, maxPlayers: 1 },
         );
@@ -2250,6 +2300,7 @@ describe('main', () => {
             readonly onPlayerLeft: ReturnType<typeof vi.fn>;
             readonly onActionReceived: ReturnType<typeof vi.fn>;
             readonly setJoinClassifier: ReturnType<typeof vi.fn>;
+            readonly onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
         }
         const transport: ReconnectTransport = {
             onPlayerJoined: vi.fn(
@@ -2264,6 +2315,7 @@ describe('main', () => {
             }),
             onActionReceived: vi.fn(() => () => {}),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
         const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
             | {
@@ -2326,6 +2378,7 @@ describe('main', () => {
             readonly onPlayerLeft: ReturnType<typeof vi.fn>;
             readonly onActionReceived: ReturnType<typeof vi.fn>;
             readonly setJoinClassifier: ReturnType<typeof vi.fn>;
+            readonly onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
         }
         const transport: FirstJoinTransport = {
             onPlayerJoined: vi.fn(
@@ -2337,6 +2390,7 @@ describe('main', () => {
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
         const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
             | {
@@ -2430,6 +2484,7 @@ describe('main', () => {
                 return () => {};
             }),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
 
         const hostId = playerId('host-undo-start');
@@ -2514,6 +2569,7 @@ describe('main', () => {
                 return () => {};
             }),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
 
         options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
@@ -2594,6 +2650,7 @@ describe('main', () => {
                 return () => {};
             }),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
 
         options?.onSessionHosted?.(transport, {
@@ -2650,6 +2707,7 @@ describe('main', () => {
             readonly onPlayerLeft: ReturnType<typeof vi.fn>;
             readonly onActionReceived: ReturnType<typeof vi.fn>;
             readonly setJoinClassifier: ReturnType<typeof vi.fn>;
+            readonly onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
         }
         const transport: SpectatorTransport = {
             onPlayerJoined: vi.fn(
@@ -2666,6 +2724,7 @@ describe('main', () => {
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
         const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
             | {
@@ -2847,6 +2906,147 @@ describe('main', () => {
         expect(spectators?.followedBy(spectatorId)).toBe(clientId);
     });
 
+    it('re-points a spectator to a newly-chosen seated player and pushes its new perspective (SPECTATE_TARGET_UPDATE)', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        mockStateBroadcasterInstance.broadcastSpectator.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeTestContributions());
+
+        const { transport, options, capturedJoinRef, capturedSpectateTargetRef } =
+            makeSpectatorSessionHarness();
+        const hostId = playerId('host-spec-switch');
+        const clientId = playerId('client-spec-switch');
+        const spectatorId = playerId('spectator-switch');
+
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        capturedJoinRef.current?.({ playerId: clientId });
+        options?.onGameStartRequested?.({
+            info: { sessionId: 'session-spec-switch', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+
+        const spectators = latestBroadcasterSpectatorSource();
+        capturedJoinRef.current?.({ playerId: spectatorId, role: 'spectator' });
+        // Default follow target is the first seated player.
+        expect(spectators?.followedBy(spectatorId)).toBe(hostId);
+
+        // Switch the followed seat to the other seated player.
+        mockStateBroadcasterInstance.broadcastSpectator.mockClear();
+        capturedSpectateTargetRef.current?.(spectatorId, clientId);
+
+        expect(spectators?.followedBy(spectatorId)).toBe(clientId);
+        // The new perspective is pushed immediately, not on the next wave.
+        expect(mockStateBroadcasterInstance.broadcastSpectator).toHaveBeenCalledWith(
+            expect.objectContaining({ phase: 'playing' }),
+            spectatorId,
+        );
+    });
+
+    it('ignores a SPECTATE_TARGET_UPDATE to a non-seated target and leaves the perspective unchanged', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        mockStateBroadcasterInstance.broadcastSpectator.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeTestContributions());
+
+        const { transport, options, capturedJoinRef, capturedSpectateTargetRef } =
+            makeSpectatorSessionHarness();
+        const hostId = playerId('host-spec-badtarget');
+        const clientId = playerId('client-spec-badtarget');
+        const spectatorId = playerId('spectator-badtarget');
+
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        capturedJoinRef.current?.({ playerId: clientId });
+        options?.onGameStartRequested?.({
+            info: { sessionId: 'session-spec-badtarget', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+
+        const spectators = latestBroadcasterSpectatorSource();
+        capturedJoinRef.current?.({ playerId: spectatorId, role: 'spectator' });
+        expect(spectators?.followedBy(spectatorId)).toBe(hostId);
+
+        mockStateBroadcasterInstance.broadcastSpectator.mockClear();
+        capturedSpectateTargetRef.current?.(spectatorId, playerId('never-seated'));
+
+        // Rejected: the follow target is unchanged and nothing is re-pushed.
+        expect(spectators?.followedBy(spectatorId)).toBe(hostId);
+        expect(mockStateBroadcasterInstance.broadcastSpectator).not.toHaveBeenCalled();
+    });
+
+    it('ignores a SPECTATE_TARGET_UPDATE from a non-spectator connection', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        mockStateBroadcasterInstance.broadcastSpectator.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeTestContributions());
+
+        const { transport, options, capturedJoinRef, capturedSpectateTargetRef } =
+            makeSpectatorSessionHarness();
+        const hostId = playerId('host-spec-nonspec');
+        const clientId = playerId('client-spec-nonspec');
+
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        capturedJoinRef.current?.({ playerId: clientId });
+        options?.onGameStartRequested?.({
+            info: { sessionId: 'session-spec-nonspec', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+
+        const spectators = latestBroadcasterSpectatorSource();
+        mockStateBroadcasterInstance.broadcastSpectator.mockClear();
+
+        // A seated player (never registered as a spectator) sends the message.
+        capturedSpectateTargetRef.current?.(clientId, hostId);
+
+        expect(spectators?.followedBy(clientId)).toBeUndefined();
+        expect(mockStateBroadcasterInstance.broadcastSpectator).not.toHaveBeenCalled();
+    });
+
+    it('never drives the pipeline for a SPECTATE_TARGET_UPDATE (out-of-band, Invariant #115)', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeTestContributions());
+
+        const { transport, options, capturedJoinRef, capturedSpectateTargetRef } =
+            makeSpectatorSessionHarness();
+        const hostId = playerId('host-spec-outofband');
+        const clientId = playerId('client-spec-outofband');
+        const spectatorId = playerId('spectator-outofband');
+
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        capturedJoinRef.current?.({ playerId: clientId });
+        options?.onGameStartRequested?.({
+            info: { sessionId: 'session-spec-outofband', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+        capturedJoinRef.current?.({ playerId: spectatorId, role: 'spectator' });
+
+        // Switching perspective is a cosmetic/control channel: it never enters
+        // the ActionPipeline, so no tick advances and nothing is recorded.
+        mockSimulationHostInstance.afterTick.mockClear();
+        capturedSpectateTargetRef.current?.(spectatorId, clientId);
+        expect(mockSimulationHostInstance.afterTick).not.toHaveBeenCalled();
+    });
+
     it('registers configured AI slots before firing onGameStart', async () => {
         mockLobbyManagerCtor.mockClear();
         mockSimulationHostInstance.registerAgent.mockClear();
@@ -2869,6 +3069,9 @@ describe('main', () => {
                                   cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
                               ): () => void;
                               setJoinClassifier(classify: unknown): void;
+                              onSpectateTargetUpdate(
+                                  cb: (from: string, targetPlayerId: string) => void,
+                              ): () => void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -2891,6 +3094,7 @@ describe('main', () => {
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
                 setJoinClassifier: vi.fn(),
+                onSpectateTargetUpdate: vi.fn(() => () => {}),
             },
             {
                 hostId: playerId('host-ai'),
@@ -3253,6 +3457,9 @@ describe('main', () => {
                                   cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
                               ): () => void;
                               setJoinClassifier(classify: unknown): void;
+                              onSpectateTargetUpdate(
+                                  cb: (from: string, targetPlayerId: string) => void,
+                              ): () => void;
                           },
                           metadata: {
                               readonly hostId: ReturnType<typeof playerId>;
@@ -3270,6 +3477,7 @@ describe('main', () => {
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
         onSessionHosted?.(fakeTransport, { hostId: playerId('host-1'), maxPlayers: 1 });
 
@@ -3352,6 +3560,7 @@ describe('main', () => {
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
                 setJoinClassifier: vi.fn(),
+                onSpectateTargetUpdate: vi.fn(() => () => {}),
             };
             const hostId = playerId('host-manifest');
             callbacks.onSessionHosted?.(transport, { hostId, maxPlayers });
@@ -3758,6 +3967,7 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
         onPlayerLeft: ReturnType<typeof vi.fn>;
         onActionReceived: ReturnType<typeof vi.fn>;
         setJoinClassifier: ReturnType<typeof vi.fn>;
+        onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
     }
 
     function makeOrderingTransport(): OrderingTransport {
@@ -3772,6 +3982,7 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
     }
 
@@ -3891,6 +4102,7 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
         onPlayerLeft: ReturnType<typeof vi.fn>;
         onActionReceived: ReturnType<typeof vi.fn>;
         setJoinClassifier: ReturnType<typeof vi.fn>;
+        onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
     }
 
     function makeRejoinTransport(): RejoinTransport {
@@ -3909,6 +4121,7 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
             }),
             onActionReceived: vi.fn(() => () => {}),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
     }
 
@@ -3986,6 +4199,7 @@ describe('onSessionHosted session teardown: onGameEnd not called when gameResult
         onPlayerLeft: ReturnType<typeof vi.fn>;
         onActionReceived: ReturnType<typeof vi.fn>;
         setJoinClassifier: ReturnType<typeof vi.fn>;
+        onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
     }
 
     function makeTeardownTransport(): TeardownTransport {
@@ -3998,6 +4212,7 @@ describe('onSessionHosted session teardown: onGameEnd not called when gameResult
                 return () => {};
             }),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
     }
 
@@ -4100,6 +4315,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         readonly onPlayerLeft: ReturnType<typeof vi.fn>;
         readonly onActionReceived: ReturnType<typeof vi.fn>;
         readonly setJoinClassifier: ReturnType<typeof vi.fn>;
+        readonly onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
     }
     interface ClientTransport {
         readonly onReveal: ReturnType<typeof vi.fn>;
@@ -4139,6 +4355,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         onPlayerLeft: vi.fn(() => () => {}),
         onActionReceived: vi.fn(() => () => {}),
         setJoinClassifier: vi.fn(),
+        onSpectateTargetUpdate: vi.fn(() => () => {}),
     });
 
     const makeClientTransport = (): ClientTransport => ({
@@ -4409,6 +4626,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
         onPlayerLeft: ReturnType<typeof vi.fn>;
         onActionReceived: ReturnType<typeof vi.fn>;
         setJoinClassifier: ReturnType<typeof vi.fn>;
+        onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
     }
     interface RtlLobbyState {
         readonly info: {
@@ -4455,6 +4673,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
                 return () => {};
             }),
             setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
         };
     };
 
@@ -4699,6 +4918,9 @@ describe('main() — session restore wiring (#823)', () => {
                 onPlayerLeft(cb: (id: string) => void): () => void;
                 onActionReceived(cb: (from: string, action: unknown) => void): () => void;
                 setJoinClassifier(classify: unknown): void;
+                onSpectateTargetUpdate(
+                    cb: (from: string, targetPlayerId: string) => void,
+                ): () => void;
             },
             metadata: { hostId: ReturnType<typeof playerId>; maxPlayers: number },
         ) => (() => void) | void;
@@ -4948,6 +5170,7 @@ describe('main() — session restore wiring (#823)', () => {
                 onPlayerLeft: () => () => {},
                 onActionReceived: () => () => {},
                 setJoinClassifier: () => {},
+                onSpectateTargetUpdate: () => () => {},
             },
             { hostId: playerId('host-after-failed-restore'), maxPlayers: 2 },
         );
@@ -5014,6 +5237,7 @@ describe('main() — session restore wiring (#823)', () => {
                 onPlayerLeft: vi.fn(() => () => {}),
                 onActionReceived: vi.fn(() => () => {}),
                 setJoinClassifier: vi.fn(),
+                onSpectateTargetUpdate: vi.fn(() => () => {}),
             };
             const hostId = playerId('host-restwire');
             callbacks.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });

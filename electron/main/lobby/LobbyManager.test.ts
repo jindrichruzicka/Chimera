@@ -2503,6 +2503,44 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         await manager.closeLobby();
     });
 
+    it('setSpectatorTarget forwards the target to the host over a joined session transport', async () => {
+        const provider = makeProvider();
+        const hosted = await provider.hostLobby(HOST_PARAMS);
+
+        const received: { from: PlayerId; target: PlayerId }[] = [];
+        hosted.transport.onSpectateTargetUpdate((from, target) => {
+            received.push({ from, target });
+        });
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hosted.lobbyCode });
+        const localId = joinManager.getLocalPlayerId();
+
+        joinManager.setSpectatorTarget(playerId('seat-host'));
+
+        // The host derives the spectator from the connection; only the target
+        // travels on the wire.
+        expect(received).toEqual([{ from: localId, target: playerId('seat-host') }]);
+
+        await joinManager.closeLobby();
+        await hosted.close();
+    });
+
+    it('setSpectatorTarget is a no-op on a hosted session (host-is-spectator out of scope)', async () => {
+        const manager = makeManager();
+        await manager.hostLobby(HOST_PARAMS);
+
+        // Void + no throw: the fire-and-forget IPC send must never surface an error.
+        expect(() => manager.setSpectatorTarget(playerId('seat-host'))).not.toThrow();
+
+        await manager.closeLobby();
+    });
+
+    it('setSpectatorTarget is a no-op without an active session', () => {
+        const manager = makeManager();
+        expect(() => manager.setSpectatorTarget(playerId('seat-host'))).not.toThrow();
+    });
+
     describe('AI agent slots (#724)', () => {
         it('addAi appends an AI slot to the synced lobby state and broadcasts it', async () => {
             let capturedTransport: HostTransport | null = null;

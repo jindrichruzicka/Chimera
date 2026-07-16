@@ -94,6 +94,13 @@ export class WsClientTransport implements ClientTransport {
         });
     }
 
+    sendSpectateTarget(targetPlayerId: PlayerId): void {
+        this.connection.send({
+            type: 'SPECTATE_TARGET_UPDATE',
+            targetPlayerId,
+        });
+    }
+
     sendSideChannel(msg: SideChannelMessage): void {
         if (msg.kind === 'chat') {
             this.connection.send({

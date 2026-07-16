@@ -116,6 +116,7 @@ describe('WsClientTransport — implements ClientTransport', () => {
         expect(typeof transport.sendAction).toBe('function');
         expect(typeof transport.sendReadyStateUpdate).toBe('function');
         expect(typeof transport.sendPlayerAttributeUpdate).toBe('function');
+        expect(typeof transport.sendSpectateTarget).toBe('function');
         expect(typeof transport.sendSideChannel).toBe('function');
         expect(typeof transport.onSnapshotReceived).toBe('function');
         expect(typeof transport.onSideChannelReceived).toBe('function');
@@ -194,6 +195,26 @@ describe('WsClientTransport — sendPlayerAttributeUpdate', () => {
         if (receivedMessage.message.type === 'PLAYER_ATTRIBUTE_UPDATE') {
             expect(receivedMessage.message.key).toBe('color');
             expect(receivedMessage.message.value).toBe('amber');
+        }
+    });
+});
+
+describe('WsClientTransport — sendSpectateTarget', () => {
+    it('delivers a SPECTATE_TARGET_UPDATE message to the server', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        const received = waitForServerInboundMessage(
+            server,
+            (_from, msg) => msg.type === 'SPECTATE_TARGET_UPDATE',
+        );
+
+        transport.sendSpectateTarget(toPlayerId('seat-2'));
+        const receivedMessage = await received;
+
+        expect(receivedMessage.from).toBe(playerId);
+        expect(receivedMessage.message.type).toBe('SPECTATE_TARGET_UPDATE');
+        if (receivedMessage.message.type === 'SPECTATE_TARGET_UPDATE') {
+            expect(receivedMessage.message.targetPlayerId).toBe('seat-2');
         }
     });
 });

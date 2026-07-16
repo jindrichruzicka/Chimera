@@ -575,3 +575,24 @@ describe('window.__chimera.system — contract', () => {
         expect(listeners.get('chimera:system:device-info-change')?.size).toBe(0);
     });
 });
+
+// ─── spectate namespace ──────────────────────────────────────────────────────
+
+describe('window.__chimera.spectate — contract', () => {
+    let api: ChimeraAPI;
+
+    beforeEach(async () => {
+        api = await loadApi();
+    });
+
+    it('setFollowedTarget() sends to chimera:spectate:set-target with { targetPlayerId }', () => {
+        api.spectate.setFollowedTarget(playerId('seat-2'));
+        expect(sendCalls).toEqual([
+            {
+                channel: 'chimera:spectate:set-target',
+                args: [{ targetPlayerId: playerId('seat-2') }],
+            },
+        ]);
+        expect(invokeCalls).toEqual([]);
+    });
+});

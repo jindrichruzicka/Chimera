@@ -252,6 +252,44 @@ describe('InMemoryMultiplayerProvider', () => {
         });
     });
 
+    // ─── Spectate-target receipt ────────────────────────────────────────────────
+
+    describe('spectate-target receipt', () => {
+        it('client sendSpectateTarget is received by the host with the connection-derived sender', async () => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+            let receivedFrom!: PlayerId;
+            let receivedTarget!: PlayerId;
+            hosted.transport.onSpectateTargetUpdate((from, targetPlayerId) => {
+                receivedFrom = from;
+                receivedTarget = targetPlayerId;
+            });
+
+            const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+            joined.transport.sendSpectateTarget(toPlayerId('seat-2'));
+
+            expect(receivedFrom).toBe(joined.localPlayerId);
+            expect(receivedTarget).toBe(toPlayerId('seat-2'));
+        });
+
+        it('unsubscribing from onSpectateTargetUpdate stops delivery', async () => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+            const targets: PlayerId[] = [];
+            const unsub = hosted.transport.onSpectateTargetUpdate((_from, targetPlayerId) => {
+                targets.push(targetPlayerId);
+            });
+            unsub();
+
+            const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+            joined.transport.sendSpectateTarget(toPlayerId('seat-2'));
+
+            expect(targets).toHaveLength(0);
+        });
+    });
+
     // ─── Side-channel ─────────────────────────────────────────────────────────
 
     describe('side-channel', () => {

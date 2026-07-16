@@ -26,6 +26,7 @@ import { createProfileApi } from './apis/profile-api.js';
 import { createReplayApi } from './apis/replay-api.js';
 import { createSavesApi } from './apis/saves-api.js';
 import { createSettingsApi } from './apis/settings-api.js';
+import { createSpectatorApi } from './apis/spectator-api.js';
 import { createSystemApi } from './apis/system-api.js';
 import { buildLogsApi } from './apis/logs-api.js';
 
@@ -79,6 +80,7 @@ const api: ChimeraAPI = {
     profile: createProfileApi(port),
     replay: createReplayApi(port),
     chat: createChatApi(port),
+    spectate: createSpectatorApi(port),
     // Deferred namespaces — the interfaces are empty stubs today (see the
     // `*API` declarations in `api-types.ts`) and will gain concrete methods
     // later. Exposing empty objects now keeps `window.__chimera` shape-stable
