@@ -126,3 +126,4 @@ Phase 2 — Reveal:
 - [Fog of War and Cryptographic Commitment](../security-trust/fog-of-war-cryptographic-commitment.md) — §8 full state obfuscation design
 - [WebSocket Protocol](websocket-message-protocol.md) — `SNAPSHOT` and `REVEAL` wire messages
 - [Simulation Core](simulation-core-action-pipeline.md) — `VisibilityScope` type, `PlayerSnapshot`
+- [Spectator Mode Contract](spectator-mode-contract.md) — a spectator receives a seated player's perspective through this same `project()` gate (F72)

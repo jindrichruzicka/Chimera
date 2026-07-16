@@ -30,7 +30,8 @@ import { useInputAction } from '../../input/useInputAction.js';
 import { useGameStore } from '../../state/gameStore.js';
 import { useLobbyStore } from '../../state/lobbyStore.js';
 import { useIsSpectator } from '../../state/lobbyUiStore.js';
-import { Button } from '../ui/Button.js';
+import { IconButton } from '../ui/IconButton.js';
+import { Icon } from '../ui/icons/index.js';
 
 /** Human label for a binding (mirrors the Controls settings formatting). */
 function formatBinding(binding: KeyBinding | undefined): string {
@@ -101,44 +102,118 @@ export function SpectatorHud(): React.ReactElement | null {
     const followedName =
         roster?.find((entry) => entry.playerId === followedId)?.displayName ?? followedId;
     const keyLabel = formatBinding(inputManager.getBinding('engine:spectate-cycle'));
-
-    const overlayStyle: React.CSSProperties = {
-        position: 'fixed',
-        bottom: 'var(--ch-space-md)',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 'var(--ch-z-tooltip)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--ch-space-md)',
-        background: 'var(--ch-color-surface-overlay)',
-        border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
-        borderRadius: 'var(--ch-radius-md)',
-        padding: 'var(--ch-space-sm) var(--ch-space-md)',
-        fontFamily: 'var(--ch-font-ui)',
-        fontSize: 'var(--ch-font-size-sm)',
-        color: 'var(--ch-color-text-primary)',
-        boxShadow: 'var(--ch-shadow-md)',
-        userSelect: 'none',
-    };
+    const hintText = t(SPECTATE_KEYS.switchHint, { key: keyLabel });
 
     return (
-        <div data-testid="spectator-hud" role="status" style={overlayStyle}>
-            <span data-testid="spectator-following">
-                {t(SPECTATE_KEYS.following, { name: followedName })}
+        <div data-testid="spectator-hud" role="status" style={capsuleStyle}>
+            <span aria-hidden="true" style={eyeStyle}>
+                <Icon name="eye" />
             </span>
-            <Button
+            <span style={modeLabelStyle}>{t(SPECTATE_KEYS.modeLabel)}</span>
+            <span data-testid="spectator-following" style={nameStyle} title={followedName}>
+                {followedName}
+            </span>
+            <span aria-hidden="true" style={dividerStyle} />
+            <IconButton
                 data-testid="spectator-switch"
-                variant="secondary"
-                size="sm"
+                variant="ghost"
                 onClick={cycleFollowedSeat}
                 aria-label={t(SPECTATE_KEYS.switchAction)}
+                aria-keyshortcuts={keyLabel}
+                title={t(SPECTATE_KEYS.switchAction)}
             >
-                {t(SPECTATE_KEYS.switchAction)}
-            </Button>
-            <span data-testid="spectator-hint" style={{ color: 'var(--ch-color-text-secondary)' }}>
-                {t(SPECTATE_KEYS.switchHint, { key: keyLabel })}
-            </span>
+                <Icon name="swap" />
+            </IconButton>
+            <kbd
+                data-testid="spectator-hint"
+                aria-label={hintText}
+                title={hintText}
+                style={keycapStyle}
+            >
+                {keyLabel}
+            </kbd>
         </div>
     );
 }
+
+// ── Styles — a slim top-center "broadcast" capsule, every value a --ch-* token
+// (Invariants #86/#91). Top placement cedes the bottom edge to the game's own
+// HUD bar, so the two never collide. Height = the 36px IconButton + 2×space-xs.
+
+const capsuleStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 'var(--ch-space-md)',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    zIndex: 'var(--ch-z-tooltip)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 'var(--ch-space-sm)',
+    background: 'var(--ch-color-surface-overlay)',
+    // A seam, not a frame: the muted border keeps the pill quiet; a themed game
+    // retints it through the same token.
+    border: 'var(--ch-border-width-sm) solid var(--ch-color-border-muted)',
+    borderRadius: 'var(--ch-radius-pill)',
+    padding: 'var(--ch-space-xs) var(--ch-space-xs) var(--ch-space-xs) var(--ch-space-md)',
+    fontFamily: 'var(--ch-font-ui)',
+    fontSize: 'var(--ch-font-size-sm)',
+    color: 'var(--ch-color-text-primary)',
+    boxShadow: 'var(--ch-shadow-sm)',
+    userSelect: 'none',
+};
+
+// The Icon fills from currentColor, so the wrapper's colour token tones the glyph.
+const eyeStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    color: 'var(--ch-color-text-secondary)',
+    flex: 'none',
+};
+
+// Uppercased via CSS so the translated string keeps its own casing rules.
+const modeLabelStyle: React.CSSProperties = {
+    color: 'var(--ch-color-text-secondary)',
+    fontSize: 'var(--ch-font-size-sm)',
+    fontWeight: 'var(--ch-font-weight-semibold)',
+    textTransform: 'uppercase',
+    lineHeight: 'var(--ch-line-height-none)',
+    whiteSpace: 'nowrap',
+};
+
+// The one prominent text. Long names truncate; the title attribute recovers them.
+const nameStyle: React.CSSProperties = {
+    color: 'var(--ch-color-text-primary)',
+    fontSize: 'var(--ch-font-size-md)',
+    fontWeight: 'var(--ch-font-weight-semibold)',
+    lineHeight: 'var(--ch-line-height-none)',
+    whiteSpace: 'nowrap',
+    maxWidth: 'calc(var(--ch-space-xl) * 5)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+};
+
+// A 20px hairline tick fencing the status text from the controls. Coloured
+// --ch-color-border (not border-muted, which vanishes on surface-overlay).
+const dividerStyle: React.CSSProperties = {
+    flex: 'none',
+    width: 'var(--ch-border-width-sm)',
+    height: 'var(--ch-size-icon)',
+    background: 'var(--ch-color-border)',
+    borderRadius: 'var(--ch-radius-pill)',
+};
+
+// A recessed keycap: darker surface + strong bottom border reads as key depth
+// without a shadow. Shows only the bound key; the full formatted hint stays on
+// aria-label/title.
+const keycapStyle: React.CSSProperties = {
+    fontFamily: 'var(--ch-font-mono)',
+    fontSize: 'var(--ch-font-size-sm)',
+    lineHeight: 'var(--ch-line-height-none)',
+    color: 'var(--ch-color-text-secondary)',
+    background: 'var(--ch-color-surface)',
+    border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
+    borderBottomColor: 'var(--ch-color-border-strong)',
+    borderRadius: 'var(--ch-radius-sm)',
+    padding: 'var(--ch-space-xs) var(--ch-space-sm)',
+    marginRight: 'var(--ch-space-xs)',
+    whiteSpace: 'nowrap',
+};

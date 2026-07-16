@@ -59,6 +59,14 @@ export interface E2eElectronLaunchOptions {
      * injects the `assets` segment itself.
      */
     readonly gameAssetsRoot?: string;
+    /**
+     * Force the hosted game to look like it declares NO spectator capability
+     * (`CHIMERA_E2E_DISABLE_SPECTATORS=1`). Only tactics is wired for e2e
+     * matches, so this lets the spectator spec exercise the "game has no
+     * capability" reject path (`match_in_progress`) that is otherwise
+     * unreachable with a capability-declaring game.
+     */
+    readonly disableSpectators?: boolean;
 }
 
 export interface E2eElectronLaunchConfig {
@@ -161,6 +169,10 @@ export function createE2eElectronLaunchConfig(
 
     if (options.debugMode === true) {
         env['CHIMERA_DEBUG'] = '1';
+    }
+
+    if (options.disableSpectators === true) {
+        env['CHIMERA_E2E_DISABLE_SPECTATORS'] = '1';
     }
 
     return {

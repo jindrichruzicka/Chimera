@@ -118,9 +118,20 @@ describe('SpectatorHud', () => {
     it('renders the followed player name from the roster and the switch hint', () => {
         renderHud();
 
-        expect(screen.getByTestId('spectator-following').textContent).toBe('Spectating Alice');
-        expect(screen.getByTestId('spectator-hint').textContent).toBe('Press Tab to switch');
+        // Name is the one prominent text; the mode label is a separate span so
+        // no sentence is concatenated in code (i18n-safe composition).
+        expect(screen.getByTestId('spectator-following').textContent).toBe('Alice');
+        expect(screen.getByText('Spectating').tagName).toBe('SPAN');
+        // The hint is a keycap showing the bound key; the full formatted
+        // sentence stays reachable for assistive tech via aria-label.
+        expect(screen.getByTestId('spectator-hint').textContent).toBe('Tab');
+        expect(screen.getByTestId('spectator-hint').getAttribute('aria-label')).toBe(
+            'Press Tab to switch',
+        );
         expect(screen.getByTestId('spectator-switch').tagName).toBe('BUTTON');
+        expect(screen.getByTestId('spectator-switch').getAttribute('aria-label')).toBe(
+            'Switch view',
+        );
     });
 
     it('renders nothing when the local session is not a spectator', () => {
@@ -170,6 +181,6 @@ describe('SpectatorHud', () => {
         useLobbyStore.getState().applyLobbyState(null);
         renderHud();
 
-        expect(screen.getByTestId('spectator-following').textContent).toBe('Spectating p1');
+        expect(screen.getByTestId('spectator-following').textContent).toBe('p1');
     });
 });

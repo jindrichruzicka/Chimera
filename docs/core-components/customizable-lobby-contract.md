@@ -259,5 +259,6 @@ games/
 - [Multiplayer Provider & WebSocket](multiplayer-provider-websocket.md) — §4.14 `LobbyManager`, `StateBroadcaster`, lobby broadcast
 - [Renderer State Stores](renderer-state-stores.md) — §4.4 `lobbyStore`, `useLobbyApi()`
 - [State Projection Interfaces](state-projection-interfaces.md) — §4.6 `StateProjector.project()`
+- [Spectator Mode Contract](spectator-mode-contract.md) — the reserved `engine.allowSpectators` host toggle rides on `snapshot.setup` (F72)
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #36, #80, #99–#101
 - [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v0.8.0.md) — F53 customizable lobby

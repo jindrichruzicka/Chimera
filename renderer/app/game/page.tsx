@@ -267,8 +267,11 @@ export default function GamePage(): React.ReactElement | null {
     // Host vs. client decides which replay the post-game summary can export: the
     // host gets the authoritative deterministic replay; a joined client gets only
     // its own perspective replay (Invariants #71 / #98). `lobbyState` is non-null
-    // here — `gameId` derives from it and is guarded above.
-    const isHost = lobbyState !== null && lobbyState.info.hostId === resolvedPlayerId;
+    // here — `gameId` derives from it and is guarded above. A spectator is never
+    // host: it follows a seat's projection, so a host-following spectator has
+    // `viewerId === hostId` — the role must override the id match (Invariant #114).
+    const isHost =
+        !isSpectator && lobbyState !== null && lobbyState.info.hostId === resolvedPlayerId;
 
     // In-game save. Built ONLY for the host so GameShell never offers the
     // saveGame capability to a joined client (Invariant #25 — main-side

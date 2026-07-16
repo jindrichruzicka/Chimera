@@ -355,7 +355,7 @@ export const ACTIONS_KEYS = {
 
 /** Spectator HUD — read-only session viewer overlay (Invariant #114). */
 export const SPECTATE_KEYS = {
-    following: translationKey('engine.spectate.following'),
+    modeLabel: translationKey('engine.spectate.modeLabel'),
     switchHint: translationKey('engine.spectate.switchHint'),
     switchAction: translationKey('engine.spectate.switchAction'),
 } as const;

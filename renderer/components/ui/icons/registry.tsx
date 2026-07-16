@@ -3,6 +3,7 @@ import { chatBubbleIcon } from './chatBubble';
 import { chevronDownIcon } from './chevronDown';
 import { closeIcon } from './close';
 import { copyIcon } from './copy';
+import { eyeIcon } from './eye';
 import { minusIcon } from './minus';
 import { pauseIcon } from './pause';
 import { playIcon } from './play';
@@ -12,6 +13,7 @@ import { seekEndIcon } from './seekEnd';
 import { seekStartIcon } from './seekStart';
 import { stepBackIcon } from './stepBack';
 import { stepForwardIcon } from './stepForward';
+import { swapIcon } from './swap';
 
 /**
  * The visual definition of one icon: its coordinate space and the SVG children
@@ -40,6 +42,7 @@ export const ICON_REGISTRY = {
     'chevron-down': chevronDownIcon,
     close: closeIcon,
     copy: copyIcon,
+    eye: eyeIcon,
     minus: minusIcon,
     pause: pauseIcon,
     play: playIcon,
@@ -49,6 +52,7 @@ export const ICON_REGISTRY = {
     'seek-start': seekStartIcon,
     'step-back': stepBackIcon,
     'step-forward': stepForwardIcon,
+    swap: swapIcon,
 } satisfies Record<string, IconGlyph>;
 
 export type IconName = keyof typeof ICON_REGISTRY;

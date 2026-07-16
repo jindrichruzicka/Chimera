@@ -477,6 +477,15 @@ export class GamePage {
         return parseInt(text, 10);
     }
 
+    /**
+     * The projected snapshot's `viewerId`. For a spectator this is the seat it
+     * currently follows, so a perspective switch is observable as this value
+     * flipping to another seated player (Invariants #98 / #114 / #115).
+     */
+    public async projectedViewerId(): Promise<string> {
+        return (await this.readCurrentSnapshot()).viewerId;
+    }
+
     /** The HUD stamina readout text, e.g. `"3/3"` (commitment mode is optimistic). */
     public async staminaText(): Promise<string> {
         return (await this.staminaReadout.innerText()).trim();

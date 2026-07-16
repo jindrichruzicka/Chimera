@@ -155,6 +155,11 @@ const testRegistry: GameScreenRegistry = {
         return (
             <footer data-testid="registry-hud" aria-label="Registry HUD">
                 <output data-testid="hud-tick">{tick}</output>
+                {/* Surfaces the forwarded host role (GameHudProps.isHost, driven
+                    by GameShell verbatim) so tests can assert the value the
+                    post-game summary uses to pick its exportable replay — not
+                    masked by controlsLocked the way the save affordance is. */}
+                <output data-testid="hud-is-host">{String(props.isHost)}</output>
                 <button
                     data-testid="undo"
                     type="button"
@@ -940,6 +945,25 @@ describe('GamePage — in-game save (#825)', () => {
 
         await screen.findByTestId('registry-hud');
 
+        expect(screen.queryByTestId('hud-save')).not.toBeInTheDocument();
+    });
+
+    it('does not treat a host-following spectator as host (Invariant #114)', async () => {
+        // A spectator that follows the host's seat projects viewerId === hostId,
+        // so a viewerId-only derivation would resolve isHost = true and offer the
+        // deterministic-replay export the summary reserves for the host
+        // (Invariants #71 / #98). The role must win: a spectator is never host.
+        mockRole = 'spectator';
+        mockLocalPlayerId = 'watcher-1';
+        // Default lobby hosts 'p1'; the snapshot's viewerId is 'p1' (the followed
+        // host seat), so the buggy viewerId-only derivation reports host.
+        mockSnapshot = makeSnapshot();
+        renderGamePage();
+
+        // GameShell forwards the derived role verbatim to the board/HUD, where
+        // the post-game summary reads it — assert it directly (controlsLocked
+        // masks the save affordance regardless, so that alone would not catch it).
+        expect(await screen.findByTestId('hud-is-host')).toHaveTextContent('false');
         expect(screen.queryByTestId('hud-save')).not.toBeInTheDocument();
     });
 

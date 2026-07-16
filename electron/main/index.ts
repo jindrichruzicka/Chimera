@@ -2449,7 +2449,14 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 classifyJoin({
                     phase: sessionRuntime.getSnapshot().phase,
                     reconnect: ctx.reconnect || registeredPlayers.has(pid),
-                    spectatorSupport: resolveSpectatorSupport(hostedGame.manifest),
+                    // E2E-only seam: only tactics is wired for e2e matches, so to
+                    // exercise the "game declares no spectator capability" reject
+                    // path (match_in_progress) the harness forces the capability
+                    // absent. Off outside e2e — real support comes from the manifest.
+                    spectatorSupport:
+                        process.env['CHIMERA_E2E_DISABLE_SPECTATORS'] === '1'
+                            ? undefined
+                            : resolveSpectatorSupport(hostedGame.manifest),
                     allowSpectators: readAllowSpectators(
                         sessionRuntime.getSnapshot().setup?.matchSettings,
                     ),

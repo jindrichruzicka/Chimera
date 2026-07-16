@@ -172,7 +172,7 @@ Admission mechanics (LobbyServer + parity in `InMemoryMultiplayerProvider`, Inva
 - A spectator is admitted into a **separate** `spectatorConnections` map, never `connections`, so it never counts against the `maxPlayers` gate — a full player lobby still admits spectators. The player-capacity gate therefore runs **after** classification.
 - Spectators are bounded by `maxSpectators` (default `DEFAULT_MAX_SPECTATORS = 8`, shared via `networking/provider/spectator-policy.ts`); over the cap → `REJECT match_in_progress`.
 - The joining client learns its role from `WELCOME.role` (defaulted to `'player'` by the wire schema for legacy hosts), surfaced as `JoinedSession.role`.
-- This is **admission only** (Invariant #114 half): a spectator is never added to `GameSnapshot.players`, the seat ledger, `registeredPlayers`/`activePlayers`, and gets no `HumanPlayerAgent`. The viewer registry and perspective-projection broadcast are a later task.
+- This is **admission only** (Invariant #114 half): a spectator is never added to `GameSnapshot.players`, the seat ledger, `registeredPlayers`/`activePlayers`, and gets no `HumanPlayerAgent`. What an admitted spectator then _sees_ — the host-local `SpectatorRegistry`, the perspective-projection broadcast (`broadcastSpectator` / `broadcastWave`), and the out-of-band `SPECTATE_TARGET_UPDATE` perspective switch (Invariant #115) — is specified in the [Spectator Mode Contract](spectator-mode-contract.md).
 
 Join-time REJECT reasons: `not_authenticated`, `invalid_token`, `invalid_password`, `lobby_full` (player capacity), `match_in_progress` (running match, spectators unavailable or gallery full), `spectators_disabled` (capable game, host toggle off), plus `profile:<AdmissionRejection>` from the profile gate.
 

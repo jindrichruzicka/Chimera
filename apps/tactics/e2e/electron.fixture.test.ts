@@ -82,6 +82,18 @@ describe('electron.fixture', () => {
         expect(config.env['CHIMERA_DEBUG']).toBeUndefined();
     });
 
+    it('sets CHIMERA_E2E_DISABLE_SPECTATORS=1 when disableSpectators is enabled', () => {
+        const config = createE2eElectronLaunchConfig({ port: '7779', disableSpectators: true });
+
+        expect(config.env['CHIMERA_E2E_DISABLE_SPECTATORS']).toBe('1');
+    });
+
+    it('omits CHIMERA_E2E_DISABLE_SPECTATORS by default so the manifest capability stands', () => {
+        const config = createE2eElectronLaunchConfig({ port: '7779' });
+
+        expect(config.env['CHIMERA_E2E_DISABLE_SPECTATORS']).toBeUndefined();
+    });
+
     it('assigns a fresh isolated Electron userData directory to each launch', () => {
         const hostConfig = createE2eElectronLaunchConfig({ port: '7779', role: 'host' });
         const clientConfig = createE2eElectronLaunchConfig({ port: '7779', role: 'client' });

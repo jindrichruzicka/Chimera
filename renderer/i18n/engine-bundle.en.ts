@@ -311,7 +311,7 @@ export const engineBundleEn: TranslationBundle = {
     'engine.actions.spectateCycle': 'Spectate next player',
 
     // ── spectator HUD (Invariant #114) ──────────────────────────────────────────
-    'engine.spectate.following': 'Spectating {name}',
+    'engine.spectate.modeLabel': 'Spectating',
     'engine.spectate.switchHint': 'Press {key} to switch',
     'engine.spectate.switchAction': 'Switch view',
 

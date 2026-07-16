@@ -1,6 +1,6 @@
 ---
 title: 'M10 — First Public Release (v1.0.0)'
-description: 'The first public 1.0.0 release of Chimera. Introduces the locked 1.X.Y versioning scheme: every @chimera-engine/* package and create-chimera-game share one version, kept in sync per milestone and re-published together on every patch. Carries F71 — an opt-in, renderer-only internationalization (i18n) system.'
+description: 'The first public 1.0.0 release of Chimera. Introduces the locked 1.X.Y versioning scheme: every @chimera-engine/* package and create-chimera-game share one version, kept in sync per milestone and re-published together on every patch. Carries F71 — an opt-in, renderer-only internationalization (i18n) system — and F72 — read-only spectator mode.'
 tags:
     [
         milestone,
@@ -15,6 +15,8 @@ tags:
         i18n,
         internationalization,
         localization,
+        spectator,
+        multiplayer,
     ]
 ---
 
@@ -22,7 +24,7 @@ tags:
 
 > **Goal**: Cut Chimera's first public **`1.0.0`** release and adopt the **locked `1.X.Y` versioning scheme** across the whole published surface. From this milestone on, every `@chimera-engine/*` package and the `create-chimera-game` initializer ship at **one shared version**.
 >
-> **Status**: Open. Carries **F71 — Internationalization / i18n** (see Features below); further features may be added as work is planned.
+> **Status**: Open. Carries **F71 — Internationalization / i18n** and **F72 — Spectator Mode** (see Features below); further features may be added as work is planned.
 
 ---
 
@@ -100,6 +102,51 @@ Feature issue: [#860](https://github.com/jindrichruzicka/Chimera/issues/860).
 formatting (beyond ICU plural/select on counts), OS/profile-locale auto-detection,
 content-database data translation, and a key-extraction tool — all candidates for a
 follow-up.
+
+### F72 — Spectator Mode
+
+Lets a peer **watch a running match** it did not join, fixing the previously
+broken join-in-progress path (a mid-match join used to fabricate a phantom seat).
+A **spectator** is a read-only session viewer: it is never a participant — never
+in `GameSnapshot.players`, the host's seat ledger, saves, or replays — and
+everything it sees crosses the wire as an already-projected `PlayerSnapshot`
+through the single `StateProjector.project()` gate (Invariants #3 / #8 / #98), so
+spectating leaks nothing a seated viewer could not already see.
+
+Spectating is **opt-in per game and off per match**, reusing the established
+**manifest-declaration → registry-forward → host-toggle** shape: a game declares
+the capability in `GameManifest` (`spectators: { mode: 'perspective' }`), and the
+host enables it per match through the reserved, host-authored `engine.allowSpectators`
+match setting (off by default, synced verbatim in `snapshot.setup`). The host's
+join classifier admits a running-match join as a spectator only when both gates
+pass, else cleanly rejects it (`spectators_disabled` when the capability is
+present but the toggle is off, `match_in_progress` when the game declares none) —
+lobby and reconnect joins stay players, unchanged. An admitted spectator follows
+one seated player through the host-local `SpectatorRegistry`, is pushed that
+seat's perspective, and re-points to another seat through the **out-of-band**
+`SPECTATE_TARGET_UPDATE` channel (never an `EngineAction`, never advancing `tick`
+— the analog of CHAT/PROFILE_UPDATE). The renderer treats a spectator as
+read-only: controls locked, no host-only save, `sendAction` inert, and a
+perspective HUD with a **Tab** switch hotkey. **Tactics** is the reference
+adopter. Ratifies **Invariants #114** (read-only viewers) and **#115** (out-of-band
+perspective switch); see the [Spectator Mode Contract](../core-components/spectator-mode-contract.md).
+
+| Task                                                                   | Issue                                                         |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Spectator contract & wire types (roles, WELCOME role, reject, message) | [#876](https://github.com/jindrichruzicka/Chimera/issues/876) |
+| `GameManifest.spectators` capability, resolver, reserved match-setting | [#877](https://github.com/jindrichruzicka/Chimera/issues/877) |
+| Classify a running-match join as spectator or reject                   | [#878](https://github.com/jindrichruzicka/Chimera/issues/878) |
+| Spectator viewer registry + perspective projection broadcast           | [#879](https://github.com/jindrichruzicka/Chimera/issues/879) |
+| Perspective switching (`SPECTATE_TARGET_UPDATE` message + IPC)         | [#880](https://github.com/jindrichruzicka/Chimera/issues/880) |
+| Renderer spectator UX: read-only board, perspective HUD, hotkey        | [#881](https://github.com/jindrichruzicka/Chimera/issues/881) |
+| Tactics adoption: allow-spectators toggle, manifest, read-only board   | [#882](https://github.com/jindrichruzicka/Chimera/issues/882) |
+| E2E, docs, and invariants #114/#115 (feature-review gate)              | [#883](https://github.com/jindrichruzicka/Chimera/issues/883) |
+
+Feature issue: [#875](https://github.com/jindrichruzicka/Chimera/issues/875).
+
+**Out of scope (deferred):** relay/observer counts in the lobby UI, spectator
+chat, latency/late-join catch-up buffering, and spectating a replay rather than a
+live match — all candidates for a follow-up.
 
 ---
 

@@ -91,6 +91,23 @@ export class TacticsLobbyPage extends LobbyPage {
         await expect.poll(() => this.commitmentToggle().isChecked()).toBe(enabled);
     }
 
+    // ── Spectators (host-authored Battle Setup toggle) ───────────────────
+
+    /** The allow-spectators toggle (`<input type=checkbox>`, host-only editable). */
+    public allowSpectatorsToggle(): Locator {
+        return this.page.getByTestId('tactics-allow-spectators-toggle');
+    }
+
+    /** Enable spectator admission for the running match (host only). */
+    public async enableSpectators(): Promise<void> {
+        await this.allowSpectatorsToggle().check();
+    }
+
+    /** Poll until the toggle reflects the round-tripped checked state. */
+    public async expectSpectatorsEnabled(enabled: boolean): Promise<void> {
+        await expect.poll(() => this.allowSpectatorsToggle().isChecked()).toBe(enabled);
+    }
+
     // ── AI players ──────────────────────────────────────────────────────
 
     /** The "Add AI player" button (host-only; disabled when the lobby is full). */

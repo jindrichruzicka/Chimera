@@ -50,13 +50,15 @@ chimera/
 │   │   │   ├── logger.ts            # Logger interface and factories (Pino sink, memory sink, noop); see §4.27
 │   │   │   └── crash-reporter.ts    # process.on('uncaughtException'/'unhandledRejection') handler; see §4.27
 │   │   ├── lobby/                   # Multiplayer lobby lifecycle and active provider management
-│   │   │   └── LobbyManager.ts      # Owns the active MultiplayerProvider; lifecycle + IPC wiring
+│   │   │   ├── LobbyManager.ts      # Owns the active MultiplayerProvider; lifecycle + IPC wiring
+│   │   │   ├── joinClassifier.ts    # Pure classifyJoin(): running-match join → player | spectator | reject (Invariant #114)
+│   │   │   └── SpectatorRegistry.ts # Host-local spectatorId → followedSeatId ledger; never in snapshot/saves/replays (Invariant #114)
 │   │   ├── runtime/                 # Simulation host and live-game runtime infrastructure
 │   │   │   ├── SimulationHost.ts    # Hosts sim tick loop; calls AgentManager.tickAll() after each tick
 │   │   │   ├── RealtimeTicker.ts    # SetInterval clock for manifest.realtime games; host starts/stops per match (§4.2.1)
 │   │   │   ├── SessionRuntime.ts    # Manages session lifecycle: setup, teardown, player assignment
 │   │   │   ├── HostSessionPipeline.ts # Orchestrates pings, broadcasts, heartbeat loop during active session
-│   │   │   └── StateBroadcaster.ts  # Per-player snapshot projection via commitment scheme; network dispatch
+│   │   │   └── StateBroadcaster.ts  # Per-player snapshot projection via commitment scheme; network dispatch + spectator perspective fan-out (broadcastWave/broadcastSpectator, Invariant #114)
 │   │   ├── saves/                   # Game save persistence via repository pattern
 │   │   │   ├── SaveManager.ts       # IPC handler; uses SaveRepository to handle save/load/list/delete
 │   │   │   ├── FileSaveRepository.ts      # Default: userData/saves/<game-id>/; atomic .tmp rename
@@ -185,8 +187,9 @@ chimera/
 ├── networking/                      # Adapter between simulation and transport
 │   └── provider/
 │       ├── MultiplayerProvider.ts   # Interface: hostLobby() → HostedSession; joinLobby() → JoinedSession
-│       ├── HostTransport.ts         # Interface: sendSnapshot, broadcastLobbyState, onActionReceived, onPlayerJoined/Left
-│       ├── ClientTransport.ts       # Interface: sendAction, onSnapshotReceived, onLobbyStateChanged, onDisconnected
+│       ├── HostTransport.ts         # Interface: sendSnapshot, broadcastLobbyState, onActionReceived, onPlayerJoined/Left + onSpectateTargetUpdate (Invariant #115)
+│       ├── ClientTransport.ts       # Interface: sendAction, onSnapshotReceived, onLobbyStateChanged, onDisconnected + sendSpectateTarget (Invariant #115)
+│       ├── spectator-policy.ts       # Shared DEFAULT_MAX_SPECTATORS admission cap (both providers, Invariant #114)
 │       ├── local/                   # LocalWebSocketProvider — default; fully encapsulated
 │       │   ├── LocalWebSocketProvider.ts
 │       │   ├── server/              # ws server internals — no imports from outside local/
@@ -205,6 +208,7 @@ chimera/
 │   ├── components/
 │   │   ├── shell/                   # Engine-provided navigation chrome
 │   │   │   ├── GameShell.tsx       # Hosts the active game's screen registry; game-agnostic
+│   │   │   ├── SpectatorHud.tsx     # Read-only spectator overlay: followed-seat name + Tab switch hotkey (Invariants #114/#115)
 │   │   │   ├── SceneRouter.tsx      # Watches sceneId / sceneTransition; see §4.18
 │   │   │   ├── TransitionOverlay.tsx  # Fixed full-screen fade overlay; see §4.19
 │   │   │   ├── RootErrorBoundary.tsx  # Top-level React error boundary; see §4.27
@@ -334,3 +338,4 @@ chimera/
 - [Electron Shell and IPC Bridge](../core-components/electron-shell-ipc-bridge.md) — `electron/` in detail
 - [Simulation Core](../core-components/simulation-core-action-pipeline.md) — `simulation/engine/` in detail
 - [Renderer State Stores](../core-components/renderer-state-stores.md) — `renderer/state/` in detail
+- [Spectator Mode Contract](../core-components/spectator-mode-contract.md) — read-only spectators, the join classifier, and perspective projection (F72)
