@@ -14,9 +14,12 @@
  * are NOT a fallback for a failed content load (which is fatal, Invariant #14).
  *
  * Module boundary (§3): this descriptor must stay load-safe in both `main` and
- * renderer. Its sole runtime import is the dependency-free turn-mode constants
- * from its own package (`apps/tactics/constants.ts`); every other import is
- * `import type`, erased at build — so the module stays safe to load anywhere.
+ * renderer. Its runtime value imports are the dependency-free turn-mode
+ * constants from its own package (`apps/tactics/simulation/constants.ts`) and
+ * the reserved spectator match-setting constants from the engine's pure-type
+ * `game-lobby-contract.ts` (types only, so its constants are safe to load
+ * anywhere); every remaining import is `import type`, erased at build — so the
+ * module stays safe to load anywhere.
  *
  * Architecture: §4.37 — Renderer Shell Pages UI Contract; §4.4 — Lobby State Sync
  */
@@ -25,9 +28,11 @@ import {
     TACTICS_DEFAULT_TURN_MODE,
     TACTICS_TURN_MODE_SETTING,
 } from '@chimera-engine/tactics/simulation/constants.js';
-import type {
-    GameLobbySetup,
-    LobbyFieldOption,
+import {
+    ALLOW_SPECTATORS_DEFAULT,
+    ALLOW_SPECTATORS_SETTING,
+    type GameLobbySetup,
+    type LobbyFieldOption,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 
 /**
@@ -87,6 +92,11 @@ export const TACTICS_MAX_PLAYERS = 4;
  * synced `LobbyState.matchSettings` carries the commitment battle-mode flag from
  * the start; the host's Battle Setup toggle flips it via `setMatchSetting`
  * and it rides into the match through `snapshot.setup`.
+ *
+ * `engine.allowSpectators` is seeded to {@link ALLOW_SPECTATORS_DEFAULT} (`'false'`)
+ * so the reserved spectator toggle is present and off by default; the host's
+ * "Allow spectators" toggle flips it via `setMatchSetting`, and the join
+ * classifier reads it to admit or reject a running-match spectator join.
  */
 export function buildTacticsLobbySetup(palette: TacticsPalette): GameLobbySetup {
     return {
@@ -94,6 +104,7 @@ export function buildTacticsLobbySetup(palette: TacticsPalette): GameLobbySetup 
         matchSettingsDefaults: {
             boardColor: DEFAULT_BOARD_COLOR,
             [TACTICS_TURN_MODE_SETTING]: TACTICS_DEFAULT_TURN_MODE,
+            [ALLOW_SPECTATORS_SETTING]: ALLOW_SPECTATORS_DEFAULT,
         },
         matchSettingsOptions: { boardColor: palette.boardColors },
         playerAttributeOptions: { color: palette.playerColors },

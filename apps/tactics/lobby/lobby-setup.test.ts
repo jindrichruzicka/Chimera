@@ -13,6 +13,10 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+    ALLOW_SPECTATORS_DEFAULT,
+    ALLOW_SPECTATORS_SETTING,
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import {
     TACTICS_DEFAULT_TURN_MODE,
     TACTICS_TURN_MODE_SETTING,
 } from '@chimera-engine/tactics/simulation/constants.js';
@@ -46,12 +50,15 @@ describe('buildTacticsLobbySetup', () => {
         expect(buildTacticsLobbySetup(PALETTE).maxPlayers).toBe(4);
     });
 
-    it('seeds the board colour and the off-by-default commitment turn mode', () => {
+    it('seeds the board colour, the off-by-default commitment turn mode, and off-by-default spectators', () => {
         // turnMode is seeded to 'sequential' so the synced LobbyState carries the
-        // off-by-default commitment battle mode (T7 → snapshot.setup for T8).
+        // off-by-default commitment battle mode (T7 → snapshot.setup for T8), and
+        // engine.allowSpectators is seeded 'false' so the host toggle is present
+        // and off by default.
         expect(buildTacticsLobbySetup(PALETTE).matchSettingsDefaults).toEqual({
             boardColor: DEFAULT_BOARD_COLOR,
             [TACTICS_TURN_MODE_SETTING]: TACTICS_DEFAULT_TURN_MODE,
+            [ALLOW_SPECTATORS_SETTING]: ALLOW_SPECTATORS_DEFAULT,
         });
     });
 

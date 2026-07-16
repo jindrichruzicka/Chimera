@@ -89,6 +89,7 @@ export const tacticsBundleEn: Readonly<Record<string, string>> = {
     'game.tactics.lobby.copyAddressAriaLabel': 'Copy lobby address',
     'game.tactics.lobby.boardColour': 'Board colour',
     'game.tactics.lobby.simultaneousTurns': 'Simultaneous turns',
+    'game.tactics.lobby.allowSpectators': 'Allow spectators',
     'game.tactics.lobby.readySummary': 'Ready: {ready}/{total}',
     'game.tactics.lobby.players': 'Players',
     'game.tactics.lobby.you': '(You)',

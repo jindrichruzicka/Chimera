@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { resolveSpectatorSupport } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import { TACTICS_GAME_ID } from './simulation/constants.js';
 import { tacticsManifest } from './manifest.js';
 
@@ -65,5 +66,10 @@ describe('tacticsManifest', () => {
             { code: 'en-US', label: 'English' },
             { code: 'cs-CZ', label: 'Čeština' },
         ]);
+    });
+
+    it('opts into perspective-following spectators (#882)', () => {
+        expect(tacticsManifest.spectators).toEqual({ mode: 'perspective' });
+        expect(resolveSpectatorSupport(tacticsManifest)).toEqual({ mode: 'perspective' });
     });
 });

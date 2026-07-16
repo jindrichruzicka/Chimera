@@ -20,6 +20,12 @@ import { TACTICS_GAME_ID } from './simulation/constants.js';
  * is first, so it is the default when the persisted locale matches neither. The
  * per-locale bundles are contributed through the renderer shell registration
  * (see `renderer/loaders.ts` → `translations`).
+ *
+ * `spectators` opts Tactics into read-only spectator mode: a spectator follows a
+ * seat's projected perspective (switchable via hotkey). The capability alone is
+ * behaviour-neutral — a running-match join is admitted as a spectator only when
+ * the host also enables the `engine.allowSpectators` match setting (surfaced by
+ * the lobby's "Allow spectators" toggle).
  */
 export const tacticsManifest: GameManifest = {
     gameId: TACTICS_GAME_ID,
@@ -35,4 +41,5 @@ export const tacticsManifest: GameManifest = {
         { code: 'en-US', label: 'English' },
         { code: 'cs-CZ', label: 'Čeština' },
     ],
+    spectators: { mode: 'perspective' },
 };

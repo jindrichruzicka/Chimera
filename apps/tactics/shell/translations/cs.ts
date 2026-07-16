@@ -370,6 +370,7 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'game.tactics.lobby.copyAddressAriaLabel': 'Kopírovat adresu lobby',
     'game.tactics.lobby.boardColour': 'Barva pole',
     'game.tactics.lobby.simultaneousTurns': 'Souběžné tahy',
+    'game.tactics.lobby.allowSpectators': 'Povolit diváky',
     'game.tactics.lobby.readySummary': 'Připraveni: {ready}/{total}',
     'game.tactics.lobby.players': 'Hráči',
     'game.tactics.lobby.you': '(Ty)',

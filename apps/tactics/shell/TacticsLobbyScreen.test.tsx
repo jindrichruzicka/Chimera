@@ -18,7 +18,10 @@ import { act, cleanup, fireEvent, render as baseRender, screen } from '@testing-
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playerId, type LobbyState } from '@chimera-engine/electron/preload/api-types.js';
-import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import {
+    ALLOW_SPECTATORS_SETTING,
+    type GameLobbyScreenProps,
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import { I18nProvider } from '@chimera-engine/renderer/i18n';
 import { tacticsBundleCs } from './translations/cs.js';
@@ -292,6 +295,58 @@ describe('TacticsLobbyScreen', () => {
                 <TacticsLobbyScreen {...makeProps({ localPlayerId: CLIENT_ID, isHost: false })} />,
             );
             expect(screen.getByTestId('tactics-commitment-scheme-toggle')).toBeDisabled();
+        });
+    });
+
+    describe('allow spectators (host-authored)', () => {
+        it('labels the toggle "Allow spectators"', () => {
+            render(<TacticsLobbyScreen {...makeProps()} />);
+
+            expect(screen.getByTestId('tactics-allow-spectators-toggle')).toHaveAccessibleName(
+                'Allow spectators',
+            );
+        });
+
+        it('gives the host an enabled toggle, off by default, that routes to setMatchSetting', () => {
+            const setMatchSetting = vi.fn();
+            render(<TacticsLobbyScreen {...makeProps({ setMatchSetting })} />);
+
+            const toggle = screen.getByTestId('tactics-allow-spectators-toggle');
+            expect(toggle).toBeEnabled();
+            expect(toggle).not.toBeChecked();
+
+            fireEvent.click(toggle);
+            expect(setMatchSetting).toHaveBeenCalledWith(ALLOW_SPECTATORS_SETTING, 'true');
+        });
+
+        it('reflects an enabled state and toggles back off', () => {
+            const setMatchSetting = vi.fn();
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        setMatchSetting,
+                        lobbyState: makeLobbyState({
+                            matchSettings: {
+                                boardColor: 'navy',
+                                [ALLOW_SPECTATORS_SETTING]: 'true',
+                            },
+                        }),
+                    })}
+                />,
+            );
+
+            const toggle = screen.getByTestId('tactics-allow-spectators-toggle');
+            expect(toggle).toBeChecked();
+
+            fireEvent.click(toggle);
+            expect(setMatchSetting).toHaveBeenCalledWith(ALLOW_SPECTATORS_SETTING, 'false');
+        });
+
+        it('renders the toggle disabled (read-only) for a non-host client', () => {
+            render(
+                <TacticsLobbyScreen {...makeProps({ localPlayerId: CLIENT_ID, isHost: false })} />,
+            );
+            expect(screen.getByTestId('tactics-allow-spectators-toggle')).toBeDisabled();
         });
     });
 

@@ -36,6 +36,10 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';
 import type { ActionEnvelope } from '@chimera-engine/simulation/engine/types.js';
 import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
+import {
+    ALLOW_SPECTATORS_DEFAULT,
+    ALLOW_SPECTATORS_SETTING,
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
 
 import { toSlotId } from '../../preload/api-types.js';
@@ -274,6 +278,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         expect(restored.setup?.matchSettings).toStrictEqual({
             boardColor: 'slate',
             [TACTICS_TURN_MODE_SETTING]: 'sequential',
+            [ALLOW_SPECTATORS_SETTING]: ALLOW_SPECTATORS_DEFAULT,
         });
         expect(restored.setup?.playerAttributes).toStrictEqual({
             [String(hostInfo.hostId)]: { color: 'red' },

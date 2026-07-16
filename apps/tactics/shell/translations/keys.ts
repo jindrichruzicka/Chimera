@@ -88,6 +88,7 @@ export const LOBBY_KEYS = {
     copyAddressAriaLabel: translationKey('game.tactics.lobby.copyAddressAriaLabel'),
     boardColour: translationKey('game.tactics.lobby.boardColour'),
     simultaneousTurns: translationKey('game.tactics.lobby.simultaneousTurns'),
+    allowSpectators: translationKey('game.tactics.lobby.allowSpectators'),
     readySummary: translationKey('game.tactics.lobby.readySummary'),
     players: translationKey('game.tactics.lobby.players'),
     you: translationKey('game.tactics.lobby.you'),

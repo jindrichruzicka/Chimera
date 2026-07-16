@@ -36,7 +36,11 @@ import {
     ToggleButton,
 } from '@chimera-engine/renderer/components/ui';
 import { useTranslate } from '@chimera-engine/renderer/i18n';
-import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import {
+    ALLOW_SPECTATORS_SETTING,
+    readAllowSpectators,
+    type GameLobbyScreenProps,
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
     readTacticsTurnMode,
     TACTICS_TURN_MODE_SETTING,
@@ -153,6 +157,15 @@ export function TacticsLobbyScreen({
                             TACTICS_TURN_MODE_SETTING,
                             next ? 'commitment' : 'sequential',
                         );
+                    }}
+                />
+                <Toggle
+                    checked={readAllowSpectators(lobbyState.matchSettings)}
+                    data-testid="tactics-allow-spectators-toggle"
+                    disabled={!isHost}
+                    label={t(LOBBY_KEYS.allowSpectators)}
+                    onCheckedChange={(next) => {
+                        setMatchSetting(ALLOW_SPECTATORS_SETTING, next ? 'true' : 'false');
                     }}
                 />
                 <p className={styles['ready-summary']}>
