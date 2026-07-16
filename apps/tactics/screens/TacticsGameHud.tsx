@@ -3,16 +3,13 @@
 import React, { useState } from 'react';
 import type { GameHudProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import {
-    Badge,
     Button,
-    Caption,
     Divider,
     Drawer,
     Icon,
     IconButton,
     Panel,
     SaveGameButton,
-    type BadgeVariant,
 } from '@chimera-engine/renderer/components/ui';
 import { ChatPanel } from '@chimera-engine/renderer/components/chat';
 import { CHAT_KEYS, useTranslate, type TranslateFn } from '@chimera-engine/renderer/i18n';
@@ -36,22 +33,17 @@ import {
 } from './useCommitmentBuffer.js';
 import styles from './TacticsGameHud.module.css';
 
+/** The turn lamp's state — drives the dot/label colour via `data-state`. */
+type TacticsTurnState = 'yours' | 'waiting';
+
 interface TacticsTurnStatus {
     readonly label: string;
-    readonly variant: BadgeVariant;
+    readonly state: TacticsTurnState;
 }
-
-type CompactButtonStyle = React.CSSProperties & {
-    readonly '--ch-button-font-size': string;
-    readonly '--ch-button-line-height': string;
-    readonly '--ch-button-min-width': string;
-    readonly '--ch-button-padding': string;
-};
 
 export function TacticsGameHud({
     snapshot,
     sendAction,
-    tick,
     undoDisabled,
     redoDisabled,
     endTurnDisabled,
@@ -124,143 +116,178 @@ export function TacticsGameHud({
     return (
         <>
             <footer aria-label={t(HUD_KEYS.hudAriaLabel)} className={styles['hud']}>
+                {/* A compact, centered command bar rather than a full-width footer:
+                    three tight clusters (identity · readouts · actions) divided by
+                    rules, so the HUD reads as one small island above the board. */}
                 <Panel className={styles['panel']} data-testid="tactics-hud-panel" variant="raised">
                     <div className={styles['body']}>
-                        <div className={styles['status']}>
+                        <div className={styles['cluster']}>
                             {/* Game-contributed brand glyph, resolved through the
                                 engine <Icon> via the app-wide <IconProvider>
                                 (shell.icons seam). Decorative (aria-hidden) — pure
                                 branding, so it carries no user-facing string —
                                 proving a game's own icon renders with the engine's
                                 currentColor + token sizing, exactly like a built-in. */}
-                            <Icon data-testid="tactics-hud-emblem" name="game.tactics.banner" />
-                            <Badge
-                                className={styles['badge']}
+                            <Icon
+                                data-testid="tactics-hud-emblem"
+                                name="game.tactics.banner"
+                                {...(styles['emblem'] === undefined
+                                    ? {}
+                                    : { className: styles['emblem'] })}
+                            />
+                            {/* Chrome-less turn lamp: a state-coloured dot + label
+                                instead of a bordered Badge chip, so the identity
+                                cluster reads as a game readout, not a widget. The
+                                dot and colour ride ::before + data-state in CSS. */}
+                            <span
+                                className={styles['turn-status']}
+                                data-state={turnStatus.state}
                                 data-testid="tactics-turn-status"
-                                variant={turnStatus.variant}
                             >
                                 {turnStatus.label}
-                            </Badge>
-                            <div className={styles['tick-group']}>
-                                <Caption className={styles['label']} tone="muted">
-                                    {t(HUD_KEYS.tick)}
-                                </Caption>
-                                <output className={styles['tick']} data-testid="hud-tick">
-                                    {tick}
-                                </output>
-                            </div>
-                            {/* Local player's remaining stamina (current/max). Shown while
-                                it is their turn; dimmed (not hidden) otherwise so the HUD
-                                layout stays stable and the value remains readable. Absent
-                                entirely when the projection carries no stamina. */}
-                            {stamina !== null && (
-                                <div
-                                    className={styles['stamina-group']}
-                                    data-dimmed={snapshot.isMyTurn ? undefined : 'true'}
-                                    data-testid="hud-stamina-group"
-                                >
-                                    <Caption className={styles['label']} tone="muted">
-                                        {t(HUD_KEYS.stamina)}
-                                    </Caption>
-                                    <output className={styles['tick']} data-testid="hud-stamina">
-                                        {stamina.current}/{stamina.max}
-                                    </output>
-                                </div>
-                            )}
-                            {isWaitingForCommitments && (
-                                <span
-                                    className={styles['waiting-message']}
-                                    data-state="waiting"
-                                    data-testid="tactics-commit-status"
-                                >
-                                    {t(HUD_KEYS.waitingForCommitments)}
-                                </span>
-                            )}
+                            </span>
                         </div>
-                        <Divider
-                            className={styles['divider']}
-                            data-testid="tactics-hud-divider"
-                            orientation="vertical"
-                        />
+
+                        {/* The engine tick is deliberately not surfaced: it is
+                            simulation plumbing, not player-facing information.
+                            (Turn state is conveyed by the identity lamp above.) */}
+                        {(stamina !== null || isWaitingForCommitments) && (
+                            <>
+                                <Divider
+                                    className={styles['divider']}
+                                    data-testid="tactics-hud-divider"
+                                    orientation="vertical"
+                                />
+
+                                <div className={styles['cluster']}>
+                                    {/* Local player's remaining stamina (current/max). Shown
+                                        while it is their turn; dimmed (not hidden) otherwise so
+                                        the HUD layout stays stable and the value remains
+                                        readable. Absent entirely when the projection carries no
+                                        stamina — the whole cluster (and its divider) drops with
+                                        it so two rules never sit adjacent. The game-contributed
+                                        lightning glyph names the stat (title → role="img"), so
+                                        the bare number needs no text label. */}
+                                    {stamina !== null && (
+                                        <div
+                                            className={styles['stamina-group']}
+                                            data-dimmed={snapshot.isMyTurn ? undefined : 'true'}
+                                            data-testid="hud-stamina-group"
+                                        >
+                                            <Icon
+                                                name="game.tactics.stamina"
+                                                title={t(HUD_KEYS.stamina)}
+                                                {...(styles['stat-icon'] === undefined
+                                                    ? {}
+                                                    : { className: styles['stat-icon'] })}
+                                            />
+                                            <output
+                                                className={styles['tick']}
+                                                data-testid="hud-stamina"
+                                            >
+                                                {stamina.current}/{stamina.max}
+                                            </output>
+                                        </div>
+                                    )}
+                                    {isWaitingForCommitments && (
+                                        <span
+                                            className={styles['waiting-message']}
+                                            data-state="waiting"
+                                            data-testid="tactics-commit-status"
+                                        >
+                                            {t(HUD_KEYS.waitingForCommitments)}
+                                        </span>
+                                    )}
+                                </div>
+                            </>
+                        )}
+
+                        <Divider className={styles['divider']} orientation="vertical" />
+
                         <div
                             aria-label={t(HUD_KEYS.actionsAriaLabel)}
                             className={styles['actions']}
                         >
-                            <Button
-                                className={styles['action-button']}
+                            {/* Undo/Redo are borderless (ghost) icon buttons — the
+                                game-contributed curved-arrow glyphs, named by
+                                aria-label + a hover title, so End Turn stays the only
+                                filled control and the strip keeps a game-HUD feel. */}
+                            <IconButton
+                                aria-label={t(HUD_KEYS.undo)}
                                 data-testid="undo"
                                 disabled={resolvedUndoDisabled}
                                 onClick={resolvedHandleUndo}
-                                size="sm"
-                                variant="secondary"
+                                title={t(HUD_KEYS.undo)}
+                                variant="ghost"
                             >
-                                {t(HUD_KEYS.undo)}
-                            </Button>
+                                <Icon name="game.tactics.undo" />
+                            </IconButton>
                             {!isCommitment && (
-                                <Button
-                                    className={styles['action-button']}
+                                <IconButton
+                                    aria-label={t(HUD_KEYS.redo)}
                                     data-testid="redo"
                                     disabled={redoDisabled}
                                     onClick={handleRedo}
-                                    size="sm"
-                                    variant="secondary"
+                                    title={t(HUD_KEYS.redo)}
+                                    variant="ghost"
                                 >
-                                    {t(HUD_KEYS.redo)}
-                                </Button>
+                                    <Icon name="game.tactics.redo" />
+                                </IconButton>
                             )}
                             <Button
-                                className={styles['action-button']}
+                                className={styles['end-turn']}
                                 data-testid="end-turn"
                                 disabled={resolvedEndTurnDisabled}
                                 onClick={resolvedHandleEndTurn}
                                 size="sm"
                                 variant="primary"
                             >
+                                <Icon name="game.tactics.end-turn" />
                                 {t(HUD_KEYS.endTurn)}
                             </Button>
                             {/* Host-only save: the shell withholds saveGame
                                 from clients, so presence IS the gate. Disabled while
                                 the commitment buffer holds unsent moves — a save
-                                captured now would miss them. SaveGameButton styles
-                                its trigger only through the `style` prop, so the
-                                compact values ride an inline constant here. */}
+                                captured now would miss them. The icon trigger keeps
+                                the strip borderless (ghost save glyph + name dialog). */}
                             {saveGame !== undefined && (
                                 <SaveGameButton
                                     data-testid="hud-save-btn"
                                     disabled={buffer.length > 0}
                                     onSave={saveGame}
-                                    style={compactSaveButtonStyle}
+                                    trigger="icon"
                                 />
                             )}
                         </div>
                     </div>
                 </Panel>
+                {/* In-match chat toggle: docked INSIDE the footer row at its
+                    trailing edge, so the bubble sits on the command bar's own
+                    centre line instead of free-floating over the board. Chat
+                    stays collapsed by default; opening it slides the shared
+                    dismissible Drawer in (a sibling of this footer). Closing the
+                    Drawer (toggle, close button, Escape, or backdrop) drives the
+                    same state, keeping the toggle's expanded affordance in sync. */}
+                <div className={styles['chat-dock']} data-testid="tactics-chat-dock">
+                    {/* Icon-only toggle: the chat-bubble glyph, named for
+                        assistive tech via aria-label (the decorative Icon
+                        carries none). Ghost (borderless) chrome to match the
+                        strip's icon actions. */}
+                    <IconButton
+                        aria-controls={chatOpen ? TACTICS_CHAT_DRAWER_ID : undefined}
+                        aria-expanded={chatOpen}
+                        aria-label={chatOpen ? t(HUD_KEYS.hideChat) : t(HUD_KEYS.chat)}
+                        data-testid="tactics-chat-toggle"
+                        onClick={() => {
+                            setChatOpen((open) => !open);
+                        }}
+                        title={chatOpen ? t(HUD_KEYS.hideChat) : t(HUD_KEYS.chat)}
+                        variant="ghost"
+                    >
+                        <Icon name="chat-bubble" />
+                    </IconButton>
+                </div>
             </footer>
-            {/* In-match chat: the HUD mounts the shared ChatPanel inside the shared
-                Drawer primitive, as a sibling of the footer (not nested inside it).
-                Collapsed by default so the board stays fully clickable; only the
-                corner toggle occupies space until the player opens chat. The toggle
-                pins to the bottom-right; opening it slides the dismissible Drawer in.
-                Closing the Drawer (toggle, close button, Escape, or backdrop) drives
-                the same state, keeping the toggle's expanded affordance in sync. */}
-            <div className={styles['chat-dock']} data-testid="tactics-chat-dock">
-                {/* Icon-only toggle: the chat-bubble glyph replaces the former
-                    "Chat"/"Hide chat" label, which now supplies the accessible
-                    name via aria-label (the decorative Icon carries none). Ghost
-                    (borderless) chrome so the glyph floats over the board. */}
-                <IconButton
-                    aria-controls={chatOpen ? TACTICS_CHAT_DRAWER_ID : undefined}
-                    aria-expanded={chatOpen}
-                    aria-label={chatOpen ? t(HUD_KEYS.hideChat) : t(HUD_KEYS.chat)}
-                    data-testid="tactics-chat-toggle"
-                    onClick={() => {
-                        setChatOpen((open) => !open);
-                    }}
-                    variant="ghost"
-                >
-                    <Icon name="chat-bubble" />
-                </IconButton>
-            </div>
             <Drawer
                 data-testid="tactics-chat-drawer"
                 hideTitle
@@ -287,20 +314,10 @@ const TACTICS_CHAT_DRAWER_ID = 'tactics-chat-drawer';
 
 function resolveTacticsTurnStatus(isMyTurn: boolean, t: TranslateFn): TacticsTurnStatus {
     if (isMyTurn) {
-        return { label: t(HUD_KEYS.turnYours), variant: 'success' };
+        return { label: t(HUD_KEYS.turnYours), state: 'yours' };
     }
 
-    return { label: t(HUD_KEYS.turnWaiting), variant: 'warning' };
+    return { label: t(HUD_KEYS.turnWaiting), state: 'waiting' };
 }
-
-// Mirrors the module's `.action-button` compact values for the one control
-// whose only styling seam is the `style` prop.
-const compactSaveButtonStyle: CompactButtonStyle = {
-    '--ch-button-font-size': 'var(--ch-font-size-sm)',
-    '--ch-button-line-height': 'var(--ch-line-height-tight)',
-    '--ch-button-min-width': 'auto',
-    '--ch-button-padding': 'var(--ch-space-xs) var(--ch-space-sm)',
-    marginBlock: 'var(--ch-space-xs)',
-};
 
 export default TacticsGameHud;

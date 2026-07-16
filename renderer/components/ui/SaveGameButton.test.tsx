@@ -171,4 +171,75 @@ describe('SaveGameButton', () => {
         expect(trigger).toHaveStyle({ marginTop: 'var(--ch-space-xs)' });
         expect(trigger).toHaveAttribute('data-ch-button-size', 'sm');
     });
+
+    describe('icon trigger mode', () => {
+        it('renders a borderless icon-only trigger carrying the save glyph', () => {
+            render(<SaveGameButton data-testid="save-trigger" onSave={vi.fn()} trigger="icon" />);
+
+            const trigger = screen.getByTestId('save-trigger');
+            // Ghost (chrome-less) IconButton, not the labelled text Button.
+            expect(trigger).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
+            expect(trigger.querySelector('svg[data-ch-icon="save"]')).not.toBeNull();
+            // Icon-only: the accessible name lives on aria-label, not visible text.
+            expect(trigger).toHaveAccessibleName('Save');
+            expect(trigger).not.toHaveTextContent('Save');
+        });
+
+        it('opens the same name dialog and saves exactly once from the icon trigger', () => {
+            const onSave = vi.fn();
+            render(<SaveGameButton data-testid="save-trigger" onSave={onSave} trigger="icon" />);
+
+            openDialog();
+            typeName('  fort hold  ');
+            fireEvent.click(screen.getByTestId('save-name-confirm'));
+
+            expect(onSave).toHaveBeenCalledTimes(1);
+            expect(onSave).toHaveBeenCalledWith('fort hold');
+            expect(screen.queryByTestId('save-name-dialog')).not.toBeInTheDocument();
+        });
+
+        it('respects disabled in icon mode', () => {
+            render(
+                <SaveGameButton
+                    data-testid="save-trigger"
+                    disabled
+                    onSave={vi.fn()}
+                    trigger="icon"
+                />,
+            );
+
+            const trigger = screen.getByTestId('save-trigger');
+            expect(trigger).toBeDisabled();
+
+            fireEvent.click(trigger);
+
+            expect(screen.queryByTestId('save-name-dialog')).not.toBeInTheDocument();
+        });
+
+        it('names the icon trigger through the active-locale translator', () => {
+            render(<SaveGameButton data-testid="save-trigger" onSave={vi.fn()} trigger="icon" />, {
+                'engine.saveGame.save': 'Uložit',
+            });
+
+            const trigger = screen.getByRole('button', { name: 'Uložit' });
+            expect(trigger).toHaveAttribute('data-testid', 'save-trigger');
+            // The hover title tracks the same translated label as aria-label.
+            expect(trigger).toHaveAttribute('title', 'Uložit');
+        });
+
+        it('forwards style and hover title to the icon trigger, like button mode', () => {
+            render(
+                <SaveGameButton
+                    data-testid="save-trigger"
+                    onSave={vi.fn()}
+                    style={{ marginTop: 'var(--ch-space-xs)' }}
+                    trigger="icon"
+                />,
+            );
+
+            const trigger = screen.getByTestId('save-trigger');
+            expect(trigger).toHaveStyle({ marginTop: 'var(--ch-space-xs)' });
+            expect(trigger).toHaveAttribute('title', 'Save');
+        });
+    });
 });

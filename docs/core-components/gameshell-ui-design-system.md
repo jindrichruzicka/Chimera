@@ -257,12 +257,15 @@ Modals nest: the focus trap is active only while a modal is the **topmost** laye
 `EscapeStack` (`useEscapeLayer(...).isTopLayer()`), so a confirm Modal opened over a page-level
 Modal owns both Escape and Tab until it closes.
 
-**`SaveGameButton`** is the Actions category's one composite: a compact `Button` trigger that
-opens a save-name prompt (`Modal` + `TextInput`, name bounded to `MAX_SAVE_LABEL_LENGTH`) and
-calls `onSave(trimmedLabel)` exactly once on confirm; the label resets each time the dialog
-opens. It is a pure callback component — no stores or IPC — so a game HUD renders it only when
-it received the host-only `GameHudProps.saveGame` capability (see §4.33) and passes that
-capability through as `onSave`.
+**`SaveGameButton`** is the Actions category's one composite: a save trigger that opens a
+save-name prompt (`Modal` + `TextInput`, name bounded to `MAX_SAVE_LABEL_LENGTH`) and calls
+`onSave(trimmedLabel)` exactly once on confirm; the label resets each time the dialog opens.
+The trigger takes two forms via `trigger`: the default `'button'` (a compact labelled
+`Button`) and `'icon'` — a borderless ghost `IconButton` carrying the `save` glyph for
+icon-driven surfaces such as a game's command bar, named for assistive tech via `aria-label`
+(plus a hover `title`) from the same translated save label. It is a pure callback component —
+no stores or IPC — so a game HUD renders it only when it received the host-only
+`GameHudProps.saveGame` capability (see §4.33) and passes that capability through as `onSave`.
 
 **`PreloadedImage`** is the Media category's one primitive: a `next/image` wrapper that holds
 the img at `opacity: 0` until `img.decode()` settles, so the first paint of the picture is the

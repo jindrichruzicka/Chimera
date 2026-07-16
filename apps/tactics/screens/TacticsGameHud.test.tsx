@@ -163,10 +163,17 @@ describe('TacticsGameHud', () => {
         render(<TacticsGameHud {...makeHudProps({ tick: 12 })} />);
 
         expect(screen.getByLabelText('Game HUD')).toBeTruthy();
-        expect(screen.getByTestId('hud-tick').textContent).toBe('12');
         expect(screen.getByTestId('undo')).toBeTruthy();
         expect(screen.getByTestId('redo')).toBeTruthy();
         expect(screen.getByTestId('end-turn')).toBeTruthy();
+    });
+
+    it('does not surface the engine tick — it is simulation plumbing, not player info', () => {
+        render(<TacticsGameHud {...makeHudProps({ tick: 12 })} />);
+
+        // The tick readout was removed entirely: no DOM node, no visible number.
+        expect(screen.queryByTestId('hud-tick')).toBeNull();
+        expect(screen.queryByText('12')).toBeNull();
     });
 
     it('renders the game-contributed banner glyph through the engine <Icon> (#113)', () => {
@@ -195,8 +202,11 @@ describe('TacticsGameHud', () => {
             </I18nProvider>,
         );
 
+        // End Turn keeps its visible label (the hero action); Undo/Redo are now
+        // icon-only, so their translated string names them via the accessible name.
         expect(screen.getByTestId('end-turn')).toHaveTextContent('Ukončit tah');
-        expect(screen.getByTestId('undo')).toHaveTextContent('Zpět');
+        expect(screen.getByTestId('undo')).toHaveAccessibleName('Zpět');
+        expect(screen.getByTestId('redo')).toHaveAccessibleName('Znovu');
         expect(screen.getByTestId('tactics-turn-status')).toHaveTextContent('Tvůj tah');
     });
 
@@ -321,25 +331,36 @@ describe('TacticsGameHud', () => {
             expect(screen.getByRole('button', { name: 'Skrýt chat' })).toBeTruthy();
         });
 
-        it('aligns the toggle dock to the footer action row content edge (not the viewport gutter)', () => {
+        it('docks the toggle inside the HUD footer row, vertically centred on the command bar', () => {
             render(<TacticsGameHud {...makeHudProps()} />);
 
-            expect(screen.getByTestId('tactics-chat-dock')).toHaveClass(
-                styles['chat-dock'] ?? 'chat-dock',
-            );
+            const dock = screen.getByTestId('tactics-chat-dock');
+            expect(dock).toHaveClass(styles['chat-dock'] ?? 'chat-dock');
+            // The dock lives INSIDE the footer landmark so it shares the command
+            // bar's row (and vertical centre) instead of free-floating over the board.
+            expect(screen.getByLabelText('Game HUD').contains(dock)).toBe(true);
 
             const dockRule = /\.chat-dock\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
-            // Matches the raised Panel's content-box inset (padding --ch-space-sm +
-            // border --ch-button-border-width), not the old free-floating --ch-space-md.
-            expect(dockRule).toContain('calc(var(--ch-space-sm) + var(--ch-button-border-width))');
-            expect(dockRule).not.toContain('var(--ch-space-md)');
+            // The dock is an IN-FLOW grid item in the footer's trailing column —
+            // not an absolute/fixed overlay — so it can never paint over (or
+            // steal clicks from) the centered island at narrow window widths.
+            expect(dockRule).toContain('justify-self: end');
+            expect(dockRule).not.toContain('position: fixed');
+            expect(dockRule).not.toContain('position: absolute');
+
+            // The footer row reserves symmetric 1fr gutters around the island,
+            // so the island stays truly centered while the dock owns the
+            // trailing gutter (grid columns cannot overlap).
+            const hudRule = /\.hud\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+            expect(hudRule).toContain('grid-template-columns: 1fr auto 1fr');
+            expect(hudRule).toContain('align-items: center');
         });
     });
 
     it('styles the HUD through tokenized module classes instead of inline constants', () => {
         render(<TacticsGameHud {...makeHudProps()} />);
 
-        // The tick readout weight and the dimmed stamina state live in the
+        // The numeric readout weight and the dimmed stamina state live in the
         // module, tokenized, rather than in inline style objects.
         const tickRule = /\.tick\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
         expect(tickRule).toContain('font-weight: var(--ch-font-weight-bold)');
@@ -349,29 +370,117 @@ describe('TacticsGameHud', () => {
         const troughMatch = /to\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
         expect(troughMatch).toContain('opacity: var(--ch-opacity-soft)');
 
-        expect(screen.getByTestId('hud-tick')).toHaveClass(styles['tick'] ?? 'tick');
+        // The `.tick` numeric style now rides the stamina readout (the tick
+        // readout itself is gone).
+        expect(screen.getByTestId('hud-stamina')).toHaveClass(styles['tick'] ?? 'tick');
     });
 
     it('renders engine controls with shared UI button primitives', () => {
         render(<TacticsGameHud {...makeHudProps()} />);
 
-        expect(screen.getByTestId('undo')).toHaveAttribute('data-ch-button-variant', 'secondary');
-        expect(screen.getByTestId('redo')).toHaveAttribute('data-ch-button-variant', 'secondary');
+        // Undo/Redo are borderless (ghost) icon buttons — End Turn is the single
+        // filled hero action, so the strip reads as a game command bar, not a
+        // bordered widget toolbar.
+        expect(screen.getByTestId('undo')).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
+        expect(screen.getByTestId('redo')).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
         expect(screen.getByTestId('end-turn')).toHaveAttribute('data-ch-button-variant', 'primary');
     });
 
-    it('presents turn status through shared panel and badge primitives', () => {
+    it('keeps the cluster rules short so the engine divider default cannot inflate the bar', () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        // Cascade guard: the engine Divider's `.vertical` rule carries a large
+        // standalone min-height (--ch-divider-length-sm). A bare `.divider`
+        // override ties with it on specificity and loses on bundle order, which
+        // is exactly the regression that once inflated the HUD island to 172px.
+        // The compound `.hud .divider` selector (0,2,0) outranks it regardless
+        // of CSS order, pinning the rules to a short token length.
+        const dividerRule = /\.hud\s+\.divider\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(dividerRule).toContain('min-height: var(--ch-space-lg)');
+        expect(screen.getByTestId('tactics-hud-divider')).toHaveClass(
+            styles['divider'] ?? 'divider',
+        );
+    });
+
+    it('order-proofs every engine-primitive override with a .hud compound selector', () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        // The same (0,1,0) specificity tie that inflated the divider exists for
+        // every tactics class that lands on an element which also carries an
+        // engine-module class. Each override rides a `.hud`-compound selector
+        // (0,2,0) so per-chunk bundle order can never decide the island's shape:
+        // the slim Panel padding (vs engine .panel's --ch-space-lg) and the
+        // compact End Turn custom props (vs engine Button's .sm min-width).
+        const panelRule = /\.hud\s+\.panel\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(panelRule).toContain('padding: var(--ch-space-xs) var(--ch-space-md)');
+
+        const endTurnRule = /\.hud\s+\.end-turn\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(endTurnRule).toContain('--ch-button-min-width: auto');
+
+        // No bare (compound-less) top-level override of those engine classes
+        // may sneak back in.
+        expect(/(^|\})\s*\.panel\s*\{/m.test(css)).toBe(false);
+        expect(/(^|\})\s*\.end-turn\s*\{/m.test(css)).toBe(false);
+    });
+
+    it('renders Undo/Redo as icon-only buttons carrying the game-contributed glyphs (#113)', () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        const undo = screen.getByTestId('undo');
+        expect(undo.querySelector('svg[data-ch-icon="game.tactics.undo"]')).not.toBeNull();
+        expect(undo).toHaveAccessibleName('Undo');
+        // Icon-only: the accessible name lives on aria-label, not visible text.
+        expect(undo).not.toHaveTextContent('Undo');
+
+        const redo = screen.getByTestId('redo');
+        expect(redo.querySelector('svg[data-ch-icon="game.tactics.redo"]')).not.toBeNull();
+        expect(redo).toHaveAccessibleName('Redo');
+        expect(redo).not.toHaveTextContent('Redo');
+    });
+
+    it('renders End Turn as an icon + label primary button (glyph plus its translated text)', () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        const endTurn = screen.getByTestId('end-turn');
+        expect(endTurn.querySelector('svg[data-ch-icon="game.tactics.end-turn"]')).not.toBeNull();
+        expect(endTurn).toHaveTextContent('End Turn');
+    });
+
+    it('labels the stamina readout with the game-contributed lightning glyph', () => {
+        render(
+            <TacticsGameHud {...makeHudProps({ snapshot: makeSnapshot({ isMyTurn: true }) })} />,
+        );
+
+        const group = screen.getByTestId('hud-stamina-group');
+        expect(group.querySelector('svg[data-ch-icon="game.tactics.stamina"]')).not.toBeNull();
+        // The numeric readout still exposes the raw current/max text e2e reads.
+        expect(screen.getByTestId('hud-stamina')).toHaveTextContent('2/3');
+    });
+
+    it('presents turn status as a chrome-less state lamp on the raised panel', () => {
         render(<TacticsGameHud {...makeHudProps()} />);
 
         expect(screen.getByTestId('tactics-hud-panel')).toHaveAttribute(
             'data-ch-panel-variant',
             'raised',
         );
-        expect(screen.getByTestId('tactics-turn-status')).toHaveAttribute(
-            'data-ch-badge-variant',
-            'success',
-        );
-        expect(screen.getByTestId('tactics-turn-status')).toHaveTextContent('Your turn');
+        // The bordered Badge chip is gone: turn status is a dot + label readout
+        // driven by data-state, so the identity cluster carries no widget chrome.
+        const status = screen.getByTestId('tactics-turn-status');
+        expect(status).toHaveAttribute('data-state', 'yours');
+        expect(status).not.toHaveAttribute('data-ch-badge-variant');
+        expect(status).toHaveTextContent('Your turn');
+
+        // The state lamp maps its colours from the shared state quartets.
+        const statusRule = /\.turn-status\[data-state='yours'\]\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(statusRule).toContain('var(--ch-color-success-text)');
+
+        // e2e contract: GamePage.turnStatusText() reads Playwright innerText(),
+        // which returns RENDERED text — a `text-transform` here would silently
+        // break every exact-match 'Your turn'/'Waiting' poll in the e2e suite.
+        // The small-caps look comes from the display face, never the transform.
+        const lampRule = /\.turn-status\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(lampRule).not.toContain('text-transform');
     });
 
     it("shows the local player's stamina as current/max while it is their turn", () => {
@@ -422,11 +531,15 @@ describe('TacticsGameHud', () => {
             />,
         );
 
-        expect(screen.getByTestId('tactics-turn-status')).toHaveAttribute(
-            'data-ch-badge-variant',
-            'warning',
-        );
-        expect(screen.getByTestId('tactics-turn-status')).toHaveTextContent('Waiting');
+        const status = screen.getByTestId('tactics-turn-status');
+        expect(status).toHaveAttribute('data-state', 'waiting');
+        expect(status).toHaveTextContent('Waiting');
+
+        // The waiting lamp maps to the warning quartet — as strong a pin as the
+        // Badge variant='warning' assertion this readout replaced.
+        const waitingRule =
+            /\.turn-status\[data-state='waiting'\]\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(waitingRule).toContain('var(--ch-color-warning-text)');
     });
 
     it('uses the engine-owned callbacks and disabled states', () => {
@@ -576,6 +689,18 @@ describe('save button (#825)', () => {
         expect(
             endTurn.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
+    });
+
+    it('renders the save trigger as a borderless icon button carrying the engine save glyph', () => {
+        render(<TacticsGameHud {...makeHudProps({ saveGame: vi.fn() })} />);
+
+        // Icon-trigger SaveGameButton: same name dialog, but the strip shows a
+        // ghost glyph instead of a bordered text button.
+        const trigger = screen.getByTestId('hud-save-btn');
+        expect(trigger).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
+        expect(trigger.querySelector('svg[data-ch-icon="save"]')).not.toBeNull();
+        expect(trigger).toHaveAccessibleName('Save');
+        expect(trigger).not.toHaveTextContent('Save');
     });
 
     it('invokes saveGame with the confirmed name exactly once and closes the dialog', () => {

@@ -313,7 +313,6 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'game.tactics.hud.turnYours': 'Tvůj tah',
     'game.tactics.hud.turnWaiting': 'Čekání',
     'game.tactics.hud.stamina': 'Výdrž',
-    'game.tactics.hud.tick': 'Takt Tactics',
     'game.tactics.hud.waitingForCommitments': 'Čekání na ostatní hráče…',
     'game.tactics.hud.undo': 'Zpět',
     'game.tactics.hud.redo': 'Znovu',

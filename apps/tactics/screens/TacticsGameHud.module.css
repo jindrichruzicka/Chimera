@@ -1,43 +1,94 @@
 /*
  * TacticsGameHud.module.css
  *
- * Tokenized styling for the tactics HUD footer — status row, action row, the
- * fixed chat dock, and the commitment-mode "waiting" pulse. Durations/easings
- * come from the shared motion tokens, which collapse to `0ms`/`linear` under
- * `prefers-reduced-motion` (renderer/styles/tokens.css), so the pulse is
- * automatically disabled for reduced-motion users.
+ * Tokenized styling for the tactics HUD — a slim, centered command strip (one
+ * 36px control row inside a raised island): three tight clusters (identity ·
+ * readouts · actions) split by short vertical rules, with the chat toggle
+ * docked on the strip's own centre line at the footer's trailing edge.
+ * Durations/easings come from the shared motion tokens, which collapse to
+ * `0ms`/`linear` under `prefers-reduced-motion` (renderer/styles/tokens.css),
+ * so the pulse is automatically disabled for reduced-motion users.
  */
 
+/* One footer row, three grid columns: symmetric 1fr gutters keep the island
+   truly centered while the chat dock owns the trailing gutter IN FLOW — grid
+   columns cannot overlap, so the dock can never paint over (or steal clicks
+   from) the island's controls, at any window width. `align-items: center`
+   puts every child on the island's centre line. */
 .hud {
+    align-items: center;
+    display: grid;
     font-family: var(--ch-font-ui);
+    grid-template-columns: 1fr auto 1fr;
+    padding-block: var(--ch-space-xs);
+    padding-inline: var(--ch-space-md);
 }
 
-.panel {
-    padding: 0 var(--ch-space-sm);
+/* Override the raised Panel's roomy chrome into a slim, softer-cornered bar.
+   Cascade guard (see the .divider note): the compound selector outranks the
+   engine `.panel` rule's --ch-space-lg padding regardless of bundle order. */
+.hud .panel {
+    border-radius: var(--ch-radius-lg);
+    grid-column: 2;
+    padding: var(--ch-space-xs) var(--ch-space-md);
 }
 
 .body {
     align-items: center;
     display: flex;
-    gap: var(--ch-space-md);
-    justify-content: space-between;
+    gap: var(--ch-space-sm);
 }
 
-.status {
+.cluster {
     align-items: center;
     display: flex;
     gap: var(--ch-space-sm);
-    min-width: max-content;
 }
 
-.badge {
-    padding: 0 var(--ch-space-sm);
+/* Brand emblem, tinted with the theme accent so the identity cluster leads. */
+.emblem {
+    color: var(--ch-color-accent);
 }
 
-.tick-group,
+/* Chrome-less turn lamp: a state-coloured dot + small label in the game's
+   display face — a readout, not a bordered chip. Colours come from the shared
+   state quartets via data-state. NO text-transform here: Playwright's
+   innerText() returns RENDERED text, and the e2e suite polls this element for
+   the exact catalogue strings — the small-caps look comes from the face. */
+.turn-status {
+    align-items: center;
+    color: var(--_turn-status-color);
+    display: inline-flex;
+    font-family: var(--ch-font-ui-button);
+    font-size: var(--ch-font-size-sm);
+    font-weight: var(--ch-font-weight-semibold);
+    gap: var(--ch-space-xs);
+    letter-spacing: var(--ch-button-letter-spacing);
+    white-space: nowrap;
+}
+
+/* The lamp itself: a small glowing dot that carries the state colour. */
+.turn-status::before {
+    background: currentColor;
+    block-size: var(--ch-space-sm);
+    border-radius: var(--ch-radius-pill);
+    box-shadow: 0 0 var(--ch-space-xs) currentColor;
+    content: '';
+    flex-shrink: 0;
+    inline-size: var(--ch-space-sm);
+}
+
+.turn-status[data-state='yours'] {
+    --_turn-status-color: var(--ch-color-success-text);
+}
+
+.turn-status[data-state='waiting'] {
+    --_turn-status-color: var(--ch-color-warning-text);
+}
+
 .stamina-group {
-    align-items: baseline;
-    display: flex;
+    align-items: center;
+    display: inline-flex;
     gap: var(--ch-space-xs);
 }
 
@@ -45,42 +96,60 @@
     opacity: var(--ch-opacity-disabled);
 }
 
-.label {
-    line-height: var(--ch-line-height-tight);
+/* Accent-tinted lightning glyph naming the stamina readout. */
+.stat-icon {
+    color: var(--ch-color-accent);
 }
 
 .tick {
     color: var(--ch-color-text-primary);
     font-size: var(--ch-font-size-md);
+    font-variant-numeric: tabular-nums;
     font-weight: var(--ch-font-weight-bold);
 }
 
-.divider {
+/* Short cluster rules. Cascade guard: the engine Divider's `.vertical` rule
+   pins a large standalone min-height (--ch-divider-length-sm) at the same
+   (0,1,0) specificity as a bare `.divider` override, so bundle order decides —
+   which once inflated the whole island to 172px. The compound `.hud .divider`
+   selector (0,2,0) outranks it regardless of order. */
+.hud .divider {
     align-self: center;
     min-height: var(--ch-space-lg);
 }
 
 .actions {
+    align-items: center;
     display: flex;
     gap: var(--ch-space-xs);
 }
 
-/* Compact footer buttons: the shared Button reads these custom properties, so
-   redefining them here shrinks the control without forking its chrome. */
-.action-button {
+/* End Turn is the hero: the strip's single filled control, pairing its
+   skip-next glyph with the label. Shrink the sm min-width (160px) to content
+   and add a glyph gap; the descendant `svg` rule (0,1,1) sizes the inline icon
+   over Icon's `.icon`. The `sm` vertical padding lifts it to the 36px
+   icon-button height so the whole action row lines up. Cascade guard (see the
+   .divider note): the compound selector outranks the engine Button `.sm`
+   custom-property defaults regardless of bundle order. */
+.hud .end-turn {
     --ch-button-font-size: var(--ch-font-size-sm);
     --ch-button-line-height: var(--ch-line-height-tight);
     --ch-button-min-width: auto;
-    --ch-button-padding: var(--ch-space-xs) var(--ch-space-sm);
-    margin-block: var(--ch-space-xs);
+    --ch-button-padding: var(--ch-space-sm) var(--ch-space-md);
+    gap: var(--ch-space-xs);
+}
+
+.end-turn svg {
+    block-size: 1.15em;
+    inline-size: 1.15em;
 }
 
 .waiting-message {
+    animation: tactics-commit-waiting-pulse calc(var(--ch-duration-slow) * 3)
+        var(--ch-easing-standard) infinite alternate;
     color: var(--ch-color-text-secondary);
     font-size: var(--ch-font-size-sm);
     white-space: nowrap;
-    animation: tactics-commit-waiting-pulse calc(var(--ch-duration-slow) * 3)
-        var(--ch-easing-standard) infinite alternate;
 }
 
 @keyframes tactics-commit-waiting-pulse {
@@ -92,21 +161,14 @@
     }
 }
 
-/* A fixed dock on the trailing edge, kept clear of the HUD footer. The toggle
-   owns its own placement so the engine shell stays agnostic and the board stays
-   fully clickable while chat is collapsed. The shared Drawer owns the expanded
-   chat surface's sizing and overlay, so the dock only anchors the corner toggle.
-   The trailing inset reuses the raised HUD Panel's own content-box inset —
-   horizontal padding (--ch-space-sm) plus its border (--ch-button-border-width) —
-   so the toggle's right edge lines up with the footer action row instead of
-   floating in the viewport gutter. */
+/* The chat toggle's dock: an in-flow item in the footer's trailing grid
+   column, sharing the command bar's centre line (the row's align-items). No
+   fixed/absolute positioning — grid columns cannot overlap, so the toggle can
+   never occlude the island's controls; the shared Drawer owns the expanded
+   chat surface's sizing and overlay. */
 .chat-dock {
-    align-items: flex-end;
+    align-items: center;
     display: flex;
-    flex-direction: column;
-    gap: var(--ch-space-xs);
-    inset-block-end: calc(var(--ch-space-xl) * 2);
-    inset-inline-end: calc(var(--ch-space-sm) + var(--ch-button-border-width));
-    position: fixed;
-    z-index: var(--ch-z-raised);
+    grid-column: 3;
+    justify-self: end;
 }

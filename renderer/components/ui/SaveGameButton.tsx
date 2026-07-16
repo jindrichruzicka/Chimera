@@ -6,9 +6,19 @@ import { MAX_SAVE_LABEL_LENGTH } from '@chimera-engine/simulation/bridge/api-typ
 import { SAVE_GAME_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import { Button } from './Button';
+import { IconButton } from './IconButton';
+import { Icon } from './icons/Icon';
 import { Modal } from './Modal';
 import { TextInput } from './TextInput';
 import styles from './SaveGameButton.module.css';
+
+/**
+ * The trigger's visual form: a compact labelled `Button` (default) or a
+ * borderless ghost `IconButton` carrying the `save` glyph for icon-driven
+ * surfaces (e.g. a game's command bar), named for assistive tech via
+ * `aria-label` from the same translated save label.
+ */
+export type SaveGameTrigger = 'button' | 'icon';
 
 export type SaveGameButtonProps = Readonly<{
     /**
@@ -18,6 +28,7 @@ export type SaveGameButtonProps = Readonly<{
     readonly onSave: (label: string) => void;
     readonly disabled?: boolean;
     readonly style?: CSSProperties;
+    readonly trigger?: SaveGameTrigger;
     /** Forwarded to the trigger button (e.g. `hud-save-btn` in the tactics HUD). */
     readonly 'data-testid'?: string;
 }>;
@@ -31,11 +42,13 @@ export function SaveGameButton({
     onSave,
     disabled = false,
     style,
+    trigger = 'button',
     'data-testid': testId,
 }: SaveGameButtonProps): React.ReactElement {
     const t = useTranslate();
     const [open, setOpen] = useState(false);
     const [label, setLabel] = useState('');
+    const saveLabel = t(SAVE_GAME_KEYS.save);
 
     function openDialog(): void {
         // Reset on open (not close) so a reopened dialog never shows a stale name.
@@ -45,16 +58,30 @@ export function SaveGameButton({
 
     return (
         <>
-            <Button
-                disabled={disabled}
-                onClick={openDialog}
-                size="sm"
-                variant="secondary"
-                {...(style === undefined ? {} : { style })}
-                {...(testId === undefined ? {} : { 'data-testid': testId })}
-            >
-                {t(SAVE_GAME_KEYS.save)}
-            </Button>
+            {trigger === 'icon' ? (
+                <IconButton
+                    aria-label={saveLabel}
+                    disabled={disabled}
+                    onClick={openDialog}
+                    title={saveLabel}
+                    variant="ghost"
+                    {...(style === undefined ? {} : { style })}
+                    {...(testId === undefined ? {} : { 'data-testid': testId })}
+                >
+                    <Icon name="save" />
+                </IconButton>
+            ) : (
+                <Button
+                    disabled={disabled}
+                    onClick={openDialog}
+                    size="sm"
+                    variant="secondary"
+                    {...(style === undefined ? {} : { style })}
+                    {...(testId === undefined ? {} : { 'data-testid': testId })}
+                >
+                    {saveLabel}
+                </Button>
+            )}
             <Modal
                 actions={[
                     { label: t(SAVE_GAME_KEYS.cancel), testId: 'save-name-cancel' },

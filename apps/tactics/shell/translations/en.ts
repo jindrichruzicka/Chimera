@@ -34,7 +34,6 @@ export const tacticsBundleEn: Readonly<Record<string, string>> = {
     'game.tactics.hud.turnYours': 'Your turn',
     'game.tactics.hud.turnWaiting': 'Waiting',
     'game.tactics.hud.stamina': 'Stamina',
-    'game.tactics.hud.tick': 'Tactics Tick',
     'game.tactics.hud.waitingForCommitments': 'Waiting for other player(s)…',
     'game.tactics.hud.undo': 'Undo',
     'game.tactics.hud.redo': 'Redo',

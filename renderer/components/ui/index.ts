@@ -35,7 +35,7 @@ export type { PreloadedImageProps } from './PreloadedImage';
 export { ProgressBar } from './ProgressBar';
 export type { ProgressBarProps } from './ProgressBar';
 export { SaveGameButton } from './SaveGameButton';
-export type { SaveGameButtonProps } from './SaveGameButton';
+export type { SaveGameButtonProps, SaveGameTrigger } from './SaveGameButton';
 export { ScrollArea } from './ScrollArea';
 export type { ScrollAreaProps } from './ScrollArea';
 export { Select } from './Select';

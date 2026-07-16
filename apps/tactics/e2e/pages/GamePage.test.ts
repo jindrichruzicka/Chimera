@@ -211,6 +211,7 @@ function makeProjectedSnapshot(options: {
 
     return {
         viewerId: 'p1',
+        tick: 0,
         entities: {
             'unit-1': { id: 'unit-1', kind: 'unit', ownerId: 'p1', x: options.localX, y: 0, hp: 1 },
             ...enemy,
@@ -247,7 +248,6 @@ describe('GamePage', () => {
         expect(gamePage.endTurnButton).toBeDefined();
         expect(gamePage.gameResultBanner).toBeDefined();
         expect(gamePage.gameResultText).toBeDefined();
-        expect(gamePage.hudTick).toBeDefined();
         expect(gamePage.sceneRouter).toBeDefined();
         expect(gamePage.transitionOverlay).toBeDefined();
         expect(gamePage.postGameSummary).toBeDefined();
@@ -280,7 +280,6 @@ describe('GamePage', () => {
             'end-turn',
             'game-result-banner',
             'game-result-text',
-            'hud-tick',
             'scene-router',
             'transition-overlay',
             'post-game-summary',
@@ -302,15 +301,6 @@ describe('GamePage', () => {
         expect(requestedTestIds).not.toContain('reveal-target');
         expect(requestedTestIds).not.toContain('attack-target');
         expect(locatorQueries).toEqual(['game-canvas canvas']);
-    });
-
-    it('parses the current HUD tick as an integer', async () => {
-        const { page } = buildPageDouble('42');
-        const gamePage = new GamePage(page);
-
-        const tick = await gamePage.currentTick();
-
-        expect(tick).toBe(42);
     });
 
     it('selects the owned primitive by clicking the projected local unit grid point', async () => {
@@ -738,7 +728,7 @@ describe('GamePage', () => {
         const gamePage = new GamePageWithPollFailure(page);
 
         await expect(gamePage.attackVisibleOpponent()).rejects.toThrow(
-            'Timed out waiting for visible adjacent opponent. Snapshot viewer=p1 tick=undefined isMyTurn=undefined units=[unit-1:p1@0,0/hp1].',
+            'Timed out waiting for visible adjacent opponent. Snapshot viewer=p1 tick=0 isMyTurn=undefined units=[unit-1:p1@0,0/hp1].',
         );
     });
 

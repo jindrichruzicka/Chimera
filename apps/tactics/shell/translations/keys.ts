@@ -25,7 +25,6 @@ export const HUD_KEYS = {
     turnYours: translationKey('game.tactics.hud.turnYours'),
     turnWaiting: translationKey('game.tactics.hud.turnWaiting'),
     stamina: translationKey('game.tactics.hud.stamina'),
-    tick: translationKey('game.tactics.hud.tick'),
     waitingForCommitments: translationKey('game.tactics.hud.waitingForCommitments'),
     undo: translationKey('game.tactics.hud.undo'),
     redo: translationKey('game.tactics.hud.redo'),

@@ -34,6 +34,7 @@ interface TacticsUnitProjection {
 
 interface TacticsSnapshotProjection {
     readonly viewerId: string;
+    readonly tick: number;
     readonly entities: Readonly<Record<string, unknown>>;
 }
 
@@ -99,7 +100,6 @@ export class GamePage {
     readonly endTurnButton: Locator;
     readonly gameResultBanner: Locator;
     readonly gameResultText: Locator;
-    readonly hudTick: Locator;
     readonly sceneRouter: Locator;
     readonly transitionOverlay: Locator;
     readonly postGameSummary: Locator;
@@ -128,7 +128,6 @@ export class GamePage {
         this.endTurnButton = page.getByTestId('end-turn');
         this.gameResultBanner = page.getByTestId('game-result-banner');
         this.gameResultText = page.getByTestId('game-result-text');
-        this.hudTick = page.getByTestId('hud-tick');
         this.sceneRouter = page.getByTestId('scene-router');
         this.transitionOverlay = page.getByTestId('transition-overlay');
         this.postGameSummary = page.getByTestId('post-game-summary');
@@ -472,9 +471,13 @@ export class GamePage {
         await this.waitForProjectedUnitDefeated(opponentUnit.id);
     }
 
+    /**
+     * The projected snapshot's simulation tick — the turn-advancement signal
+     * specs poll. Read from the game API projection (not the HUD), because the
+     * tick is deliberately no longer surfaced in the tactics HUD.
+     */
     public async currentTick(): Promise<number> {
-        const text = await this.hudTick.innerText();
-        return parseInt(text, 10);
+        return (await this.readCurrentSnapshot()).tick;
     }
 
     /**
@@ -513,18 +516,24 @@ export class GamePage {
 
     public async waitForTick(tick: number, timeout = 30_000): Promise<void> {
         await this.page.waitForFunction(
-            (targetTick: number) => {
-                const text =
-                    (
-                        globalThis as {
-                            readonly document?: {
-                                querySelector(
-                                    s: string,
-                                ): { readonly textContent: string | null } | null;
+            async (targetTick: number) => {
+                const gameApi = (
+                    globalThis as {
+                        readonly __chimera?: {
+                            readonly game?: {
+                                readonly getCurrentSnapshot?: () => Promise<{
+                                    readonly tick?: number;
+                                } | null>;
                             };
-                        }
-                    ).document?.querySelector('[data-testid=hud-tick]')?.textContent ?? '0';
-                return parseInt(text, 10) >= targetTick;
+                        };
+                    }
+                ).__chimera?.game;
+                if (typeof gameApi?.getCurrentSnapshot !== 'function') {
+                    return false;
+                }
+                const snapshot = await gameApi.getCurrentSnapshot();
+                const current = typeof snapshot?.tick === 'number' ? snapshot.tick : 0;
+                return current >= targetTick;
             },
             tick,
             { timeout },
