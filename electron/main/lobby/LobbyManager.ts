@@ -655,8 +655,9 @@ export class LobbyManager {
                 if (player.role === 'spectator') {
                     // Read-only viewer (Invariant #114): never a lobby seat. Skip
                     // roster seeding, the "reconnected" toast, and the AI-overflow
-                    // auto-remove. The who's-watching UI / viewer registry are a
-                    // later task.
+                    // auto-remove. The host tracks the viewer in its
+                    // SpectatorRegistry, so no lobby-roster presence is surfaced
+                    // for spectators here.
                     return;
                 }
                 if (this.lobbyState === null) {

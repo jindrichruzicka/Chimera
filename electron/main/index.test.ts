@@ -222,7 +222,9 @@ const { mockStateBroadcasterCtor, mockStateBroadcasterInstance } = vi.hoisted(()
     }
     const instance = {
         broadcast: vi.fn(),
+        broadcastWave: vi.fn(),
         broadcastTick: vi.fn(),
+        broadcastSpectator: vi.fn(),
         registerRendererRecipient: vi.fn<(recipient: MockRendererRecipient) => () => undefined>(
             () => () => undefined,
         ),
@@ -1717,6 +1719,117 @@ describe('resolveRendererLaunchUrl', () => {
     });
 });
 
+// ── Spectator session harness (Invariant #114) ────────────────────────────────
+// Shared scaffolding for the viewer-registry tests: a transport double whose
+// join/leave/action callbacks are captured for manual driving, plus the
+// LobbyManager options of the most recent main() boot.
+
+interface SpectatorViewSourceLike {
+    entries(): readonly (readonly [string, string])[];
+    followedBy(spectatorId: string): string | undefined;
+}
+
+interface SpectatorSessionOptions {
+    onSessionHosted?: (
+        transport: {
+            readonly onPlayerJoined: ReturnType<typeof vi.fn>;
+            readonly onPlayerLeft: ReturnType<typeof vi.fn>;
+            readonly onActionReceived: ReturnType<typeof vi.fn>;
+            readonly setJoinClassifier: ReturnType<typeof vi.fn>;
+        },
+        metadata: {
+            readonly hostId: ReturnType<typeof playerId>;
+            readonly maxPlayers: number;
+        },
+    ) => void;
+    onGameStartRequested?: (state: {
+        readonly info: {
+            readonly sessionId: string;
+            readonly hostId: ReturnType<typeof playerId>;
+            readonly gameId: string;
+        };
+        readonly players: readonly {
+            readonly playerId: ReturnType<typeof playerId>;
+            readonly displayName: string;
+            readonly ready: boolean;
+        }[];
+    }) => void;
+}
+
+/**
+ * The `spectators` view source handed to the most recent StateBroadcaster
+ * construction — the live handle onto the session's SpectatorRegistry.
+ * (`mock.calls` is tuple-typed from the arg-less mock factory, so the call
+ * row is widened before indexing the options position.)
+ */
+function latestBroadcasterSpectatorSource(): SpectatorViewSourceLike | undefined {
+    const call = mockStateBroadcasterCtor.mock.calls[0] as unknown as
+        | readonly unknown[]
+        | undefined;
+    const options = call?.[3] as { spectators?: SpectatorViewSourceLike } | undefined;
+    return options?.spectators;
+}
+
+function makeSpectatorSessionHarness(): {
+    transport: {
+        readonly onPlayerJoined: ReturnType<typeof vi.fn>;
+        readonly onPlayerLeft: ReturnType<typeof vi.fn>;
+        readonly onActionReceived: ReturnType<typeof vi.fn>;
+        readonly setJoinClassifier: ReturnType<typeof vi.fn>;
+    };
+    options: SpectatorSessionOptions | undefined;
+    capturedJoinRef: {
+        current?: (entry: {
+            readonly playerId: ReturnType<typeof playerId>;
+            readonly role?: 'player' | 'spectator';
+        }) => void;
+    };
+    capturedLeftRef: {
+        current?: (leftPlayerId: ReturnType<typeof playerId>, reason?: string) => void;
+    };
+    capturedActionRef: { current?: (from: string, action: unknown) => void };
+} {
+    const capturedJoinRef: {
+        current?: (entry: {
+            readonly playerId: ReturnType<typeof playerId>;
+            readonly role?: 'player' | 'spectator';
+        }) => void;
+    } = {};
+    const capturedLeftRef: {
+        current?: (leftPlayerId: ReturnType<typeof playerId>, reason?: string) => void;
+    } = {};
+    const capturedActionRef: { current?: (from: string, action: unknown) => void } = {};
+
+    const transport = {
+        onPlayerJoined: vi.fn(
+            (
+                cb: (entry: {
+                    readonly playerId: ReturnType<typeof playerId>;
+                    readonly role?: 'player' | 'spectator';
+                }) => void,
+            ) => {
+                capturedJoinRef.current = cb;
+                return () => {};
+            },
+        ),
+        onPlayerLeft: vi.fn(
+            (cb: (leftPlayerId: ReturnType<typeof playerId>, reason?: string) => void) => {
+                capturedLeftRef.current = cb;
+                return () => {};
+            },
+        ),
+        onActionReceived: vi.fn((cb: (from: string, action: unknown) => void) => {
+            capturedActionRef.current = cb;
+            return () => {};
+        }),
+        setJoinClassifier: vi.fn(),
+    };
+
+    const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as SpectatorSessionOptions | undefined;
+
+    return { transport, options, capturedJoinRef, capturedLeftRef, capturedActionRef };
+}
+
 describe('main', () => {
     beforeEach(() => {
         browserWindowInstances.length = 0;
@@ -1950,7 +2063,10 @@ describe('main', () => {
             transport,
             mockProjectorInstance,
             expect.any(Object),
-            { hostViewerId: playerId('host-projector') },
+            {
+                hostViewerId: playerId('host-projector'),
+                spectators: expect.objectContaining({ followedBy: expect.any(Function) }),
+            },
         );
     });
 
@@ -2577,6 +2693,158 @@ describe('main', () => {
         // the start gate never advances (Invariant #114).
         expect(mockSimulationHostInstance.registerAgent).not.toHaveBeenCalled();
         expect(mockSimulationHostInstance.onGameStart).not.toHaveBeenCalled();
+    });
+
+    it('registers a spectator to follow the first seated player and pushes its perspective snapshot (Invariant #114)', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        mockStateBroadcasterInstance.broadcastSpectator.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeTestContributions());
+
+        const { transport, options, capturedJoinRef } = makeSpectatorSessionHarness();
+        const hostId = playerId('host-spec-follow');
+        const clientId = playerId('client-spec-follow');
+        const spectatorId = playerId('spectator-follow');
+
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        capturedJoinRef.current?.({ playerId: clientId });
+        options?.onGameStartRequested?.({
+            info: { sessionId: 'session-spec-follow', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+
+        const spectators = latestBroadcasterSpectatorSource();
+        expect(spectators).toBeDefined();
+
+        capturedJoinRef.current?.({ playerId: spectatorId, role: 'spectator' });
+
+        // Default follow target is the first seated player in snapshot order.
+        expect(spectators?.followedBy(spectatorId)).toBe(hostId);
+        // The joiner is immediately pushed its perspective snapshot.
+        expect(mockStateBroadcasterInstance.broadcastSpectator).toHaveBeenCalledWith(
+            expect.objectContaining({ phase: 'playing' }),
+            spectatorId,
+        );
+    });
+
+    it('drops a remote EngineAction arriving from a spectator connection (Invariant #114)', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeTestContributions());
+
+        const { transport, options, capturedJoinRef, capturedActionRef } =
+            makeSpectatorSessionHarness();
+        const hostId = playerId('host-spec-drop');
+        const clientId = playerId('client-spec-drop');
+        const spectatorId = playerId('spectator-drop');
+
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        capturedJoinRef.current?.({ playerId: clientId });
+        options?.onGameStartRequested?.({
+            info: { sessionId: 'session-spec-drop', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+        capturedJoinRef.current?.({ playerId: spectatorId, role: 'spectator' });
+
+        const moveAction = {
+            type: 'tactics:move_unit',
+            playerId: hostId,
+            tick: 1,
+            payload: { unitId: 'unit-1', x: 1, y: 0 },
+        };
+
+        // Positive control: the same envelope from a seated connection drives
+        // the pipeline fan-out.
+        mockSimulationHostInstance.afterTick.mockClear();
+        capturedActionRef.current?.(hostId, moveAction);
+        expect(mockSimulationHostInstance.afterTick).toHaveBeenCalled();
+
+        // From the spectator connection the envelope is dropped at the host
+        // boundary — even one spoofing a seated player's id never reaches the
+        // pipeline.
+        mockSimulationHostInstance.afterTick.mockClear();
+        capturedActionRef.current?.(spectatorId, { ...moveAction, tick: 2 });
+        expect(mockSimulationHostInstance.afterTick).not.toHaveBeenCalled();
+    });
+
+    it('removes a spectator from the viewer registry when it disconnects', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeTestContributions());
+
+        const { transport, options, capturedJoinRef, capturedLeftRef } =
+            makeSpectatorSessionHarness();
+        const hostId = playerId('host-spec-leave');
+        const clientId = playerId('client-spec-leave');
+        const spectatorId = playerId('spectator-leave');
+
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        capturedJoinRef.current?.({ playerId: clientId });
+        options?.onGameStartRequested?.({
+            info: { sessionId: 'session-spec-leave', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+
+        const spectators = latestBroadcasterSpectatorSource();
+        capturedJoinRef.current?.({ playerId: spectatorId, role: 'spectator' });
+        expect(spectators?.followedBy(spectatorId)).toBeDefined();
+
+        capturedLeftRef.current?.(spectatorId, 'normal');
+
+        expect(spectators?.followedBy(spectatorId)).toBeUndefined();
+        expect(spectators?.entries()).toEqual([]);
+    });
+
+    it('re-points spectators when their followed seat deliberately leaves, and holds on transient drops', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(makeTestContributions());
+
+        const { transport, options, capturedJoinRef, capturedLeftRef } =
+            makeSpectatorSessionHarness();
+        const hostId = playerId('host-spec-repoint');
+        const clientId = playerId('client-spec-repoint');
+        const spectatorId = playerId('spectator-repoint');
+
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        capturedJoinRef.current?.({ playerId: clientId });
+        options?.onGameStartRequested?.({
+            info: { sessionId: 'session-spec-repoint', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+
+        const spectators = latestBroadcasterSpectatorSource();
+        capturedJoinRef.current?.({ playerId: spectatorId, role: 'spectator' });
+        expect(spectators?.followedBy(spectatorId)).toBe(hostId);
+
+        // A transient drop keeps the follow target — the seat is retained for
+        // reconnect and stays projectable.
+        capturedLeftRef.current?.(hostId, 'timeout');
+        expect(spectators?.followedBy(spectatorId)).toBe(hostId);
+
+        // A deliberate leave re-points followers to the next seated player.
+        capturedLeftRef.current?.(hostId, 'normal');
+        expect(spectators?.followedBy(spectatorId)).toBe(clientId);
     });
 
     it('registers configured AI slots before firing onGameStart', async () => {
@@ -4210,9 +4478,13 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
         return options;
     };
 
-    /** Snapshots broadcast with the given phase, paired with their viewerId. */
+    /**
+     * Stage-7 wave snapshots with the given phase, paired with their viewerId.
+     * Reads `broadcastWave` — return-to-lobby / restart broadcast through the
+     * pipeline Stage-7 callback, not the point-send `broadcast`.
+     */
     const broadcastsWithPhase = (phase: string): unknown[] =>
-        mockStateBroadcasterInstance.broadcast.mock.calls
+        mockStateBroadcasterInstance.broadcastWave.mock.calls
             .filter(([snap]) => (snap as { phase?: string }).phase === phase)
             .map(([, viewerId]) => viewerId);
 
@@ -4228,6 +4500,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
         mockRegisterCrashReporter.mockClear();
         mockLobbyManagerCtor.mockClear();
         mockStateBroadcasterInstance.broadcast.mockClear();
+        mockStateBroadcasterInstance.broadcastWave.mockClear();
         mockSimulationHostInstance.registerAgent.mockClear();
         mockSimulationHostInstance.onGameStart.mockClear();
         mockSimulationHostInstance.onGameEnd.mockClear();
@@ -4242,7 +4515,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
 
     it('broadcasts a phase:lobby snapshot to the host and every client', async () => {
         const options = await startHostedMatch();
-        mockStateBroadcasterInstance.broadcast.mockClear();
+        mockStateBroadcasterInstance.broadcastWave.mockClear();
 
         options.onReturnToLobbyRequested?.(makeLobbyState());
 
@@ -4320,7 +4593,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
     it('is restartable — a subsequent engine:start_game broadcasts phase:playing', async () => {
         const options = await startHostedMatch();
         options.onReturnToLobbyRequested?.(makeLobbyState());
-        mockStateBroadcasterInstance.broadcast.mockClear();
+        mockStateBroadcasterInstance.broadcastWave.mockClear();
 
         options.onGameStartRequested?.(makeLobbyState());
 
@@ -4365,7 +4638,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
 
     it('is fail-loud and runs no reset when the action is rejected (non-host dispatcher)', async () => {
         const options = await startHostedMatch();
-        mockStateBroadcasterInstance.broadcast.mockClear();
+        mockStateBroadcasterInstance.broadcastWave.mockClear();
         mockAgentManagerInstance.clear.mockClear();
 
         // A return-to-lobby whose dispatcher is not the session host fails the

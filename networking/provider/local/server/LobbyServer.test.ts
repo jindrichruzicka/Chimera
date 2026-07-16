@@ -18,6 +18,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
 import type { PlayerId } from '@chimera-engine/simulation/contracts';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
 import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
 import type { DisconnectReason, LobbyState } from '../../MultiplayerProvider.js';
 import type {
@@ -79,6 +80,7 @@ function makeServer(opts?: {
     matchId?: string;
     hostPlayerId?: PlayerId;
     restoredSeats?: readonly PlayerId[];
+    logger?: Logger;
 }): LobbyServer {
     const s = new LobbyServer({
         port: 0,
@@ -89,9 +91,26 @@ function makeServer(opts?: {
         ...(opts?.matchId === undefined ? {} : { matchId: opts.matchId }),
         ...(opts?.hostPlayerId === undefined ? {} : { hostPlayerId: opts.hostPlayerId }),
         ...(opts?.restoredSeats === undefined ? {} : { restoredSeats: opts.restoredSeats }),
+        ...(opts?.logger === undefined ? {} : { logger: opts.logger }),
     });
     servers.push(s);
     return s;
+}
+
+/** Minimal Logger double that records warn messages; child() returns itself. */
+function makeWarnCollectingLogger(warns: string[]): Logger {
+    const logger: Logger = {
+        trace: () => {},
+        debug: () => {},
+        info: () => {},
+        warn: (msg) => {
+            warns.push(msg);
+        },
+        error: () => {},
+        fatal: () => {},
+        child: () => logger,
+    };
+    return logger;
 }
 
 /**
@@ -348,6 +367,72 @@ describe('LobbyServer — spectator admission (Invariant #114)', () => {
         if (msg.type !== 'REJECT') throw new Error('expected REJECT');
         expect(msg.reason).toBe('profile:banned');
         player.ws.close();
+    });
+});
+
+// ─── Spectator delivery & action boundary (Invariant #114) ───────────────────
+
+describe('LobbyServer — spectator delivery and action boundary (Invariant #114)', () => {
+    it('sendToPlayer delivers to a spectator connection', async () => {
+        const server = makeServer();
+        server.setJoinClassifier(() => ({ role: 'spectator' }));
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        const frames: ServerMessage[] = [];
+        ws.on('message', (raw) => frames.push(JSON.parse(rawToString(raw)) as ServerMessage));
+
+        server.sendToPlayer(playerId, { type: 'PONG', sentAt: 0 });
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(frames.some((f) => f.type === 'PONG')).toBe(true);
+        ws.close();
+    });
+
+    it('drops an ACTION from a spectator connection and does not route it', async () => {
+        const warns: string[] = [];
+        const server = makeServer({ logger: makeWarnCollectingLogger(warns) });
+        server.setJoinClassifier(() => ({ role: 'spectator' }));
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        const routed: { from: PlayerId; msg: ClientMessage }[] = [];
+        server.onMessage((from, msg) => routed.push({ from, msg }));
+
+        ws.send(
+            JSON.stringify({
+                type: 'ACTION',
+                tick: 1,
+                action: { type: 'test:noop', playerId, tick: 1, payload: {} },
+                checksum: 0,
+            } satisfies ClientMessage),
+        );
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(routed).toHaveLength(0);
+        expect(warns.some((m) => m.toLowerCase().includes('spectator'))).toBe(true);
+        ws.close();
+    });
+
+    it('still routes non-ACTION messages from a spectator (out-of-band channel stays open)', async () => {
+        const server = makeServer();
+        server.setJoinClassifier(() => ({ role: 'spectator' }));
+        await server.ready();
+        const { ws } = await connectAndJoin(server);
+
+        const routed: ClientMessage[] = [];
+        server.onMessage((_from, msg) => routed.push(msg));
+
+        ws.send(
+            JSON.stringify({
+                type: 'SPECTATE_TARGET_UPDATE',
+                targetPlayerId: 'seat-1',
+            } satisfies ClientMessage),
+        );
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(routed.map((m) => m.type)).toContain('SPECTATE_TARGET_UPDATE');
+        ws.close();
     });
 });
 

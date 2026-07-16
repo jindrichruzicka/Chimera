@@ -86,6 +86,7 @@ import {
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import { readAllowSpectators } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { classifyJoin } from './lobby/joinClassifier.js';
+import { SpectatorRegistry } from './lobby/SpectatorRegistry.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
@@ -1596,7 +1597,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                                 'StateBroadcaster used before hosted session wiring completed',
                             );
                         }
-                        broadcasterRef.current.broadcast(snap, to);
+                        // Stage-7 wave: per-viewer send + a single spectator
+                        // fan-out per wave. Point-sends (reconnect re-sync,
+                        // host-renderer seat switch) use `broadcast` instead so
+                        // they never drive spectator traffic.
+                        broadcasterRef.current.broadcastWave(snap, to);
                     },
                     (tick, to) => {
                         if (broadcasterRef.current === null) {
@@ -1774,10 +1779,19 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // undo state never bleeds between sessions.
             // Must be set before any pipeline.process()/processAction-triggered
             // broadcast can run; the callback above throws if this ordering is broken.
+            // Host-local ledger of admitted spectators and the seat each one
+            // follows (Invariant #114). Injected into the broadcaster as its
+            // spectator view source; populated/cleaned by the join/leave
+            // handlers below. Never enters GameSnapshot, saves, or replays.
+            const spectatorRegistry = new SpectatorRegistry(lobbyLogger);
             const broadcasterOptions =
                 metadata.e2eHooks === undefined
-                    ? { hostViewerId: metadata.hostId }
-                    : { hostViewerId: metadata.hostId, e2eHooks: metadata.e2eHooks };
+                    ? { hostViewerId: metadata.hostId, spectators: spectatorRegistry }
+                    : {
+                          hostViewerId: metadata.hostId,
+                          e2eHooks: metadata.e2eHooks,
+                          spectators: spectatorRegistry,
+                      };
             broadcasterRef.current = new StateBroadcaster(
                 transport,
                 projector,
@@ -2446,8 +2460,24 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     // Read-only viewer (Invariant #114): never seated. Not added
                     // to activePlayers / registeredPlayers / the seat ledger, gets
                     // no HumanPlayerAgent, and never advances the start gate — so
-                    // the phantom-seat path is skipped entirely. The viewer
-                    // registry + perspective broadcast are a later task.
+                    // the phantom-seat path is skipped entirely. Instead the
+                    // viewer registry tracks it following the first seated
+                    // player, and it is immediately pushed that seat's
+                    // projection so it sees the match without waiting for the
+                    // next broadcast wave.
+                    const snapshot = sessionRuntime.getSnapshot();
+                    const firstSeat = Object.keys(snapshot.players)[0] as PlayerId | undefined;
+                    if (firstSeat === undefined) {
+                        // Unreachable via the join classifier (spectators are
+                        // admitted only into a running match), kept as a guard:
+                        // never project a non-existent seat.
+                        lobbyLogger.warn('spectator joined with no seated players; ignoring', {
+                            playerId: pid,
+                        });
+                        return;
+                    }
+                    spectatorRegistry.add(pid, firstSeat);
+                    broadcasterRef.current?.broadcastSpectator(snapshot, pid);
                     return;
                 }
                 activePlayers.add(pid);
@@ -2471,6 +2501,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 sessionRestoreCoordinator.notePlayerJoined(pid);
             });
             const unsubLeft = transport.onPlayerLeft((pid, reason) => {
+                // A departing spectator only leaves the viewer registry — it
+                // held no seat, so there is nothing to release and no "left
+                // match" toast tied to seats (Invariant #114).
+                if (spectatorRegistry.remove(pid)) {
+                    return;
+                }
                 activePlayers.delete(pid);
                 // A lobby-phase leave frees + re-packs the host slot ledger so it
                 // stays in step with LobbyManager's compacted `players` roster.
@@ -2496,6 +2532,17 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     reason === 'normal' &&
                     sessionRuntime.getSnapshot().phase !== gamePhase('lobby')
                 ) {
+                    // Re-point spectators following the departed seat to the next
+                    // seated player. The seat itself stays in `snapshot.players`
+                    // (a mid-match leave never mutates game state), so a transient
+                    // drop above holds the follow target for the likely reconnect
+                    // — only a deliberate leave re-points.
+                    const nextSeat = Object.keys(sessionRuntime.getSnapshot().players).find(
+                        (seat) => seat !== pid,
+                    ) as PlayerId | undefined;
+                    if (nextSeat !== undefined) {
+                        spectatorRegistry.repointFollowersOf(pid, nextSeat);
+                    }
                     const event: PlayerLeftMatchEvent = {
                         playerId: pid,
                         displayName: playerDirectory.snapshot()[pid]?.displayName ?? String(pid),
@@ -2514,7 +2561,18 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // autosave fire-and-forget.  Errors here are
             // swallowed so a single misbehaving client cannot crash the
             // host event loop; the pipeline already logs invalid actions.
-            const unsubAction = transport.onActionReceived((_from, action) => {
+            const unsubAction = transport.onActionReceived((from, action) => {
+                // A spectator connection never dispatches EngineActions
+                // (Invariant #114). Dropping on the SENDING connection also
+                // stops an envelope spoofing a seated player's id — a seatless
+                // `validate()` rejection alone would not.
+                if (spectatorRegistry.has(from)) {
+                    lobbyLogger.warn('hosted session: dropped action from spectator', {
+                        actionType: action.type,
+                        playerId: from,
+                    });
+                    return;
+                }
                 try {
                     // Same fan-out as the host's own actions (Invariant #17:
                     // routing through SimulationHost/AgentManager), so a remote
@@ -2542,6 +2600,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 unsubJoined();
                 unsubLeft();
                 unsubAction();
+                spectatorRegistry.clear();
                 clearUndoHistory([...activePlayers]);
                 // Discard any retained replay recording on session close.
                 // Matches are no longer persisted at game-over, so this drops both an

@@ -121,8 +121,9 @@ export class LobbyServer implements MessageBus {
     /**
      * Read-only spectator connections, kept out of `connections` so they never
      * count against the player-capacity gate. Bounded by `maxSpectators`.
-     * Admission only (Invariant #114) — the viewer registry + perspective
-     * broadcast are a later task; a spectator here holds no seat and no agent.
+     * A spectator holds no seat and no agent (Invariant #114): it receives its
+     * perspective snapshots via `sendToPlayer` unicast, is never part of
+     * `broadcast()`, and its ACTION messages are dropped at this boundary.
      */
     private readonly spectatorConnections = new Map<PlayerId, WebSocket>();
     private readonly _token: string;
@@ -240,11 +241,13 @@ export class LobbyServer implements MessageBus {
     }
 
     /**
-     * Send a serialised ServerMessage to one specific authenticated client.
-     * No-op if the PlayerId is not connected.
+     * Send a serialised ServerMessage to one specific authenticated client —
+     * a seated player or a spectator (spectators receive their perspective
+     * snapshots through this unicast path; they are never part of
+     * `broadcast()`). No-op if the PlayerId is not connected.
      */
     sendToPlayer(playerId: PlayerId, msg: ServerMessage): void {
-        const ws = this.connections.get(playerId);
+        const ws = this.connections.get(playerId) ?? this.spectatorConnections.get(playerId);
         if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(msg));
         }
@@ -569,6 +572,17 @@ export class LobbyServer implements MessageBus {
                 return;
             }
 
+            // A spectator is a read-only viewer (Invariant #114): drop its
+            // EngineActions at this boundary — belt-and-braces on top of the
+            // seatless `validate()` rejection. Out-of-band messages (chat,
+            // spectate-target updates) still route.
+            if (msg.type === 'ACTION' && this.spectatorConnections.has(pid)) {
+                this.logger?.warn('dropped ACTION from spectator connection', {
+                    playerId: pid,
+                });
+                return;
+            }
+
             for (const cb of this.messageCbs) {
                 cb(pid, msg);
             }
@@ -618,9 +632,10 @@ export class LobbyServer implements MessageBus {
             } satisfies LobbyState);
 
         // A spectator holds no seat and is never added to the authoritative
-        // roster (the viewer registry / who's-watching UI is a later task). It
-        // still receives the current roster so it can see who is playing, but it
-        // does not mutate or persist the cached lobby state (Invariant #114).
+        // roster; the host tracks viewers in its own SpectatorRegistry, not in
+        // this lobby state. It still receives the current roster so it can see
+        // who is playing, but it does not mutate or persist the cached lobby
+        // state (Invariant #114).
         if (role === 'spectator') {
             return baseState;
         }

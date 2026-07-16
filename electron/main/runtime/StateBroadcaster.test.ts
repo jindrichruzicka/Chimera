@@ -17,6 +17,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { StateBroadcaster } from './StateBroadcaster.js';
+import type { SpectatorViewSource } from './StateBroadcaster.js';
 import { createNoopLogger } from '../logging/logger.js';
 import { GAME_SNAPSHOT_CHANNEL } from '../../preload/apis/game-api.js';
 import { playerId as toPlayerId } from '@chimera-engine/networking';
@@ -342,5 +343,195 @@ describe('StateBroadcaster.dispose', () => {
 
         expect(transport.sendSnapshot).toHaveBeenCalledOnce();
         expect(transport.sendSnapshot).toHaveBeenCalledWith(PLAYER_A, projected);
+    });
+});
+
+// ── Spectator perspective fan-out (Invariant #114) ────────────────────────────
+
+const SPEC_1 = toPlayerId('spectator-1');
+const SPEC_2 = toPlayerId('spectator-2');
+
+/** Projector double whose projection carries the requested viewerId. */
+function makePerViewerProjector(): StateProjector<BaseGameSnapshot> {
+    return {
+        project: vi.fn<
+            (snapshot: Readonly<BaseGameSnapshot>, viewerId: PlayerId) => PlayerSnapshot
+        >((snapshot, viewerId) => ({
+            ...makeProjectedSnapshot(viewerId),
+            tick: snapshot.tick,
+        })),
+    };
+}
+
+function makeSpectatorSource(
+    pairs: readonly (readonly [PlayerId, PlayerId])[],
+): SpectatorViewSource {
+    const map = new Map(pairs);
+    return {
+        entries: () => [...map.entries()],
+        followedBy: (spectatorId) => map.get(spectatorId),
+    };
+}
+
+describe('StateBroadcaster — spectator perspective fan-out (Invariant #114)', () => {
+    it('fans out the followed seat projection to each spectator exactly once per wave', () => {
+        const transport = makeTransport();
+        const projector = makePerViewerProjector();
+        const spectators = makeSpectatorSource([
+            [SPEC_1, PLAYER_A],
+            [SPEC_2, PLAYER_B],
+        ]);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators,
+        });
+        const snapshot = makeSnapshot(PLAYER_A);
+
+        // Stage 7 calls broadcastWave() once per seated viewer with the same
+        // snapshot object — the spectator fan-out must not repeat per call.
+        broadcaster.broadcastWave(snapshot, PLAYER_A);
+        broadcaster.broadcastWave(snapshot, PLAYER_B);
+
+        expect(transport.sendSnapshot).toHaveBeenCalledTimes(4);
+        expect(transport.sendSnapshot).toHaveBeenCalledWith(
+            SPEC_1,
+            expect.objectContaining({ viewerId: PLAYER_A }),
+        );
+        expect(transport.sendSnapshot).toHaveBeenCalledWith(
+            SPEC_2,
+            expect.objectContaining({ viewerId: PLAYER_B }),
+        );
+        expect(projector.project).toHaveBeenCalledWith(snapshot, PLAYER_A);
+        expect(projector.project).toHaveBeenCalledWith(snapshot, PLAYER_B);
+    });
+
+    it('a point-send broadcast() never reaches spectators (only broadcastWave does)', () => {
+        const transport = makeTransport();
+        const projector = makePerViewerProjector();
+        const spectators = makeSpectatorSource([
+            [SPEC_1, PLAYER_A],
+            [SPEC_2, PLAYER_B],
+        ]);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators,
+        });
+        const snapshot = makeSnapshot(PLAYER_A);
+
+        // A reconnect re-sync / host-renderer seat switch targets ONE viewer
+        // and must not push snapshots to remote spectators.
+        broadcaster.broadcast(snapshot, PLAYER_A);
+
+        expect(transport.sendSnapshot).toHaveBeenCalledOnce();
+        expect(transport.sendSnapshot).toHaveBeenCalledWith(
+            PLAYER_A,
+            expect.objectContaining({ viewerId: PLAYER_A }),
+        );
+        expect(transport.sendSnapshot).not.toHaveBeenCalledWith(SPEC_1, expect.anything());
+        expect(transport.sendSnapshot).not.toHaveBeenCalledWith(SPEC_2, expect.anything());
+
+        // …and because the point-send never touched the wave marker, the next
+        // real wave of the SAME snapshot still fans out to every spectator.
+        broadcaster.broadcastWave(snapshot, PLAYER_A);
+        expect(transport.sendSnapshot).toHaveBeenCalledWith(SPEC_1, expect.anything());
+        expect(transport.sendSnapshot).toHaveBeenCalledWith(SPEC_2, expect.anything());
+    });
+
+    it('fans out again when the next wave carries a new snapshot object', () => {
+        const transport = makeTransport();
+        const projector = makePerViewerProjector();
+        const spectators = makeSpectatorSource([[SPEC_1, PLAYER_A]]);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators,
+        });
+
+        broadcaster.broadcastWave(makeSnapshot(PLAYER_A), PLAYER_A);
+        broadcaster.broadcastWave({ ...makeSnapshot(PLAYER_A), tick: 2 }, PLAYER_A);
+
+        const spectatorSends = (
+            transport.sendSnapshot as ReturnType<typeof vi.fn>
+        ).mock.calls.filter(([target]) => target === SPEC_1);
+        expect(spectatorSends).toHaveLength(2);
+    });
+
+    it('broadcastSpectator() unicasts the followed seat projection to one spectator', () => {
+        const transport = makeTransport();
+        const projector = makePerViewerProjector();
+        const spectators = makeSpectatorSource([
+            [SPEC_1, PLAYER_A],
+            [SPEC_2, PLAYER_B],
+        ]);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators,
+        });
+        const snapshot = makeSnapshot(PLAYER_A);
+
+        broadcaster.broadcastSpectator(snapshot, SPEC_1);
+
+        expect(transport.sendSnapshot).toHaveBeenCalledOnce();
+        expect(transport.sendSnapshot).toHaveBeenCalledWith(
+            SPEC_1,
+            expect.objectContaining({ viewerId: PLAYER_A }),
+        );
+
+        // The join-time unicast must not consume the wave fan-out: the next
+        // wave of the same snapshot still reaches every spectator.
+        broadcaster.broadcastWave(snapshot, PLAYER_A);
+        const spectatorSends = (
+            transport.sendSnapshot as ReturnType<typeof vi.fn>
+        ).mock.calls.filter(([target]) => target === SPEC_1);
+        expect(spectatorSends).toHaveLength(2);
+    });
+
+    it('broadcastSpectator() sends nothing for an unregistered spectator', () => {
+        const transport = makeTransport();
+        const projector = makePerViewerProjector();
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators: makeSpectatorSource([]),
+        });
+
+        broadcaster.broadcastSpectator(makeSnapshot(PLAYER_A), SPEC_1);
+
+        expect(projector.project).not.toHaveBeenCalled();
+        expect(transport.sendSnapshot).not.toHaveBeenCalled();
+    });
+
+    it('forwards clock-only ticks to spectators exactly once per tick value', () => {
+        const transport = makeTransport();
+        const projector = makePerViewerProjector();
+        const spectators = makeSpectatorSource([
+            [SPEC_1, PLAYER_A],
+            [SPEC_2, PLAYER_B],
+        ]);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators,
+        });
+
+        broadcaster.broadcastTick(5, PLAYER_A);
+        broadcaster.broadcastTick(5, PLAYER_B);
+        broadcaster.broadcastTick(6, PLAYER_A);
+
+        expect(transport.sendTick).toHaveBeenCalledWith(SPEC_1, 5);
+        expect(transport.sendTick).toHaveBeenCalledWith(SPEC_2, 5);
+        expect(transport.sendTick).toHaveBeenCalledWith(SPEC_1, 6);
+        const spectatorTicks = (transport.sendTick as ReturnType<typeof vi.fn>).mock.calls.filter(
+            ([target]) => target === SPEC_1 || target === SPEC_2,
+        );
+        expect(spectatorTicks).toHaveLength(4);
+    });
+
+    it('stops spectator fan-out after dispose()', () => {
+        const transport = makeTransport();
+        const projector = makePerViewerProjector();
+        const spectators = makeSpectatorSource([[SPEC_1, PLAYER_A]]);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            spectators,
+        });
+
+        broadcaster.dispose();
+        broadcaster.broadcastWave(makeSnapshot(PLAYER_A), PLAYER_A);
+        broadcaster.broadcastSpectator(makeSnapshot(PLAYER_A), SPEC_1);
+        broadcaster.broadcastTick(5, PLAYER_A);
+
+        expect(transport.sendSnapshot).not.toHaveBeenCalled();
+        expect(transport.sendTick).not.toHaveBeenCalled();
     });
 });

@@ -621,6 +621,27 @@ describe('InMemoryMultiplayerProvider — spectator admission (Invariant #114)',
         expect(spectatorStates).toHaveLength(0);
     });
 
+    it('delivers unicast snapshots and ticks to a spectator (perspective-broadcast transport pin)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+        hosted.transport.setJoinClassifier(() => ({ role: 'spectator' }));
+
+        const spectator = await provider.joinLobby({ address: hosted.lobbyCode });
+        const snapshots: unknown[] = [];
+        const ticks: number[] = [];
+        spectator.transport.onSnapshotReceived((snap) => snapshots.push(snap));
+        spectator.transport.onTickReceived((tick) => ticks.push(tick));
+
+        hosted.transport.sendSnapshot(
+            spectator.localPlayerId,
+            makeSnapshot(spectator.localPlayerId),
+        );
+        hosted.transport.sendTick(spectator.localPlayerId, 7);
+
+        expect(snapshots).toHaveLength(1);
+        expect(ticks).toEqual([7]);
+    });
+
     it('notifies the host of a joining spectator with role="spectator"', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
