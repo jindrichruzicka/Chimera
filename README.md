@@ -75,6 +75,8 @@ the rest.
   rebindable keyboard + gamepad input, camera presets, audio buses, chat, toasts, settings UI.
 - **A stack you already know.** Electron, Next.js, React 19, Three.js / React Three Fiber —
   all TypeScript, end to end.
+- **LLM-friendly by design.** Plain TypeScript and text-based state that coding assistants read
+  and write with ease — pair with Claude Code or Copilot to build faster.
 - **Secure by default.** Context isolation, an enumerated typed preload surface, sanitised
   side-channels, timing-safe lobby passwords.
 - **Tooling that respects your time.** In-engine inspector with time travel, `pnpm dev:mp N` for
