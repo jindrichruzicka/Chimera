@@ -90,6 +90,7 @@ import { classifyJoin } from './lobby/joinClassifier.js';
 import { SpectatorRegistry } from './lobby/SpectatorRegistry.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
+import { resolveE2eForcedTickerHz } from './runtime/e2e-realtime-seam.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
 import { runRevealSync } from './runtime/RevealOrchestrator.js';
 import { FileReplayRepository } from './replay/FileReplayRepository.js';
@@ -1877,7 +1878,13 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // actions back through runHostAction. The envelope mirrors
             // SessionRuntime.dispatchTick exactly: the per-tick seed comes from
             // the snapshot, never wall-clock time (determinism, Invariant #2).
-            const tickerHz = resolveTickerHz(hostedGame.manifest);
+            // E2E-only seam: force a live ticker onto the (turn-based) tactics
+            // host so the heartbeat spec can exercise the real-time engine-tick
+            // loop and its broadcast path. Inert outside e2e (double-gated on
+            // CHIMERA_E2E=1 + a valid interval) — unset ⇒ null ⇒ the manifest's
+            // resolveTickerHz stands, so production is unchanged.
+            const tickerHz =
+                resolveE2eForcedTickerHz(process.env) ?? resolveTickerHz(hostedGame.manifest);
             const realtimeTicker =
                 tickerHz === null
                     ? null

@@ -94,6 +94,18 @@ describe('electron.fixture', () => {
         expect(config.env['CHIMERA_E2E_DISABLE_SPECTATORS']).toBeUndefined();
     });
 
+    it('sets CHIMERA_E2E_REALTIME_TICK_MS when realtimeTickMs is provided', () => {
+        const config = createE2eElectronLaunchConfig({ port: '7794', realtimeTickMs: 50 });
+
+        expect(config.env['CHIMERA_E2E_REALTIME_TICK_MS']).toBe('50');
+    });
+
+    it('omits CHIMERA_E2E_REALTIME_TICK_MS by default so the manifest realtime flag stands', () => {
+        const config = createE2eElectronLaunchConfig({ port: '7794' });
+
+        expect(config.env['CHIMERA_E2E_REALTIME_TICK_MS']).toBeUndefined();
+    });
+
     it('assigns a fresh isolated Electron userData directory to each launch', () => {
         const hostConfig = createE2eElectronLaunchConfig({ port: '7779', role: 'host' });
         const clientConfig = createE2eElectronLaunchConfig({ port: '7779', role: 'client' });

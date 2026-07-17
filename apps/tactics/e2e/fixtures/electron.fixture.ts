@@ -67,6 +67,16 @@ export interface E2eElectronLaunchOptions {
      * unreachable with a capability-declaring game.
      */
     readonly disableSpectators?: boolean;
+    /**
+     * Force the host to run a live wall-clock `RealtimeTicker` at this interval
+     * (`CHIMERA_E2E_REALTIME_TICK_MS`), overriding the manifest's `realtime`
+     * flag. Only tactics is wired for e2e matches and tactics is turn-based
+     * (`realtime: false`, null ticker), so this seam lets the heartbeat spec
+     * exercise the real-time engine-tick loop — its autonomous firing and its
+     * broadcast to clients — that is otherwise unreachable with a turn-based
+     * game. Off outside this option: unset ⇒ the manifest flag stands.
+     */
+    readonly realtimeTickMs?: number;
 }
 
 export interface E2eElectronLaunchConfig {
@@ -173,6 +183,10 @@ export function createE2eElectronLaunchConfig(
 
     if (options.disableSpectators === true) {
         env['CHIMERA_E2E_DISABLE_SPECTATORS'] = '1';
+    }
+
+    if (options.realtimeTickMs !== undefined) {
+        env['CHIMERA_E2E_REALTIME_TICK_MS'] = String(options.realtimeTickMs);
     }
 
     return {

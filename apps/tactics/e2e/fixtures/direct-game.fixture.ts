@@ -41,6 +41,21 @@ export interface DirectGameFixtureOptions {
     readonly waitForGameStarted: boolean;
     /** Launch the host in Runtime Debug Layer mode (`CHIMERA_DEBUG=1`, §4.12). */
     readonly debugMode: boolean;
+    /**
+     * Server port for BOTH processes. Defaults to the shared `7779`; a spec that
+     * runs its own pair of processes should override this (via `test.use`) to a
+     * dedicated port so it stays collision-safe under `workers: 2` (separate
+     * files run on separate workers on the same port otherwise).
+     */
+    readonly port: string;
+    /**
+     * Force the host to run a live wall-clock `RealtimeTicker` at this interval
+     * (ms), overriding tactics' turn-based manifest (`CHIMERA_E2E_REALTIME_TICK_MS`).
+     * Off by default; the heartbeat spec sets it to drive the real-time
+     * engine-tick loop end-to-end. Threaded to the host only — the client just
+     * receives the broadcast ticks.
+     */
+    readonly realtimeTickMs?: number;
 }
 
 export interface DirectGameFixtures {
@@ -50,6 +65,7 @@ export interface DirectGameFixtures {
     readonly clientWindow: Page;
 }
 
+/** Default shared port; override per-file via the `port` fixture option. */
 const DIRECT_GAME_PORT = '7779';
 /** Polling interval while waiting for the lobby code from the host process. */
 const LOBBY_CODE_POLL_MS = 100;
@@ -123,15 +139,21 @@ export const test = electronTest.extend<
     clientInitialRoute: ['/game', { option: true }],
     waitForGameStarted: [true, { option: true }],
     debugMode: [false, { option: true }],
+    port: [DIRECT_GAME_PORT, { option: true }],
+    realtimeTickMs: [undefined, { option: true }],
 
-    hostApp: async ({ firstPlayer, passAndPlay, hostInitialRoute, debugMode }, use) => {
+    hostApp: async (
+        { firstPlayer, passAndPlay, hostInitialRoute, debugMode, port, realtimeTickMs },
+        use,
+    ) => {
         const app = await launchE2eElectronApplication({
-            port: DIRECT_GAME_PORT,
+            port,
             role: 'host',
             directGameRole: 'host',
             initialRoute: hostInitialRoute,
             passAndPlay,
             debugMode,
+            ...(realtimeTickMs !== undefined ? { realtimeTickMs } : {}),
         });
         try {
             await configureFirstPlayer(app, firstPlayer);
@@ -141,7 +163,7 @@ export const test = electronTest.extend<
         }
     },
 
-    clientApp: async ({ hostApp, passAndPlay, launchClient, clientInitialRoute }, use) => {
+    clientApp: async ({ hostApp, passAndPlay, launchClient, clientInitialRoute, port }, use) => {
         if (passAndPlay || !launchClient) {
             await use(hostApp);
             return;
@@ -150,7 +172,7 @@ export const test = electronTest.extend<
         const lobbyCode = await waitForLobbyCode(hostApp);
 
         const app = await launchE2eElectronApplication({
-            port: DIRECT_GAME_PORT,
+            port,
             role: 'client',
             directGameRole: 'client',
             directGameJoinAddress: lobbyCode,
