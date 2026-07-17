@@ -110,6 +110,10 @@ export function buildStandaloneRootManifest(
             // before Electron spawns; otherwise the binary runs as plain Node and the app
             // crashes at startup with a cryptic undefined-deref.
             start: 'node scripts/launch.mjs',
+            // `pnpm start:debug` runs the SAME launcher with --debug: developer mode
+            // (windowed + DevTools) plus the F9 Debug Inspector. The launcher's --debug
+            // branch sets CHIMERA_ENV/NODE_ENV=development + CHIMERA_DEBUG=1.
+            'start:debug': 'node scripts/launch.mjs --debug',
             package:
                 `next build apps/${name}/renderer && ` +
                 `pnpm --filter @chimera-engine/${name} build:app && ` +
@@ -160,6 +164,9 @@ export function buildStandaloneLauncherScript(kebab: string): string {
 // Build the app first (once, and after UI/main changes):
 //   pnpm exec next build apps/${kebab}/renderer
 //   pnpm --filter @chimera-engine/${kebab} build:app
+//
+// \`pnpm start\` runs production-default (fullscreen). \`pnpm start:debug\` passes --debug for a
+// developer run: windowed with DevTools + the F9 Debug Inspector.
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 
@@ -171,11 +178,86 @@ const electronBinary = require('electron');
 const env = { ...process.env };
 delete env['ELECTRON_RUN_AS_NODE'];
 
+// --debug (\`pnpm start:debug\`): launch in the engine's developer mode. CHIMERA_ENV=development
+// boots windowed (not fullscreen) with Chromium DevTools; CHIMERA_DEBUG=1 plus a non-production
+// NODE_ENV flips IS_DEBUG_MODE on so the Runtime Debug Layer + F9 Inspector load. The production
+// debug guard only fires when NODE_ENV==='production', so setting it to 'development' keeps quiet.
+if (process.argv.includes('--debug')) {
+    env['NODE_ENV'] = 'development';
+    env['CHIMERA_ENV'] = 'development';
+    env['CHIMERA_DEBUG'] = '1';
+}
+
 const child = spawn(electronBinary, ['apps/${kebab}'], { stdio: 'inherit', env });
 child.on('exit', (code, signal) => {
     process.exit(signal !== null ? 1 : code ?? 0);
 });
 `;
+}
+
+/**
+ * The standalone project's `.vscode/launch.json`: a "Run <Game>" config and a source-map-bound
+ * "Debug <Game>" config, both launching the built Electron app through the `node` debugger — which
+ * auto-injects the V8 inspector into the spawned `electron` binary, so no `--inspect` flag is
+ * needed. The Debug config's `outFiles` + `sourceMaps` bind MAIN-process breakpoints against the
+ * app's own source inlined into `dist/electron/main.js` (relies on esbuild `sourcemap: true` in
+ * build-main). Renderer/UI code is debugged in the Chromium DevTools window instead.
+ *
+ * Standalone-only + root-placed: the generated project root IS the workspace VS Code opens, so
+ * `${workspaceFolder}` resolves `node_modules/.bin/electron` at the root and `apps/<kebab>`
+ * relative to it. Pure string over kebab + title, mirroring the other synthesizers.
+ */
+export function buildStandaloneVscodeLaunchJson(kebab: string, title: string): string {
+    const shared = {
+        type: 'node',
+        request: 'launch',
+        cwd: '${workspaceFolder}',
+        runtimeExecutable: '${workspaceFolder}/node_modules/.bin/electron',
+        args: [`apps/${kebab}`],
+        env: { NODE_ENV: 'development', CHIMERA_ENV: 'development', CHIMERA_DEBUG: '1' },
+        console: 'integratedTerminal',
+        preLaunchTask: `Build ${title} (renderer + bundle)`,
+        skipFiles: ['<node_internals>/**', '**/node_modules/**'],
+    };
+    const config = {
+        version: '0.2.0',
+        configurations: [
+            { name: `Run ${title}`, ...shared },
+            {
+                name: `Debug ${title}`,
+                ...shared,
+                outFiles: [`\${workspaceFolder}/apps/${kebab}/dist/electron/**/*.js`],
+                sourceMaps: true,
+                smartStep: true,
+            },
+        ],
+    };
+    return `${JSON.stringify(config, null, 4)}\n`;
+}
+
+/**
+ * The standalone `.vscode/tasks.json`: the `preLaunchTask` both launch configs run before starting
+ * the app. Rebuilds the renderer static export (with CHIMERA_DEBUG=1 so browser source maps emit
+ * for DevTools) and re-bundles the Electron main/preload, so a launch always reflects current
+ * source. Drops the monorepo's `build:packages` step (a no-op stub in a standalone project). Pure.
+ */
+export function buildStandaloneVscodeTasksJson(kebab: string, title: string): string {
+    const config = {
+        version: '2.0.0',
+        tasks: [
+            {
+                label: `Build ${title} (renderer + bundle)`,
+                type: 'shell',
+                command:
+                    `pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/${kebab}/renderer && ` +
+                    `pnpm --filter @chimera-engine/${kebab} build:app`,
+                options: { cwd: '${workspaceFolder}' },
+                problemMatcher: [],
+                presentation: { reveal: 'always', focus: false, panel: 'shared', clear: true },
+            },
+        ],
+    };
+    return `${JSON.stringify(config, null, 4)}\n`;
 }
 
 /**

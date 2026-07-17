@@ -31,6 +31,8 @@ import {
     buildStandaloneRootManifest,
     buildStandaloneRootTsconfig,
     buildStandaloneVitestConfig,
+    buildStandaloneVscodeLaunchJson,
+    buildStandaloneVscodeTasksJson,
     buildStandaloneWorkspaceYaml,
     rewriteAppPackageForStandalone,
     rewriteAppTsconfigBuildForStandalone,
@@ -240,6 +242,7 @@ async function emitStandaloneProject(
     outputRoot: string,
     appDir: string,
     kebab: string,
+    title: string,
 ): Promise<void> {
     const manifest = buildStandaloneRootManifest({ name: kebab, toolchainDeps: TOOLCHAIN_DEPS });
     await writeFile(
@@ -271,6 +274,23 @@ async function emitStandaloneProject(
     await writeFile(
         path.join(scriptsDir, 'launch.mjs'),
         buildStandaloneLauncherScript(kebab),
+        'utf8',
+    );
+
+    // The IDE debug layer: a project-root `.vscode/` with "Run <Game>" + "Debug <Game>" launch
+    // configs and their build task. Standalone-only — a `--workspace` scaffold inherits the
+    // monorepo's own root `.vscode/`. Root-placed so it targets the workspace VS Code opens; the
+    // Debug config binds main-process breakpoints against the source-mapped `dist/electron/main.js`.
+    const vscodeDir = path.join(outputRoot, '.vscode');
+    await mkdir(vscodeDir, { recursive: true });
+    await writeFile(
+        path.join(vscodeDir, 'launch.json'),
+        buildStandaloneVscodeLaunchJson(kebab, title),
+        'utf8',
+    );
+    await writeFile(
+        path.join(vscodeDir, 'tasks.json'),
+        buildStandaloneVscodeTasksJson(kebab, title),
         'utf8',
     );
 
@@ -391,7 +411,7 @@ export async function scaffoldGame(options: ScaffoldGameOptions): Promise<Scaffo
         await wireRootPackageJson(repoRoot, names.kebab);
         await wireRootTsconfigBuild(repoRoot, names.kebab);
     } else {
-        await emitStandaloneProject(outputRoot, appDir, names.kebab);
+        await emitStandaloneProject(outputRoot, appDir, names.kebab, names.title);
     }
 
     return { appDir, names, template, filesWritten };
@@ -522,6 +542,10 @@ if (process.env['VITEST'] === undefined) {
                     console.log(`  pnpm exec next build apps/${result.names.kebab}/renderer`);
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
                     console.log('  pnpm start');
+                    console.log('  pnpm start:debug   # windowed + DevTools + F9 Debug Inspector');
+                    console.log(
+                        `  # or open this folder in VS Code and run the "Debug ${result.names.title}" launch config for breakpoints`,
+                    );
                 }
             } catch (error) {
                 console.error(

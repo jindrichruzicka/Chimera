@@ -56,6 +56,18 @@ describe('blank template smoke harness', () => {
         );
     });
 
+    // The template's build:app bundler is byte-shared with apps/tactics but has no co-located
+    // unit test (the tested copy lives in apps/tactics). These source-level guards cover the two
+    // dev-debugging seams the VITEST-gated CLI entry can't unit-test: the standalone F9 fix
+    // (bundle the packed debug-api.js sibling so the Inspector window loads) and main-process
+    // source maps (so `pnpm start:debug` + the "Debug <Game>" launch config bind breakpoints).
+    it('ships the F9 debug-preload fallback + main-process source maps in the build:app bundler', async () => {
+        const buildMain = await read('electron/build-main.ts');
+        expect(buildMain).toContain('resolveInstalledDebugPreloadEntry');
+        expect(buildMain).toContain('fileExists: existsSync');
+        expect(buildMain).toContain('sourcemap: true');
+    });
+
     it('ships a co-located screen render smoke through the renderer public barrels', async () => {
         const content = await read('screens/__GamePascal__Board.test.tsx');
         expect(content.startsWith('// @vitest-environment jsdom')).toBe(true);

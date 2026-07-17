@@ -25,6 +25,10 @@ const nextConfig: NextConfig = {
     assetPrefix: './',
     reactStrictMode: true,
     trailingSlash: true,
+    // Emit browser source maps ONLY for a debug build (the `.vscode` build task + `pnpm start:debug`
+    // set CHIMERA_DEBUG=1), so Chromium DevTools shows your TypeScript. A plain `pnpm package` never
+    // sets it, so the distributable stays map-free (no source structure shipped, smaller `out/`).
+    productionBrowserSourceMaps: process.env['CHIMERA_DEBUG'] === '1',
     images: { unoptimized: true },
     transpilePackages: ['@chimera-engine/renderer'],
     webpack(rawConfig): WebpackConfig {

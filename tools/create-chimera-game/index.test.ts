@@ -342,6 +342,8 @@ describe('scaffoldGame', () => {
                 'pnpm-workspace.yaml',
                 'vitest.config.mts',
                 'tsconfig.json',
+                '.vscode/launch.json',
+                '.vscode/tasks.json',
             ]) {
                 expect(
                     await readFile(path.join(outputRoot, file), 'utf8'),
@@ -364,9 +366,26 @@ describe('scaffoldGame', () => {
             // `pnpm start` + its launcher are emitted; the launcher strips ELECTRON_RUN_AS_NODE
             // before spawning Electron so a raw launch from a leaked env does not crash.
             expect(rootPkg.scripts.start).toBe('node scripts/launch.mjs');
+            // `pnpm start:debug` runs the same launcher with --debug (developer mode + F9 Inspector).
+            expect(rootPkg.scripts['start:debug']).toBe('node scripts/launch.mjs --debug');
             const launcher = await readFile(path.join(outputRoot, 'scripts', 'launch.mjs'), 'utf8');
             expect(launcher).toContain("delete env['ELECTRON_RUN_AS_NODE']");
             expect(launcher).toContain("spawn(electronBinary, ['apps/my-game']");
+            expect(launcher).toContain("process.argv.includes('--debug')");
+            expect(launcher).toContain("env['CHIMERA_DEBUG'] = '1'");
+
+            // The IDE debug layer: a project-root `.vscode/` with the game-named launch + build configs.
+            const launchJson = JSON.parse(
+                await readFile(path.join(outputRoot, '.vscode', 'launch.json'), 'utf8'),
+            );
+            expect(launchJson.configurations.map((c: { name: string }) => c.name)).toContain(
+                'Debug My Game',
+            );
+            const tasksJson = await readFile(
+                path.join(outputRoot, '.vscode', 'tasks.json'),
+                'utf8',
+            );
+            expect(tasksJson).toContain('Build My Game (renderer + bundle)');
 
             // The app's @chimera-engine/* deps are rewritten onto published ranges — no workspace:* survives.
             const appPkg = JSON.parse(

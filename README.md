@@ -26,13 +26,20 @@ Prove it works, play it, ship it:
 pnpm --filter @chimera-engine/my-game test       # unit tests — green out of the box
 pnpm exec next build apps/my-game/renderer       # build the UI
 pnpm --filter @chimera-engine/my-game build:app  # bundle the Electron main
-pnpm start                                       # play it
+pnpm start                                       # play it (fullscreen)
+pnpm start:debug                                 # windowed + DevTools + F9 Debug Inspector
 pnpm package                                          # distributable (.app / installer)
 ```
 
 `pnpm start` launches the app with `ELECTRON_RUN_AS_NODE` stripped from the environment — some
 IDE and CI terminals export it, which would otherwise make the `electron` binary run as plain
 Node and crash the app at startup.
+
+**Debugging.** `pnpm start:debug` runs the app in developer mode: a windowed window with Chromium
+DevTools open and the F9 Debug Inspector enabled. For breakpoints, open the folder in VS Code and
+run the generated **“Debug my-game”** launch config — it rebuilds and binds source-mapped
+breakpoints in your main-process code (`electron/main.ts`, `simulation/**`). Renderer/UI code is
+debugged in the DevTools window.
 
 Requires Node.js **≥ 20** and [pnpm](https://pnpm.io) **≥ 10**. The engine arrives as published
 `@chimera-engine/*` packages — no monorepo checkout needed.

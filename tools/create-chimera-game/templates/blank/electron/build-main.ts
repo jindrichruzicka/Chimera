@@ -120,6 +120,26 @@ export function resolveDevDebugPreloadEntry(
     return fileExists(entry) ? entry : undefined;
 }
 
+/**
+ * The Inspector-window debug preload entry resolved as the SIBLING of the app's already-resolved
+ * api preload — the STANDALONE fallback. The installed `@chimera-engine/electron` tarball ships a
+ * compiled `dist/preload/debug-api.js` next to `dist/preload/api.js` (via `files: ["dist"]`); it is
+ * not a public `exports` subpath, but it is the very file the runtime loads as
+ * `<preloadDir>/debug-api.js`. A scaffolded game has no monorepo host SOURCE
+ * (`resolveDevDebugPreloadEntry` returns undefined) yet still wants F9, so `build:app` bundles this
+ * compiled sibling. Returns undefined when no `fileExists` probe is injected (e.g. the e2e
+ * global-setup, which stays debug-free) or the sibling is absent (an older engine tarball, or a
+ * preload resolved off a source tree).
+ */
+export function resolveInstalledDebugPreloadEntry(
+    apiPreloadPath: string,
+    fileExists?: (file: string) => boolean,
+): string | undefined {
+    if (fileExists === undefined) return undefined;
+    const sibling = path.join(path.dirname(apiPreloadPath), 'debug-api.js');
+    return fileExists(sibling) ? sibling : undefined;
+}
+
 export interface PlanBundlesOptions {
     readonly appDir: string;
     readonly mainEntry: string;
@@ -193,6 +213,13 @@ export interface BuildAppBundlesDeps {
     readonly appDir: string;
     /** Optional monorepo-only debug preload entry (host source path); see PlanBundlesOptions. */
     readonly debugPreloadEntry?: string;
+    /**
+     * Existence probe (injected `existsSync`) for the STANDALONE debug-preload fallback: when no
+     * monorepo-source `debugPreloadEntry` is supplied, resolve the packed engine's compiled
+     * `debug-api.js` sibling of the api preload. Supplied only by the `build:app` CLI entry; absent
+     * from the e2e global-setups, which stay debug-free. Keeps the fallback unit-testable.
+     */
+    readonly fileExists?: (file: string) => boolean;
     /** Optional output-path override (the E2E `.e2e-build` layout); see PlanBundlesOptions. */
     readonly outfiles?: BundleOutfiles;
     readonly log?: (message: string) => void;
@@ -224,10 +251,20 @@ export function buildAppBundles(deps: BuildAppBundlesDeps): void {
 
     const preloadEntry = deps.resolvePreload(verifyPackMode ? nodePaths[0] : undefined);
 
-    // The debug preload is a dev/e2e convenience only and never ships in a verify:pack
-    // run (the gate excludes the debug specs; Invariant #27 keeps it private). Optional keys are
+    // The monorepo-SOURCE debug entry is never used in verify:pack mode (the gate excludes the
+    // debug specs; the source is private). PRESERVED verbatim as the source-entry branch.
+    const sourceDebugPreloadEntry = verifyPackMode ? undefined : deps.debugPreloadEntry;
+    // STANDALONE FALLBACK: a scaffolded game supplies NO source entry AND its build:app always runs
+    // in verify:pack mode (CHIMERA_VERIFY_PACK_NODE_MODULES=node_modules, to resolve the engine from
+    // node_modules) — which would drop the debug bundle and break F9. When (and only when) no source
+    // entry was supplied, resolve the debug preload as the SIBLING of the resolved api preload (the
+    // packed engine ships dist/preload/debug-api.js). Monorepo + e2e keep their exact behaviour: a
+    // supplied source entry always takes the preserved verify:pack drop above. Optional keys are
     // spread in only when defined (exactOptionalPropertyTypes forbids explicit undefined).
-    const debugPreloadEntry = verifyPackMode ? undefined : deps.debugPreloadEntry;
+    const debugPreloadEntry =
+        deps.debugPreloadEntry === undefined
+            ? resolveInstalledDebugPreloadEntry(preloadEntry, deps.fileExists)
+            : sourceDebugPreloadEntry;
     const specs = planBundles({
         appDir: deps.appDir,
         mainEntry: path.join(deps.appDir, 'electron/main.ts'),
@@ -278,6 +315,11 @@ if (process.env['VITEST'] === undefined && isDirectRun()) {
             platform: 'node',
             format: 'cjs',
             target: 'node20',
+            // Emit external `.map` files so a debugger (VSCode "Debug <Game>"
+            // launch config, or `pnpm start:debug`) can bind breakpoints in the
+            // original TypeScript source rather than the bundled output. Harmless
+            // in packaged builds (a sibling `.map` next to each bundle).
+            sourcemap: true,
             external: [...spec.external],
             alias: { ...spec.alias },
             nodePaths: [...spec.nodePaths],
@@ -294,9 +336,10 @@ if (process.env['VITEST'] === undefined && isDirectRun()) {
         return createRequire(fromPackageJson).resolve('@chimera-engine/electron/preload/api');
     };
 
-    // Bundle the Inspector-window debug preload too when the monorepo host source is
-    // present (it is for any in-repo app; absent for a scaffolded game that copies this
-    // file verbatim). `buildAppBundles` itself drops it in verify:pack mode. Spread in
+    // Bundle the Inspector-window debug preload. In the monorepo the host SOURCE is present, so
+    // `resolveDevDebugPreloadEntry` returns it. A scaffolded game has no host source (undefined), so
+    // `buildAppBundles` falls back — via the injected `fileExists` probe — to the packed engine's
+    // compiled `debug-api.js` sibling, keeping F9 working out of the box. Spread the source entry in
     // only when defined — exactOptionalPropertyTypes forbids an explicit `undefined`.
     const debugPreloadEntry = resolveDevDebugPreloadEntry(root, existsSync);
 
@@ -307,6 +350,7 @@ if (process.env['VITEST'] === undefined && isDirectRun()) {
         env: process.env,
         root,
         appDir,
+        fileExists: existsSync,
         ...(debugPreloadEntry !== undefined ? { debugPreloadEntry } : {}),
         log: (message) => console.log(`[build:app] ${message}`),
     });

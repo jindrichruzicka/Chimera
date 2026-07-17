@@ -53,6 +53,15 @@ Then `pnpm install` runs in the current directory. Next: `pnpm --filter @chimera
 `ELECTRON_RUN_AS_NODE` before spawning Electron — some IDE/CI terminals export it, which would
 otherwise boot the `electron` binary as plain Node and crash the app at startup.
 
+**Debugging.** `pnpm start:debug` runs the same launcher with `--debug`: it sets
+`CHIMERA_ENV`/`NODE_ENV=development` + `CHIMERA_DEBUG=1`, so the app boots windowed (not fullscreen)
+with Chromium DevTools and the F9 Debug Inspector enabled. For breakpoints, the standalone project
+ships a `.vscode/` with **“Run &lt;Game&gt;”** and **“Debug &lt;Game&gt;”** launch configs: “Debug”
+rebuilds via a `tasks.json` build task and binds source-mapped breakpoints in main-process code
+(`electron/main.ts`, `simulation/**`) — the app bundler emits `.map` files and the renderer build
+emits browser source maps under `CHIMERA_DEBUG=1`. Renderer/UI code is debugged in the DevTools
+window. A plain `pnpm package` sets none of these, so the distributable stays production-default.
+
 **In-monorepo (`--workspace`).** Writes the app under this repo's `apps/<kebab>/` and registers it
 (mirroring `apps/tactics`): adds `@chimera-engine/<kebab>: "workspace:*"` to the root `package.json`,
 appends a `tsconfig.build.json` reference and a `typecheck` line, then `pnpm install`. Next:

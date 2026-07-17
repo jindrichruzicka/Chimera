@@ -9,6 +9,7 @@ import {
     planBundles,
     buildAppBundles,
     resolveDevDebugPreloadEntry,
+    resolveInstalledDebugPreloadEntry,
     type BuildFn,
     type BundleSpec,
 } from './build-main.js';
@@ -169,6 +170,32 @@ describe('resolveDevDebugPreloadEntry', () => {
     });
 });
 
+describe('resolveInstalledDebugPreloadEntry', () => {
+    const API = '/nm/@chimera-engine/electron/dist/preload/api.js';
+    const SIBLING = '/nm/@chimera-engine/electron/dist/preload/debug-api.js';
+
+    it('returns the compiled debug-api.js sibling of the resolved api preload when it exists', () => {
+        expect(resolveInstalledDebugPreloadEntry(API, () => true)).toBe(SIBLING);
+    });
+
+    it('returns undefined when the sibling is absent (older engine tarball / source-tree preload)', () => {
+        expect(resolveInstalledDebugPreloadEntry(API, () => false)).toBeUndefined();
+    });
+
+    it('returns undefined when no fileExists probe is injected (the e2e global-setup stays debug-free)', () => {
+        expect(resolveInstalledDebugPreloadEntry(API)).toBeUndefined();
+    });
+
+    it('probes exactly the debug-api.js sibling of the api preload dir', () => {
+        const probed: string[] = [];
+        resolveInstalledDebugPreloadEntry(API, (file) => {
+            probed.push(file);
+            return false;
+        });
+        expect(probed).toEqual([SIBLING]);
+    });
+});
+
 describe('buildAppBundles', () => {
     function makeDeps(env: Record<string, string | undefined>) {
         const built: BundleSpec[] = [];
@@ -240,5 +267,41 @@ describe('buildAppBundles', () => {
         const debug = built.find((s) => s.label === 'debug-preload');
         expect(debug?.outfile).toBe(outfiles.debugPreload);
         expect(debug?.entry).toBe(path.join(ROOT, 'electron/preload/debug-api.ts'));
+    });
+
+    // Standalone F9 fix: a scaffolded game supplies NO source debug entry, and its build:app
+    // ALWAYS runs in verify:pack mode (CHIMERA_VERIFY_PACK_NODE_MODULES=node_modules, to resolve
+    // the engine from node_modules). The fallback resolves the packed sibling of api.js so F9 works.
+    it('falls back to the packed debug-api.js sibling in verify:pack mode when no source entry is supplied', () => {
+        const nm = '/tmp/consumer/node_modules';
+        const { built, deps } = makeDeps({ [VERIFY_PACK_NODE_MODULES_ENV]: nm });
+        // resolvePreload (makeDeps default) resolves the api preload from the packed engine;
+        // its sibling debug-api.js is the fallback entry.
+        buildAppBundles({ ...deps, fileExists: () => true });
+        const debug = built.find((s) => s.label === 'debug-preload');
+        expect(debug?.entry).toBe(
+            '/node_modules/@chimera-engine/electron/dist/preload/debug-api.js',
+        );
+        expect(debug?.outfile).toBe(path.join(APP_DIR, 'dist/preload/debug-api.js'));
+    });
+
+    it('PRESERVES the verify:pack drop: a supplied SOURCE debug entry is dropped, fallback not taken', () => {
+        const nm = '/tmp/consumer/node_modules';
+        const { built, deps } = makeDeps({ [VERIFY_PACK_NODE_MODULES_ENV]: nm });
+        buildAppBundles({
+            ...deps,
+            debugPreloadEntry: path.join(ROOT, 'electron/preload/debug-api.ts'),
+            fileExists: () => true,
+        });
+        // The source entry takes the verify:pack drop (undefined); the sibling fallback fires only
+        // when NO source entry was supplied — so no debug bundle here.
+        expect(built.some((s) => s.label === 'debug-preload')).toBe(false);
+    });
+
+    it('does not fall back when no fileExists probe is injected (protects the e2e global-setup path)', () => {
+        const nm = '/tmp/consumer/node_modules';
+        const { built, deps } = makeDeps({ [VERIFY_PACK_NODE_MODULES_ENV]: nm });
+        buildAppBundles(deps);
+        expect(built.some((s) => s.label === 'debug-preload')).toBe(false);
     });
 });

@@ -5,6 +5,8 @@ import {
     buildStandaloneRootTsconfig,
     buildStandaloneToolchainDeps,
     buildStandaloneVitestConfig,
+    buildStandaloneVscodeLaunchJson,
+    buildStandaloneVscodeTasksJson,
     buildStandaloneWorkspaceYaml,
     rewriteAppPackageForStandalone,
     rewriteAppTsconfigBuildForStandalone,
@@ -68,6 +70,9 @@ describe('buildStandaloneRootManifest', () => {
         // `pnpm start` runs the launcher, which strips ELECTRON_RUN_AS_NODE before spawning
         // Electron — otherwise a raw `electron apps/<game>` in a leaked env crashes at startup.
         expect(manifest.scripts['start']).toBe('node scripts/launch.mjs');
+        // `pnpm start:debug` runs the same launcher with --debug: developer mode + the F9
+        // Debug Inspector (CHIMERA_ENV/NODE_ENV=development + CHIMERA_DEBUG=1, set in the launcher).
+        expect(manifest.scripts['start:debug']).toBe('node scripts/launch.mjs --debug');
     });
 
     it('carries the supplied pnpm.overrides for the gate tarball-resolved form', () => {
@@ -104,6 +109,78 @@ describe('buildStandaloneLauncherScript', () => {
         const script = buildStandaloneLauncherScript('space-armada');
         expect(script).toContain("'apps/space-armada'");
         expect(script).toContain('@chimera-engine/space-armada build:app');
+    });
+
+    it('sets developer + debug env ONLY under a --debug flag (pnpm start:debug)', () => {
+        const script = buildStandaloneLauncherScript('my-game');
+        // The dev+debug env is gated behind the flag, not unconditional — a bare
+        // `pnpm start` must stay production-default (fullscreen, no debug bridge).
+        expect(script).toMatch(/process\.argv\.includes\('--debug'\)/);
+        expect(script).toContain("env['NODE_ENV'] = 'development'");
+        expect(script).toContain("env['CHIMERA_ENV'] = 'development'");
+        expect(script).toContain("env['CHIMERA_DEBUG'] = '1'");
+        // Every debug env assignment sits AFTER the --debug guard (inside the branch),
+        // so it never runs for the plain `start` path.
+        const guardIdx = script.indexOf("includes('--debug')");
+        expect(guardIdx).toBeGreaterThan(-1);
+        expect(script.indexOf("env['NODE_ENV'] = 'development'")).toBeGreaterThan(guardIdx);
+        expect(script.indexOf("env['CHIMERA_DEBUG'] = '1'")).toBeGreaterThan(guardIdx);
+    });
+});
+
+describe('buildStandaloneVscodeLaunchJson', () => {
+    it('emits a "Run <Game>" and a source-map-bound "Debug <Game>" config for the scaffolded app', () => {
+        const out = buildStandaloneVscodeLaunchJson('my-game', 'My Game');
+        const parsed = JSON.parse(out) as {
+            version: string;
+            configurations: Record<string, unknown>[];
+        };
+        expect(parsed.version).toBe('0.2.0');
+        const names = parsed.configurations.map((c) => c['name']);
+        expect(names).toContain('Run My Game');
+        expect(names).toContain('Debug My Game');
+        for (const config of parsed.configurations) {
+            expect(config['type']).toBe('node');
+            expect(config['request']).toBe('launch');
+            // Launches THIS game's app dir via the standalone-root electron binary.
+            expect(config['args']).toEqual(['apps/my-game']);
+            expect(String(config['runtimeExecutable'])).toContain('node_modules/.bin/electron');
+            // Dev + debug env so the window is windowed with DevTools + the F9 bridge.
+            expect(config['env']).toMatchObject({
+                NODE_ENV: 'development',
+                CHIMERA_ENV: 'development',
+                CHIMERA_DEBUG: '1',
+            });
+            // The build task label the launch runs first (must match the tasks.json label).
+            expect(config['preLaunchTask']).toBe('Build My Game (renderer + bundle)');
+        }
+        // Only the Debug config binds source maps for main-process breakpoints.
+        const debug = parsed.configurations.find((c) => c['name'] === 'Debug My Game');
+        expect(debug?.['sourceMaps']).toBe(true);
+        expect(debug?.['outFiles']).toEqual([
+            '${workspaceFolder}/apps/my-game/dist/electron/**/*.js',
+        ]);
+        const run = parsed.configurations.find((c) => c['name'] === 'Run My Game');
+        expect(run?.['sourceMaps']).toBeUndefined();
+    });
+});
+
+describe('buildStandaloneVscodeTasksJson', () => {
+    it('emits the preLaunch build task that rebuilds the renderer (with maps) + the bundle', () => {
+        const out = buildStandaloneVscodeTasksJson('my-game', 'My Game');
+        const parsed = JSON.parse(out) as {
+            version: string;
+            tasks: Record<string, unknown>[];
+        };
+        expect(parsed.version).toBe('2.0.0');
+        const task = parsed.tasks[0];
+        // Label MUST match the launch config's preLaunchTask.
+        expect(task?.['label']).toBe('Build My Game (renderer + bundle)');
+        const command = String(task?.['command']);
+        // CHIMERA_DEBUG=1 on the next build so browser source maps emit for DevTools.
+        expect(command).toContain('CHIMERA_DEBUG=1');
+        expect(command).toContain('next build apps/my-game/renderer');
+        expect(command).toContain('@chimera-engine/my-game build:app');
     });
 });
 
