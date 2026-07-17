@@ -361,6 +361,12 @@ describe('scaffoldGame', () => {
             expect(rootPkg.scripts.package).toContain(
                 'pnpm --filter @chimera-engine/my-game run package',
             );
+            // `pnpm start` + its launcher are emitted; the launcher strips ELECTRON_RUN_AS_NODE
+            // before spawning Electron so a raw launch from a leaked env does not crash.
+            expect(rootPkg.scripts.start).toBe('node scripts/launch.mjs');
+            const launcher = await readFile(path.join(outputRoot, 'scripts', 'launch.mjs'), 'utf8');
+            expect(launcher).toContain("delete env['ELECTRON_RUN_AS_NODE']");
+            expect(launcher).toContain("spawn(electronBinary, ['apps/my-game']");
 
             // The app's @chimera-engine/* deps are rewritten onto published ranges — no workspace:* survives.
             const appPkg = JSON.parse(

@@ -27,6 +27,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeGameName, type GameNames } from './normalize';
 import {
+    buildStandaloneLauncherScript,
     buildStandaloneRootManifest,
     buildStandaloneRootTsconfig,
     buildStandaloneVitestConfig,
@@ -259,6 +260,17 @@ async function emitStandaloneProject(
     await writeFile(
         path.join(outputRoot, 'tsconfig.json'),
         buildStandaloneRootTsconfig(ROOT_COMPILER_OPTIONS),
+        'utf8',
+    );
+
+    // The `pnpm start` launcher. It strips ELECTRON_RUN_AS_NODE before spawning Electron so a
+    // launch from a leaked env (some IDE/agent terminals, CI) runs Electron rather than plain
+    // Node — the latter crashes at startup with a cryptic undefined-deref.
+    const scriptsDir = path.join(outputRoot, 'scripts');
+    await mkdir(scriptsDir, { recursive: true });
+    await writeFile(
+        path.join(scriptsDir, 'launch.mjs'),
+        buildStandaloneLauncherScript(kebab),
         'utf8',
     );
 
@@ -504,9 +516,12 @@ if (process.env['VITEST'] === undefined) {
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
                 } else {
                     // Standalone default scaffolds into <cwd>, so the project is already the cwd —
-                    // no `cd` step to print.
+                    // no `cd` step to print. `pnpm start` (the launcher) is the run step; it strips
+                    // ELECTRON_RUN_AS_NODE so a launch from a leaked env does not crash.
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} test`);
+                    console.log(`  pnpm exec next build apps/${result.names.kebab}/renderer`);
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
+                    console.log('  pnpm start');
                 }
             } catch (error) {
                 console.error(

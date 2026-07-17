@@ -550,6 +550,7 @@ const {
     resolveRuntimePaths,
     resolveRendererProtocolFilePath,
     registerRendererProtocolScheme,
+    assertElectronRuntime,
     buildRendererProtocolResponse,
     parseSingleByteRange,
     sanitiseE2eInitialUrl,
@@ -647,6 +648,31 @@ function withPlatform(value: NodeJS.Platform, fn: () => void): void {
         Object.defineProperty(process, 'platform', { value: original, configurable: true });
     }
 }
+
+describe('assertElectronRuntime', () => {
+    // Guards the reported "electron apps/<game> crashes the terminal" bug: when
+    // ELECTRON_RUN_AS_NODE is leaked into the shell (IDE/agent terminals, CI),
+    // the `electron` binary runs as plain Node, `require('electron')` yields the
+    // executable path string, and every destructured API (app/protocol/…) is
+    // undefined — so the app dies at the first API touch with a cryptic
+    // "Cannot read properties of undefined". This turns that into an actionable
+    // message BEFORE the crash.
+    it('is a no-op when the Electron app API object is present (real Electron runtime)', () => {
+        expect(() => assertElectronRuntime({}, {})).not.toThrow();
+        // App-presence wins even if the flag is somehow also set — we are clearly under Electron.
+        expect(() => assertElectronRuntime({}, { ELECTRON_RUN_AS_NODE: '1' })).not.toThrow();
+    });
+
+    it('throws an actionable error when the app API is undefined (running as plain Node)', () => {
+        expect(() => assertElectronRuntime(undefined, {})).toThrow(/Electron runtime required/);
+    });
+
+    it('names ELECTRON_RUN_AS_NODE in the message when that flag forced Node mode', () => {
+        expect(() => assertElectronRuntime(undefined, { ELECTRON_RUN_AS_NODE: '1' })).toThrow(
+            /ELECTRON_RUN_AS_NODE/,
+        );
+    });
+});
 
 describe('createMainWindow', () => {
     beforeEach(() => {

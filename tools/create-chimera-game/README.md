@@ -48,7 +48,10 @@ install + boot with no monorepo:
   Electron bundler resolves the host from the installed `@chimera-engine/electron`.
 
 Then `pnpm install` runs in the current directory. Next: `pnpm --filter @chimera-engine/<kebab> test`,
-`pnpm --filter @chimera-engine/<kebab> build:app`.
+`pnpm exec next build apps/<kebab>/renderer`, `pnpm --filter @chimera-engine/<kebab> build:app`, then
+`pnpm start` to play it. `pnpm start` goes through a generated `scripts/launch.mjs` that strips
+`ELECTRON_RUN_AS_NODE` before spawning Electron — some IDE/CI terminals export it, which would
+otherwise boot the `electron` binary as plain Node and crash the app at startup.
 
 **In-monorepo (`--workspace`).** Writes the app under this repo's `apps/<kebab>/` and registers it
 (mirroring `apps/tactics`): adds `@chimera-engine/<kebab>: "workspace:*"` to the root `package.json`,

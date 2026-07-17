@@ -471,11 +471,49 @@ export function registerRendererProtocolScheme(
     ]);
 }
 
+/**
+ * Assert the process is running under the real Electron runtime, not plain Node.
+ *
+ * When `ELECTRON_RUN_AS_NODE` is set in the environment — some IDE/agent
+ * terminals and CI runners export it globally — the `electron` binary boots as
+ * a bare Node process, so `require('electron')` resolves to the executable PATH
+ * STRING and every destructured API (`app`, `protocol`, `BrowserWindow`, …)
+ * collapses to `undefined`. The first API touch then dies with a cryptic
+ * `TypeError: Cannot read properties of undefined (reading '…')` (historically
+ * at the module-load `registerSchemesAsPrivileged` below), which reads to a
+ * user as "launching the app crashes the terminal". This converts that into an
+ * actionable message naming the cause and the fix, thrown before the crash.
+ *
+ * `electronApp` is the imported `app` (or the `undefined` it collapses to under
+ * Node); `env` is injected for testability. The generated app's `pnpm start`
+ * launcher strips the flag, so this guard only fires on a raw
+ * `electron apps/<game>` launched from a leaked environment.
+ */
+export function assertElectronRuntime(
+    electronApp: unknown,
+    env: Readonly<Record<string, string | undefined>> = process.env,
+): void {
+    if (electronApp !== undefined && electronApp !== null) return;
+    const runAsNode = env['ELECTRON_RUN_AS_NODE'];
+    const cause =
+        runAsNode !== undefined && runAsNode !== ''
+            ? `ELECTRON_RUN_AS_NODE=${runAsNode} is set, so the \`electron\` binary is running as plain Node.js`
+            : 'the process is running as plain Node.js, not Electron (Electron APIs are unavailable)';
+    throw new Error(
+        `[chimera] Electron runtime required: ${cause}. Unset ELECTRON_RUN_AS_NODE ` +
+            '(`unset ELECTRON_RUN_AS_NODE`) and relaunch, or use the generated `pnpm start`, ' +
+            'which strips it for you.',
+    );
+}
+
 // Register the renderer scheme as privileged at module load (must run before
 // `app.whenReady`). Guarded like the bootstrap: skipped under Vitest, where
 // `electron` is mocked per-test, so importing this module (e.g. via the
 // composition root `apps/tactics/electron/main.ts`) is side-effect-free in unit tests.
+// `assertElectronRuntime` runs first so a Node-mode launch fails with an
+// actionable message instead of an undefined-deref one line later.
 if (process.env['VITEST'] === undefined) {
+    assertElectronRuntime(app);
     registerRendererProtocolScheme(electronProtocol);
 }
 

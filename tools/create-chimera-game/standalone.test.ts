@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildStandaloneLauncherScript,
     buildStandaloneRootManifest,
     buildStandaloneRootTsconfig,
     buildStandaloneToolchainDeps,
@@ -64,6 +65,9 @@ describe('buildStandaloneRootManifest', () => {
         expect(manifest.scripts['package']).toContain('@chimera-engine/my-game build:app');
         expect(manifest.scripts['package']).toContain('@chimera-engine/my-game run package');
         expect(manifest.scripts['package']).not.toContain('build:packages');
+        // `pnpm start` runs the launcher, which strips ELECTRON_RUN_AS_NODE before spawning
+        // Electron — otherwise a raw `electron apps/<game>` in a leaked env crashes at startup.
+        expect(manifest.scripts['start']).toBe('node scripts/launch.mjs');
     });
 
     it('carries the supplied pnpm.overrides for the gate tarball-resolved form', () => {
@@ -76,6 +80,30 @@ describe('buildStandaloneRootManifest', () => {
         expect(manifest.pnpm.overrides).toEqual(overrides);
         // overrides is a copy, not the caller's object.
         expect(manifest.pnpm.overrides).not.toBe(overrides);
+    });
+});
+
+describe('buildStandaloneLauncherScript', () => {
+    it('spawns the game app with ELECTRON_RUN_AS_NODE stripped from the child env', () => {
+        const script = buildStandaloneLauncherScript('my-game');
+        // Launches THIS game's app dir.
+        expect(script).toContain("'apps/my-game'");
+        // Resolves the electron BINARY path (the Node-side export) and spawns it as a child.
+        expect(script).toContain("require('electron')");
+        expect(script).toContain('spawn');
+        // Removes the Node-mode flag so the `electron` binary runs as Electron, not plain Node —
+        // the root cause of the "electron apps/<game> crashes the terminal" report.
+        expect(script).toContain('ELECTRON_RUN_AS_NODE');
+        expect(script).toMatch(/delete\s+env\['ELECTRON_RUN_AS_NODE'\]/);
+        // ESM (.mjs forces module mode; the standalone root has no "type":"module").
+        expect(script).toContain('import { spawn }');
+        expect(script).toContain('createRequire(import.meta.url)');
+    });
+
+    it('bakes the given kebab into both the app path and the build hint', () => {
+        const script = buildStandaloneLauncherScript('space-armada');
+        expect(script).toContain("'apps/space-armada'");
+        expect(script).toContain('@chimera-engine/space-armada build:app');
     });
 });
 

@@ -26,9 +26,13 @@ Prove it works, play it, ship it:
 pnpm --filter @chimera-engine/my-game test       # unit tests — green out of the box
 pnpm exec next build apps/my-game/renderer       # build the UI
 pnpm --filter @chimera-engine/my-game build:app  # bundle the Electron main
-pnpm exec electron apps/my-game                  # play it
+pnpm start                                       # play it
 pnpm package                                          # distributable (.app / installer)
 ```
+
+`pnpm start` launches the app with `ELECTRON_RUN_AS_NODE` stripped from the environment — some
+IDE and CI terminals export it, which would otherwise make the `electron` binary run as plain
+Node and crash the app at startup.
 
 Requires Node.js **≥ 20** and [pnpm](https://pnpm.io) **≥ 10**. The engine arrives as published
 `@chimera-engine/*` packages — no monorepo checkout needed.
