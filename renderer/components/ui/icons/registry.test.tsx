@@ -19,6 +19,7 @@ describe('ICON_REGISTRY', () => {
     });
 
     it.each([
+        'check',
         'close',
         'chevron-down',
         'plus',

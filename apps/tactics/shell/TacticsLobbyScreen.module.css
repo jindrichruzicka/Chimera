@@ -1,6 +1,11 @@
+/* Two side-by-side panels: Battle Setup (narrower) and the roster (wider, the
+   hero of the screen). `align-items: start` keeps the shorter panel from
+   stretching to the taller one's height. */
 .lobby {
+    align-items: start;
     display: grid;
     gap: var(--ch-space-md);
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
 }
 
 .panel {
@@ -23,24 +28,24 @@
     justify-content: space-between;
 }
 
-/* The board colour has a short, fixed set of options, so a full-width field
-   reads as oversized; constrain it to half the panel. Overrides only the
-   inline size, leaving the Select root's max-inline-size cap intact. */
+/* The board colour spans its panel; the panel itself is the narrow column, so
+   the field no longer needs its own 50% constraint. Overrides only the inline
+   size, leaving the Select root's max-inline-size cap intact. */
 .board-color-select {
-    inline-size: 50%;
+    inline-size: 100%;
 }
 
-.ready-summary {
-    color: var(--ch-color-text-secondary);
-    font-size: var(--ch-font-size-sm);
-    margin: var(--ch-space-none);
-}
-
-/* Host-only lobby address share: a label, a short hint, and the joinable code
-   alongside a copy affordance. */
+/* Host-only lobby address share: a label, the joinable code, and a copy
+   affordance, boxed as the panel's invite card. */
 .address {
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border-muted);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
     display: grid;
     gap: var(--ch-space-xs);
+    padding: var(--ch-space-sm);
 }
 
 .address-label {
@@ -58,7 +63,7 @@
 }
 
 .address-code {
-    background-color: var(--ch-color-surface-raised);
+    background-color: var(--ch-color-surface-overlay);
     border-color: var(--ch-color-border);
     border-radius: var(--ch-radius-sm);
     border-style: solid;
@@ -74,42 +79,78 @@
 
 .roster {
     display: grid;
-    gap: var(--ch-space-sm);
+    gap: var(--ch-space-xs);
     list-style: none;
     margin: var(--ch-space-none);
     padding: var(--ch-space-none);
 }
 
+/* Card-style seat rows; a ready seat picks up the success tone on its border
+   so the roster reads at a glance. */
 .roster-row {
     align-items: center;
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border-muted);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
     display: flex;
     flex-wrap: wrap;
     gap: var(--ch-space-sm);
+    padding: var(--ch-space-sm);
 }
 
+.roster-row[data-ready='true'] {
+    border-color: var(--ch-color-success-border);
+}
+
+/* The player's colour, shown as a filled disc anchoring the row. */
 .swatch {
-    block-size: var(--ch-space-md);
+    block-size: var(--ch-space-lg);
     border-color: var(--ch-color-border);
-    border-radius: var(--ch-radius-sm);
+    border-radius: var(--ch-radius-pill);
     border-style: solid;
     border-width: var(--ch-border-width-sm);
     display: inline-block;
     flex: none;
-    inline-size: var(--ch-space-md);
+    inline-size: var(--ch-space-lg);
+}
+
+.ai-heading-row {
+    align-items: center;
+    border-block-start-color: var(--ch-color-border-muted);
+    border-block-start-style: solid;
+    border-block-start-width: var(--ch-border-width-sm);
+    display: flex;
+    gap: var(--ch-space-sm);
+    justify-content: space-between;
+    padding-block-start: var(--ch-space-sm);
+}
+
+.ai-caption {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
 }
 
 .ai-badge {
-    background-color: var(--ch-color-surface-raised);
-    border-color: var(--ch-color-border);
-    border-radius: var(--ch-radius-sm);
+    align-items: center;
+    background-color: var(--ch-color-surface-overlay);
+    block-size: var(--ch-space-lg);
+    border-color: var(--ch-color-border-strong);
+    border-radius: var(--ch-radius-pill);
     border-style: solid;
     border-width: var(--ch-border-width-sm);
     color: var(--ch-color-text-secondary);
+    display: inline-flex;
     flex: none;
     font-size: var(--ch-font-size-sm);
     font-weight: var(--ch-font-weight-semibold);
+    justify-content: center;
     line-height: var(--ch-line-height-none);
-    padding: var(--ch-space-xs) var(--ch-space-sm);
+    min-inline-size: var(--ch-space-lg);
+    padding-inline: var(--ch-space-xs);
 }
 
 .player-name {
@@ -121,4 +162,44 @@
 
 .you {
     color: var(--ch-color-text-secondary);
+}
+
+/* Ready-state chip with a leading check glyph sized to the chip's own text.
+   The compound selector outranks Icon.module.css's `.icon` (cascade tie-break
+   between module classes is load-order dependent, so specificity decides). */
+.status-badge {
+    gap: var(--ch-space-xs);
+}
+
+.roster-row .status-badge svg {
+    block-size: var(--ch-font-size-sm);
+    inline-size: var(--ch-font-size-sm);
+}
+
+/* Icon-only square ready toggle. Compound selector for the same tie-break
+   reason; the pressed state re-tokenises to the success quartet so "pressed"
+   reads as "ready", not merely "active". */
+.roster-row .ready-toggle {
+    block-size: var(--ch-size-icon-button);
+    inline-size: var(--ch-size-icon-button);
+    padding: var(--ch-space-none);
+    --ch-toggle-button-bg-pressed: var(--ch-color-success-surface);
+    --ch-toggle-button-bg-pressed-hover: var(--ch-color-success-surface);
+    --ch-toggle-button-border-color-pressed: var(--ch-color-success-border);
+    --ch-toggle-button-border-color-pressed-hover: var(--ch-color-success-border);
+    --ch-toggle-button-color-pressed: var(--ch-color-success-text);
+    --ch-toggle-button-color-pressed-hover: var(--ch-color-success-text);
+}
+
+.roster-row .ready-toggle svg {
+    block-size: var(--ch-icon-button-glyph-size);
+    inline-size: var(--ch-icon-button-glyph-size);
+}
+
+/* var()/calc() is invalid in a media condition, so the breakpoint is the
+   resolved token math (--ch-space-xl × 18) written out as a px literal. */
+@media (max-width: 720px) {
+    .lobby {
+        grid-template-columns: 1fr;
+    }
 }

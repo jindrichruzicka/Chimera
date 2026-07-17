@@ -25,7 +25,7 @@ export const test = electronTest.extend<LobbyFixtures>({
         const app = await launchE2eElectronApplication({
             port: '7779',
             role: 'host',
-            initialRoute: '/lobby',
+            initialRoute: '/lobby?gameId=tactics',
         });
         try {
             await use(app);
@@ -40,7 +40,7 @@ export const test = electronTest.extend<LobbyFixtures>({
         const app = await launchE2eElectronApplication({
             port: '7779',
             role: 'client',
-            initialRoute: '/lobby',
+            initialRoute: '/lobby?gameId=tactics',
         });
         try {
             await use(app);

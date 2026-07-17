@@ -4,6 +4,8 @@ import React from 'react';
 import type { LobbyState, PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { PlayerList } from '../../components/shell/PlayerList';
 import { Heading } from '../../components/ui/Heading';
+import { IconButton } from '../../components/ui/IconButton';
+import { Icon } from '../../components/ui/icons/Icon';
 import { LOBBY_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import type { PendingAction } from './lobbyTypes';
@@ -18,6 +20,15 @@ export interface ActiveLobbyPanelProps {
     readonly onToggleReady: (ready: boolean) => Promise<void>;
 }
 
+/**
+ * Copy the session ID to the clipboard so the host can paste it to the other
+ * players. The optional chain keeps the call a no-op where
+ * `navigator.clipboard` is absent (e.g. jsdom).
+ */
+function copySessionId(value: string): void {
+    void navigator.clipboard?.writeText(value);
+}
+
 export function ActiveLobbyPanel({
     lobbyState,
     localPlayerId,
@@ -25,7 +36,6 @@ export function ActiveLobbyPanel({
     onToggleReady,
 }: ActiveLobbyPanelProps): React.ReactElement {
     const t = useTranslate();
-    const readyCount = lobbyState.players.filter((player) => player.ready).length;
 
     return (
         <div className={styles['active-lobby']} data-testid="active-lobby-panel">
@@ -39,7 +49,24 @@ export function ActiveLobbyPanel({
                     <div className={styles['detail-row']}>
                         <dt>{t(LOBBY_KEYS.sessionIdLabel)}</dt>
                         <dd>
-                            <span data-testid="lobby-session-id">{lobbyState.info.sessionId}</span>
+                            <span className={styles['session-code-row']}>
+                                <code
+                                    className={styles['session-code']}
+                                    data-testid="lobby-session-id"
+                                >
+                                    {lobbyState.info.sessionId}
+                                </code>
+                                <IconButton
+                                    aria-label={t(LOBBY_KEYS.copySessionAriaLabel)}
+                                    data-testid="lobby-session-copy"
+                                    onClick={() => {
+                                        copySessionId(lobbyState.info.sessionId);
+                                    }}
+                                    variant="ghost"
+                                >
+                                    <Icon name="copy" />
+                                </IconButton>
+                            </span>
                         </dd>
                     </div>
                     <div className={styles['detail-row']}>
@@ -49,12 +76,6 @@ export function ActiveLobbyPanel({
                     <div className={styles['detail-row']}>
                         <dt>{t(LOBBY_KEYS.gameLabel)}</dt>
                         <dd>{lobbyState.info.gameId}</dd>
-                    </div>
-                    <div className={styles['detail-row']}>
-                        <dt>{t(LOBBY_KEYS.readyLabel)}</dt>
-                        <dd>
-                            {readyCount}/{lobbyState.players.length}
-                        </dd>
                     </div>
                 </dl>
             </section>

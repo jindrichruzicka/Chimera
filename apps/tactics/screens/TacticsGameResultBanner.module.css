@@ -12,6 +12,10 @@
     background:
         radial-gradient(ellipse at center, transparent 8%, var(--ch-color-overlay-backdrop) 34%),
         var(--ch-color-overlay-backdrop);
+    /* Frost the live board beneath the scrim with the same token-driven blur the
+       shared Modal uses, so the verdict overlay and the game's modals read as one
+       system (engine default --ch-overlay-backdrop-blur is 0 → no blur). */
+    backdrop-filter: blur(var(--ch-overlay-backdrop-blur));
     animation: tactics-banner-fade-in var(--ch-duration-slow) var(--ch-easing-standard) both;
 }
 

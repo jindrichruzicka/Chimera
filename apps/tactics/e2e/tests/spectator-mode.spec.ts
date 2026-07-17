@@ -68,7 +68,7 @@ async function startHostPlusAiMatch(options: {
     const hostApp = await launchE2eElectronApplication({
         port: SPECTATOR_PORT,
         role: 'host',
-        initialRoute: '/lobby',
+        initialRoute: '/lobby?gameId=tactics',
         ...(options.disableSpectators === true ? { disableSpectators: true } : {}),
     });
     const hostWindow = await bootWindow(hostApp);
@@ -133,7 +133,7 @@ test.describe('Spectator mode', () => {
             spectatorApp = await launchE2eElectronApplication({
                 port: SPECTATOR_PORT,
                 role: 'client',
-                initialRoute: '/lobby',
+                initialRoute: '/lobby?gameId=tactics',
             });
             const spectatorWindow = await bootWindow(spectatorApp);
             const spectatorLobby = new LobbyPage(spectatorWindow);
@@ -192,7 +192,7 @@ test.describe('Spectator mode', () => {
             joinerApp = await launchE2eElectronApplication({
                 port: SPECTATOR_PORT,
                 role: 'client',
-                initialRoute: '/lobby',
+                initialRoute: '/lobby?gameId=tactics',
             });
             const joinerWindow = await bootWindow(joinerApp);
             const joinerLobby = new LobbyPage(joinerWindow);
@@ -223,7 +223,7 @@ test.describe('Spectator mode', () => {
             joinerApp = await launchE2eElectronApplication({
                 port: SPECTATOR_PORT,
                 role: 'client',
-                initialRoute: '/lobby',
+                initialRoute: '/lobby?gameId=tactics',
             });
             const joinerWindow = await bootWindow(joinerApp);
             const joinerLobby = new LobbyPage(joinerWindow);

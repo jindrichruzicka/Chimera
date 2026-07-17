@@ -119,8 +119,7 @@ interface MpSaveFixtures {
 const test = electronTest.extend<MpSaveFixtures>({
     // Host boots the menu (no directGameRole) so the spec drives hosting
     // through the real UI. The gameId query is applied in-body via
-    // MainMenuPage.goto — the fixture's initialRoute cannot carry a query
-    // (it appends a trailing slash that would corrupt the value).
+    // MainMenuPage.goto so the spec exercises the menu→lobby navigation.
     // eslint-disable-next-line no-empty-pattern
     hostApp: async ({}, use) => {
         const app = await launchE2eElectronApplication({
@@ -142,7 +141,7 @@ const test = electronTest.extend<MpSaveFixtures>({
         const app = await launchE2eElectronApplication({
             port: MP_SAVE_PORT,
             role: 'client',
-            initialRoute: '/lobby',
+            initialRoute: '/lobby?gameId=tactics',
         });
         try {
             await use(app);

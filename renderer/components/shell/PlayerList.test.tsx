@@ -150,6 +150,71 @@ describe('PlayerList', () => {
 
         expect(readyBadge).toHaveAttribute('data-ch-badge-variant', 'success');
         expect(notReadyBadge).toHaveAttribute('data-ch-badge-variant', 'warning');
+
+        // The ready badge leads with the shared check glyph; not-ready has none.
+        expect(readyBadge.querySelector('svg[data-ch-icon="check"]')).not.toBeNull();
+        expect(notReadyBadge.querySelector('svg[data-ch-icon="check"]')).toBeNull();
+    });
+
+    it('renders an avatar initial for every player row', () => {
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'player-1',
+                gameId: 'tactics',
+            },
+            players: [
+                { playerId: 'player-1', displayName: 'Alice', ready: true },
+                { playerId: 'player-2', displayName: 'bob', ready: false },
+            ],
+        };
+
+        render(<PlayerList />);
+
+        // Decorative initial derived from the display name, uppercased.
+        const aliceAvatar = getPlayerRow('player-1').querySelector('[data-testid="player-avatar"]');
+        const bobAvatar = getPlayerRow('player-2').querySelector('[data-testid="player-avatar"]');
+        expect(aliceAvatar?.textContent).toBe('A');
+        expect(bobAvatar?.textContent).toBe('B');
+        expect(aliceAvatar).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('summarises the ready count in a heading chip that turns success when everyone is ready', () => {
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'player-1',
+                gameId: 'tactics',
+            },
+            players: [
+                { playerId: 'player-1', displayName: 'Alice', ready: true },
+                { playerId: 'player-2', displayName: 'Bob', ready: false },
+            ],
+        };
+
+        const { rerender } = render(<PlayerList />);
+
+        const chip = screen.getByTestId('lobby-ready-summary');
+        expect(chip.textContent).toBe('Ready: 1/2');
+        expect(chip).toHaveAttribute('data-ch-badge-variant', 'neutral');
+
+        // Everyone ready → the chip flips to the success variant.
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'player-1',
+                gameId: 'tactics',
+            },
+            players: [
+                { playerId: 'player-1', displayName: 'Alice', ready: true },
+                { playerId: 'player-2', displayName: 'Bob', ready: true },
+            ],
+        };
+        rerender(<PlayerList />);
+
+        const readyChip = screen.getByTestId('lobby-ready-summary');
+        expect(readyChip.textContent).toBe('Ready: 2/2');
+        expect(readyChip).toHaveAttribute('data-ch-badge-variant', 'success');
     });
 
     it('exposes each player ready state on the row data-ready attribute', () => {
@@ -196,17 +261,22 @@ describe('PlayerList', () => {
         const bobRow = getPlayerRow('player-2');
         expect(bobRow.textContent).not.toContain('(You)');
 
-        // Alice should have a Toggle Ready button
-        const aliceToggleButton = Array.from(aliceRow.querySelectorAll('button')).find(
-            (btn) => btn.textContent === 'Toggle Ready',
-        );
-        expect(aliceToggleButton).toBeTruthy();
+        // Alice's ready control is an icon toggle carrying the check glyph and
+        // reflecting her ready state via aria-pressed.
+        const aliceToggle = aliceRow.querySelector('[data-testid="ready-toggle"]');
+        expect(aliceToggle).toBeTruthy();
+        expect(aliceToggle).toHaveAttribute('aria-pressed', 'true');
+        expect(aliceToggle).toHaveAccessibleName('Toggle Ready');
+        expect(aliceToggle?.querySelector('svg[data-ch-icon="check"]')).not.toBeNull();
 
-        // Bob should NOT have a Toggle Ready button
-        const bobToggleButton = Array.from(bobRow.querySelectorAll('button')).find(
-            (btn) => btn.textContent === 'Toggle Ready',
-        );
-        expect(bobToggleButton).toBeFalsy();
+        // The toggle IS the local ready indicator — no redundant ready badge
+        // next to it (the badge stays for remote players only).
+        expect(aliceRow.querySelector('[data-ch-badge-variant="success"]')).toBeNull();
+        expect(aliceRow.querySelector('[data-ch-badge-variant="warning"]')).toBeNull();
+        expect(bobRow.querySelector('[data-ch-badge-variant="warning"]')).not.toBeNull();
+
+        // Bob should NOT have a ready toggle
+        expect(bobRow.querySelector('[data-testid="ready-toggle"]')).toBeNull();
     });
 
     it('invokes onToggleReady callback with inverted ready value when local player clicks toggle', async () => {
@@ -227,7 +297,7 @@ describe('PlayerList', () => {
         render(<PlayerList localPlayerId="player-1" onToggleReady={onToggleReady} />);
 
         const aliceRow = getPlayerRow('player-1');
-        const toggleButton = aliceRow.querySelector('button');
+        const toggleButton = aliceRow.querySelector('[data-testid="ready-toggle"]');
 
         expect(toggleButton).toBeTruthy();
         fireEvent.click(toggleButton!);
@@ -250,7 +320,8 @@ describe('PlayerList', () => {
 
         render(<PlayerList localPlayerId="player-1" onToggleReady={onToggleReady} />);
 
-        const toggleButton = screen.getByText('Toggle Ready');
+        const toggleButton = screen.getByTestId('ready-toggle');
+        expect(toggleButton).toHaveAttribute('aria-pressed', 'true');
         fireEvent.click(toggleButton);
 
         expect(onToggleReady).toHaveBeenCalledWith(false);
@@ -270,7 +341,8 @@ describe('PlayerList', () => {
 
         render(<PlayerList localPlayerId="player-1" onToggleReady={onToggleReady} />);
 
-        const toggleButton = screen.getByText('Toggle Ready');
+        const toggleButton = screen.getByTestId('ready-toggle');
+        expect(toggleButton).toHaveAttribute('aria-pressed', 'false');
         fireEvent.click(toggleButton);
 
         expect(onToggleReady).toHaveBeenCalledWith(true);
@@ -374,23 +446,17 @@ describe('PlayerList', () => {
 
         render(<PlayerList localPlayerId="player-2" onToggleReady={onToggleReady} />);
 
-        // Bob's row should have (You) indicator and toggle button
+        // Bob's row should have (You) indicator and the icon ready toggle
         const bobRow = getPlayerRow('player-2');
         expect(bobRow.textContent).toContain('(You)');
 
-        const bobToggleButton = Array.from(bobRow.querySelectorAll('button')).find(
-            (btn) => btn.textContent === 'Toggle Ready',
-        );
+        const bobToggleButton = bobRow.querySelector('[data-testid="ready-toggle"]');
         expect(bobToggleButton).toBeTruthy();
 
         // Alice's row should NOT have (You) indicator or toggle button
         const aliceRow = getPlayerRow('player-1');
         expect(aliceRow.textContent).not.toContain('(You)');
-
-        const aliceToggleButton = Array.from(aliceRow.querySelectorAll('button')).find(
-            (btn) => btn.textContent === 'Toggle Ready',
-        );
-        expect(aliceToggleButton).toBeFalsy();
+        expect(aliceRow.querySelector('[data-testid="ready-toggle"]')).toBeNull();
 
         // Verify Bob can toggle ready
         fireEvent.click(bobToggleButton!);
@@ -420,8 +486,7 @@ describe('PlayerList', () => {
         expect(bobRow.textContent).not.toContain('(You)');
 
         // Neither should have toggle buttons
-        const buttons = screen.queryAllByText('Toggle Ready');
-        expect(buttons.length).toBe(0);
+        expect(screen.queryAllByTestId('ready-toggle').length).toBe(0);
     });
 
     it('maintains correct local player indicator when roster updates', () => {
@@ -468,6 +533,21 @@ describe('PlayerList', () => {
         expect(getPlayerRow('player-3').textContent).not.toContain('(You)');
     });
 
+    it('disables the ready toggle while an update is in flight', () => {
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'player-1',
+                gameId: 'tactics',
+            },
+            players: [{ playerId: 'player-1', displayName: 'Alice', ready: false }],
+        };
+
+        render(<PlayerList localPlayerId="player-1" onToggleReady={vi.fn()} isTogglePending />);
+
+        expect(screen.getByTestId('ready-toggle')).toBeDisabled();
+    });
+
     it('renders game-overridden heading and control labels (token-driven)', () => {
         const onToggleReady = vi.fn();
 
@@ -482,15 +562,16 @@ describe('PlayerList', () => {
 
         render(<PlayerList localPlayerId="player-1" onToggleReady={onToggleReady} />, {
             'engine.lobby.playersHeading': 'Seats ({n})',
-            'engine.lobby.notReady': 'Waiting',
+            'engine.lobby.readySummary': 'Armed {ready} of {total}',
             'engine.lobby.toggleReady': 'I am ready',
             'engine.lobby.you': '(Me)',
         });
 
         expect(screen.getByText('Seats (1)')).toBeTruthy();
+        expect(screen.getByTestId('lobby-ready-summary').textContent).toBe('Armed 0 of 1');
         const aliceRow = getPlayerRow('player-1');
-        expect(aliceRow.textContent).toContain('Waiting');
         expect(aliceRow.textContent).toContain('(Me)');
-        expect(screen.getByText('I am ready')).toBeTruthy();
+        // The icon toggle carries its game-overridden label as accessible name.
+        expect(screen.getByTestId('ready-toggle')).toHaveAccessibleName('I am ready');
     });
 });

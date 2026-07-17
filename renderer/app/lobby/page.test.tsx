@@ -449,6 +449,33 @@ describe('LobbyPage pending actions', () => {
         expect(screen.getByTestId('active-lobby-panel')).not.toContainElement(actionBar);
     });
 
+    it('offers a copy affordance for the session ID in the engine-default panel', () => {
+        const writeText = vi.fn(() => Promise.resolve());
+        Object.defineProperty(navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText },
+        });
+
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
+        };
+
+        renderLobbyPage();
+
+        const copyButton = screen.getByTestId('lobby-session-copy');
+        expect(copyButton).toHaveAccessibleName('Copy session ID');
+        expect(copyButton.querySelector('svg[data-ch-icon="copy"]')).not.toBeNull();
+        // Borderless (ghost) affordance — a chrome-less icon button.
+        expect(copyButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
+
+        fireEvent.click(copyButton);
+        expect(writeText).toHaveBeenCalledWith('session-1');
+
+        Reflect.deleteProperty(navigator, 'clipboard');
+    });
+
     it('uses a quiet dialog surface without heading metadata badges', () => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
@@ -871,6 +898,10 @@ describe('LobbyPage game-provided lobby screen', () => {
         mockLobbyShell = { LobbyScreen: StubLobbyScreen };
         mockPush.mockReset();
 
+        // A game-provided screen renders only in that game's explicit shell
+        // context — the URL must carry ?gameId= (no default-game fallback).
+        window.history.pushState({}, '', '/lobby?gameId=tactics');
+
         setMatchSetting = vi.fn(async () => undefined);
         setPlayerAttribute = vi.fn(async () => undefined);
 
@@ -920,6 +951,30 @@ describe('LobbyPage game-provided lobby screen', () => {
 
     it('falls back to the engine-default ActiveLobbyPanel when no LobbyScreen is provided', async () => {
         mockLobbyShell = {};
+
+        renderLobbyPage();
+
+        expect(await screen.findByTestId('active-lobby-panel')).toBeTruthy();
+        expect(screen.queryByTestId('stub-lobby-screen')).toBeNull();
+    });
+
+    it('keeps the engine-default panel on a bare URL — no default-game shell fallback', async () => {
+        // The registry would deliver a LobbyScreen for the hosted game, but the
+        // URL carries no explicit ?gameId= (the engine-default shell context),
+        // so the lobby must stay engine-branded — mirroring the main menu's
+        // "shell override resolves ONLY from ?gameId=" rule.
+        window.history.pushState({}, '', '/lobby');
+
+        renderLobbyPage();
+
+        expect(await screen.findByTestId('active-lobby-panel')).toBeTruthy();
+        expect(screen.queryByTestId('stub-lobby-screen')).toBeNull();
+    });
+
+    it('keeps the engine-default panel when the explicit gameId does not match the lobby game', async () => {
+        // Explicit context for a DIFFERENT game than the one the lobby hosts:
+        // the mismatched shell must not brand this lobby.
+        window.history.pushState({}, '', '/lobby?gameId=other-game');
 
         renderLobbyPage();
 

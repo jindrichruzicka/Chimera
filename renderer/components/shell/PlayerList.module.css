@@ -5,6 +5,14 @@
     gap: var(--ch-space-md);
 }
 
+.heading-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+    justify-content: space-between;
+}
+
 .list {
     display: grid;
     gap: var(--ch-space-xs);
@@ -15,6 +23,7 @@
 
 .row {
     align-items: center;
+    background-color: var(--ch-color-surface-raised);
     border-color: var(--ch-color-border-muted);
     border-radius: var(--ch-radius-md);
     border-style: solid;
@@ -25,12 +34,36 @@
     padding: var(--ch-space-sm);
 }
 
+/* A ready seat reads at a glance: the whole row border picks up the success
+   tone the badge/toggle already carries. */
+.row[data-ready='true'] {
+    border-color: var(--ch-color-success-border);
+}
+
 .identity {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
-    gap: var(--ch-space-xs);
+    gap: var(--ch-space-sm);
     min-inline-size: 0;
+}
+
+/* Decorative initial disc that gives each seat a face-like anchor. */
+.avatar {
+    align-items: center;
+    background-color: var(--ch-color-surface-overlay);
+    block-size: var(--ch-size-icon-button);
+    border-color: var(--ch-color-border-strong);
+    border-radius: var(--ch-radius-pill);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    color: var(--ch-color-text-secondary);
+    display: inline-flex;
+    flex: none;
+    font-size: var(--ch-font-size-sm);
+    font-weight: var(--ch-font-weight-semibold);
+    inline-size: var(--ch-size-icon-button);
+    justify-content: center;
 }
 
 .name {
@@ -47,6 +80,38 @@
     flex-wrap: wrap;
     gap: var(--ch-space-sm);
     justify-content: flex-end;
+}
+
+/* Ready-state chip with a leading check glyph sized to the chip's own text.
+   The compound selector outranks Icon.module.css's `.icon` (cascade tie-break
+   between module classes is load-order dependent, so specificity decides). */
+.status-badge {
+    gap: var(--ch-space-xs);
+}
+
+.controls .status-badge svg {
+    block-size: var(--ch-font-size-sm);
+    inline-size: var(--ch-font-size-sm);
+}
+
+/* Icon-only square ready toggle. Compound selector for the same tie-break
+   reason; the pressed state re-tokenises to the success quartet so "pressed"
+   reads as "ready", not merely "active". */
+.controls .ready-toggle {
+    block-size: var(--ch-size-icon-button);
+    inline-size: var(--ch-size-icon-button);
+    padding: var(--ch-space-none);
+    --ch-toggle-button-bg-pressed: var(--ch-color-success-surface);
+    --ch-toggle-button-bg-pressed-hover: var(--ch-color-success-surface);
+    --ch-toggle-button-border-color-pressed: var(--ch-color-success-border);
+    --ch-toggle-button-border-color-pressed-hover: var(--ch-color-success-border);
+    --ch-toggle-button-color-pressed: var(--ch-color-success-text);
+    --ch-toggle-button-color-pressed-hover: var(--ch-color-success-text);
+}
+
+.controls .ready-toggle svg {
+    block-size: var(--ch-icon-button-glyph-size);
+    inline-size: var(--ch-icon-button-glyph-size);
 }
 
 /* var()/calc() is invalid in a media condition, so the breakpoint is the

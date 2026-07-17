@@ -128,7 +128,7 @@ describe('TacticsLobbyScreen', () => {
         expect(screen.getByRole('button', { name: 'Odebrat hráče AI 1' })).toBeInTheDocument();
     });
 
-    it('renders one roster row per player with name, ready badge, and colour swatch', () => {
+    it('renders one roster row per player with name, ready state, and colour swatch', () => {
         render(<TacticsLobbyScreen {...makeProps()} />);
 
         const rows = screen.getAllByTestId('tactics-lobby-player');
@@ -137,15 +137,42 @@ describe('TacticsLobbyScreen', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
         expect(screen.getByText('Bob')).toBeInTheDocument();
 
+        // Local player (Alice): the ready toggle IS the indicator — no
+        // redundant ready badge next to it.
         const aliceRow = rows.find((row) => row.getAttribute('data-player-id') === HOST_ID);
         expect(aliceRow?.getAttribute('data-ready')).toBe('true');
-        expect(aliceRow?.querySelector('[data-ch-badge-variant="success"]')?.textContent).toBe(
-            'Ready',
+        expect(aliceRow?.querySelector('[data-ch-badge-variant="success"]')).toBeNull();
+        expect(aliceRow?.querySelector('[data-testid="tactics-ready-toggle"]')).not.toBeNull();
+
+        // Remote player (Bob, not ready): status badge, warning variant.
+        const bobRow = rows.find((row) => row.getAttribute('data-player-id') === CLIENT_ID);
+        expect(bobRow?.querySelector('[data-ch-badge-variant="warning"]')?.textContent).toBe(
+            'Not Ready',
         );
+        expect(bobRow?.querySelector('[data-testid="tactics-ready-toggle"]')).toBeNull();
 
         const swatch = screen.getByTestId(`tactics-player-swatch-${HOST_ID}`);
         // Blue hex sourced from the content prop (player-colors/blue.json).
         expect(swatch).toHaveStyle({ backgroundColor: '#2563eb' });
+    });
+
+    it('shows a remote player success badge with the check glyph once they are ready', () => {
+        render(
+            <TacticsLobbyScreen
+                {...makeProps({
+                    // Bob's view: Alice (ready) is remote and must carry the badge.
+                    localPlayerId: CLIENT_ID,
+                    isHost: false,
+                })}
+            />,
+        );
+
+        const aliceRow = screen
+            .getAllByTestId('tactics-lobby-player')
+            .find((row) => row.getAttribute('data-player-id') === HOST_ID);
+        const badge = aliceRow?.querySelector('[data-ch-badge-variant="success"]');
+        expect(badge?.textContent).toBe('Ready');
+        expect(badge?.querySelector('svg[data-ch-icon="check"]')).not.toBeNull();
     });
 
     it('marks the local player with a (You) indicator', () => {
@@ -154,6 +181,62 @@ describe('TacticsLobbyScreen', () => {
             .getAllByTestId('tactics-lobby-player')
             .find((row) => row.getAttribute('data-player-id') === CLIENT_ID);
         expect(bobRow?.textContent).toContain('(You)');
+    });
+
+    it('summarises readiness in a players-panel chip that turns success when everyone is ready', () => {
+        const { rerender } = render(<TacticsLobbyScreen {...makeProps()} />);
+
+        // 1 of 2 ready → neutral progress chip inside the players panel.
+        const chip = screen.getByTestId('tactics-ready-summary');
+        expect(chip.textContent).toBe('Ready: 1/2');
+        expect(chip).toHaveAttribute('data-ch-badge-variant', 'neutral');
+        const playersPanel = screen.getByRole('heading', { name: 'Players' }).closest('section');
+        expect(playersPanel).toContainElement(chip);
+
+        rerender(
+            <TacticsLobbyScreen
+                {...makeProps({
+                    lobbyState: makeLobbyState({
+                        players: [
+                            {
+                                playerId: HOST_ID,
+                                displayName: 'Alice',
+                                ready: true,
+                                attributes: { color: 'blue' },
+                            },
+                            {
+                                playerId: CLIENT_ID,
+                                displayName: 'Bob',
+                                ready: true,
+                                attributes: { color: 'red' },
+                            },
+                        ],
+                    }),
+                })}
+            />,
+        );
+
+        const readyChip = screen.getByTestId('tactics-ready-summary');
+        expect(readyChip.textContent).toBe('Ready: 2/2');
+        expect(readyChip).toHaveAttribute('data-ch-badge-variant', 'success');
+    });
+
+    it('merges the AI seats into the players panel (no standalone AI Players section)', () => {
+        render(
+            <TacticsLobbyScreen
+                {...makeProps({
+                    lobbyState: makeLobbyState({ agentSlots: [{ slotIndex: 1, kind: 'ai' }] }),
+                })}
+            />,
+        );
+
+        // One roster panel: the AI caption, rows, and Add control all live in
+        // the same section as the human roster.
+        const playersPanel = screen.getByRole('heading', { name: 'Players' }).closest('section');
+        expect(playersPanel).toContainElement(screen.getByTestId('tactics-lobby-ai-player'));
+        expect(playersPanel).toContainElement(screen.getByTestId('tactics-add-ai'));
+        // The old standalone section heading is gone.
+        expect(screen.queryByRole('heading', { name: 'AI Players' })).not.toBeInTheDocument();
     });
 
     it('renders no host/player role badge (removed in the modernized layout)', () => {
@@ -583,6 +666,15 @@ describe('TacticsLobbyScreen', () => {
             // Local player (Alice/host) is ready → the toggle is pressed.
             const toggle = screen.getByTestId('tactics-ready-toggle');
             expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        });
+
+        it('renders the ready control as an icon toggle with the check glyph and an accessible name', () => {
+            render(<TacticsLobbyScreen {...makeProps()} />);
+
+            const toggle = screen.getByTestId('tactics-ready-toggle');
+            expect(toggle.querySelector('svg[data-ch-icon="check"]')).not.toBeNull();
+            // Icon-only control: the accessible name lives on aria-label.
+            expect(toggle).toHaveAccessibleName('Ready');
         });
 
         it('renders the ready toggle unpressed when the local player is not ready', () => {

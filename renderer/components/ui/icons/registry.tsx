@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { chatBubbleIcon } from './chatBubble';
+import { checkIcon } from './check';
 import { chevronDownIcon } from './chevronDown';
 import { closeIcon } from './close';
 import { copyIcon } from './copy';
@@ -39,6 +40,7 @@ export interface IconGlyph {
  */
 export const ICON_REGISTRY = {
     'chat-bubble': chatBubbleIcon,
+    check: checkIcon,
     'chevron-down': chevronDownIcon,
     close: closeIcon,
     copy: copyIcon,

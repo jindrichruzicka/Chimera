@@ -97,7 +97,6 @@ export const LOBBY_KEYS = {
     readyToggle: translationKey('game.tactics.lobby.readyToggle'),
     aiPlayers: translationKey('game.tactics.lobby.aiPlayers'),
     addAiAriaLabel: translationKey('game.tactics.lobby.addAiAriaLabel'),
-    noAiPlayers: translationKey('game.tactics.lobby.noAiPlayers'),
     aiBadge: translationKey('game.tactics.lobby.aiBadge'),
     aiPlayerName: translationKey('game.tactics.lobby.aiPlayerName'),
     removeAiAriaLabel: translationKey('game.tactics.lobby.removeAiAriaLabel'),

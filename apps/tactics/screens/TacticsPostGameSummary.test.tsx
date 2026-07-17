@@ -23,6 +23,7 @@ import { tacticsBundleCs } from '../shell/translations/cs.js';
 import { tacticsBundleEn } from '../shell/translations/en.js';
 import { tacticsIcons } from '../shell/icons.js';
 import { TacticsPostGameSummary } from './TacticsPostGameSummary.js';
+import summaryStyles from './TacticsPostGameSummary.module.css?raw';
 
 const TACTICS_LANGUAGES = [
     { code: 'en-US', label: 'English' },
@@ -405,5 +406,17 @@ describe('TacticsPostGameSummary — client perspective replay', () => {
         expect(bridges.openInPlayer).not.toHaveBeenCalled();
         expect(bridges.exportCurrentMatch).not.toHaveBeenCalled();
         expect(bridges.perspective.exportCurrent).not.toHaveBeenCalled();
+    });
+});
+
+describe('TacticsPostGameSummary frosted overlay', () => {
+    it('frames the summary on the same token-driven frosted backdrop as the modal and banner', () => {
+        // The post-game scene replaces the board, so the summary is not an
+        // overlay over the live board — it needs its OWN backdrop layer to read
+        // as a focused surface. Give it the modal/banner treatment: the dimming
+        // scrim plus the token-driven backdrop blur (a no-op behind a flat
+        // background, frosting whatever the scene ever paints there).
+        expect(summaryStyles).toContain('var(--ch-color-overlay-backdrop)');
+        expect(summaryStyles).toContain('backdrop-filter: blur(var(--ch-overlay-backdrop-blur))');
     });
 });

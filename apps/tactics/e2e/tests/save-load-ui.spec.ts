@@ -85,8 +85,7 @@ const test = electronTest.extend<SaveLoadUiFixtures>({
     saveLoadUiApp: async ({}, use) => {
         // Menu boot: no directGameRole/passAndPlay — the spec drives hosting
         // through the real lobby UI. The gameId query is applied in-body via
-        // MainMenuPage.goto (the fixture's initialRoute cannot carry a query:
-        // it appends a trailing slash that would corrupt the value).
+        // MainMenuPage.goto so the spec exercises the menu→lobby navigation.
         const app = await launchE2eElectronApplication({
             port: SAVE_LOAD_UI_PORT,
             initialRoute: '/main-menu',

@@ -158,11 +158,14 @@ export function createE2eElectronLaunchConfig(
     const initialRoute =
         options.initialRoute ?? (options.directGameRole !== undefined ? '/game' : undefined);
     if (initialRoute !== undefined) {
-        const initialRouteWithSlash = initialRoute.endsWith('/')
-            ? initialRoute
-            : `${initialRoute}/`;
+        // The static-export router needs a trailing slash on the PATH; a query
+        // string (e.g. `?gameId=tactics`) must stay behind it untouched.
+        const queryIndex = initialRoute.indexOf('?');
+        const routePath = queryIndex === -1 ? initialRoute : initialRoute.slice(0, queryIndex);
+        const routeQuery = queryIndex === -1 ? '' : initialRoute.slice(queryIndex);
+        const routePathWithSlash = routePath.endsWith('/') ? routePath : `${routePath}/`;
         env['CHIMERA_E2E_INITIAL_URL'] =
-            `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}${initialRouteWithSlash}`;
+            `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}${routePathWithSlash}${routeQuery}`;
     }
 
     if (options.directGameRole !== undefined) {

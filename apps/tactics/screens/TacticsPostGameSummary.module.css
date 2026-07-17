@@ -4,6 +4,13 @@
     display: grid;
     place-items: center;
     font-family: var(--ch-font-ui);
+    /* Frame the summary as a focused surface on the same frosted backdrop the
+       shared Modal and the end-of-match banner use: a dimming scrim plus the
+       token-driven blur. The post-game scene replaces the board, so this backdrop
+       stands in for it rather than frosting a live field — but it keeps all three
+       result surfaces one system (engine default --ch-overlay-backdrop-blur is 0). */
+    background-color: var(--ch-color-overlay-backdrop);
+    backdrop-filter: blur(var(--ch-overlay-backdrop-blur));
 }
 
 /* Per-outcome accent channel, rationed to the emblem, the crest word, and the

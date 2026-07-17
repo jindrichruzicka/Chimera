@@ -157,16 +157,16 @@ export const LOBBY_KEYS = {
     // Active session panel.
     sessionHeading: translationKey('engine.lobby.sessionHeading'),
     sessionIdLabel: translationKey('engine.lobby.sessionIdLabel'),
+    copySessionAriaLabel: translationKey('engine.lobby.copySessionAriaLabel'),
     hostIdLabel: translationKey('engine.lobby.hostIdLabel'),
     gameLabel: translationKey('engine.lobby.gameLabel'),
-    readyLabel: translationKey('engine.lobby.readyLabel'),
     // Player list.
     playersHeading: translationKey('engine.lobby.playersHeading'),
+    readySummary: translationKey('engine.lobby.readySummary'),
     you: translationKey('engine.lobby.you'),
     ready: translationKey('engine.lobby.ready'),
     notReady: translationKey('engine.lobby.notReady'),
     toggleReady: translationKey('engine.lobby.toggleReady'),
-    updating: translationKey('engine.lobby.updating'),
 } as const;
 
 /** Replays browser, playback controls, and the replay player page. */

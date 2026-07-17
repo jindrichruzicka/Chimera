@@ -55,6 +55,29 @@
     gap: var(--ch-space-md);
 }
 
+/* Shareable session code: the one detail players actually act on, so it gets
+   code styling and an inline copy affordance. */
+.session-code-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-xs);
+}
+
+.session-code {
+    background-color: var(--ch-color-surface-overlay);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    color: var(--ch-color-text-primary);
+    font-family: var(--ch-font-mono);
+    font-size: var(--ch-font-size-sm);
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    padding: var(--ch-space-xs) var(--ch-space-sm);
+}
+
 .session-panel {
     background-color: var(--ch-color-surface);
     border-color: var(--ch-color-border);

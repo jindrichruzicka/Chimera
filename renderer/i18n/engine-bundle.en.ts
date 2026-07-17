@@ -145,15 +145,15 @@ export const engineBundleEn: TranslationBundle = {
     'engine.lobby.joinPasswordPlaceholder': 'Required only if the host set one',
     'engine.lobby.sessionHeading': 'Session',
     'engine.lobby.sessionIdLabel': 'Session ID:',
+    'engine.lobby.copySessionAriaLabel': 'Copy session ID',
     'engine.lobby.hostIdLabel': 'Host ID:',
     'engine.lobby.gameLabel': 'Game:',
-    'engine.lobby.readyLabel': 'Ready:',
     'engine.lobby.playersHeading': 'Players ({n})',
+    'engine.lobby.readySummary': 'Ready: {ready}/{total}',
     'engine.lobby.you': '(You)',
     'engine.lobby.ready': 'Ready',
     'engine.lobby.notReady': 'Not Ready',
     'engine.lobby.toggleReady': 'Toggle Ready',
-    'engine.lobby.updating': 'Updating...',
 
     // ── replays ─────────────────────────────────────────────────────────────────
     'engine.replays.title': 'Replays',

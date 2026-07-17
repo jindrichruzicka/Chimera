@@ -41,6 +41,18 @@ describe('electron.fixture', () => {
         expect(config.env['CHIMERA_E2E_INITIAL_URL']).toBe('chimera://renderer/lobby/');
     });
 
+    it('keeps a query string intact when initialRoute carries one (slash goes before the ?)', () => {
+        const config = createE2eElectronLaunchConfig({
+            port: '7778',
+            role: 'host',
+            initialRoute: '/lobby?gameId=tactics',
+        });
+
+        expect(config.env['CHIMERA_E2E_INITIAL_URL']).toBe(
+            'chimera://renderer/lobby/?gameId=tactics',
+        );
+    });
+
     it('omits CHIMERA_E2E_INITIAL_URL when initialRoute is not provided', () => {
         const config = createE2eElectronLaunchConfig({ port: '7778' });
 

@@ -11,6 +11,7 @@ import { tacticsBundleCs } from '../shell/translations/cs.js';
 import { tacticsBundleEn } from '../shell/translations/en.js';
 import { tacticsIcons } from '../shell/icons.js';
 import { TacticsGameResultBanner } from './TacticsGameResultBanner.js';
+import bannerStyles from './TacticsGameResultBanner.module.css?raw';
 
 const TACTICS_LANGUAGES = [
     { code: 'en-US', label: 'English' },
@@ -224,5 +225,17 @@ describe('TacticsGameResultBanner', () => {
             'Pokračuj stisknutím Enter',
         );
         expect(screen.getByRole('img', { name: 'Vítězství' })).toBeTruthy();
+    });
+});
+
+describe('TacticsGameResultBanner frosted overlay', () => {
+    it('frosts the live battlefield behind the verdict with the token-driven backdrop blur', () => {
+        // Same frosted-glass treatment the shared Modal applies: a token-driven
+        // backdrop-filter blur beneath the existing dimming scrim, so the banner
+        // and the game's modal overlays read as one system (tactics raises
+        // --ch-overlay-backdrop-blur; the engine default of 0 stays a no-op).
+        expect(bannerStyles).toContain('backdrop-filter: blur(var(--ch-overlay-backdrop-blur))');
+        // The dimming scrim it layers under is still present.
+        expect(bannerStyles).toContain('var(--ch-color-overlay-backdrop)');
     });
 });

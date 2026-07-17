@@ -1,7 +1,8 @@
 import React from 'react';
 import { Badge } from '../ui/Badge';
-import { Button } from '../ui/Button';
 import { Heading } from '../ui/Heading';
+import { ToggleButton } from '../ui/ToggleButton';
+import { Icon } from '../ui/icons/Icon';
 import { LOBBY_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import type { TranslateFn } from '../../i18n/i18n-context';
@@ -24,6 +25,10 @@ export interface PlayerListProps {
 /**
  * Player list component that displays lobby participants and their ready states.
  * Subscribes only to the players slice of lobbyStore to avoid unnecessary re-renders.
+ *
+ * The local player's ready state is a single icon toggle (the pressed check IS
+ * the indicator); a separate ready badge renders only for the seats the local
+ * player cannot control.
  */
 export function PlayerList({
     localPlayerId,
@@ -33,12 +38,19 @@ export function PlayerList({
     const t = useTranslate();
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const players = lobbyState?.players ?? [];
+    const readyCount = players.filter((player) => player.ready).length;
+    const allReady = players.length > 0 && readyCount === players.length;
 
     return (
         <div className={styles['root']} data-testid="player-list">
-            <Heading level={3} size="md">
-                {t(LOBBY_KEYS.playersHeading, { n: players.length })}
-            </Heading>
+            <div className={styles['heading-row']}>
+                <Heading level={3} size="md">
+                    {t(LOBBY_KEYS.playersHeading, { n: players.length })}
+                </Heading>
+                <Badge data-testid="lobby-ready-summary" variant={allReady ? 'success' : 'neutral'}>
+                    {t(LOBBY_KEYS.readySummary, { ready: readyCount, total: players.length })}
+                </Badge>
+            </div>
             <ul className={styles['list']}>
                 {players.map((player) => (
                     <PlayerRow
@@ -64,6 +76,11 @@ interface PlayerRowProps {
 }
 
 function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending, t }: PlayerRowProps) {
+    const displayName = player.displayName || player.playerId;
+    // The local player's control doubles as their status indicator, so the
+    // badge renders only where no toggle does.
+    const showToggle = isLocalPlayer && onToggleReady !== undefined;
+
     return (
         <li
             className={styles['row']}
@@ -72,27 +89,36 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending, t }:
             data-ready={player.ready ? 'true' : 'false'}
         >
             <span className={styles['identity']}>
-                <span className={styles['name']}>{player.displayName || player.playerId}</span>
+                <span aria-hidden="true" className={styles['avatar']} data-testid="player-avatar">
+                    {displayName.trim().charAt(0).toUpperCase()}
+                </span>
+                <span className={styles['name']}>{displayName}</span>
                 {isLocalPlayer ? <Badge variant="neutral">{t(LOBBY_KEYS.you)}</Badge> : null}
             </span>
             <div className={styles['controls']}>
-                {/* 'warning' (orange) is intentional over 'error' (red): not-ready is a
-                    pending/neutral state, not a fault condition. */}
-                <Badge variant={player.ready ? 'success' : 'warning'}>
-                    {player.ready ? t(LOBBY_KEYS.ready) : t(LOBBY_KEYS.notReady)}
-                </Badge>
-                {isLocalPlayer && onToggleReady && (
-                    <Button
+                {showToggle ? (
+                    <ToggleButton
+                        aria-label={t(LOBBY_KEYS.toggleReady)}
+                        className={styles['ready-toggle']}
                         data-testid="ready-toggle"
-                        onClick={() => {
-                            void onToggleReady(!player.ready);
-                        }}
                         disabled={isTogglePending}
-                        size="sm"
-                        variant="secondary"
+                        onPressedChange={(next) => {
+                            void onToggleReady?.(next);
+                        }}
+                        pressed={player.ready}
                     >
-                        {isTogglePending ? t(LOBBY_KEYS.updating) : t(LOBBY_KEYS.toggleReady)}
-                    </Button>
+                        <Icon name="check" />
+                    </ToggleButton>
+                ) : (
+                    /* 'warning' (orange) is intentional over 'error' (red): not-ready
+                       is a pending/neutral state, not a fault condition. */
+                    <Badge
+                        className={styles['status-badge']}
+                        variant={player.ready ? 'success' : 'warning'}
+                    >
+                        {player.ready ? <Icon name="check" /> : null}
+                        {player.ready ? t(LOBBY_KEYS.ready) : t(LOBBY_KEYS.notReady)}
+                    </Badge>
                 )}
             </div>
         </li>

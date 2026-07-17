@@ -98,7 +98,6 @@ export const tacticsBundleEn: Readonly<Record<string, string>> = {
     'game.tactics.lobby.readyToggle': 'Ready',
     'game.tactics.lobby.aiPlayers': 'AI Players',
     'game.tactics.lobby.addAiAriaLabel': 'Add AI player',
-    'game.tactics.lobby.noAiPlayers': 'No AI players added.',
     'game.tactics.lobby.aiBadge': 'AI',
     'game.tactics.lobby.aiPlayerName': 'AI Player {n}',
     'game.tactics.lobby.removeAiAriaLabel': 'Remove AI Player {n}',

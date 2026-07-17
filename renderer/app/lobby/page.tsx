@@ -84,6 +84,9 @@ export default function LobbyPage() {
     const [pendingAction, setPendingAction] = useState<PendingAction>(null);
     const [error, setError] = useState<string | null>(null);
     const [lobbyConfig, setLobbyConfig] = useState(getDefaultLobbyConfig);
+    // Explicit shell game context from `?gameId=` — unlike lobbyConfig.gameId it
+    // has NO registry-default fallback, mirroring the main menu's rule.
+    const [shellGameId, setShellGameId] = useState<string | null>(null);
     const isMountedRef = useRef(true);
 
     const gameId = lobbyConfig.gameId;
@@ -95,13 +98,23 @@ export default function LobbyPage() {
     const previousLobbyStateRef = useRef(lobbyState);
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
 
+    // A game-branded lobby (LobbyScreen + its content) renders only in that
+    // game's explicit shell context: the URL's `?gameId=` must name the game the
+    // active lobby actually hosts. A bare URL is the engine-default shell — the
+    // hosted game's registry-default id alone must NOT pull in its branding
+    // (shell overrides resolve ONLY from `?gameId=`, no default-game fallback).
+    const activeShellGameId =
+        lobbyState !== null && shellGameId !== null && lobbyState.info.gameId === shellGameId
+            ? shellGameId
+            : null;
+
     // Load the active game's shell so a game-provided LobbyScreen can replace the
     // engine default. Keyed on gameId so it only reloads when the game changes.
-    const gameShell = useLobbyGameShell(lobbyState?.info.gameId ?? null);
+    const gameShell = useLobbyGameShell(activeShellGameId);
 
     // Fetch the active game's content (§4.8) so its LobbyScreen can read the
     // collections it authored (e.g. tactics colours). Generic + game-agnostic.
-    const gameContent = useGameContent(lobbyState?.info.gameId ?? null);
+    const gameContent = useGameContent(activeShellGameId);
 
     useEffect(() => {
         if (previousLobbyStateRef.current !== null && lobbyState === null) {
@@ -120,7 +133,9 @@ export default function LobbyPage() {
     // Read URL-driven lobby options after mount to avoid hydration drift.
     useEffect(() => {
         isMountedRef.current = true;
-        setLobbyConfig(parseLobbyConfig(new URLSearchParams(window.location.search)));
+        const searchParams = new URLSearchParams(window.location.search);
+        setLobbyConfig(parseLobbyConfig(searchParams));
+        setShellGameId(resolveShellGameId(searchParams));
 
         return () => {
             isMountedRef.current = false;

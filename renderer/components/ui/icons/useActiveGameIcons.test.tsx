@@ -11,14 +11,16 @@ import type { GameIconSet, IconGlyph } from './registry';
 
 // The hook resolves the active game id from the URL (`?gameId=`, read from
 // window.location.search) and the game's contributed icon set from the registry
-// shell seam. `usePathname` only keys the effect that re-reads the URL, so a
-// fixed stub suffices. Mirrors the useActiveGameTranslations harness.
-const { mockLoadRendererGameShell } = vi.hoisted(() => ({
+// shell seam. `usePathname` keys the effect that re-reads the URL AND scopes
+// the store fallback (honoured only on the game scene), so the stub is
+// swappable per test. Mirrors the useActiveGameTranslations harness.
+const { mockLoadRendererGameShell, mockPathname } = vi.hoisted(() => ({
     mockLoadRendererGameShell: vi.fn(),
+    mockPathname: { current: '/main-menu' },
 }));
 
 vi.mock('next/navigation', () => ({
-    usePathname: () => '/main-menu',
+    usePathname: () => mockPathname.current,
 }));
 
 vi.mock('../../../game/rendererGameRegistry', () => ({
@@ -49,6 +51,7 @@ function IconsProbe(): React.ReactElement {
 }
 
 beforeEach(() => {
+    mockPathname.current = '/main-menu';
     setUrlGameId(null);
     mockLoadRendererGameShell.mockReset();
     mockLoadRendererGameShell.mockResolvedValue({});
@@ -91,8 +94,9 @@ describe('useActiveGameIcons', () => {
     });
 
     it('swaps the set when the active game id changes', async () => {
-        // Drive the gameId through the reactive settings store (the URL-reading
-        // effect is keyed on the pathname, which the stub holds constant).
+        // Drive the gameId through the reactive settings store — the in-match
+        // context, since the store fallback is honoured only on the game scene.
+        mockPathname.current = '/game';
         useSettingsStore.setState({ activeGameId: 'demo', settings: {} });
         mockLoadRendererGameShell.mockResolvedValue({ icons: DEMO_ICONS });
 
