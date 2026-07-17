@@ -114,7 +114,10 @@ function makeFakeRun(
                     private: true,
                     devDependencies: { next: '^15', vitest: '^3' },
                     scripts: { 'build:packages': 'node -e ""' },
-                    pnpm: { onlyBuiltDependencies: ['electron', 'esbuild'] },
+                    pnpm: {
+                        onlyBuiltDependencies: ['electron', 'esbuild'],
+                        ignoredBuiltDependencies: ['sharp'],
+                    },
                 }),
             );
             files.set(
@@ -206,6 +209,7 @@ describe('applyTarballOverrides', () => {
             Object.keys(resolved.devDependencies).some((k) => k.startsWith('@chimera-engine/')),
         ).toBe(false);
         expect(resolved.pnpm.onlyBuiltDependencies).toEqual(['electron', 'esbuild']);
+        expect(resolved.pnpm.ignoredBuiltDependencies).toEqual(['sharp']);
         expect(resolved.scripts['build:packages']).not.toContain('tsc');
         // overrides serialize first (historical key order).
         expect(Object.keys(resolved.pnpm)[0]).toBe('overrides');

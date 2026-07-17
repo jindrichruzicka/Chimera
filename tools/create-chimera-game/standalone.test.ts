@@ -50,6 +50,9 @@ describe('buildStandaloneRootManifest', () => {
         expect(manifest.pnpm.overrides).toBeUndefined();
         // electron + esbuild install scripts are allowed (e2e needs the binaries).
         expect(manifest.pnpm.onlyBuiltDependencies).toEqual(['electron', 'esbuild']);
+        // sharp's script is intentionally ignored (unused prebuilt Next.js dep) so a fresh
+        // install prints no "ignored build scripts" warning.
+        expect(manifest.pnpm.ignoredBuiltDependencies).toEqual(['sharp']);
         // global-setup runs `pnpm build:packages` from this root: it must be a no-op (packages
         // arrive prebuilt), never the engine's real build.
         expect(manifest.scripts['build:packages']).toBeDefined();

@@ -57,6 +57,13 @@ export interface StandaloneRootManifest {
          */
         readonly overrides?: Record<string, string>;
         readonly onlyBuiltDependencies: readonly string[];
+        /**
+         * Dependencies whose install scripts are intentionally NOT run — acknowledged so pnpm 10
+         * does not print the "Ignored build scripts … run pnpm approve-builds" warning on a fresh
+         * install. `sharp` (a transitive Next.js dep) ships prebuilt binaries and is unused by the
+         * static-export renderer, so its build script is never needed.
+         */
+        readonly ignoredBuiltDependencies: readonly string[];
     };
 }
 
@@ -82,7 +89,9 @@ export interface BuildStandaloneRootManifestParams {
  * electron-builder). It omits `build:packages` (the engine is prebuilt) and drives the app by
  * filter; `electron-builder` rides along from the app's own devDependencies. The
  * `onlyBuiltDependencies` allowlist lets pnpm run electron's + esbuild's install scripts so the
- * e2e arm has a usable Electron binary + esbuild platform binary.
+ * e2e arm has a usable Electron binary + esbuild platform binary; `ignoredBuiltDependencies`
+ * acknowledges `sharp` (a transitive, unused Next.js dep with prebuilt binaries) so a fresh
+ * `pnpm install` prints no "ignored build scripts" warning.
  */
 export function buildStandaloneRootManifest(
     params: BuildStandaloneRootManifestParams,
@@ -103,6 +112,7 @@ export function buildStandaloneRootManifest(
         pnpm: {
             ...(overrides !== undefined ? { overrides: { ...overrides } } : {}),
             onlyBuiltDependencies: ['electron', 'esbuild'],
+            ignoredBuiltDependencies: ['sharp'],
         },
     };
 }
