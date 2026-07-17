@@ -437,6 +437,7 @@ itself, locked token-for-token by `renderer/styles/tokens.test.ts`.
 --ch-color-surface-selected: rgba(161, 161, 170, 0.16);
 --ch-color-scrim: #000000;
 --ch-color-overlay-backdrop: #27272a; /* Modal full-screen scrim; games override for a see-through backdrop */
+--ch-overlay-backdrop-blur: 0; /* backdrop-filter blur behind the Modal scrim; 0 = none, games raise it for frosted glass */
 
 /* Accent ramp — a neutral grey ramp with no brand tint, separated from the
  * shell only by lightness. accent is the resting interactive fill and

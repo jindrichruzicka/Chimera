@@ -105,6 +105,7 @@ const expectedTokens = [
     '--ch-color-surface-selected',
     '--ch-color-scrim',
     '--ch-color-overlay-backdrop',
+    '--ch-overlay-backdrop-blur',
     '--ch-color-accent',
     '--ch-color-accent-hover',
     '--ch-color-accent-strong',
@@ -332,6 +333,12 @@ describe('renderer design tokens', () => {
         const declarations = extractDeclaredTokens(readTokensCss());
 
         expect(new Set(declarations)).toEqual(new Set(expectedTokens));
+    });
+
+    it('defaults the overlay backdrop blur to zero so the engine overlay stays a plain scrim', () => {
+        // Games opt into frosted glass by overriding --ch-overlay-backdrop-blur;
+        // the engine default of 0 keeps the shared Modal backdrop unblurred.
+        expect(extractTokenValue(readTokensCss(), '--ch-overlay-backdrop-blur')).toBe('0');
     });
 
     it('keeps the focus ring distinct from active chrome: ring color is text-secondary', () => {

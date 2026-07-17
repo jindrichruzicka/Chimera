@@ -61,6 +61,26 @@ describe('tactics token overrides', () => {
         expect(readTokenValue(readOverrideCss(), '--ch-color-accent-strong')).not.toBeNull();
     });
 
+    it('frosts the modal overlay: a non-zero backdrop blur over a semi-transparent scrim', () => {
+        const css = readOverrideCss();
+
+        // Tactics opts into the frosted-glass overlay by raising the blur token
+        // above the engine default of 0; the scrim it sits over must stay
+        // semi-transparent (an rgba with alpha < 1) so the blurred shell behind
+        // the Modal actually shows through.
+        const blur = readTokenValue(css, '--ch-overlay-backdrop-blur');
+        expect(blur).not.toBeNull();
+        expect(blur).toMatch(/^\d+(?:\.\d+)?px$/);
+        expect(Number.parseFloat(blur!)).toBeGreaterThan(0);
+
+        const backdrop = readTokenValue(css, '--ch-color-overlay-backdrop');
+        expect(backdrop).not.toBeNull();
+        // rgba with an alpha strictly below 1 → the scrim is see-through.
+        const alpha = /rgba\([^)]*,\s*(0?\.\d+|0)\s*\)$/.exec(backdrop!);
+        expect(alpha).not.toBeNull();
+        expect(Number.parseFloat(alpha![1]!)).toBeLessThan(1);
+    });
+
     it('themes the hover glows and leaves the composed button hover shadows alone', () => {
         const css = readOverrideCss();
 

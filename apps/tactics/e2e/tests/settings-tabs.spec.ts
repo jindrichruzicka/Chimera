@@ -124,6 +124,54 @@ test.describe('Settings tabs', () => {
         }
     });
 
+    test('tactics frosts the settings modal overlay with a token-driven backdrop blur', async () => {
+        // RC polish: the tactics modal overlay is frosted glass — a non-zero
+        // backdrop blur behind its semi-transparent scrim. The blur is a
+        // token-driven CSS property (--ch-overlay-backdrop-blur → backdrop-filter),
+        // only applied once the tactics token override loads, so this drives the
+        // tactics game context (directGameRole host) rather than the plain boot.
+        const app = await launchTacticsSettingsApp();
+        try {
+            const window = await app.firstWindow();
+            await window.waitForLoadState('domcontentloaded');
+            const settingsPage = new SettingsPage(window);
+            await expect(settingsPage.getControlByLabel('Master Volume')).toBeVisible({
+                timeout: 10_000,
+            });
+
+            // The settings dialog carries the settings-dialog testid; its parent
+            // is the overlay that paints the scrim + backdrop-filter. Read the
+            // overlay's computed backdrop-filter (some Chromium builds expose it
+            // only under the -webkit- alias). The e2e tsconfig ships no DOM lib,
+            // so browser globals are reached through a narrow structural cast.
+            const backdropFilter = await window
+                .getByTestId('settings-dialog')
+                .evaluate((element) => {
+                    const dialog = element as unknown as {
+                        readonly parentElement: unknown;
+                        readonly ownerDocument: {
+                            readonly defaultView: {
+                                getComputedStyle(target: unknown): {
+                                    readonly backdropFilter: string;
+                                    readonly webkitBackdropFilter: string;
+                                };
+                            } | null;
+                        };
+                    };
+                    const overlay = dialog.parentElement;
+                    if (!overlay) throw new Error('settings dialog has no overlay parent');
+                    const view = dialog.ownerDocument.defaultView;
+                    if (!view) throw new Error('settings document has no defaultView');
+                    const style = view.getComputedStyle(overlay);
+                    return style.backdropFilter || style.webkitBackdropFilter;
+                });
+
+            expect(backdropFilter).toContain('blur(8px)');
+        } finally {
+            await app.close().catch(() => undefined);
+        }
+    });
+
     test('master volume persists after reloading the settings page', async ({ mainWindow }) => {
         const settingsPage = await openSettingsPage(mainWindow);
 

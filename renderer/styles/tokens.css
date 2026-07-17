@@ -273,6 +273,14 @@
      * plays); a game may remap it to a bespoke cursor instead of no cursor. */
     --ch-cursor-hidden: none;
 
+    /* ── Overlay backdrop ──
+     * Blur radius applied behind the shared Modal's full-screen scrim via
+     * `backdrop-filter`. The engine default of 0 keeps the overlay a plain
+     * scrim; a game raises it (and pairs it with a semi-transparent
+     * --ch-color-overlay-backdrop) for a frosted-glass overlay that blurs the
+     * shell showing through behind the dialog. */
+    --ch-overlay-backdrop-blur: 0;
+
     /* ── Z-index ladder ──
      * The complete stacking contract, lowest to highest: shell background,
      * raised in-page chrome (HUD docks, toggle thumbs), tooltip/popover,

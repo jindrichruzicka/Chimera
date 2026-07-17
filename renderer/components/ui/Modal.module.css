@@ -4,6 +4,9 @@
     animation-fill-mode: both;
     animation-name: var(--ch-backdrop-anim-enter-name);
     animation-timing-function: var(--ch-backdrop-anim-enter-easing);
+    /* Token-driven frosted-glass blur behind the scrim; 0 by default (no blur),
+     * games raise --ch-overlay-backdrop-blur for a see-through frosted overlay. */
+    backdrop-filter: blur(var(--ch-overlay-backdrop-blur));
     background-color: var(--ch-color-overlay-backdrop);
     display: flex;
     inset: var(--ch-space-none);

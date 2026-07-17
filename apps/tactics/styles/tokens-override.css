@@ -12,6 +12,9 @@
     --ch-color-surface-hover: rgba(201, 168, 76, 0.08);
     --ch-color-surface-selected: rgba(201, 168, 76, 0.18);
     --ch-color-overlay-backdrop: rgba(16, 16, 29, 0.76);
+    /* Frosted-glass modal overlay: blur the shell showing through the
+       semi-transparent scrim above. Engine default is 0 (no blur). */
+    --ch-overlay-backdrop-blur: 8px;
     --ch-color-text-primary: #e0d6c8;
     --ch-color-text-secondary: #b3a68f;
     --ch-color-accent: #c9a84c;
