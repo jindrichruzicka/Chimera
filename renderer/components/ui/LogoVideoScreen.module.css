@@ -2,6 +2,10 @@
     position: fixed;
     inset: var(--ch-space-none);
     background-color: var(--ch-color-scrim);
+    /* Hide the OS cursor for the duration of the brand screen. The element
+     * covers the whole window, and `cursor` inherits, so this also suppresses
+     * the cursor over the <video> child; every other screen keeps its cursor. */
+    cursor: var(--ch-cursor-hidden);
 }
 
 .video {

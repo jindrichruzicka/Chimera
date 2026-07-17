@@ -100,6 +100,37 @@ test.describe('Game logo screen (§4.37 / #858)', () => {
         await expect(video).toHaveAttribute('src', '/chimera_logo.mp4');
     });
 
+    test('hides the OS cursor while the brand screen is on-screen', async ({ mainWindow }) => {
+        // The logo screen must show no cursor while it plays (RC polish); every
+        // other screen keeps its system/game cursor. The suppression is a
+        // computed CSS property (`cursor: none` via --ch-cursor-hidden), so it is
+        // observable through getComputedStyle even though the OS cursor plane
+        // itself is not captured in screenshots. Freeze the media exit triggers
+        // first so the element stays mounted for the read.
+        await freezeLogoVideoAutoAdvance(mainWindow);
+        await mainWindow.goto(logoScreenUrl('tactics'));
+
+        const logoScreen = mainWindow.getByTestId('logo-video-screen');
+        await expect(logoScreen).toBeVisible({ timeout: NAV_TIMEOUT_MS });
+
+        // The e2e tsconfig ships no DOM lib, so browser globals are reached
+        // through a narrow structural cast.
+        const cursor = await logoScreen.evaluate((element) => {
+            const el = element as unknown as {
+                readonly ownerDocument: {
+                    readonly defaultView: {
+                        getComputedStyle(target: unknown): { readonly cursor: string };
+                    } | null;
+                };
+            };
+            const view = el.ownerDocument.defaultView;
+            if (!view) throw new Error('logo screen document has no defaultView');
+            return view.getComputedStyle(element).cursor;
+        });
+
+        expect(cursor).toBe('none');
+    });
+
     test('skip on input navigates to the main menu with gameId preserved', async ({
         mainWindow,
     }) => {

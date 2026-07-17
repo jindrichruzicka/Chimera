@@ -279,6 +279,7 @@ const expectedTokens = [
     '--ch-cursor-default',
     '--ch-cursor-pointer',
     '--ch-cursor-disabled',
+    '--ch-cursor-hidden',
     '--ch-z-base',
     '--ch-z-raised',
     '--ch-z-tooltip',

@@ -269,6 +269,9 @@
     --ch-cursor-default: auto;
     --ch-cursor-pointer: pointer;
     --ch-cursor-disabled: not-allowed;
+    /* Suppresses the OS cursor entirely (the boot logo screen hides it while it
+     * plays); a game may remap it to a bespoke cursor instead of no cursor. */
+    --ch-cursor-hidden: none;
 
     /* ── Z-index ladder ──
      * The complete stacking contract, lowest to highest: shell background,

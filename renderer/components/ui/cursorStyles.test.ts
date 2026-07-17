@@ -38,6 +38,10 @@ describe('cursor token declarations', () => {
         ['--ch-cursor-default', 'auto'],
         ['--ch-cursor-pointer', 'pointer'],
         ['--ch-cursor-disabled', 'not-allowed'],
+        // The brand logo screen hides the OS cursor via this token; keeping it in
+        // the family means the ban below is satisfied and a game can still remap
+        // it (e.g. a custom loading cursor) instead of a bare `none`.
+        ['--ch-cursor-hidden', 'none'],
     ])('tokens.css declares %s with the system value %s', (token, value) => {
         expect(tokensCss).toContain(`${token}: ${value};`);
     });
@@ -49,6 +53,20 @@ describe('cursor token declarations', () => {
         );
 
         expect(rootDeclarations).toContain('cursor: var(--ch-cursor-default)');
+    });
+
+    it('the logo video screen suppresses the OS cursor via the hidden token', () => {
+        // The full-window logo screen must show no cursor while it plays; every
+        // other screen keeps the system/game cursor. The suppression routes
+        // through --ch-cursor-hidden (not a bare `cursor: none`) so it obeys the
+        // token ban below and stays game-overridable. `cursor` inherits, so the
+        // one declaration on the container also covers the <video> child.
+        const logoScreenDeclarations = extractDeclarations(
+            readRendererFile('components/ui/LogoVideoScreen.module.css'),
+            '.logo-video-screen',
+        );
+
+        expect(logoScreenDeclarations).toContain('cursor: var(--ch-cursor-hidden)');
     });
 });
 

@@ -582,6 +582,7 @@ itself, locked token-for-token by `renderer/styles/tokens.test.ts`.
 --ch-cursor-default: auto;
 --ch-cursor-pointer: pointer;
 --ch-cursor-disabled: not-allowed;
+--ch-cursor-hidden: none; /* Boot logo screen suppresses the OS cursor; games may remap to a bespoke cursor */
 
 /* ── Motion ──────────────────────────────────────────────── */
 --ch-duration-fast: 120ms;
