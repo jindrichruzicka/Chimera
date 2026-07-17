@@ -44,10 +44,8 @@ import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.j
 
 import { toSlotId } from '../../preload/api-types.js';
 
-import {
-    registerTacticsActions,
-    resolveTacticsFirstPlayer,
-} from '@chimera-engine/tactics/simulation/actions.js';
+import { registerTacticsActions } from '@chimera-engine/tactics/simulation/actions.js';
+import { resolveTacticsFirstPlayer } from '@chimera-engine/tactics/simulation/init.js';
 import { createTacticsAIState } from '@chimera-engine/tactics/ai/tacticsPolicy.js';
 import { tacticsCommitmentOrchestration } from '@chimera-engine/tactics/simulation/commitment/orchestration.js';
 import { tacticsResolveIsMyTurn } from '@chimera-engine/tactics/simulation/commitment/turnGate.js';

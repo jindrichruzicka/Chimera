@@ -598,8 +598,8 @@ const { PerspectiveReplayManager } = await import('./replay/PerspectiveReplayMan
 // assertions still verify the game-owned rules flow through main() → projector.
 // Tactics modules are imported directly: test files are exempt from the
 // no-main-games-import boundary.
-const { registerTacticsActions, resolveTacticsFirstPlayer } =
-    await import('@chimera-engine/tactics/simulation/actions.js');
+const { registerTacticsActions } = await import('@chimera-engine/tactics/simulation/actions.js');
+const { resolveTacticsFirstPlayer } = await import('@chimera-engine/tactics/simulation/init.js');
 const { createTacticsAIState } = await import('@chimera-engine/tactics/ai/tacticsPolicy.js');
 const { tacticsManifest } = await import('@chimera-engine/tactics/manifest.js');
 const { tacticsCommitmentOrchestration } =

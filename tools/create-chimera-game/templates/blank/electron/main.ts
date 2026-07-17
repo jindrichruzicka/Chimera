@@ -10,10 +10,8 @@
 
 import { main, type MainGameContribution } from '@chimera-engine/electron/main';
 
-import {
-    register__GamePascal__Actions,
-    resolve__GamePascal__FirstPlayer,
-} from '@chimera-engine/__game_kebab__/simulation/actions.js';
+import { register__GamePascal__Actions } from '@chimera-engine/__game_kebab__/simulation/actions.js';
+import { resolve__GamePascal__FirstPlayer } from '@chimera-engine/__game_kebab__/simulation/init.js';
 import { __gameCamel__Manifest } from '@chimera-engine/__game_kebab__/manifest.js';
 import { __gameCamel__SettingsSchema } from '@chimera-engine/__game_kebab__/settings-schema.js';
 import { __gameCamel__VisibilityRules } from '@chimera-engine/__game_kebab__/simulation/visibility-rules.js';

@@ -18,10 +18,8 @@
 import { main, type MainGameContribution } from '@chimera-engine/electron/main';
 
 import { createTacticsAIState } from '@chimera-engine/tactics/ai/tacticsPolicy.js';
-import {
-    registerTacticsActions,
-    resolveTacticsFirstPlayer,
-} from '@chimera-engine/tactics/simulation/actions.js';
+import { registerTacticsActions } from '@chimera-engine/tactics/simulation/actions.js';
+import { resolveTacticsFirstPlayer } from '@chimera-engine/tactics/simulation/init.js';
 import {
     paletteFromCollections,
     TACTICS_CONTENT_SCHEMAS,

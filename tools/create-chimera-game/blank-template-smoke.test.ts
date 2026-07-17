@@ -39,8 +39,14 @@ describe('blank template smoke harness', () => {
             '__GAME_CONSTANT___GAME_ID',
         );
         await expect(read('simulation/visibility-rules.ts')).resolves.toContain('VisibilityRules');
+        // Match initialization (the first-player resolver) is its own simulation
+        // module, kept separate from the action registry (mirrors apps/tactics).
+        await expect(read('simulation/init.ts')).resolves.toContain(
+            'resolve__GamePascal__FirstPlayer',
+        );
         const main = await read('electron/main.ts');
         expect(main).toContain("from '@chimera-engine/__game_kebab__/simulation/actions.js'");
+        expect(main).toContain("from '@chimera-engine/__game_kebab__/simulation/init.js'");
         expect(main).toContain(
             "from '@chimera-engine/__game_kebab__/simulation/visibility-rules.js'",
         );

@@ -7,27 +7,10 @@ import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionReg
 import type {
     ActionDefinition,
     BaseGameSnapshot,
-    PlayerId,
     ValidationResult,
 } from '@chimera-engine/simulation/engine/types.js';
 
 import { __GAME_CONSTANT___GAME_ID, __GAME_CONSTANT___PING_ACTION } from './constants.js';
-
-/**
- * First-player config — structurally assignable to the host's `FirstPlayerConfig`
- * (defined in `@chimera-engine/electron`), so this game-core module names no platform
- * type. Override the resolver to seat your game's starting player.
- */
-export interface __GamePascal__GameInitializationConfig {
-    readonly hostPlayerId: PlayerId;
-    readonly firstPlayer?: PlayerId;
-}
-
-export function resolve__GamePascal__FirstPlayer(
-    config: __GamePascal__GameInitializationConfig,
-): PlayerId {
-    return config.firstPlayer ?? config.hostPlayerId;
-}
 
 /** Example action payload — replace with your game's real payloads. */
 interface __GamePascal__PingPayload {
