@@ -78,7 +78,16 @@ It runs:
 
 so a misaligned set can never reach the registry.
 
-### 3. Release skills
+### 3. Release candidates (`1.X.0-rc.N`)
+
+A milestone `1.X.0` **may be previewed on npm as one or more release candidates** before the final release. The RC is still lock-step — the whole first-party set moves together to the same `1.X.0-rc.N` — and it is published to the npm **`rc` dist-tag**, never `latest`, so a plain `npm install` / `npm create chimera-game` keeps resolving the current stable line. Consumers opt in explicitly (`@rc` or `@1.X.0-rc.N`).
+
+- **The only pre-release identifier allowed is `-rc.N`.** `verify:version-alignment` accepts `1.X.Y-rc.N` (`isLockstepVersion`), but still rejects any other pre-release (`-beta`, `-alpha`), build metadata (`+…`), and every `0.x` version.
+- **Mechanism — Changesets prerelease mode.** `pnpm changeset pre enter rc` writes `.changeset/pre.json`; then `pnpm version-packages` produces `1.X.0-rc.N` across the `fixed` group, and `changeset publish` (via `pnpm release` / `release.yml`) publishes prerelease versions under the **`rc`** dist-tag automatically — no `--tag` flag or workflow change is needed, but `.changeset/pre.json` must be committed.
+- **Going stable.** `pnpm changeset pre exit`, then `pnpm version-packages` collapses the accumulated changesets to the final `1.X.0`, which publishes to `latest`. Cut the milestone GitHub release via `/create-release`.
+- **`create-chimera-game`.** After the version bump, run `pnpm gen:toolchain` so the frozen `ENGINE_DEP_RANGES` become `^1.X.0-rc.N`; a `^…-rc.N` caret range resolves the published RC (semver includes same-tuple prereleases).
+
+### 4. Release skills
 
 Both `/create-release` (milestone tag) and `/publish-packages` (package tags) treat the version as **one shared `1.X.Y`**. They pick the next shared version (milestone → `1.X.0`, otherwise → `1.X.(Y+1)`), let Changesets apply it to the whole `fixed` group, and run `verify:version-alignment` before pushing.
 
@@ -90,6 +99,7 @@ Both `/create-release` (milestone tag) and `/publish-packages` (package tags) tr
 - **Milestone release** → `1.X.0` (advance the compatibility line `X`, reset patch).
 - **Any package update between milestones** → `1.X.(Y+1)` (advance patch; republish all).
 - **Breaking change** → it belongs to a milestone, which advances `X`. A matching `X` is the compatibility promise.
+- **Release candidate** → `1.X.0-rc.N` (whole set in lock-step), published to the npm `rc` dist-tag via Changesets pre mode; the only allowed pre-release identifier. Never lands on `latest`.
 - Run `pnpm verify:version-alignment` before any tag/publish; if it fails, re-align, don't override.
 
 ---

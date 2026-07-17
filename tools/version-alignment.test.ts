@@ -42,13 +42,25 @@ describe('isLockstepVersion', () => {
         expect(isLockstepVersion(' 1.0.1 ')).toBe(true); // trimmed
     });
 
+    it('accepts release candidates (1.X.Y-rc.N) so a milestone can be previewed on npm', () => {
+        expect(isLockstepVersion('1.0.0-rc.0')).toBe(true);
+        expect(isLockstepVersion('1.0.0-rc.3')).toBe(true);
+        expect(isLockstepVersion('1.2.0-rc.0')).toBe(true);
+        expect(isLockstepVersion(' 1.0.0-rc.1 ')).toBe(true); // trimmed
+    });
+
     it('rejects 0.x versions (the retired independent scheme)', () => {
         expect(isLockstepVersion('0.9.0')).toBe(false);
         expect(isLockstepVersion('0.0.1')).toBe(false);
+        expect(isLockstepVersion('0.9.0-rc.0')).toBe(false); // rc does not license a 0.x major
     });
 
-    it('rejects non-release shapes (pre-release, build, partial, garbage)', () => {
-        expect(isLockstepVersion('1.0.0-beta.1')).toBe(false);
+    it('rejects non-rc pre-release, build, partial, and malformed rc shapes', () => {
+        expect(isLockstepVersion('1.0.0-beta.1')).toBe(false); // only -rc.N is licensed
+        expect(isLockstepVersion('1.0.0-alpha')).toBe(false);
+        expect(isLockstepVersion('1.0.0-rc')).toBe(false); // rc needs a numeric counter
+        expect(isLockstepVersion('1.0.0-rc.')).toBe(false);
+        expect(isLockstepVersion('1.0.0-rc.0+build.5')).toBe(false); // no trailing build metadata
         expect(isLockstepVersion('1.0.0+build.5')).toBe(false);
         expect(isLockstepVersion('1.0')).toBe(false);
         expect(isLockstepVersion('1')).toBe(false);
@@ -73,6 +85,25 @@ describe('checkAlignment', () => {
         const result = checkAlignment(at103);
         expect(result.ok).toBe(true);
         expect(result.version).toBe('1.0.3');
+    });
+
+    it('passes when the whole set is aligned on one release candidate', () => {
+        const atRc = ALIGNED_1_0_0.map((p) => ({ ...p, version: '1.0.0-rc.0' }));
+        const result = checkAlignment(atRc);
+        expect(result.ok).toBe(true);
+        expect(result.version).toBe('1.0.0-rc.0');
+        expect(result.reasons).toEqual([]);
+    });
+
+    it('fails when one package is stable but the rest are on the release candidate', () => {
+        const mixed = ALIGNED_1_0_0.map((p) =>
+            p.name === '@chimera-engine/ai'
+                ? { ...p, version: '1.0.0' }
+                : { ...p, version: '1.0.0-rc.0' },
+        );
+        const result = checkAlignment(mixed);
+        expect(result.ok).toBe(false);
+        expect(result.reasons.join('\n')).toContain('not aligned');
     });
 
     it('fails when one package has drifted, naming the offending version group', () => {

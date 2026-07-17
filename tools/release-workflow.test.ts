@@ -66,6 +66,15 @@ describe('release.yml CI release workflow', () => {
         expect(idxBuild).toBeGreaterThan(idxAlignment);
     });
 
+    // The create-chimera-game toolchain snapshot (ENGINE_DEP_RANGES) is drift-checked before
+    // build/publish, so a scaffolded game can never pin a stale/nonexistent engine range.
+    it('runs verify:toolchain-snapshot before build', () => {
+        const idxSnapshot = content.search(/run:\s*pnpm verify:toolchain-snapshot\b/);
+        const idxBuild = content.search(/run:\s*pnpm build:packages/);
+        expect(idxSnapshot).toBeGreaterThanOrEqual(0);
+        expect(idxBuild).toBeGreaterThan(idxSnapshot);
+    });
+
     // AC2 — publish is gated behind verify:pack (it precedes publish; a failed step
     // fails the job before publish runs). Skip-unchanged is delegated to `changeset
     // publish`, which only publishes versions not already on the registry.

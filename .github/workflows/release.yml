@@ -81,6 +81,13 @@ jobs:
       - name: Verify version alignment (verify:version-alignment)
         run: pnpm verify:version-alignment
 
+      # The published create-chimera-game bin freezes each engine version into
+      # toolchain.generated.ts (ENGINE_DEP_RANGES). If that snapshot drifts from the live
+      # engine versions, scaffolded games would pin the wrong (or a nonexistent) range. Fail
+      # fast here, before build/publish, so a stale snapshot can never ship.
+      - name: Verify toolchain snapshot (verify:toolchain-snapshot)
+        run: pnpm verify:toolchain-snapshot
+
       - name: Build packages
         run: pnpm build:packages
 

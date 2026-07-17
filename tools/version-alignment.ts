@@ -7,15 +7,18 @@
  * PUBLISHED package — the five `@chimera-engine/*` engine packages AND the
  * `create-chimera-game` initializer — shares one version, `1.X.Y`. A milestone advances
  * the middle `X`; any between-milestone package update advances the patch `Y`; and the
- * whole set always re-publishes together at the same version. The full policy lives in
- * `docs/versioning-policy.md`.
+ * whole set always re-publishes together at the same version. A milestone `1.X.0` may be
+ * previewed as a release candidate `1.X.0-rc.N` (published to npm's `rc` dist-tag, never
+ * `latest`) — the whole set still moves in lock-step to the same `-rc.N`. The full policy
+ * lives in `docs/versioning-policy.md`.
  *
  * Changesets' `fixed` group (`.changeset/config.json`) keeps bumps in lock-step, but a
  * hand-edit, a bad merge, or a stray `npm version` could still drift one package. This
  * gate is the belt-and-braces check: it reads every first-party `package.json` and FAILS
  * unless (1) all versions are byte-identical and (2) the shared version is a valid `1.X.Y`
- * (major >= 1). It runs in the pre-release gate and in `release.yml` before publish, so a
- * misaligned set can never reach the registry.
+ * (major >= 1), optionally with an `-rc.N` release-candidate suffix. It runs in the
+ * pre-release gate and in `release.yml` before publish, so a misaligned set can never
+ * reach the registry.
  *
  *   tsx tools/version-alignment.ts             # positive gate (over real package.json files)
  *   tsx tools/version-alignment.ts --self-test # negative gate (must detect synthetic drift)
@@ -64,10 +67,15 @@ export const LOCKSTEP_PACKAGE_DIRS = [
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
-/** A strict `1.X.Y` release version: major >= 1, all three parts non-negative integers, no pre-release/build suffix. */
-const LOCKSTEP_VERSION_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+/**
+ * A locked release version: `1.X.Y` (major >= 1, three non-negative integer parts) with an
+ * OPTIONAL `-rc.N` release-candidate suffix. `-rc.N` is the only pre-release identifier allowed
+ * (a milestone `1.X.0` may be previewed on npm's `rc` dist-tag as `1.X.0-rc.N`); any other
+ * pre-release (`-beta`, `-alpha`), build metadata (`+…`), partial, or 0.x version is rejected.
+ */
+const LOCKSTEP_VERSION_RE = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/;
 
-/** True when `version` is a plain `MAJOR.MINOR.PATCH` with `MAJOR >= 1` (the `1.X.Y` shape). */
+/** True when `version` is a `MAJOR.MINOR.PATCH` (`MAJOR >= 1`), optionally with an `-rc.N` suffix. */
 export function isLockstepVersion(version: string): boolean {
     const match = LOCKSTEP_VERSION_RE.exec(version.trim());
     if (match === null) return false;
@@ -108,7 +116,7 @@ export function checkAlignment(packages: readonly VersionedPackage[]): Alignment
     for (const pkg of packages) {
         if (!isLockstepVersion(pkg.version)) {
             reasons.push(
-                `"${pkg.name}" version "${pkg.version}" is not a valid locked 1.X.Y release version (expected MAJOR.MINOR.PATCH with MAJOR >= 1)`,
+                `"${pkg.name}" version "${pkg.version}" is not a valid locked 1.X.Y release version (expected MAJOR.MINOR.PATCH with MAJOR >= 1, optionally suffixed -rc.N)`,
             );
         }
     }
