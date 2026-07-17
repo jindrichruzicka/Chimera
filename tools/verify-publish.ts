@@ -22,7 +22,10 @@
  *                                or the package itself)
  *   3. `publint run <dir> --strict` per package — exports/files/types correctness
  *   4. `pnpm publish --dry-run --no-git-checks` per package — manifest + workspace:*
- *                                rewrite validation against the real publish path
+ *                                rewrite validation against the real publish path. A
+ *                                prerelease version (e.g. `1.0.0-rc.0`) adds `--tag rc`
+ *                                (npm requires an explicit tag for prereleases), matching
+ *                                the tag Changesets uses in pre mode.
  *
  * `depcheck` scans the runtime `.js` only, never `.d.ts`: a TYPE-ONLY import (e.g.
  * simulation's `import type * as React from 'react'`) erases from `.js`, so it is
@@ -102,6 +105,8 @@ export const CONSUMER_PROVIDED_SPECIFIERS: readonly string[] = ['chimera-game-re
 /** The dependency-bearing slice of a package.json the depcheck needs. */
 export interface PackageManifest {
     readonly name: string;
+    /** The published version; drives the prerelease dist-tag for the dry-run step. */
+    readonly version?: string;
     readonly dependencies?: Record<string, string>;
     readonly peerDependencies?: Record<string, string>;
     readonly optionalDependencies?: Record<string, string>;
@@ -209,9 +214,31 @@ export function publintArgs(pkgDir: string): string[] {
     return ['exec', 'publint', 'run', pkgDir, '--strict'];
 }
 
-/** `pnpm publish --dry-run --no-git-checks` argv (run with cwd = the package dir). */
-export function publishDryRunArgs(): string[] {
-    return ['publish', '--dry-run', '--no-git-checks'];
+/**
+ * The npm dist-tag a version publishes under, or `null` for a plain release (npm's default
+ * `latest`). A prerelease version resolves to its FIRST prerelease identifier — `1.0.0-rc.0`
+ * → `rc` — matching how Changesets tags a pre-mode publish. npm REQUIRES an explicit `--tag`
+ * when publishing a prerelease, so without this the dry-run (and the real publish) errors with
+ * "You must specify a tag using --tag when publishing a prerelease version".
+ */
+export function prereleaseDistTag(version: string): string | null {
+    const dashIndex = version.indexOf('-');
+    if (dashIndex === -1) return null;
+    const firstIdentifier = version.slice(dashIndex + 1).split('.')[0] ?? '';
+    return firstIdentifier.length > 0 ? firstIdentifier : null;
+}
+
+/**
+ * `pnpm publish --dry-run --no-git-checks` argv (run with cwd = the package dir). A
+ * prerelease `distTag` (e.g. `rc`) appends `--tag <distTag>` so npm accepts the prerelease
+ * and it never lands on `latest`; omit it for a plain release.
+ */
+export function publishDryRunArgs(distTag?: string | null): string[] {
+    const args = ['publish', '--dry-run', '--no-git-checks'];
+    if (distTag !== undefined && distTag !== null && distTag.length > 0) {
+        args.push('--tag', distTag);
+    }
+    return args;
 }
 
 // ── Step runners ───────────────────────────────────────────────────────────────
@@ -262,12 +289,16 @@ function runPublint(
     return deps.run('pnpm', publintArgs(pkg.dir), { cwd: deps.repoRoot, capture: true });
 }
 
-function runPublishDryRun(
+async function runPublishDryRun(
     deps: VerifyPublishDeps,
     pkg: { readonly name: string; readonly dir: string },
-): RunResult {
-    deps.log(`publish --dry-run ${pkg.name}…`);
-    return deps.run('pnpm', publishDryRunArgs(), {
+): Promise<RunResult> {
+    // Derive the dist-tag from the package's own version so the dry-run exercises the SAME
+    // `--tag` the real `changeset publish` uses (prerelease → its first identifier, e.g. `rc`).
+    const manifest = await readManifest(deps, pkg.dir);
+    const distTag = manifest.version !== undefined ? prereleaseDistTag(manifest.version) : null;
+    deps.log(`publish --dry-run ${pkg.name}${distTag !== null ? ` (--tag ${distTag})` : ''}…`);
+    return deps.run('pnpm', publishDryRunArgs(distTag), {
         cwd: path.join(deps.repoRoot, pkg.dir),
         capture: true,
     });
@@ -309,7 +340,7 @@ export async function verifyPublish(
 
         if (options.dryRun !== false) {
             for (const pkg of CHIMERA_PACKAGES) {
-                assertStepOk('dry-run', runPublishDryRun(deps, pkg));
+                assertStepOk('dry-run', await runPublishDryRun(deps, pkg));
             }
         }
 

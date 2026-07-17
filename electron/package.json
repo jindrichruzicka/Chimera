@@ -1,6 +1,6 @@
 {
     "name": "@chimera-engine/electron",
-    "version": "0.10.0",
+    "version": "1.0.0-rc.0",
     "description": "Electron main + preload host wrapper composing the Chimera engine into a desktop app.",
     "license": "MIT",
     "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",

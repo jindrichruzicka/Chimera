@@ -1,5 +1,19 @@
 # create-chimera-game
 
+## 1.0.0-rc.0
+
+### Major Changes
+
+- M10 — first public release (`1.0.0`). Adopt the locked `1.X.Y` versioning scheme: every
+  `@chimera-engine/*` engine package and the `create-chimera-game` initializer now share one
+  version and re-publish together. This bump retires the independent `0.x` per-package semver
+  and aligns the whole first-party set at `1.0.0`. Previewed on npm as `1.0.0-rc.0` under the
+  `rc` dist-tag before the final release.
+
+### Minor Changes
+
+- 88c00c5: `create-chimera-game <name>` now scaffolds the standalone project **into the current directory** instead of a new `<name>/` subdirectory. The intended flow is "make a folder, open it, run the initializer there", so the app (`apps/<kebab>/`) and the emitted project root (`package.json`, `pnpm-workspace.yaml`, `tsconfig.json`, `vitest.config.mts`) land directly in `<cwd>` with no redundant wrapper directory, and `pnpm install` runs there. To avoid clobbering an existing project, the CLI refuses when the current directory already contains a `package.json`. `--workspace` (in-monorepo) and `--out <dir>` (the `verify:scaffold` gate) are unchanged.
+
 ## 0.2.0
 
 ### Minor Changes

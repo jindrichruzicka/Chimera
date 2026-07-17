@@ -1,5 +1,33 @@
 # @chimera-engine/renderer
 
+## 1.0.0-rc.0
+
+### Major Changes
+
+- M10 — first public release (`1.0.0`). Adopt the locked `1.X.Y` versioning scheme: every
+  `@chimera-engine/*` engine package and the `create-chimera-game` initializer now share one
+  version and re-publish together. This bump retires the independent `0.x` per-package semver
+  and aligns the whole first-party set at `1.0.0`. Previewed on npm as `1.0.0-rc.0` under the
+  `rc` dist-tag before the final release.
+
+### Patch Changes
+
+- 3250d73: `LogoVideoScreen` now skips on key press only — a mouse click no longer dismisses the brand/logo screen. The skip-on-input wiring drops its `window` `'click'` listener and keeps `'keydown'`; the watchdog timeout, video `ended`/`error`, and autoplay-rejection exit paths are unchanged.
+- a8b5cb6: Close out F72 Spectator Mode (feature-review gate). Land the carried-over
+  correctness fix from the #881 review: `renderer/app/game/page.tsx` now derives
+  `isHost = false` for a spectator, so a spectator that follows the host's seat
+  (and therefore projects `viewerId === hostId`) is no longer mistaken for the
+  host — keeping the deterministic-replay export host-only (Invariants #71 / #98 /
+  #114). Adds the end-to-end Playwright spec proving admit-as-spectator, the
+  read-only followed view, the out-of-band perspective switch, and both mid-match
+  reject reasons (`spectators_disabled`, `match_in_progress`), plus the new
+  Spectator Mode Contract doc and the ratified invariants #114 (read-only viewers)
+  and #115 (out-of-band `SPECTATE_TARGET_UPDATE`).
+- Updated dependencies [e9f122f]
+- Updated dependencies
+- Updated dependencies [da1f1cd]
+    - @chimera-engine/simulation@1.0.0-rc.0
+
 ## 0.10.0
 
 ### Minor Changes

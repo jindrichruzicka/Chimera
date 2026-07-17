@@ -19,6 +19,7 @@ import {
     checkAllDeps,
     publintArgs,
     publishDryRunArgs,
+    prereleaseDistTag,
     verifyPublish,
     verifyPublishSelfTest,
     CONSUMER_PROVIDED_SPECIFIERS,
@@ -291,6 +292,31 @@ describe('publintArgs / publishDryRunArgs', () => {
 
     it('dry-run-publishes without git checks (run from the package dir)', () => {
         expect(publishDryRunArgs()).toEqual(['publish', '--dry-run', '--no-git-checks']);
+    });
+
+    it('appends --tag for a prerelease dist-tag; omits it for a plain release', () => {
+        expect(publishDryRunArgs('rc')).toEqual([
+            'publish',
+            '--dry-run',
+            '--no-git-checks',
+            '--tag',
+            'rc',
+        ]);
+        expect(publishDryRunArgs(null)).toEqual(['publish', '--dry-run', '--no-git-checks']);
+        expect(publishDryRunArgs('')).toEqual(['publish', '--dry-run', '--no-git-checks']);
+    });
+});
+
+describe('prereleaseDistTag', () => {
+    it('returns the first prerelease identifier (matches Changesets pre-mode tagging)', () => {
+        expect(prereleaseDistTag('1.0.0-rc.0')).toBe('rc');
+        expect(prereleaseDistTag('1.2.0-rc.3')).toBe('rc');
+        expect(prereleaseDistTag('2.0.0-beta.1')).toBe('beta');
+    });
+
+    it('returns null for a plain release (npm default latest)', () => {
+        expect(prereleaseDistTag('1.0.0')).toBeNull();
+        expect(prereleaseDistTag('0.9.1')).toBeNull();
     });
 });
 

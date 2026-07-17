@@ -367,7 +367,10 @@ describe('scaffoldGame', () => {
                 await readFile(path.join(result.appDir, 'package.json'), 'utf8'),
             );
             expect(appPkg.name).toBe('@chimera-engine/my-game');
-            expect(appPkg.dependencies['@chimera-engine/simulation']).toMatch(/^\^\d+\.\d+\.\d+$/);
+            // A caret range, optionally with an `-rc.N` release-candidate suffix (`^1.0.0-rc.0`).
+            expect(appPkg.dependencies['@chimera-engine/simulation']).toMatch(
+                /^\^\d+\.\d+\.\d+(?:-rc\.\d+)?$/,
+            );
             expect(JSON.stringify(appPkg)).not.toContain('workspace:*');
 
             // The app's build/e2e tsconfigs no longer reference monorepo sibling packages (#816):

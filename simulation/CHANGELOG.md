@@ -1,5 +1,20 @@
 # @chimera-engine/simulation
 
+## 1.0.0-rc.0
+
+### Major Changes
+
+- M10 — first public release (`1.0.0`). Adopt the locked `1.X.Y` versioning scheme: every
+  `@chimera-engine/*` engine package and the `create-chimera-game` initializer now share one
+  version and re-publish together. This bump retires the independent `0.x` per-package semver
+  and aligns the whole first-party set at `1.0.0`. Previewed on npm as `1.0.0-rc.0` under the
+  `rc` dist-tag before the final release.
+
+### Minor Changes
+
+- e9f122f: Add the optional spectator capability to the `GameManifest` contract and the reserved allow-spectators match setting (F72). New exports from `foundation/game-manifest-contract`: `GameSpectatorSupport` (an opaque `mode: 'perspective'` — the only v1 visibility model), the optional `GameManifest.spectators` field, and the pure `resolveSpectatorSupport(manifest)` helper (returns `undefined` for an absent field or a malformed `mode`, never throws, never mutates). New exports from `foundation/game-lobby-contract`: the engine-owned reserved match-setting key `ALLOW_SPECTATORS_SETTING` (`'engine.allowSpectators'`), its `ALLOW_SPECTATORS_DEFAULT` (`'false'`), and the pure `readAllowSpectators(matchSettings)` reader (`true` only when the key is exactly `'true'`, fail-safe closed otherwise). Behaviour-neutral for every existing game: absent `spectators` resolves to `undefined` and join-in-progress stays rejected — no game admits spectators until it declares the capability and the host enables it per match.
+- da1f1cd: Let a spectator switch which seat they follow (F72 Spectator Mode). The `SPECTATE_TARGET_UPDATE` wire message is now plumbed end-to-end: the networking transports gain `ClientTransport.sendSpectateTarget(targetPlayerId)` and `HostTransport.onSpectateTargetUpdate((from, targetPlayerId) => …)` (mirrored across the local WebSocket provider — `WsClientTransport`, `MessageRouter`, `WsHostTransport` — and the `InMemoryMultiplayerProvider`); the host derives the spectator from the connection (never a client-supplied id, Invariant #99) and, after validating the requested target is a currently-seated player, re-points the viewer's `SpectatorRegistry` entry and immediately re-broadcasts the new-perspective projection — an unknown or non-seated target is ignored and the perspective is unchanged. A new renderer→main IPC seam drives it: `window.__chimera.spectate.setFollowedTarget(targetPlayerId)` sends the Zod-validated `chimera:spectate:set-target` channel (Invariant #5), which `LobbyManager.setSpectatorTarget` forwards over the joined session's transport. The message is out-of-band / cosmetic: never an `EngineAction`, never advances `tick`, and never enters `ActionHistory`, saves, or replays (Invariant #115).
+
 ## 0.10.0
 
 ### Minor Changes

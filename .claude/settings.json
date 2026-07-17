@@ -11,7 +11,7 @@
                     },
                     {
                         "type": "command",
-                        "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -Eq '^git (commit|push)\\b'; then pnpm format:check && pnpm lint && pnpm typecheck && pnpm test || { echo '[hook:pre-commit-gate] Gate failed. Fix the above errors and retry.' >&2; exit 2; }; fi"
+                        "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -Eq '^git (commit|push)\\b'; then pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:toolchain-snapshot || { echo '[hook:pre-commit-gate] Gate failed. Fix the above errors and retry.' >&2; exit 2; }; fi"
                     }
                 ]
             }
