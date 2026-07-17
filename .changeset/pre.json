@@ -1,22 +1,23 @@
 {
-    "mode": "pre",
-    "tag": "rc",
-    "initialVersions": {
-        "@chimera-engine/ai": "0.9.1",
-        "@chimera-engine/tactics": "0.9.0",
-        "@chimera-engine/electron": "0.10.0",
-        "@chimera-engine/networking": "0.9.1",
-        "@chimera-engine/renderer": "0.10.0",
-        "@chimera-engine/simulation": "0.10.0",
-        "create-chimera-game": "0.2.0"
-    },
-    "changesets": [
-        "create-chimera-game-scaffold-into-cwd",
-        "game-manifest-spectators-declaration",
-        "logo-screen-keypress-only-skip",
-        "m10-first-public-release",
-        "spectator-feature-review-gate",
-        "spectator-perspective-switching",
-        "spectator-viewer-registry-perspective-broadcast"
-    ]
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "@chimera-engine/ai": "0.9.1",
+    "@chimera-engine/tactics": "0.9.0",
+    "@chimera-engine/electron": "0.10.0",
+    "@chimera-engine/networking": "0.9.1",
+    "@chimera-engine/renderer": "0.10.0",
+    "@chimera-engine/simulation": "0.10.0",
+    "create-chimera-game": "0.2.0"
+  },
+  "changesets": [
+    "create-chimera-game-scaffold-into-cwd",
+    "electron-run-as-node-launch-fix",
+    "game-manifest-spectators-declaration",
+    "logo-screen-keypress-only-skip",
+    "m10-first-public-release",
+    "spectator-feature-review-gate",
+    "spectator-perspective-switching",
+    "spectator-viewer-registry-perspective-broadcast"
+  ]
 }
