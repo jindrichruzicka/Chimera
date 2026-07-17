@@ -5,6 +5,7 @@ import {
     Badge,
     Button,
     Caption,
+    Icon,
     Panel,
     type BadgeVariant,
     type CaptionTone,
@@ -54,6 +55,17 @@ const SUMMARY_MESSAGE_KEYS = {
     draw: SUMMARY_KEYS.messageDraw,
     unknown: SUMMARY_KEYS.messageUnknown,
 } as const satisfies Readonly<Record<GameResultOutcome, TranslationKey>>;
+
+// The crest emblem shares the heraldic game.tactics.result-* family with the
+// end-of-match banner, tying the two surfaces into one house (Invariant #113).
+// It is decorative here — the badge already announces the outcome as text — so
+// the glyph carries no accessible name.
+const SUMMARY_ICON_NAMES = {
+    win: 'game.tactics.result-victory',
+    loss: 'game.tactics.result-defeat',
+    draw: 'game.tactics.result-draw',
+    unknown: 'game.tactics.result-concluded',
+} as const satisfies Readonly<Record<GameResultOutcome, string>>;
 
 function resolveSummaryCopy(outcome: GameResultOutcome, t: TranslateFn): SummaryCopy {
     return {
@@ -212,7 +224,17 @@ export function TacticsPostGameSummary({
                 title={t(SUMMARY_KEYS.panelTitle)}
                 variant="raised"
             >
-                <div className={styles['header']}>
+                {/* Crest lockup: the heraldic emblem, a gold "pale" hairline, and
+                    the outcome word restyled as an engraved ghost badge. */}
+                <div className={styles['crest']}>
+                    <span
+                        aria-hidden="true"
+                        className={styles['emblem']}
+                        data-testid="post-game-summary-emblem"
+                    >
+                        <Icon name={SUMMARY_ICON_NAMES[outcome]} />
+                    </span>
+                    <span aria-hidden="true" className={styles['pale']} />
                     <Badge
                         className={styles['badge']}
                         data-testid="post-game-summary-badge"
@@ -220,14 +242,15 @@ export function TacticsPostGameSummary({
                     >
                         {summary.badgeLabel}
                     </Badge>
-                    <Caption
-                        className={styles['message']}
-                        data-testid="post-game-summary-message"
-                        tone={summary.captionTone}
-                    >
-                        {summary.message}
-                    </Caption>
                 </div>
+                <span aria-hidden="true" className={styles['baserule']} />
+                <Caption
+                    className={styles['message']}
+                    data-testid="post-game-summary-message"
+                    tone={summary.captionTone}
+                >
+                    {summary.message}
+                </Caption>
                 {snapshot.gameResult !== null && <PostGameReplayActions />}
             </Panel>
         </section>

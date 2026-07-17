@@ -14,6 +14,17 @@ describe('tacticsIcons', () => {
         expect(Object.keys(tacticsIcons)).toContain('game.tactics.banner');
     });
 
+    it('contributes the four heraldic game-result emblem glyphs', () => {
+        expect(Object.keys(tacticsIcons)).toEqual(
+            expect.arrayContaining([
+                'game.tactics.result-victory',
+                'game.tactics.result-defeat',
+                'game.tactics.result-draw',
+                'game.tactics.result-concluded',
+            ]),
+        );
+    });
+
     it('defines every glyph with a non-empty viewBox and a renderable content element (fill-based, no fill attr)', () => {
         for (const [name, glyph] of Object.entries(tacticsIcons)) {
             expect(typeof glyph.viewBox, name).toBe('string');

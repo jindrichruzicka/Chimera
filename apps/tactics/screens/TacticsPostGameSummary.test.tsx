@@ -17,9 +17,11 @@ import {
     type PerspectiveReplayExportBridge,
     type ReplayExportBridge,
 } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
+import { IconProvider } from '@chimera-engine/renderer/components/ui';
 import { I18nProvider } from '@chimera-engine/renderer/i18n';
 import { tacticsBundleCs } from '../shell/translations/cs.js';
 import { tacticsBundleEn } from '../shell/translations/en.js';
+import { tacticsIcons } from '../shell/icons.js';
 import { TacticsPostGameSummary } from './TacticsPostGameSummary.js';
 
 const TACTICS_LANGUAGES = [
@@ -27,11 +29,17 @@ const TACTICS_LANGUAGES = [
     { code: 'cs-CZ', label: 'Čeština' },
 ] as const;
 
-// The summary renders its badge/message/panel/replay copy through useTranslate(),
-// which throws outside a provider. Wrap in the English Tactics bundle so
-// `game.tactics.*` resolve to the pre-tokenisation text.
+// The summary renders its badge/message/panel/replay copy through useTranslate()
+// (which throws outside a provider) and its crest emblem through the engine
+// <Icon>, resolved against the active IconProvider. Wrap in the English Tactics
+// bundle + the Tactics icon set so the copy resolves and the emblem renders
+// (mirroring the app-wide ActiveGameIconProvider).
 function EnProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
-    return <I18nProvider gameOverride={tacticsBundleEn}>{children}</I18nProvider>;
+    return (
+        <I18nProvider gameOverride={tacticsBundleEn}>
+            <IconProvider gameIcons={tacticsIcons}>{children}</IconProvider>
+        </I18nProvider>
+    );
 }
 
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
@@ -139,6 +147,41 @@ describe('TacticsPostGameSummary', () => {
         );
     });
 
+    it('renders the heraldic outcome emblem in the crest for each outcome', () => {
+        const localPlayerId = playerId('p1');
+        const { rerender } = render(<TacticsPostGameSummary {...makeSummaryProps()} />);
+        expect(
+            screen
+                .getByTestId('post-game-summary-emblem')
+                .querySelector('svg[data-ch-icon="game.tactics.result-victory"]'),
+        ).not.toBeNull();
+
+        rerender(
+            <TacticsPostGameSummary
+                {...makeSummaryProps({
+                    snapshot: makeSnapshot({ gameResult: { winnerIds: [playerId('p2')] } }),
+                    localPlayerId,
+                })}
+            />,
+        );
+        expect(
+            screen
+                .getByTestId('post-game-summary-emblem')
+                .querySelector('svg[data-ch-icon="game.tactics.result-defeat"]'),
+        ).not.toBeNull();
+
+        rerender(
+            <TacticsPostGameSummary
+                {...makeSummaryProps({ snapshot: makeSnapshot({ gameResult: null }) })}
+            />,
+        );
+        expect(
+            screen
+                .getByTestId('post-game-summary-emblem')
+                .querySelector('svg[data-ch-icon="game.tactics.result-concluded"]'),
+        ).not.toBeNull();
+    });
+
     it('summarizes the outcome through the badge and message, without redundant chrome', () => {
         render(<TacticsPostGameSummary {...makeSummaryProps()} />);
 
@@ -217,7 +260,9 @@ describe('TacticsPostGameSummary', () => {
                 languages={TACTICS_LANGUAGES}
                 locale="cs-CZ"
             >
-                <TacticsPostGameSummary {...makeSummaryProps()} />
+                <IconProvider gameIcons={tacticsIcons}>
+                    <TacticsPostGameSummary {...makeSummaryProps()} />
+                </IconProvider>
             </I18nProvider>,
         );
 

@@ -6,31 +6,118 @@
     font-family: var(--ch-font-ui);
 }
 
+/* Per-outcome accent channel, rationed to the emblem, the crest word, and the
+   panel's top edge — the rest stays gold/parchment house chrome. */
+.root[data-outcome='win'] {
+    --oc: var(--ch-color-success-text);
+}
+
+.root[data-outcome='loss'] {
+    --oc: var(--ch-color-error-text);
+}
+
+.root[data-outcome='draw'] {
+    --oc: var(--ch-color-accent-strong);
+}
+
+.root[data-outcome='unknown'] {
+    --oc: var(--ch-color-text-secondary);
+}
+
 .panel {
     inline-size: 100%;
     max-inline-size: calc(var(--ch-button-min-width-lg) * 2 + var(--ch-space-lg));
 }
 
-.root[data-outcome='win'] .panel {
-    border-color: var(--ch-color-success);
+/* Recolour only the panel's top edge with the outcome hue; the other three sides
+   keep the gold-ink default. The compound selector clears the primitive's own
+   single-class border shorthand. */
+.root .panel {
+    border-block-start-color: var(--oc);
 }
 
-.root[data-outcome='loss'] .panel {
-    border-color: var(--ch-color-error);
+/* Engrave the panel title in Cinzel caps to match the banner verdict. The
+   accessible name still reads from the h2 textContent. */
+.root .panel > h2 {
+    font-family: var(--ch-font-ui-button);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: linear-gradient(180deg, var(--ch-title-fill-top), var(--ch-title-fill-bottom));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-stroke: var(--ch-title-outline-width) var(--ch-title-outline-color);
 }
 
-.root[data-outcome='draw'] .panel {
-    border-color: var(--ch-color-warning);
+.crest {
+    align-items: center;
+    display: flex;
+    gap: var(--ch-space-md);
 }
 
-.header {
-    align-items: start;
+/* The emblem: a compact gold-halo medallion ringed in the outcome hue, holding
+   the heraldic glyph. --ch-size-icon override drives the inner <Icon> size. */
+.emblem {
+    --ch-size-icon: calc(var(--ch-space-lg) + var(--ch-space-xs));
+    position: relative;
+    flex: none;
+    inline-size: calc(var(--ch-space-xl) + var(--ch-space-sm));
+    block-size: calc(var(--ch-space-xl) + var(--ch-space-sm));
     display: grid;
-    gap: var(--ch-space-sm);
+    place-items: center;
+    border-radius: var(--ch-radius-pill);
+    color: var(--oc);
+    background: radial-gradient(
+        circle at center,
+        var(--ch-color-surface-selected),
+        transparent 70%
+    );
 }
 
-.badge {
-    justify-self: start;
+.emblem::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--ch-radius-pill);
+    border: var(--ch-border-width-sm) solid var(--oc);
+    opacity: 0.5;
+}
+
+/* Glyph glow — a tight outcome-tinted halo on the emblem's SVG. */
+.emblem svg {
+    filter: drop-shadow(0 0 var(--ch-space-xs) var(--oc));
+}
+
+/* Vertical gold hairline separating the emblem from the word — a heraldic pale. */
+.pale {
+    inline-size: var(--ch-border-width-sm);
+    block-size: calc(var(--ch-space-lg) + var(--ch-space-sm));
+    flex: none;
+    background: linear-gradient(180deg, transparent, var(--ch-color-accent) 50%, transparent);
+    opacity: 0.7;
+}
+
+/* The badge, restyled from a filled state pill into an engraved ghost word in the
+   outcome tone. The compound selector outranks the primitive's own classes. */
+.crest .badge {
+    background: var(--ch-color-transparent);
+    border: none;
+    border-radius: var(--ch-space-none);
+    padding: var(--ch-space-none);
+    color: var(--oc);
+    font-family: var(--ch-font-ui-button);
+    font-size: var(--ch-font-size-lg);
+    font-weight: var(--ch-font-weight-bold);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+/* A gold hairline base rule dividing the crest from the message + actions. */
+.baserule {
+    block-size: var(--ch-border-width-sm);
+    inline-size: 100%;
+    background: linear-gradient(90deg, var(--ch-color-accent) 0%, transparent 75%);
+    opacity: 0.55;
 }
 
 .message {

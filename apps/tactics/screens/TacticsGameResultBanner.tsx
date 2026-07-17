@@ -6,16 +6,20 @@ import type {
     GameResultBannerProps,
     GameResultOutcome,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
-import { Card } from '@chimera-engine/renderer/components/ui';
+import { Card, Icon } from '@chimera-engine/renderer/components/ui';
 import { useTranslate, type TranslateFn } from '@chimera-engine/renderer/i18n';
 import { RESULT_KEYS } from '../shell/translations/keys.js';
 import styles from './TacticsGameResultBanner.module.css';
 
-const OUTCOME_ICONS = {
-    win: '🏆',
-    loss: '⚔️',
-    draw: '⚖️',
-    unknown: '🏁',
+// Each outcome maps to its own heraldic emblem in the game.tactics.result-*
+// family (contributed via shell/icons.tsx; see Invariant #113). The glyph renders
+// game-first through the app-wide IconProvider and inherits the emblem's
+// per-outcome `currentColor` — so the shape reads the result before the colour.
+const OUTCOME_ICON_NAMES = {
+    win: 'game.tactics.result-victory',
+    loss: 'game.tactics.result-defeat',
+    draw: 'game.tactics.result-draw',
+    unknown: 'game.tactics.result-concluded',
 } as const satisfies Readonly<Record<GameResultOutcome, string>>;
 
 const OUTCOME_ICON_KEYS = {
@@ -60,14 +64,24 @@ export function TacticsGameResultBanner(props: GameResultBannerProps): React.Rea
                 padding="lg"
                 surface="raised"
             >
+                {/* Four gold registration ticks — the "seal" frame that binds the
+                    banner and the post-game summary into one house. Decorative. */}
+                <span aria-hidden="true" className={`${styles['tick']} ${styles['tickTl']}`} />
+                <span aria-hidden="true" className={`${styles['tick']} ${styles['tickTr']}`} />
+                <span aria-hidden="true" className={`${styles['tick']} ${styles['tickBl']}`} />
+                <span aria-hidden="true" className={`${styles['tick']} ${styles['tickBr']}`} />
+                {/* The emblem is the accessible image host: role="img" + the
+                    translated outcome label. The heraldic <Icon> inside is purely
+                    decorative, so the outcome is announced exactly once. */}
                 <span
                     data-testid="game-result-icon"
                     role="img"
                     aria-label={t(OUTCOME_ICON_KEYS[outcome])}
-                    className={styles['icon']}
+                    className={styles['emblem']}
                 >
-                    {OUTCOME_ICONS[outcome]}
+                    <Icon name={OUTCOME_ICON_NAMES[outcome]} />
                 </span>
+                <span aria-hidden="true" className={styles['rule']} />
                 <p className={styles['text']} data-testid="game-result-text">
                     {resolveTacticsResultMessage(props, t)}
                 </p>

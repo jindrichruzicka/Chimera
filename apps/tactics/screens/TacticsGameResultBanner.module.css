@@ -4,52 +4,180 @@
     display: grid;
     place-items: center;
     pointer-events: none;
+    /* Freeze and dim the battlefield behind the verdict so the sealed plate is the
+       sole focus. Two stacked backdrop layers deepen the translucent scrim past
+       any single board highlight (a bright unit ring would otherwise punch
+       through), with a centre radial that lifts it slightly under the card for a
+       last cinematic hint of the frozen field. */
+    background:
+        radial-gradient(ellipse at center, transparent 8%, var(--ch-color-overlay-backdrop) 34%),
+        var(--ch-color-overlay-backdrop);
     animation: tactics-banner-fade-in var(--ch-duration-slow) var(--ch-easing-standard) both;
 }
 
+/* Per-outcome accent channel. Colour is rationed hard: it touches only the
+   emblem glyph, its glow, the emblem ring, and the card's top edge — everything
+   else stays gold/parchment house chrome. */
+.overlay[data-game-result-outcome='win'] {
+    --oc: var(--ch-color-success-text);
+}
+
+.overlay[data-game-result-outcome='loss'] {
+    --oc: var(--ch-color-error-text);
+}
+
+.overlay[data-game-result-outcome='draw'] {
+    --oc: var(--ch-color-accent-strong);
+}
+
+.overlay[data-game-result-outcome='unknown'] {
+    --oc: var(--ch-color-text-secondary);
+}
+
 .card {
-    min-width: var(--ch-button-min-width-md);
+    position: relative;
+    inline-size: fit-content;
+    min-inline-size: var(--ch-button-min-width-md);
+    max-inline-size: calc(var(--ch-button-min-width-lg) + var(--ch-space-lg));
     pointer-events: auto;
     text-align: center;
-    animation: tactics-banner-scale-in var(--ch-duration-slow) var(--ch-easing-standard) both;
+    /* A crisp engraved plate, not a pillow. */
+    border-radius: var(--ch-radius-sm);
+    border-block-start: var(--ch-border-width-sm) solid var(--oc);
+    animation: tactics-banner-scale-in var(--ch-duration-slow) var(--ch-easing-decelerate) both;
 }
 
-.icon {
-    display: block;
-    font-size: var(--ch-font-size-xl);
-    margin-block-end: var(--ch-space-sm);
-    line-height: var(--ch-line-height-none);
+/* ── The seal frame: four L-shaped gold corner ticks ──
+   Four real corner elements, each carrying a border on its two adjacent sides
+   (a single inset border would draw a full frame, not corner Ls). */
+.tick {
+    position: absolute;
+    inline-size: var(--ch-space-md);
+    block-size: var(--ch-space-md);
+    border: var(--ch-space-none) solid var(--ch-color-accent);
+    opacity: 0.7;
+    pointer-events: none;
 }
 
+.tickTl {
+    inset-block-start: var(--ch-space-sm);
+    inset-inline-start: var(--ch-space-sm);
+    border-block-start-width: var(--ch-border-width-sm);
+    border-inline-start-width: var(--ch-border-width-sm);
+}
+
+.tickTr {
+    inset-block-start: var(--ch-space-sm);
+    inset-inline-end: var(--ch-space-sm);
+    border-block-start-width: var(--ch-border-width-sm);
+    border-inline-end-width: var(--ch-border-width-sm);
+}
+
+.tickBl {
+    inset-block-end: var(--ch-space-sm);
+    inset-inline-start: var(--ch-space-sm);
+    border-block-end-width: var(--ch-border-width-sm);
+    border-inline-start-width: var(--ch-border-width-sm);
+}
+
+.tickBr {
+    inset-block-end: var(--ch-space-sm);
+    inset-inline-end: var(--ch-space-sm);
+    border-block-end-width: var(--ch-border-width-sm);
+    border-inline-end-width: var(--ch-border-width-sm);
+}
+
+/* ── The emblem: a struck medallion ──
+   A gold halo disc ringed in the outcome hue, holding the heraldic glyph. The
+   --ch-size-icon override drives the inner <Icon> size straight off the scale. */
+.emblem {
+    --ch-size-icon: calc(var(--ch-space-xl) + var(--ch-space-md));
+    position: relative;
+    inline-size: calc(var(--ch-space-xl) * 2);
+    block-size: calc(var(--ch-space-xl) * 2);
+    margin-block: var(--ch-space-xs) var(--ch-space-sm);
+    margin-inline: auto;
+    display: grid;
+    place-items: center;
+    border-radius: var(--ch-radius-pill);
+    color: var(--oc);
+    /* A soft gold halo — the shared gold "selected" tint reads as a lit medallion. */
+    background: radial-gradient(
+        circle at center,
+        var(--ch-color-surface-selected),
+        transparent 68%
+    );
+}
+
+.emblem::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--ch-radius-pill);
+    border: var(--ch-border-width-sm) solid var(--oc);
+    opacity: 0.5;
+}
+
+/* Glyph glow — a tight outcome-tinted halo on the emblem's SVG (the only svg in
+   the medallion), so the shape reads as struck/lit. */
+.emblem svg {
+    filter: drop-shadow(0 0 var(--ch-space-sm) var(--oc));
+}
+
+/* A short gold hairline seal underline, interrupted by a tiny gold lozenge. */
+.rule {
+    position: relative;
+    inline-size: calc(var(--ch-space-xl) * 3);
+    block-size: var(--ch-border-width-sm);
+    margin-block: var(--ch-space-none) var(--ch-space-md);
+    margin-inline: auto;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        var(--ch-color-accent) 22%,
+        var(--ch-color-accent-strong) 50%,
+        var(--ch-color-accent) 78%,
+        transparent
+    );
+}
+
+.rule::after {
+    content: '';
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    inline-size: var(--ch-space-xs);
+    block-size: var(--ch-space-xs);
+    transform: translate(-50%, -50%) rotate(45deg);
+    background: var(--ch-color-accent-strong);
+    box-shadow: var(--ch-glow-accent);
+}
+
+/* The verdict, engraved in Cinzel caps via the parchment title treatment. Two
+   words stack into a centred title block. */
 .text {
-    color: var(--ch-color-text-primary);
-    font-family: var(--ch-font-ui);
+    font-family: var(--ch-font-ui-button);
+    font-weight: var(--ch-font-weight-bold);
     font-size: var(--ch-font-size-xl);
-    font-weight: var(--ch-font-weight-semibold);
+    letter-spacing: 0.08em;
     line-height: var(--ch-line-height-tight);
     margin: var(--ch-space-none);
+    text-transform: uppercase;
+    background: linear-gradient(180deg, var(--ch-title-fill-top), var(--ch-title-fill-bottom));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-stroke: var(--ch-title-outline-width) var(--ch-title-outline-color);
 }
 
 .hint {
     color: var(--ch-color-text-secondary);
     font-family: var(--ch-font-ui);
     font-size: var(--ch-font-size-sm);
+    letter-spacing: 0.03em;
     line-height: var(--ch-line-height-tight);
     margin-block: var(--ch-space-sm) var(--ch-space-none);
     margin-inline: var(--ch-space-none);
-}
-
-/* Outcome-specific accent on the card border */
-.overlay[data-game-result-outcome='win'] .card {
-    border-color: var(--ch-color-success);
-}
-
-.overlay[data-game-result-outcome='loss'] .card {
-    border-color: var(--ch-color-error);
-}
-
-.overlay[data-game-result-outcome='draw'] .card {
-    border-color: var(--ch-color-warning);
 }
 
 @keyframes tactics-banner-fade-in {
@@ -64,10 +192,10 @@
 @keyframes tactics-banner-scale-in {
     from {
         opacity: 0;
-        transform: scale(0.85);
+        transform: scale(0.94) translateY(var(--ch-space-sm));
     }
     to {
         opacity: 1;
-        transform: scale(1);
+        transform: scale(1) translateY(0);
     }
 }

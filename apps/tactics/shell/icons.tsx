@@ -47,6 +47,49 @@ const staminaIcon: IconGlyph = {
     content: <path d="M7 2v11h3v9l7-12h-4l4-8z" />,
 };
 
+// ── Game-result emblems ──────────────────────────────────────────────────────
+// The heraldic "Marshal's Seal" family shown on the end-of-match banner and the
+// post-game summary. One construction language binds all four: a single ~4.3-unit
+// band, a strict 45° facet grammar, and vertical mirror symmetry about x=12 — so
+// the outcome is read from the shape's DIRECTION (rank up / rank down / level /
+// sealed) before its colour. Each is a fill-based glyph carrying no `fill`, so it
+// inherits the emblem's per-outcome `currentColor` like every other game glyph.
+
+// VICTORY — an ascendant chevron (planted full-span feet, apex up) crowned by a
+// floating five-point mullet: the summit, honours won.
+const resultVictoryIcon: IconGlyph = {
+    viewBox: '0 0 24 24',
+    content: (
+        <path d="M3 16.8 L12 7.6 L21 16.8 L17.6 16.8 L12 12 L6.4 16.8 Z M12 0.9 L12.85 3.13 L15.23 3.25 L13.38 4.75 L14 7.05 L12 5.75 L10 7.05 L10.62 4.75 L8.77 3.25 L11.15 3.13 Z" />
+    ),
+};
+
+// DEFEAT — victory's exact vertical mirror, uncrowned: the same chevron inverted
+// (apex down), the crowning mullet gone. Direction flip + absent crown read the
+// loss on two independent channels.
+const resultDefeatIcon: IconGlyph = {
+    viewBox: '0 0 24 24',
+    content: <path d="M3 7.2 L12 16.4 L21 7.2 L17.6 7.2 L12 12 L6.4 7.2 Z" />,
+};
+
+// DRAW — the chevron flattened and doubled into a heraldic double-fess: two level
+// bars, ends chamfered at 45° to rhyme with the chevron miters. A balanced "=",
+// neither rising nor falling.
+const resultDrawIcon: IconGlyph = {
+    viewBox: '0 0 24 24',
+    content: (
+        <path d="M5 7 L19 7 L21 9 L19 11 L5 11 L3 9 Z M5 13 L19 13 L21 15 L19 17 L5 17 L3 15 Z" />
+    ),
+};
+
+// CONCLUDED — victory's up-chevron fused with defeat's down-chevron into one
+// sealed lozenge ring: both outcomes resolved, no side named. The inner diamond is
+// wound opposite to the outer so the default nonzero rule punches a clean hole.
+const resultConcludedIcon: IconGlyph = {
+    viewBox: '0 0 24 24',
+    content: <path d="M12 4.5 L19.5 12 L12 19.5 L4.5 12 Z M12 8.8 L8.8 12 L12 15.2 L15.2 12 Z" />,
+};
+
 // Keys are namespaced `game.tactics.*` so a glyph never silently overrides an
 // engine built-in (the game-first lookup in `<Icon>` would otherwise do so).
 // `as const satisfies GameIconSet` keeps local typo-safety on the game's own keys.
@@ -56,4 +99,8 @@ export const tacticsIcons = {
     'game.tactics.redo': redoIcon,
     'game.tactics.end-turn': endTurnIcon,
     'game.tactics.stamina': staminaIcon,
+    'game.tactics.result-victory': resultVictoryIcon,
+    'game.tactics.result-defeat': resultDefeatIcon,
+    'game.tactics.result-draw': resultDrawIcon,
+    'game.tactics.result-concluded': resultConcludedIcon,
 } as const satisfies GameIconSet;
