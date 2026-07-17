@@ -56,10 +56,7 @@ export const SETTINGS_KEYS = {
     sfxVolume: translationKey('engine.settings.sfxVolume'),
     musicVolume: translationKey('engine.settings.musicVolume'),
     muted: translationKey('engine.settings.muted'),
-    fullscreen: translationKey('engine.settings.fullscreen'),
-    vsync: translationKey('engine.settings.vsync'),
     targetFps: translationKey('engine.settings.targetFps'),
-    uiScale: translationKey('engine.settings.uiScale'),
     language: translationKey('engine.settings.language'),
     autoSave: translationKey('engine.settings.autoSave'),
     autoSaveInterval: translationKey('engine.settings.autoSaveInterval'),
@@ -78,7 +75,6 @@ export const SETTINGS_KEYS = {
     langFrFr: translationKey('engine.settings.langFrFr'),
     // Value formatters (interpolated).
     formatPercent: translationKey('engine.settings.formatPercent'),
-    formatScale: translationKey('engine.settings.formatScale'),
     formatTurns: translationKey('engine.settings.formatTurns'),
     // Tab labels.
     tabAudio: translationKey('engine.settings.tabAudio'),
@@ -160,8 +156,6 @@ export const LOBBY_KEYS = {
     joinPasswordPlaceholder: translationKey('engine.lobby.joinPasswordPlaceholder'),
     // Active session panel.
     sessionHeading: translationKey('engine.lobby.sessionHeading'),
-    roleHost: translationKey('engine.lobby.roleHost'),
-    rolePlayer: translationKey('engine.lobby.rolePlayer'),
     sessionIdLabel: translationKey('engine.lobby.sessionIdLabel'),
     hostIdLabel: translationKey('engine.lobby.hostIdLabel'),
     gameLabel: translationKey('engine.lobby.gameLabel'),
@@ -312,9 +306,8 @@ export const GAME_RESULT_KEYS = {
     lose: translationKey('engine.gameResult.lose'),
 } as const;
 
-/** Engine-default in-game HUD scaffold (tick readout + undo/redo/end-turn). */
+/** Engine-default in-game HUD scaffold (undo/redo/end-turn). */
 export const HUD_KEYS = {
-    tick: translationKey('engine.hud.tick'),
     undo: translationKey('engine.hud.undo'),
     redo: translationKey('engine.hud.redo'),
     endTurn: translationKey('engine.hud.endTurn'),

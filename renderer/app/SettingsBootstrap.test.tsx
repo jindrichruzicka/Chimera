@@ -57,7 +57,7 @@ let mounted: boolean;
 function makeSettings(masterVolume = 1.0): ResolvedSettings {
     return {
         audio: { masterVolume, sfxVolume: 1.0, musicVolume: 0.8, muted: false },
-        display: { fullscreen: false, vsync: true, targetFps: 60, uiScale: 1.0 },
+        display: { targetFps: 60 },
         gameplay: {
             language: 'en-US',
             autoSave: true,

@@ -72,7 +72,6 @@ test.describe('Settings tabs', () => {
         const settingsPage = await openSettingsPage(mainWindow);
 
         await settingsPage.clickTab('Display');
-        await expect(settingsPage.getControlByLabel('Fullscreen')).toBeVisible();
         await expect(settingsPage.getControlByLabel('Target FPS')).toBeVisible();
 
         // Engine-reserved actions are not player-rebindable; with no game

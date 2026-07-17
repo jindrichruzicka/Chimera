@@ -1476,10 +1476,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
                 muted: z.boolean(),
             }),
             display: z.object({
-                fullscreen: z.boolean(),
-                vsync: z.boolean(),
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
-                uiScale: z.number(),
             }),
             gameplay: z.object({
                 language: z.string(),
@@ -1531,10 +1528,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
                 muted: z.boolean(),
             }),
             display: z.object({
-                fullscreen: z.boolean(),
-                vsync: z.boolean(),
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
-                uiScale: z.number(),
             }),
             gameplay: z.object({
                 language: z.string(),
@@ -1586,10 +1580,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
                 muted: z.boolean(),
             }),
             display: z.object({
-                fullscreen: z.boolean(),
-                vsync: z.boolean(),
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
-                uiScale: z.number(),
             }),
             gameplay: z.object({
                 language: z.string(),
@@ -1930,10 +1921,7 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
                 muted: z.boolean(),
             }),
             display: z.object({
-                fullscreen: z.boolean(),
-                vsync: z.boolean(),
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
-                uiScale: z.number(),
             }),
             gameplay: z.object({
                 language: z.string(),
@@ -1992,10 +1980,7 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
                 muted: z.boolean(),
             }),
             display: z.object({
-                fullscreen: z.boolean(),
-                vsync: z.boolean(),
                 targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
-                uiScale: z.number(),
             }),
             gameplay: z.object({
                 language: z.string(),

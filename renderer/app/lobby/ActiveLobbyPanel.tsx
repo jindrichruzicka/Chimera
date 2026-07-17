@@ -3,7 +3,6 @@
 import React from 'react';
 import type { LobbyState, PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { PlayerList } from '../../components/shell/PlayerList';
-import { Badge } from '../../components/ui/Badge';
 import { Heading } from '../../components/ui/Heading';
 import { LOBBY_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
@@ -26,7 +25,6 @@ export function ActiveLobbyPanel({
     onToggleReady,
 }: ActiveLobbyPanelProps): React.ReactElement {
     const t = useTranslate();
-    const isHost = localPlayerId !== null && localPlayerId === lobbyState.info.hostId;
     const readyCount = lobbyState.players.filter((player) => player.ready).length;
 
     return (
@@ -36,9 +34,6 @@ export function ActiveLobbyPanel({
                     <Heading level={2} size="lg">
                         {t(LOBBY_KEYS.sessionHeading)}
                     </Heading>
-                    <Badge variant={isHost ? 'success' : 'neutral'}>
-                        {isHost ? t(LOBBY_KEYS.roleHost) : t(LOBBY_KEYS.rolePlayer)}
-                    </Badge>
                 </div>
                 <dl className={styles['session-details']}>
                     <div className={styles['detail-row']}>

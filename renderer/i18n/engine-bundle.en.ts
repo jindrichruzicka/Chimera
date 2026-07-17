@@ -46,10 +46,7 @@ export const engineBundleEn: TranslationBundle = {
     'engine.settings.sfxVolume': 'SFX Volume',
     'engine.settings.musicVolume': 'Music Volume',
     'engine.settings.muted': 'Muted',
-    'engine.settings.fullscreen': 'Fullscreen',
-    'engine.settings.vsync': 'VSync',
     'engine.settings.targetFps': 'Target FPS',
-    'engine.settings.uiScale': 'UI Scale',
     'engine.settings.language': 'Language',
     'engine.settings.autoSave': 'Auto Save',
     'engine.settings.autoSaveInterval': 'Auto Save Interval',
@@ -67,10 +64,9 @@ export const engineBundleEn: TranslationBundle = {
     'engine.settings.langEsEs': 'Español',
     'engine.settings.langFrFr': 'Français',
     // Value formatters. Numeric scaling/rounding stays with the consumer (the
-    // source does `value*100` for percent and `toFixed(2)` for scale), so `n`
-    // is the already-scaled, already-rounded value; these tokens only render it.
+    // source does `value*100` for percent), so `n` is the already-scaled,
+    // already-rounded value; these tokens only render it.
     'engine.settings.formatPercent': '{n}%',
-    'engine.settings.formatScale': '{n}x',
     // Pluralized deliberately: the source renders "{n} turns" unconditionally,
     // so this corrects the singular case ("1 turn") when a consumer adopts it.
     'engine.settings.formatTurns': '{n, plural, one {# turn} other {# turns}}',
@@ -148,8 +144,6 @@ export const engineBundleEn: TranslationBundle = {
     'engine.lobby.joinPasswordLabel': 'Password:',
     'engine.lobby.joinPasswordPlaceholder': 'Required only if the host set one',
     'engine.lobby.sessionHeading': 'Session',
-    'engine.lobby.roleHost': 'Host',
-    'engine.lobby.rolePlayer': 'Player',
     'engine.lobby.sessionIdLabel': 'Session ID:',
     'engine.lobby.hostIdLabel': 'Host ID:',
     'engine.lobby.gameLabel': 'Game:',
@@ -282,7 +276,6 @@ export const engineBundleEn: TranslationBundle = {
     'engine.gameResult.lose': 'You lose',
 
     // ── in-game HUD scaffold ────────────────────────────────────────────────────
-    'engine.hud.tick': 'Tick',
     'engine.hud.undo': 'Undo',
     'engine.hud.redo': 'Redo',
     'engine.hud.endTurn': 'End Turn',

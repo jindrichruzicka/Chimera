@@ -91,12 +91,7 @@ describe('tacticsSettingsPageDefinition', () => {
     });
 
     it('defines display fields using the current EngineSettings field ids', () => {
-        expect(engineFieldsForTab('display')).toEqual([
-            'display.fullscreen',
-            'display.vsync',
-            'display.targetFps',
-            'display.uiScale',
-        ]);
+        expect(engineFieldsForTab('display')).toEqual(['display.targetFps']);
         expect(gameFieldsForTab('display')).toEqual([]);
     });
 

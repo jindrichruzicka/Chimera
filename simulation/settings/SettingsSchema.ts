@@ -14,10 +14,9 @@ export interface EngineSettings {
         readonly muted: boolean;
     };
     readonly display: {
-        readonly fullscreen: boolean;
-        readonly vsync: boolean;
-        readonly targetFps: 30 | 60 | 120 | 0; // 0 = uncapped
-        readonly uiScale: number; // 0.5–2.0 multiplier
+        /** Caps the renderer's frame rate; `0` = uncapped (native refresh).
+         *  Applied by the renderer FrameRateLimiter, not the simulation. */
+        readonly targetFps: 30 | 60 | 120 | 0;
     };
     readonly gameplay: {
         readonly language: string; // BCP 47 locale tag, e.g. 'en-US'
@@ -55,10 +54,7 @@ export const ENGINE_DEFAULTS: EngineSettings = {
         muted: false,
     },
     display: {
-        fullscreen: false,
-        vsync: true,
         targetFps: 60,
-        uiScale: 1.0,
     },
     gameplay: {
         language: 'en-US',
@@ -139,10 +135,7 @@ export const engineSettingsZodShape = {
         muted: z.boolean(),
     }),
     display: z.object({
-        fullscreen: z.boolean(),
-        vsync: z.boolean(),
         targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
-        uiScale: z.number().min(0.5).max(2.0),
     }),
     gameplay: z.object({
         language: z.string(),

@@ -152,7 +152,7 @@ function makeSettings(
             muted: false,
             ...audioOverrides,
         },
-        display: { fullscreen: false, vsync: true, targetFps: 60 as const, uiScale: 1.0 },
+        display: { targetFps: 60 as const },
         gameplay: {
             language: 'en-US',
             autoSave: true,
@@ -252,7 +252,6 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
     it('renders Display fields after selecting the Display tab', async () => {
         await renderSettingsPageAndOpenTab('Display');
 
-        expect(screen.getByLabelText(/fullscreen/i)).toBeTruthy();
         expect(screen.getByLabelText(/target fps/i)).toBeTruthy();
     });
 
@@ -274,12 +273,13 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
         expect(screen.getByLabelText<HTMLSelectElement>(/target fps/i).value).toBe('120');
     });
 
-    it('renders Gameplay fields after selecting the Gameplay tab', async () => {
+    it('renders the Language selector after selecting the Gameplay tab', async () => {
         await renderSettingsPageAndOpenTab('Gameplay');
 
-        // The Language selector loads its declared languages asynchronously.
+        // The engine default gameplay tab surfaces only the language selector
+        // (which loads its declared languages asynchronously); games register
+        // their own gameplay settings.
         expect(await screen.findByRole('combobox', { name: 'Language' })).toBeTruthy();
-        expect(screen.getByRole('switch', { name: 'Auto Save' })).toBeTruthy();
     });
 
     describe('gameplay.language field → LanguageSelector (#868)', () => {
@@ -315,8 +315,9 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
             mockLoadRendererGameShell.mockResolvedValue(makeRendererShell([TWO_LANGUAGES[0]!]));
 
             await renderSettingsPageAndOpenTab('Gameplay');
-            // Wait for a sibling gameplay field so the tab has painted.
-            expect(await screen.findByRole('switch', { name: 'Auto Save' })).toBeTruthy();
+            // Wait for the gameplay section to paint (empty once the single-language
+            // selector hides itself).
+            expect(await screen.findByTestId('settings-section-gameplay-gameplay')).toBeTruthy();
 
             expect(screen.queryByRole('combobox', { name: 'Language' })).toBeNull();
         });
@@ -325,7 +326,7 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
             mockLoadRendererGameShell.mockResolvedValue(makeRendererShell([]));
 
             await renderSettingsPageAndOpenTab('Gameplay');
-            expect(await screen.findByRole('switch', { name: 'Auto Save' })).toBeTruthy();
+            expect(await screen.findByTestId('settings-section-gameplay-gameplay')).toBeTruthy();
 
             expect(screen.queryByRole('combobox', { name: 'Language' })).toBeNull();
         });
@@ -602,7 +603,6 @@ describe('SettingsPage — master volume slider (AC #2)', () => {
     it('marks generated engine controls with stable E2E test ids', async () => {
         await renderSettingsPageAndOpenTab('Display');
 
-        expect(screen.getByTestId('settings-control-display-fullscreen')).toBeTruthy();
         expect(screen.getByTestId('settings-control-display-targetfps')).toBeTruthy();
     });
 

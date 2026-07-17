@@ -20,7 +20,7 @@ describe('tacticsSettingsSchema', () => {
     it('has complete engine defaults from ENGINE_DEFAULTS', () => {
         const d = tacticsSettingsSchema.defaults;
         expect(d.audio.masterVolume).toBe(1.0);
-        expect(d.display.fullscreen).toBe(false);
+        expect(d.display.targetFps).toBe(60);
         expect(d.gameplay.autoSave).toBe(true);
     });
 

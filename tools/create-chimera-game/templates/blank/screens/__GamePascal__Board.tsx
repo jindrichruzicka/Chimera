@@ -9,12 +9,11 @@
 // and `@chimera-engine/renderer/components/r3f` (Invariant #96).
 
 import React from 'react';
-import { Caption, Heading, Panel } from '@chimera-engine/renderer/components/ui';
+import { Caption, Panel } from '@chimera-engine/renderer/components/ui';
 
 export default function __GamePascal__Board(): React.ReactElement {
     return (
         <Panel title="__Game Title__">
-            <Heading>__Game Title__</Heading>
             <Caption>
                 Your new Chimera game is running. Edit screens/ to build your board, and dispatch
                 actions through the `sendAction` prop.

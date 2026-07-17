@@ -47,10 +47,7 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.settings.sfxVolume': 'Hlasitost efektů',
     'engine.settings.musicVolume': 'Hlasitost hudby',
     'engine.settings.muted': 'Ztlumeno',
-    'engine.settings.fullscreen': 'Celá obrazovka',
-    'engine.settings.vsync': 'VSync',
     'engine.settings.targetFps': 'Cílové FPS',
-    'engine.settings.uiScale': 'Měřítko rozhraní',
     'engine.settings.language': 'Jazyk',
     'engine.settings.autoSave': 'Automatické ukládání',
     'engine.settings.autoSaveInterval': 'Interval automatického ukládání',
@@ -66,7 +63,6 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.settings.langEsEs': 'Español',
     'engine.settings.langFrFr': 'Français',
     'engine.settings.formatPercent': '{n}\u00A0%',
-    'engine.settings.formatScale': '{n}×',
     'engine.settings.formatTurns':
         '{n, plural, one {# tah} few {# tahy} many {# tahu} other {# tahů}}',
     'engine.settings.tabAudio': 'Zvuk',
@@ -141,8 +137,6 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.lobby.joinPasswordLabel': 'Heslo:',
     'engine.lobby.joinPasswordPlaceholder': 'Vyžadováno, jen pokud ho hostitel nastavil',
     'engine.lobby.sessionHeading': 'Relace',
-    'engine.lobby.roleHost': 'Hostitel',
-    'engine.lobby.rolePlayer': 'Hráč',
     'engine.lobby.sessionIdLabel': 'ID relace:',
     'engine.lobby.hostIdLabel': 'ID hostitele:',
     'engine.lobby.gameLabel': 'Hra:',
@@ -271,14 +265,12 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.gameResult.lose': 'Prohrál jsi',
 
     // ── in-game HUD scaffold ────────────────────────────────────────────────────
-    'engine.hud.tick': 'Takt',
     'engine.hud.undo': 'Zpět',
     'engine.hud.redo': 'Znovu',
     'engine.hud.endTurn': 'Ukončit tah',
 
     // ── performance HUD ─────────────────────────────────────────────────────────
-    // FPS / Ping / RTT / Draw calls stay as established technical borrowings,
-    // like VSync in the settings section.
+    // FPS / Ping / RTT / Draw calls stay as established technical borrowings.
     'engine.perfHud.fps': 'FPS: {value}',
     'engine.perfHud.frameAvg': 'Snímek prům.: {value}',
     'engine.perfHud.frameP95': 'Snímek p95: {value}',

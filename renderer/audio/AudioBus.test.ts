@@ -71,7 +71,7 @@ function makeSettings(audio: {
             musicVolume: audio.musicVolume ?? 0.8,
             muted: audio.muted ?? false,
         },
-        display: { fullscreen: false, vsync: true, targetFps: 60, uiScale: 1 },
+        display: { targetFps: 60 },
         gameplay: {
             language: 'en-US',
             autoSave: true,

@@ -85,6 +85,7 @@ vi.mock('@react-three/fiber', () => ({
 
 vi.mock('@chimera-engine/renderer/components/r3f', () => ({
     PerfProbe: () => <div data-testid="perf-probe" />,
+    FrameRateLimiter: () => <div data-testid="frame-rate-limiter" />,
 }));
 
 vi.mock('../scene/TacticsGroundPlane.js', () => ({

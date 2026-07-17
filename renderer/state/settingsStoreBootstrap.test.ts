@@ -24,7 +24,7 @@ import { ENGINE_SETTINGS_GAME_ID } from '../input/KeyBindingRepository.js';
 
 const makeSettings = (masterVolume = 1.0): ResolvedSettings => ({
     audio: { masterVolume, sfxVolume: 1.0, musicVolume: 0.8, muted: false },
-    display: { fullscreen: false, vsync: true, targetFps: 60, uiScale: 1.0 },
+    display: { targetFps: 60 },
     gameplay: {
         language: 'en-US',
         autoSave: true,

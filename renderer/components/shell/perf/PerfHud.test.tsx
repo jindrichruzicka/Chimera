@@ -111,7 +111,7 @@ function applySettings(showPerfHud: boolean): void {
         settings: {
             __engine__: {
                 audio: { masterVolume: 1, sfxVolume: 1, musicVolume: 0.8, muted: false },
-                display: { fullscreen: false, vsync: true, targetFps: 60, uiScale: 1 },
+                display: { targetFps: 60 },
                 gameplay: {
                     language: 'en-US',
                     autoSave: true,

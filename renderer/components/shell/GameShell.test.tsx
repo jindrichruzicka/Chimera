@@ -379,15 +379,15 @@ describe('GameShell page object locators', () => {
         );
 
         expect(screen.getByTestId('game-canvas').textContent).toContain('Board slot');
-        expect(screen.getByTestId('undo')).toBeTruthy();
-        expect(screen.getByTestId('redo')).toBeTruthy();
+        // The engine default HUD ships only End Turn; undo/redo are opt-in per game.
+        expect(screen.queryByTestId('undo')).toBeNull();
+        expect(screen.queryByTestId('redo')).toBeNull();
         expect(screen.getByTestId('end-turn')).toBeTruthy();
         expect(screen.getByTestId('game-result-banner')).toBeTruthy();
         expect(
             screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('unknown');
         expect(screen.queryByTestId('game-over-banner')).toBeNull();
-        expect(screen.getByTestId('hud-tick').textContent).toBe('42');
     });
 
     it('resolves the landmark accessible names through the active-locale translator', () => {
@@ -408,13 +408,10 @@ describe('GameShell page object locators', () => {
         expect(screen.getByLabelText('Controls')).toBeTruthy();
     });
 
-    it('resolves the default HUD scaffold labels through engine.hud.* tokens (game override wins)', () => {
+    it('resolves the default HUD scaffold label through the engine.hud.endTurn token (game override wins)', () => {
         baseRender(
             <I18nProvider
                 gameOverride={{
-                    'engine.hud.tick': 'Turn',
-                    'engine.hud.undo': 'Back',
-                    'engine.hud.redo': 'Forward',
                     'engine.hud.endTurn': 'Finish',
                 }}
             >
@@ -422,11 +419,7 @@ describe('GameShell page object locators', () => {
             </I18nProvider>,
         );
 
-        expect(screen.getByTestId('undo').textContent).toBe('Back');
-        expect(screen.getByTestId('redo').textContent).toBe('Forward');
         expect(screen.getByTestId('end-turn').textContent).toBe('Finish');
-        // The tick readout keeps its numeric <output>; only the label re-keys.
-        expect(screen.getByTestId('hud-tick').closest('div')?.textContent).toBe('Turn 3');
     });
 
     it('keeps shell root layout structure while using tokenized font family', () => {
@@ -440,45 +433,34 @@ describe('GameShell page object locators', () => {
         expect(style).toContain('font-family: var(--ch-font-ui)');
     });
 
-    it('renders the fallback HUD controls through the shared Button primitive', () => {
+    it('renders the fallback HUD control through the shared Button primitive', () => {
         render(<GameShell tick={1} canUndo canRedo />);
 
-        for (const testId of ['undo', 'redo', 'end-turn']) {
-            const control = screen.getByTestId(testId);
-            expect(control.tagName).toBe('BUTTON');
-            expect(control.getAttribute('data-ch-button-variant')).toBe('secondary');
-            expect(control.getAttribute('data-ch-button-size')).toBe('sm');
-        }
+        const control = screen.getByTestId('end-turn');
+        expect(control.tagName).toBe('BUTTON');
+        expect(control.getAttribute('data-ch-button-variant')).toBe('secondary');
+        expect(control.getAttribute('data-ch-button-size')).toBe('sm');
     });
 
-    it('wires HUD controls through game-agnostic callbacks', () => {
-        const onUndo = vi.fn();
-        const onRedo = vi.fn();
+    it('wires the default End Turn control through a game-agnostic callback', () => {
         const onEndTurn = vi.fn();
 
         render(
             <GameShell
                 tick={7}
-                canUndo={true}
-                canRedo={true}
-                onUndo={onUndo}
-                onRedo={onRedo}
+                canUndo={false}
+                canRedo={false}
+                canEndTurn={true}
                 onEndTurn={onEndTurn}
             />,
         );
 
-        fireEvent.click(screen.getByTestId('undo'));
-        fireEvent.click(screen.getByTestId('redo'));
         fireEvent.click(screen.getByTestId('end-turn'));
 
-        expect(onUndo).toHaveBeenCalledOnce();
-        expect(onRedo).toHaveBeenCalledOnce();
         expect(onEndTurn).toHaveBeenCalledOnce();
     });
 
-    it('disables all action controls for a spectator (Invariant #92/#114)', () => {
-        const onUndo = vi.fn();
-        const onRedo = vi.fn();
+    it('disables the default action control for a spectator (Invariant #92/#114)', () => {
         const onEndTurn = vi.fn();
 
         render(
@@ -487,23 +469,15 @@ describe('GameShell page object locators', () => {
                 canUndo={true}
                 canRedo={true}
                 canEndTurn={true}
-                onUndo={onUndo}
-                onRedo={onRedo}
                 onEndTurn={onEndTurn}
                 isSpectator={true}
             />,
         );
 
-        for (const testId of ['undo', 'redo', 'end-turn']) {
-            expect(screen.getByTestId(testId).hasAttribute('disabled')).toBe(true);
-        }
+        expect(screen.getByTestId('end-turn').hasAttribute('disabled')).toBe(true);
 
-        fireEvent.click(screen.getByTestId('undo'));
-        fireEvent.click(screen.getByTestId('redo'));
         fireEvent.click(screen.getByTestId('end-turn'));
 
-        expect(onUndo).not.toHaveBeenCalled();
-        expect(onRedo).not.toHaveBeenCalled();
         expect(onEndTurn).not.toHaveBeenCalled();
     });
 
@@ -619,9 +593,7 @@ describe('GameShell page object locators', () => {
         expect(onEndTurn).toHaveBeenCalledOnce();
     });
 
-    it('disables all engine controls after a match result is resolved', () => {
-        const onUndo = vi.fn();
-        const onRedo = vi.fn();
+    it('disables the default engine control after a match result is resolved', () => {
         const onEndTurn = vi.fn();
         const localPlayerId = playerId('p1');
 
@@ -633,26 +605,14 @@ describe('GameShell page object locators', () => {
                 canEndTurn={true}
                 localPlayerId={localPlayerId}
                 gameResult={{ winnerIds: [localPlayerId] }}
-                onUndo={onUndo}
-                onRedo={onRedo}
                 onEndTurn={onEndTurn}
             />,
         );
 
-        const undoButton = screen.getByTestId('undo');
-        const redoButton = screen.getByTestId('redo');
         const endTurnButton = screen.getByTestId('end-turn');
-
-        expect(undoButton.hasAttribute('disabled')).toBe(true);
-        expect(redoButton.hasAttribute('disabled')).toBe(true);
         expect(endTurnButton.hasAttribute('disabled')).toBe(true);
 
-        fireEvent.click(undoButton);
-        fireEvent.click(redoButton);
         fireEvent.click(endTurnButton);
-
-        expect(onUndo).not.toHaveBeenCalled();
-        expect(onRedo).not.toHaveBeenCalled();
         expect(onEndTurn).not.toHaveBeenCalled();
     });
 

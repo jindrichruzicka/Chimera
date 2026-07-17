@@ -47,8 +47,8 @@ function runContractTests(label: string, makeRepo: () => SettingsRepository): vo
 
         it('overwrites entire override object on subsequent save()', async () => {
             await repo.save('tactics', { audio: { masterVolume: 0.5 } });
-            await repo.save('tactics', { display: { fullscreen: true } });
-            expect(await repo.load('tactics')).toEqual({ display: { fullscreen: true } });
+            await repo.save('tactics', { display: { targetFps: 30 } });
+            expect(await repo.load('tactics')).toEqual({ display: { targetFps: 30 } });
         });
 
         it('isolates different gameId namespaces', async () => {

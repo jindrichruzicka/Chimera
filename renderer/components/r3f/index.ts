@@ -10,3 +10,4 @@
  */
 
 export { PerfProbe } from '../shell/perf/PerfProbe';
+export { FrameRateLimiter } from './FrameRateLimiter';

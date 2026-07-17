@@ -3,7 +3,7 @@
 import { Canvas } from '@react-three/fiber';
 import React, { useState } from 'react';
 import { OrthographicCamera, Vector3 } from 'three';
-import { PerfProbe } from '@chimera-engine/renderer/components/r3f';
+import { FrameRateLimiter, PerfProbe } from '@chimera-engine/renderer/components/r3f';
 import { useTranslate } from '@chimera-engine/renderer/i18n';
 import type { GameScreenProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import {
@@ -262,6 +262,7 @@ export function TacticsDemoBoard({
             )}
             <Canvas camera={camera}>
                 <PerfProbe />
+                <FrameRateLimiter />
                 <ambientLight intensity={0.65} />
                 <directionalLight intensity={0.9} position={[3, 6, 4]} />
                 <TacticsGroundPlane

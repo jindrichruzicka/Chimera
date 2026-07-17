@@ -59,7 +59,7 @@ type SettingPrimitive = boolean | number | string;
 // The slider value-caption formatters, keyed language-agnostically. Each kind is
 // resolved to a `(value) => string` at render through the active `t()`
 // (makeValueFormatter): the pure descriptor stays free of English.
-type ValueFormatterKind = 'percent' | 'scale' | 'turns';
+type ValueFormatterKind = 'percent' | 'turns';
 
 type EngineFieldDefinition = Readonly<{
     readonly control: SettingsControlDefinition;
@@ -104,12 +104,7 @@ const ENGINE_DEFAULT_SETTINGS_DEFINITION: GameSettingsPageDefinition = {
                 {
                     id: 'display',
                     label: SETTINGS_KEYS.tabDisplay,
-                    items: [
-                        { kind: 'engine-field', fieldId: 'display.fullscreen' },
-                        { kind: 'engine-field', fieldId: 'display.vsync' },
-                        { kind: 'engine-field', fieldId: 'display.targetFps' },
-                        { kind: 'engine-field', fieldId: 'display.uiScale' },
-                    ],
+                    items: [{ kind: 'engine-field', fieldId: 'display.targetFps' }],
                 },
             ],
         },
@@ -120,13 +115,13 @@ const ENGINE_DEFAULT_SETTINGS_DEFINITION: GameSettingsPageDefinition = {
                 {
                     id: 'gameplay',
                     label: SETTINGS_KEYS.tabGameplay,
-                    items: [
-                        { kind: 'engine-field', fieldId: 'gameplay.language' },
-                        { kind: 'engine-field', fieldId: 'gameplay.autoSave' },
-                        { kind: 'engine-field', fieldId: 'gameplay.autoSaveIntervalTurns' },
-                        { kind: 'engine-field', fieldId: 'gameplay.showHints' },
-                        { kind: 'engine-field', fieldId: 'gameplay.showPerfHud' },
-                    ],
+                    // The engine ships no player-facing gameplay toggles by default —
+                    // a game registers its own via its GameSettingsPageDefinition
+                    // (§4.37.10; see the tactics adopter). Only the language selector
+                    // remains, and it hides itself for single-language games, so the
+                    // default gameplay tab is empty until a game declares ≥2 languages
+                    // or contributes its own gameplay settings.
+                    items: [{ kind: 'engine-field', fieldId: 'gameplay.language' }],
                 },
             ],
         },
@@ -182,27 +177,11 @@ const ENGINE_FIELD_DEFINITIONS: Record<EngineSettingsFieldId, EngineFieldDefinit
         defaultValue: false,
         label: SETTINGS_KEYS.muted,
     },
-    'display.fullscreen': {
-        control: { type: 'toggle' },
-        defaultValue: false,
-        label: SETTINGS_KEYS.fullscreen,
-    },
-    'display.vsync': {
-        control: { type: 'toggle' },
-        defaultValue: true,
-        label: SETTINGS_KEYS.vsync,
-    },
     'display.targetFps': {
         control: { type: 'select', options: TARGET_FPS_OPTIONS },
         defaultValue: 60,
         label: SETTINGS_KEYS.targetFps,
         parseValue: parseIntegerValue,
-    },
-    'display.uiScale': {
-        control: { type: 'slider', min: 0.5, max: 2, step: 0.05 },
-        defaultValue: 1,
-        formatKind: 'scale',
-        label: SETTINGS_KEYS.uiScale,
     },
     // The language field is not rendered from this descriptor — renderSettingsItem
     // special-cases 'gameplay.language' to <SettingsLanguageSelector>, which sources
@@ -978,9 +957,6 @@ function makeValueFormatter(
                 t(SETTINGS_KEYS.formatPercent, {
                     n: Number((coerceNumber(value, 1) * 100).toFixed(0)),
                 });
-        case 'scale':
-            return (value) =>
-                t(SETTINGS_KEYS.formatScale, { n: coerceNumber(value, 1).toFixed(2) });
         case 'turns':
             return (value) => t(SETTINGS_KEYS.formatTurns, { n: coerceNumber(value, 5) });
     }

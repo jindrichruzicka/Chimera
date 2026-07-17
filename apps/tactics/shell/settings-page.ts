@@ -44,12 +44,7 @@ export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
                 {
                     id: 'display',
                     label: 'game.tactics.settings.tabDisplay',
-                    items: [
-                        { kind: 'engine-field', fieldId: 'display.fullscreen' },
-                        { kind: 'engine-field', fieldId: 'display.vsync' },
-                        { kind: 'engine-field', fieldId: 'display.targetFps' },
-                        { kind: 'engine-field', fieldId: 'display.uiScale' },
-                    ],
+                    items: [{ kind: 'engine-field', fieldId: 'display.targetFps' }],
                 },
             ],
         },

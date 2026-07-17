@@ -395,15 +395,7 @@ function GameShellFrame(
 
     const hud =
         props.hud === undefined ? (
-            <DefaultGameHud
-                tick={tick}
-                undoDisabled={undoDisabled}
-                redoDisabled={redoDisabled}
-                endTurnDisabled={endTurnDisabled}
-                handleUndo={handleUndo}
-                handleRedo={handleRedo}
-                handleEndTurn={handleEndTurn}
-            />
+            <DefaultGameHud endTurnDisabled={endTurnDisabled} handleEndTurn={handleEndTurn} />
         ) : (
             <GameHudSlot
                 Hud={props.hud}
@@ -453,12 +445,7 @@ function GameShellFrame(
 }
 
 interface GameHudControlsProps {
-    readonly tick: number;
-    readonly undoDisabled: boolean;
-    readonly redoDisabled: boolean;
     readonly endTurnDisabled: boolean;
-    readonly handleUndo: () => void;
-    readonly handleRedo: () => void;
     readonly handleEndTurn: () => void;
 }
 
@@ -475,39 +462,18 @@ function GameHudSlot({ Hud, ...hudProps }: GameHudSlotProps): React.ReactElement
 }
 
 function DefaultGameHud({
-    tick,
-    undoDisabled,
-    redoDisabled,
     endTurnDisabled,
-    handleUndo,
-    handleRedo,
     handleEndTurn,
 }: GameHudControlsProps): React.ReactElement {
     const t = useTranslate();
+    // The engine default HUD ships only End Turn. Undo/redo are opt-in: many
+    // games have no undo (or no redo), so surfacing them by default would imply
+    // a capability the game may not support. A game that wants them contributes
+    // its own HUD (GameScreenRegistry.hud) — the undo/redo props still flow to it
+    // via GameHudProps (see the tactics HUD).
     return (
         <footer aria-label={t(GAME_SHELL_KEYS.hudAriaLabel)} style={gameShellHudStyle}>
-            <div>
-                {t(HUD_KEYS.tick)} <output data-testid="hud-tick">{tick}</output>
-            </div>
             <div style={gameShellActionsStyle}>
-                <Button
-                    data-testid="undo"
-                    variant="secondary"
-                    size="sm"
-                    disabled={undoDisabled}
-                    onClick={handleUndo}
-                >
-                    {t(HUD_KEYS.undo)}
-                </Button>
-                <Button
-                    data-testid="redo"
-                    variant="secondary"
-                    size="sm"
-                    disabled={redoDisabled}
-                    onClick={handleRedo}
-                >
-                    {t(HUD_KEYS.redo)}
-                </Button>
                 <Button
                     data-testid="end-turn"
                     variant="secondary"
@@ -532,7 +498,7 @@ const gameShellRootStyle: React.CSSProperties = {
 const gameShellHudStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     gap: 'var(--ch-space-md)',
     padding: 'var(--ch-space-sm) var(--ch-space-md)',
     borderTop: 'var(--ch-border-width-sm) solid var(--ch-color-border)',

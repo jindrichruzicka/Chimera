@@ -501,10 +501,7 @@ export type EngineSettingsFieldId =
     | 'audio.sfxVolume'
     | 'audio.musicVolume'
     | 'audio.muted'
-    | 'display.fullscreen'
-    | 'display.vsync'
     | 'display.targetFps'
-    | 'display.uiScale'
     | 'gameplay.language'
     | 'gameplay.autoSave'
     | 'gameplay.autoSaveIntervalTurns'
@@ -567,10 +564,7 @@ The engine field registry is exhaustive for the current `EngineSettings` interfa
 | `audio.sfxVolume`                | SFX Volume           | Slider      | `1`, formatted as a percentage                                                                                                                  |
 | `audio.musicVolume`              | Music Volume         | Slider      | `0.8`, formatted as a percentage                                                                                                                |
 | `audio.muted`                    | Muted                | Toggle      | `false`                                                                                                                                         |
-| `display.fullscreen`             | Fullscreen           | Toggle      | `false`                                                                                                                                         |
-| `display.vsync`                  | VSync                | Toggle      | `true`                                                                                                                                          |
-| `display.targetFps`              | Target FPS           | Select      | `60`; options `30`, `60`, `120`, `0`                                                                                                            |
-| `display.uiScale`                | UI Scale             | Slider      | `1`, range `0.5`-`2`, formatted as `x`                                                                                                          |
+| `display.targetFps`              | Target FPS           | Select      | `60`; options `30`, `60`, `120`, `0` (uncapped). Applied by the renderer FrameRateLimiter (r3f barrel); a game mounts it in its own `<Canvas>`  |
 | `gameplay.language`              | Language             | Select      | `en-US`; options are the game's declared `translations.languages` (endonyms); the row is hidden when the game declares fewer than two languages |
 | `gameplay.autoSave`              | Auto Save            | Toggle      | `true`                                                                                                                                          |
 | `gameplay.autoSaveIntervalTurns` | Auto Save Interval   | Slider      | `5`, range `1`-`100`, integer turns                                                                                                             |
@@ -585,12 +579,12 @@ receive an untyped or stale `engine-field` fail fast instead of silently renderi
 
 When no game settings definition is available, the renderer uses the engine default four-tab layout:
 
-| Tab      | Sections | Engine fields                                                                                                            |
-| -------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Audio    | Audio    | `audio.masterVolume`, `audio.sfxVolume`, `audio.musicVolume`, `audio.muted`                                              |
-| Display  | Display  | `display.fullscreen`, `display.vsync`, `display.targetFps`, `display.uiScale`                                            |
-| Gameplay | Gameplay | `gameplay.language`, `gameplay.autoSave`, `gameplay.autoSaveIntervalTurns`, `gameplay.showHints`, `gameplay.showPerfHud` |
-| Controls | Controls | `controls.bindings`                                                                                                      |
+| Tab      | Sections | Engine fields                                                                                                                                                             |
+| -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Audio    | Audio    | `audio.masterVolume`, `audio.sfxVolume`, `audio.musicVolume`, `audio.muted`                                                                                               |
+| Display  | Display  | `display.targetFps`                                                                                                                                                       |
+| Gameplay | Gameplay | `gameplay.language` (hidden for single-language games — so the default Gameplay tab is empty until a game declares ≥2 languages or contributes its own gameplay settings) |
+| Controls | Controls | `controls.bindings`                                                                                                                                                       |
 
 There is no partial merge between a game settings definition and the engine default tab set. A
 provided `GameSettingsPageDefinition` owns its tab list. It can include any subset of engine fields,

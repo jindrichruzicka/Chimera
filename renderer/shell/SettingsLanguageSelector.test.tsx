@@ -22,7 +22,7 @@ const LANGUAGES: readonly GameLanguage[] = [
 function makeSettings(language = 'en-US'): ResolvedSettings {
     return {
         audio: { masterVolume: 0.8, sfxVolume: 1.0, musicVolume: 0.7, muted: false },
-        display: { fullscreen: false, vsync: true, targetFps: 60 as const, uiScale: 1.0 },
+        display: { targetFps: 60 as const },
         gameplay: {
             language,
             autoSave: true,

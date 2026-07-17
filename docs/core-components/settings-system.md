@@ -34,10 +34,11 @@ interface EngineSettings {
         muted: boolean;
     };
     display: {
-        fullscreen: boolean;
-        vsync: boolean;
-        targetFps: 30 | 60 | 120 | 0; // 0 = uncapped
-        uiScale: number; // 0.5–2.0 multiplier
+        // Caps the renderer frame rate; 0 = uncapped (native refresh). Applied
+        // by the renderer FrameRateLimiter (r3f barrel), never read by the
+        // simulation. Games always run fullscreen in packaged builds, so there
+        // is no fullscreen/vsync/uiScale setting.
+        targetFps: 30 | 60 | 120 | 0;
     };
     gameplay: {
         language: string; // BCP 47 locale

@@ -28,7 +28,7 @@ const TOGGLE_PERF_HUD_BINDING: KeyBinding = { primary: 'F3' };
 function makeSettings(bindings: Record<string, KeyBinding> = {}): ResolvedSettings {
     return {
         audio: { masterVolume: 1, sfxVolume: 1, musicVolume: 0.8, muted: false },
-        display: { fullscreen: false, vsync: true, targetFps: 60, uiScale: 1 },
+        display: { targetFps: 60 },
         gameplay: {
             language: 'en-US',
             autoSave: true,

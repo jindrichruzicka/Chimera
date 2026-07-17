@@ -41,10 +41,7 @@ describe('engineSettingsZodShape (WARN-1)', () => {
                 muted: false,
             },
             display: {
-                fullscreen: false,
-                vsync: true,
                 targetFps: 60,
-                uiScale: 1.0,
             },
             gameplay: {
                 language: 'en-US',
@@ -68,7 +65,7 @@ describe('engineSettingsZodShape (WARN-1)', () => {
         });
         const result = gameSchema.safeParse({
             audio: { masterVolume: 'loud', sfxVolume: 0.5, musicVolume: 0.6, muted: false },
-            display: { fullscreen: false, vsync: true, targetFps: 60, uiScale: 1.0 },
+            display: { targetFps: 60 },
             gameplay: {
                 language: 'en-US',
                 autoSave: true,
@@ -96,12 +93,13 @@ describe('DeepPartial<EngineSettings>', () => {
 
     it('accepts deeply nested partial overrides without requiring sibling keys', () => {
         const partial: DeepPartial<EngineSettings> = {
-            display: { fullscreen: true },
+            display: { targetFps: 30 },
             gameplay: { language: 'fr-FR' },
         };
-        expect(partial.display?.fullscreen).toBe(true);
+        expect(partial.display?.targetFps).toBe(30);
         expect(partial.gameplay?.language).toBe('fr-FR');
-        expect(partial.display?.vsync).toBeUndefined();
+        // Sibling gameplay keys stay optional in a DeepPartial.
+        expect(partial.gameplay?.autoSave).toBeUndefined();
     });
 });
 
@@ -113,7 +111,7 @@ describe('GameSettingsSchema<T>.schema field', () => {
             gameId: 'test-game',
             defaults: {
                 audio: { masterVolume: 1, sfxVolume: 1, musicVolume: 0.8, muted: false },
-                display: { fullscreen: false, vsync: true, targetFps: 60, uiScale: 1.0 },
+                display: { targetFps: 60 },
                 gameplay: {
                     language: 'en-US',
                     autoSave: true,

@@ -405,13 +405,8 @@ describe('EngineSettingsFieldId', () => {
     });
 
     it('accepts all display engine field ids', () => {
-        const ids: EngineSettingsFieldId[] = [
-            'display.fullscreen',
-            'display.vsync',
-            'display.targetFps',
-            'display.uiScale',
-        ];
-        expect(ids).toHaveLength(4);
+        const ids: EngineSettingsFieldId[] = ['display.targetFps'];
+        expect(ids).toHaveLength(1);
     });
 
     it('accepts all gameplay engine field ids', () => {
@@ -594,7 +589,7 @@ describe('SettingsItemDefinition', () => {
 
     it('discriminant narrows each variant correctly', () => {
         const items: SettingsItemDefinition[] = [
-            { kind: 'engine-field', fieldId: 'display.fullscreen' },
+            { kind: 'engine-field', fieldId: 'display.targetFps' },
             {
                 kind: 'game-field',
                 path: 'tactics.animSpeed',
@@ -704,7 +699,7 @@ describe('SettingsTabDefinition', () => {
             id: 'display',
             label: 'Display',
             sections: [
-                { id: 'screen', items: [{ kind: 'engine-field', fieldId: 'display.fullscreen' }] },
+                { id: 'screen', items: [{ kind: 'engine-field', fieldId: 'display.targetFps' }] },
                 { id: 'perf', items: [{ kind: 'engine-field', fieldId: 'display.targetFps' }] },
             ],
         };
@@ -762,12 +757,7 @@ describe('GameSettingsPageDefinition', () => {
                     sections: [
                         {
                             id: 'screen',
-                            items: [
-                                { kind: 'engine-field', fieldId: 'display.fullscreen' },
-                                { kind: 'engine-field', fieldId: 'display.vsync' },
-                                { kind: 'engine-field', fieldId: 'display.targetFps' },
-                                { kind: 'engine-field', fieldId: 'display.uiScale' },
-                            ],
+                            items: [{ kind: 'engine-field', fieldId: 'display.targetFps' }],
                         },
                     ],
                 },

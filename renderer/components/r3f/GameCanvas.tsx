@@ -4,6 +4,7 @@ import { Canvas } from '@react-three/fiber';
 import React from 'react';
 import type { ReactNode } from 'react';
 import { PerfProbe } from '../shell/perf/PerfProbe';
+import { FrameRateLimiter } from './FrameRateLimiter';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
 import type { Vector3Tuple } from '../../types/r3f-types.js';
 
@@ -73,6 +74,7 @@ export function GameCanvas({
     return (
         <Canvas camera={camera}>
             <PerfProbe />
+            <FrameRateLimiter />
             {children}
         </Canvas>
     );
