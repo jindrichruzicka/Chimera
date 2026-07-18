@@ -257,6 +257,59 @@ export function createNoopLogger(): Logger {
     return createLogger({ source: NOOP_SOURCE, sink: NOOP_SINK });
 }
 
+// ─── Stdout sink (dev-harness live streaming) ─────────────────────────────────
+
+/**
+ * A {@link LoggerSink} that renders each entry as one human-readable line to
+ * stdout. Wired into the main fan-out ONLY when the dev multiplayer harness is
+ * active (§4.32): the orchestrator pipes every child's stdout with a `[p<i>]`
+ * prefix, so `pnpm dev:mp` streams each instance's main-process logs live in
+ * one terminal — the file sink alone is not enough there, because its
+ * crash-safe SonicBoom buffer (`minLength: 4096`, see {@link createPinoSink})
+ * holds sparse post-startup entries off disk until a flush.
+ *
+ * This is a sink, not a `console.*` call site — modules keep logging through
+ * their injected `Logger` (Invariant #67); the `write` parameter exists for
+ * tests and defaults to `process.stdout`.
+ */
+export function createStdoutSink(
+    write: (line: string) => void = (line): void => void process.stdout.write(line),
+): LoggerSink {
+    return {
+        write(entry: LogEntry): void {
+            // Pad to the longest level tag ('error') so columns align.
+            const level = entry.level.padEnd(5, ' ');
+            const context =
+                entry.context !== undefined && Object.keys(entry.context).length > 0
+                    ? ` ${JSON.stringify(entry.context)}`
+                    : '';
+            const error = entry.error !== undefined ? ` — ${entry.error.message}` : '';
+            write(`${level} [${entry.source.module}] ${entry.message}${context}${error}\n`);
+        },
+    };
+}
+
+/**
+ * Flush a {@link FlushableSink} on a fixed interval; returns a disposer. Used
+ * by the dev-harness boot so the on-disk log stays near-real-time despite the
+ * file sink's crash-safe buffering — without it, sparse post-startup entries
+ * can sit invisible in the SonicBoom buffer for minutes (and are lost outright
+ * on SIGKILL). A throwing flush (transient fs error) is swallowed so one bad
+ * tick never kills the timer. The interval is `unref`'d where supported so it
+ * never holds the process open.
+ */
+export function startPeriodicFlush(sink: Pick<FlushableSink, 'flushSync'>, ms: number): () => void {
+    const timer = setInterval(() => {
+        try {
+            sink.flushSync();
+        } catch {
+            // Transient flush failures must not stop future ticks.
+        }
+    }, ms);
+    timer.unref?.();
+    return (): void => clearInterval(timer);
+}
+
 // ─── Pino-backed file sink ────────────────────────────────────────────────────
 
 const LOG_RETENTION_DAYS = 14;

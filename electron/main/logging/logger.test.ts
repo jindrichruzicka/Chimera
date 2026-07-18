@@ -3,7 +3,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import pino from 'pino';
-import { createLogger, createMemorySink, createNoopLogger, createPinoSink } from './logger.js';
+import {
+    createLogger,
+    createMemorySink,
+    createNoopLogger,
+    createPinoSink,
+    createStdoutSink,
+    startPeriodicFlush,
+} from './logger.js';
 import type { LogEntry, LogSource } from '@chimera-engine/simulation/foundation/logging.js';
 
 const TEST_SOURCE: LogSource = { process: 'main', module: 'test' };
@@ -376,5 +383,93 @@ describe('createPinoSink', () => {
         }
 
         intercepted.mockRestore();
+    });
+});
+
+describe('createStdoutSink', () => {
+    const entry = (overrides: Partial<LogEntry> = {}): LogEntry => ({
+        level: 'info',
+        message: 'dev harness: auto-hosting',
+        timestamp: 1000,
+        source: { process: 'main', module: 'dev-harness' },
+        ...overrides,
+    });
+
+    it('renders one line per entry: level, module, message', () => {
+        const lines: string[] = [];
+        const sink = createStdoutSink((line) => lines.push(line));
+
+        sink.write(entry());
+
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toBe('info  [dev-harness] dev harness: auto-hosting\n');
+    });
+
+    it('appends the context as compact JSON when present', () => {
+        const lines: string[] = [];
+        const sink = createStdoutSink((line) => lines.push(line));
+
+        sink.write(entry({ context: { gameId: 'sample', maxPlayers: 2 } }));
+
+        expect(lines[0]).toBe(
+            'info  [dev-harness] dev harness: auto-hosting {"gameId":"sample","maxPlayers":2}\n',
+        );
+    });
+
+    it('appends the error message for error entries', () => {
+        const lines: string[] = [];
+        const sink = createStdoutSink((line) => lines.push(line));
+
+        sink.write(
+            entry({
+                level: 'error',
+                message: 'dev harness bootstrap failed',
+                error: { name: 'Error', message: 'scenario gameId mismatch' },
+            }),
+        );
+
+        expect(lines[0]).toContain('error [dev-harness] dev harness bootstrap failed');
+        expect(lines[0]).toContain('scenario gameId mismatch');
+    });
+});
+
+describe('startPeriodicFlush', () => {
+    it('flushes the sink on every interval tick until disposed', () => {
+        vi.useFakeTimers();
+        try {
+            let flushes = 0;
+            const dispose = startPeriodicFlush({ flushSync: () => void (flushes += 1) }, 500);
+
+            vi.advanceTimersByTime(1600);
+            expect(flushes).toBe(3);
+
+            dispose();
+            vi.advanceTimersByTime(2000);
+            expect(flushes).toBe(3);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('keeps ticking if a flush throws (a transient fs error must not kill the timer)', () => {
+        vi.useFakeTimers();
+        try {
+            let calls = 0;
+            const dispose = startPeriodicFlush(
+                {
+                    flushSync: () => {
+                        calls += 1;
+                        if (calls === 1) throw new Error('EBADF');
+                    },
+                },
+                500,
+            );
+
+            vi.advanceTimersByTime(1100);
+            expect(calls).toBe(2);
+            dispose();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

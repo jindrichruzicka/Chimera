@@ -46,6 +46,7 @@ import type {
 } from '@chimera-engine/simulation/foundation/chat.js';
 import type { E2eHooks } from '../runtime/e2e-hooks.js';
 import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import { resolveAttributeValueCap } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
     resolveMatchSettingsDefaults,
     resolvePlayerAttributeDefaults,
@@ -642,6 +643,20 @@ export class LobbyManager {
                     return;
                 }
 
+                // Network-derived value: the wire schema only applies the coarse
+                // bound, so the precise per-game cap is enforced here — over-cap
+                // values are dropped, never merged into the broadcast state.
+                const attributeValueCap = resolveAttributeValueCap(this.currentLobbySetup());
+                if (value.length > attributeValueCap) {
+                    this.log.warn('dropping over-cap player attribute update', {
+                        from,
+                        key,
+                        valueLength: value.length,
+                        cap: attributeValueCap,
+                    });
+                    return;
+                }
+
                 // Owner-authored: apply the attribute to the SENDER's seat,
                 // derived from the connection — never a client-supplied playerId.
                 const hasPlayer = this.lobbyState.players.some((entry) => entry.playerId === from);
@@ -1070,6 +1085,19 @@ export class LobbyManager {
         if (playerId !== this.localPlayerId) {
             return Promise.reject(
                 new Error('LobbyManager: a player can only set attributes on its own seat'),
+            );
+        }
+
+        // Enforce the per-game value cap on BOTH paths: the hosted merge below,
+        // and the joined forward — failing fast here beats the host's silent
+        // wire-side drop, so the caller learns why the attribute never synced.
+        const attributeValueCap = resolveAttributeValueCap(this.currentLobbySetup());
+        if (value.length > attributeValueCap) {
+            return Promise.reject(
+                new Error(
+                    `LobbyManager: attribute "${key}" value is ${value.length} chars — over the ` +
+                        `game's cap of ${attributeValueCap} (GameLobbySetup.maxAttributeValueLength)`,
+                ),
             );
         }
 

@@ -17,6 +17,7 @@ import {
     WIRE_MAX_JOIN_CLAIMS,
     WIRE_MAX_JOIN_CLAIM_ID_LENGTH,
     WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
+    WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
     WIRE_MAX_PROFILE_REJECT_REASON_LENGTH,
 } from './messages-schemas.js';
 
@@ -334,11 +335,29 @@ describe('ClientMessageSchema — PLAYER_ATTRIBUTE_UPDATE', () => {
         expect(result.success).toBe(false);
     });
 
+    it('accepts PLAYER_ATTRIBUTE_UPDATE with a value at the coarse wire value cap (a JSON deck fits)', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'PLAYER_ATTRIBUTE_UPDATE',
+            key: 'deck',
+            value: 'a'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH),
+        });
+        expect(result.success).toBe(true);
+    });
+
     it('rejects PLAYER_ATTRIBUTE_UPDATE with an over-length value (coarse wire cap)', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'PLAYER_ATTRIBUTE_UPDATE',
             key: 'color',
-            value: 'a'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH + 1),
+            value: 'a'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH + 1),
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('still rejects PLAYER_ATTRIBUTE_UPDATE with an over-length key (key cap is unchanged)', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'PLAYER_ATTRIBUTE_UPDATE',
+            key: 'k'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH + 1),
+            value: 'amber',
         });
         expect(result.success).toBe(false);
     });

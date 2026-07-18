@@ -118,6 +118,15 @@ export function buildStandaloneRootManifest(
                 `next build apps/${name}/renderer && ` +
                 `pnpm --filter @chimera-engine/${name} build:app && ` +
                 `pnpm --filter @chimera-engine/${name} run package`,
+            // `pnpm dev:mp <N> [--scenario <name>]` — the dev multiplayer harness (§4.32):
+            // mirrors `package`'s build chain (fresh renderer + app bundle), then delegates
+            // to the app's dev:mp script (the `chimera-dev-mp` bin from
+            // @chimera-engine/electron). pnpm appends trailing args to the LAST command in
+            // the chain, so `pnpm dev:mp 3 --scenario skirmish` reaches the harness intact.
+            'dev:mp':
+                `next build apps/${name}/renderer && ` +
+                `pnpm --filter @chimera-engine/${name} build:app && ` +
+                `pnpm --filter @chimera-engine/${name} dev:mp`,
         },
         pnpm: {
             ...(overrides !== undefined ? { overrides: { ...overrides } } : {}),
@@ -130,6 +139,19 @@ export function buildStandaloneRootManifest(
 /** The `pnpm-workspace.yaml` for the standalone root: the scaffolded app is the lone member. */
 export function buildStandaloneWorkspaceYaml(): string {
     return 'packages:\n  - apps/*\n';
+}
+
+/**
+ * The standalone root's `.gitignore`. Synthesized (not shipped as a template
+ * file) because npm strips `.gitignore` from published tarballs — a template
+ * copy would silently vanish from the packed CLI. Covers install/build output
+ * plus the dev multiplayer harness's per-instance `.dev-userdata/` dirs
+ * (§4.32, Invariant #78), which are wiped and recreated on every run.
+ */
+export function buildStandaloneGitignore(): string {
+    return ['node_modules/', 'dist/', 'out/', '.next/', '.e2e-build/', '.dev-userdata/', ''].join(
+        '\n',
+    );
 }
 
 /**

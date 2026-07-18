@@ -17,15 +17,18 @@
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
  *
  * Module boundary (§3 Module Boundary Table): `shared/` must not import from
- * `renderer/`, `games/*`, `electron/`, or simulation runtime. The sole import
- * below is a *type-only* re-use of the canonical `LobbyState`/`PlayerId` from a
- * sibling `shared/` module; `import type` is erased at build, so the emitted
- * module carries zero runtime imports — the constraint stays structurally
- * enforced just as in `game-shell-contract.ts`.
+ * `renderer/`, `games/*`, `electron/`, or simulation runtime. The imports
+ * below re-use only sibling `shared/` modules: the canonical
+ * `LobbyState`/`PlayerId`/`GameContent` types (type-only, erased at build) and
+ * the `WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH` wire bound (a compile-time
+ * constant; sibling runtime imports mirror `messages-schemas.ts` →
+ * `chat-schemas.ts`) — the boundary constraint stays intact just as in
+ * `game-shell-contract.ts`.
  */
 
 import type { LobbyState, PlayerId } from './messages-schemas.js';
 import type { GameContent } from './game-content-contract.js';
+import { WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH } from './messages-schemas.js';
 
 // ─── Field options ──────────────────────────────────────────────────────────────
 
@@ -65,6 +68,17 @@ export interface GameLobbySetup {
      * mutate external state.
      */
     resolveDefaultPlayerAttributes(seatIndex: number): Record<string, string>;
+
+    /**
+     * Optional per-game cap, in UTF-16 code units, on a single player-attribute
+     * VALUE. Games whose per-seat data is a structured payload (e.g. a card
+     * game's JSON-encoded deck) raise it; absent ⇒ the engine default
+     * ({@link DEFAULT_ATTRIBUTE_VALUE_CAP}) — exactly the pre-existing
+     * behaviour. Always clamped to the coarse wire bound
+     * (`WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH`); enforced host-side by
+     * `LobbyManager` via {@link resolveAttributeValueCap}.
+     */
+    readonly maxAttributeValueLength?: number;
 }
 
 // ─── Synced setup config ──────────────────────────────────────────────────────
@@ -188,6 +202,29 @@ export function lookupFieldOption(
  */
 export function optionLabel(options: readonly LobbyFieldOption[], value: string): string {
     return lookupFieldOption(options, value)?.label ?? value;
+}
+
+/**
+ * Engine default cap on a single player-attribute value when the game's
+ * {@link GameLobbySetup} declares no `maxAttributeValueLength` — the
+ * historical wire cap, so games that declare nothing keep exactly the old
+ * behaviour.
+ */
+export const DEFAULT_ATTRIBUTE_VALUE_CAP = 256;
+
+/**
+ * Resolve the effective per-game cap on a player-attribute value. Returns the
+ * setup's declared `maxAttributeValueLength` clamped to the coarse wire bound;
+ * {@link DEFAULT_ATTRIBUTE_VALUE_CAP} when there is no setup, no declaration,
+ * or a malformed declaration (non-integer, non-finite, or < 1) — all
+ * behaviour-neutral, mirroring the manifest-contract resolvers. Never throws.
+ */
+export function resolveAttributeValueCap(setup: GameLobbySetup | undefined): number {
+    const declared = setup?.maxAttributeValueLength;
+    if (declared === undefined || !Number.isInteger(declared) || declared < 1) {
+        return DEFAULT_ATTRIBUTE_VALUE_CAP;
+    }
+    return Math.min(declared, WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH);
 }
 
 // ─── Reserved spectator match-setting ───────────────────────────────────────────

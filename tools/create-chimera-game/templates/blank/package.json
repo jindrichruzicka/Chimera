@@ -6,6 +6,7 @@
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
         "build:app": "tsx electron/build-main.ts",
+        "dev:mp": "cross-env CHIMERA_DEV_HARNESS=1 chimera-dev-mp",
         "package": "electron-builder",
         "test": "vitest run --config ../../vitest.config.mts --dir .",
         "test:e2e": "playwright test --config=e2e/playwright.config.ts --project=electron-e2e",

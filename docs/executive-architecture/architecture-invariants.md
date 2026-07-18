@@ -196,7 +196,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **77.** The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with `NODE_ENV=production`, and every harness flag must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent.
 
-**78.** Each harness-spawned instance runs in an isolated Electron `userData` directory (`.dev-userdata/p<i>/`). Shared state between instances is forbidden — profiles, saves, settings, logs, and crash dumps must be per-instance so the harness behaves identically to multiple distinct machines.
+**78.** Each harness-spawned instance runs in an isolated Electron `userData` directory (`.dev-userdata/p<i>/`). Shared state between instances is forbidden — profiles, saves, settings, logs, and crash dumps must be per-instance so the harness behaves identically to multiple distinct machines. The host's announce file (the lobby-code handshake) lives inside the host's OWN `userData` dir and is read only by the orchestrator CLI — an instance never reads another instance's directory.
 
 **79.** All `registerExtension()` calls must complete before `api.ts` is loaded. `buildExtensionsApi()` is called exactly once, immediately before `contextBridge.exposeInMainWorld`. A late registration after `buildExtensionsApi()` has run will mutate the internal registry but the frozen copy already handed to `exposeInMainWorld` will not reflect it.
 

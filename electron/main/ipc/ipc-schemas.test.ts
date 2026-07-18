@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import {
+    WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
+    WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
+} from '@chimera-engine/simulation/foundation/messages-schemas.js';
 import { MAX_SAVE_LABEL_LENGTH } from '../../preload/api-types.js';
 import {
     EngineActionSchema,
@@ -264,6 +268,36 @@ describe('SetPlayerAttributePayloadSchema', () => {
                 value: '',
             }).success,
         ).toBe(true);
+    });
+
+    it('accepts a deck-sized value up to the coarse wire value bound (per-game cap is enforced in LobbyManager)', () => {
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({
+                playerId: 'p1',
+                key: 'deck',
+                value: 'v'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH),
+            }).success,
+        ).toBe(true);
+    });
+
+    it('rejects a value over the coarse wire value bound', () => {
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({
+                playerId: 'p1',
+                key: 'deck',
+                value: 'v'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH + 1),
+            }).success,
+        ).toBe(false);
+    });
+
+    it('still rejects a key over the key cap', () => {
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({
+                playerId: 'p1',
+                key: 'k'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH + 1),
+                value: 'blue',
+            }).success,
+        ).toBe(false);
     });
 
     it('rejects a missing or empty playerId', () => {

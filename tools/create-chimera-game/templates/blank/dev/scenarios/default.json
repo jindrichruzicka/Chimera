@@ -1,0 +1,5 @@
+{
+    "gameId": "__game_kebab__",
+    "seats": [{ "profile": "p1.json" }, { "profile": "p2.json" }],
+    "autoStart": true
+}

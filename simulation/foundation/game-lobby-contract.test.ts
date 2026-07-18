@@ -37,9 +37,12 @@ import {
     lookupFieldOption,
     optionLabel,
     readAllowSpectators,
+    resolveAttributeValueCap,
     ALLOW_SPECTATORS_SETTING,
     ALLOW_SPECTATORS_DEFAULT,
+    DEFAULT_ATTRIBUTE_VALUE_CAP,
 } from './game-lobby-contract.js';
+import { WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH } from './messages-schemas.js';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
 
@@ -294,5 +297,46 @@ describe('GameLobbyScreenProps', () => {
                 void [key, value, extra],
         };
         expect(_).toBeDefined();
+    });
+});
+
+// ─── resolveAttributeValueCap ───────────────────────────────────────────────────
+
+describe('resolveAttributeValueCap', () => {
+    it('defaults to the engine cap when the setup declares nothing', () => {
+        expect(resolveAttributeValueCap(setup)).toBe(DEFAULT_ATTRIBUTE_VALUE_CAP);
+        expect(DEFAULT_ATTRIBUTE_VALUE_CAP).toBe(256);
+    });
+
+    it('defaults to the engine cap when there is no setup at all — never throws', () => {
+        expect(resolveAttributeValueCap(undefined)).toBe(DEFAULT_ATTRIBUTE_VALUE_CAP);
+    });
+
+    it('returns a game-declared cap (a card game raises it so a JSON deck fits)', () => {
+        expect(resolveAttributeValueCap({ ...setup, maxAttributeValueLength: 8192 })).toBe(8192);
+    });
+
+    it('clamps a declared cap to the coarse wire bound', () => {
+        expect(
+            resolveAttributeValueCap({
+                ...setup,
+                maxAttributeValueLength: WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH * 2,
+            }),
+        ).toBe(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH);
+    });
+
+    it('falls back to the default for a non-positive or non-finite declaration', () => {
+        expect(resolveAttributeValueCap({ ...setup, maxAttributeValueLength: 0 })).toBe(
+            DEFAULT_ATTRIBUTE_VALUE_CAP,
+        );
+        expect(resolveAttributeValueCap({ ...setup, maxAttributeValueLength: -5 })).toBe(
+            DEFAULT_ATTRIBUTE_VALUE_CAP,
+        );
+        expect(resolveAttributeValueCap({ ...setup, maxAttributeValueLength: Number.NaN })).toBe(
+            DEFAULT_ATTRIBUTE_VALUE_CAP,
+        );
+        expect(resolveAttributeValueCap({ ...setup, maxAttributeValueLength: 1.5 })).toBe(
+            DEFAULT_ATTRIBUTE_VALUE_CAP,
+        );
     });
 });

@@ -16,10 +16,17 @@
         "access": "public"
     },
     "type": "module",
+    "bin": {
+        "chimera-dev-mp": "dist/dev-harness/cli.js"
+    },
     "exports": {
         "./main": {
             "types": "./dist/main/index.d.ts",
             "default": "./dist/main/index.js"
+        },
+        "./dev-harness": {
+            "types": "./dist/dev-harness/harness.d.ts",
+            "default": "./dist/dev-harness/harness.js"
         },
         "./preload/api": {
             "types": "./dist/preload/api.d.ts",

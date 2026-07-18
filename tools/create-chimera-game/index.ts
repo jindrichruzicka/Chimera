@@ -33,6 +33,7 @@ import {
     buildStandaloneVitestConfig,
     buildStandaloneVscodeLaunchJson,
     buildStandaloneVscodeTasksJson,
+    buildStandaloneGitignore,
     buildStandaloneWorkspaceYaml,
     rewriteAppPackageForStandalone,
     rewriteAppTsconfigBuildForStandalone,
@@ -255,6 +256,9 @@ async function emitStandaloneProject(
         buildStandaloneWorkspaceYaml(),
         'utf8',
     );
+    // Synthesized (npm strips template .gitignore files from tarballs); covers the
+    // dev-harness `.dev-userdata/` dirs alongside install/build output.
+    await writeFile(path.join(outputRoot, '.gitignore'), buildStandaloneGitignore(), 'utf8');
     await writeFile(
         path.join(outputRoot, 'vitest.config.mts'),
         buildStandaloneVitestConfig(kebab),
@@ -543,6 +547,9 @@ if (process.env['VITEST'] === undefined) {
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
                     console.log('  pnpm start');
                     console.log('  pnpm start:debug   # windowed + DevTools + F9 Debug Inspector');
+                    console.log(
+                        '  pnpm dev:mp 2      # instant 2-player multiplayer session (dev/scenarios/default.json: pnpm dev:mp --scenario default)',
+                    );
                     console.log(
                         `  # or open this folder in VS Code and run the "Debug ${result.names.title}" launch config for breakpoints`,
                     );

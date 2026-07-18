@@ -56,15 +56,26 @@ export const WIRE_MAX_CHAT_BODY_LENGTH = 4096;
 export const WIRE_MAX_PROFILE_REJECT_REASON_LENGTH = 256;
 
 /**
- * Coarse bound on an inbound `PLAYER_ATTRIBUTE_UPDATE` `key`/`value`, in UTF-16
- * code units, applied at the wire boundary. The frame is owner-authored but
+ * Coarse bound on an inbound `PLAYER_ATTRIBUTE_UPDATE` `key`, in UTF-16 code
+ * units, applied at the wire boundary. The frame is owner-authored but
  * network-derived (a joined client sends it), and the host merges the value into
  * `LobbyPlayerEntry.attributes` and rebroadcasts it to every peer. Legitimate
- * values are short option ids (e.g. `color` → `amber`), so this cap is generous
- * yet well above any real value — anything past it is clearly abusive and
- * dropped as a malformed frame.
+ * keys are short game-defined ids (e.g. `color`, `deck`), so this cap is
+ * generous yet well above any real key — anything past it is clearly abusive
+ * and dropped as a malformed frame.
  */
 export const WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH = 256;
+
+/**
+ * Coarse bound on an inbound `PLAYER_ATTRIBUTE_UPDATE` `value`, in UTF-16 code
+ * units, applied at the wire boundary. Wider than the key cap because a value
+ * may carry a game-defined structured payload (e.g. a card game's JSON-encoded
+ * deck ≈ 2 KB) — mirroring how `WIRE_MAX_CHAT_BODY_LENGTH` is only the coarse
+ * DoS bound while the host applies the precise policy cap: the per-game limit
+ * (`GameLobbySetup.maxAttributeValueLength`, default 256) is enforced by
+ * `LobbyManager` via `resolveAttributeValueCap`.
+ */
+export const WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH = 16_384;
 
 /**
  * Coarse bound on the number of saved-seat claims an inbound `JOIN` may carry.
@@ -285,9 +296,11 @@ const PlayerAttributeUpdateMessage = z
     .object({
         type: z.literal('PLAYER_ATTRIBUTE_UPDATE'),
         // Owner-authored but network-derived: cap key/value so a hostile client
-        // cannot push unbounded strings into the broadcast lobby state.
+        // cannot push unbounded strings into the broadcast lobby state. The
+        // value cap is only the coarse wire bound — the host enforces the
+        // precise per-game cap (resolveAttributeValueCap) before merging.
         key: z.string().min(1).max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
-        value: z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
+        value: z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH),
     })
     .strict();
 

@@ -1,0 +1,6 @@
+{
+    "localProfileId": "carol",
+    "displayName": "Carol",
+    "avatar": { "kind": "builtin", "ref": "avatar/default" },
+    "locale": "en-US"
+}

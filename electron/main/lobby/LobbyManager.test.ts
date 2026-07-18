@@ -2868,3 +2868,112 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         await hostManager.closeLobby();
     });
 });
+
+describe('LobbyManager — per-game attribute value cap (resolveAttributeValueCap)', () => {
+    /** SAMPLE_SETUP with a card-game-sized value cap declared. */
+    const DECK_SETUP: GameLobbySetup = { ...SAMPLE_SETUP, maxAttributeValueLength: 8192 };
+    const resolveDeckSetup = (gameId: string): GameLobbySetup | undefined =>
+        gameId === 'tactics' ? DECK_SETUP : undefined;
+
+    it('hosted setPlayerAttribute rejects a value over the default cap and leaves state unchanged', async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        const info = await manager.hostLobby(HOST_PARAMS);
+
+        await expect(
+            manager.setPlayerAttribute(info.hostId, 'deck', 'x'.repeat(257)),
+        ).rejects.toThrow(/cap/i);
+
+        const host = manager.getCurrentState()?.players.find((p) => p.playerId === info.hostId);
+        expect(host?.attributes?.['deck']).toBeUndefined();
+
+        await manager.closeLobby();
+    });
+
+    it('hosted setPlayerAttribute accepts a JSON-deck-sized value when the game raises the cap', async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveDeckSetup,
+        });
+        const info = await manager.hostLobby(HOST_PARAMS);
+
+        const deck = JSON.stringify(Array.from({ length: 300 }, (_, i) => `card-${i}`));
+        expect(deck.length).toBeGreaterThan(256);
+        await expect(
+            manager.setPlayerAttribute(info.hostId, 'deck', deck),
+        ).resolves.toBeUndefined();
+
+        const host = manager.getCurrentState()?.players.find((p) => p.playerId === info.hostId);
+        expect(host?.attributes?.['deck']).toBe(deck);
+
+        await manager.closeLobby();
+    });
+
+    it('joined setPlayerAttribute fails fast locally on an over-cap value instead of a silent host drop', async () => {
+        const provider = makeProvider();
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+        const joinId = joinManager.getLocalPlayerId();
+        expect(joinId).toBeTruthy();
+
+        await expect(
+            joinManager.setPlayerAttribute(joinId!, 'deck', 'x'.repeat(257)),
+        ).rejects.toThrow(/cap/i);
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
+    it('drops an over-cap wire PLAYER_ATTRIBUTE_UPDATE on the host (hostile client) and keeps state', async () => {
+        const provider = makeProvider();
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        // Join at the PROVIDER level so the raw client transport can send an
+        // over-cap value without LobbyManager's local fail-fast in the way.
+        const session = await provider.joinLobby({ address: hostInfo.sessionId });
+        const joinedId = session.localPlayerId;
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        session.transport.sendPlayerAttributeUpdate('deck', 'x'.repeat(257));
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        const joined = hostManager.getCurrentState()?.players.find((p) => p.playerId === joinedId);
+        expect(joined).toBeDefined();
+        expect(joined?.attributes?.['deck']).toBeUndefined();
+
+        await session.disconnect();
+        await hostManager.closeLobby();
+    });
+
+    it('merges a deck-sized wire PLAYER_ATTRIBUTE_UPDATE when the game raises the cap', async () => {
+        const provider = makeProvider();
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            resolveLobbySetup: resolveDeckSetup,
+        });
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const session = await provider.joinLobby({ address: hostInfo.sessionId });
+        const joinedId = session.localPlayerId;
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const deck = JSON.stringify(Array.from({ length: 300 }, (_, i) => `card-${i}`));
+        session.transport.sendPlayerAttributeUpdate('deck', deck);
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        const joined = hostManager.getCurrentState()?.players.find((p) => p.playerId === joinedId);
+        expect(joined?.attributes?.['deck']).toBe(deck);
+
+        await session.disconnect();
+        await hostManager.closeLobby();
+    });
+});

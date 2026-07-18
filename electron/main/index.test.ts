@@ -546,6 +546,7 @@ const {
     registerAppLifecycle,
     resolveChimeraEnv,
     parseHarnessFlags,
+    hasIgnoredHarnessFlags,
     registerClientRevealForwarding,
     resolveRuntimePaths,
     resolveRendererProtocolFilePath,
@@ -1742,6 +1743,24 @@ describe('resolveRendererLaunchUrl', () => {
     it('ignores the declaration outside packaged builds — dev and E2E boots land on the main menu', () => {
         expect(
             resolveRendererLaunchUrl({ gameId: 'demo', manifest: declaredManifest }, false),
+        ).toBe(buildRendererGameLaunchUrl('demo'));
+    });
+
+    it('boots into the lobby route when the dev harness auto-flow is active', () => {
+        expect(
+            resolveRendererLaunchUrl({ gameId: 'demo', manifest: undeclaredManifest }, false, true),
+        ).toBe(buildRendererGameLaunchUrl('demo', '/lobby'));
+    });
+
+    it('harness auto-flow wins over a declared logo screen — the session, not the splash, is the point', () => {
+        expect(
+            resolveRendererLaunchUrl({ gameId: 'demo', manifest: declaredManifest }, true, true),
+        ).toBe(buildRendererGameLaunchUrl('demo', '/lobby'));
+    });
+
+    it('an omitted harness argument keeps the existing two-argument behaviour', () => {
+        expect(
+            resolveRendererLaunchUrl({ gameId: 'demo', manifest: undeclaredManifest }, false),
         ).toBe(buildRendererGameLaunchUrl('demo'));
     });
 });
@@ -3775,18 +3794,19 @@ describe('parseHarnessFlags', () => {
         expect(result?.autoHost).toBe(true);
     });
 
-    it('parses --dev-port=7777 when CHIMERA_DEV_HARNESS=1', () => {
-        const result = parseHarnessFlags(['node', 'electron/main/index.js', '--dev-port=7777'], {
-            CHIMERA_DEV_HARNESS: '1',
-        });
-        expect(result?.port).toBe(7777);
+    it('parses --dev-auto-join=<lobbyCode> as the full join code (regression: the equals form used to never match)', () => {
+        const result = parseHarnessFlags(
+            ['node', 'electron/main/index.js', '--dev-auto-join=127.0.0.1:52110:tok3n'],
+            { CHIMERA_DEV_HARNESS: '1' },
+        );
+        expect(result?.autoJoin).toBe('127.0.0.1:52110:tok3n');
     });
 
-    it('parses --dev-auto-join flag when CHIMERA_DEV_HARNESS=1', () => {
+    it('leaves autoJoin undefined for a bare --dev-auto-join with no value', () => {
         const result = parseHarnessFlags(['node', 'electron/main/index.js', '--dev-auto-join'], {
             CHIMERA_DEV_HARNESS: '1',
         });
-        expect(result?.autoJoin).toBe(true);
+        expect(result?.autoJoin).toBeUndefined();
     });
 
     it('parses --dev-game=tactics when CHIMERA_DEV_HARNESS=1', () => {
@@ -3794,6 +3814,73 @@ describe('parseHarnessFlags', () => {
             CHIMERA_DEV_HARNESS: '1',
         });
         expect(result?.game).toBe('tactics');
+    });
+
+    it('parses the fixture-file flags (--dev-profile-file / --dev-scenario-file / --dev-announce-file)', () => {
+        const result = parseHarnessFlags(
+            [
+                'node',
+                'electron/main/index.js',
+                '--dev-profile-file=/tmp/dev/profiles/alice.json',
+                '--dev-scenario-file=/tmp/dev/scenarios/skirmish.json',
+                '--dev-announce-file=/tmp/.dev-userdata/p1/dev-harness-announce.json',
+            ],
+            { CHIMERA_DEV_HARNESS: '1' },
+        );
+        expect(result?.profileFile).toBe('/tmp/dev/profiles/alice.json');
+        expect(result?.scenarioFile).toBe('/tmp/dev/scenarios/skirmish.json');
+        expect(result?.announceFile).toBe('/tmp/.dev-userdata/p1/dev-harness-announce.json');
+    });
+
+    it('parses --dev-players=<n> (expected human seats for a scenario-less auto-host)', () => {
+        const parsed = parseHarnessFlags(['node', 'index.js', '--dev-players=3'], {
+            CHIMERA_DEV_HARNESS: '1',
+        });
+        expect(parsed?.players).toBe(3);
+
+        const absent = parseHarnessFlags(['node', 'index.js', '--dev-auto-host'], {
+            CHIMERA_DEV_HARNESS: '1',
+        });
+        expect(absent?.players).toBeUndefined();
+    });
+
+    it('parses --dev-seat=<n> as a 1-based integer and drops a malformed value', () => {
+        const parsed = parseHarnessFlags(['node', 'index.js', '--dev-seat=3'], {
+            CHIMERA_DEV_HARNESS: '1',
+        });
+        expect(parsed?.seat).toBe(3);
+
+        const malformed = parseHarnessFlags(['node', 'index.js', '--dev-seat=abc'], {
+            CHIMERA_DEV_HARNESS: '1',
+        });
+        expect(malformed?.seat).toBeUndefined();
+
+        const nonPositive = parseHarnessFlags(['node', 'index.js', '--dev-seat=0'], {
+            CHIMERA_DEV_HARNESS: '1',
+        });
+        expect(nonPositive?.seat).toBeUndefined();
+    });
+});
+
+// ─── hasIgnoredHarnessFlags ───────────────────────────────────────────────────
+
+describe('hasIgnoredHarnessFlags', () => {
+    it('is true when --dev-* flags are present without CHIMERA_DEV_HARNESS (the warn-and-ignore case)', () => {
+        expect(hasIgnoredHarnessFlags(['node', 'index.js', '--dev-auto-host'], {})).toBe(true);
+        expect(
+            hasIgnoredHarnessFlags(['node', 'index.js', '--dev-seat=2'], {
+                CHIMERA_DEV_HARNESS: '0',
+            }),
+        ).toBe(true);
+    });
+
+    it('is false when the env var is set, or when no harness flags are present', () => {
+        expect(
+            hasIgnoredHarnessFlags(['node', 'index.js', '--dev-auto-host'], {
+                CHIMERA_DEV_HARNESS: '1',
+            }),
+        ).toBe(false);
+        expect(hasIgnoredHarnessFlags(['node', 'index.js', '--inspect'], {})).toBe(false);
     });
 });
 

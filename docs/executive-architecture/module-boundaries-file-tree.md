@@ -67,11 +67,15 @@ chimera/
 │   │   ├── settings/                # Application settings persistence
 │   │   │   ├── SettingsManager.ts   # IPC handler; uses FileSettingsRepository for get/update/reset
 │   │   │   └── FileSettingsRepository.ts  # Persists settings to userData/settings.json
-│   │   └── profile/                 # Player profile and directory management
-│   │       ├── ProfileManager.ts    # Profile repository + player directory owner; see §4.24
-│   │       ├── FileProfileRepository.ts  # Persists profiles to userData/profiles/
-│   │       ├── PlayerDirectory.ts   # Shared lobby player directory + presence tracking
-│   │       └── ProfileGate.ts       # Profile validation and acceptance gate
+│   │   ├── profile/                 # Player profile and directory management
+│   │   │   ├── ProfileManager.ts    # Profile repository + player directory owner; see §4.24
+│   │   │   ├── FileProfileRepository.ts  # Persists profiles to userData/profiles/
+│   │   │   ├── PlayerDirectory.ts   # Shared lobby player directory + presence tracking
+│   │   │   └── ProfileGate.ts       # Profile validation and acceptance gate
+│   │   └── dev/                     # Dev-harness graph; reached only via the CHIMERA_DEV_HARNESS-gated dynamic import (§4.32)
+│   │       ├── DevHarnessCoordinator.ts  # Auto host/join/seed/ready/start flow over the LobbyManager port
+│   │       └── dev-fixture-loader.ts     # Seed-profile + scenario loading, atomic announce write
+│   ├── dev-harness/                 # `chimera-dev-mp` bin + harness library (spawn planning, announce handshake); see §4.32
 │   ├── preload/
 │   │   ├── api.ts                   # Composes the following namespaces below into window.__chimera
 │   │   ├── api-types.ts             # Type-only module: ChimeraAPI, ChimeraExtensions, all namespace interfaces
@@ -289,13 +293,12 @@ chimera/
 │   ├── snapshot.ts                  # GameSnapshot (full truth) + PlayerSnapshot (projected view)
 │   ├── logging.ts                   # LogLevel, LogEntry; see §4.27
 │   ├── game-manifest-contract.ts    # GameManifest (display name, window title, realtime/tickRateMs, icon, cursor, logoScreen, languages, spectators) + resolvers (§4.2.1)
+│   ├── dev-fixture-contract.ts      # Dev-harness fixture schemas (DevScenario, DevAnnounce) + pure helpers; see §4.32
 │   └── constants.ts
 │
 ├── tools/
 │   ├── dev-server.ts                # Hot-reload dev harness
-│   ├── dev-multiplayer.ts           # Spawns N Electron instances; see §4.32
 │   ├── fetch-google-fonts.ts        # Dev-time Google Fonts downloader; writes committed self-hosted .woff2 files
-│   ├── dev-profiles/                # Seed profiles (dev-p1.json, dev-p2.json, …)
 │   ├── desync-logger.ts             # Snapshot diff log for debugging
 │   ├── validate-assets.ts           # CI: verify AssetRef strings and GameFontFace files resolve to disk
 │   └── migrate-save.ts              # CLI: run SaveMigrator against a save file

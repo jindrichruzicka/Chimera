@@ -55,7 +55,7 @@
         "coverage": "pnpm build:packages && vitest run --coverage",
         "build:renderer": "pnpm build:packages && next build renderer",
         "fetch:fonts": "pnpm build:packages && tsx tools/fetch-google-fonts.ts",
-        "dev:mp": "pnpm build:packages && cross-env CHIMERA_DEV_HARNESS=1 tsx tools/dev-multiplayer.ts",
+        "dev:mp": "pnpm build:packages && pnpm exec next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app && pnpm --filter @chimera-engine/tactics dev:mp",
         "create:game": "tsx tools/create-chimera-game/index.ts --workspace"
     },
     "devDependencies": {

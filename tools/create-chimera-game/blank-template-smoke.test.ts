@@ -100,6 +100,32 @@ describe('blank template smoke harness', () => {
         expect(pkg.scripts['test:e2e']).toContain('playwright test');
     });
 
+    it('wires the dev:mp multiplayer-harness script through the chimera-dev-mp bin (§4.32)', async () => {
+        const pkg = JSON.parse(await read('package.json')) as { scripts: Record<string, string> };
+        expect(pkg.scripts['dev:mp']).toBe('cross-env CHIMERA_DEV_HARNESS=1 chimera-dev-mp');
+    });
+
+    it('ships tokenised dev-harness fixtures: two profiles and a default scenario (§4.32)', async () => {
+        const p1 = JSON.parse(await read('dev/profiles/p1.json')) as {
+            localProfileId: string;
+            displayName: string;
+            locale: string;
+        };
+        const p2 = JSON.parse(await read('dev/profiles/p2.json')) as { localProfileId: string };
+        expect(p1.localProfileId).not.toBe(p2.localProfileId);
+        expect(p1.displayName).toContain('__Game Title__');
+        expect(p1.locale).toBeDefined();
+
+        const scenario = JSON.parse(await read('dev/scenarios/default.json')) as {
+            gameId: string;
+            seats: readonly { profile?: string }[];
+        };
+        expect(scenario.gameId).toBe('__game_kebab__');
+        expect(scenario.seats).toHaveLength(2);
+        expect(scenario.seats[0]?.profile).toBe('p1.json');
+        expect(scenario.seats[1]?.profile).toBe('p2.json');
+    });
+
     it('ships the electron-builder packaging script + deps in the template package.json (#814)', async () => {
         const pkg = JSON.parse(await read('package.json')) as {
             scripts: Record<string, string>;

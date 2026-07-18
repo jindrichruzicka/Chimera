@@ -105,6 +105,9 @@ const PROBE_SUBPATHS = [
     '@chimera-engine/renderer/styles/tokens.css',
     '@chimera-engine/renderer/styles/animations.css',
     '@chimera-engine/electron/main',
+    // The dev multiplayer harness library behind the `chimera-dev-mp` bin (§4.32) —
+    // a dropped export would strand every scaffolded app's `dev:mp` script.
+    '@chimera-engine/electron/dev-harness',
     '@chimera-engine/electron/preload/api',
     '@chimera-engine/electron/preload/api-types',
 ] as const;

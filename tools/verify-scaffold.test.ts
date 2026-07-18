@@ -141,6 +141,24 @@ function makeFakeRun(
         if (args.includes('exec') && args.includes('electron-builder')) {
             files.set(path.join(appDir, 'release'), 'bundle');
         }
+        // The dev-harness dry run prints the spawn-plan JSON after pnpm's script banner —
+        // the gate must extract + validate the JSON despite the banner noise.
+        if (args.includes('dev:mp')) {
+            const report = {
+                appDir,
+                entry: path.join(appDir, 'dist', 'electron', 'main.js'),
+                players: 2,
+                instances: [
+                    { label: 'p1', args: ['--dev-auto-host'], userDataDir: 'p1' },
+                    { label: 'p2', args: ['--dev-auto-join=<announce>'], userDataDir: 'p2' },
+                ],
+            };
+            return {
+                status: 0,
+                stdout: `> ${PROBE_GAME.pkg}@0.1.0 dev:mp\n${JSON.stringify(report, null, 2)}\n`,
+                stderr: '',
+            };
+        }
         return { status: 0, stdout: '', stderr: '' };
     };
     return { run, calls };
@@ -316,13 +334,21 @@ describe('verifyScaffold', () => {
         // The bundle lands under <app>/release.
         expect(files.has(path.join(tmpRoot, 'apps', PROBE_GAME.kebab, 'release'))).toBe(true);
 
-        // Ordering: install < unit < e2e < prod-build (build) < build:app < next build < package.
+        // The dev-harness dry run (§4.32) exercises the packaged chimera-dev-mp bin against
+        // the built app — after build:app (the entry exists), before the package arm.
+        const devMp = calls.find((c) => c.args.includes('dev:mp'));
+        expect(devMp?.args).toEqual(['--filter', PROBE_GAME.pkg, 'dev:mp', '2', '--dry-run']);
+        expect(devMp?.cwd).toBe(tmpRoot);
+
+        // Ordering: install < unit < e2e < prod-build (build) < build:app < dev:mp dry-run
+        // < next build < package.
         const idx = (pred: (c: RecordedCall) => boolean): number => calls.findIndex(pred);
         expect(idx((c) => c.args[0] === 'install')).toBeLessThan(idx((c) => c === unit));
         expect(idx((c) => c === unit)).toBeLessThan(idx((c) => c === e2e));
         expect(idx((c) => c === e2e)).toBeLessThan(idx((c) => c === prodBuild));
         expect(idx((c) => c === prodBuild)).toBeLessThan(idx((c) => c === buildApp));
-        expect(idx((c) => c === buildApp)).toBeLessThan(idx((c) => c === nextBuild));
+        expect(idx((c) => c === buildApp)).toBeLessThan(idx((c) => c === devMp));
+        expect(idx((c) => c === devMp)).toBeLessThan(idx((c) => c === nextBuild));
         expect(idx((c) => c === nextBuild)).toBeLessThan(idx((c) => c === pkg));
 
         // The gate layered tarball overrides onto the CLI-emitted root (it no longer synthesizes
@@ -371,6 +397,34 @@ describe('verifyScaffold', () => {
         expect(result.ok).toBe(false);
         expect(result.failedStep).toBe('prod-build');
         expect(removed).toContain(tmpRoot);
+    });
+
+    it('reports dev-harness when the chimera-dev-mp dry run fails', async () => {
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) =>
+            args.includes('dev:mp')
+                ? { status: 1, stdout: '', stderr: 'bin not found' }
+                : undefined,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('dev-harness');
+    });
+
+    it('reports dev-harness when the dry run exits 0 but prints no parseable spawn plan', async () => {
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) =>
+            args.includes('dev:mp')
+                ? { status: 0, stdout: 'not a spawn plan\n', stderr: '' }
+                : undefined,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('dev-harness');
     });
 
     it('reports package when the electron-builder --dir step fails', async () => {

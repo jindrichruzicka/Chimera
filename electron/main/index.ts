@@ -37,6 +37,8 @@ import {
     createLogger,
     createPinoSink,
     createMemorySink,
+    createStdoutSink,
+    startPeriodicFlush,
     type Logger,
     type LoggerSink,
     type FlushableSink,
@@ -183,6 +185,9 @@ import {
     type E2eHooks,
 } from './runtime/e2e-hooks.js';
 import { assertProductionDebugGuard, assertProductionDevHarnessGuard } from './startup-guard.js';
+// Type-only: erased at build, so the dev graph stays out of the production
+// module graph — the value arrives via the harness-gated dynamic import below.
+import type { DevHarnessCoordinator } from './dev/DevHarnessCoordinator.js';
 import { buildAssetRef, type TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import {
     localProfileId,
@@ -306,21 +311,42 @@ export function resolveFirstPlayerFromLobbyState(
 
 /**
  * Parsed harness flags from `process.argv`. Only populated when
- * `CHIMERA_DEV_HARNESS=1` is present in the environment.
+ * `CHIMERA_DEV_HARNESS=1` is present in the environment (Invariant #77).
  */
 export interface HarnessFlags {
+    /** `--dev-auto-host` — host + seed a lobby before the window renders. */
     readonly autoHost: boolean;
-    readonly autoJoin: boolean;
-    readonly port: number | undefined;
+    /**
+     * `--dev-auto-join=<lobbyCode>` — join the given `host:port:token` code
+     * before the window renders. The full code (not just host:port): the
+     * hosting provider mints an OS-assigned port and a session token, so the
+     * orchestrator relays the code it learnt from the host's announce file.
+     */
+    readonly autoJoin: string | undefined;
+    /** `--dev-profile-id=<id>` — active-profile id; fallback when no profile file. */
     readonly profileId: string | undefined;
+    /** `--dev-profile-file=<path>` — seed this profile JSON into the repository. */
+    readonly profileFile: string | undefined;
+    /** `--dev-scenario-file=<path>` — dev scenario driving the auto-flow. */
+    readonly scenarioFile: string | undefined;
+    /** `--dev-seat=<n>` — this instance's 1-based seat in the scenario (1 = host). */
+    readonly seat: number | undefined;
+    /**
+     * `--dev-players=<n>` — expected human seat count for a scenario-less
+     * auto-host (a scenario's `seats.length` wins when both are present); the
+     * auto-start latch waits for exactly this many seated + ready players.
+     */
+    readonly players: number | undefined;
+    /** `--dev-announce-file=<path>` — where the auto-host writes its lobby code. */
+    readonly announceFile: string | undefined;
+    /** `--dev-game=<id>` — cross-checked against the hosted game's id. */
     readonly game: string | undefined;
-    readonly scenario: string | undefined;
 }
 
 /**
- * Parse the six harness flags from `argv` when `env.CHIMERA_DEV_HARNESS === '1'`.
- * Returns `null` (and silently ignores any flag-shaped args) when the env var
- * is absent or not `'1'`.
+ * Parse the harness flags from `argv` when `env.CHIMERA_DEV_HARNESS === '1'`.
+ * Returns `null` (ignoring any flag-shaped args) when the env var is absent or
+ * not `'1'` — see {@link hasIgnoredHarnessFlags} for the warn-on-ignore signal.
  *
  * Pure function — no I/O, no side effects; testable in isolation.
  */
@@ -335,21 +361,39 @@ export function parseHarnessFlags(
         const entry = argv.find((a) => a.startsWith(prefix));
         return entry !== undefined ? entry.slice(prefix.length) : undefined;
     };
-    const numVal = (prefix: string): number | undefined => {
+    const intVal = (prefix: string): number | undefined => {
         const s = val(prefix);
-        if (s === undefined) return undefined;
-        const n = Number(s);
-        return Number.isFinite(n) ? n : undefined;
+        if (s === undefined || !/^[0-9]+$/.test(s)) return undefined;
+        const n = Number.parseInt(s, 10);
+        return n >= 1 ? n : undefined;
     };
 
     return {
         autoHost: has('--dev-auto-host'),
-        autoJoin: has('--dev-auto-join'),
-        port: numVal('--dev-port='),
+        autoJoin: val('--dev-auto-join='),
         profileId: val('--dev-profile-id='),
+        profileFile: val('--dev-profile-file='),
+        scenarioFile: val('--dev-scenario-file='),
+        seat: intVal('--dev-seat='),
+        players: intVal('--dev-players='),
+        announceFile: val('--dev-announce-file='),
         game: val('--dev-game='),
-        scenario: val('--dev-scenario='),
     };
+}
+
+/**
+ * True when `argv` carries `--dev-*` harness flags that {@link parseHarnessFlags}
+ * will ignore because `CHIMERA_DEV_HARNESS` is not `'1'` — the documented
+ * warn-and-ignore case (Invariant #77): the caller logs one warning so a dev
+ * who forgot the env var is not left staring at silently inert flags.
+ * Pure function.
+ */
+export function hasIgnoredHarnessFlags(
+    argv: readonly string[],
+    env: Readonly<Record<string, string | undefined>>,
+): boolean {
+    if (env['CHIMERA_DEV_HARNESS'] === '1') return false;
+    return argv.some((arg) => arg.startsWith('--dev-'));
 }
 
 /**
@@ -1120,15 +1164,25 @@ function createProductionLoggerSink(logsDir: string): FlushableSink {
  * Select the renderer URL the main window boots into. A packaged build
  * whose hosted game declares a `logoScreen` launches into that route; every
  * other boot (no declaration, dev, E2E) launches into the main menu exactly
- * as before. `isPackaged` is injected (`app.isPackaged` at the call site) so
- * the selection is a pure, unit-testable function — same pattern as
- * {@link resolveRuntimePaths}. The route stays opaque here (Invariant #20);
- * `createMainWindow`'s protocol/host guard remains the sole URL authority.
+ * as before. When the dev-harness auto-flow is active (`harnessAutoLobby`),
+ * the window boots straight into the lobby route instead — the coordinator
+ * has already hosted/joined main-side, and `GameStoreBootstrap` carries the
+ * window from `/lobby` to `/game` when the auto-started snapshot lands; this
+ * takes precedence over a logo screen (the session, not the splash, is the
+ * point of a harness boot). `isPackaged` is injected (`app.isPackaged` at the
+ * call site) so the selection is a pure, unit-testable function — same
+ * pattern as {@link resolveRuntimePaths}. The routes stay opaque here
+ * (Invariant #20); `createMainWindow`'s protocol/host guard remains the sole
+ * URL authority.
  */
 export function resolveRendererLaunchUrl(
     hostedGame: { readonly gameId: string; readonly manifest: GameManifest },
     isPackaged: boolean,
+    harnessAutoLobby = false,
 ): ChimeraRendererUrl {
+    if (harnessAutoLobby) {
+        return buildRendererGameLaunchUrl(hostedGame.gameId, '/lobby');
+    }
     const logoScreen = isPackaged ? resolveGameLogoScreen(hostedGame.manifest) : undefined;
     return buildRendererGameLaunchUrl(hostedGame.gameId, logoScreen?.route);
 }
@@ -1165,7 +1219,15 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         contentSchemasByGameId,
         lobbySetupByGameId,
     } = createMainGameRegistry(contributions);
-    const rendererLaunchUrl = resolveRendererLaunchUrl(hostedGame, app.isPackaged);
+
+    // Harness flags parse before the launch URL is chosen: an auto-flow
+    // instance (auto-host or auto-join) boots straight into `/lobby`, where
+    // the renderer hydrates the already-seeded lobby and `GameStoreBootstrap`
+    // carries it to `/game` on auto-start. Invariant #77 gates the flags.
+    const harnessFlags = parseHarnessFlags(process.argv, process.env);
+    const harnessAutoFlow =
+        harnessFlags !== null && (harnessFlags.autoHost || harnessFlags.autoJoin !== undefined);
+    const rendererLaunchUrl = resolveRendererLaunchUrl(hostedGame, app.isPackaged, harnessAutoFlow);
 
     const { preloadPath, rendererEntry, gameAssetsRoot } = resolveRuntimePaths({
         moduleDirname: __dirname,
@@ -1174,7 +1236,6 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     });
     const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
     const userData = app.getPath('userData');
-    const harnessFlags = parseHarnessFlags(process.argv, process.env);
 
     // Shared in-memory ring buffer: used by the logs IPC `readRecent` handler
     // so the renderer can fetch recent entries for export/debug.
@@ -1183,10 +1244,21 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // Fan-out sink: entries go to both the Pino file sink and the in-memory
     // ring buffer so `chimera:logs:readRecent` has data to return.
     const pinoSink = createProductionLoggerSink(path.join(userData, 'logs'));
+    // Dev harness (§4.32): stream every entry to stdout too — the orchestrator
+    // pipes child stdout with a `[p<i>]` prefix, so `dev:mp` shows each
+    // instance's main-process logs live — and flush the file sink periodically
+    // so its crash-safe SonicBoom buffer (minLength: 4096) cannot hold sparse
+    // post-startup entries off disk for minutes. Both harness-gated: production
+    // and plain dev boots keep exactly today's sink behaviour.
+    const harnessStdoutSink = harnessFlags !== null ? createStdoutSink() : null;
+    if (harnessFlags !== null) {
+        startPeriodicFlush(pinoSink, 1_000);
+    }
     const combinedSink: LoggerSink = {
         write(entry) {
             pinoSink.write(entry);
             memorySink.write(entry);
+            harnessStdoutSink?.write(entry);
         },
     };
     const crashLogSink = new LogRingBufferSink(combinedSink);
@@ -1198,6 +1270,14 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         source: { process: 'main', module: 'root' },
         sink: crashLogSink,
     });
+
+    // Invariant #77's documented warn-and-ignore: `--dev-*` flags without
+    // CHIMERA_DEV_HARNESS=1 are inert — say so once instead of silently.
+    if (hasIgnoredHarnessFlags(process.argv, process.env)) {
+        logger.warn(
+            '--dev-* harness flags present but CHIMERA_DEV_HARNESS is not "1" — ignoring them (Invariant #77)',
+        );
+    }
 
     // ── Content database load (§4.8, Invariant #14) ───────────────────────────
     // Load every registered game's content directory into an immutable
@@ -1412,7 +1492,27 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     const chatRelay = new ChatRelay(lobbyLogger, playerDirectory);
     const profileRepository = new FileProfileRepository(path.join(userData, 'profiles'));
     const profileManager = new ProfileManager(profileRepository);
-    await ensureActiveProfile(profileManager, profileRepository, harnessFlags?.profileId);
+    // Dev-harness seed-copy (§4.32): a `--dev-profile-file` fixture becomes the
+    // instance's persisted + active profile before normal resolution. Dynamic
+    // import keeps the dev graph out of the production module graph (the
+    // Invariant #27 pattern); `parseHarnessFlags` already gates on Invariant #77.
+    let seededProfileId: string | undefined;
+    if (harnessFlags?.profileFile !== undefined) {
+        const { seedDevProfile } = await import('./dev/dev-fixture-loader.js');
+        seededProfileId = await seedDevProfile(profileRepository, harnessFlags.profileFile);
+        logger.info('dev harness: seeded fixture profile', { profileId: seededProfileId });
+    } else if (harnessAutoFlow && harnessFlags?.profileId !== undefined) {
+        // No fixture file → generate a distinct "Dev Player N" identity for the
+        // harness's dev-p<N> fallback ids, so a bare `dev:mp 3` still yields
+        // distinguishable players.
+        const { seedGeneratedDevProfile } = await import('./dev/dev-fixture-loader.js');
+        seededProfileId = await seedGeneratedDevProfile(profileRepository, harnessFlags.profileId);
+    }
+    await ensureActiveProfile(
+        profileManager,
+        profileRepository,
+        seededProfileId ?? harnessFlags?.profileId,
+    );
 
     // Session wiring callbacks consumed by the saves IPC adapter to capture
     // SaveFiles and apply restored files.
@@ -1545,6 +1645,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             chatHub.deliverLocal(message);
         };
     }
+
+    // Dev-harness auto-flow coordinator (§4.32). Late-bound (the
+    // `saveInitialTurnMemento` pattern): declared before the LobbyManager
+    // options so the `onLobbyStateChanged` closure can tap it, constructed
+    // right after the manager exists. Null in every non-harness boot.
+    let devHarnessCoordinator: DevHarnessCoordinator | null = null;
 
     const lobbyManager = new LobbyManager(new LocalWebSocketProvider(), lobbyLogger, {
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
@@ -2885,6 +2991,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
             });
 
+            // Dev-harness auto-start latch (§4.32): the coordinator fires
+            // startGame() once the scenario roster is complete and ready.
+            devHarnessCoordinator?.onLobbyStateChanged(state);
+
             // Direct-game E2E auto-start: when the host process has bootstrapped
             // both players (host + client) and all players are ready, start the
             // match automatically without any lobby UI interaction.
@@ -3115,6 +3225,29 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         profileManager,
         logger: logger.child({ module: 'lobby' }),
     });
+
+    // Construct the dev-harness auto-flow coordinator (§4.32) once the real
+    // LobbyManager exists — it satisfies the coordinator's structural lobby
+    // port, so the auto-flow drives the same authoritative operations the
+    // lobby IPC handlers do. Dynamic imports keep the dev graph out of the
+    // production module graph (the Invariant #27 pattern); `harnessAutoFlow`
+    // is derived from flags already gated by Invariant #77.
+    if (harnessAutoFlow && harnessFlags !== null) {
+        const [{ DevHarnessCoordinator: CoordinatorCtor }, fixtureLoader] = await Promise.all([
+            import('./dev/DevHarnessCoordinator.js'),
+            import('./dev/dev-fixture-loader.js'),
+        ]);
+        devHarnessCoordinator = new CoordinatorCtor({
+            flags: harnessFlags,
+            hostedGameId: hostedGame.gameId,
+            fallbackMaxPlayers: resolveLobbySetup(hostedGame.gameId)?.maxPlayers ?? 2,
+            lobby: lobbyManager,
+            attestation: () => profileManager.currentAttestation(),
+            loadScenario: fixtureLoader.loadDevScenario,
+            writeAnnounce: fixtureLoader.writeDevAnnounceFile,
+            logger: logger.child({ module: 'dev-harness' }),
+        });
+    }
 
     // Register the generic `chimera:content:*` channel, backed by the content
     // databases loaded at startup. Game-agnostic: ships plain collections only.
@@ -3596,6 +3729,25 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 : undefined;
         if (directGameRole === 'host' || directGameRole === 'client') {
             void bootstrapDirectGameBeforeWindow().finally(createWindow);
+            return;
+        }
+
+        // Dev-harness auto-flow (§4.32): host/join + seed BEFORE the window so
+        // the `/lobby` boot route hydrates a fully-seeded lobby. Unlike the
+        // E2E flow's log-and-continue, a failure here exits the instance —
+        // the orchestrator's one-out-all-out teardown stops the siblings.
+        const coordinator = devHarnessCoordinator;
+        if (coordinator !== null) {
+            void coordinator
+                .bootstrap()
+                .then(() => createWindow())
+                .catch((err: unknown) => {
+                    logger.error(
+                        'dev harness bootstrap failed — exiting this instance',
+                        err instanceof Error ? err : new Error(String(err)),
+                    );
+                    app.exit(1);
+                });
             return;
         }
 

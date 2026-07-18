@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    buildStandaloneGitignore,
     buildStandaloneLauncherScript,
     buildStandaloneRootManifest,
     buildStandaloneRootTsconfig,
@@ -73,6 +74,12 @@ describe('buildStandaloneRootManifest', () => {
         // `pnpm start:debug` runs the same launcher with --debug: developer mode + the F9
         // Debug Inspector (CHIMERA_ENV/NODE_ENV=development + CHIMERA_DEBUG=1, set in the launcher).
         expect(manifest.scripts['start:debug']).toBe('node scripts/launch.mjs --debug');
+        // `pnpm dev:mp` mirrors `package`'s build chain (renderer + app bundle) and then
+        // delegates to the app's dev:mp (the chimera-dev-mp bin, §4.32) — trailing args
+        // (`pnpm dev:mp 3 --scenario x`) land on the delegated script.
+        expect(manifest.scripts['dev:mp']).toContain('next build apps/my-game/renderer');
+        expect(manifest.scripts['dev:mp']).toContain('@chimera-engine/my-game build:app');
+        expect(manifest.scripts['dev:mp']?.endsWith('@chimera-engine/my-game dev:mp')).toBe(true);
     });
 
     it('carries the supplied pnpm.overrides for the gate tarball-resolved form', () => {
@@ -85,6 +92,23 @@ describe('buildStandaloneRootManifest', () => {
         expect(manifest.pnpm.overrides).toEqual(overrides);
         // overrides is a copy, not the caller's object.
         expect(manifest.pnpm.overrides).not.toBe(overrides);
+    });
+});
+
+describe('buildStandaloneGitignore', () => {
+    it('ignores install/build/runtime artefacts including the dev-harness userData dirs', () => {
+        const gitignore = buildStandaloneGitignore();
+        for (const entry of [
+            'node_modules/',
+            'dist/',
+            'out/',
+            '.next/',
+            '.e2e-build/',
+            '.dev-userdata/',
+        ]) {
+            expect(gitignore).toContain(entry);
+        }
+        expect(gitignore.endsWith('\n')).toBe(true);
     });
 });
 

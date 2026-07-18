@@ -1,0 +1,9 @@
+{
+    "gameId": "tactics",
+    "seats": [
+        { "profile": "alice.json", "attributes": { "color": "red" } },
+        { "profile": "bob.json", "attributes": { "color": "amber" } }
+    ],
+    "matchSettings": { "boardColor": "navy", "turnMode": "commitment" },
+    "autoStart": true
+}

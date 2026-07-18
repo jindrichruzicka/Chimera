@@ -62,6 +62,17 @@ rebuilds via a `tasks.json` build task and binds source-mapped breakpoints in ma
 emits browser source maps under `CHIMERA_DEBUG=1`. Renderer/UI code is debugged in the DevTools
 window. A plain `pnpm package` sets none of these, so the distributable stays production-default.
 
+**Multiplayer dev loop.** `pnpm dev:mp <N>` (standalone root) launches an instant N-player
+session: it builds the renderer + app bundle, then runs the `chimera-dev-mp` harness (the
+`@chimera-engine/electron` bin, §4.32) — one auto-hosting Electron instance plus N−1 auto-joining
+clients, each with an isolated `.dev-userdata/p<i>` profile, auto-readying and auto-starting the
+match. The scaffold ships starter fixtures under `apps/<kebab>/dev/`: `profiles/*.json` (cosmetic
+identities) and `scenarios/default.json` — run it with `pnpm dev:mp --scenario default`. Author
+your own scenarios to inject game-defined per-seat attributes (e.g. a JSON-encoded deck) and
+host-authored match settings (e.g. an arena id); they ride the same lobby channels a real player
+uses and land in `snapshot.setup`. `pnpm dev:mp 2 --dry-run` prints the validated spawn plan
+without launching anything.
+
 **In-monorepo (`--workspace`).** Writes the app under this repo's `apps/<kebab>/` and registers it
 (mirroring `apps/tactics`): adds `@chimera-engine/<kebab>: "workspace:*"` to the root `package.json`,
 appends a `tsconfig.build.json` reference and a `typecheck` line, then `pnpm install`. Next:

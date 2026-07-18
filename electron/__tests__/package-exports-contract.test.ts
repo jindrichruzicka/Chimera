@@ -44,6 +44,7 @@ interface ElectronManifest {
     files?: string[];
     types?: string;
     main?: string;
+    bin?: Record<string, string>;
     exports?: Record<string, { types?: string; default?: string } | string>;
     dependencies?: Record<string, string>;
 }
@@ -56,6 +57,14 @@ const EXPECTED_EXPORTS = {
     './main': {
         types: './dist/main/index.d.ts',
         default: './dist/main/index.js',
+    },
+    // Dev multiplayer harness library (§4.32): the pure planning/orchestration
+    // builders behind the `chimera-dev-mp` bin. Dev-only-in-tarball follows the
+    // debug-api precedent — the gate is the runtime env (Invariant #77), not
+    // file presence.
+    './dev-harness': {
+        types: './dist/dev-harness/harness.d.ts',
+        default: './dist/dev-harness/harness.js',
     },
     './preload/api': {
         types: './dist/preload/api.d.ts',
@@ -95,6 +104,10 @@ describe('@chimera-engine/electron package surface (issue #777)', () => {
         for (const [key, value] of Object.entries(EXPECTED_EXPORTS)) {
             expect(exportsMap[key]).toEqual(value);
         }
+    });
+
+    it('ships the chimera-dev-mp bin from dist (§4.32 — the packaged dev multiplayer harness)', () => {
+        expect(manifest.bin).toEqual({ 'chimera-dev-mp': 'dist/dev-harness/cli.js' });
     });
 
     it('does not leak main-process internals — no `.` barrel and no broad wildcard subpath (Invariant #5)', () => {

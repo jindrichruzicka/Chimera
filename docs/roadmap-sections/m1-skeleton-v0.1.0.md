@@ -57,7 +57,7 @@ Implement `SettingsSchema`, `SettingsMerger` (three-layer merge), `SettingsRepos
 
 ## F08 — Development Tooling `§4.32, §4.27`
 
-Set up `tools/dev-server.ts` hot-reload harness, `tools/dev-multiplayer.ts` launcher (with `CHIMERA_DEV_HARNESS` guard), seed dev profiles in `tools/dev-profiles/`, and the `Logger` interface backed by Pino with daily rotation. Wire `RootErrorBoundary` and `rendererLogger`.
+Set up `tools/dev-server.ts` hot-reload harness, the dev multiplayer launcher (with `CHIMERA_DEV_HARNESS` guard; now the `chimera-dev-mp` bin in `electron/dev-harness/`, with per-game seed fixtures under `apps/<game>/dev/`), and the `Logger` interface backed by Pino with daily rotation. Wire `RootErrorBoundary` and `rendererLogger`.
 
 ---
 

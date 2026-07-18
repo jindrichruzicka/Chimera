@@ -87,6 +87,7 @@ export type VerifyScaffoldStep =
     | 'unit'
     | 'e2e'
     | 'prod-build'
+    | 'dev-harness'
     | 'package';
 
 export interface VerifyScaffoldResult {
@@ -220,6 +221,46 @@ function scaffoldProbe(deps: VerifyScaffoldDeps, tmp: string): RunResult {
     return deps.run('tsx', [cli, PROBE_GAME.name, '--out', tmp], { cwd: deps.repoRoot });
 }
 
+/**
+ * Extract + shape-check the `chimera-dev-mp --dry-run` spawn plan from captured
+ * stdout (pnpm prefixes script output with its banner, so the JSON is sliced
+ * between the first `{` and the last `}`). Throws a {@link VerifyScaffoldStepError}
+ * for the `dev-harness` step on any parse/shape failure.
+ */
+function assertDryRunReport(stdout: string): void {
+    const fail = (reason: string): never => {
+        throw new VerifyScaffoldStepError(
+            'dev-harness',
+            `verify:scaffold: step "dev-harness" ${reason}`,
+        );
+    };
+    const start = stdout.indexOf('{');
+    const end = stdout.lastIndexOf('}');
+    if (start === -1 || end <= start) {
+        fail('printed no spawn-plan JSON');
+    }
+    let report: { players?: unknown; entry?: unknown; instances?: unknown };
+    try {
+        report = JSON.parse(stdout.slice(start, end + 1)) as typeof report;
+    } catch {
+        return fail('printed unparseable spawn-plan JSON');
+    }
+    if (report.players !== 2) {
+        fail(`planned ${String(report.players)} players instead of 2`);
+    }
+    if (typeof report.entry !== 'string' || !report.entry.endsWith('.js')) {
+        fail('resolved no built app entry');
+    }
+    const instances = report.instances;
+    if (!Array.isArray(instances) || instances.length !== 2) {
+        fail('planned the wrong instance count');
+    }
+    const host = (instances as { args?: readonly string[] }[])[0];
+    if (!(host?.args ?? []).includes('--dev-auto-host')) {
+        fail('planned no auto-hosting first instance');
+    }
+}
+
 /** Run one of the generated app's smoke scripts (`test` or `test:e2e`) from the standalone root. */
 function runAppScript(
     deps: VerifyScaffoldDeps,
@@ -338,6 +379,20 @@ async function scaffoldPipeline(
         'prod-build',
         deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'build:app'], { cwd: tmp }),
     );
+
+    // 8b. dev-harness dry run (§4.32): the packaged `chimera-dev-mp` bin must resolve from
+    //    the standalone install (via the app's `dev:mp` script) and produce a valid spawn
+    //    plan against the just-built app entry. `--dry-run` spawns no Electron — the gate
+    //    stays CI-cheap; the plan JSON is extracted from under pnpm's script banner and
+    //    shape-checked so a bin that "succeeds" without planning still fails the step.
+    deps.log('dry-running the dev multiplayer harness (chimera-dev-mp --dry-run)…');
+    const devHarnessDryRun = deps.run(
+        'pnpm',
+        ['--filter', PROBE_GAME.pkg, 'dev:mp', '2', '--dry-run'],
+        { cwd: tmp, capture: true },
+    );
+    assertStepOk('dev-harness', devHarnessDryRun);
+    assertDryRunReport(devHarnessDryRun.stdout);
 
     // 9. package. Export the Next renderer (populates `renderer/out`), then build an UNSIGNED
     //    `electron-builder --dir` bundle from the standalone-emitted project. electron-builder

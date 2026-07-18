@@ -16,7 +16,10 @@
 // `electron/preload/schemas.ts`.
 
 import { z } from 'zod';
-import { WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH } from '@chimera-engine/simulation/foundation/messages-schemas.js';
+import {
+    WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
+    WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
+} from '@chimera-engine/simulation/foundation/messages-schemas.js';
 import { ChatScopeSchema } from '@chimera-engine/simulation/foundation/chat-schemas.js';
 import type { ChatScope } from '@chimera-engine/simulation/foundation/chat.js';
 import { MAX_SAVE_LABEL_LENGTH, toSlotId, playerId } from '../../preload/api-types.js';
@@ -333,13 +336,17 @@ export const SetMatchSettingPayloadSchema = z
  * `chimera:lobby:set-player-attribute`. Owner-authored: the handler
  * accepts only the caller's own-seat write; `playerId` is validated and
  * branded via {@link PlayerIdSchema} so the handler receives a typed `PlayerId`.
- * `key`/`value` are length-capped to match the wire frame's coarse bound.
+ * `key`/`value` are length-capped to match the wire frame's coarse bounds —
+ * the value bound is wide so game-defined structured payloads (e.g. a
+ * JSON-encoded deck) can pass; the precise per-game cap
+ * (`GameLobbySetup.maxAttributeValueLength`, default 256) is enforced by
+ * `LobbyManager.setPlayerAttribute` behind this boundary.
  */
 export const SetPlayerAttributePayloadSchema = z
     .object({
         playerId: PlayerIdSchema,
         key: NonEmptyStringSchema.max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
-        value: z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
+        value: z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH),
     })
     .strict();
 
