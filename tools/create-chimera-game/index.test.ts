@@ -121,6 +121,21 @@ describe('scaffoldGame', () => {
                 '',
             ].join('\n'),
         );
+        // The e2e Playwright config carries the `export default defineConfig(` marker the standalone
+        // emit splices the CHIMERA_VERIFY_PACK_NODE_MODULES self-set before; the standalone test asserts
+        // the injection landed (proving the rewrite is wired into emitStandaloneProject).
+        await write(
+            'templates/blank/e2e/playwright.config.ts',
+            [
+                "import { defineConfig } from '@playwright/test';",
+                '',
+                'export default defineConfig({',
+                "    testDir: './tests',",
+                "    globalSetup: './global-setup.ts',",
+                '});',
+                '',
+            ].join('\n'),
+        );
         await write('templates/blank/node_modules/junk.js', 'module.exports = {};');
 
         // A SECOND template, used to prove template parametrisation with no CLI code change.
@@ -421,6 +436,18 @@ describe('scaffoldGame', () => {
             expect(appE2eTsconfig).not.toContain('electron/dist');
             // The game's own path (standalone-valid) is kept.
             expect(appE2eTsconfig).toContain('apps/my-game');
+
+            // The e2e Playwright config self-sets CHIMERA_VERIFY_PACK_NODE_MODULES so runners that
+            // bypass the test:e2e script (VS Code Test Explorer, npx, the launch config) still resolve
+            // @chimera-engine/electron from node_modules. Drift guard: exercises the real template
+            // through the emit path — if the export form changes, the rewrite throws and this fails.
+            const appE2ePlaywrightConfig = await readFile(
+                path.join(result.appDir, 'e2e', 'playwright.config.ts'),
+                'utf8',
+            );
+            expect(appE2ePlaywrightConfig).toContain(
+                "process.env.CHIMERA_VERIFY_PACK_NODE_MODULES ??= 'node_modules';",
+            );
 
             // The monorepo root is untouched: no dependency added, no tsconfig reference.
             expect(await readFile(path.join(repoRoot, 'package.json'), 'utf8')).toBe(pkgBefore);

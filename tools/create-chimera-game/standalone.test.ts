@@ -691,6 +691,32 @@ export default defineConfig({
         expect(twice).toBe(once);
         expect(once.match(/CHIMERA_VERIFY_PACK_NODE_MODULES/g)).toHaveLength(1);
     });
+
+    it('THROWS when the defineConfig marker is absent (template export form drifted)', () => {
+        // Fail loud instead of silently no-op'ing: a template refactor that changed the export form
+        // (e.g. `const config = defineConfig(...); export default config;`) would otherwise make the
+        // String.replace a no-op, reintroducing the "Could not resolve @chimera-engine/electron/main"
+        // bug with no error at scaffold time.
+        const drifted = `import { defineConfig } from '@playwright/test';
+const config = defineConfig({ testDir: './tests' });
+export default config;
+`;
+        expect(() => rewriteE2ePlaywrightConfigForStandalone(drifted)).toThrow(
+            /export default defineConfig/,
+        );
+    });
+
+    it('does NOT throw when the var is already present, even if the marker is absent', () => {
+        // The idempotent early-return must win before the marker check: a config that already
+        // self-sets the var (a re-run, or a hand-authored variant) is returned unchanged.
+        const already = `import { defineConfig } from '@playwright/test';
+process.env.CHIMERA_VERIFY_PACK_NODE_MODULES ??= 'node_modules';
+const config = defineConfig({ testDir: './tests' });
+export default config;
+`;
+        expect(() => rewriteE2ePlaywrightConfigForStandalone(already)).not.toThrow();
+        expect(rewriteE2ePlaywrightConfigForStandalone(already)).toBe(already);
+    });
 });
 
 describe('buildStandaloneVitestConfig', () => {

@@ -654,6 +654,18 @@ export function rewriteE2eTsconfigForStandalone(rawTsconfig: string): string {
 export function rewriteE2ePlaywrightConfigForStandalone(rawConfig: string): string {
     if (rawConfig.includes('CHIMERA_VERIFY_PACK_NODE_MODULES')) return rawConfig;
     const marker = 'export default defineConfig(';
+    // Fail loud rather than silently no-op: `String.replace` returns the input unchanged when the
+    // marker is missing, which would reintroduce the "Could not resolve @chimera-engine/electron/main"
+    // bug at scaffold time with no error. If a future template refactor changes the export form, this
+    // throw (surfaced by verify:scaffold + the scaffoldGame standalone test) points at the fix.
+    if (!rawConfig.includes(marker)) {
+        throw new Error(
+            `rewriteE2ePlaywrightConfigForStandalone: marker "${marker}" not found in the e2e ` +
+                'playwright.config.ts — the template export form changed. Update the marker so the ' +
+                'CHIMERA_VERIFY_PACK_NODE_MODULES self-set still injects, otherwise standalone e2e ' +
+                'silently breaks under runners that bypass the test:e2e script.',
+        );
+    }
     const injection =
         '// Standalone scaffold: resolve `@chimera-engine/electron` from node_modules for EVERY e2e runner\n' +
         '// (the VS Code Playwright Test Explorer, `npx playwright test`, the launch config) — not only\n' +
