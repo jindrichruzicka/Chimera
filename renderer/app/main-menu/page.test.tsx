@@ -117,12 +117,24 @@ describe('MainMenuPage — engine fallback (no active lobby game)', () => {
         expect(screen.getByRole('button', { name: /component gallery/i })).toBeTruthy();
     });
 
-    it('renders a "?" glyph inside the component gallery icon button', () => {
+    it('renders the gallery glyph inside the component gallery icon button', () => {
         vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
 
         renderMainMenuPage();
 
-        expect(screen.getByTestId('main-menu-component-gallery')).toHaveTextContent('?');
+        const galleryButton = screen.getByTestId('main-menu-component-gallery');
+        expect(galleryButton.querySelector('svg[data-ch-icon="gallery"]')).toBeTruthy();
+    });
+
+    it('renders the component gallery button as a borderless (ghost) icon button', () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
+
+        renderMainMenuPage();
+
+        expect(screen.getByTestId('main-menu-component-gallery')).toHaveAttribute(
+            'data-ch-icon-button-variant',
+            'ghost',
+        );
     });
 
     it('does not render the component gallery icon button in the packaged production build', () => {

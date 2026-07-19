@@ -3,13 +3,3 @@
     inset-inline-start: var(--ch-space-md);
     position: absolute;
 }
-
-.component-gallery-icon {
-    align-items: center;
-    block-size: var(--ch-size-icon-button);
-    display: inline-flex;
-    inline-size: var(--ch-size-icon-button);
-    justify-content: center;
-    line-height: var(--ch-line-height-tight);
-    pointer-events: none;
-}

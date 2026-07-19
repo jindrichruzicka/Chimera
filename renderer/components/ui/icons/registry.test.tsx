@@ -31,6 +31,7 @@ describe('ICON_REGISTRY', () => {
         'step-forward',
         'seek-start',
         'seek-end',
+        'gallery',
     ] as const)('registers the %s glyph', (name) => {
         expect(Object.keys(ICON_REGISTRY)).toContain(name);
     });

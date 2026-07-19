@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { GameMainMenuButton } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 import { useOptionalFade } from '../../components/shell/FadeContext';
 import { screenFadeMs } from '../../components/shell/screenFadeDuration';
+import { Icon } from '../../components/ui/icons';
 import { IconButton } from '../../components/ui/IconButton';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { isGalleryEnabled } from '../component-gallery/galleryGate';
@@ -73,6 +74,7 @@ function ComponentGalleryButton(): React.ReactElement | null {
                         {...triggerProps}
                         aria-label={COMPONENT_GALLERY_LABEL}
                         data-testid="main-menu-component-gallery"
+                        variant="ghost"
                         onClick={() => {
                             router.push(
                                 withShellGameId(
@@ -82,9 +84,7 @@ function ComponentGalleryButton(): React.ReactElement | null {
                             );
                         }}
                     >
-                        <span aria-hidden="true" className={pageStyles['component-gallery-icon']}>
-                            ?
-                        </span>
+                        <Icon name="gallery" />
                     </IconButton>
                 )}
             </Tooltip>

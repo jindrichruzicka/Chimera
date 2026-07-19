@@ -5,6 +5,7 @@ import { chevronDownIcon } from './chevronDown';
 import { closeIcon } from './close';
 import { copyIcon } from './copy';
 import { eyeIcon } from './eye';
+import { galleryIcon } from './gallery';
 import { minusIcon } from './minus';
 import { pauseIcon } from './pause';
 import { playIcon } from './play';
@@ -45,6 +46,7 @@ export const ICON_REGISTRY = {
     close: closeIcon,
     copy: copyIcon,
     eye: eyeIcon,
+    gallery: galleryIcon,
     minus: minusIcon,
     pause: pauseIcon,
     play: playIcon,
