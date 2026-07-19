@@ -1,6 +1,6 @@
 {
     "name": "@chimera-engine/simulation",
-    "version": "1.0.0-rc.4",
+    "version": "1.0.0-rc.5",
     "description": "Deterministic, host-authoritative game-simulation core for the Chimera engine.",
     "license": "MIT",
     "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",

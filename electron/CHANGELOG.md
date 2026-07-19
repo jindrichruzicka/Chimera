@@ -1,5 +1,14 @@
 # @chimera-engine/electron
 
+## 1.0.0-rc.5
+
+### Patch Changes
+
+- @chimera-engine/simulation@1.0.0-rc.5
+- @chimera-engine/ai@1.0.0-rc.5
+- @chimera-engine/networking@1.0.0-rc.5
+- @chimera-engine/renderer@1.0.0-rc.5
+
 ## 1.0.0-rc.4
 
 ### Patch Changes
