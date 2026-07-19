@@ -42,10 +42,16 @@ describe('buildStandaloneRootManifest', () => {
         const manifest = buildStandaloneRootManifest({
             name: 'my-game',
             toolchainDeps: { next: '^15', electron: '^33' },
+            packageManager: 'pnpm@10.33.0',
+            engines: { node: '>=20.0.0' },
         });
         expect(manifest.private).toBe(true);
         expect(manifest.name).toBe('my-game');
         expect(manifest.devDependencies['next']).toBe('^15');
+        // The pnpm + Node envelope the monorepo tests is frozen into the scaffold: pnpm 10
+        // self-switches to the pinned packageManager, and engines documents the Node floor.
+        expect(manifest.packageManager).toBe('pnpm@10.33.0');
+        expect(manifest.engines).toEqual({ node: '>=20.0.0' });
         // No @chimera-engine/* leaks into the declared deps (the app declares them, resolved from npm).
         expect(
             Object.keys(manifest.devDependencies).some((k) => k.startsWith('@chimera-engine/')),
@@ -105,6 +111,8 @@ describe('buildStandaloneRootManifest', () => {
         const manifest = buildStandaloneRootManifest({
             name: 'chimera-verify-scaffold-root',
             toolchainDeps: { next: '^15' },
+            packageManager: 'pnpm@10.33.0',
+            engines: { node: '>=20.0.0' },
             overrides,
         });
         expect(manifest.pnpm.overrides).toEqual(overrides);
@@ -289,6 +297,8 @@ describe('buildStandaloneVscodeLaunchJson', () => {
         const manifest = buildStandaloneRootManifest({
             name: kebab,
             toolchainDeps: { next: '^15' },
+            packageManager: 'pnpm@10.33.0',
+            engines: { node: '>=20.0.0' },
         });
         const tasks = JSON.parse(buildStandaloneVscodeTasksJson(kebab, title)) as {
             tasks: { label: string }[];
@@ -420,6 +430,7 @@ describe('rewriteAppPackageForStandalone', () => {
                     '@chimera-engine/simulation': '^0.9.0',
                     '@chimera-engine/renderer': '^0.9.0',
                 },
+                toolchainDeps: {},
                 nodeModulesEnv: 'node_modules',
             }),
         );
@@ -447,20 +458,56 @@ describe('rewriteAppPackageForStandalone', () => {
                     '@chimera-engine/simulation': '^0.9.0',
                     '@chimera-engine/renderer': '^0.9.0',
                 },
+                toolchainDeps: { electron: '33.4.11' },
                 nodeModulesEnv: 'node_modules',
             }),
         );
         expect(out.devDependencies['@chimera-engine/simulation']).toBe('^0.9.0');
         expect(out.devDependencies['@chimera-engine/renderer']).toBe('^0.9.0');
-        // Non-engine devDeps are untouched; no workspace:* spec survives in any section.
-        expect(out.devDependencies.electron).toBe('^33.2.0');
+        // Non-engine devDeps are pinned exact; no workspace:* spec survives in any section.
+        expect(out.devDependencies.electron).toBe('33.4.11');
         expect(JSON.stringify(out)).not.toContain('workspace:*');
+    });
+
+    it('pins the app-level non-engine deps (electron / electron-builder) to the exact toolchain versions — a caret here re-opens the next@15.5.20 drift class for the packaging path', () => {
+        const appPkg = JSON.stringify({
+            name: '@chimera-engine/my-game',
+            devDependencies: {
+                '@chimera-engine/renderer': 'workspace:*',
+                electron: '^33.2.0',
+                'electron-builder': '^25.1.8',
+            },
+        });
+        const out = JSON.parse(
+            rewriteAppPackageForStandalone(appPkg, {
+                engineRanges: { '@chimera-engine/renderer': '^1.0.0-rc.3' },
+                toolchainDeps: { electron: '33.4.11', 'electron-builder': '25.1.8' },
+                nodeModulesEnv: 'node_modules',
+            }),
+        );
+        expect(out.devDependencies.electron).toBe('33.4.11');
+        expect(out.devDependencies['electron-builder']).toBe('25.1.8');
+        expect(out.devDependencies['@chimera-engine/renderer']).toBe('^1.0.0-rc.3');
+    });
+
+    it('throws when an app dep has no pinned toolchain version — template/snapshot parity is a hard gate, never a silent floating range', () => {
+        const appPkg = JSON.stringify({
+            devDependencies: { 'electron-builder': '^25.1.8' },
+        });
+        expect(() =>
+            rewriteAppPackageForStandalone(appPkg, {
+                engineRanges: {},
+                toolchainDeps: {},
+                nodeModulesEnv: 'node_modules',
+            }),
+        ).toThrow(/electron-builder/);
     });
 
     it('injects CHIMERA_VERIFY_PACK_NODE_MODULES into build:app + test:e2e only, leaving test untouched', () => {
         const out = JSON.parse(
             rewriteAppPackageForStandalone(raw, {
                 engineRanges: {},
+                toolchainDeps: {},
                 nodeModulesEnv: 'node_modules',
             }),
         );
@@ -477,10 +524,12 @@ describe('rewriteAppPackageForStandalone', () => {
     it('is idempotent — re-running does not double-inject the env', () => {
         const once = rewriteAppPackageForStandalone(raw, {
             engineRanges: {},
+            toolchainDeps: {},
             nodeModulesEnv: 'node_modules',
         });
         const twice = rewriteAppPackageForStandalone(once, {
             engineRanges: {},
+            toolchainDeps: {},
             nodeModulesEnv: 'node_modules',
         });
         expect(twice).toBe(once);

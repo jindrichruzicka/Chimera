@@ -7,53 +7,58 @@
 // toolchain + engine versions the monorepo builds against, without reading the monorepo at
 // `npm create` time. This file is prettier/eslint-ignored: it is a machine artifact.
 
-/** Root devDependencies + dependencies, minus every `@chimera-engine/*` workspace edge. */
+/**
+ * Root devDependencies + dependencies, minus every `@chimera-engine/*` workspace edge, pinned to
+ * the EXACT installed versions the monorepo builds against (never ranges — a range lets a fresh
+ * `npm create` install resolve untested upstream patches; next@15.5.20 broke the scaffold that way).
+ */
 export const TOOLCHAIN_DEPS: Readonly<Record<string, string>> = {
-    "@changesets/cli": "^2.31.0",
-    "@eslint/css": "^1.2.0",
-    "@eslint/js": "^9.39.4",
-    "@next/eslint-plugin-next": "^16.2.6",
-    "@playwright/test": "^1.59.1",
-    "@react-three/fiber": "^9.6.1",
-    "@react-three/test-renderer": "^9.1.0",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^22.10.0",
-    "@types/pino": "^7.0.5",
-    "@types/pngjs": "^6.0.5",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.184.1",
-    "@types/ws": "^8.18.1",
-    "@vitest/browser": "^4.1.5",
-    "@vitest/coverage-v8": "^3.2.4",
-    "chokidar": "^5.0.0",
-    "cross-env": "^10.1.0",
-    "electron": "^33.2.0",
-    "esbuild": "^0.28.0",
-    "eslint": "^9.39.4",
-    "eslint-config-prettier": "^9.1.2",
-    "fast-check": "^4.7.0",
-    "jsdom": "^29.0.2",
-    "next": "^15.5.15",
-    "pino": "^10.3.1",
-    "png2icons": "^2.0.1",
-    "pngjs": "^7.0.0",
-    "prettier": "^3.3.3",
-    "publint": "^0.3.21",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "sharp": "^0.35.2",
-    "three": "^0.184.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.59.0",
-    "vite-tsconfig-paths": "^4.3.2",
-    "vitest": "^3.2.4",
-    "ws": "^8.20.0",
-    "zod": "^4.3.6",
-    "zustand": "^5.0.12"
+    "@changesets/cli": "2.31.0",
+    "@eslint/css": "1.2.0",
+    "@eslint/js": "9.39.4",
+    "@next/eslint-plugin-next": "16.2.6",
+    "@playwright/test": "1.59.1",
+    "@react-three/fiber": "9.6.1",
+    "@react-three/test-renderer": "9.1.0",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/node": "22.19.17",
+    "@types/pino": "7.0.5",
+    "@types/pngjs": "6.0.5",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "0.184.1",
+    "@types/ws": "8.18.1",
+    "@vitest/browser": "4.1.5",
+    "@vitest/coverage-v8": "3.2.4",
+    "chokidar": "5.0.0",
+    "cross-env": "10.1.0",
+    "electron": "33.4.11",
+    "electron-builder": "25.1.8",
+    "esbuild": "0.28.0",
+    "eslint": "9.39.4",
+    "eslint-config-prettier": "9.1.2",
+    "fast-check": "4.7.0",
+    "jsdom": "29.0.2",
+    "next": "15.5.15",
+    "pino": "10.3.1",
+    "png2icons": "2.0.1",
+    "pngjs": "7.0.0",
+    "prettier": "3.8.3",
+    "publint": "0.3.21",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "sharp": "0.35.2",
+    "three": "0.184.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.59.0",
+    "vite-tsconfig-paths": "4.3.2",
+    "vitest": "3.2.4",
+    "ws": "8.20.0",
+    "zod": "4.3.6",
+    "zustand": "5.0.12"
 };
 
 /** `^<version>` per publishable engine package, from each package's own version field. */
@@ -93,3 +98,11 @@ export const ROOT_COMPILER_OPTIONS = {
     ],
     "verbatimModuleSyntax": false
 } as const;
+
+/** The root's `packageManager` pin — pnpm 10 self-switches to it in the emitted scaffold. */
+export const ROOT_PACKAGE_MANAGER = "pnpm@10.33.0";
+
+/** The root's `engines` constraint (the tested Node floor), frozen verbatim. */
+export const ROOT_ENGINES: Readonly<Record<string, string>> = {
+    "node": ">=20.0.0"
+};

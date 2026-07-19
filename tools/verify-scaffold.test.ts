@@ -211,6 +211,8 @@ describe('applyTarballOverrides', () => {
         const published = buildStandaloneRootManifest({
             name: 'chimera-verify-scaffold-root',
             toolchainDeps: { next: '^15', electron: '^33' },
+            packageManager: 'pnpm@10.33.0',
+            engines: { node: '>=20.0.0' },
         });
         expect(published.pnpm.overrides).toBeUndefined();
 

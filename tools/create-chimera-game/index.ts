@@ -39,7 +39,13 @@ import {
     rewriteAppTsconfigBuildForStandalone,
     rewriteE2eTsconfigForStandalone,
 } from './standalone';
-import { ENGINE_DEP_RANGES, ROOT_COMPILER_OPTIONS, TOOLCHAIN_DEPS } from './toolchain.generated';
+import {
+    ENGINE_DEP_RANGES,
+    ROOT_COMPILER_OPTIONS,
+    ROOT_ENGINES,
+    ROOT_PACKAGE_MANAGER,
+    TOOLCHAIN_DEPS,
+} from './toolchain.generated';
 import { findLeftoverTokens, renameTokensInPath, substituteTokens } from './tokens';
 
 /** Top-level template subdirs never copied into the generated app (build output / deps). */
@@ -245,7 +251,12 @@ async function emitStandaloneProject(
     kebab: string,
     title: string,
 ): Promise<void> {
-    const manifest = buildStandaloneRootManifest({ name: kebab, toolchainDeps: TOOLCHAIN_DEPS });
+    const manifest = buildStandaloneRootManifest({
+        name: kebab,
+        toolchainDeps: TOOLCHAIN_DEPS,
+        packageManager: ROOT_PACKAGE_MANAGER,
+        engines: ROOT_ENGINES,
+    });
     await writeFile(
         path.join(outputRoot, 'package.json'),
         `${JSON.stringify(manifest, null, 4)}\n`,
@@ -304,6 +315,7 @@ async function emitStandaloneProject(
         appPkgPath,
         rewriteAppPackageForStandalone(rawAppPkg, {
             engineRanges: ENGINE_DEP_RANGES,
+            toolchainDeps: TOOLCHAIN_DEPS,
             // pnpm runs the app's scripts with cwd = the app dir, so a relative `node_modules`
             // resolves to the installed `<app>/node_modules`.
             nodeModulesEnv: 'node_modules',

@@ -23,10 +23,11 @@
 
 /**
  * Merge the root `dependencies` + `devDependencies` and drop every `@chimera-engine/*` entry. The
- * remainder — the repo's toolchain + renderer peers at the exact versions the engine packages
- * were built against — is declared at the standalone root so the generated app (which declares
- * only `@chimera-engine/*`) resolves react / vitest / playwright / electron / next by walking up to the
- * project's `node_modules`, exactly as it would by walking up to the monorepo root.
+ * remainder — the repo's toolchain + renderer peers — is declared at the standalone root so the
+ * generated app (which declares only `@chimera-engine/*`) resolves react / vitest / playwright /
+ * electron / next by walking up to the project's `node_modules`, exactly as it would by walking up
+ * to the monorepo root. This returns the root's RANGES; `gen-toolchain` pins them to the exact
+ * installed versions before freezing the snapshot the published CLI emits.
  */
 export function buildStandaloneToolchainDeps(rootPkg: {
     dependencies?: Record<string, string>;
@@ -47,6 +48,14 @@ export interface StandaloneRootManifest {
     readonly name: string;
     readonly version: string;
     readonly private: true;
+    /**
+     * The monorepo root's pinned package manager (e.g. `pnpm@10.33.0`), frozen into the scaffold:
+     * pnpm 10 self-switches to the declared version (`manage-package-manager-versions`), so the
+     * standalone install runs the same pnpm the monorepo's gates ran.
+     */
+    readonly packageManager: string;
+    /** The monorepo root's `engines` constraint (the tested Node floor), frozen verbatim. */
+    readonly engines: Readonly<Record<string, string>>;
     readonly devDependencies: Record<string, string>;
     readonly scripts: Record<string, string>;
     readonly pnpm: {
@@ -72,6 +81,10 @@ export interface BuildStandaloneRootManifestParams {
     readonly name: string;
     /** Toolchain ranges from {@link buildStandaloneToolchainDeps}. */
     readonly toolchainDeps: Readonly<Record<string, string>>;
+    /** The frozen `packageManager` pin (snapshot `ROOT_PACKAGE_MANAGER`). */
+    readonly packageManager: string;
+    /** The frozen `engines` constraint (snapshot `ROOT_ENGINES`). */
+    readonly engines: Readonly<Record<string, string>>;
     /**
      * Optional `pnpm.overrides` map. Omitted by the published CLI (npm resolution); supplied by
      * the gate to force every `@chimera-engine/*` edge onto a packed `file:<tarball>`.
@@ -107,11 +120,13 @@ function standalonePackageBuildChain(name: string): string {
 export function buildStandaloneRootManifest(
     params: BuildStandaloneRootManifestParams,
 ): StandaloneRootManifest {
-    const { name, toolchainDeps, overrides } = params;
+    const { name, toolchainDeps, packageManager, engines, overrides } = params;
     return {
         name,
         version: '0.0.0',
         private: true,
+        packageManager,
+        engines: { ...engines },
         devDependencies: { ...toolchainDeps },
         scripts: {
             'build:packages': 'node -e ""',
@@ -474,6 +489,15 @@ export interface StandaloneAppRewriteParams {
     /** `@chimera-engine/* : ^x.y.z` ranges (the published engine versions) from the toolchain snapshot. */
     readonly engineRanges: Readonly<Record<string, string>>;
     /**
+     * Exact-version pins from the toolchain snapshot (`TOOLCHAIN_DEPS`). Every NON-engine dep the
+     * template app declares (electron, electron-builder) is rewritten onto its exact pin: the
+     * template's caret ranges are correct in-monorepo (the workspace lockfile pins them) but
+     * out-of-repo they resolve the newest matching registry version — the same drift class that
+     * let next@15.5.20 break the scaffold. An app dep missing from this map is a hard error, so
+     * a new template dep cannot silently ship as a floating range.
+     */
+    readonly toolchainDeps: Readonly<Record<string, string>>;
+    /**
      * The value injected as `CHIMERA_VERIFY_PACK_NODE_MODULES` into the app's `build:app` and
      * `test:e2e` scripts (via `cross-env`). Outside the monorepo there is no `electron/` SOURCE for
      * the app's Electron bundler to alias `@chimera-engine/electron/main` onto, so this env makes
@@ -516,6 +540,16 @@ export function rewriteAppPackageForStandalone(
             if (name.startsWith('@chimera-engine/')) {
                 const range = params.engineRanges[name];
                 if (range !== undefined) section[name] = range;
+            } else {
+                const exact = params.toolchainDeps[name];
+                if (exact === undefined) {
+                    throw new Error(
+                        `app dep "${name}" has no exact pin in the toolchain snapshot — ` +
+                            'declare it at the monorepo root (so gen:toolchain freezes it) ' +
+                            'before adding it to the template, or it ships as a floating range.',
+                    );
+                }
+                section[name] = exact;
             }
         }
     };
