@@ -359,6 +359,7 @@ describe('scaffoldGame', () => {
                 'tsconfig.json',
                 '.vscode/launch.json',
                 '.vscode/tasks.json',
+                '.vscode/extensions.json',
             ]) {
                 expect(
                     await readFile(path.join(outputRoot, file), 'utf8'),
@@ -406,6 +407,15 @@ describe('scaffoldGame', () => {
                 'utf8',
             );
             expect(tasksJson).toContain('Build My Game (renderer + bundle)');
+            // The IDE layer recommends the Vitest + Playwright Test Explorer providers so a fresh
+            // clone is prompted to install them (otherwise the Test Explorer shows only whichever
+            // provider the developer already had installed).
+            const extensionsJson = JSON.parse(
+                await readFile(path.join(outputRoot, '.vscode', 'extensions.json'), 'utf8'),
+            );
+            expect(extensionsJson.recommendations).toEqual(
+                expect.arrayContaining(['vitest.explorer', 'ms-playwright.playwright']),
+            );
 
             // The app's @chimera-engine/* deps are rewritten onto published ranges — no workspace:* survives.
             const appPkg = JSON.parse(

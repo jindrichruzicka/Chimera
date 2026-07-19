@@ -33,6 +33,7 @@ import {
     buildStandaloneVitestConfig,
     buildStandaloneVscodeLaunchJson,
     buildStandaloneVscodeTasksJson,
+    buildStandaloneVscodeExtensionsJson,
     buildStandaloneGitignore,
     buildStandaloneWorkspaceYaml,
     rewriteAppPackageForStandalone,
@@ -307,6 +308,14 @@ async function emitStandaloneProject(
     await writeFile(
         path.join(vscodeDir, 'tasks.json'),
         buildStandaloneVscodeTasksJson(kebab, title),
+        'utf8',
+    );
+    // Workspace-recommended extensions so VS Code prompts to install the Vitest + Playwright Test
+    // Explorer providers on first open — the Test Explorer only shows a framework's tests when its
+    // extension is present.
+    await writeFile(
+        path.join(vscodeDir, 'extensions.json'),
+        buildStandaloneVscodeExtensionsJson(),
         'utf8',
     );
 

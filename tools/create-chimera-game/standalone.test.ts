@@ -8,6 +8,7 @@ import {
     buildStandaloneVitestConfig,
     buildStandaloneVscodeLaunchJson,
     buildStandaloneVscodeTasksJson,
+    buildStandaloneVscodeExtensionsJson,
     buildStandaloneWorkspaceYaml,
     rewriteAppPackageForStandalone,
     rewriteAppTsconfigBuildForStandalone,
@@ -412,6 +413,36 @@ describe('buildStandaloneVscodeTasksJson', () => {
         );
         expect(cleanCommand).toContain('CHIMERA_DEBUG=1');
         expect(cleanCommand).toContain('next build apps/my-game/renderer');
+    });
+});
+
+describe('buildStandaloneVscodeExtensionsJson', () => {
+    const parse = (): { recommendations: string[] } =>
+        JSON.parse(buildStandaloneVscodeExtensionsJson());
+
+    it('recommends the Vitest + Playwright Test Explorer extensions', () => {
+        // The VS Code Test Explorer only surfaces a framework's tests when that framework's extension
+        // is installed. The scaffold ships BOTH a vitest unit suite (vitest.config.mts) and a
+        // Playwright e2e suite, so both providers are recommended — otherwise a fresh clone shows
+        // only whichever extension the developer happened to already have.
+        const { recommendations } = parse();
+        expect(recommendations).toContain('vitest.explorer');
+        expect(recommendations).toContain('ms-playwright.playwright');
+    });
+
+    it('recommends ONLY extensions whose tooling the scaffold actually ships', () => {
+        // No eslint flat config / prettier config / .editorconfig is emitted, so recommending those
+        // extensions would prompt installs for tooling that is not set up. Keep the list honest.
+        const { recommendations } = parse();
+        expect(recommendations).not.toContain('dbaeumer.vscode-eslint');
+        expect(recommendations).not.toContain('esbenp.prettier-vscode');
+        expect(recommendations).toHaveLength(2);
+    });
+
+    it('emits valid JSON ending in a trailing newline', () => {
+        const out = buildStandaloneVscodeExtensionsJson();
+        expect(() => JSON.parse(out) as unknown).not.toThrow();
+        expect(out.endsWith('\n')).toBe(true);
     });
 });
 

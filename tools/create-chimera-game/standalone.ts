@@ -490,6 +490,29 @@ export function buildStandaloneVscodeTasksJson(kebab: string, title: string): st
 }
 
 /**
+ * The standalone project's `.vscode/extensions.json` — the workspace-recommended extensions VS Code
+ * prompts to install on first open.
+ *
+ * Recommends ONLY the two test-provider extensions whose frameworks the scaffold actually ships:
+ *   - `vitest.explorer`         — surfaces the app's Vitest unit suite (`vitest.config.mts`) in the
+ *                                 Test Explorer.
+ *   - `ms-playwright.playwright` — surfaces the app's Playwright e2e suite.
+ *
+ * The VS Code Test Explorer only shows a framework's tests when THAT framework's extension is
+ * installed, so without this a fresh clone shows only whichever provider the developer already had
+ * (the "I see only Playwright, no Vitest" report). eslint / prettier / editorconfig extensions are
+ * deliberately NOT recommended: the standalone scaffold ships no config for them (no eslint flat
+ * config — see `buildStandaloneVscodeLaunchJson` — no prettier config, no `.editorconfig`), so
+ * recommending them would prompt installs for tooling that is not set up. Pure literal.
+ */
+export function buildStandaloneVscodeExtensionsJson(): string {
+    const config = {
+        recommendations: ['vitest.explorer', 'ms-playwright.playwright'],
+    };
+    return `${JSON.stringify(config, null, 4)}\n`;
+}
+
+/**
  * The standalone-root `tsconfig.json`: just the frozen root `compilerOptions`. The scaffolded
  * app's `tsconfig.json` / `tsconfig.build.json` / `e2e/tsconfig.json` all `extends` this root two/
  * three levels up; `extends` only merges `compilerOptions`, so emitting them here is exactly what
