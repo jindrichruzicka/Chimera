@@ -54,8 +54,14 @@ npmRebuild: false
 files:
   - dist/electron/main.js
   - dist/preload/api.js
+  # Debug builds (.vscode launch tasks, `pnpm start:debug`) emit *.map files with full
+  # TSX sourcesContent into renderer/out; never ship them (the bare app-level `package`
+  # script packages out/ as-is, without the root chain's fresh `next build`).
   - from: renderer/out
     to: renderer/out
+    filter:
+      - '**/*'
+      - '!**/*.map'
   - from: data
     to: apps/tactics/data
   - from: assets

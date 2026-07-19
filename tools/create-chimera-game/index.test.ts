@@ -375,11 +375,16 @@ describe('scaffoldGame', () => {
             expect(launcher).toContain("env['CHIMERA_DEBUG'] = '1'");
 
             // The IDE debug layer: a project-root `.vscode/` with the game-named launch + build configs.
+            // "Debug My Game" is a COMPOUND (main-process launch + renderer attach); its
+            // configurations carry the two members.
             const launchJson = JSON.parse(
                 await readFile(path.join(outputRoot, '.vscode', 'launch.json'), 'utf8'),
             );
-            expect(launchJson.configurations.map((c: { name: string }) => c.name)).toContain(
+            expect(launchJson.compounds.map((c: { name: string }) => c.name)).toContain(
                 'Debug My Game',
+            );
+            expect(launchJson.configurations.map((c: { name: string }) => c.name)).toEqual(
+                expect.arrayContaining(['Debug My Game: Main process', 'Attach My Game Renderer']),
             );
             const tasksJson = await readFile(
                 path.join(outputRoot, '.vscode', 'tasks.json'),

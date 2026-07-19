@@ -80,6 +80,24 @@ describe('buildStandaloneRootManifest', () => {
         expect(manifest.scripts['dev:mp']).toContain('next build apps/my-game/renderer');
         expect(manifest.scripts['dev:mp']).toContain('@chimera-engine/my-game build:app');
         expect(manifest.scripts['dev:mp']?.endsWith('@chimera-engine/my-game dev:mp')).toBe(true);
+        // Per-platform packaging scripts (the standalone twin of the monorepo's
+        // `package:<game>:<platform>`), driven by the .vscode Package launch configs. Each
+        // mirrors `package`'s build chain then runs electron-builder with the platform flag.
+        const platforms: Readonly<Record<string, string>> = {
+            'package:my-game:mac-dir': '--mac dir',
+            'package:my-game:mac-dmg': '--mac dmg',
+            'package:my-game:win': '--win nsis',
+            'package:my-game:linux-appimage': '--linux AppImage',
+            'package:my-game:linux-dir': '--linux dir',
+        };
+        for (const [script, flag] of Object.entries(platforms)) {
+            const command = manifest.scripts[script];
+            expect(command, `${script} must exist`).toBeDefined();
+            expect(command).toContain('next build apps/my-game/renderer');
+            expect(command).toContain('@chimera-engine/my-game build:app');
+            expect(command).toContain(`exec electron-builder ${flag}`);
+            expect(command).not.toContain('build:packages');
+        }
     });
 
     it('carries the supplied pnpm.overrides for the gate tarball-resolved form', () => {
@@ -153,58 +171,215 @@ describe('buildStandaloneLauncherScript', () => {
 });
 
 describe('buildStandaloneVscodeLaunchJson', () => {
-    it('emits a "Run <Game>" and a source-map-bound "Debug <Game>" config for the scaffolded app', () => {
-        const out = buildStandaloneVscodeLaunchJson('my-game', 'My Game');
-        const parsed = JSON.parse(out) as {
-            version: string;
-            configurations: Record<string, unknown>[];
-        };
+    type LaunchConfig = Record<string, unknown>;
+    interface Launch {
+        version: string;
+        configurations: LaunchConfig[];
+        compounds: LaunchConfig[];
+    }
+    const parse = (): Launch => JSON.parse(buildStandaloneVscodeLaunchJson('my-game', 'My Game'));
+
+    it('mirrors the tactics config set (Run / Clean / Debug compound / Vitest / Playwright / Package)', () => {
+        const parsed = parse();
         expect(parsed.version).toBe('0.2.0');
         const names = parsed.configurations.map((c) => c['name']);
+        // Electron launches: plain run, clean run, and the compound's main-process member.
         expect(names).toContain('Run My Game');
-        expect(names).toContain('Debug My Game');
-        for (const config of parsed.configurations) {
-            expect(config['type']).toBe('node');
-            expect(config['request']).toBe('launch');
-            // Launches THIS game's app dir via the standalone-root electron binary.
-            expect(config['args']).toEqual(['apps/my-game']);
-            expect(String(config['runtimeExecutable'])).toContain('node_modules/.bin/electron');
-            // Dev + debug env so the window is windowed with DevTools + the F9 bridge.
-            expect(config['env']).toMatchObject({
-                NODE_ENV: 'development',
-                CHIMERA_ENV: 'development',
-                CHIMERA_DEBUG: '1',
-            });
-            // The build task label the launch runs first (must match the tasks.json label).
-            expect(config['preLaunchTask']).toBe('Build My Game (renderer + bundle)');
-        }
-        // Only the Debug config binds source maps for main-process breakpoints.
-        const debug = parsed.configurations.find((c) => c['name'] === 'Debug My Game');
-        expect(debug?.['sourceMaps']).toBe(true);
-        expect(debug?.['outFiles']).toEqual([
+        expect(names).toContain('Run My Game (Clean)');
+        expect(names).toContain('Debug My Game: Main process');
+        expect(names).toContain('Attach My Game Renderer');
+        // Test-runner + packaging parity with tactics.
+        expect(names).toContain('Vitest: run all tests');
+        expect(names).toContain('Vitest: debug all tests');
+        expect(names).toContain('Vitest: debug current test file');
+        expect(names).toContain('Playwright: run all tests');
+        expect(names).toContain('Playwright: debug all tests');
+        expect(names).toContain('Package: My Game — macOS (folder)');
+        expect(names).toContain('Package: My Game — macOS (.dmg)');
+        expect(names).toContain('Package: My Game — Windows (.exe / nsis)');
+        expect(names).toContain('Package: My Game — Linux (AppImage)');
+        expect(names).toContain('Package: My Game — Linux (folder)');
+        // No ESLint configs: a standalone scaffold ships no eslint flat config, so an
+        // `eslint .` launch would be broken out of the box.
+        expect(names.some((n) => String(n).startsWith('ESLint'))).toBe(false);
+    });
+
+    it('makes "Debug My Game" a compound of the main-process launch + the renderer attach', () => {
+        const parsed = parse();
+        const compound = parsed.compounds.find((c) => c['name'] === 'Debug My Game');
+        expect(compound).toBeDefined();
+        expect(compound?.['configurations']).toEqual([
+            'Debug My Game: Main process',
+            'Attach My Game Renderer',
+        ]);
+        expect(compound?.['stopAll']).toBe(true);
+    });
+
+    it('binds MAIN-process breakpoints and opens the CDP port the renderer attach uses', () => {
+        const main = parse().configurations.find(
+            (c) => c['name'] === 'Debug My Game: Main process',
+        );
+        expect(main?.['type']).toBe('node');
+        // --remote-debugging-port must precede the app path so Chromium consumes it as a switch.
+        expect(main?.['args']).toEqual(['--remote-debugging-port=9222', 'apps/my-game']);
+        expect(String(main?.['runtimeExecutable'])).toContain('node_modules/.bin/electron');
+        expect(main?.['sourceMaps']).toBe(true);
+        expect(main?.['outFiles']).toEqual([
             '${workspaceFolder}/apps/my-game/dist/electron/**/*.js',
         ]);
-        const run = parsed.configurations.find((c) => c['name'] === 'Run My Game');
-        expect(run?.['sourceMaps']).toBeUndefined();
+        expect(main?.['preLaunchTask']).toBe('Build My Game (renderer + bundle)');
+        expect(main?.['env']).toMatchObject({ CHIMERA_DEBUG: '1' });
+    });
+
+    it('attaches to the Chromium renderer and maps app-relative webpack sources back to source', () => {
+        const attach = parse().configurations.find((c) => c['name'] === 'Attach My Game Renderer');
+        expect(attach?.['type']).toBe('chrome');
+        expect(attach?.['request']).toBe('attach');
+        expect(attach?.['port']).toBe(9222);
+        // webpack://_N_E/../screens/X.tsx (context = apps/<game>/renderer) -> apps/my-game/screens/X.tsx.
+        expect(attach?.['sourceMapPathOverrides']).toMatchObject({
+            'webpack://_N_E/../*': '${workspaceFolder}/apps/my-game/*',
+            'webpack://_N_E/./*': '${workspaceFolder}/apps/my-game/renderer/*',
+        });
+        // A compound member takes NO preLaunchTask (the main-process launch runs the build).
+        expect(attach?.['preLaunchTask']).toBeUndefined();
+    });
+
+    it('runs the clean launch through the clean build task', () => {
+        const clean = parse().configurations.find((c) => c['name'] === 'Run My Game (Clean)');
+        expect(clean?.['preLaunchTask']).toBe('Build My Game (clean renderer + bundle)');
+        expect(clean?.['args']).toEqual(['apps/my-game']);
+    });
+
+    it('wires Vitest + Playwright + Package configs to the standalone binaries/scripts', () => {
+        const parsed = parse();
+        const byName = (name: string): LaunchConfig | undefined =>
+            parsed.configurations.find((c) => c['name'] === name);
+        expect(String(byName('Vitest: run all tests')?.['runtimeExecutable'])).toContain(
+            'node_modules/.bin/vitest',
+        );
+        expect(byName('Vitest: debug current test file')?.['runtimeArgs']).toEqual([
+            'run',
+            '--no-file-parallelism',
+            '${relativeFile}',
+        ]);
+        // Playwright targets THIS game's e2e config + its single electron project.
+        expect(byName('Playwright: run all tests')?.['runtimeArgs']).toEqual([
+            'test',
+            '--config',
+            'apps/my-game/e2e/playwright.config.ts',
+            '--project=electron-e2e',
+        ]);
+        // Package configs drive the per-platform root scripts (buildStandaloneRootManifest).
+        expect(byName('Package: My Game — macOS (folder)')?.['runtimeExecutable']).toBe('pnpm');
+        expect(byName('Package: My Game — macOS (folder)')?.['runtimeArgs']).toEqual([
+            'run',
+            'package:my-game:mac-dir',
+        ]);
+        expect(byName('Package: My Game — Windows (.exe / nsis)')?.['runtimeArgs']).toEqual([
+            'run',
+            'package:my-game:win',
+        ]);
+    });
+
+    it('references only Package scripts + compound members + task labels that actually exist', () => {
+        const kebab = 'my-game';
+        const title = 'My Game';
+        const launch = parse();
+        const manifest = buildStandaloneRootManifest({
+            name: kebab,
+            toolchainDeps: { next: '^15' },
+        });
+        const tasks = JSON.parse(buildStandaloneVscodeTasksJson(kebab, title)) as {
+            tasks: { label: string }[];
+        };
+
+        // Every Package config drives a root script that is actually declared.
+        const packageCfgs = launch.configurations.filter((c) =>
+            String(c['name']).startsWith('Package'),
+        );
+        expect(packageCfgs).toHaveLength(5);
+        for (const cfg of packageCfgs) {
+            const [verb, script] = cfg['runtimeArgs'] as [string, string];
+            expect(verb).toBe('run');
+            expect(manifest.scripts, `${String(cfg['name'])} → ${script}`).toHaveProperty(script);
+        }
+
+        // Every compound member names a real configuration.
+        const configNames = new Set(launch.configurations.map((c) => c['name']));
+        for (const compound of launch.compounds) {
+            for (const member of compound['configurations'] as string[]) {
+                expect(configNames, `compound member ${member}`).toContain(member);
+            }
+        }
+
+        // Every preLaunchTask names a real task.
+        const taskLabels = new Set(tasks.tasks.map((t) => t.label));
+        for (const cfg of launch.configurations) {
+            if (cfg['preLaunchTask'] !== undefined) {
+                expect(taskLabels, `preLaunchTask of ${String(cfg['name'])}`).toContain(
+                    cfg['preLaunchTask'],
+                );
+            }
+        }
+    });
+
+    it('orders the dropdown via presentation.order — the compound directly above its main member', () => {
+        const parsed = parse();
+        const entries = [
+            ...parsed.configurations.map((c) => ({
+                name: String(c['name']),
+                order: (c['presentation'] as { order?: number } | undefined)?.order,
+            })),
+            ...parsed.compounds.map((c) => ({
+                name: String(c['name']),
+                order: (c['presentation'] as { order?: number } | undefined)?.order,
+            })),
+        ];
+        // Every entry carries an order (configs render before compounds otherwise).
+        for (const e of entries) expect(typeof e.order, `${e.name} needs an order`).toBe('number');
+        const orders = entries.map((e) => e.order);
+        expect(new Set(orders).size, 'orders must be unique').toBe(orders.length);
+        entries.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const sortedNames = entries.map((e) => e.name);
+        expect(sortedNames[0]).toBe('Run My Game');
+        const compoundIdx = sortedNames.indexOf('Debug My Game');
+        expect(sortedNames[compoundIdx + 1]).toBe('Debug My Game: Main process');
     });
 });
 
 describe('buildStandaloneVscodeTasksJson', () => {
-    it('emits the preLaunch build task that rebuilds the renderer (with maps) + the bundle', () => {
+    it('emits the incremental + clean preLaunch build tasks (both with source maps)', () => {
         const out = buildStandaloneVscodeTasksJson('my-game', 'My Game');
         const parsed = JSON.parse(out) as {
             version: string;
             tasks: Record<string, unknown>[];
         };
         expect(parsed.version).toBe('2.0.0');
-        const task = parsed.tasks[0];
-        // Label MUST match the launch config's preLaunchTask.
-        expect(task?.['label']).toBe('Build My Game (renderer + bundle)');
-        const command = String(task?.['command']);
-        // CHIMERA_DEBUG=1 on the next build so browser source maps emit for DevTools.
+        const labels = parsed.tasks.map((t) => t['label']);
+        // Labels MUST match the launch configs' preLaunchTask values.
+        expect(labels).toContain('Build My Game (renderer + bundle)');
+        expect(labels).toContain('Build My Game (clean renderer + bundle)');
+
+        const incremental = parsed.tasks.find(
+            (t) => t['label'] === 'Build My Game (renderer + bundle)',
+        );
+        const command = String(incremental?.['command']);
+        // CHIMERA_DEBUG=1 on the next build so browser source maps emit for DevTools + the attach.
         expect(command).toContain('CHIMERA_DEBUG=1');
         expect(command).toContain('next build apps/my-game/renderer');
         expect(command).toContain('@chimera-engine/my-game build:app');
+
+        const clean = parsed.tasks.find(
+            (t) => t['label'] === 'Build My Game (clean renderer + bundle)',
+        );
+        const cleanCommand = String(clean?.['command']);
+        // Wipes the renderer caches + export + bundle before the same debug build.
+        expect(cleanCommand).toContain(
+            'rm -rf apps/my-game/renderer/.next apps/my-game/renderer/out apps/my-game/dist',
+        );
+        expect(cleanCommand).toContain('CHIMERA_DEBUG=1');
+        expect(cleanCommand).toContain('next build apps/my-game/renderer');
     });
 });
 

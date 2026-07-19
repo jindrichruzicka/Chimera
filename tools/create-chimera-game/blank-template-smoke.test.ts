@@ -178,6 +178,15 @@ describe('blank template smoke harness', () => {
         expect(yml).toContain('to: apps/__game_kebab__/assets');
     });
 
+    // Debug builds (the scaffold's .vscode task / `pnpm start:debug`) leave browser source
+    // maps with full TSX sourcesContent in renderer/out, and the bare `package` script hands
+    // electron-builder whatever out/ currently holds — the file set must refuse *.map so a
+    // debug build's maps never ship in a distributable (mirrors apps/tactics).
+    it('excludes renderer source maps from the packaged renderer/out file set', async () => {
+        const yml = await read('electron-builder.yml');
+        expect(yml).toMatch(/from:\s*renderer\/out[\s\S]{0,200}?!\*\*\/\*\.map/);
+    });
+
     it('ships a committed per-game placeholder icon under the game asset dir, not renderer/public (Invariant #97)', async () => {
         const png = await readFile(path.join(blankTemplateDir, 'assets', 'icons', 'icon.png'));
         // PNG magic number — a real raster placeholder, not a stub text file.

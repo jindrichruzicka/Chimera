@@ -9,9 +9,13 @@
             //   3. build:app      — re-bundle the Electron main + preload
             // Incremental (warm .next cache): ~9s. The old task ran only step 3,
             // so renderer changes never appeared in a launch.
+            // CHIMERA_DEBUG=1 on next build turns on productionBrowserSourceMaps
+            // (renderer/next.config.ts) so DevTools and the "Attach Tactics Renderer"
+            // launch config can bind breakpoints to the original TSX. Launch-config
+            // `env` does NOT reach preLaunchTasks, so the flag must live here.
             "label": "Build Tactics (renderer + bundle)",
             "type": "shell",
-            "command": "pnpm build:packages && pnpm exec next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app",
+            "command": "pnpm build:packages && pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app",
             "options": { "cwd": "${workspaceFolder}" },
             "problemMatcher": [],
             "presentation": { "reveal": "always", "focus": false, "panel": "shared", "clear": true }
@@ -24,7 +28,7 @@
             // incremental task above already picks up source changes reliably.
             "label": "Build Tactics (clean renderer + bundle)",
             "type": "shell",
-            "command": "rm -rf apps/tactics/renderer/.next apps/tactics/renderer/out apps/tactics/dist && pnpm build:packages && pnpm exec next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app",
+            "command": "rm -rf apps/tactics/renderer/.next apps/tactics/renderer/out apps/tactics/dist && pnpm build:packages && pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app",
             "options": { "cwd": "${workspaceFolder}" },
             "problemMatcher": [],
             "presentation": { "reveal": "always", "focus": false, "panel": "shared", "clear": true }

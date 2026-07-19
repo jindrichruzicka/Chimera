@@ -80,6 +80,16 @@ export interface BuildStandaloneRootManifestParams {
 }
 
 /**
+ * The renderer + app-bundle build steps every standalone packaging script prefixes onto its
+ * `electron-builder` invocation (shared by `package` and the per-platform `package:<game>:*`
+ * scripts). Omits the monorepo's `build:packages` — the engine arrives prebuilt in a standalone
+ * install. Pure string over the kebab.
+ */
+function standalonePackageBuildChain(name: string): string {
+    return `next build apps/${name}/renderer && pnpm --filter @chimera-engine/${name} build:app`;
+}
+
+/**
  * The standalone workspace-root `package.json`. Declares the toolchain, optionally forces
  * `@chimera-engine/*` onto the gate's tarballs, stubs `build:packages` to a no-op — the generated
  * app's e2e `global-setup` runs `pnpm build:packages` from this root, but the engine packages
@@ -87,7 +97,8 @@ export interface BuildStandaloneRootManifestParams {
  * build here — and carries a `package` script: the standalone twin of the monorepo's
  * `package:<game>` distributable flow (build the Next renderer + app bundle, then run the app's
  * electron-builder). It omits `build:packages` (the engine is prebuilt) and drives the app by
- * filter; `electron-builder` rides along from the app's own devDependencies. The
+ * filter; `electron-builder` rides along from the app's own devDependencies. It also carries the
+ * per-platform `package:<game>:<platform>` scripts the `.vscode` Package launch configs drive. The
  * `onlyBuiltDependencies` allowlist lets pnpm run electron's + esbuild's install scripts so the
  * e2e arm has a usable Electron binary + esbuild platform binary; `ignoredBuiltDependencies`
  * acknowledges `sharp` (a transitive, unused Next.js dep with prebuilt binaries) so a fresh
@@ -114,10 +125,17 @@ export function buildStandaloneRootManifest(
             // (windowed + DevTools) plus the F9 Debug Inspector. The launcher's --debug
             // branch sets CHIMERA_ENV/NODE_ENV=development + CHIMERA_DEBUG=1.
             'start:debug': 'node scripts/launch.mjs --debug',
-            package:
-                `next build apps/${name}/renderer && ` +
-                `pnpm --filter @chimera-engine/${name} build:app && ` +
-                `pnpm --filter @chimera-engine/${name} run package`,
+            package: `${standalonePackageBuildChain(name)} && pnpm --filter @chimera-engine/${name} run package`,
+            // Per-platform packaging: the standalone twin of the monorepo's
+            // `package:<game>:<platform>` scripts, invoked by the .vscode Package launch
+            // configs. Each mirrors `package`'s build chain (fresh renderer + app bundle,
+            // NO build:packages — the engine is prebuilt) then runs electron-builder with the
+            // platform flag matching this game's electron-builder.yml targets.
+            [`package:${name}:mac-dir`]: `${standalonePackageBuildChain(name)} && pnpm --filter @chimera-engine/${name} exec electron-builder --mac dir`,
+            [`package:${name}:mac-dmg`]: `${standalonePackageBuildChain(name)} && pnpm --filter @chimera-engine/${name} exec electron-builder --mac dmg`,
+            [`package:${name}:win`]: `${standalonePackageBuildChain(name)} && pnpm --filter @chimera-engine/${name} exec electron-builder --win nsis`,
+            [`package:${name}:linux-appimage`]: `${standalonePackageBuildChain(name)} && pnpm --filter @chimera-engine/${name} exec electron-builder --linux AppImage`,
+            [`package:${name}:linux-dir`]: `${standalonePackageBuildChain(name)} && pnpm --filter @chimera-engine/${name} exec electron-builder --linux dir`,
             // `pnpm dev:mp <N> [--scenario <name>]` — the dev multiplayer harness (§4.32):
             // mirrors `package`'s build chain (fresh renderer + app bundle), then delegates
             // to the app's dev:mp script (the `chimera-dev-mp` bin from
@@ -218,39 +236,182 @@ child.on('exit', (code, signal) => {
 }
 
 /**
- * The standalone project's `.vscode/launch.json`: a "Run <Game>" config and a source-map-bound
- * "Debug <Game>" config, both launching the built Electron app through the `node` debugger — which
- * auto-injects the V8 inspector into the spawned `electron` binary, so no `--inspect` flag is
- * needed. The Debug config's `outFiles` + `sourceMaps` bind MAIN-process breakpoints against the
- * app's own source inlined into `dist/electron/main.js` (relies on esbuild `sourcemap: true` in
- * build-main). Renderer/UI code is debugged in the Chromium DevTools window instead.
+ * The standalone project's `.vscode/launch.json` — full parity with the monorepo's apps/tactics
+ * launch surface, adapted to a scaffolded game at `apps/<kebab>` under the project root VS Code
+ * opens (so `${workspaceFolder}` resolves the root `node_modules/.bin/*` and `apps/<kebab>`):
  *
- * Standalone-only + root-placed: the generated project root IS the workspace VS Code opens, so
- * `${workspaceFolder}` resolves `node_modules/.bin/electron` at the root and `apps/<kebab>`
- * relative to it. Pure string over kebab + title, mirroring the other synthesizers.
+ *   - Run <Game> / Run <Game> (Clean): launch the built app (incremental / scorched-earth build).
+ *   - Debug <Game> (COMPOUND) = "Debug <Game>: Main process" (node launch — auto-injects the V8
+ *     inspector into the spawned electron binary, binds MAIN-process breakpoints via `outFiles` +
+ *     `sourceMaps` against the app source inlined into dist/electron/main.js, and opens the CDP
+ *     port with --remote-debugging-port) + "Attach <Game> Renderer" (chrome attach — binds
+ *     RENDERER/TSX breakpoints via the browser source maps the build task emits under
+ *     CHIMERA_DEBUG=1, mapping app-relative webpack sources back to apps/<kebab>).
+ *   - Vitest run / debug-all / debug-current: the root vitest.config.mts is auto-discovered.
+ *   - Playwright run / debug: this game's e2e config + its single electron-e2e project.
+ *   - Package <Game> — <platform>: the per-platform root scripts (buildStandaloneRootManifest).
+ *
+ * Dropdown order is fixed with `presentation.order` (VS Code otherwise lists all configurations
+ * first then compounds at the bottom, burying the compound). NO ESLint configs: a standalone
+ * scaffold ships no eslint flat config, so an `eslint .` launch would be broken out of the box.
+ *
+ * Pure string over kebab + title, mirroring the other synthesizers.
  */
 export function buildStandaloneVscodeLaunchJson(kebab: string, title: string): string {
-    const shared = {
+    const skipFiles = ['<node_internals>/**', '**/node_modules/**'];
+    const electronBase = {
         type: 'node',
         request: 'launch',
         cwd: '${workspaceFolder}',
         runtimeExecutable: '${workspaceFolder}/node_modules/.bin/electron',
-        args: [`apps/${kebab}`],
         env: { NODE_ENV: 'development', CHIMERA_ENV: 'development', CHIMERA_DEBUG: '1' },
         console: 'integratedTerminal',
-        preLaunchTask: `Build ${title} (renderer + bundle)`,
-        skipFiles: ['<node_internals>/**', '**/node_modules/**'],
+        skipFiles,
     };
+    const binBase = (bin: string): Record<string, unknown> => ({
+        type: 'node',
+        request: 'launch',
+        runtimeExecutable: `\${workspaceFolder}/node_modules/.bin/${bin}`,
+        cwd: '${workspaceFolder}',
+        console: 'integratedTerminal',
+        skipFiles,
+        smartStep: true,
+    });
+    const packageBase = {
+        type: 'node',
+        request: 'launch',
+        runtimeExecutable: 'pnpm',
+        cwd: '${workspaceFolder}',
+        console: 'integratedTerminal',
+        skipFiles,
+        smartStep: true,
+    };
+    const playwrightArgs = [
+        'test',
+        '--config',
+        `apps/${kebab}/e2e/playwright.config.ts`,
+        '--project=electron-e2e',
+    ];
     const config = {
         version: '0.2.0',
         configurations: [
-            { name: `Run ${title}`, ...shared },
             {
-                name: `Debug ${title}`,
-                ...shared,
+                name: `Run ${title}`,
+                presentation: { order: 1 },
+                ...electronBase,
+                args: [`apps/${kebab}`],
+                preLaunchTask: `Build ${title} (renderer + bundle)`,
+            },
+            {
+                name: `Run ${title} (Clean)`,
+                presentation: { order: 2 },
+                ...electronBase,
+                args: [`apps/${kebab}`],
+                preLaunchTask: `Build ${title} (clean renderer + bundle)`,
+            },
+            {
+                name: `Debug ${title}: Main process`,
+                presentation: { order: 4 },
+                ...electronBase,
+                // --remote-debugging-port opens the CDP port the renderer attach uses; it must
+                // precede the app path so Chromium consumes it as a switch.
+                args: ['--remote-debugging-port=9222', `apps/${kebab}`],
+                preLaunchTask: `Build ${title} (renderer + bundle)`,
                 outFiles: [`\${workspaceFolder}/apps/${kebab}/dist/electron/**/*.js`],
                 sourceMaps: true,
                 smartStep: true,
+            },
+            {
+                name: `Attach ${title} Renderer`,
+                presentation: { order: 5 },
+                type: 'chrome',
+                request: 'attach',
+                port: 9222,
+                // Poll while the main-process launch's preLaunchTask build runs.
+                timeout: 300000,
+                webRoot: `\${workspaceFolder}/apps/${kebab}/renderer`,
+                // Sources are named webpack://_N_E/<path relative to apps/<kebab>/renderer>, so
+                // ../* covers app files outside the renderer dir (screens/…).
+                sourceMapPathOverrides: {
+                    'webpack://_N_E/../*': `\${workspaceFolder}/apps/${kebab}/*`,
+                    'webpack://_N_E/./*': `\${workspaceFolder}/apps/${kebab}/renderer/*`,
+                    'webpack://_N_E/*': `\${workspaceFolder}/apps/${kebab}/renderer/*`,
+                },
+                skipFiles,
+                smartStep: true,
+            },
+            {
+                name: 'Vitest: run all tests',
+                presentation: { order: 6 },
+                ...binBase('vitest'),
+                runtimeArgs: ['run'],
+            },
+            {
+                name: 'Vitest: debug all tests',
+                presentation: { order: 7 },
+                ...binBase('vitest'),
+                runtimeArgs: ['run', '--no-file-parallelism'],
+                autoAttachChildProcesses: true,
+            },
+            {
+                name: 'Vitest: debug current test file',
+                presentation: { order: 8 },
+                ...binBase('vitest'),
+                runtimeArgs: ['run', '--no-file-parallelism', '${relativeFile}'],
+                autoAttachChildProcesses: true,
+            },
+            {
+                name: 'Playwright: run all tests',
+                presentation: { order: 9 },
+                ...binBase('playwright'),
+                runtimeArgs: playwrightArgs,
+            },
+            {
+                name: 'Playwright: debug all tests',
+                presentation: { order: 10 },
+                ...binBase('playwright'),
+                runtimeArgs: [...playwrightArgs, '--debug'],
+                autoAttachChildProcesses: true,
+            },
+            {
+                name: `Package: ${title} — macOS (folder)`,
+                presentation: { order: 11 },
+                ...packageBase,
+                runtimeArgs: ['run', `package:${kebab}:mac-dir`],
+            },
+            {
+                name: `Package: ${title} — macOS (.dmg)`,
+                presentation: { order: 12 },
+                ...packageBase,
+                runtimeArgs: ['run', `package:${kebab}:mac-dmg`],
+            },
+            {
+                name: `Package: ${title} — Windows (.exe / nsis)`,
+                presentation: { order: 13 },
+                ...packageBase,
+                runtimeArgs: ['run', `package:${kebab}:win`],
+            },
+            {
+                name: `Package: ${title} — Linux (AppImage)`,
+                presentation: { order: 14 },
+                ...packageBase,
+                runtimeArgs: ['run', `package:${kebab}:linux-appimage`],
+            },
+            {
+                name: `Package: ${title} — Linux (folder)`,
+                presentation: { order: 15 },
+                ...packageBase,
+                runtimeArgs: ['run', `package:${kebab}:linux-dir`],
+            },
+        ],
+        compounds: [
+            {
+                // Full-app debugging (the default pick): main process (node) + renderer (chrome
+                // attach). order 3 → renders directly above its "Main process" member (order 4).
+                name: `Debug ${title}`,
+                presentation: { order: 3 },
+                configurations: [`Debug ${title}: Main process`, `Attach ${title} Renderer`],
+                stopAll: true,
             },
         ],
     };
@@ -258,24 +419,38 @@ export function buildStandaloneVscodeLaunchJson(kebab: string, title: string): s
 }
 
 /**
- * The standalone `.vscode/tasks.json`: the `preLaunchTask` both launch configs run before starting
- * the app. Rebuilds the renderer static export (with CHIMERA_DEBUG=1 so browser source maps emit
- * for DevTools) and re-bundles the Electron main/preload, so a launch always reflects current
- * source. Drops the monorepo's `build:packages` step (a no-op stub in a standalone project). Pure.
+ * The standalone `.vscode/tasks.json`: the `preLaunchTask`s the launch configs run before starting
+ * the app. Both rebuild the renderer static export (with CHIMERA_DEBUG=1 so browser source maps
+ * emit for DevTools + the "Attach <Game> Renderer" config) and re-bundle the Electron main/preload,
+ * so a launch always reflects current source. The clean variant first wipes the renderer caches +
+ * static export + bundle output for the "Run <Game> (Clean)" launch. Both drop the monorepo's
+ * `build:packages` step (a no-op stub in a standalone project). Pure.
  */
 export function buildStandaloneVscodeTasksJson(kebab: string, title: string): string {
+    const build =
+        `pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/${kebab}/renderer && ` +
+        `pnpm --filter @chimera-engine/${kebab} build:app`;
+    const presentation = { reveal: 'always', focus: false, panel: 'shared', clear: true };
     const config = {
         version: '2.0.0',
         tasks: [
             {
                 label: `Build ${title} (renderer + bundle)`,
                 type: 'shell',
-                command:
-                    `pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/${kebab}/renderer && ` +
-                    `pnpm --filter @chimera-engine/${kebab} build:app`,
+                command: build,
                 options: { cwd: '${workspaceFolder}' },
                 problemMatcher: [],
-                presentation: { reveal: 'always', focus: false, panel: 'shared', clear: true },
+                presentation,
+            },
+            {
+                label: `Build ${title} (clean renderer + bundle)`,
+                type: 'shell',
+                command:
+                    `rm -rf apps/${kebab}/renderer/.next apps/${kebab}/renderer/out apps/${kebab}/dist && ` +
+                    build,
+                options: { cwd: '${workspaceFolder}' },
+                problemMatcher: [],
+                presentation,
             },
         ],
     };

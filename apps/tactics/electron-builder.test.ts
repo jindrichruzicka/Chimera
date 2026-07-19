@@ -63,6 +63,15 @@ describe('apps/tactics electron-builder.yml packaging config', () => {
         expect(content).toMatch(/renderer\/out/);
     });
 
+    // Debug builds (the .vscode launch tasks, `pnpm start:debug`) leave browser source
+    // maps with full TSX sourcesContent in renderer/out. The root package:tactics:*
+    // chains re-run `next build` (which wipes out/ first), but the bare app-level
+    // `package` script hands electron-builder whatever out/ currently holds — so the
+    // file set itself must refuse *.map or a debug build's maps ship in the bundle.
+    it('excludes renderer source maps from the packaged renderer/out file set', () => {
+        expect(content).toMatch(/from:\s*renderer\/out[\s\S]{0,200}?!\*\*\/\*\.map/);
+    });
+
     it('remaps game content + assets into the apps/tactics/ subtree (gameAssetsRoot path math)', () => {
         expect(content).toMatch(/to:\s*apps\/tactics\/data/);
         expect(content).toMatch(/to:\s*apps\/tactics\/assets/);

@@ -1,10 +1,16 @@
 {
     "version": "0.2.0",
+    // Dropdown order is controlled by presentation.order (VS Code otherwise lists all
+    // configurations first, then compounds at the very bottom — which would bury the
+    // "Debug Tactics" compound below everything). Every entry carries an explicit order
+    // so configs and compounds interleave deterministically; the compound sits directly
+    // above its "Debug Tactics: Main process" member.
     "configurations": [
         {
             "type": "node",
             "request": "launch",
             "name": "Run Tactics",
+            "presentation": { "order": 1 },
             "cwd": "${workspaceFolder}",
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
             "args": ["apps/tactics"],
@@ -21,6 +27,7 @@
             "type": "node",
             "request": "launch",
             "name": "Run Tactics (Clean)",
+            "presentation": { "order": 2 },
             "cwd": "${workspaceFolder}",
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
             "args": ["apps/tactics"],
@@ -34,12 +41,20 @@
             "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
         },
         {
+            // Main-process half of the "Debug Tactics" compound (and usable alone
+            // for main-only debugging): a `node` launch attaches to Electron's main
+            // process, so breakpoints bind in apps/tactics/electron/** but NEVER in
+            // renderer TSX (that runs in Chromium) — the compound adds the renderer
+            // attach for those. --remote-debugging-port opens the CDP port the
+            // renderer attach uses; it must precede the app path so Chromium
+            // consumes it as a switch. order 4 → sits just below the compound (order 3).
             "type": "node",
             "request": "launch",
-            "name": "Debug Tactics",
+            "name": "Debug Tactics: Main process",
+            "presentation": { "order": 4 },
             "cwd": "${workspaceFolder}",
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
-            "args": ["apps/tactics"],
+            "args": ["--remote-debugging-port=9222", "apps/tactics"],
             "env": {
                 "NODE_ENV": "development",
                 "CHIMERA_ENV": "development",
@@ -53,9 +68,39 @@
             "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
         },
         {
+            // Renderer half of the "Debug Tactics" compound: attaches to the
+            // Chromium debug port the main-process launch opens and binds breakpoints in
+            // renderer/screens TSX via the browser source maps the build task
+            // emits (CHIMERA_DEBUG=1 → productionBrowserSourceMaps; js-debug
+            // fetches them over chimera:// through the browser — webRoot is only
+            // a fallback). Sources are named webpack://_N_E/<path relative to
+            // apps/tactics/renderer>, so ../* covers apps/tactics files outside
+            // the renderer dir (screens/…). KNOWN LIMIT: only apps/tactics
+            // sources bind. @chimera-engine/renderer components compile from the
+            // package dist, whose map sources carry dist-depth-relative names no
+            // static override can map — breakpoints in engine renderer files
+            // stay grey (their sources are still viewable read-only in DevTools).
+            "type": "chrome",
+            "request": "attach",
+            "name": "Attach Tactics Renderer",
+            "presentation": { "order": 5 },
+            "port": 9222,
+            // Keep polling while the preLaunchTask build runs (~9s warm, minutes cold).
+            "timeout": 300000,
+            "webRoot": "${workspaceFolder}/apps/tactics/renderer",
+            "sourceMapPathOverrides": {
+                "webpack://_N_E/../*": "${workspaceFolder}/apps/tactics/*",
+                "webpack://_N_E/./*": "${workspaceFolder}/apps/tactics/renderer/*",
+                "webpack://_N_E/*": "${workspaceFolder}/apps/tactics/renderer/*"
+            },
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
+        },
+        {
             "type": "node",
             "request": "launch",
             "name": "Vitest: run all tests",
+            "presentation": { "order": 6 },
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/vitest",
             "runtimeArgs": ["run"],
             "cwd": "${workspaceFolder}",
@@ -67,6 +112,7 @@
             "type": "node",
             "request": "launch",
             "name": "Vitest: debug all tests",
+            "presentation": { "order": 7 },
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/vitest",
             "runtimeArgs": ["run", "--no-file-parallelism"],
             "cwd": "${workspaceFolder}",
@@ -79,6 +125,7 @@
             "type": "node",
             "request": "launch",
             "name": "Vitest: debug current test file",
+            "presentation": { "order": 8 },
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/vitest",
             "runtimeArgs": ["run", "--no-file-parallelism", "${relativeFile}"],
             "cwd": "${workspaceFolder}",
@@ -91,6 +138,7 @@
             "type": "node",
             "request": "launch",
             "name": "ESLint: lint workspace",
+            "presentation": { "order": 9 },
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/eslint",
             "runtimeArgs": ["."],
             "cwd": "${workspaceFolder}",
@@ -102,6 +150,7 @@
             "type": "node",
             "request": "launch",
             "name": "ESLint: lint workspace (fix)",
+            "presentation": { "order": 10 },
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/eslint",
             "runtimeArgs": [".", "--fix"],
             "cwd": "${workspaceFolder}",
@@ -113,6 +162,7 @@
             "type": "node",
             "request": "launch",
             "name": "ESLint: lint current file",
+            "presentation": { "order": 11 },
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/eslint",
             "runtimeArgs": ["${relativeFile}"],
             "cwd": "${workspaceFolder}",
@@ -124,6 +174,7 @@
             "type": "node",
             "request": "launch",
             "name": "Playwright: run all tests",
+            "presentation": { "order": 12 },
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/playwright",
             "runtimeArgs": ["test", "--config", "apps/tactics/e2e/playwright.config.ts"],
             "cwd": "${workspaceFolder}",
@@ -135,6 +186,7 @@
             "type": "node",
             "request": "launch",
             "name": "Playwright: debug all tests",
+            "presentation": { "order": 13 },
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/playwright",
             "runtimeArgs": ["test", "--config", "apps/tactics/e2e/playwright.config.ts", "--debug"],
             "cwd": "${workspaceFolder}",
@@ -147,6 +199,7 @@
             "type": "node",
             "request": "launch",
             "name": "Package: Tactics — macOS (folder)",
+            "presentation": { "order": 14 },
             "runtimeExecutable": "pnpm",
             "runtimeArgs": ["run", "package:tactics:mac-dir"],
             "cwd": "${workspaceFolder}",
@@ -158,6 +211,7 @@
             "type": "node",
             "request": "launch",
             "name": "Package: Tactics — macOS (.dmg)",
+            "presentation": { "order": 15 },
             "runtimeExecutable": "pnpm",
             "runtimeArgs": ["run", "package:tactics:mac-dmg"],
             "cwd": "${workspaceFolder}",
@@ -169,6 +223,7 @@
             "type": "node",
             "request": "launch",
             "name": "Package: Tactics — Windows (.exe / nsis)",
+            "presentation": { "order": 16 },
             "runtimeExecutable": "pnpm",
             "runtimeArgs": ["run", "package:tactics:win"],
             "cwd": "${workspaceFolder}",
@@ -180,6 +235,7 @@
             "type": "node",
             "request": "launch",
             "name": "Package: Tactics — Linux (AppImage)",
+            "presentation": { "order": 17 },
             "runtimeExecutable": "pnpm",
             "runtimeArgs": ["run", "package:tactics:linux-appimage"],
             "cwd": "${workspaceFolder}",
@@ -191,12 +247,26 @@
             "type": "node",
             "request": "launch",
             "name": "Package: Tactics — Linux (folder)",
+            "presentation": { "order": 18 },
             "runtimeExecutable": "pnpm",
             "runtimeArgs": ["run", "package:tactics:linux-dir"],
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
             "smartStep": true
+        }
+    ],
+    "compounds": [
+        {
+            // Full-app debugging (the default pick): main process (node) + renderer
+            // (chrome attach). Breakpoints bind in apps/tactics/electron/** AND in
+            // renderer TSX. Members: the "Debug Tactics: Main process" launch opens
+            // the CDP port, then "Attach Tactics Renderer" attaches to it. order 3 →
+            // renders directly above its "Debug Tactics: Main process" member (order 4).
+            "name": "Debug Tactics",
+            "presentation": { "order": 3 },
+            "configurations": ["Debug Tactics: Main process", "Attach Tactics Renderer"],
+            "stopAll": true
         }
     ]
 }

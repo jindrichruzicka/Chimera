@@ -50,8 +50,14 @@ npmRebuild: false
 files:
   - dist/electron/main.js
   - dist/preload/api.js
+  # Debug builds (the .vscode task, `pnpm start:debug`) emit *.map files with full
+  # TSX sourcesContent into renderer/out; never ship them (this bare `package`
+  # script packages out/ as-is, without a fresh `next build`).
   - from: renderer/out
     to: renderer/out
+    filter:
+      - '**/*'
+      - '!**/*.map'
   - from: assets
     to: apps/__game_kebab__/assets
   # When your game ships content, add its data dir here so the host's content loader finds
