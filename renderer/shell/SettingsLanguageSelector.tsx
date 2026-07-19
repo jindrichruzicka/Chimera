@@ -37,16 +37,30 @@ export interface SettingsLanguageSelectorProps {
     readonly variant?: 'select' | 'inline';
 }
 
+/** A resolved declared-language read: the list plus whether the load settled. */
+export interface DeclaredLanguages {
+    readonly languages: readonly GameLanguage[];
+    /**
+     * `false` until the async shell load resolves (or immediately `true` when an
+     * explicit list is supplied). Callers deciding "no language choice" must gate
+     * on this so a still-loading game is not mistaken for a single-language one.
+     */
+    readonly ready: boolean;
+}
+
 /**
  * Resolve declared languages: the explicit prop when supplied, otherwise the
  * active game's shell-contributed `translations.languages`, loaded lazily. A
- * failed load resolves to an empty list (the selector then self-hides).
+ * failed load resolves to an empty list (the selector then self-hides). The
+ * `ready` flag lets a caller distinguish "still loading" from "loaded, <2
+ * languages" — the settings surface needs that to place its empty-state message
+ * without flashing it while languages are in flight.
  */
-function useDeclaredLanguages(
+export function useDeclaredLanguages(
     gameId: string,
     explicit: readonly GameLanguage[] | undefined,
-): readonly GameLanguage[] {
-    const [loaded, setLoaded] = useState<readonly GameLanguage[]>([]);
+): DeclaredLanguages {
+    const [loaded, setLoaded] = useState<DeclaredLanguages>({ languages: [], ready: false });
 
     useEffect(() => {
         if (explicit !== undefined) {
@@ -54,17 +68,17 @@ function useDeclaredLanguages(
         }
         // Clear immediately so a gameId change never flashes the previous game's
         // languages while the new shell load is still in flight.
-        setLoaded([]);
+        setLoaded({ languages: [], ready: false });
         let disposed = false;
         loadRendererGameShell(gameId)
             .then((shell) => {
                 if (!disposed) {
-                    setLoaded(shell.translations?.languages ?? []);
+                    setLoaded({ languages: shell.translations?.languages ?? [], ready: true });
                 }
             })
             .catch(() => {
                 if (!disposed) {
-                    setLoaded([]);
+                    setLoaded({ languages: [], ready: true });
                 }
             });
         return () => {
@@ -72,7 +86,7 @@ function useDeclaredLanguages(
         };
     }, [gameId, explicit]);
 
-    return explicit ?? loaded;
+    return explicit === undefined ? loaded : { languages: explicit, ready: true };
 }
 
 export function SettingsLanguageSelector({
@@ -84,7 +98,7 @@ export function SettingsLanguageSelector({
     const activeGameId = useSettingsStore((state) => state.activeGameId);
     const gameId = gameIdProp ?? activeGameId ?? ENGINE_SETTINGS_GAME_ID;
 
-    const languages = useDeclaredLanguages(gameId, languagesProp);
+    const { languages } = useDeclaredLanguages(gameId, languagesProp);
 
     const value = useSettingsStore((state) => {
         const settings = state.settings[gameId] as { gameplay?: { language?: string } } | undefined;

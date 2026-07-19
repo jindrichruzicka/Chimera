@@ -79,6 +79,7 @@ export const engineBundleEn: TranslationBundle = {
     'engine.settings.close': 'Close',
     'engine.settings.tabsAriaLabel': 'Settings categories',
     'engine.settings.loading': 'Loading settings',
+    'engine.settings.noSettings': 'No settings available.',
     'engine.settings.keyBindingsManaged': 'Key bindings are managed by the engine controls panel.',
     'engine.settings.noControls': 'No controls registered.',
     'engine.settings.pressKey': 'Press a key...',

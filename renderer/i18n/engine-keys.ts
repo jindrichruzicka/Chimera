@@ -87,6 +87,9 @@ export const SETTINGS_KEYS = {
     close: translationKey('engine.settings.close'),
     tabsAriaLabel: translationKey('engine.settings.tabsAriaLabel'),
     loading: translationKey('engine.settings.loading'),
+    // Shown in place of a settings section that has nothing to change (e.g. a
+    // gameplay tab whose only item, the language selector, self-hides).
+    noSettings: translationKey('engine.settings.noSettings'),
     // Controls panel.
     keyBindingsManaged: translationKey('engine.settings.keyBindingsManaged'),
     noControls: translationKey('engine.settings.noControls'),

@@ -74,6 +74,7 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.settings.close': 'Zavřít',
     'engine.settings.tabsAriaLabel': 'Kategorie nastavení',
     'engine.settings.loading': 'Načítání nastavení',
+    'engine.settings.noSettings': 'Žádná nastavení nejsou k dispozici.',
     'engine.settings.keyBindingsManaged': 'Přiřazení kláves spravuje panel Ovládání.',
     'engine.settings.noControls': 'Žádné ovládací prvky nejsou registrovány.',
     'engine.settings.pressKey': 'Stiskni klávesu…',

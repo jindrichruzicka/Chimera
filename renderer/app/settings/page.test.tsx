@@ -311,7 +311,7 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
             expect(mockUpdate).toHaveBeenCalledWith(GAME_ID, { gameplay: { language: 'cs-CZ' } });
         });
 
-        it('shows no Language row when the game declares fewer than two languages', async () => {
+        it('shows the empty-section message (not a Language row) when the game declares fewer than two languages', async () => {
             mockLoadRendererGameShell.mockResolvedValue(makeRendererShell([TWO_LANGUAGES[0]!]));
 
             await renderSettingsPageAndOpenTab('Gameplay');
@@ -319,16 +319,31 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
             // selector hides itself).
             expect(await screen.findByTestId('settings-section-gameplay-gameplay')).toBeTruthy();
 
+            // With nothing the player can change, the section surfaces the shared
+            // empty-state message instead of a blank panel — parity with the
+            // controls tab's "No controls registered.".
+            expect(await screen.findByText('No settings available.')).toBeTruthy();
             expect(screen.queryByRole('combobox', { name: 'Language' })).toBeNull();
         });
 
-        it('shows no Language row when the game declares no languages', async () => {
+        it('shows the empty-section message when the game declares no languages', async () => {
             mockLoadRendererGameShell.mockResolvedValue(makeRendererShell([]));
 
             await renderSettingsPageAndOpenTab('Gameplay');
             expect(await screen.findByTestId('settings-section-gameplay-gameplay')).toBeTruthy();
 
+            expect(await screen.findByText('No settings available.')).toBeTruthy();
             expect(screen.queryByRole('combobox', { name: 'Language' })).toBeNull();
+        });
+
+        it('does not show the empty-section message when the game declares ≥2 languages', async () => {
+            // TWO_LANGUAGES is the default: the language selector renders, so the
+            // gameplay section is not empty and the message must stay absent (no
+            // first-paint flash while the languages are still loading).
+            await renderSettingsPageAndOpenTab('Gameplay');
+
+            expect(await screen.findByRole('combobox', { name: 'Language' })).toBeTruthy();
+            expect(screen.queryByText('No settings available.')).toBeNull();
         });
     });
 

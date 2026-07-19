@@ -45,7 +45,10 @@ import { SETTINGS_KEYS } from '../../i18n/engine-keys';
 import type { TranslateFn } from '../../i18n/i18n-context';
 import { useTranslate } from '../../i18n/useTranslate';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
-import { SettingsLanguageSelector } from '../../shell/SettingsLanguageSelector';
+import {
+    SettingsLanguageSelector,
+    useDeclaredLanguages,
+} from '../../shell/SettingsLanguageSelector';
 import { useSettingsStore } from '../../state/settingsStore';
 import {
     getSettingsApi,
@@ -594,6 +597,12 @@ function SettingsDefinitionSurface({
     readonly resolvedSettings: ResolvedSettings | undefined;
     readonly t: TranslateFn;
 }>): React.ReactElement {
+    // Read the game's declared languages once here so a section can tell whether
+    // its language field will render anything: the field self-hides for <2
+    // languages, which is the common way a section ends up empty. `ready` gates
+    // the empty-state decision so it never flashes while languages load.
+    const { languages, ready: languageReady } = useDeclaredLanguages(gameId, undefined);
+    const hasLanguageChoice = languages.length >= 2;
     const definition = readSettingsDefinition(activeGameId);
 
     return (
@@ -607,6 +616,8 @@ function SettingsDefinitionSurface({
                     <SettingsTabPanel
                         key={tab.id}
                         gameId={gameId}
+                        hasLanguageChoice={hasLanguageChoice}
+                        languageReady={languageReady}
                         onUpdate={onUpdate}
                         renderControlsPanel={renderControlsPanel}
                         resolvedSettings={resolvedSettings}
@@ -622,6 +633,8 @@ function SettingsDefinitionSurface({
 
 function SettingsTabPanel({
     gameId,
+    hasLanguageChoice,
+    languageReady,
     onUpdate,
     renderControlsPanel,
     resolvedSettings,
@@ -629,6 +642,8 @@ function SettingsTabPanel({
     tab,
 }: Readonly<{
     readonly gameId: string;
+    readonly hasLanguageChoice: boolean;
+    readonly languageReady: boolean;
     readonly onUpdate: (patch: Record<string, unknown>) => void;
     readonly renderControlsPanel: () => React.ReactElement;
     readonly resolvedSettings: ResolvedSettings | undefined;
@@ -649,6 +664,14 @@ function SettingsTabPanel({
                     resolvedTabLabel,
                     resolvedSectionLabel,
                 );
+                // A section is "empty" when none of its items will render
+                // anything the player can act on — either it declares no items,
+                // or its only item is the language field with no real choice.
+                // Mirror the controls panel's "No controls registered." so an
+                // empty section never paints a silent, blank panel.
+                const hasVisibleItem = section.items.some((item) =>
+                    settingsItemWillRender(item, { hasLanguageChoice, languageReady }),
+                );
                 return (
                     <section
                         aria-labelledby={shouldRenderHeading ? headingId : undefined}
@@ -662,15 +685,19 @@ function SettingsTabPanel({
                             </Heading>
                         ) : null}
                         <div className={styles['field-list']}>
-                            {section.items.map((item) =>
-                                renderSettingsItem({
-                                    item,
-                                    gameId,
-                                    onUpdate,
-                                    renderControlsPanel,
-                                    resolvedSettings,
-                                    t,
-                                }),
+                            {hasVisibleItem ? (
+                                section.items.map((item) =>
+                                    renderSettingsItem({
+                                        item,
+                                        gameId,
+                                        onUpdate,
+                                        renderControlsPanel,
+                                        resolvedSettings,
+                                        t,
+                                    }),
+                                )
+                            ) : (
+                                <Caption tone="muted">{t(SETTINGS_KEYS.noSettings)}</Caption>
                             )}
                         </div>
                     </section>
@@ -678,6 +705,24 @@ function SettingsTabPanel({
             })}
         </div>
     );
+}
+
+/**
+ * Whether a settings item will render visible content. Only the language field
+ * can render nothing (it self-hides for <2 declared languages); every other item
+ * — game fields, other engine fields, and the key-binding item (which owns its
+ * own "No controls registered." empty state) — always paints. While the language
+ * load is still in flight the field is treated as pending (will render), so the
+ * section's empty-state message never flashes before the count is known.
+ */
+function settingsItemWillRender(
+    item: SettingsItemDefinition,
+    { hasLanguageChoice, languageReady }: { hasLanguageChoice: boolean; languageReady: boolean },
+): boolean {
+    if (item.kind === 'engine-field' && item.fieldId === 'gameplay.language') {
+        return !languageReady || hasLanguageChoice;
+    }
+    return true;
 }
 
 function shouldRenderSectionHeading(
