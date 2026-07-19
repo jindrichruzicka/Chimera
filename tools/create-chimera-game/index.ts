@@ -38,6 +38,7 @@ import {
     rewriteAppPackageForStandalone,
     rewriteAppTsconfigBuildForStandalone,
     rewriteE2eTsconfigForStandalone,
+    rewriteE2ePlaywrightConfigForStandalone,
 } from './standalone';
 import {
     ENGINE_DEP_RANGES,
@@ -335,6 +336,14 @@ async function emitStandaloneProject(
     await rewriteFileIfPresent(
         path.join(appDir, 'e2e', 'tsconfig.json'),
         rewriteE2eTsconfigForStandalone,
+    );
+    // Make the e2e Playwright config self-set CHIMERA_VERIFY_PACK_NODE_MODULES so runners that bypass
+    // the `test:e2e` script (the VS Code Playwright Test Explorer, `npx playwright test`, the launch
+    // config) still resolve `@chimera-engine/electron` from node_modules — otherwise the global-setup
+    // bundler fails with "Could not resolve @chimera-engine/electron/main".
+    await rewriteFileIfPresent(
+        path.join(appDir, 'e2e', 'playwright.config.ts'),
+        rewriteE2ePlaywrightConfigForStandalone,
     );
 }
 

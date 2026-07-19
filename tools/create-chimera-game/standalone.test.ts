@@ -12,6 +12,7 @@ import {
     rewriteAppPackageForStandalone,
     rewriteAppTsconfigBuildForStandalone,
     rewriteE2eTsconfigForStandalone,
+    rewriteE2ePlaywrightConfigForStandalone,
 } from './standalone';
 
 /**
@@ -649,6 +650,46 @@ describe('rewriteE2eTsconfigForStandalone', () => {
         const once = rewriteE2eTsconfigForStandalone(raw);
         const twice = rewriteE2eTsconfigForStandalone(once);
         expect(twice).toBe(once);
+    });
+});
+
+describe('rewriteE2ePlaywrightConfigForStandalone', () => {
+    // Mirrors the blank template's e2e/playwright.config.ts: an import, then the defineConfig export.
+    const raw = `import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+    testDir: './tests',
+    globalSetup: './global-setup.ts',
+});
+`;
+
+    it('self-sets CHIMERA_VERIFY_PACK_NODE_MODULES before the defineConfig export', () => {
+        const out = rewriteE2ePlaywrightConfigForStandalone(raw);
+        // The env default must be present so runners that bypass the test:e2e script (VS Code Test
+        // Explorer, npx, the launch config) still resolve @chimera-engine/electron from node_modules.
+        expect(out).toContain("process.env.CHIMERA_VERIFY_PACK_NODE_MODULES ??= 'node_modules';");
+        // It MUST precede the config export: the config module loads (running this line) before
+        // globalSetup — which reads process.env to compute the esbuild alias — in the same process.
+        expect(out.indexOf('CHIMERA_VERIFY_PACK_NODE_MODULES')).toBeLessThan(
+            out.indexOf('export default defineConfig'),
+        );
+        // And it must come AFTER the imports (a bare statement above an import would be invalid).
+        expect(out.indexOf("from '@playwright/test'")).toBeLessThan(
+            out.indexOf('CHIMERA_VERIFY_PACK_NODE_MODULES'),
+        );
+    });
+
+    it('leaves the original defineConfig body intact', () => {
+        const out = rewriteE2ePlaywrightConfigForStandalone(raw);
+        expect(out).toContain("testDir: './tests'");
+        expect(out).toContain("globalSetup: './global-setup.ts'");
+    });
+
+    it('is idempotent — re-running does not inject a second time', () => {
+        const once = rewriteE2ePlaywrightConfigForStandalone(raw);
+        const twice = rewriteE2ePlaywrightConfigForStandalone(once);
+        expect(twice).toBe(once);
+        expect(once.match(/CHIMERA_VERIFY_PACK_NODE_MODULES/g)).toHaveLength(1);
     });
 });
 

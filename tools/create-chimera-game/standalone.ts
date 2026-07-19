@@ -632,6 +632,39 @@ export function rewriteE2eTsconfigForStandalone(rawTsconfig: string): string {
 }
 
 /**
+ * Make the scaffolded app's `e2e/playwright.config.ts` SELF-SET `CHIMERA_VERIFY_PACK_NODE_MODULES` for
+ * a STANDALONE run — the launcher-agnostic twin of the `test:e2e` script's `cross-env` prefix.
+ *
+ * The e2e `global-setup` bundles the Electron main with esbuild; outside the monorepo there is no
+ * `electron/` SOURCE to alias `@chimera-engine/electron/main` onto, so that env must be set to make
+ * `build-main` resolve the host engine from `node_modules` (see `computeEsbuildAlias`). The `test:e2e`
+ * script sets it, but ANY runner that loads this config WITHOUT that script — the VS Code Playwright
+ * Test Explorer extension, a bare `npx playwright test`, the `.vscode` Playwright launch — bypasses it
+ * and the bundle dies with "Could not resolve @chimera-engine/electron/main". Self-setting it at
+ * config-module load (Playwright evaluates the config before `globalSetup`, in the SAME process, so
+ * the mutation is visible there) makes standalone e2e work under EVERY runner. `??=` leaves an
+ * explicit override — the verify:pack / verify:scaffold gates set an absolute path — untouched.
+ *
+ * Standalone-only: called from `emitStandaloneProject`, never in `--workspace` mode (there the
+ * monorepo `electron/main/index.ts` source EXISTS and the source alias is the wanted behaviour). The
+ * statement is spliced in AFTER the imports, immediately before the `export default defineConfig`
+ * call. Pure + idempotent: a config that already references the var (a re-run, or a template that
+ * already self-sets it) is returned unchanged.
+ */
+export function rewriteE2ePlaywrightConfigForStandalone(rawConfig: string): string {
+    if (rawConfig.includes('CHIMERA_VERIFY_PACK_NODE_MODULES')) return rawConfig;
+    const marker = 'export default defineConfig(';
+    const injection =
+        '// Standalone scaffold: resolve `@chimera-engine/electron` from node_modules for EVERY e2e runner\n' +
+        '// (the VS Code Playwright Test Explorer, `npx playwright test`, the launch config) — not only\n' +
+        "// the `test:e2e` script. The e2e global-setup's esbuild bundler reads this to drop the\n" +
+        '// monorepo-only `@chimera-engine/electron/main` source alias (absent in a standalone scaffold).\n' +
+        '// `??=` leaves the verify:pack / verify:scaffold gate override untouched.\n' +
+        "process.env.CHIMERA_VERIFY_PACK_NODE_MODULES ??= 'node_modules';\n\n";
+    return rawConfig.replace(marker, `${injection}${marker}`);
+}
+
+/**
  * The unit-arm vitest config the generated app's `test` script loads via
  * `--config ../../vitest.config.mts`. It maps the app's OWN relative `.js` smoke imports onto
  * co-located TS source (never node_modules), and deliberately does NOT remap bare `@chimera-engine/*`
