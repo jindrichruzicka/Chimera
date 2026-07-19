@@ -290,6 +290,27 @@ describe('buildStandaloneVscodeLaunchJson', () => {
         ]);
     });
 
+    it('sets CHIMERA_VERIFY_PACK_NODE_MODULES on the Playwright launches (parity with test:e2e)', () => {
+        // The Playwright configs invoke the runner bin DIRECTLY, bypassing the app's `test:e2e`
+        // script — which is the only place `rewriteAppPackageForStandalone` injects
+        // CHIMERA_VERIFY_PACK_NODE_MODULES. Without it here the e2e global-setup's esbuild bundler
+        // keeps the monorepo-only `@chimera-engine/electron/main` -> <root>/electron/main/index.ts
+        // source alias (absent in a standalone scaffold) and the build fails with
+        // "Could not resolve @chimera-engine/electron/main". The value `node_modules` matches the
+        // script; build-main resolves it app-dir-relative, so it is cwd-independent.
+        const parsed = parse();
+        const byName = (name: string): LaunchConfig | undefined =>
+            parsed.configurations.find((c) => c['name'] === name);
+        for (const name of ['Playwright: run all tests', 'Playwright: debug all tests']) {
+            expect(byName(name)?.['env'], name).toMatchObject({
+                CHIMERA_VERIFY_PACK_NODE_MODULES: 'node_modules',
+            });
+        }
+        // Vitest resolves `@chimera-engine/*` through its own inlining config (no esbuild alias),
+        // so it must NOT carry the env — mirroring the script rewrite, which touches only test:e2e.
+        expect(byName('Vitest: run all tests')?.['env']).toBeUndefined();
+    });
+
     it('references only Package scripts + compound members + task labels that actually exist', () => {
         const kebab = 'my-game';
         const title = 'My Game';

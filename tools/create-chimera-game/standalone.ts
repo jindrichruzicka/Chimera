@@ -263,7 +263,10 @@ child.on('exit', (code, signal) => {
  *     RENDERER/TSX breakpoints via the browser source maps the build task emits under
  *     CHIMERA_DEBUG=1, mapping app-relative webpack sources back to apps/<kebab>).
  *   - Vitest run / debug-all / debug-current: the root vitest.config.mts is auto-discovered.
- *   - Playwright run / debug: this game's e2e config + its single electron-e2e project.
+ *   - Playwright run / debug: this game's e2e config + its single electron-e2e project. Both set
+ *     CHIMERA_VERIFY_PACK_NODE_MODULES=node_modules — they invoke the runner bin directly, so they
+ *     miss the app's `test:e2e` script (the only place that env is injected), and without it the
+ *     e2e global-setup's esbuild bundler cannot resolve `@chimera-engine/electron/main`.
  *   - Package <Game> — <platform>: the per-platform root scripts (buildStandaloneRootManifest).
  *
  * Dropdown order is fixed with `presentation.order` (VS Code otherwise lists all configurations
@@ -307,6 +310,18 @@ export function buildStandaloneVscodeLaunchJson(kebab: string, title: string): s
         `apps/${kebab}/e2e/playwright.config.ts`,
         '--project=electron-e2e',
     ];
+    // The Playwright launches invoke the runner bin DIRECTLY, so they bypass the app's `test:e2e`
+    // script — the ONLY place `rewriteAppPackageForStandalone` injects this env. Its e2e
+    // `global-setup` bundles the Electron main with esbuild; without this var set, that bundler
+    // keeps the monorepo-only `@chimera-engine/electron/main` -> `<root>/electron/main/index.ts`
+    // source alias (see build-main `computeEsbuildAlias`), which does not exist in a standalone
+    // scaffold — so the build dies with "Could not resolve @chimera-engine/electron/main". Setting
+    // it drops that alias and resolves the host engine from `node_modules` instead. The value
+    // mirrors the script; build-main resolves it app-dir-relative, so it is cwd-independent (these
+    // launches run with cwd = the project root, not the app dir). Vitest needs no such env (it
+    // resolves `@chimera-engine/*` through its own inlining config, not esbuild), matching the
+    // script rewrite, which touches only `build:app` + `test:e2e`.
+    const playwrightEnv = { CHIMERA_VERIFY_PACK_NODE_MODULES: 'node_modules' };
     const config = {
         version: '0.2.0',
         configurations: [
@@ -380,6 +395,7 @@ export function buildStandaloneVscodeLaunchJson(kebab: string, title: string): s
                 presentation: { order: 9 },
                 ...binBase('playwright'),
                 runtimeArgs: playwrightArgs,
+                env: playwrightEnv,
             },
             {
                 name: 'Playwright: debug all tests',
@@ -387,6 +403,7 @@ export function buildStandaloneVscodeLaunchJson(kebab: string, title: string): s
                 ...binBase('playwright'),
                 runtimeArgs: [...playwrightArgs, '--debug'],
                 autoAttachChildProcesses: true,
+                env: playwrightEnv,
             },
             {
                 name: `Package: ${title} — macOS (folder)`,
