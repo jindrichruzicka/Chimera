@@ -127,6 +127,11 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
 }
 
 function createAudioManagerForEnvironment(assetManager: AssetManager): AudioManager {
+    // Next static-export prerender runs this in Node, where the Web Audio API
+    // does not exist; fall back silently instead of warning per route.
+    if (typeof window === 'undefined') {
+        return createNoopAudioManager();
+    }
     try {
         return createAudioManager(assetManager);
     } catch (error) {
