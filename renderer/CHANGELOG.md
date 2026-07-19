@@ -1,5 +1,22 @@
 # @chimera-engine/renderer
 
+## 1.0.0-rc.3
+
+### Minor Changes
+
+- Added a `gallery` glyph (2x2 rounded-tile grid) to the engine icon registry and
+  switched the main-menu component-gallery button to a borderless ghost `IconButton`
+  using it, dropping the now-dead `.component-gallery-icon` CSS.
+
+### Patch Changes
+
+- Silenced a spurious AudioManager console warning during static-export prerendering.
+  `createAudioManagerForEnvironment` now returns the noop audio manager behind a
+  `typeof window` guard when no `AudioContext` is available (Next static export runs
+  `Providers` once per route in Node), matching the SSR guards already used in the
+  providers module. The warn path is preserved for genuine client-side failures.
+    - @chimera-engine/simulation@1.0.0-rc.3
+
 ## 1.0.0-rc.2
 
 ### Minor Changes
