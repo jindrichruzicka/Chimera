@@ -1,6 +1,6 @@
 {
     "name": "@chimera-engine/tactics",
-    "version": "0.9.0",
+    "version": "0.9.1-rc.0",
     "private": true,
     "description": "Tactics — the reference Chimera consumer app (turn-based tactics game).",
     "author": "Chimera",

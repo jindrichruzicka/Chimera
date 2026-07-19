@@ -12,10 +12,17 @@
   },
   "changesets": [
     "create-chimera-game-scaffold-into-cwd",
+    "dev-harness-game-fixtures",
     "electron-run-as-node-launch-fix",
     "game-manifest-spectators-declaration",
+    "lobby-ui-modernization",
+    "logo-screen-hide-cursor",
     "logo-screen-keypress-only-skip",
     "m10-first-public-release",
+    "modal-overlay-backdrop-blur",
+    "rc-polish-fps-limiter-display-settings",
+    "scaffold-debug-support",
+    "settings-empty-section-message",
     "spectator-feature-review-gate",
     "spectator-perspective-switching",
     "spectator-viewer-registry-perspective-broadcast"

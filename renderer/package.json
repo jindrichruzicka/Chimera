@@ -1,6 +1,6 @@
 {
     "name": "@chimera-engine/renderer",
-    "version": "1.0.0-rc.1",
+    "version": "1.0.0-rc.2",
     "description": "React / React-Three-Fiber renderer component library and app shell for the Chimera engine.",
     "license": "MIT",
     "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",

@@ -1,5 +1,39 @@
 # @chimera-engine/renderer
 
+## 1.0.0-rc.2
+
+### Minor Changes
+
+- Modernized the multiplayer lobby UI: seats now toggle ready via an icon control (backed by
+  a new `check` glyph in the engine icon set), AI seats are merged into the roster, and the
+  lobby banner and summary gain a frosted backdrop. Tactics adopts a two-column lobby layout
+  on top of the shared renderer changes.
+- RC polish across the engine chrome and settings:
+    - New real frame-rate limiter: `FrameRateLimiter` (exported from the r3f barrel) gates
+      `gl.render` at render priority and reads `targetFps` from resolved settings, replacing
+      the previously non-functional display cap.
+    - Removed the dead `display.fullscreen`, `display.vsync`, and `display.uiScale` settings
+      engine-wide (they had no runtime effect; fullscreen is forced in production). The
+      gameplay settings tab is now language-only.
+    - Slimmed the default chrome: dropped the lobby role badge and the default HUD's
+      `Tick`/undo/redo affordances (`DefaultGameHud`), and removed the duplicated title from
+      the blank game template.
+
+- Settings sections with nothing to change now show an empty-state message
+  (`engine.settings.noSettings` → "No settings available."), mirroring the existing
+  `noControls` behaviour. `SettingsTabPanel` is now data-driven via a `settingsItemWillRender`
+  predicate — "empty" means every item renders null (e.g. the language selector self-hides
+  below two languages), not merely a zero-length item list. `useDeclaredLanguages` is now
+  ready-aware and exported so the section can gate without flashing.
+
+### Patch Changes
+
+- a68c5ba: The boot logo screen now hides the OS mouse cursor while it plays. `LogoVideoScreen` routes its cursor through a new `--ch-cursor-hidden: none` design token (kept in the `--ch-cursor-*` family so it stays game-overridable); every other screen keeps its system/game cursor unchanged.
+- 4ce48c4: The shared `Modal` overlay now supports a token-driven backdrop blur. A new `--ch-overlay-backdrop-blur` design token feeds `backdrop-filter: blur(...)` on the overlay; it defaults to `0` (no blur, unchanged plain scrim). Tactics overrides it to `8px`, frosting the shell that shows through its semi-transparent modal scrim.
+- Updated dependencies [7f237bb]
+- Updated dependencies
+    - @chimera-engine/simulation@1.0.0-rc.2
+
 ## 1.0.0-rc.1
 
 ### Patch Changes
