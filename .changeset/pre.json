@@ -24,6 +24,7 @@
     "modal-overlay-backdrop-blur",
     "rc-polish-fps-limiter-display-settings",
     "scaffold-debug-support",
+    "scaffold-toolchain-exact-pins",
     "settings-empty-section-message",
     "spectator-feature-review-gate",
     "spectator-perspective-switching",

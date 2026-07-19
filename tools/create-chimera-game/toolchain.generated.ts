@@ -63,11 +63,11 @@ export const TOOLCHAIN_DEPS: Readonly<Record<string, string>> = {
 
 /** `^<version>` per publishable engine package, from each package's own version field. */
 export const ENGINE_DEP_RANGES: Readonly<Record<string, string>> = {
-    "@chimera-engine/ai": "^1.0.0-rc.3",
-    "@chimera-engine/electron": "^1.0.0-rc.3",
-    "@chimera-engine/networking": "^1.0.0-rc.3",
-    "@chimera-engine/renderer": "^1.0.0-rc.3",
-    "@chimera-engine/simulation": "^1.0.0-rc.3"
+    "@chimera-engine/ai": "^1.0.0-rc.4",
+    "@chimera-engine/electron": "^1.0.0-rc.4",
+    "@chimera-engine/networking": "^1.0.0-rc.4",
+    "@chimera-engine/renderer": "^1.0.0-rc.4",
+    "@chimera-engine/simulation": "^1.0.0-rc.4"
 };
 
 /** The root tsconfig `compilerOptions`, frozen for the standalone app's inlined tsconfig. */

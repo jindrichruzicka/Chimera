@@ -1,6 +1,6 @@
 {
     "name": "@chimera-engine/ai",
-    "version": "1.0.0-rc.3",
+    "version": "1.0.0-rc.4",
     "description": "Game-agnostic AI agent framework for the Chimera engine.",
     "license": "MIT",
     "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",
