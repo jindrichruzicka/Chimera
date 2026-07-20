@@ -68,6 +68,40 @@ describe('blank template smoke harness', () => {
         expect(buildMain).toContain('sourcemap: true');
     });
 
+    // The Invariant #27 packaged-bundle gate (#902): a scaffolded game's
+    // `build-main.ts` and `electron-builder.yml` are adopter-editable, so the
+    // template ships its own `verify:packaged-bundle` — a THIN driver over the
+    // engine-exported helper (`@chimera-engine/electron/packaged-bundle`), never
+    // a copy of the marker set or predicates (copies drift silently, and only
+    // in the weaker direction). verify:scaffold runs the generated app's gate
+    // for real; these pins keep the template wiring from being dropped.
+    it('ships a thin verify:packaged-bundle gate driving the engine-exported helper (Invariant #27)', async () => {
+        const gate = await read('electron/verify-packaged-bundle.ts');
+        expect(gate).toContain("from '@chimera-engine/electron/packaged-bundle'");
+        expect(gate).toContain('verifyPackagedBundle(');
+        // The gate tracks the app's own bundle plan rather than restating it.
+        expect(gate).toContain("from './build-main.js'");
+        expect(gate).toContain('appBundleOutfiles(');
+        // It runs the app's own build:app script under the same packaging flag
+        // the standalone `package` script sets — the real shipped invocation.
+        // The env var name arrives by import from the plan, never as a restated
+        // literal that could drift from what build-main reads.
+        expect(gate).toContain('PACKAGED_BUILD_ENV');
+        expect(gate).toContain("'build:app'");
+        // Import-safe: vitest collection or an import must never trigger real builds.
+        expect(gate).toContain("process.env['VITEST'] === undefined");
+        // No local marker/predicate residue — the single definition lives in the engine.
+        expect(gate).not.toContain('SnapshotRingBuffer');
+        expect(gate).not.toContain('DEBUG_GRAPH_MARKERS');
+    });
+
+    it('wires the verify:packaged-bundle script into the template package.json (Invariant #27)', async () => {
+        const pkg = JSON.parse(await read('package.json')) as { scripts: Record<string, string> };
+        expect(pkg.scripts['verify:packaged-bundle']).toBe(
+            'tsx electron/verify-packaged-bundle.ts',
+        );
+    });
+
     it('ships a co-located screen render smoke through the renderer public barrels', async () => {
         const content = await read('screens/__GamePascal__Board.test.tsx');
         expect(content.startsWith('// @vitest-environment jsdom')).toBe(true);
@@ -278,6 +312,7 @@ describe('blank template smoke harness', () => {
             'e2e/playwright.config.ts',
             'e2e/tsconfig.json',
             'electron-builder.yml',
+            'electron/verify-packaged-bundle.ts',
         ];
         for (const rel of files) {
             expect((await read(rel)).toLowerCase()).not.toContain('tactics');

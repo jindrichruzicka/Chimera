@@ -26,7 +26,9 @@
  *   7. `pnpm --filter <app> test:e2e` — the generated app's Electron BOOT-smoke
  *   8. `pnpm --filter <app> build` + `build:app` — the PRODUCTION build: `tsc -p tsconfig.build.json`
  *      (proves the standalone refs rewrite resolves the engine from `node_modules`) + the esbuild
- *      main/preload bundles. This is the arm that fails out-of-repo.
+ *      main/preload bundles. This is the arm that fails out-of-repo. Then the generated app's own
+ *      `verify:packaged-bundle` gate (Invariant #27) — the template's thin driver over the
+ *      engine-exported packaged-bundle guard — so a broken template guard fails engine CI here.
  *   9. `next build` the renderer + an UNSIGNED `electron-builder --dir` — proves the tokenised
  *      packaging config produces a branded local app bundle from the standalone-emitted project.
  *
@@ -87,6 +89,7 @@ export type VerifyScaffoldStep =
     | 'unit'
     | 'e2e'
     | 'prod-build'
+    | 'packaged-bundle'
     | 'dev-harness'
     | 'package';
 
@@ -378,6 +381,21 @@ async function scaffoldPipeline(
     assertStepOk(
         'prod-build',
         deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'build:app'], { cwd: tmp }),
+    );
+
+    // 8a. the generated app's own Invariant #27 gate: the blank template ships a
+    //    `verify:packaged-bundle` script driving the engine-exported packaged-bundle guard
+    //    (@chimera-engine/electron/packaged-bundle), protecting the adopter-editable
+    //    `build-main.ts` + `electron-builder.yml`. Running it here means a broken TEMPLATE
+    //    gate fails the engine's own CI, not a downstream adopter's packaging run. It rebuilds
+    //    the app's dist twice (packaged, then the dev restore that doubles as its negative
+    //    control), so it sits between build:app and the arms that read `dist/` — it exits with
+    //    the DEV bundle restored, exactly the shape the dev-harness dry run and the package arm
+    //    expect.
+    deps.log("running the generated app's verify:packaged-bundle gate (Invariant #27)…");
+    assertStepOk(
+        'packaged-bundle',
+        deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'verify:packaged-bundle'], { cwd: tmp }),
     );
 
     // 8b. dev-harness dry run (§4.32): the packaged `chimera-dev-mp` bin must resolve from

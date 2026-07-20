@@ -47,6 +47,10 @@
         "./preload/debug-api-types.js": {
             "types": "./preload/debug-api-types.ts",
             "default": "./dist/preload/debug-api-types.js"
+        },
+        "./packaged-bundle": {
+            "types": "./dist/packaged-bundle/index.d.ts",
+            "default": "./dist/packaged-bundle/index.js"
         }
     },
     "files": [

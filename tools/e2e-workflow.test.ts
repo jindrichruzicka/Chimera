@@ -107,6 +107,16 @@ describe('e2e.yml CI workflow', () => {
         expect(content).not.toMatch(/run:\s*pnpm(?:\s+run)?\s+build:renderer/);
     });
 
+    it('runs the verify:scaffold gate — the CI enforcement point for the generated-app guards', () => {
+        // verify:scaffold is what exercises a GENERATED game's own gates (unit +
+        // e2e smoke, prod build, and the Invariant #27 `verify:packaged-bundle`
+        // driver the blank template ships). Losing this step would silently
+        // un-enforce every template guard on CI with all other checks green, so
+        // it is pinned the same way ci-workflow.test.ts pins the monorepo's
+        // `pnpm verify:packaged-bundle` step.
+        expect(content).toMatch(/run:\s*pnpm verify:scaffold/);
+    });
+
     it('does NOT have a standalone "build:electron" step — global-setup.ts esbuild handles main compilation into .e2e-build/', () => {
         // global-setup.ts uses esbuild to compile electron/main/index.ts → .e2e-build/electron/main/index.js.
         // pnpm build:electron writes to a different path (electron/main/index.js) not used by e2e,

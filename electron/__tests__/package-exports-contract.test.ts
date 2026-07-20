@@ -87,6 +87,14 @@ const EXPECTED_EXPORTS = {
         types: './preload/debug-api-types.ts',
         default: './dist/preload/debug-api-types.js',
     },
+    // The Invariant #27 packaged-bundle guard (§4.12, #902): the single home of
+    // the debug-bundle marker set and the self-validating verification, consumed
+    // by the monorepo's verify:packaged-bundle driver and by every scaffolded
+    // game's own gate — which is why it must ship in the published surface.
+    './packaged-bundle': {
+        types: './dist/packaged-bundle/index.d.ts',
+        default: './dist/packaged-bundle/index.js',
+    },
 } as const;
 
 describe('@chimera-engine/electron package surface (issue #777)', () => {

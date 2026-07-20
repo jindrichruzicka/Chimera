@@ -10,6 +10,7 @@
         "package": "electron-builder",
         "test": "vitest run --config ../../vitest.config.mts --dir .",
         "test:e2e": "playwright test --config=e2e/playwright.config.ts --project=electron-e2e",
+        "verify:packaged-bundle": "tsx electron/verify-packaged-bundle.ts",
         "lint": "eslint ."
     },
     "dependencies": {

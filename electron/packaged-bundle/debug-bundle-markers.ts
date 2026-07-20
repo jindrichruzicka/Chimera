@@ -1,22 +1,27 @@
 /**
- * apps/tactics/electron/debug-bundle-markers.ts
+ * electron/packaged-bundle/debug-bundle-markers.ts
  *
  * The strings whose ABSENCE means the Runtime Debug Layer (§4.12, Invariant #27)
  * left a packaged Electron bundle.
  *
- * Extracted so the in-memory bundle assertions
- * (`__tests__/packaged-bundle-content.test.ts`) and the real-artifact gate
- * (`tools/verify-packaged-bundle.ts`) share ONE definition. Two copies of a
- * marker set drift silently and in one direction only — the weaker copy stops
- * naming a module and its checks keep passing.
+ * This is the marker set's ONLY home, exported as part of the public
+ * `@chimera-engine/electron/packaged-bundle` subpath. The debug graph these
+ * markers describe lives in the ENGINE (`debug-bridge`, `SnapshotRingBuffer`/
+ * `SnapshotInspector`, the `chimera:debug*` channels, the `__chimeraDebug`
+ * bridge global), so the strings that prove its absence are engine internals —
+ * and every consumer (the monorepo's in-memory bundle assertions and
+ * `verify:packaged-bundle` driver, and every scaffolded game's own gate) must
+ * share this ONE definition. Copies of a marker set drift silently and in one
+ * direction only — the weaker copy stops naming a module and its checks keep
+ * passing.
  */
 
 /**
  * Marker strings per GATED MODULE — every module the debug gate dynamically
  * imports needs at least one, or hoisting that module out of the gate ships it
  * with the assertions still green. Listing markers for only some of the gated
- * modules is a silent hole, not a partial guard. An anti-rot test fails if a
- * gated import ever appears without markers here.
+ * modules is a silent hole, not a partial guard. An anti-rot test in the
+ * reference app fails if a gated import ever appears without markers here.
  *
  * Markers must be unique to their module and survive in a DEV bundle. Three
  * names are deliberately absent:

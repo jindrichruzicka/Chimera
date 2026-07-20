@@ -336,20 +336,32 @@ describe('verifyScaffold', () => {
         // The bundle lands under <app>/release.
         expect(files.has(path.join(tmpRoot, 'apps', PROBE_GAME.kebab, 'release'))).toBe(true);
 
+        // The generated app's own Invariant #27 gate (#902): the engine-exported
+        // packaged-bundle guard, run through the app's `verify:packaged-bundle`
+        // script so a broken TEMPLATE gate fails the engine's own CI rather than
+        // a downstream adopter's packaging run.
+        const packagedGate = calls.find((c) => c.args.includes('verify:packaged-bundle'));
+        expect(packagedGate?.args).toEqual(['--filter', PROBE_GAME.pkg, 'verify:packaged-bundle']);
+        expect(packagedGate?.cwd).toBe(tmpRoot);
+
         // The dev-harness dry run (§4.32) exercises the packaged chimera-dev-mp bin against
         // the built app — after build:app (the entry exists), before the package arm.
         const devMp = calls.find((c) => c.args.includes('dev:mp'));
         expect(devMp?.args).toEqual(['--filter', PROBE_GAME.pkg, 'dev:mp', '2', '--dry-run']);
         expect(devMp?.cwd).toBe(tmpRoot);
 
-        // Ordering: install < unit < e2e < prod-build (build) < build:app < dev:mp dry-run
-        // < next build < package.
+        // Ordering: install < unit < e2e < prod-build (build) < build:app <
+        // packaged-bundle gate < dev:mp dry-run < next build < package. The gate
+        // sits after build:app (the app must be buildable) and before the arms
+        // that read `dist/`: it rebuilds dist twice and leaves the DEV bundle
+        // restored, which is exactly the shape the dry run + package arms expect.
         const idx = (pred: (c: RecordedCall) => boolean): number => calls.findIndex(pred);
         expect(idx((c) => c.args[0] === 'install')).toBeLessThan(idx((c) => c === unit));
         expect(idx((c) => c === unit)).toBeLessThan(idx((c) => c === e2e));
         expect(idx((c) => c === e2e)).toBeLessThan(idx((c) => c === prodBuild));
         expect(idx((c) => c === prodBuild)).toBeLessThan(idx((c) => c === buildApp));
-        expect(idx((c) => c === buildApp)).toBeLessThan(idx((c) => c === devMp));
+        expect(idx((c) => c === buildApp)).toBeLessThan(idx((c) => c === packagedGate));
+        expect(idx((c) => c === packagedGate)).toBeLessThan(idx((c) => c === devMp));
         expect(idx((c) => c === devMp)).toBeLessThan(idx((c) => c === nextBuild));
         expect(idx((c) => c === nextBuild)).toBeLessThan(idx((c) => c === pkg));
 
@@ -398,6 +410,25 @@ describe('verifyScaffold', () => {
 
         expect(result.ok).toBe(false);
         expect(result.failedStep).toBe('prod-build');
+        expect(removed).toContain(tmpRoot);
+    });
+
+    it("reports packaged-bundle when the generated app's Invariant #27 gate fails", async () => {
+        // The gate's own output explains WHAT failed (marker, allowlist,
+        // negative control); the scaffold pipeline only needs to attribute the
+        // step so a template regression is not misread as a packaging failure.
+        const { fs, files, removed } = makeFakeFs();
+        const tmpRoot = TMP_ROOT;
+        const { run } = makeFakeRun(files, tmpRoot, (_cmd, args) =>
+            args.includes('verify:packaged-bundle')
+                ? { status: 1, stdout: '', stderr: 'packaged main still carries the debug layer' }
+                : undefined,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('packaged-bundle');
         expect(removed).toContain(tmpRoot);
     });
 

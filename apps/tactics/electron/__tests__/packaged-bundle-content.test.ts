@@ -46,7 +46,7 @@ import {
     DEBUG_GRAPH_MARKERS,
     DEBUG_PUSH_CHANNEL_LITERAL,
     DEBUG_REQUEST_CHANNEL_RE,
-} from '../debug-bundle-markers.js';
+} from '@chimera-engine/electron/packaged-bundle';
 
 const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ROOT = path.resolve(APP_DIR, '../..');
@@ -54,10 +54,13 @@ const MAIN_INDEX = path.join(ROOT, 'electron/main/index.ts');
 const DEBUG_BRIDGE_SPECIFIER = './debug-bridge.js';
 
 /**
- * The debug-layer markers live in their own module because the real-artifact
- * gate (`tools/verify-packaged-bundle.ts`) asserts the same set against the
- * bytes a packaging run emits. A second copy would drift silently and in one
- * direction only — the weaker copy stops naming a module and keeps passing.
+ * The debug-layer markers are the ENGINE'S (`@chimera-engine/electron/packaged-bundle`):
+ * the real-artifact gates — the monorepo's `tools/verify-packaged-bundle.ts`
+ * driver AND every scaffolded game's own `verify:packaged-bundle` — assert the
+ * same set against the bytes a packaging run emits. A second copy would drift
+ * silently and in one direction only — the weaker copy stops naming a module
+ * and keeps passing; `tools/verify-packaged-bundle.test.ts` ratchets the
+ * single-definition property repo-wide.
  */
 
 interface BundledApp {

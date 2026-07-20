@@ -110,6 +110,10 @@ const PROBE_SUBPATHS = [
     '@chimera-engine/electron/dev-harness',
     '@chimera-engine/electron/preload/api',
     '@chimera-engine/electron/preload/api-types',
+    // The Invariant #27 packaged-bundle guard (markers + self-validating verification) —
+    // every scaffolded game's `verify:packaged-bundle` gate resolves it from the packed
+    // artifact, so a dropped `exports`/`files` entry would strand the guard downstream.
+    '@chimera-engine/electron/packaged-bundle',
 ] as const;
 
 // ── Result + step-error types ────────────────────────────────────────────────

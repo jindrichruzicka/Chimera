@@ -87,7 +87,7 @@ The runtime controls above make the layer unreachable. Three separate exclusions
 
 That figure is deliberately approximate. Absolute bundle totals move with engine-dist churn and with the working directory the build ran in — esbuild embeds cwd-relative module paths — so a pinned byte count goes stale on changes that have nothing to do with this property, and then reads as a regression to whoever re-measures. The checkable claim is the ABSENCE of the debug markers, which `pnpm verify:packaged-bundle` asserts against the bytes a real packaging run emits.
 
-That does not make the second row idle. `files` in a scaffolded game's `electron-builder.yml` is adopter-editable, and widening it to `dist/**` is an entirely natural edit — at which point an _emitted_ debug preload would ship. "Not built" is a stronger guarantee than "not listed", and it keeps 1.59 MB of debug code out of the build tree either way. It is just not a saving in the distributable.
+That does not make the second row idle. `files` in a scaffolded game's `electron-builder.yml` is adopter-editable, and widening it to `dist/**` is an entirely natural edit — at which point an _emitted_ debug preload would ship. "Not built" is a stronger guarantee than "not listed", and it keeps 1.59 MB of debug code out of the build tree either way. It is just not a saving in the distributable. That edit is no longer merely warned about: every consumer app's `verify:packaged-bundle` gate — the scaffolded game's included — checks the `files:` allowlist alongside the emitted bytes and **fails** on a `dist/` glob, a listed debug preload, or a dropped shipped-bundle entry (see [the engine-exported guard](#the-engine-exported-guard-scaffolded-games) below).
 
 The last column matters. The first two rows are asserted against a real esbuild run, so a regression fails CI. The third was measured once by hand: nothing inspects the exported `out/` tree, exactly as for the Component Gallery gate whose shape it copies. Its unit tests cover `notFound()` being called, not what `next build` then emits — so treat the 404 as verified-at-the-time, not ratcheted.
 
@@ -99,6 +99,19 @@ Two further things this deliberately does **not** do:
 - It does not minify, so the dead `if (false) { … }` statements survive in the packaged main bundle with their imports rewritten to `await null`. They reference `startDebugBridge` by name while reaching no module — which is why the bundle-content assertion in `apps/tactics/electron/__tests__/packaged-bundle-content.test.ts` keys off graph-internal names instead.
 
 That assertion is the enforcement: it runs a real esbuild over the production bundle plan and fails if any marker reappears, with an inverted dev-build case so it cannot pass vacuously.
+
+### The engine-exported guard (scaffolded games)
+
+The marker set and the verification logic live in **one place**: the public `@chimera-engine/electron/packaged-bundle` export (`electron/packaged-bundle/`). The debug graph the markers describe is engine code, so the strings that prove its absence are engine internals — a copy in a consumer app would drift silently, and only in the weaker direction (the stale copy stops naming a module and its checks keep passing). `tools/verify-packaged-bundle.test.ts` ratchets the single-definition property repo-wide, and `verify:pack` proves the subpath resolves from the packed artifact.
+
+The export provides the markers, the content predicates, the `electron-builder.yml` `files:`-allowlist checks, and a `verifyPackagedBundle` runner with the negative controls built in: on **every** run, the dev rebuild that restores the app's `dist/` must be rejected by **every** predicate (per predicate, not merely "some failure"), and a synthetic widened allowlist must be rejected by every allowlist check — so a gutted or rotted check fails the gate itself, on the same run.
+
+Two thin, app-owned drivers consume it, each pointing the runner at its own app's bundle plan (`appBundleOutfiles`) and real `build:app` invocation:
+
+- `tools/verify-packaged-bundle.ts` — the monorepo's gate (CI + the merge script's pre-merge gate, pinned by `ci-workflow.test.ts` / `merge-gate.test.ts`).
+- `templates/blank/electron/verify-packaged-bundle.ts` — shipped in every scaffolded game as `pnpm verify:packaged-bundle`, because a scaffolded game's `build-main.ts` and `electron-builder.yml` are adopter-editable: dropping the packaging `define` or widening `files:` to `dist/**` would otherwise reship the debug layer with no red check anywhere. `verify:scaffold` runs the generated app's gate (the `packaged-bundle` step), so a broken template guard fails the engine's own CI (`e2e.yml`, pinned by `e2e-workflow.test.ts`) rather than a downstream adopter's packaging run.
+
+The engine package imports nothing from `tools/` or any app (§3 dependency direction): the drivers own the paths and build commands, the engine owns the checks.
 
 ---
 
