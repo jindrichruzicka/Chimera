@@ -11,11 +11,12 @@ import type {
 } from '@chimera-engine/simulation/engine/types.js';
 
 import { __GAME_CONSTANT___GAME_ID, __GAME_CONSTANT___PING_ACTION } from './constants.js';
+import { __GamePascal__PingPayloadSchema } from './action-schemas.js';
+import type { __GamePascal__PingPayload } from './action-types.js';
 
-/** Example action payload — replace with your game's real payloads. */
-interface __GamePascal__PingPayload {
-    readonly note: string;
-}
+// Re-export payload types so game consumers can import from here without
+// needing to know about action-types.ts.
+export type { __GamePascal__PingPayload } from './action-types.js';
 
 /**
  * A trivial example action so the registry is non-empty and the dispatch path is
@@ -27,8 +28,7 @@ const __gameCamel__PingDefinition: ActionDefinition<__GamePascal__PingPayload, B
     type: __GAME_CONSTANT___PING_ACTION,
 
     parsePayload(raw): __GamePascal__PingPayload {
-        const note = raw['note'];
-        return { note: typeof note === 'string' ? note : '' };
+        return __GamePascal__PingPayloadSchema.parse(raw);
     },
 
     validate(): ValidationResult {

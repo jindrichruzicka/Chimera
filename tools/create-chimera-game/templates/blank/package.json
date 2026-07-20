@@ -12,6 +12,9 @@
         "test:e2e": "playwright test --config=e2e/playwright.config.ts --project=electron-e2e",
         "lint": "eslint ."
     },
+    "dependencies": {
+        "zod": "^4.3.6"
+    },
     "devDependencies": {
         "@chimera-engine/simulation": "workspace:*",
         "@chimera-engine/ai": "workspace:*",

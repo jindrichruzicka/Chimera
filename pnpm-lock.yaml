@@ -173,6 +173,10 @@ importers:
         version: link:../simulation
 
   apps/tactics:
+    dependencies:
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@chimera-engine/ai':
         specifier: workspace:*
