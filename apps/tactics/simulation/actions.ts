@@ -25,6 +25,17 @@ import {
 import { buildInitialTacticsEntities } from './entities.js';
 import type { TacticsSnapshot } from './stamina.js';
 import { consumeStamina, readStamina } from './stamina.js';
+import {
+    TacticsMoveUnitPayloadSchema,
+    TacticsAttackPayloadSchema,
+    TacticsRevealTilePayloadSchema,
+} from './action-schemas.js';
+import type {
+    TacticsGridCoordinate,
+    TacticsMoveUnitPayload,
+    TacticsAttackPayload,
+    TacticsRevealTilePayload,
+} from './action-types.js';
 
 export { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION, TACTICS_REVEAL_TILE_ACTION };
 
@@ -34,31 +45,15 @@ export { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION, TACTICS_REVEAL_TILE_AC
  */
 export const TACTICS_DEFAULT_UNIT_ID = entityId(TACTICS_DEFAULT_UNIT_ID_VALUE);
 
-export type TacticsGridCoordinate = number & { readonly __brand: 'TacticsGridCoordinate' };
-
-export function tacticsGridCoordinate(raw: number): TacticsGridCoordinate {
-    if (!Number.isInteger(raw)) {
-        throw new TypeError('tactics coordinates must be integers.');
-    }
-    return raw as TacticsGridCoordinate;
-}
-
-export interface TacticsMoveUnitPayload {
-    readonly unitId: EntityId;
-    readonly x: TacticsGridCoordinate;
-    readonly y: TacticsGridCoordinate;
-}
-
-export interface TacticsAttackPayload {
-    readonly attackerId: EntityId;
-    readonly defenderId: EntityId;
-}
-
-export interface TacticsRevealTilePayload {
-    readonly scoutId: EntityId;
-    readonly x: TacticsGridCoordinate;
-    readonly y: TacticsGridCoordinate;
-}
+// Re-export branded coordinate + payload types from action-types.ts so existing
+// callers continue to import from this module without change.
+export {
+    tacticsGridCoordinate,
+    type TacticsGridCoordinate,
+    type TacticsMoveUnitPayload,
+    type TacticsAttackPayload,
+    type TacticsRevealTilePayload,
+} from './action-types.js';
 
 interface TacticsUnitEntity extends BaseEntityState {
     readonly kind: 'unit';
@@ -192,25 +187,7 @@ export const tacticsMoveUnitDefinition: ActionDefinition<TacticsMoveUnitPayload,
         predictable: true,
 
         parsePayload(raw: Readonly<Record<string, unknown>>): TacticsMoveUnitPayload {
-            const unitId = raw['unitId'];
-            const x = raw['x'];
-            const y = raw['y'];
-            if (typeof unitId !== 'string' || unitId.length === 0) {
-                throw new TypeError('tactics:move_unit payload must include a non-empty unitId.');
-            }
-            if (
-                typeof x !== 'number' ||
-                typeof y !== 'number' ||
-                !Number.isInteger(x) ||
-                !Number.isInteger(y)
-            ) {
-                throw new TypeError('tactics:move_unit payload x and y must be integers.');
-            }
-            return {
-                unitId: entityId(unitId),
-                x: tacticsGridCoordinate(x),
-                y: tacticsGridCoordinate(y),
-            };
+            return TacticsMoveUnitPayloadSchema.parse(raw);
         },
 
         validate(payload, state, playerId): ValidationResult {
@@ -257,18 +234,7 @@ export const tacticsAttackDefinition: ActionDefinition<TacticsAttackPayload, Bas
     type: TACTICS_ATTACK_ACTION,
 
     parsePayload(raw: Readonly<Record<string, unknown>>): TacticsAttackPayload {
-        const attackerId = raw['attackerId'];
-        const defenderId = raw['defenderId'];
-        if (typeof attackerId !== 'string' || attackerId.length === 0) {
-            throw new TypeError('tactics:attack payload must include a non-empty attackerId.');
-        }
-        if (typeof defenderId !== 'string' || defenderId.length === 0) {
-            throw new TypeError('tactics:attack payload must include a non-empty defenderId.');
-        }
-        return {
-            attackerId: entityId(attackerId),
-            defenderId: entityId(defenderId),
-        };
+        return TacticsAttackPayloadSchema.parse(raw);
     },
 
     validate(payload, state, playerId): ValidationResult {
@@ -328,25 +294,7 @@ export const tacticsRevealTileDefinition: ActionDefinition<
     type: TACTICS_REVEAL_TILE_ACTION,
 
     parsePayload(raw: Readonly<Record<string, unknown>>): TacticsRevealTilePayload {
-        const scoutId = raw['scoutId'];
-        const x = raw['x'];
-        const y = raw['y'];
-        if (typeof scoutId !== 'string' || scoutId.length === 0) {
-            throw new TypeError('tactics:reveal_tile payload must include a non-empty scoutId.');
-        }
-        if (
-            typeof x !== 'number' ||
-            typeof y !== 'number' ||
-            !Number.isInteger(x) ||
-            !Number.isInteger(y)
-        ) {
-            throw new TypeError('tactics:reveal_tile payload x and y must be integers.');
-        }
-        return {
-            scoutId: entityId(scoutId),
-            x: tacticsGridCoordinate(x),
-            y: tacticsGridCoordinate(y),
-        };
+        return TacticsRevealTilePayloadSchema.parse(raw);
     },
 
     validate(payload, state, playerId): ValidationResult {

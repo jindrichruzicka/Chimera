@@ -24,13 +24,10 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
 } from '../constants.js';
-import { entityId, playerId } from '@chimera-engine/simulation/engine/types.js';
+import { playerId } from '@chimera-engine/simulation/engine/types.js';
 
-import { tacticsGridCoordinate } from '../actions.js';
+import { EntityIdSchema, GridCoordinateSchema } from '../action-schemas.js';
 import type { LocalActionBuffer, TacticsCommitmentEnvelopeValue } from './contract.js';
-
-const EntityIdSchema = z.string().min(1).transform(entityId);
-const GridCoordinateSchema = z.number().int().transform(tacticsGridCoordinate);
 
 const MoveActionSchema = z
     .object({

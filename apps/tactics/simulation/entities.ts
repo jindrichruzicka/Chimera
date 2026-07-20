@@ -5,7 +5,7 @@ import type {
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
 import { entityId } from '@chimera-engine/simulation/engine/types.js';
-import { tacticsGridCoordinate } from './actions.js';
+import { tacticsGridCoordinate } from './action-types.js';
 import { TACTICS_DEFAULT_UNIT_ID_VALUE, TACTICS_START_POSITIONS } from './constants.js';
 
 /**

@@ -13,6 +13,9 @@
         "test": "vitest run --config ../../vitest.config.mts --dir .",
         "lint": "eslint ."
     },
+    "dependencies": {
+        "zod": "^4.3.6"
+    },
     "devDependencies": {
         "@chimera-engine/simulation": "workspace:*",
         "@chimera-engine/ai": "workspace:*",
