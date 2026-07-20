@@ -13,27 +13,39 @@ tags: [debug, inspector, ring-buffer, snapshot-diff, development-only]
 
 ## Overview
 
-The debug layer gives developers full, authoritative visibility into the running simulation: every historical `GameSnapshot`, every action ever applied, and a per-player projection explorer showing exactly what each player's `PlayerSnapshot` looks like at any tick. It is **entirely absent in production** and must never create an information exposure risk for players.
+The debug layer gives developers full, authoritative visibility into the running simulation: every historical `GameSnapshot`, every action ever applied, and a per-player projection explorer showing exactly what each player's `PlayerSnapshot` looks like at any tick. It is **never reachable in production** and must never create an information exposure risk for players: a packaged build bakes `IS_DEBUG_MODE` to the literal `false`, and the startup guard refuses to start a packaged binary carrying `CHIMERA_DEBUG` (Invariant #27). The debug code is still _present_ in the shipped bundle — see the tree-shaking note below.
 
 ---
 
 ## Debug Mode Identification
 
 ```typescript
-// shared/constants.ts
-// IS_DEBUG_MODE is replaced at build time; debug module graph is tree-shaken in production
+// simulation/foundation/constants.ts
+// Both reads are replaced at build time in a packaged build, folding this to `false`
 export const IS_DEBUG_MODE =
     process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';
 ```
 
+In a **packaged** build the app bundler bakes both reads (`process.env.NODE_ENV = "production"` and `process.env.CHIMERA_DEBUG = ""`) as esbuild `define`s, so the emitted `dist/electron/main.js` contains the literal `IS_DEBUG_MODE = false`. The debug bridge then sits behind a permanently-false gate: even if the startup guard were bypassed, no debug surface can be registered. That define is opt-in — the packaging scripts declare `CHIMERA_PACKAGED_BUILD=1` (`computePackagedDefine` in the app's `build-main.ts`). `build:app` is the same script an everyday dev launch runs, so packaging cannot be inferred; a dev or e2e build deliberately gets no define, keeping F9 reachable.
+
+Both reads must be defined: replacing only `NODE_ENV` leaves `process.env.CHIMERA_DEBUG === '1' && false`, which esbuild cannot reduce to a literal.
+
+> **Not tree-shaking.** The debug module graph still ships in the packaged bundle. `IS_DEBUG_MODE` is imported across a module boundary (the built `@chimera-engine/simulation` dist), so esbuild does not propagate the literal into `if (IS_DEBUG_MODE)` and cannot drop the branch or its dynamic import. The gate is dead at runtime, but the code is present — eliminating it is a separate, unsolved concern.
+
 | Environment           | `CHIMERA_DEBUG` | `IS_DEBUG_MODE` | Debug bridge started |
 | --------------------- | --------------- | --------------- | -------------------- |
 | Production package    | absent          | `false`         | Never                |
+| Production package    | `1`             | `false`         | **Refuses to start** |
 | Dev server            | `1`             | `true`          | Yes                  |
+| Undefined build, pkgd | `1`             | `true`          | **Refuses to start** |
 | CI (unit/integration) | absent          | `false`         | Never                |
 | E2E tests             | absent          | `false`         | Never                |
 
-Dynamic import gate in `electron/main/index.ts` — the dot-access constant lets the bundler's `define` replacement constant-fold the branch and tree-shake the debug graph:
+A packaged binary carrying `CHIMERA_DEBUG` does not silently drop to a debug-free boot — it refuses to start (Invariant #27). electron-builder never sets `NODE_ENV`, so the guard trusts `app.isPackaged`, not the environment.
+
+The two refusal rows are the two independent layers, and it matters which one fires. The refusal is driven by the **`CHIMERA_DEBUG` environment read**, never by `IS_DEBUG_MODE` — so it fires even in a correctly-defined bundle where `IS_DEBUG_MODE` is already the baked literal `false`. The "undefined build" row is the belt-and-braces case: a packaging script that lost `CHIMERA_PACKAGED_BUILD=1` emits a bundle whose gate is still live (`IS_DEBUG_MODE` is `true` under `CHIMERA_DEBUG=1`), and the runtime guard is the only thing standing between that binary and the Inspector. It still refuses. The drift test in `tools/packaged-build-flag.test.ts` exists so that row stays hypothetical.
+
+Dynamic import gate in `electron/main/index.ts` — the dot-access constant lets the bundler's `define` replacement fold `IS_DEBUG_MODE` to `false`, so the branch is never entered in a packaged build:
 
 ```typescript
 let debugBridge: DebugBridge | undefined = undefined;
@@ -57,7 +69,7 @@ const debugPort = debugBridge?.attachSession({
 
 The toggle is driven by the `engine:toggle-debug-inspector` InputAction (default **F9**, rebindable — see [Input & Keybindings](input-keybindings.md)): the game renderer dispatches it through `window.__chimera.system.toggleDebugInspector()`, a fire-and-forget, payload-less send on `chimera:debug:toggle-inspector`. In production builds no listener is registered on the channel, so the send is a true no-op.
 
-> **Invariant #27** — `CHIMERA_DEBUG` must never appear in production packaging. The production build asserts `IS_DEBUG_MODE === false` at startup.
+> **Invariant #27** — `CHIMERA_DEBUG` must never appear in production packaging. A production runtime (packaged **or** `NODE_ENV=production`) asserts `IS_DEBUG_MODE === false` at startup and refuses to start when `CHIMERA_DEBUG` is set — see `isProductionRuntime` / `assertProductionDebugGuard` in `electron/main/startup-guard.ts`.
 
 ---
 
@@ -177,7 +189,7 @@ export type DebugResponse =
 
 ### IPC channels
 
-Channel constants are plain strings in `shared/constants.ts` so the Inspector preload mirrors them without importing the debug module graph (Invariant #27). In production no handler or listener exists on any of them — renderer sends are true no-ops.
+Channel constants are plain strings in `simulation/foundation/constants.ts` so the Inspector preload mirrors them without importing the debug module graph (Invariant #27). In production no handler or listener exists on any of them — renderer sends are true no-ops.
 
 | Constant                         | Channel                          | Direction                 | Payload                                                             |
 | -------------------------------- | -------------------------------- | ------------------------- | ------------------------------------------------------------------- |

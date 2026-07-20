@@ -1,4 +1,4 @@
-// shared/env-node.d.ts
+// simulation/foundation/env-node.d.ts
 //
 // Ambient `NODE_ENV` declaration for the Node/Electron programs compiled by
 // the root tsconfig (electron, simulation, ai, games, networking, tools, e2e).

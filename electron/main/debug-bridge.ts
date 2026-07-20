@@ -82,7 +82,7 @@ import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from './renderer-url
 import type { HostSessionDebugPort } from './runtime/HostSessionPipeline.js';
 
 // Channel constants (DEBUG_CHANNEL, DEBUG_TOGGLE_INSPECTOR_CHANNEL,
-// DEBUG_PUSH_CHANNEL) live in `shared/constants.ts` so the Inspector preload
+// DEBUG_PUSH_CHANNEL) live in `simulation/foundation/constants.ts` so the Inspector preload
 // shares the literals without importing this debug module graph.
 
 // ─── Bounds (Invariant #30 spirit — nothing grows unboundedly) ────────────────

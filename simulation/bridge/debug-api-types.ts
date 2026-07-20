@@ -10,8 +10,8 @@
 //
 // Everything is `import type`/`export type`, so the renderer debug page
 // consumes this module — via `renderer/types/chimera-debug.d.ts`
-// — with zero runtime coupling to `simulation/debug` (Invariant #27: the
-// debug module graph stays out of production bundles).
+// — with zero runtime coupling to `simulation/debug` (Invariant #27: nothing
+// here can pull the debug module graph into a renderer runtime).
 //
 // Snapshot-carrying payloads are derived from `DebugResponse` variants with
 // `Extract`/`Omit` instead of naming the simulation snapshot type directly:

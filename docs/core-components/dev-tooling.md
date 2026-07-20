@@ -103,7 +103,7 @@ chimera-dev-mp [N] [--scenario <name>] [--app <dir>] [--entry <path>] [--game <i
 
 Everything is validated **before any spawn**: the scenario (Zod, strict), every referenced profile file (engine schema + distinct `localProfileId`s — duplicates would collide at the host's join gate), seat-count consistency, and the built entry (the CLI errors with the build command rather than auto-building). One limit: the CLI validates attribute values against the **coarse wire bound only** — the per-game `maxAttributeValueLength` needs the game's own lobby setup, so an over-cap value surfaces at instance seeding (a loud bootstrap failure + teardown, not a silent drop).
 
-The CLI requires `CHIMERA_DEV_HARNESS=1` (the app's `dev:mp` script sets it) and refuses `NODE_ENV=production` (Invariant #77). Child instances always launch windowed development mode (`NODE_ENV`/`CHIMERA_ENV=development`) with `ELECTRON_RUN_AS_NODE` stripped.
+The CLI requires `CHIMERA_DEV_HARNESS=1` (the app's `dev:mp` script sets it) and refuses `NODE_ENV=production` (`assertHarnessEnv`, Invariant #77). `NODE_ENV` is the only signal available to it: `chimera-dev-mp` is a plain Node CLI that _spawns_ Electron, so there is no `app.isPackaged` to read. The packaged trigger is enforced one level down — each spawned instance runs the engine's `main()` startup guard, which refuses for a packaged binary **or** `NODE_ENV=production`. Child instances always launch windowed development mode (`NODE_ENV`/`CHIMERA_ENV=development`) with `ELECTRON_RUN_AS_NODE` stripped.
 
 ### Script wiring (identical in both worlds)
 
@@ -166,7 +166,11 @@ A bootstrap failure (bad fixture, gameId mismatch, join rejection) exits that in
 
 ```typescript
 // electron/main/startup-guard.ts (Invariant #77)
-if (process.env.CHIMERA_DEV_HARNESS === '1' && process.env.NODE_ENV === 'production') {
+// isProductionRuntime = isPackaged || env.NODE_ENV === 'production'.
+// `isPackaged` (app.isPackaged, injected by the main() composition root) is the
+// load-bearing term: electron-builder never sets NODE_ENV, so a NODE_ENV-only
+// test would be vacuous for every shipped binary.
+if (env['CHIMERA_DEV_HARNESS'] === '1' && isProductionRuntime(env, isPackaged)) {
     throw new Error('CHIMERA_DEV_HARNESS is enabled in a production build. Refusing to start.');
 }
 ```
@@ -183,10 +187,10 @@ if (process.env.CHIMERA_DEV_HARNESS === '1' && process.env.NODE_ENV === 'product
 
 ## Invariants
 
-| #   | Rule                                                                                                                                                                                                                                                      |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #77 | The harness refuses to start when `CHIMERA_DEV_HARNESS=1` + `NODE_ENV=production`. All `--dev-*` flags are ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent.                                                                                 |
-| #78 | Each harness-spawned instance runs in an isolated `userData` directory (`.dev-userdata/p<i>/`); shared state between instances is forbidden. The host's announce file lives inside its OWN dir and is read only by the orchestrator — never by a sibling. |
+| #   | Rule                                                                                                                                                                                                                                                                                                                               |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #77 | The harness is development-only. The CLI (`assertHarnessEnv`) refuses `NODE_ENV=production`; each spawned instance additionally hits the engine's `main()` startup guard, which refuses for a packaged binary **or** `NODE_ENV=production`. All `--dev-*` flags are ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent. |
+| #78 | Each harness-spawned instance runs in an isolated `userData` directory (`.dev-userdata/p<i>/`); shared state between instances is forbidden. The host's announce file lives inside its OWN dir and is read only by the orchestrator — never by a sibling.                                                                          |
 
 ---
 

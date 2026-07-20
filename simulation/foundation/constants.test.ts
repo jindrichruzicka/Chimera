@@ -1,4 +1,4 @@
-// shared/constants.test.ts
+// simulation/foundation/constants.test.ts
 //
 // Unit tests for the IS_DEBUG_MODE constant against the §4.12 environment
 // matrix (docs/core-components/runtime-debug-layer.md).

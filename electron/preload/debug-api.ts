@@ -14,7 +14,7 @@
 // wiring. Protocol types are consumed via `import type`, so this module has
 // zero runtime coupling to `simulation/debug` (Invariant #27).
 //
-// The debug channel constants live in `shared/constants.ts` — the documented
+// The debug channel constants live in `simulation/foundation/constants.ts` — the documented
 // exception to the per-namespace channel rule — so this preload and the main
 // bridge share the same literals without importing the debug module graph.
 //

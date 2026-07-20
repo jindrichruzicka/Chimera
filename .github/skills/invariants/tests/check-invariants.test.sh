@@ -456,14 +456,14 @@ test_chimera_debug_in_package_json_detected() {
     fi
 }
 
-# Test 14: bracket-access CHIMERA_DEBUG read in shared/constants.ts
+# Test 14: bracket-access CHIMERA_DEBUG read in simulation/foundation/constants.ts
 #          → violation [invariant-27] (breaks define replacement)
 test_bracket_access_chimera_debug_detected() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "export const IS_DEBUG_MODE = process.env['CHIMERA_DEBUG'] === '1' && process.env.NODE_ENV !== 'production';"
 
     local out exit_code
@@ -481,14 +481,14 @@ test_bracket_access_chimera_debug_detected() {
     fi
 }
 
-# Test 15: bracket-access NODE_ENV read in shared/constants.ts
+# Test 15: bracket-access NODE_ENV read in simulation/foundation/constants.ts
 #          → violation [invariant-27] (both reads must stay dot access)
 test_bracket_access_node_env_detected() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env['NODE_ENV'] !== 'production';"
 
     local out exit_code
@@ -506,7 +506,7 @@ test_bracket_access_node_env_detected() {
     fi
 }
 
-# Test 16: clean package.json + spec-shaped shared/constants.ts → exit 0
+# Test 16: clean package.json + spec-shaped simulation/foundation/constants.ts → exit 0
 test_clean_debug_mode_shape_passes() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
@@ -514,7 +514,7 @@ test_clean_debug_mode_shape_passes() {
 
     plant_file "${tmp}" "package.json" \
         '{ "scripts": { "dev": "electron ." } }'
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
 
     local out exit_code
@@ -528,6 +528,53 @@ test_clean_debug_mode_shape_passes() {
     fi
 }
 
+# Test 16a: repo marker present but the constants file is missing → flagged
+#           [invariant-27]. This is the ANTI-ROT probe: without it, a wrong
+#           CONSTANTS path makes Check 9 skip SILENTLY on every real run. The
+#           probe anchors on a marker the check does not own so that a
+#           whole-DIRECTORY rename cannot hide the file.
+test_missing_constants_file_in_real_repo_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "package.json" \
+        '{ "scripts": { "dev": "electron ." } }'
+    # The marker says "this is the real repo" — but the constant is nowhere.
+    plant_file "${tmp}" "pnpm-workspace.yaml" "packages:\n  - 'apps/*'"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]] && grep -q "invariant-27" <<<"${out}"; then
+        pass "missing constants file in a real repo root flagged as [invariant-27]"
+    else
+        fail "anti-rot probe did not fire for a missing constants file:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 16b: no repo marker (a bare fixture root) → probe stays INERT, so the
+#           harness's own single-file temp roots do not trip it.
+test_missing_constants_file_without_repo_marker_inert() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "package.json" \
+        '{ "scripts": { "dev": "electron ." } }'
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "anti-rot probe stays inert in a bare fixture root"
+    else
+        fail "anti-rot probe wrongly fired without a repo marker:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # Test 17: dot-access literals surviving only in a comment while the real
 #          initializer regressed to bracket access → still flagged
 #          [invariant-27] (check must anchor to the assignment, not the file)
@@ -536,7 +583,7 @@ test_comment_masked_bracket_access_detected() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "// Spec shape: process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production'"$'\n'"export const IS_DEBUG_MODE = process.env['CHIMERA_DEBUG'] === '1' && process.env['NODE_ENV'] !== 'production';"
 
     local out exit_code
@@ -554,14 +601,14 @@ test_comment_masked_bracket_access_detected() {
     fi
 }
 
-# Test 18: shared/constants.ts exists but the IS_DEBUG_MODE assignment was
+# Test 18: simulation/foundation/constants.ts exists but the IS_DEBUG_MODE assignment was
 #          removed/renamed → flagged [invariant-27] (shape can't be verified)
 test_missing_is_debug_mode_assignment_detected() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "export const DEBUG_CHANNEL = 'chimera:debug';"
 
     local out exit_code
@@ -587,7 +634,7 @@ test_multiline_spec_shape_passes() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "/**"$'\n'" * Invariant #27: production asserts IS_DEBUG_MODE === false at startup."$'\n'" */"$'\n'"export const IS_DEBUG_MODE ="$'\n'"    process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
 
     local out exit_code
@@ -609,7 +656,7 @@ test_block_comment_masked_bracket_access_detected() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "/**"$'\n'" * Spec shape: export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"$'\n'" */"$'\n'"export const IS_DEBUG_MODE = process.env['CHIMERA_DEBUG'] === '1' && process.env['NODE_ENV'] !== 'production';"
 
     local out exit_code
@@ -635,7 +682,7 @@ test_block_comment_spec_citation_passes() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "/**"$'\n'" * Spec shape: export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"$'\n'" */"$'\n'"export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
 
     local out exit_code
@@ -657,7 +704,7 @@ test_trailing_comment_masked_regression_detected() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "export const IS_DEBUG_MODE = true; // spec: process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production'"
 
     local out exit_code
@@ -682,7 +729,7 @@ test_trailing_comment_on_clean_assignment_passes() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production'; // baked at build time"
 
     local out exit_code
@@ -751,7 +798,7 @@ test_url_string_in_assignment_passes() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "export const IS_DEBUG_MODE = process.env.UPDATE_URL !== 'https://updates.chimera.dev' && process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
 
     local out exit_code
@@ -774,7 +821,7 @@ test_glob_string_before_assignment_passes() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/constants.ts" \
+    plant_file "${tmp}" "simulation/foundation/constants.ts" \
         "export const SAVE_GLOB = 'saves/*.json';"$'\n'"export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
 
     local out exit_code
@@ -1381,6 +1428,8 @@ test_chimera_debug_in_package_json_detected
 test_bracket_access_chimera_debug_detected
 test_bracket_access_node_env_detected
 test_clean_debug_mode_shape_passes
+test_missing_constants_file_in_real_repo_detected
+test_missing_constants_file_without_repo_marker_inert
 test_comment_masked_bracket_access_detected
 test_missing_is_debug_mode_assignment_detected
 test_multiline_spec_shape_passes

@@ -86,7 +86,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **26.** `SaveFile.pendingCommitments` must be restored into `CommitmentScheme` on load. A loaded game without restored commitments must not process any `REVEAL` messages until commitments are present.
 
-**27.** `CHIMERA_DEBUG` must never appear in the production packaging configuration. The production build must assert `IS_DEBUG_MODE === false` at startup and refuse to start if `process.env.CHIMERA_DEBUG` is set in a `NODE_ENV=production` process.
+**27.** `CHIMERA_DEBUG` must never appear in the production packaging configuration. A **production runtime** is any process that is either packaged (`app.isPackaged`) **or** launched with `NODE_ENV=production` — electron-builder never sets `NODE_ENV`, so packaging alone must trigger the guard. Every production runtime must assert `IS_DEBUG_MODE === false` at startup and refuse to start if `process.env.CHIMERA_DEBUG` is set (`electron/main/startup-guard.ts` — `isProductionRuntime` / `assertProductionDebugGuard`, called with `app.isPackaged` from the `main()` composition root).
 
 **28.** `window.__chimeraDebug` is exposed only by `debug-api.ts` and only to the Inspector Window. The game renderer's `api.ts` preload must never expose any debug **data** surface — no snapshots, projections, diffs, action logs, or perf stats. The data-free Inspector-window toggle (`system.toggleDebugInspector()`, a payload-less send on `chimera:debug:toggle-inspector`) is explicitly permitted; outside debug mode no listener is registered and the send is a no-op.
 
@@ -174,7 +174,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **66.** Key bindings are settings, not profile data. They follow the settings layered-merge contract (engine defaults ← game defaults ← user overrides) and are stored under `settings.controls.bindings`. They are not transmitted over the network and never appear in `GameSnapshot`.
 
-**67.** Every main-process manager is constructed with an injected `Logger` child. No module emits logs via raw `console.*` — all structured logging flows through the injected logger.
+**67.** Every main-process manager is constructed with an injected `Logger` child. No module emits logs via raw `console.*` — all structured logging flows through the injected logger. Two sanctioned exceptions, each of which must cite this invariant in an in-code comment: (a) the fatal startup refusals in `main()` (Invariants #27/#77), which run before the root logger exists — they must be the first statement so no debug surface initialises first — and so write the refusal reason to `stderr` via `console.error` before `app.exit(1)`; (b) the preload layer (`electron/preload/shared/listener.ts`), which has no injected logger and reports validation drift to the renderer devtools console.
 
 **68.** The crash reporter runs autosave before writing the crash dump when a live simulation is present. The crash dump file is created atomically (`.tmp` + rename) so a partially-written crash dump never exists.
 
@@ -194,7 +194,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **76.** `fromFloat()` is permitted only at content-load time for hard-coded constants. It must not be called inside `validate()`, `reduce()`, or any hot simulation path. Linting is enforced by a dedicated ESLint rule in CI.
 
-**77.** The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with `NODE_ENV=production`, and every harness flag must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent.
+**77.** The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with a **production runtime** — packaged **or** `NODE_ENV=production`, the same `isProductionRuntime` predicate as Invariant #27 — and every harness flag must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent.
 
 **78.** Each harness-spawned instance runs in an isolated Electron `userData` directory (`.dev-userdata/p<i>/`). Shared state between instances is forbidden — profiles, saves, settings, logs, and crash dumps must be per-instance so the harness behaves identically to multiple distinct machines. The host's announce file (the lobby-code handshake) lives inside the host's OWN `userData` dir and is read only by the orchestrator CLI — an instance never reads another instance's directory.
 

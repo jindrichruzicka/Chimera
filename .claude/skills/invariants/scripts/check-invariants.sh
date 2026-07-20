@@ -181,10 +181,26 @@ done < <(
 
 # ─── Check 9: IS_DEBUG_MODE keeps its define-replaceable shape (invariant 27) ─
 # Bundler `define` replacement only matches dot-access member expressions; a
-# refactor to bracket access would silently break production tree-shaking of
-# the debug module graph. Both reads of the expression are pinned — the
-# CHIMERA_DEBUG flag and the NODE_ENV production gate.
-CONSTANTS="shared/constants.ts"
+# refactor to bracket access would silently stop the packaged build from folding
+# IS_DEBUG_MODE to `false`, leaving a LIVE debug gate in a distributable. Both
+# reads of the expression are pinned — the CHIMERA_DEBUG flag and the NODE_ENV
+# production gate — because the define must replace both to fold the whole
+# expression to a literal.
+#
+# The `-f` guard keeps the check inert in the harness's throwaway fixture roots,
+# which plant only the file under test. On its own that guard makes a wrong
+# CONSTANTS path skip the whole check SILENTLY, so the anti-rot probe below
+# turns that into a violation.
+#
+# The probe anchors on `pnpm-workspace.yaml`, deliberately NOT on the constant's
+# own directory: a whole-DIRECTORY rename would take a dir-existence test down
+# with it. A marker the check does not own means "this is the real repo, so the
+# file must be findable" — while fixture roots (no workspace file) stay inert.
+CONSTANTS="simulation/foundation/constants.ts"
+REPO_MARKER="pnpm-workspace.yaml"
+if [[ -f "${REPO_MARKER}" && ! -f "${CONSTANTS}" ]]; then
+    violation "27" "${CONSTANTS}: missing — invariant 27's IS_DEBUG_MODE shape check cannot run (did the constant move? update CONSTANTS in this script)"
+fi
 if [[ -f "${CONSTANTS}" ]]; then
     # Anchor to the assignment itself: strip /* */ block comments (a block
     # comment citing the full spec shape must not anchor the capture) and all

@@ -16,6 +16,7 @@ import type {
 } from '@chimera-engine/simulation/engine/types.js';
 import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
 import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import type * as LoadGameContentModule from './content/loadGameContent.js';
 
 interface ProjectorOptionsForTest {
     readonly getUndoMeta?: (viewerId: PlayerId) => unknown;
@@ -58,6 +59,16 @@ vi.mock('./saves/SaveManager.js', () => ({
 
 const { mockOsRelease } = vi.hoisted(() => ({
     mockOsRelease: vi.fn<() => string>(() => '23.6.0-test'),
+}));
+
+/**
+ * Mutable `app.isPackaged` for the electron mock. Defaults to `true` (see the
+ * mock's own note on the game-assets root walk); the one case that needs a
+ * genuine DEV launch — the debug-bridge gate — flips it for its duration. Held
+ * in a hoisted box so the hoisted `vi.mock` factory can close over it.
+ */
+const { mockAppIsPackaged } = vi.hoisted(() => ({
+    mockAppIsPackaged: { value: true },
 }));
 
 vi.mock('node:os', async (importOriginal) => {
@@ -427,6 +438,7 @@ const appOn = vi.fn<(event: string, handler: AppEventHandler) => void>();
 const appQuit = vi.fn<() => void>();
 const appRelaunch = vi.fn<() => void>();
 const appExit = vi.fn<(code: number) => void>();
+const dialogShowErrorBox = vi.fn<(title: string, content: string) => void>();
 const appWhenReady = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const appGetPath = vi.fn<(name: string) => string>(() => '/tmp/chimera-userData-fake');
 const appGetLocale = vi.fn<() => string>(() => 'en-US');
@@ -491,12 +503,16 @@ vi.mock('electron', () => ({
         // <root>/apps via the packaged branch (../../apps). The dev/source branch
         // (isPackaged:false) assumes the deeper runtime bundle layout
         // (apps/<game>/dist/electron) and is covered directly by the
-        // resolveRuntimePaths unit tests above.
-        isPackaged: true,
+        // resolveRuntimePaths unit tests above. Read through the mutable box so
+        // the dev-launch cases can flip it (see mockAppIsPackaged).
+        get isPackaged(): boolean {
+            return mockAppIsPackaged.value;
+        },
         // macOS-only dock handle (undefined on other platforms in real Electron).
         dock: { setIcon: appDockSetIcon },
     },
     BrowserWindow: FakeBrowserWindow,
+    dialog: { showErrorBox: dialogShowErrorBox },
     ipcMain: {
         handle: ipcMainHandle,
         on: ipcMainOn,
@@ -1965,9 +1981,23 @@ describe('main', () => {
 
     it('with CHIMERA_DEBUG=1 registers both debug handlers but creates NO Inspector window', async () => {
         vi.stubEnv('CHIMERA_DEBUG', '1');
+        // A DEV launch: the debug bridge is only reachable in an unpackaged
+        // build. Since the packaged-aware guard (Invariant #27) refuses to
+        // start a packaged binary carrying CHIMERA_DEBUG, this case must run
+        // with app.isPackaged === false — which is what a real F9 session is.
+        mockAppIsPackaged.value = false;
         vi.resetModules();
+        // Unpackaged resolves the game-assets root relative to the SOURCE
+        // __dirname (electron/main), which does not reach <root>/apps — the
+        // packaged walk this suite otherwise relies on. Content loading is not
+        // what this case is about, so stub it; every other test keeps the real
+        // loader.
+        vi.doMock('./content/loadGameContent.js', async (importOriginal) => ({
+            ...(await importOriginal<typeof LoadGameContentModule>()),
+            loadAllGameContent: vi.fn(async () => new Map()),
+        }));
         try {
-            // Fresh import so shared/constants re-evaluates IS_DEBUG_MODE
+            // Fresh import so foundation/constants re-evaluates IS_DEBUG_MODE
             // (NODE_ENV is 'test' under vitest, so the guard passes).
             const fresh = await import('./index.js');
             await fresh.main(makeTestContributions());
@@ -1985,6 +2015,8 @@ describe('main', () => {
             );
             expect(debugLoads).toHaveLength(0);
         } finally {
+            mockAppIsPackaged.value = true;
+            vi.doUnmock('./content/loadGameContent.js');
             vi.unstubAllEnvs();
             vi.resetModules();
         }
@@ -3997,15 +4029,22 @@ describe('main() CHIMERA_DEV_HARNESS guard', () => {
         }
     });
 
-    it('does not throw when CHIMERA_DEV_HARNESS=1 and NODE_ENV=development', async () => {
+    it('throws when CHIMERA_DEV_HARNESS=1 in a packaged binary, even with NODE_ENV=development', async () => {
+        // The suite's electron mock is packaged. electron-builder never sets
+        // NODE_ENV, so packaging alone must trigger the refusal (Invariant #77).
         const origEnv = process.env;
         process.env = { ...origEnv, CHIMERA_DEV_HARNESS: '1', NODE_ENV: 'development' };
         try {
-            await expect(main(makeTestContributions())).resolves.not.toThrow();
+            await expect(main(makeTestContributions())).rejects.toThrow(/Refusing to start/);
         } finally {
             process.env = origEnv;
         }
     });
+
+    // The unpackaged arm (dev harness allowed when app.isPackaged is false) is
+    // covered at the unit level in startup.test.ts — this suite's electron mock
+    // is packaged so the game-assets root walk resolves from the source
+    // __dirname, and flipping it here would only exercise path resolution.
 });
 
 // ─── CHIMERA_DEBUG production guard (Invariant #27) ──────────────────────────
@@ -4027,7 +4066,21 @@ describe('main() CHIMERA_DEBUG production guard (Invariant #27)', () => {
         }
     });
 
-    it('does not throw when CHIMERA_DEBUG is set and NODE_ENV=development', async () => {
+    it('refuses and TERMINATES in a packaged binary with CHIMERA_DEBUG, even at NODE_ENV=development', async () => {
+        // Two things at once, because they are one scenario:
+        //
+        // 1. The gap this guard closes — the suite's electron mock is PACKAGED
+        //    and NODE_ENV is never 'production' here, which is exactly the real
+        //    shipped shape (electron-builder never sets NODE_ENV). A shipped
+        //    binary launched with CHIMERA_DEBUG=1 must refuse rather than boot
+        //    the debug bridge with GameSnapshot-level Inspector access.
+        // 2. Refusing means TERMINATING. `main()` is launched as `void main(...)`
+        //    from the game's composition root, so a guard throw is only an
+        //    UnhandledPromiseRejection: Electron prints a warning and keeps the
+        //    process alive with no window — the binary appears to "run" while
+        //    having refused nothing. Verified against a real packaged build.
+        //    The engine must exit non-zero itself; a game must not be able to
+        //    lose the guarantee.
         const origEnv = process.env;
         process.env = {
             ...origEnv,
@@ -4035,12 +4088,35 @@ describe('main() CHIMERA_DEBUG production guard (Invariant #27)', () => {
             NODE_ENV: 'development',
             CHIMERA_DEV_HARNESS: undefined,
         };
+        appExit.mockClear();
+        dialogShowErrorBox.mockClear();
+        // stderr is the ONLY diagnostic a refusing binary ever produces, so pin
+        // it: without this, deleting the console.error leaves a shipped app that
+        // exits 1 in total silence and the whole suite still passes.
+        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         try {
-            await expect(main(makeTestContributions())).resolves.not.toThrow();
+            await expect(main(makeTestContributions())).rejects.toThrow(/CHIMERA_DEBUG/i);
+            expect(appExit).toHaveBeenCalledWith(1);
+            expect(errSpy).toHaveBeenCalledWith(
+                expect.stringMatching(/refusing to start.*CHIMERA_DEBUG/i),
+            );
+            // FORWARD ratchet, not a property of today's code: index.ts does not
+            // import `dialog` at all, so nothing here can currently fail. It
+            // guards the next person who reaches for a modal — showErrorBox
+            // BLOCKS until dismissed, so a packaged binary launched
+            // non-interactively (CI, a script, a headless box) would hang
+            // forever instead of refusing. Refusing must be deterministic; the
+            // reason goes to stderr.
+            expect(dialogShowErrorBox).not.toHaveBeenCalled();
         } finally {
+            errSpy.mockRestore();
             process.env = origEnv;
         }
     });
+
+    // The unpackaged arm (CHIMERA_DEBUG allowed when app.isPackaged is false)
+    // is covered at the unit level in startup.test.ts, and end-to-end by the
+    // debug-handler gate test above, which runs a full unpackaged main().
 
     it('does not throw when CHIMERA_DEBUG is absent and NODE_ENV=production', async () => {
         // Ambient sensitivity: the guard's default parameter bakes IS_DEBUG_MODE

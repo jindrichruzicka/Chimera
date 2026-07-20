@@ -181,10 +181,26 @@ done < <(
 
 # ─── Check 9: IS_DEBUG_MODE keeps its define-replaceable shape (invariant 27) ─
 # Bundler `define` replacement only matches dot-access member expressions; a
-# refactor to bracket access would silently break production tree-shaking of
-# the debug module graph. Both reads of the expression are pinned — the
-# CHIMERA_DEBUG flag and the NODE_ENV production gate.
-CONSTANTS="shared/constants.ts"
+# refactor to bracket access would silently stop the packaged build from folding
+# IS_DEBUG_MODE to `false`, leaving a LIVE debug gate in a distributable. Both
+# reads of the expression are pinned — the CHIMERA_DEBUG flag and the NODE_ENV
+# production gate — because the define must replace both to fold the whole
+# expression to a literal.
+#
+# The `-f` guard keeps the check inert in the harness's throwaway fixture roots,
+# which plant only the file under test. On its own that guard makes a wrong
+# CONSTANTS path skip the whole check SILENTLY, so the anti-rot probe below
+# turns that into a violation.
+#
+# The probe anchors on `pnpm-workspace.yaml`, deliberately NOT on the constant's
+# own directory: a whole-DIRECTORY rename would take a dir-existence test down
+# with it. A marker the check does not own means "this is the real repo, so the
+# file must be findable" — while fixture roots (no workspace file) stay inert.
+CONSTANTS="simulation/foundation/constants.ts"
+REPO_MARKER="pnpm-workspace.yaml"
+if [[ -f "${REPO_MARKER}" && ! -f "${CONSTANTS}" ]]; then
+    violation "27" "${CONSTANTS}: missing — invariant 27's IS_DEBUG_MODE shape check cannot run (did the constant move? update CONSTANTS in this script)"
+fi
 if [[ -f "${CONSTANTS}" ]]; then
     # Anchor to the assignment itself: strip /* */ block comments (a block
     # comment citing the full spec shape must not anchor the capture) and all
@@ -393,17 +409,21 @@ if [[ -d electron/main ]]; then
     )
 fi
 
-# ─── Check 16: engine shell pages must not import games/* (invariant 94) ──────
+# ─── Check 16: the renderer names no game (invariants 94 & #784) ─────────────
 # The main-menu/lobby/game/settings/saves/component-gallery pages are
-# game-agnostic; they reach game React only through renderer-owned loader helpers
-# (renderer/game/rendererGameRegistry — a `game/`, not `games/`, path), never a
-# games/* module or a @chimera-engine/<game> package directly. The lobby page may parse
-# LobbyConfig via @chimera-engine/simulation helpers (engine, allowed). Mirrors the
-# ESLint rule chimera/no-shell-games-import and the host-side Check 7 (#80), and
-# locks the boundary across the @chimera-engine/renderer package cut (issue #774).
-# Matches static + dynamic specifiers; engine @chimera-engine/* packages and comment
-# lines are filtered out. No file is exempt — the loader lives in renderer/game/,
-# outside these page directories.
+# game-agnostic, AND the renderer game-registration seam (renderer/game/) is now
+# game-agnostic too (#784): the registry became a runtime injection point
+# (registerRendererGame) and the tactics loaders moved to the consumer app
+# (apps/tactics/renderer/register.ts). None of these may import a games/* module
+# or a @chimera-engine/<game> package directly — a game's renderer contribution enters
+# only at the consumer-app composition root, selected by the
+# chimera-game-registration build alias. The lobby page may parse LobbyConfig via
+# @chimera-engine/simulation helpers (engine, allowed). Mirrors the ESLint
+# renderer/** game-import ban + chimera/no-shell-games-import and the host-side
+# Check 7 (#80); locks the boundary across the @chimera-engine/renderer package cut
+# (issues #774, #784). Matches static + dynamic specifiers; engine @chimera-engine/*
+# packages and comment lines are filtered out. No file is exempt — the renderer
+# registry seam is scanned alongside the shell pages.
 SHELL_PAGE_DIRS=(
     renderer/app/main-menu
     renderer/app/lobby
@@ -411,6 +431,7 @@ SHELL_PAGE_DIRS=(
     renderer/app/settings
     renderer/app/saves
     renderer/app/component-gallery
+    renderer/game
 )
 for shell_page_dir in "${SHELL_PAGE_DIRS[@]}"; do
     [[ -d "${shell_page_dir}" ]] || continue
@@ -462,6 +483,25 @@ if [[ ${#GAME_SURFACE_DIRS[@]} -gt 0 ]]; then
         || true
     )
 fi
+
+# ─── Check 18: i18n runtime stays renderer-only (invariant 110) ──────────────
+# The i18n RUNTIME — translation resolution, the ICU formatter, and the React
+# binding, all under renderer/i18n/ — is a renderer concern. simulation/, ai/,
+# and networking/ must never import or reference it. The ONLY i18n surface
+# allowed in simulation/ is the declarative language CONTRACT in
+# simulation/foundation/game-manifest-contract.ts (GameLanguage,
+# GameManifest.languages, resolveGameLanguages/firstLanguageCode) — a language
+# declaration, not a runtime — so this check deliberately does NOT match those
+# identifiers; it matches only runtime symbols/paths. The renderer-import ban of
+# Check 2 already forbids `from '.../renderer/...'`; this is the additional,
+# i18n-specific containment for Invariant #110 (it also catches a bare-specifier
+# or dynamic import that Check 2's `from ['\"].*renderer/` pattern would miss).
+# False-positive suppression (comments/tests/fixtures/node_modules) is inherited
+# from check_grep, so the JSDoc mention of `useTranslate()` in
+# simulation/bridge/debug-api-types.ts is not flagged.
+check_grep "110" \
+    'renderer/i18n|useTranslate|I18nProvider|formatMessage|TranslationBundle|TranslationKey' \
+    simulation ai networking
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo

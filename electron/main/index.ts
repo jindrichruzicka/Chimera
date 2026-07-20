@@ -10,9 +10,10 @@ import {
     session,
 } from 'electron';
 import { IS_DEBUG_MODE } from '@chimera-engine/simulation/foundation/constants.js';
-// Type-only import — erased at compile time, so the debug-bridge module graph
-// stays out of the production bundle (Invariant #27); the runtime import is
-// the dynamic one behind the IS_DEBUG_MODE gate in main().
+// Type-only import — erased at compile time, so nothing here forces the
+// debug-bridge module graph to load (Invariant #27); the runtime import is the
+// dynamic one behind the IS_DEBUG_MODE gate in main(). The graph is still
+// BUNDLED in a packaged build — unreachable, not absent; see that gate.
 import type { DebugBridge } from './debug-bridge.js';
 import {
     MalformedAssetRefError,
@@ -1198,13 +1199,37 @@ export function resolveRendererLaunchUrl(
  *   `path.join(__dirname, '../../renderer/out/index.html')`
  */
 export async function main(contributions: readonly MainGameContribution[]): Promise<void> {
-    // ── Invariant #27: CHIMERA_DEBUG + production guard ───────────────────────
-    // Must be the very first check so no debug surface is initialised before
-    // an illegal production+debug combination is caught.
-    assertProductionDebugGuard(process.env);
-
-    // ── Invariant 77: CHIMERA_DEV_HARNESS + production guard ──────────────────
-    assertProductionDevHarnessGuard(process.env);
+    // ── Invariants #27 / #77: production startup guards ───────────────────────
+    // Must be the very first check so no debug surface is initialised before an
+    // illegal production+debug combination is caught. `app.isPackaged` is the
+    // sole trusted build signal (the same one the replay privacy gate trusts):
+    // electron-builder never sets NODE_ENV, so a NODE_ENV-only test would be
+    // vacuous for every shipped binary. It is a static property, readable
+    // before `app.whenReady()`.
+    //
+    // The failure must TERMINATE the process here, in the engine. Consumer
+    // composition roots launch this as `void main(...)`, so a bare throw is
+    // only an UnhandledPromiseRejection: Electron prints a warning and keeps
+    // the process alive with no window, which is not a refusal to start. The
+    // rethrow preserves the contract for tests and any awaiting caller.
+    try {
+        assertProductionDebugGuard(process.env, IS_DEBUG_MODE, app.isPackaged);
+        assertProductionDevHarnessGuard(process.env, app.isPackaged);
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        // Invariant #67 sanctioned exception: the root Logger is not constructed
+        // until later in main(), and this guard must be the FIRST statement so no
+        // debug surface initialises before an illegal combination is caught. There
+        // is no injected logger to reach for, so the refusal reason goes to stderr.
+        console.error(`fatal: refusing to start — ${message}`);
+        // Deliberately NO dialog.showErrorBox here: it is MODAL and blocks
+        // until dismissed, so a packaged binary launched non-interactively
+        // (CI, a script, a double-click on a headless box) would hang forever
+        // instead of refusing. Refusing must be deterministic and immediate;
+        // the reason goes to stderr.
+        app.exit(1);
+        throw err;
+    }
 
     // Derive the host-side game registry from the contributions injected by the
     // consumer app composition root (apps/tactics/electron/main.ts) — the host
@@ -1428,10 +1453,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         getDeviceInfo: () => deviceProbeWatcher?.getCurrentInfo(),
     });
 
-    // Runtime Debug Layer (§4.12). The bridge module is loaded ONLY
-    // via this dynamic import behind the dot-access IS_DEBUG_MODE constant so
-    // the bundler's define replacement constant-folds the branch and
-    // tree-shakes the whole debug graph in production (Invariant #27).
+    // Runtime Debug Layer (§4.12). The bridge module is loaded ONLY via this
+    // dynamic import behind the dot-access IS_DEBUG_MODE constant, which the
+    // bundler's define replacement folds to `false` in a packaged build — so
+    // this branch is never entered in a distributable (Invariant #27). The
+    // graph is NOT tree-shaken out of the bundle today (the constant crosses a
+    // module boundary); the gate is dead, but the code still ships.
     // Sessions attach per-hosted-session inside `onSessionHosted` below; the
     // Inspector window itself stays closed until the first toggle IPC.
     let debugBridge: DebugBridge | undefined = undefined;

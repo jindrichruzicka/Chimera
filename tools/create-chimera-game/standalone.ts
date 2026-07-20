@@ -99,7 +99,38 @@ export interface BuildStandaloneRootManifestParams {
  * install. Pure string over the kebab.
  */
 function standalonePackageBuildChain(name: string): string {
-    return `next build apps/${name}/renderer && pnpm --filter @chimera-engine/${name} build:app`;
+    // Both halves of a distributable build must be declared, because `cross-env`
+    // scopes a var to the ONE command it wraps and each bundler reads a different
+    // flag:
+    //   NEXT_PUBLIC_CHIMERA_PACKAGED → the Next renderer build, gating dev-only
+    //     routes (component gallery, replay UI) out of the shipped renderer.
+    //   CHIMERA_PACKAGED_BUILD → the Electron app bundle, baking the production
+    //     define so IS_DEBUG_MODE folds to false (Invariant #27).
+    // Only the packaging chain sets either — `dev:mp` and the everyday
+    // `build:app` must stay debug-capable, and they share these bundlers.
+    return (
+        `cross-env NEXT_PUBLIC_CHIMERA_PACKAGED=1 next build apps/${name}/renderer && ` +
+        `cross-env CHIMERA_PACKAGED_BUILD=1 pnpm --filter @chimera-engine/${name} build:app`
+    );
+}
+
+/**
+ * The renderer + app-bundle rebuild every DEBUG entry point runs before launching: the exact
+ * inverse of {@link standalonePackageBuildChain}. Neither packaging flag is set, so the dev-only
+ * routes stay in the static export and `IS_DEBUG_MODE` stays a live runtime read; `CHIMERA_DEBUG=1`
+ * additionally emits browser source maps for DevTools and the renderer-attach debugger.
+ *
+ * Both halves are rebuilt because `package*` overwrites BOTH outputs — `apps/<game>/renderer/out`
+ * and `apps/<game>/dist/electron/main.js` — and those are the very artifacts a debug launch reads.
+ * Rebuilding only one leaves the other still carrying the packaged flags, which is silent: F9 does
+ * nothing, or the component gallery and replay routes are simply absent, with no error either way.
+ * Shared by `start:debug` and the `.vscode` preLaunchTasks so the two cannot drift. Pure.
+ */
+function standaloneDebugBuildChain(name: string): string {
+    return (
+        `pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/${name}/renderer && ` +
+        `pnpm --filter @chimera-engine/${name} build:app`
+    );
 }
 
 /**
@@ -139,7 +170,16 @@ export function buildStandaloneRootManifest(
             // `pnpm start:debug` runs the SAME launcher with --debug: developer mode
             // (windowed + DevTools) plus the F9 Debug Inspector. The launcher's --debug
             // branch sets CHIMERA_ENV/NODE_ENV=development + CHIMERA_DEBUG=1.
-            'start:debug': 'node scripts/launch.mjs --debug',
+            //
+            // It rebuilds BOTH halves first, WITHOUT the packaging flags, because
+            // `package*` overwrites the very artifacts this launcher reads:
+            // `apps/<game>/renderer/out` (gallery + replay routes gated OUT) and
+            // `apps/<game>/dist/electron/main.js` (IS_DEBUG_MODE baked to `false`).
+            // A `pnpm package` followed by `pnpm start:debug` would otherwise launch
+            // a silently half-dead app — F9 doing nothing and dev-only routes missing,
+            // with no error to explain either. Rebuilding both makes the flag state of
+            // whatever ran last irrelevant, at the cost of one warm `next build`.
+            'start:debug': `${standaloneDebugBuildChain(name)} && node scripts/launch.mjs --debug`,
             package: `${standalonePackageBuildChain(name)} && pnpm --filter @chimera-engine/${name} run package`,
             // Per-platform packaging: the standalone twin of the monorepo's
             // `package:<game>:<platform>` scripts, invoked by the .vscode Package launch
@@ -236,7 +276,13 @@ delete env['ELECTRON_RUN_AS_NODE'];
 // --debug (\`pnpm start:debug\`): launch in the engine's developer mode. CHIMERA_ENV=development
 // boots windowed (not fullscreen) with Chromium DevTools; CHIMERA_DEBUG=1 plus a non-production
 // NODE_ENV flips IS_DEBUG_MODE on so the Runtime Debug Layer + F9 Inspector load. The production
-// debug guard only fires when NODE_ENV==='production', so setting it to 'development' keeps quiet.
+// debug guard fires for a PACKAGED binary or NODE_ENV==='production' (Invariant #27); this
+// launcher points the electron binary at the unpackaged app dir, so app.isPackaged is false and
+// the guard stays quiet — NODE_ENV='development' keeps the second trigger quiet too.
+//
+// The env alone is not enough: IS_DEBUG_MODE is also a BUILD-time constant, and a
+// \`package*\` run bakes it to \`false\` in this same dist bundle. That is why the
+// \`start:debug\` script re-bundles before invoking this launcher.
 if (process.argv.includes('--debug')) {
     env['NODE_ENV'] = 'development';
     env['CHIMERA_ENV'] = 'development';
@@ -459,9 +505,7 @@ export function buildStandaloneVscodeLaunchJson(kebab: string, title: string): s
  * `build:packages` step (a no-op stub in a standalone project). Pure.
  */
 export function buildStandaloneVscodeTasksJson(kebab: string, title: string): string {
-    const build =
-        `pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/${kebab}/renderer && ` +
-        `pnpm --filter @chimera-engine/${kebab} build:app`;
+    const build = standaloneDebugBuildChain(kebab);
     const presentation = { reveal: 'always', focus: false, panel: 'shared', clear: true };
     const config = {
         version: '2.0.0',

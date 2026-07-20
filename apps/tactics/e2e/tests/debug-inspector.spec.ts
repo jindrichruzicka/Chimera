@@ -24,7 +24,7 @@
  *   - The Diff tab's Refresh re-fetches the tick list, so ticks recorded
  *     after the Inspector opened become selectable and diffable
  *   - Without CHIMERA_DEBUG=1 no toggle listener exists, so F9 is a true
- *     no-op (Invariant #27: the debug graph stays out of production)
+ *     no-op (Invariant #27: no debug surface is registered outside debug mode)
  */
 
 import { test, expect } from '../fixtures/direct-game.fixture';

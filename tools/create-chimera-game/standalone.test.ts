@@ -79,9 +79,21 @@ describe('buildStandaloneRootManifest', () => {
         // `pnpm start` runs the launcher, which strips ELECTRON_RUN_AS_NODE before spawning
         // Electron — otherwise a raw `electron apps/<game>` in a leaked env crashes at startup.
         expect(manifest.scripts['start']).toBe('node scripts/launch.mjs');
-        // `pnpm start:debug` runs the same launcher with --debug: developer mode + the F9
-        // Debug Inspector (CHIMERA_ENV/NODE_ENV=development + CHIMERA_DEBUG=1, set in the launcher).
-        expect(manifest.scripts['start:debug']).toBe('node scripts/launch.mjs --debug');
+        // `pnpm start:debug` rebuilds BOTH halves WITHOUT the packaging flags, then runs the same
+        // launcher with --debug: developer mode + the F9 Debug Inspector (CHIMERA_ENV/NODE_ENV=
+        // development + CHIMERA_DEBUG=1, set in the launcher). Both rebuilds are load-bearing,
+        // because `package*` overwrites BOTH artifacts a debug launch reads: the renderer static
+        // export (dev-only gallery + replay routes gated OUT) and the app bundle (IS_DEBUG_MODE
+        // baked to `false`). Rebuilding only one leaves the other packaged, and both failure modes
+        // are silent. Asserted as an exact string so losing either half fails here.
+        expect(manifest.scripts['start:debug']).toBe(
+            'pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/my-game/renderer && ' +
+                'pnpm --filter @chimera-engine/my-game build:app && node scripts/launch.mjs --debug',
+        );
+        // Neither packaging flag may appear — CHIMERA_DEBUG=1 is the debug build's own flag
+        // (it emits browser source maps) and is not one of them.
+        expect(manifest.scripts['start:debug']).not.toContain('CHIMERA_PACKAGED_BUILD');
+        expect(manifest.scripts['start:debug']).not.toContain('NEXT_PUBLIC_CHIMERA_PACKAGED');
         // `pnpm dev:mp` mirrors `package`'s build chain (renderer + app bundle) and then
         // delegates to the app's dev:mp (the chimera-dev-mp bin, §4.32) — trailing args
         // (`pnpm dev:mp 3 --scenario x`) land on the delegated script.
@@ -355,6 +367,25 @@ describe('buildStandaloneVscodeLaunchJson', () => {
                 );
             }
         }
+
+        // ...and conversely, every config that LAUNCHES the app must HAVE one. The check
+        // above is vacuous for a config with no preLaunchTask, so on its own it would let
+        // one be deleted silently. That matters because `package*` overwrites both
+        // artifacts a launch reads (renderer/out and dist/electron/main.js): a launch
+        // config that does not rebuild would boot the packaged renderer against a bundle
+        // with IS_DEBUG_MODE baked to `false` — F9 dead and dev-only routes missing, with
+        // no error. The preLaunchTask IS the protection, so pin its presence.
+        const appLaunches = launch.configurations.filter((c) => {
+            const exe = c['runtimeExecutable'];
+            return typeof exe === 'string' && exe.endsWith('/electron');
+        });
+        expect(appLaunches.length, 'expected the Run/Run-Clean/Debug-main launches').toBe(3);
+        for (const cfg of appLaunches) {
+            expect(
+                cfg['preLaunchTask'],
+                `${String(cfg['name'])} launches the app and must rebuild first`,
+            ).toBeDefined();
+        }
     });
 
     it('orders the dropdown via presentation.order — the compound directly above its main member', () => {
@@ -413,6 +444,50 @@ describe('buildStandaloneVscodeTasksJson', () => {
         );
         expect(cleanCommand).toContain('CHIMERA_DEBUG=1');
         expect(cleanCommand).toContain('next build apps/my-game/renderer');
+    });
+
+    it('keeps BOTH packaging flags out of the debug build tasks', () => {
+        // These tasks are the F5 debug entry point — the one a VS Code user actually
+        // hits. Either packaging flag leaking in here bakes a production artifact into
+        // the paths a debug launch reads (NEXT_PUBLIC_CHIMERA_PACKAGED gates the gallery
+        // and replay routes out; CHIMERA_PACKAGED_BUILD folds IS_DEBUG_MODE to `false`),
+        // and both failures are silent. `start:debug` carries the same two negative
+        // assertions; without these, the OTHER debug entry point was unprotected.
+        // CHIMERA_DEBUG=1 is the debug build's own flag and is not one of them.
+        const parsed = JSON.parse(buildStandaloneVscodeTasksJson('my-game', 'My Game')) as {
+            tasks: Record<string, unknown>[];
+        };
+        for (const task of parsed.tasks) {
+            const command = String(task['command']);
+            expect(command, `${String(task['label'])} must stay debug-capable`).not.toContain(
+                'CHIMERA_PACKAGED_BUILD',
+            );
+            expect(command, `${String(task['label'])} must stay debug-capable`).not.toContain(
+                'NEXT_PUBLIC_CHIMERA_PACKAGED',
+            );
+        }
+    });
+
+    it('rebuilds exactly what start:debug rebuilds (one shared debug chain)', () => {
+        // The two debug entry points — `pnpm start:debug` and the F5 preLaunchTask — must
+        // rebuild the SAME two halves, or fixing one and forgetting the other reintroduces
+        // the half-packaged launch. They are emitted from one helper; this pins that they
+        // stay in lockstep, so the composition is the ONLY thing that may differ.
+        const manifest = buildStandaloneRootManifest({
+            name: 'my-game',
+            toolchainDeps: { next: '^15' },
+            packageManager: 'pnpm@10.33.0',
+            engines: { node: '>=20.0.0' },
+        });
+        const parsed = JSON.parse(buildStandaloneVscodeTasksJson('my-game', 'My Game')) as {
+            tasks: Record<string, unknown>[];
+        };
+        const incremental = parsed.tasks.find(
+            (t) => t['label'] === 'Build My Game (renderer + bundle)',
+        );
+        expect(manifest.scripts['start:debug']).toBe(
+            `${String(incremental?.['command'])} && node scripts/launch.mjs --debug`,
+        );
     });
 });
 

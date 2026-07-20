@@ -152,7 +152,7 @@ chimera/
 │   ├── input/                       # Input action schema (§4.26) — shared between renderer and settings
 │   │   ├── InputAction.ts           # InputAction ID namespaces (engine:*, game:*); registry contract
 │   │   └── InputBindingSchema.ts    # EngineBindings base; GameBindingSchema<T> generic; default bindings
-│   ├── debug/                       # Debug-mode only — entire module tree-shaken out in production
+│   ├── debug/                       # Debug-mode only — gate folds to false in packaged builds (still bundled)
 │   │   ├── SnapshotRingBuffer.ts    # Observer: records last N full GameSnapshots after each ActionPipeline step
 │   │   ├── SnapshotInspector.ts     # Facade: query API — get/reconstruct/diff snapshots; project to a PlayerId
 │   │   ├── SnapshotDiff.ts          # Structural diff of two GameSnapshots (added/changed/removed fields)

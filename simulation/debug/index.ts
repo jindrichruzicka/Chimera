@@ -6,8 +6,10 @@
  *
  * Consumers import from `@chimera-engine/simulation/debug` rather than internal
  * module paths directly. Everything here is debug-only tooling: instantiated
- * exclusively when `IS_DEBUG_MODE` is true (Invariant #31) and tree-shaken
- * out of production builds.
+ * exclusively when `IS_DEBUG_MODE` is true (Invariant #31), which a packaged
+ * build folds to the literal `false` — so none of it is ever constructed in a
+ * distributable. The modules are still bundled (the constant crosses a module
+ * boundary, so the gated branch is not eliminated); unreachable, not absent.
  */
 
 export { SnapshotRingBuffer, DEFAULT_RING_BUFFER_CAPACITY } from './SnapshotRingBuffer.js';

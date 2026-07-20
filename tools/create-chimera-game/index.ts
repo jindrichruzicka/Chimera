@@ -201,9 +201,17 @@ async function wireRootPackageJson(repoRoot: string, kebab: string): Promise<voi
     // packages, build the app's Next renderer, bundle main/preload, then run electron-builder.
     // `??=` keeps it idempotent — a re-scaffold never clobbers a hand-edited script.
     pkg.scripts ??= {};
+    // Both halves of a distributable build are declared, because `cross-env`
+    // scopes a var to the ONE command it wraps and each bundler reads a different
+    // flag: NEXT_PUBLIC_CHIMERA_PACKAGED gates dev-only routes out of the Next
+    // renderer build; CHIMERA_PACKAGED_BUILD bakes the production define into the
+    // Electron app bundle so IS_DEBUG_MODE folds to false (Invariant #27).
+    // `build:app` is the same script a dev launch runs, so neither can be
+    // inferred — they must be declared here.
     pkg.scripts[`package:${kebab}`] ??=
-        `pnpm build:packages && next build apps/${kebab}/renderer && ` +
-        `pnpm --filter @chimera-engine/${kebab} build:app && ` +
+        `pnpm build:packages && ` +
+        `cross-env NEXT_PUBLIC_CHIMERA_PACKAGED=1 next build apps/${kebab}/renderer && ` +
+        `cross-env CHIMERA_PACKAGED_BUILD=1 pnpm --filter @chimera-engine/${kebab} build:app && ` +
         `pnpm --filter @chimera-engine/${kebab} run package`;
 
     await writeFile(pkgPath, `${JSON.stringify(pkg, null, 4)}\n`, 'utf8');

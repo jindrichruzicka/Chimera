@@ -51,6 +51,17 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
+      # Runs the mechanical Architecture Invariant checks AND their own test
+      # harness (~3s total). Without a gate these checks can rot silently: one
+      # was pinned to a path that had been removed, so it skipped on every run
+      # while still reporting success.
+      #
+      # Placed here, beside the other cheap check: it is pure bash over the
+      # working tree, needing neither `build:packages` nor the Electron binary,
+      # so running it before the ~15-minute build/lint/test sweep fails fast.
+      - name: Verify architecture invariants
+        run: pnpm verify:invariants
+
       # The @chimera-engine/* packages ship dists (F59–F62); typed ESLint and
       # every cross-package import resolve against them. The root gate scripts
       # run `pnpm build:packages` themselves, but this workflow invokes the raw

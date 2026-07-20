@@ -2,7 +2,9 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+    PACKAGED_BUILD_ENV,
     VERIFY_PACK_NODE_MODULES_ENV,
+    computePackagedDefine,
     computeNodePaths,
     computeEsbuildAlias,
     appBundleOutfiles,
@@ -88,6 +90,45 @@ describe('appBundleOutfiles', () => {
     });
 });
 
+describe('computePackagedDefine', () => {
+    // Invariant #27 / §4.12: a PACKAGED bundle bakes the production identity so
+    // IS_DEBUG_MODE constant-folds to the literal `false`, leaving the debug
+    // bridge behind a permanently-dead gate. It does NOT tree-shake the debug
+    // module graph — that code still ships, because the constant crosses a
+    // module boundary and esbuild cannot drop the branch (see build-main.ts).
+    // Dev `build:app` and the e2e global-setups must NOT get the define — they
+    // share this bundler, and baking production there would silently kill the
+    // F9 Inspector.
+
+    it('bakes BOTH IS_DEBUG_MODE reads when the packaged-build flag is set', () => {
+        // Defining only NODE_ENV leaves `process.env.CHIMERA_DEBUG === '1' && false`,
+        // which esbuild cannot reduce to a literal — so IS_DEBUG_MODE would stay
+        // a runtime read and the gate would remain LIVE in a distributable.
+        expect(computePackagedDefine({ [PACKAGED_BUILD_ENV]: '1' })).toEqual({
+            'process.env.NODE_ENV': '"production"',
+            'process.env.CHIMERA_DEBUG': '""',
+        });
+    });
+
+    it('bakes nothing for an everyday dev build (flag absent)', () => {
+        expect(computePackagedDefine({})).toEqual({});
+    });
+
+    it('bakes nothing for any value other than the exact "1"', () => {
+        expect(computePackagedDefine({ [PACKAGED_BUILD_ENV]: '0' })).toEqual({});
+        expect(computePackagedDefine({ [PACKAGED_BUILD_ENV]: 'true' })).toEqual({});
+        expect(computePackagedDefine({ [PACKAGED_BUILD_ENV]: '' })).toEqual({});
+    });
+
+    it('replaces DOT-access member expressions, the only shape esbuild define matches', () => {
+        // Invariant #27 Check 9 pins IS_DEBUG_MODE's dot access for exactly this
+        // reason; a bracket-access key here would silently never match.
+        for (const key of Object.keys(computePackagedDefine({ [PACKAGED_BUILD_ENV]: '1' }))) {
+            expect(key).toMatch(/^process\.env\.[A-Z_]+$/);
+        }
+    });
+});
+
 describe('planBundles', () => {
     const base = {
         appDir: APP_DIR,
@@ -130,6 +171,18 @@ describe('planBundles', () => {
         for (const spec of specs) {
             expect(spec.alias).toBe(alias);
             expect(spec.nodePaths).toBe(nodePaths);
+        }
+    });
+
+    it('threads the define onto every bundle spec', () => {
+        const define = { 'process.env.NODE_ENV': '"production"' };
+        const specs = planBundles({
+            ...base,
+            define,
+            debugPreloadEntry: path.join(ROOT, 'electron/preload/debug-api.ts'),
+        });
+        for (const spec of specs) {
+            expect(spec.define).toBe(define);
         }
     });
 
@@ -243,6 +296,29 @@ describe('buildAppBundles', () => {
         expect(preload?.alias['@chimera-engine/electron/main']).toBeUndefined();
         // preload entry was resolved from the consumer (verify:pack) require root.
         expect(deps.resolvePreload).toHaveBeenCalledWith(nm);
+    });
+
+    it('bakes the production define into every bundle when the packaged-build flag is set', () => {
+        const { built, deps } = makeDeps({ [PACKAGED_BUILD_ENV]: '1' });
+        buildAppBundles(deps);
+        expect(built.length).toBeGreaterThan(0);
+        for (const spec of built) {
+            expect(spec.define).toEqual({
+                'process.env.NODE_ENV': '"production"',
+                'process.env.CHIMERA_DEBUG': '""',
+            });
+        }
+    });
+
+    it('bakes NO define for an everyday dev build, keeping the F9 debug bridge reachable', () => {
+        // The single most important regression guard for the define: `build:app`
+        // is the SAME script dev launches and packaging both run, so a leaked
+        // flag would kill the Inspector with no error message.
+        const { built, deps } = makeDeps({});
+        buildAppBundles(deps);
+        for (const spec of built) {
+            expect(spec.define).toEqual({});
+        }
     });
 
     it('does not bundle a debug preload by default (production app is debug-free)', () => {

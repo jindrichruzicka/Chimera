@@ -32,6 +32,44 @@ import { buildSync } from 'esbuild';
  */
 export const VERIFY_PACK_NODE_MODULES_ENV = 'CHIMERA_VERIFY_PACK_NODE_MODULES';
 
+/**
+ * Env var the PACKAGING scripts set to mark a distributable build. `build:app`
+ * is the same script an everyday dev launch runs, so packaging cannot be
+ * inferred — it must be declared. Set by every `package:<game>*` script.
+ */
+export const PACKAGED_BUILD_ENV = 'CHIMERA_PACKAGED_BUILD';
+
+/**
+ * esbuild `define` for the app bundles (§4.12, Invariant #27).
+ *
+ * In a packaged build, bake the production identity so
+ * `IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production'`
+ * constant-folds to the literal `false` in the emitted bundle: the debug bridge
+ * then sits behind a permanently-false gate and no debug surface can ever be
+ * registered in a distributable build.
+ *
+ * BOTH reads must be defined. Replacing only `NODE_ENV` leaves
+ * `process.env.CHIMERA_DEBUG === '1' && false`, which esbuild cannot reduce to a
+ * literal. Keys MUST stay dot-access member expressions — the only shape
+ * esbuild's define replacement matches. The engine's startup guard reads the flag
+ * via bracket access on an injected `process.env`, so it is untouched and still
+ * refuses to start on a real `CHIMERA_DEBUG=1`.
+ *
+ * Returns `{}` for everyday dev builds and for the e2e `global-setup`, which
+ * passes `process.env` without the flag: they share this bundler, and baking
+ * production there would silently disable the F9 Inspector.
+ *
+ * This is defence in depth, not the enforcement — the engine's packaged-aware
+ * startup guard is what refuses to start a debug-capable packaged binary.
+ */
+export function computePackagedDefine(
+    env: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+    return env[PACKAGED_BUILD_ENV] === '1'
+        ? { 'process.env.NODE_ENV': '"production"', 'process.env.CHIMERA_DEBUG': '""' }
+        : {};
+}
+
 /** A single esbuild bundle to emit (main / preload / debug-preload). */
 export interface BundleSpec {
     readonly label: 'main' | 'preload' | 'debug-preload';
@@ -40,6 +78,8 @@ export interface BundleSpec {
     readonly external: readonly string[];
     readonly alias: Readonly<Record<string, string>>;
     readonly nodePaths: readonly string[];
+    /** Build-time constant replacement; see {@link computePackagedDefine}. */
+    readonly define: Readonly<Record<string, string>>;
 }
 
 /** esbuild runner (buildSync-shaped); injected so unit tests bundle nothing. */
@@ -154,6 +194,11 @@ export interface PlanBundlesOptions {
     readonly alias: Readonly<Record<string, string>>;
     readonly nodePaths: readonly string[];
     /**
+     * Build-time constant replacement, threaded onto every spec. Absent ⇒ none
+     * (the dev/e2e default). See {@link computePackagedDefine}.
+     */
+    readonly define?: Readonly<Record<string, string>>;
+    /**
      * Output paths override. Absent ⇒ the default `<appDir>/dist` layout
      * ({@link appBundleOutfiles}). The E2E `global-setup` passes its `.e2e-build`
      * layout so production and tests share one bundler with different sinks.
@@ -167,6 +212,7 @@ export interface PlanBundlesOptions {
  */
 export function planBundles(options: PlanBundlesOptions): BundleSpec[] {
     const out = options.outfiles ?? appBundleOutfiles(options.appDir);
+    const define = options.define ?? {};
     const specs: BundleSpec[] = [
         {
             label: 'main',
@@ -175,6 +221,7 @@ export function planBundles(options: PlanBundlesOptions): BundleSpec[] {
             external: ['electron', 'node:*'],
             alias: options.alias,
             nodePaths: options.nodePaths,
+            define,
         },
         {
             label: 'preload',
@@ -183,6 +230,7 @@ export function planBundles(options: PlanBundlesOptions): BundleSpec[] {
             external: ['electron'],
             alias: options.alias,
             nodePaths: options.nodePaths,
+            define,
         },
     ];
     if (options.debugPreloadEntry !== undefined) {
@@ -193,6 +241,7 @@ export function planBundles(options: PlanBundlesOptions): BundleSpec[] {
             external: ['electron'],
             alias: options.alias,
             nodePaths: options.nodePaths,
+            define,
         });
     }
     return specs;
@@ -271,6 +320,7 @@ export function buildAppBundles(deps: BuildAppBundlesDeps): void {
         preloadEntry,
         alias,
         nodePaths,
+        define: computePackagedDefine(deps.env),
         ...(debugPreloadEntry !== undefined ? { debugPreloadEntry } : {}),
         ...(deps.outfiles !== undefined ? { outfiles: deps.outfiles } : {}),
     });
@@ -323,6 +373,10 @@ if (process.env['VITEST'] === undefined && isDirectRun()) {
             external: [...spec.external],
             alias: { ...spec.alias },
             nodePaths: [...spec.nodePaths],
+            // Empty for dev/e2e builds; bakes NODE_ENV=production (so
+            // IS_DEBUG_MODE folds to false) only when the packaging scripts
+            // declare CHIMERA_PACKAGED_BUILD=1. See computePackagedDefine.
+            define: { ...spec.define },
         });
     };
 

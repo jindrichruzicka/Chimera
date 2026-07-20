@@ -53,12 +53,16 @@ describe('ci.yml CI workflow', () => {
         expect(buildIndex).toBeLessThan(lintIndex);
     });
 
-    it('still runs the full gate: format, lint, typecheck, assets, tests', () => {
+    it('still runs the full gate: format, lint, typecheck, assets, tests, invariants', () => {
         expect(content).toMatch(/pnpm format:check/);
         expect(content).toMatch(/pnpm -r lint/);
         expect(content).toMatch(/pnpm typecheck/);
         expect(content).toMatch(/pnpm validate:assets/);
         expect(content).toMatch(/pnpm -r test/);
+        // The mechanical invariant checks need a gate of their own: unrun, they
+        // rot silently — a check pinned to a removed path skipped on every run
+        // while still reporting success.
+        expect(content).toMatch(/pnpm verify:invariants/);
     });
 
     it('does not reference the removed root e2e/ directory (suite lives in apps/tactics/e2e since F63)', () => {

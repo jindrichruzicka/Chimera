@@ -265,6 +265,15 @@ describe('scaffoldGame', () => {
         expect(script).toContain('next build apps/my-game/renderer');
         expect(script).toContain('pnpm --filter @chimera-engine/my-game build:app');
         expect(script).toContain('pnpm --filter @chimera-engine/my-game run package');
+        // Invariant #27: the packaged-build marker must ride on the build:app
+        // segment, so the emitted bundle folds IS_DEBUG_MODE to false. Asserted
+        // on the SEGMENT, not just the script: a marker on the wrong command
+        // would not reach the bundler. This workspace emitter and the standalone
+        // twin are both ratcheted against silent removal in
+        // tools/packaged-build-flag.test.ts.
+        expect(script).toContain(
+            'cross-env CHIMERA_PACKAGED_BUILD=1 pnpm --filter @chimera-engine/my-game build:app',
+        );
     });
 
     it('resolves an arbitrary --template id with no CLI code change', async () => {
@@ -382,8 +391,18 @@ describe('scaffoldGame', () => {
             // `pnpm start` + its launcher are emitted; the launcher strips ELECTRON_RUN_AS_NODE
             // before spawning Electron so a raw launch from a leaked env does not crash.
             expect(rootPkg.scripts.start).toBe('node scripts/launch.mjs');
-            // `pnpm start:debug` runs the same launcher with --debug (developer mode + F9 Inspector).
-            expect(rootPkg.scripts['start:debug']).toBe('node scripts/launch.mjs --debug');
+            // `pnpm start:debug` rebuilds BOTH halves WITHOUT the packaging flags, then runs the
+            // same launcher with --debug (developer mode + F9 Inspector). Both rebuilds are
+            // load-bearing: `package*` overwrites BOTH artifacts a debug launch reads — the
+            // renderer static export (dev-only gallery + replay routes gated OUT) and the app
+            // bundle (IS_DEBUG_MODE baked to `false`) — and either half left packaged fails
+            // silently. Asserted as an exact string so losing either one fails here.
+            expect(rootPkg.scripts['start:debug']).toBe(
+                'pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/my-game/renderer && ' +
+                    'pnpm --filter @chimera-engine/my-game build:app && node scripts/launch.mjs --debug',
+            );
+            expect(rootPkg.scripts['start:debug']).not.toContain('CHIMERA_PACKAGED_BUILD');
+            expect(rootPkg.scripts['start:debug']).not.toContain('NEXT_PUBLIC_CHIMERA_PACKAGED');
             const launcher = await readFile(path.join(outputRoot, 'scripts', 'launch.mjs'), 'utf8');
             expect(launcher).toContain("delete env['ELECTRON_RUN_AS_NODE']");
             expect(launcher).toContain("spawn(electronBinary, ['apps/my-game']");

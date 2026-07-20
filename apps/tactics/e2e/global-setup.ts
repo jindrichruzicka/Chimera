@@ -93,6 +93,11 @@ export default function globalSetup(): void {
                 external: [...spec.external],
                 alias: { ...spec.alias },
                 nodePaths: [...spec.nodePaths],
+                // Honour the spec's define like the `build:app` CLI does. Empty
+                // in practice here (e2e never sets CHIMERA_PACKAGED_BUILD, so
+                // the debug gate stays live for the suite) — forwarded so the
+                // BundleSpec contract has no silent exception.
+                define: { ...spec.define },
             });
         },
         readJson: (file) => JSON.parse(readFileSync(file, 'utf8')) as { name?: string },
