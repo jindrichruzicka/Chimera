@@ -46,6 +46,10 @@ export type TacticsSelectionIntent =
               | 'missing-local-player'
               | 'missing-selection'
               | 'opponent-control'
+              // Ground click resolving to the selected unit's CURRENT tile. Not a
+              // move, and must not reach the simulation, which would charge a
+              // stamina for zero displacement — see `resolveGroundTargetIntent`.
+              | 'target-not-moved'
               | 'unknown-target';
       };
 
@@ -293,6 +297,21 @@ function resolveGroundTargetIntent(
     }
     if (selectedUnit.ownership !== 'own') {
         return { type: 'noop', reason: 'opponent-control' };
+    }
+    // A "move" onto the tile the unit already occupies is not a move, and must
+    // never reach the simulation: `tacticsMoveUnitDefinition.validate()` checks
+    // unit-exists, ownership and `stamina > 0` only — there is no distance check
+    // — so `reduce()` would spend a stamina for zero displacement.
+    //
+    // Not a theoretical case. The unit mesh is TWEENED between tiles
+    // (DEFAULT_UNIT_MOVEMENT_DURATION_MS), so a click aimed at the unit while it
+    // is still animating can miss the mesh and hit the ground plane behind it.
+    // A no-op does not clear the selection, so that stray click arrives with a
+    // live selection and resolves here — burning a turn resource with nothing to
+    // show for it. Rejecting it at the intent layer keeps the simulation's
+    // range-unlimited move rule untouched.
+    if (grid.x === selectedUnit.grid.x && grid.y === selectedUnit.grid.y) {
+        return { type: 'noop', reason: 'target-not-moved' };
     }
 
     return { type: 'move-unit', unitId: selectedUnit.id, grid };

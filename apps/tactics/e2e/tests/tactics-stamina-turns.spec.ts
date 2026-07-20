@@ -18,6 +18,27 @@ import { test, expect } from '../fixtures/game.fixture';
 import { GamePage } from '../pages/GamePage';
 
 test.describe('Tactics turn-gating + stamina (sequential mode)', () => {
+    /**
+     * Collapse the unit-movement tween before driving the board.
+     *
+     * The unit mesh is animated between tiles over `--ch-duration-normal`
+     * (`TacticsUnitPrimitive`), which DECOUPLES rendered geometry from snapshot
+     * state: this spec clicks cell centres, so a click aimed at the unit while it
+     * is still sliding can miss the mesh and hit the ground plane behind it. That
+     * turns a "select" into a stray ground click and desynchronises the
+     * select-then-move pairing the stamina assertions depend on.
+     *
+     * `prefers-reduced-motion` zeroes that token, so the mesh snaps and geometry
+     * always agrees with the projected snapshot. Animation is not what this spec
+     * tests — turn-gating and stamina accounting are. (Occluded Playwright windows
+     * also freeze CSS transition clocks, the same reason the i18n spec emulates
+     * this.)
+     */
+    test.beforeEach(async ({ hostWindow, clientWindow }) => {
+        await hostWindow.emulateMedia({ reducedMotion: 'reduce' });
+        await clientWindow.emulateMedia({ reducedMotion: 'reduce' });
+    });
+
     test('the off-turn board is non-interactive and the turn badge tracks the active seat', async ({
         hostWindow,
         clientWindow,

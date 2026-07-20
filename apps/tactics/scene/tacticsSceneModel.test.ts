@@ -190,6 +190,52 @@ describe('tacticsSceneModel', () => {
         ).toEqual({ type: 'attack-unit', attackerId: OWN_UNIT, defenderId: OPPONENT_UNIT });
     });
 
+    it('returns no-op intent for a ground click on the selected unit’s own tile', () => {
+        // A move onto the tile the unit already occupies is not a move. The
+        // simulation would accept it — `tacticsMoveUnitDefinition.validate()`
+        // checks unit-exists, ownership and stamina>0 only, with no distance
+        // check — and `reduce()` then spends a stamina for zero displacement.
+        //
+        // This is reachable in normal play: the unit mesh is TWEENED between
+        // tiles (DEFAULT_UNIT_MOVEMENT_DURATION_MS), so a click aimed at the
+        // unit mid-animation can miss the mesh and hit the ground plane behind
+        // it. Selection is not cleared by a no-op, so that stray ground click
+        // arrives with a live selection and becomes a zero-distance move —
+        // silently burning a turn resource with no visible effect.
+        const units = [ownSceneUnit(), opponentSceneUnit()];
+
+        expect(
+            resolveTacticsSelectionIntent({
+                units,
+                localPlayerId: LOCAL_PLAYER,
+                selectedUnitId: OWN_UNIT,
+                target: { type: 'ground', grid: { x: 0, y: 0 } },
+            }),
+        ).toEqual({ type: 'noop', reason: 'target-not-moved' });
+    });
+
+    it('still resolves a ground click on any OTHER tile as a move', () => {
+        // Guards the fix from over-reaching: only the zero-distance case is
+        // rejected. Move stays range-unlimited — tactics has no adjacency rule.
+        const units = [ownSceneUnit(), opponentSceneUnit()];
+
+        for (const grid of [
+            { x: 1, y: 0 },
+            { x: 0, y: 1 },
+            { x: -2, y: -2 },
+            { x: 3, y: 2 },
+        ]) {
+            expect(
+                resolveTacticsSelectionIntent({
+                    units,
+                    localPlayerId: LOCAL_PLAYER,
+                    selectedUnitId: OWN_UNIT,
+                    target: { type: 'ground', grid },
+                }),
+            ).toEqual({ type: 'move-unit', unitId: OWN_UNIT, grid });
+        }
+    });
+
     it('returns no-op intent when an opponent unit would be controlled', () => {
         const units = [ownSceneUnit(), opponentSceneUnit()];
 
