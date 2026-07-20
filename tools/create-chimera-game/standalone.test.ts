@@ -83,8 +83,8 @@ describe('buildStandaloneRootManifest', () => {
         // launcher with --debug: developer mode + the F9 Debug Inspector (CHIMERA_ENV/NODE_ENV=
         // development + CHIMERA_DEBUG=1, set in the launcher). Both rebuilds are load-bearing,
         // because `package*` overwrites BOTH artifacts a debug launch reads: the renderer static
-        // export (dev-only gallery + replay routes gated OUT) and the app bundle (IS_DEBUG_MODE
-        // baked to `false`). Rebuilding only one leaves the other packaged, and both failure modes
+        // export (dev-only gallery, replay and Inspector routes 404-ing) and the app bundle
+        // (debug graph pruned, Inspector preload dropped). Rebuilding only one leaves the other packaged, and both failure modes
         // are silent. Asserted as an exact string so losing either half fails here.
         expect(manifest.scripts['start:debug']).toBe(
             'pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/my-game/renderer && ' +

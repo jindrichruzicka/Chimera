@@ -19,6 +19,20 @@ import {
 } from '../../components/debug/__test-support__/DebugApiStubs';
 import DebugInspectorPage from './page';
 
+// The route's server wrapper calls `notFound()` when the packaged flag is set.
+// Every panel test below runs with the flag absent, so the gate is open and this
+// mock only matters to the gate block at the end of the file. The mock THROWS,
+// as the real `notFound()` does — a non-throwing stub would let the wrapper
+// fall through and render the Inspector anyway, so nothing could assert the
+// markup is actually absent.
+vi.mock('next/navigation', () => ({
+    notFound: vi.fn((): never => {
+        throw new Error('NEXT_NOT_FOUND');
+    }),
+}));
+
+import { notFound as notFoundMock } from 'next/navigation';
+
 afterEach(() => {
     cleanup();
     Reflect.deleteProperty(window, '__chimeraDebug');
@@ -172,5 +186,55 @@ describe('DebugInspectorPage', () => {
         render(<DebugInspectorPage />);
 
         expect(screen.getByRole('tablist', { name: 'Inspector panels' })).toBeInTheDocument();
+    });
+});
+
+// ── Packaged builds 404 the route (§4.12) ────────────────────────────────────
+//
+// Defence in depth behind the main-process controls: a distributable never
+// creates the Inspector window, and ships no debug preload, so this page could
+// only ever render its "bridge unavailable" state. Gating it turns a reachable
+// route into a 404.
+//
+// It does NOT remove the panel JavaScript — Next still emits the route's chunk,
+// exactly as it does for the Component Gallery; only the prerendered page
+// changes. The bytes are saved on the Electron side. See `debugRouteGate`.
+
+describe('DebugInspectorPage server wrapper — packaged gate', () => {
+    it('aborts the render via notFound(), leaving no Inspector markup', () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '1');
+
+        vi.mocked(notFoundMock).mockClear();
+        expect(() => render(<DebugInspectorPage />)).toThrow('NEXT_NOT_FOUND');
+        // Not `toHaveBeenCalledOnce()`: React re-attempts a render that throws,
+        // so the exact count is a React internal. The throw plus the markup
+        // absence below carry the guarantee — had the wrapper fallen through,
+        // the client root would be in the document.
+        expect(vi.mocked(notFoundMock)).toHaveBeenCalled();
+        expect(screen.queryByTestId('debug-inspector-page')).not.toBeInTheDocument();
+
+        vi.unstubAllEnvs();
+    });
+
+    it('does not call notFound() in a non-packaged build', () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
+
+        vi.mocked(notFoundMock).mockClear();
+        render(<DebugInspectorPage />);
+        expect(vi.mocked(notFoundMock)).not.toHaveBeenCalled();
+
+        vi.unstubAllEnvs();
+    });
+
+    it('isDebugInspectorRouteEnabled is false only in the packaged production build', async () => {
+        const { isDebugInspectorRouteEnabled } = await import('./debugRouteGate.js');
+
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '1');
+        expect(isDebugInspectorRouteEnabled()).toBe(false);
+
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
+        expect(isDebugInspectorRouteEnabled()).toBe(true);
+
+        vi.unstubAllEnvs();
     });
 });

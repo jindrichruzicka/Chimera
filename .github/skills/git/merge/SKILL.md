@@ -23,7 +23,7 @@ bash .github/skills/git/merge/scripts/check-and-merge.sh --dry-run  # checks + r
 4. No downmerged main commits (no merge commits bringing main back).
 5. First commit (oldest vs `main`) has non-empty body.
 6. All later commits start with `fixup!`.
-7. `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test` all exit 0.
+7. `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:packaged-bundle` all exit 0.
 
 Any failure → print all problems, exit non-zero, do not touch `main`.
 

@@ -178,6 +178,22 @@ describe('blank template smoke harness', () => {
         expect(yml).toContain('to: apps/__game_kebab__/assets');
     });
 
+    // The `files:` allowlist must name the two shipped bundles individually. A
+    // `dist/**` glob would sweep in whatever else dist/ holds — including a
+    // debug preload left by an earlier dev build, since `build:app` overwrites
+    // but never cleans (mirrors apps/tactics/electron-builder.test.ts).
+    it('names dist files individually rather than globbing dist/**', async () => {
+        const yml = await read('electron-builder.yml');
+        const distEntries = yml
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.startsWith('- dist/'));
+
+        expect(distEntries).toEqual(['- dist/electron/main.js', '- dist/preload/api.js']);
+        expect(yml).not.toMatch(/dist\/\*\*/);
+        expect(yml).not.toMatch(/debug-api/);
+    });
+
     // Debug builds (the scaffold's .vscode task / `pnpm start:debug`) leave browser source
     // maps with full TSX sourcesContent in renderer/out, and the bare `package` script hands
     // electron-builder whatever out/ currently holds — the file set must refuse *.map so a

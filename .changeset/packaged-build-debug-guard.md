@@ -16,9 +16,10 @@ privacy gate already used. The existing `NODE_ENV` trigger is unchanged.
 As defence in depth, the app bundler gained an opt-in production `define`: packaging scripts
 declare `CHIMERA_PACKAGED_BUILD=1`, which bakes both `IS_DEBUG_MODE` reads so the emitted bundle
 contains the literal `IS_DEBUG_MODE = false` — the debug bridge sits behind a permanently-false
-gate even if the startup guard were bypassed. (The debug module graph itself still ships; the
-constant crosses a module boundary, so esbuild cannot drop the branch. Removing it is a separate
-concern.) Dev and e2e builds share that bundler and deliberately get no define, so the F9
+gate even if the startup guard were bypassed. (This step made the gate dead but left the debug
+module graph in the bundle; a separate change in this same release removes it — see "Packaged
+builds no longer bundle the Runtime Debug Layer".) Dev and e2e builds share that bundler and
+deliberately get no define, so the F9
 Inspector stays reachable; a drift test fails loudly if a packaging script ever loses the flag.
 
 Also fixes a scaffolding bug this exposed: the packaging scripts emitted by `create-chimera-game`

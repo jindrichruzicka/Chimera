@@ -546,7 +546,11 @@ test_missing_constants_file_in_real_repo_detected() {
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
 
-    if [[ ${exit_code} -ne 0 ]] && grep -q "invariant-27" <<<"${out}"; then
+    # Anchored on the FILE NAME, not a bare `invariant-27`: several checks emit
+    # that number (the packaging-config scan, the REPO_MARKER anti-rot probe), so
+    # a bare match would let this single-cause probe pass for a different
+    # violation entirely.
+    if [[ ${exit_code} -ne 0 ]] && grep -q '\[invariant-27\].*constants\.ts.*missing' <<<"${out}"; then
         pass "missing constants file in a real repo root flagged as [invariant-27]"
     else
         fail "anti-rot probe did not fire for a missing constants file:"
@@ -571,6 +575,68 @@ test_missing_constants_file_without_repo_marker_inert() {
         pass "anti-rot probe stays inert in a bare fixture root"
     else
         fail "anti-rot probe wrongly fired without a repo marker:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 16c/16d: the REPO_MARKER anti-rot probe itself.
+#
+# Every repo-only rule in this script is armed by `pnpm-workspace.yaml`. Rename
+# it and they ALL fall silently inert — the exact failure that left Check 9 dead
+# code for months. The probe turns that into a violation, and these two fixtures
+# are the only thing that exercises it: without them the backstop is as
+# unreachable as the rule it protects, which was the original defect.
+#
+# The skills directory is planted because the probe only arms in a root shaped
+# like this repo: `package.json` plus `.github/skills/invariants`. Each mirror
+# names only its OWN surface, so this file stays a pure `.github`→`.github`
+# substitution of its twin.
+plant_repo_shaped_root() {
+    local root="$1"
+    plant_file "${root}" "package.json" '{ "scripts": { "dev": "electron ." } }'
+    plant_file "${root}" "simulation/foundation/constants.ts" \
+        "export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
+    mkdir -p "${root}/.github/skills/invariants"
+}
+
+# Test 16c: repo-shaped root with the marker RENAMED → probe fires.
+test_missing_repo_marker_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_repo_shaped_root "${tmp}"
+    # The rename that would silently disarm every marker-gated rule.
+    plant_file "${tmp}" "pnpm-workspace.yml" "packages:\n  - 'apps/*'"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]] && grep -q '\[invariant-27\].*pnpm-workspace\.yaml.*missing' <<<"${out}"; then
+        pass "renamed repo marker detected as [invariant-27]"
+    else
+        fail "repo-marker anti-rot probe did not fire:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 16d: the same root WITH the marker → silent. Without this the probe could
+#           be satisfied by firing unconditionally.
+test_present_repo_marker_inert() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_repo_shaped_root "${tmp}"
+    plant_file "${tmp}" "pnpm-workspace.yaml" "packages:\n  - 'apps/*'"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "repo-marker probe stays silent when the marker is present"
+    else
+        fail "repo-marker probe fired with the marker present:"
         echo "${out}" | sed 's/^/       /' >&2
     fi
 }
@@ -1430,6 +1496,8 @@ test_bracket_access_node_env_detected
 test_clean_debug_mode_shape_passes
 test_missing_constants_file_in_real_repo_detected
 test_missing_constants_file_without_repo_marker_inert
+test_missing_repo_marker_detected
+test_present_repo_marker_inert
 test_comment_masked_bracket_access_detected
 test_missing_is_debug_mode_assignment_detected
 test_multiline_spec_shape_passes

@@ -63,6 +63,24 @@ describe('apps/tactics electron-builder.yml packaging config', () => {
         expect(content).toMatch(/renderer\/out/);
     });
 
+    // The `files` list under dist/ is an ALLOWLIST of two named files, and §4.12's
+    // accounting depends on it: `dist/preload/debug-api.js` and every `.map` are
+    // outside a distributable by construction, not because anything excludes them.
+    // A `dist/**` glob here would silently start shipping whatever the build emits —
+    // including a debug preload, on any branch where one is emitted again — and
+    // would make `docs/core-components/runtime-debug-layer.md`'s byte accounting
+    // wrong in the direction that matters.
+    it('names dist files individually rather than globbing dist/**', () => {
+        const distEntries = content
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.startsWith('- dist/'));
+
+        expect(distEntries).toEqual(['- dist/electron/main.js', '- dist/preload/api.js']);
+        expect(content).not.toMatch(/dist\/\*\*/);
+        expect(content).not.toMatch(/debug-api/);
+    });
+
     // Debug builds (the .vscode launch tasks, `pnpm start:debug`) leave browser source
     // maps with full TSX sourcesContent in renderer/out. The root package:tactics:*
     // chains re-run `next build` (which wipes out/ first), but the bare app-level

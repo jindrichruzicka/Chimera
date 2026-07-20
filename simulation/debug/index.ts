@@ -8,8 +8,13 @@
  * module paths directly. Everything here is debug-only tooling: instantiated
  * exclusively when `IS_DEBUG_MODE` is true (Invariant #31), which a packaged
  * build folds to the literal `false` — so none of it is ever constructed in a
- * distributable. The modules are still bundled (the constant crosses a module
- * boundary, so the gated branch is not eliminated); unreachable, not absent.
+ * distributable. It is not merely unreachable there but ABSENT: the app bundler
+ * folds the debug gate in `electron/main/index.ts` and prunes the dynamic import
+ * that reaches this barrel, so none of these modules enter a packaged bundle.
+ *
+ * The source stays, and this barrel stays public: `DebugProtocol` and
+ * `SnapshotDiff` have type-only importers reaching the renderer, which cost zero
+ * runtime bytes. Absence from the bundle is the goal, not deletion.
  */
 
 export { SnapshotRingBuffer, DEFAULT_RING_BUFFER_CAPACITY } from './SnapshotRingBuffer.js';

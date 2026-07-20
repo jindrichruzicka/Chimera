@@ -198,6 +198,52 @@ done < <(
 # file must be findable" — while fixture roots (no workspace file) stay inert.
 CONSTANTS="simulation/foundation/constants.ts"
 REPO_MARKER="pnpm-workspace.yaml"
+
+# Strip JS comments from $1, preserving line numbering 1:1 (a full-line comment
+# emits an empty line), so a stripped file can still be scanned positionally.
+#
+# String-aware: `//` and `/*` inside '…'/"…"/`…` literals (URLs, globs) are
+# content, not comment markers, and must survive — a string-blind stripper
+# truncates them and raises false violations. Known limitation: regex literals
+# are not modelled; a `//` inside one is treated as a comment (fails closed).
+#
+# Shared by BOTH halves of Check 9. Comment text quoting the pinned shape must
+# never be able to satisfy — or anchor — a check about executable code.
+strip_js_comments() {
+    awk '{
+        line = $0; out = ""
+        n = length(line); i = 1
+        while (i <= n) {
+            c = substr(line, i, 1)
+            two = substr(line, i, 2)
+            if (inblock) {
+                if (two == "*/") { inblock = 0; i += 2 } else { i++ }
+            } else if (instr != "") {
+                out = out c
+                if (c == "\\") { out = out substr(line, i + 1, 1); i += 2 }
+                else { if (c == instr) instr = ""; i++ }
+            } else if (two == "/*") { inblock = 1; i += 2 }
+            else if (two == "//") { break }
+            else {
+                if (c == "\x27" || c == "\"" || c == "`") instr = c
+                out = out c; i++
+            }
+        }
+        # Only template literals span lines; an open quote string at EOL
+        # is invalid JS — reset so it cannot poison the following lines.
+        if (instr == "\x27" || instr == "\"") instr = ""
+        print out
+    }' "$1"
+}
+
+# The marker arms every repo-only rule below. If it is ever renamed, those rules
+# would ALL fall silently inert — the exact way Check 9 rotted into a no-op once
+# before. Fail loudly instead of skipping: a checkout that is not the repo root
+# has no `package.json` + `.github/` pair either, so this cannot misfire.
+if [[ ! -f "${REPO_MARKER}" && -f "package.json" && -d ".github/skills/invariants" ]]; then
+    violation "27" "${REPO_MARKER}: missing from what looks like the repo root — every marker-gated invariant check has silently stopped running (did the workspace file get renamed? update REPO_MARKER in this script)"
+fi
+
 if [[ -f "${REPO_MARKER}" && ! -f "${CONSTANTS}" ]]; then
     violation "27" "${CONSTANTS}: missing — invariant 27's IS_DEBUG_MODE shape check cannot run (did the constant move? update CONSTANTS in this script)"
 fi
@@ -213,32 +259,9 @@ if [[ -f "${CONSTANTS}" ]]; then
     # Known limitation: regex literals are not modelled; a `//` inside one
     # would still be treated as a comment (fails closed — false positive).
     IS_DEBUG_ASSIGNMENT=$(
-        awk '{
-            line = $0; out = ""
-            n = length(line); i = 1
-            while (i <= n) {
-                c = substr(line, i, 1)
-                two = substr(line, i, 2)
-                if (inblock) {
-                    if (two == "*/") { inblock = 0; i += 2 } else { i++ }
-                } else if (instr != "") {
-                    out = out c
-                    if (c == "\\") { out = out substr(line, i + 1, 1); i += 2 }
-                    else { if (c == instr) instr = ""; i++ }
-                } else if (two == "/*") { inblock = 1; i += 2 }
-                else if (two == "//") { break }
-                else {
-                    if (c == "\x27" || c == "\"" || c == "`") instr = c
-                    out = out c; i++
-                }
-            }
-            # Only template literals span lines; an open quote string at EOL
-            # is invalid JS — reset so it cannot poison the following lines.
-            if (instr == "\x27" || instr == "\"") instr = ""
-            print out
-        }' "${CONSTANTS}" \
-        | awk '/export const IS_DEBUG_MODE/{found=1} found{print} found&&/;/{exit}' \
-        || true
+        strip_js_comments "${CONSTANTS}" \
+            | awk '/export const IS_DEBUG_MODE/{found=1} found{print} found&&/;/{exit}' \
+            || true
     )
     if [[ -z "${IS_DEBUG_ASSIGNMENT}" ]]; then
         violation "27" "${CONSTANTS}: export const IS_DEBUG_MODE assignment not found (invariant 27 pins its define-replaceable shape)"
@@ -251,6 +274,25 @@ if [[ -f "${CONSTANTS}" ]]; then
         fi
     fi
 fi
+
+# The debug GATE in electron/main/index.ts carries a verbatim copy of this
+# expression, and is equally load-bearing: it is what the define folds to
+# `if (false)`, pruning the debug module graph out of packaged bundles.
+#
+# It is deliberately NOT checked here. A shell text scan cannot tell code from a
+# string literal, cannot balance braces, and cannot tell a static import from a
+# dynamic one. Each of those is enough on its own to make such a check green over
+# a shipped debug graph: a decoy string supplies both the anchor and the pinned
+# literals, and hoisting the imports out leaves an empty correct-shaped `if` that
+# still anchors the capture. Guards that must understand the source belong where
+# a parser is available.
+#
+# The gate is pinned instead by two checks that CAN establish it:
+#   - tools/packaged-build-flag.test.ts — parses the file with the TypeScript
+#     compiler API (enclosure, static-vs-dynamic imports, expression identity).
+#   - apps/tactics/electron/__tests__/packaged-bundle-content.test.ts — asserts
+#     the emitted bundle itself, which is the property rather than a proxy for it.
+# Both run under `pnpm test`, which CI runs alongside this script.
 
 # ─── Check 10: electron/main core must not import games/* (invariant 2) ──────
 # The host (main process) stays agnostic of which games exist. Since F62 (#778)
@@ -431,6 +473,8 @@ SHELL_PAGE_DIRS=(
     renderer/app/settings
     renderer/app/saves
     renderer/app/component-gallery
+    renderer/app/debug
+    renderer/app/replays
     renderer/game
 )
 for shell_page_dir in "${SHELL_PAGE_DIRS[@]}"; do

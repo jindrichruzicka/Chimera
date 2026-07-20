@@ -13,7 +13,17 @@
     "compilerOptions": {
         "noEmit": true
     },
-    "include": ["**/*.ts"],
+    // The two ambient ProcessEnv declarations are pulled in explicitly: this
+    // project's `include` is package-relative, so it would otherwise miss them
+    // and `noPropertyAccessFromIndexSignature` would reject the dot-access debug
+    // gate in main/index.ts — the very shape esbuild's `define` needs to fold
+    // (§4.12, Invariant #27). `env-node.d.ts`'s own header already names the
+    // Electron program as in scope; only the renderer program must exclude it.
+    "include": [
+        "**/*.ts",
+        "../simulation/foundation/env.d.ts",
+        "../simulation/foundation/env-node.d.ts"
+    ],
     "exclude": [
         "node_modules",
         "dist",

@@ -34,7 +34,7 @@ These settings are **Invariants 3 and 4** in [Architecture Invariants](../execut
 ## 8.3 IPC input validation
 
 - Every `ipcMain.handle` handler must validate its input with Zod before passing it to any domain object. Unvalidated input from the renderer is untrusted user input.
-- Handlers must never return a full `GameSnapshot`. They return only `PlayerSnapshot` or purpose-built response DTOs. Exception: the `chimera:debug*` handlers in `debug-bridge.ts` return full snapshots to the Inspector Window ("full truth — debug only", §4.12), gated by `IS_DEBUG_MODE` (Invariant 27) and sender-validated (Invariant 29).
+- Handlers must never return a full `GameSnapshot`. They return only `PlayerSnapshot` or purpose-built response DTOs. Exception: the `chimera:debug*` handlers in `debug-bridge.ts` return full snapshots to the Inspector Window ("full truth — debug only", §4.12), behind the debug-mode gate (Invariant 27, whose exact expression §4.12 pins — it is deliberately not the imported `IS_DEBUG_MODE` constant) and sender-validated (Invariant 29).
 
 ## 8.4 File system
 

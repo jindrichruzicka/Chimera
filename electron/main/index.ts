@@ -12,8 +12,10 @@ import {
 import { IS_DEBUG_MODE } from '@chimera-engine/simulation/foundation/constants.js';
 // Type-only import — erased at compile time, so nothing here forces the
 // debug-bridge module graph to load (Invariant #27); the runtime import is the
-// dynamic one behind the IS_DEBUG_MODE gate in main(). The graph is still
-// BUNDLED in a packaged build — unreachable, not absent; see that gate.
+// dynamic one behind the debug gate in main(). In a packaged build the bundler
+// folds that gate to `if (false)` and prunes the import records with it, so the
+// graph is ABSENT from the shipped bundle, not merely unreachable. See the gate
+// for why it does not test `IS_DEBUG_MODE` directly.
 import type { DebugBridge } from './debug-bridge.js';
 import {
     MalformedAssetRefError,
@@ -186,8 +188,10 @@ import {
     type E2eHooks,
 } from './runtime/e2e-hooks.js';
 import { assertProductionDebugGuard, assertProductionDevHarnessGuard } from './startup-guard.js';
-// Type-only: erased at build, so the dev graph stays out of the production
-// module graph — the value arrives via the harness-gated dynamic import below.
+// Type-only: erased at compile time, so this line binds nothing at runtime — the
+// value arrives via the harness-gated dynamic import below. That gate is a
+// runtime check, not a foldable one, so the dev graph still SHIPS in a packaged
+// bundle (by design, Invariant #77); only its evaluation is gated.
 import type { DevHarnessCoordinator } from './dev/DevHarnessCoordinator.js';
 import { buildAssetRef, type TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import {
@@ -1454,15 +1458,25 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     });
 
     // Runtime Debug Layer (§4.12). The bridge module is loaded ONLY via this
-    // dynamic import behind the dot-access IS_DEBUG_MODE constant, which the
-    // bundler's define replacement folds to `false` in a packaged build — so
-    // this branch is never entered in a distributable (Invariant #27). The
-    // graph is NOT tree-shaken out of the bundle today (the constant crosses a
-    // module boundary); the gate is dead, but the code still ships.
+    // dynamic import, behind a gate the bundler folds to `false` in a packaged
+    // build — so the branch is never entered in a distributable (Invariant #27)
+    // AND the whole debug graph is dropped from the bundle.
+    //
+    // The condition is deliberately the INLINED expression rather than the
+    // imported `IS_DEBUG_MODE`. That constant crosses a module boundary (it is
+    // read from the built @chimera-engine/simulation dist), and esbuild does not
+    // propagate its literal into a consuming module — so `if (IS_DEBUG_MODE)`
+    // stayed live and the graph shipped. Written out here, both dot-access reads
+    // are replaced by `computePackagedDefine`, the condition folds to
+    // `if (false)`, and esbuild prunes the two dynamic-import records with it.
+    // The shape MUST stay identical, modulo whitespace, to the IS_DEBUG_MODE assignment in
+    // simulation/foundation/constants.ts — pinned by tools/packaged-build-flag.test.ts,
+    // because drift here silently restores the shipped debug graph.
+    //
     // Sessions attach per-hosted-session inside `onSessionHosted` below; the
     // Inspector window itself stays closed until the first toggle IPC.
     let debugBridge: DebugBridge | undefined = undefined;
-    if (IS_DEBUG_MODE) {
+    if (process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production') {
         const { startDebugBridge } = await import('./debug-bridge.js');
         const { buildNetworkDiagnostics } = await import('./network-diagnostics.js');
         debugBridge = startDebugBridge({
@@ -1520,9 +1534,13 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     const profileRepository = new FileProfileRepository(path.join(userData, 'profiles'));
     const profileManager = new ProfileManager(profileRepository);
     // Dev-harness seed-copy (§4.32): a `--dev-profile-file` fixture becomes the
-    // instance's persisted + active profile before normal resolution. Dynamic
-    // import keeps the dev graph out of the production module graph (the
-    // Invariant #27 pattern); `parseHarnessFlags` already gates on Invariant #77.
+    // instance's persisted + active profile before normal resolution. The dynamic
+    // import keeps the dev graph out of the production RUNTIME graph — never
+    // evaluated unless the harness flags are set, which `parseHarnessFlags`
+    // already gates on Invariant #77. It does NOT keep it out of the bundle: the
+    // condition is a runtime value, not a define-foldable literal, so
+    // `electron/main/dev/` ships in every distributable by design. See the
+    // fuller note at the harness auto-flow gate below.
     let seededProfileId: string | undefined;
     if (harnessFlags?.profileFile !== undefined) {
         const { seedDevProfile } = await import('./dev/dev-fixture-loader.js');
@@ -3256,9 +3274,16 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // Construct the dev-harness auto-flow coordinator (§4.32) once the real
     // LobbyManager exists — it satisfies the coordinator's structural lobby
     // port, so the auto-flow drives the same authoritative operations the
-    // lobby IPC handlers do. Dynamic imports keep the dev graph out of the
-    // production module graph (the Invariant #27 pattern); `harnessAutoFlow`
-    // is derived from flags already gated by Invariant #77.
+    // lobby IPC handlers do. The dynamic imports keep the dev graph out of the
+    // production RUNTIME graph — never evaluated unless the harness flags are
+    // set (Invariant #77).
+    //
+    // NOT the §4.12 bundle-pruning pattern, despite the surface similarity to
+    // the debug gate above. `harnessAutoFlow` is a runtime CLI value, not a
+    // define-foldable literal, so esbuild cannot prune these import records:
+    // `electron/main/dev/` DOES ship in a packaged bundle (verified against a
+    // real packaged build — `DevHarnessCoordinator` is present). That is by
+    // design, since Invariant #77 gates on env rather than file absence.
     if (harnessAutoFlow && harnessFlags !== null) {
         const [{ DevHarnessCoordinator: CoordinatorCtor }, fixtureLoader] = await Promise.all([
             import('./dev/DevHarnessCoordinator.js'),

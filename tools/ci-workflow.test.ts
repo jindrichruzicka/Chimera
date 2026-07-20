@@ -65,6 +65,24 @@ describe('ci.yml CI workflow', () => {
         expect(content).toMatch(/pnpm verify:invariants/);
     });
 
+    it('runs the packaged-bundle debug-layer gate, after every test step', () => {
+        // Invariant #27's artifact gate has exactly two enforcement points — this
+        // CI step and the merge script's pre-merge gate (pinned by
+        // merge-gate.test.ts). Losing the step here would silently un-enforce the
+        // property on CI with every other check green, so it is pinned the same
+        // way verify:invariants is. Ordering is load-bearing too: the gate
+        // rebuilds `apps/tactics/dist` in place (restoring the dev bundle
+        // afterwards), which is not safe to interleave with steps that read that
+        // dist.
+        const gateIndex = content.indexOf('pnpm verify:packaged-bundle');
+        expect(gateIndex).toBeGreaterThan(-1);
+        for (const testStep of ['pnpm -r test', 'vitest run --dir tools']) {
+            const testIndex = content.indexOf(testStep);
+            expect(testIndex).toBeGreaterThan(-1);
+            expect(gateIndex).toBeGreaterThan(testIndex);
+        }
+    });
+
     it('does not reference the removed root e2e/ directory (suite lives in apps/tactics/e2e since F63)', () => {
         // `eslint … e2e …` and `vitest run --dir e2e` fail outright on the
         // missing path; the apps/tactics package lints/tests its own e2e dir

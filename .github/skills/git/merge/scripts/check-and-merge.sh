@@ -106,12 +106,12 @@ fi
 info "All checks passed."
 echo
 
-# ─── 8b. Pre-merge gate: format / lint / typecheck / tests ────────────────────
+# ─── 8b. Pre-merge gate: format / lint / typecheck / tests / packaged-bundle ──
 # Catches regressions before they reach main. A green local checkout is not
 # sufficient because previous merges may have introduced drift; we re-run the
 # full gate against the current branch state. If any check fails the merge is
 # aborted with the same severity as a structural problem above.
-info "Running pre-merge gate (format:check, lint, typecheck, test)..."
+info "Running pre-merge gate (format:check, lint, typecheck, test, verify:packaged-bundle)..."
 GATE_FAILED=()
 run_gate_step() {
   local label="$1"; shift
@@ -123,6 +123,10 @@ run_gate_step "pnpm format:check" pnpm format:check
 run_gate_step "pnpm lint"         pnpm lint
 run_gate_step "pnpm typecheck"    pnpm typecheck
 run_gate_step "pnpm test"         pnpm test
+# The Invariant #27 artifact gate: reads the bytes a real packaging build emits,
+# and self-validates against a dev build. Runs pre-merge so the property is
+# enforced BEFORE a commit lands on main, not only by the post-push CI workflow.
+run_gate_step "pnpm verify:packaged-bundle" pnpm verify:packaged-bundle
 
 if [[ ${#GATE_FAILED[@]} -gt 0 ]]; then
   echo

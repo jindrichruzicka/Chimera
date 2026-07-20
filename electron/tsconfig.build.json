@@ -46,6 +46,14 @@
         { "path": "../networking/tsconfig.build.json" },
         { "path": "../renderer/tsconfig.build.json" }
     ],
-    "include": ["**/*.ts"],
+    // Ambient ProcessEnv declarations pulled in explicitly — see the matching
+    // note in electron/tsconfig.json: this project's `include` is
+    // package-relative, and without them `noPropertyAccessFromIndexSignature`
+    // rejects the dot-access debug gate that esbuild's `define` must fold.
+    "include": [
+        "**/*.ts",
+        "../simulation/foundation/env.d.ts",
+        "../simulation/foundation/env-node.d.ts"
+    ],
     "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts", "**/__tests__/**"]
 }

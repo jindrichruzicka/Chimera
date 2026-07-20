@@ -1,7 +1,10 @@
 // simulation/foundation/env-node.d.ts
 //
-// Ambient `NODE_ENV` declaration for the Node/Electron programs compiled by
-// the root tsconfig (electron, simulation, ai, games, networking, tools, e2e).
+// Ambient `NODE_ENV` declaration for the Node/Electron programs: the root
+// tsconfig (electron, simulation, ai, games, networking, tools, e2e), plus
+// `electron/tsconfig.json` and `electron/tsconfig.build.json`, which list this
+// file explicitly because their `include` is package-relative and would
+// otherwise miss it (see the note there).
 //
 // Optional on purpose: a plain `electron .` or `node` launch leaves NODE_ENV
 // unset, so the type must admit `undefined`. Compare with inequality

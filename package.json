@@ -34,6 +34,7 @@
         "verify:changeset-policy:selftest": "tsx tools/changeset-policy.ts --self-test",
         "verify:version-alignment": "tsx tools/version-alignment.ts",
         "verify:version-alignment:selftest": "tsx tools/version-alignment.ts --self-test",
+        "verify:packaged-bundle": "tsx tools/verify-packaged-bundle.ts",
         "verify:invariants": "bash .claude/skills/invariants/scripts/check-invariants.sh && bash .claude/skills/invariants/tests/check-invariants.test.sh",
         "verify:toolchain-snapshot": "tsx tools/gen-toolchain.ts --check",
         "gen:toolchain": "tsx tools/gen-toolchain.ts",

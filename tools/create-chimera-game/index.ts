@@ -203,9 +203,10 @@ async function wireRootPackageJson(repoRoot: string, kebab: string): Promise<voi
     pkg.scripts ??= {};
     // Both halves of a distributable build are declared, because `cross-env`
     // scopes a var to the ONE command it wraps and each bundler reads a different
-    // flag: NEXT_PUBLIC_CHIMERA_PACKAGED gates dev-only routes out of the Next
-    // renderer build; CHIMERA_PACKAGED_BUILD bakes the production define into the
-    // Electron app bundle so IS_DEBUG_MODE folds to false (Invariant #27).
+    // flag: NEXT_PUBLIC_CHIMERA_PACKAGED 404s the dev-only routes (gallery, replay
+    // UI, debug Inspector) in the Next renderer build; CHIMERA_PACKAGED_BUILD bakes
+    // the production define into the Electron app bundle, which folds the debug gate
+    // so its module graph is pruned and drops the Inspector preload (Invariant #27).
     // `build:app` is the same script a dev launch runs, so neither can be
     // inferred — they must be declared here.
     pkg.scripts[`package:${kebab}`] ??=

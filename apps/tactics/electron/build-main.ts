@@ -50,11 +50,13 @@ export const PACKAGED_BUILD_ENV = 'CHIMERA_PACKAGED_BUILD';
  *
  * In a packaged build, bake the production identity so
  * `IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production'`
- * constant-folds to the literal `false` in the emitted bundle. The debug bridge
- * then sits behind a permanently-false gate: even if the startup guard were
- * bypassed, `if (IS_DEBUG_MODE)` can never enter and no debug surface can be
- * registered. Verified by inspecting the emitted `dist/electron/main.js`:
- * packaged emits `IS_DEBUG_MODE = false`; a dev build keeps the runtime reads.
+ * constant-folds to the literal `false` in the emitted bundle, and so does the
+ * character-identical copy of that expression that `electron/main/index.ts` uses
+ * as its debug gate (see below for why it is a copy). Every reader of the flag is
+ * therefore dead in a distributable: even if the startup guard were bypassed, no
+ * debug surface can be registered. Asserted against a real bundle in
+ * `__tests__/packaged-bundle-content.test.ts` — packaged emits
+ * `IS_DEBUG_MODE = false`; a dev build keeps the runtime reads.
  *
  * BOTH reads must be defined. Replacing only `NODE_ENV` leaves
  * `process.env.CHIMERA_DEBUG === '1' && false`, which esbuild cannot reduce to a
@@ -62,11 +64,20 @@ export const PACKAGED_BUILD_ENV = 'CHIMERA_PACKAGED_BUILD';
  * to empty is exactly right semantically: a packaged build must never honour it
  * (Invariant #27).
  *
- * NOT tree-shaking: the debug module graph still ships. `IS_DEBUG_MODE` crosses a
- * module boundary (it is imported from the built `@chimera-engine/simulation`
- * dist), so esbuild does not propagate the literal into the `if` and cannot drop
- * the branch or its dynamic import. Eliminating the graph from the bundle is a
- * separate, unsolved concern — do not claim it here without re-measuring.
+ * These same two defines are what let the debug graph LEAVE the bundle. The gate
+ * in `electron/main/index.ts` does not test the imported `IS_DEBUG_MODE` — esbuild
+ * does not propagate a cross-module constant into a consuming module, so that
+ * form kept the branch live and shipped the graph. The gate inlines the identical
+ * expression, which folds here to `if (false)`; esbuild then prunes the two
+ * dynamic-import records behind it — around 30 KB, with the debug graph's marker
+ * strings gone. It does NOT minify, so the dead branch statements themselves
+ * remain (rewritten to `await null`).
+ *
+ * Absolute byte totals are deliberately not recorded here. They move with engine
+ * dist churn and with the cwd the build ran in (esbuild embeds cwd-relative
+ * module paths), so a pinned figure goes stale on unrelated changes and reads as
+ * a regression. The stable, checkable claim is the ABSENCE of the markers,
+ * which `verify:packaged-bundle` asserts against a real build.
  *
  * This does NOT blind the startup guard. The guard reads the flag as
  * `env['CHIMERA_DEBUG']` — bracket access on an injected `process.env`
@@ -85,9 +96,22 @@ export const PACKAGED_BUILD_ENV = 'CHIMERA_PACKAGED_BUILD';
 export function computePackagedDefine(
     env: Readonly<Record<string, string | undefined>>,
 ): Record<string, string> {
-    return env[PACKAGED_BUILD_ENV] === '1'
+    return isPackagedBuild(env)
         ? { 'process.env.NODE_ENV': '"production"', 'process.env.CHIMERA_DEBUG': '""' }
         : {};
+}
+
+/**
+ * Is this bundle destined for a distributable?
+ *
+ * The single reading of the packaging signal. Two independent decisions depend
+ * on it — baking the production define, and dropping the debug preload — and
+ * they must never disagree: a bundle with the define baked but the preload still
+ * emitted (or vice versa) is a half-excluded artifact, the same failure mode this
+ * file warns about for the two `define` keys.
+ */
+export function isPackagedBuild(env: Readonly<Record<string, string | undefined>>): boolean {
+    return env[PACKAGED_BUILD_ENV] === '1';
 }
 
 /** A single esbuild bundle to emit (main / preload / debug-preload). */
@@ -104,6 +128,91 @@ export interface BundleSpec {
 
 /** esbuild runner (buildSync-shaped); injected so unit tests bundle nothing. */
 export type BuildFn = (spec: BundleSpec) => void;
+
+/**
+ * The COMPLETE esbuild option set the shipped build passes, derived from a
+ * {@link BundleSpec}. Sink options (`outfile`, `sourcemap`) are included
+ * deliberately: an in-memory assertion overrides them with `write: false`, and
+ * leaving them to the caller is what lets the guarded set drift.
+ *
+ * `define` is the sole link between {@link computePackagedDefine} and the
+ * emitted bytes — Invariant #27 rests on it reaching esbuild. `sourcemap` is
+ * load-bearing too, in a way it does not look: switched to `'inline'` it would
+ * embed the original TypeScript — debug sources included — inside the shipped
+ * `main.js`, where the external `.map` files never travel.
+ */
+export interface EsbuildBundleOptions {
+    entryPoints: string[];
+    bundle: true;
+    platform: 'node';
+    format: 'cjs';
+    target: 'node20';
+    external: string[];
+    alias: Record<string, string>;
+    nodePaths: string[];
+    define: Record<string, string>;
+    outfile: string;
+    /**
+     * External `.map` files, so a debugger (the VSCode "Debug Tactics" launch
+     * config) binds breakpoints in the original TypeScript rather than the
+     * bundled output. `electron-builder.yml` lists the two bundles by name, so
+     * no `.map` reaches a distributable.
+     */
+    sourcemap: true;
+}
+
+/** @see EsbuildBundleOptions */
+export function esbuildBundleOptions(spec: BundleSpec): EsbuildBundleOptions {
+    return {
+        entryPoints: [spec.entry],
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+        target: 'node20',
+        external: [...spec.external],
+        alias: { ...spec.alias },
+        nodePaths: [...spec.nodePaths],
+        define: { ...spec.define },
+        outfile: spec.outfile,
+        sourcemap: true,
+    };
+}
+
+/**
+ * The {@link BuildFn} the CLI ships, with esbuild and the FS injected.
+ *
+ * The point of the factory is that the packaged-bundle assertions can EXECUTE
+ * the shipped invocation — passing a capturing `runBuild` — instead of asserting
+ * about its source text. Were the CLI to spell its own `buildSync({ ... })`
+ * call, no scan of that literal could keep its option set honest: a second
+ * spread (`...{ define: {} }`) reinstates any option past a check of declared
+ * properties and reships the entire debug graph with every assertion green.
+ * Options reached by a test only through a restatement — or through a denylist
+ * of names — are not options the test actually guards.
+ *
+ * So `tools/packaged-build-flag.test.ts` enumerates no option names. It pins
+ * one structural fact instead: esbuild is reached exactly once in this file,
+ * through this factory.
+ *
+ * Two limits worth stating, because the arrangement looks more complete than it
+ * is. Executing the factory guards an option only as far as the assertions can
+ * SEE it: `define` is covered because dropping it puts marker strings back in
+ * the text, whereas `sourcemap: 'inline'` would embed every source and leave the
+ * markers base64-hidden, passing them all. And nothing here constrains what the
+ * CLI passes to `buildAppBundles` below — a wrapped `build:` or a starved `env:`
+ * defeats every unit-level guard in this file's orbit. Both classes are caught
+ * instead by `tools/verify-packaged-bundle.ts`, which reads the bytes a real
+ * packaging run emits and models none of this.
+ */
+export function createEsbuildBuild(deps: {
+    readonly runBuild: (options: EsbuildBundleOptions) => void;
+    readonly ensureDir: (dir: string) => void;
+}): BuildFn {
+    return (spec) => {
+        deps.ensureDir(path.dirname(spec.outfile));
+        deps.runBuild(esbuildBundleOptions(spec));
+    };
+}
 
 /**
  * esbuild `nodePaths` for `@chimera-engine/*` resolution: the throwaway tarball
@@ -330,10 +439,20 @@ export function buildAppBundles(deps: BuildAppBundlesDeps): void {
     // packed engine ships dist/preload/debug-api.js). Monorepo + e2e keep their exact behaviour: a
     // supplied source entry always takes the preserved verify:pack drop above. Optional keys are
     // spread in only when defined (exactOptionalPropertyTypes forbids explicit undefined).
-    const debugPreloadEntry =
+    const resolvedDebugPreloadEntry =
         deps.debugPreloadEntry === undefined
             ? resolveInstalledDebugPreloadEntry(preloadEntry, deps.fileExists)
             : sourceDebugPreloadEntry;
+    // A PACKAGED build EMITS no debug preload at all. `dist/preload/debug-api.js` is the largest
+    // debug artifact on disk (~532 KB + a ~1.06 MB sourcemap) and it is unreachable even when
+    // present: the only thing that loads it is the Inspector window, created from behind the debug
+    // gate that `computePackagedDefine` folds dead. electron-builder's `files` allowlist already
+    // keeps it out of the packaged app, so this is not a shipped-byte saving — it keeps the artifact
+    // out of the build tree, and out of any distributable whose `files` list is later widened to
+    // `dist/**`. Applied to the RESOLVED entry so it
+    // suppresses BOTH routes above — in particular the packed-sibling fallback, which is the one a
+    // scaffolded game's packaging run takes (it always builds in verify:pack mode).
+    const debugPreloadEntry = isPackagedBuild(deps.env) ? undefined : resolvedDebugPreloadEntry;
     const specs = planBundles({
         appDir: deps.appDir,
         mainEntry: path.join(deps.appDir, 'electron/main.ts'),
@@ -376,29 +495,12 @@ if (process.env['VITEST'] === undefined && isDirectRun()) {
     const appDir = path.resolve(__dirname, '..');
     const root = path.resolve(appDir, '../..');
 
-    const build: BuildFn = (spec) => {
-        mkdirSync(path.dirname(spec.outfile), { recursive: true });
-        buildSync({
-            entryPoints: [spec.entry],
-            outfile: spec.outfile,
-            bundle: true,
-            platform: 'node',
-            format: 'cjs',
-            target: 'node20',
-            // Emit external `.map` files so a debugger (VSCode "Debug Tactics"
-            // launch config) can bind breakpoints in the original TypeScript
-            // source rather than the bundled output. Harmless in packaged
-            // builds (a sibling `.map` next to each bundle).
-            sourcemap: true,
-            external: [...spec.external],
-            alias: { ...spec.alias },
-            nodePaths: [...spec.nodePaths],
-            // Empty for dev/e2e builds; bakes NODE_ENV=production (so
-            // IS_DEBUG_MODE folds to false) only when the packaging scripts
-            // declare CHIMERA_PACKAGED_BUILD=1. See computePackagedDefine.
-            define: { ...spec.define },
-        });
-    };
+    // No esbuild options here by construction: every one of them comes from
+    // `esbuildBundleOptions`, which the packaged-bundle assertions execute.
+    const build = createEsbuildBuild({
+        runBuild: buildSync,
+        ensureDir: (dir) => mkdirSync(dir, { recursive: true }),
+    });
 
     const resolvePreload = (nodeModules?: string): string => {
         // From the consumer's package.json (verify:pack) or the app's own — both

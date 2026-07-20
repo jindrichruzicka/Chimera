@@ -34,7 +34,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **2.** `applyAction`/`definition.reduce` are pure functions — same input, same output, always.
 
-**3.** `GameSnapshot` never leaves the host's main process. `PlayerSnapshot` is the only state type that crosses any process or network boundary. Exception: the debug layer (`debug-bridge.ts`) returns full snapshots to the Inspector Window over `chimera:debug*` ("full truth — debug only", §4.12); it loads solely under the `IS_DEBUG_MODE` gate (Invariant 27) and validates every request sender against the Inspector's `webContents.id` (Invariant 29).
+**3.** `GameSnapshot` never leaves the host's main process. `PlayerSnapshot` is the only state type that crosses any process or network boundary. Exception: the debug layer (`debug-bridge.ts`) returns full snapshots to the Inspector Window over `chimera:debug*` ("full truth — debug only", §4.12); it loads solely under the debug-mode gate (Invariant 27, whose exact expression §4.12 pins — it is deliberately not the imported `IS_DEBUG_MODE` constant) and validates every request sender against the Inspector's `webContents.id` (Invariant 29).
 
 **4.** The renderer reads state; it never writes state directly.
 

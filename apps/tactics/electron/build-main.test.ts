@@ -5,6 +5,7 @@ import {
     PACKAGED_BUILD_ENV,
     VERIFY_PACK_NODE_MODULES_ENV,
     computePackagedDefine,
+    isPackagedBuild,
     computeNodePaths,
     computeEsbuildAlias,
     appBundleOutfiles,
@@ -93,9 +94,13 @@ describe('appBundleOutfiles', () => {
 describe('computePackagedDefine', () => {
     // Invariant #27 / §4.12: a PACKAGED bundle bakes the production identity so
     // IS_DEBUG_MODE constant-folds to the literal `false`, leaving the debug
-    // bridge behind a permanently-dead gate. It does NOT tree-shake the debug
-    // module graph — that code still ships, because the constant crosses a
-    // module boundary and esbuild cannot drop the branch (see build-main.ts).
+    // bridge behind a permanently-dead gate. The same two defines are also what
+    // let the debug module graph LEAVE the bundle: the gate in
+    // electron/main/index.ts inlines this expression rather than testing the
+    // imported constant, so esbuild can fold it locally and prune the dynamic
+    // imports behind it. That graph-absence is asserted against a real bundle in
+    // __tests__/packaged-bundle-content.test.ts; these cases cover only the
+    // define's derivation.
     // Dev `build:app` and the e2e global-setups must NOT get the define — they
     // share this bundler, and baking production there would silently kill the
     // F9 Inspector.
@@ -125,6 +130,40 @@ describe('computePackagedDefine', () => {
         // reason; a bracket-access key here would silently never match.
         for (const key of Object.keys(computePackagedDefine({ [PACKAGED_BUILD_ENV]: '1' }))) {
             expect(key).toMatch(/^process\.env\.[A-Z_]+$/);
+        }
+    });
+});
+
+describe('isPackagedBuild', () => {
+    // The single reading of the packaging signal. Two decisions consume it — the
+    // production define and the debug-preload drop — and a half-excluded artifact
+    // (define baked but preload emitted, or vice versa) is the failure mode that
+    // sharing one predicate exists to prevent.
+    it('is true only for the exact "1"', () => {
+        expect(isPackagedBuild({ [PACKAGED_BUILD_ENV]: '1' })).toBe(true);
+        for (const value of ['0', 'true', '', undefined]) {
+            expect(isPackagedBuild({ [PACKAGED_BUILD_ENV]: value })).toBe(false);
+        }
+        expect(isPackagedBuild({})).toBe(false);
+    });
+
+    it('agrees with both consumers, so the artifact can never be half-excluded', () => {
+        for (const env of [{ [PACKAGED_BUILD_ENV]: '1' }, {}, { [PACKAGED_BUILD_ENV]: '0' }]) {
+            const packaged = isPackagedBuild(env);
+            // Consumer 1: the define is baked iff packaged.
+            expect(Object.keys(computePackagedDefine(env)).length > 0).toBe(packaged);
+            // Consumer 2: the debug preload is planned iff NOT packaged.
+            const built: BundleSpec[] = [];
+            buildAppBundles({
+                build: (spec) => built.push(spec),
+                readJson: () => ({ name: GAME_PKG }),
+                resolvePreload: () => '/node_modules/@chimera-engine/electron/dist/preload/api.js',
+                env,
+                root: ROOT,
+                appDir: APP_DIR,
+                debugPreloadEntry: path.join(ROOT, 'electron/preload/debug-api.ts'),
+            });
+            expect(built.some((s) => s.label === 'debug-preload')).toBe(!packaged);
         }
     });
 });
@@ -379,5 +418,45 @@ describe('buildAppBundles', () => {
         const { built, deps } = makeDeps({ [VERIFY_PACK_NODE_MODULES_ENV]: nm });
         buildAppBundles(deps);
         expect(built.some((s) => s.label === 'debug-preload')).toBe(false);
+    });
+
+    // ── Packaged builds ship no debug preload at all (§4.12) ──────────────────
+    //
+    // `dist/preload/debug-api.js` is the largest debug artifact on disk — ~532 KB
+    // plus a ~1.06 MB sourcemap. It never reached a distributable (electron-builder's
+    // `files` allowlist names `dist/preload/api.js` only), so this drop is about the
+    // packaging build's OUTPUT TREE, not about shipped bytes. It is also unreachable
+    // even when present: the Inspector window that loads it is only ever created from
+    // behind the folded-dead debug gate. Both entry routes must be suppressed, so the
+    // check applies to the RESOLVED entry rather than to either branch that produces it.
+    describe('packaged builds emit no debug preload', () => {
+        const SOURCE_ENTRY = path.join(ROOT, 'electron/preload/debug-api.ts');
+
+        it('drops the monorepo SOURCE debug entry when the packaged-build flag is set', () => {
+            const { built, deps } = makeDeps({ [PACKAGED_BUILD_ENV]: '1' });
+            buildAppBundles({ ...deps, debugPreloadEntry: SOURCE_ENTRY });
+            expect(built.map((s) => s.label)).toEqual(['main', 'preload']);
+        });
+
+        // Anti-vacuity for the case above: the same call WITHOUT the flag must
+        // still emit it, or the assertion could pass for an unrelated reason.
+        it('still emits it for the same build without the flag', () => {
+            const { built, deps } = makeDeps({});
+            buildAppBundles({ ...deps, debugPreloadEntry: SOURCE_ENTRY });
+            expect(built.some((s) => s.label === 'debug-preload')).toBe(true);
+        });
+
+        // The path that ships a SCAFFOLDED distributable: a standalone game
+        // supplies no source entry and always runs verify:pack, so the packed
+        // sibling fallback — not the source branch — is what would otherwise
+        // leak the preload into someone else's shipped app.
+        it('drops the packed-sibling FALLBACK too, so scaffolded distributables stay clean', () => {
+            const { built, deps } = makeDeps({
+                [VERIFY_PACK_NODE_MODULES_ENV]: '/tmp/consumer/node_modules',
+                [PACKAGED_BUILD_ENV]: '1',
+            });
+            buildAppBundles({ ...deps, fileExists: () => true });
+            expect(built.map((s) => s.label)).toEqual(['main', 'preload']);
+        });
     });
 });

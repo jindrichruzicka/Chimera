@@ -394,8 +394,8 @@ describe('scaffoldGame', () => {
             // `pnpm start:debug` rebuilds BOTH halves WITHOUT the packaging flags, then runs the
             // same launcher with --debug (developer mode + F9 Inspector). Both rebuilds are
             // load-bearing: `package*` overwrites BOTH artifacts a debug launch reads — the
-            // renderer static export (dev-only gallery + replay routes gated OUT) and the app
-            // bundle (IS_DEBUG_MODE baked to `false`) — and either half left packaged fails
+            // renderer static export (dev-only gallery, replay and Inspector routes 404-ing) and
+            // the app bundle (debug graph pruned, Inspector preload dropped) — and either half left packaged fails
             // silently. Asserted as an exact string so losing either one fails here.
             expect(rootPkg.scripts['start:debug']).toBe(
                 'pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/my-game/renderer && ' +

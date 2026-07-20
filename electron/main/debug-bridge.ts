@@ -3,9 +3,12 @@
  *
  * Runtime Debug Layer bridge (§4.12 — runtime-debug-layer.md).
  *
- * Started exclusively via the `IS_DEBUG_MODE` dynamic-import gate in
+ * Started exclusively via the debug-mode dynamic-import gate in
  * `electron/main/index.ts` (Invariant #27) — this module is therefore the
- * gated debug graph and may statically import `simulation/debug`. It:
+ * gated debug graph and may statically import `simulation/debug`. The gate
+ * inlines the `IS_DEBUG_MODE` expression rather than importing the constant, so
+ * a packaged build folds it to `if (false)` and prunes this whole graph out of
+ * the bundle: absent from a distributable, not merely unreachable. It:
  *
  *   - instantiates `SnapshotRingBuffer` + `SnapshotInspector` per attached
  *     session (Invariant #31),

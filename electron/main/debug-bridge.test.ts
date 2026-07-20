@@ -12,8 +12,9 @@
  *         `{ type: 'ERROR' }`.
  *   #30 — ring buffer capacity fixed; bridge log/memento stores are bounded.
  *   #31 — SnapshotRingBuffer/SnapshotInspector are instantiated by the
- *         bridge only (the bridge itself only ever loads under the
- *         IS_DEBUG_MODE dynamic-import gate — covered in index.test.ts).
+ *         bridge only (the bridge itself only ever loads under the debug-mode
+ *         dynamic-import gate — covered in index.test.ts; a packaged build
+ *         folds that gate and drops this graph from the bundle entirely).
  *
  * Tests written FIRST (red); implementation in `electron/main/debug-bridge.ts`.
  */

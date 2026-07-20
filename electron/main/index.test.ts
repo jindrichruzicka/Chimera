@@ -1970,7 +1970,7 @@ describe('main', () => {
 
     // ── Runtime Debug Layer gate (§4.12, F47 T5, Invariant #27) ──────────────
 
-    it('registers NO debug handlers when IS_DEBUG_MODE is false (gate not entered)', async () => {
+    it('registers NO debug handlers when CHIMERA_DEBUG is unset (gate not entered)', async () => {
         await main(makeTestContributions());
 
         const handleChannels = ipcMainHandle.mock.calls.map(([channel]) => channel);
@@ -1998,7 +1998,10 @@ describe('main', () => {
         }));
         try {
             // Fresh import so foundation/constants re-evaluates IS_DEBUG_MODE
-            // (NODE_ENV is 'test' under vitest, so the guard passes).
+            // for the STARTUP GUARD (NODE_ENV is 'test' under vitest, so it
+            // passes). The debug gate itself no longer reads that constant — it
+            // inlines the expression and re-reads process.env at main() time, so
+            // the stubbed CHIMERA_DEBUG reaches it either way.
             const fresh = await import('./index.js');
             await fresh.main(makeTestContributions());
 

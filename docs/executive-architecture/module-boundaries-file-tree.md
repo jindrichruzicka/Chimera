@@ -42,7 +42,7 @@ chimera/
 ├── electron/                        # Electron shell
 │   ├── main/
 │   │   ├── index.ts                 # App entry, window creation; injects dependencies and wires all subsystems
-│   │   ├── debug-bridge.ts          # debug-only: chimera:debug IPC bridge + lazy Inspector window; loaded via IS_DEBUG_MODE dynamic import (§4.12)
+│   │   ├── debug-bridge.ts          # debug-only: chimera:debug IPC bridge + lazy Inspector window; behind the folded debug gate, pruned from packaged bundles (§4.12)
 │   │   ├── ipc/                     # IPC handler registrations per preload namespace
 │   │   │   ├── ipc-handlers.ts      # All contextBridge IPC registrations (one register* per namespace)
 │   │   │   └── ipc-schemas.ts       # Zod schemas for IPC message payloads (validation at IPC boundaries)
@@ -152,7 +152,7 @@ chimera/
 │   ├── input/                       # Input action schema (§4.26) — shared between renderer and settings
 │   │   ├── InputAction.ts           # InputAction ID namespaces (engine:*, game:*); registry contract
 │   │   └── InputBindingSchema.ts    # EngineBindings base; GameBindingSchema<T> generic; default bindings
-│   ├── debug/                       # Debug-mode only — gate folds to false in packaged builds (still bundled)
+│   ├── debug/                       # Debug-mode only — gate folds to false in packaged builds; graph pruned, not shipped
 │   │   ├── SnapshotRingBuffer.ts    # Observer: records last N full GameSnapshots after each ActionPipeline step
 │   │   ├── SnapshotInspector.ts     # Facade: query API — get/reconstruct/diff snapshots; project to a PlayerId
 │   │   ├── SnapshotDiff.ts          # Structural diff of two GameSnapshots (added/changed/removed fields)
@@ -208,7 +208,7 @@ chimera/
 │   │   ├── lobby/page.tsx
 │   │   ├── match/page.tsx           # Thin shell: mounts GameShell
 │   │   ├── settings/page.tsx
-│   │   └── debug/page.tsx           # debug-only: Inspector Window UI
+│   │   └── debug/page.tsx           # debug-only: server gate — notFound() in packaged builds; UI in DebugInspectorClient.tsx
 │   ├── components/
 │   │   ├── shell/                   # Engine-provided navigation chrome
 │   │   │   ├── GameShell.tsx       # Hosts the active game's screen registry; game-agnostic

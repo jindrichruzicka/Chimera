@@ -94,3 +94,18 @@ jobs:
 
       - name: Test (tools)
         run: pnpm exec vitest run --dir tools
+
+      # Reads the bytes a REAL packaging build emits (§4.12, Invariant #27).
+      # A unit-level guard over this property must model the shipped build, and
+      # whatever it models, the call site one level further out is unmodelled —
+      # so this gate runs the packaging command instead of describing it, and no
+      # refactor of `build-main.ts` can satisfy it while the debug graph ships.
+      # Each run self-validates: the dev rebuild that restores the dist must be
+      # rejected by every predicate, so a gutted check fails the gate itself.
+      # Pinned by tools/ci-workflow.test.ts — losing this step would silently
+      # un-enforce the property on CI.
+      #
+      # Must run AFTER the test steps: it rewrites `apps/tactics/dist` (and
+      # restores the dev bundle afterwards), so it is not safe to interleave.
+      - name: Verify the packaged bundles carry no debug layer
+        run: pnpm verify:packaged-bundle

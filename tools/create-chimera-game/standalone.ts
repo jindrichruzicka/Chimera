@@ -102,10 +102,12 @@ function standalonePackageBuildChain(name: string): string {
     // Both halves of a distributable build must be declared, because `cross-env`
     // scopes a var to the ONE command it wraps and each bundler reads a different
     // flag:
-    //   NEXT_PUBLIC_CHIMERA_PACKAGED → the Next renderer build, gating dev-only
-    //     routes (component gallery, replay UI) out of the shipped renderer.
-    //   CHIMERA_PACKAGED_BUILD → the Electron app bundle, baking the production
-    //     define so IS_DEBUG_MODE folds to false (Invariant #27).
+    //   NEXT_PUBLIC_CHIMERA_PACKAGED → the Next renderer build, 404-ing the
+    //     dev-only routes (component gallery, replay UI, debug Inspector).
+    //   CHIMERA_PACKAGED_BUILD → the Electron app bundle. Bakes the production
+    //     define, which folds both IS_DEBUG_MODE and the debug gate to `false`
+    //     so the debug module graph is pruned out of the bundle, AND drops the
+    //     Inspector preload bundle entirely (Invariant #27, §4.12).
     // Only the packaging chain sets either — `dev:mp` and the everyday
     // `build:app` must stay debug-capable, and they share these bundlers.
     return (

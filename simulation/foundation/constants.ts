@@ -32,9 +32,16 @@ export const DEBUG_PUSH_CHANNEL = 'chimera:debug:push';
  * Replaced at build time by bundler `define` configuration, so a packaged build
  * folds this to the literal `false` and the debug gate is dead in every
  * distributable. Both reads MUST stay dot access — `define` replacement only
- * matches dot-access member expressions, never bracket access. (Folding the
- * constant does not remove the debug module graph from the bundle; the constant
- * crosses a module boundary, so the gated branch survives.)
+ * matches dot-access member expressions, never bracket access.
+ *
+ * ⚠️ This expression is DUPLICATED, deliberately. `electron/main/index.ts` gates
+ * the debug bridge on a character-identical inline copy rather than importing
+ * this constant, because esbuild does not propagate a cross-module constant into
+ * a consuming module — imported, the branch stayed live and the whole debug graph
+ * shipped in every distributable. Inlined, it folds to `if (false)` and esbuild
+ * prunes the dynamic imports behind it. **Change this expression and you must
+ * change that one**; `tools/packaged-build-flag.test.ts` fails if they diverge,
+ * since silent drift would restore the shipped graph.
  *
  * Invariant #27: `CHIMERA_DEBUG` never appears in production packaging; a
  * production runtime — PACKAGED (`app.isPackaged`) or `NODE_ENV=production` —
