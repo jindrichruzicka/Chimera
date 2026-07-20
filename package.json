@@ -58,7 +58,8 @@
         "build:renderer": "pnpm build:packages && next build renderer",
         "fetch:fonts": "pnpm build:packages && tsx tools/fetch-google-fonts.ts",
         "dev:mp": "pnpm build:packages && pnpm exec next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app && pnpm --filter @chimera-engine/tactics dev:mp",
-        "create:game": "tsx tools/create-chimera-game/index.ts --workspace"
+        "create:game": "tsx tools/create-chimera-game/index.ts --workspace",
+        "practice:packaged-build": "tsx tools/practice-packaged-build.ts"
     },
     "devDependencies": {
         "@changesets/cli": "^2.31.0",

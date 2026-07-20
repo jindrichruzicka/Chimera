@@ -254,6 +254,28 @@
             "console": "integratedTerminal",
             "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
             "smartStep": true
+        },
+        {
+            // Practice the published `npm create chimera-game` flow end-to-end, against THIS
+            // workspace's latest source, into the sibling `../ChimeraTest` project (which it wipes +
+            // rebuilds each run). It packs every @chimera-engine/* to a tarball, scaffolds the blank
+            // template out-of-repo via the real create-chimera-game CLI, force-resolves the engine
+            // deps onto those tarballs (so a real `pnpm install` simulates "installed from npm"
+            // without publishing), then unit-smokes, runs the Invariant #27 gate, and produces the
+            // macOS packaged .app in ../ChimeraTest/apps/<kebab>/release. Runs everything through
+            // `pnpm` so it needs nothing on PATH beyond the global pnpm. See
+            // tools/practice-packaged-build.ts. (Not the scaffolded game's own launch config — this
+            // drives the whole scaffold-and-package pipeline from the engine repo.)
+            "type": "node",
+            "request": "launch",
+            "name": "Practice: Scaffold + Package → ../ChimeraTest",
+            "presentation": { "order": 19 },
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": ["run", "practice:packaged-build"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
         }
     ],
     "compounds": [
