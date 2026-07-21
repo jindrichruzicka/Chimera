@@ -16,7 +16,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 | Theme                                  | Invariants                                                                                                                              |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76, 104, 105, 106, 107, 110                                                                       |
-| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95, 99, 101, 103, 105, 108, 110, 111, 114, 115       |
+| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 17, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95, 99, 101, 103, 105, 108, 110, 111, 114, 115   |
 | **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90, 103                                                                                  |
 | **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46, 97                                                                                                          |
 | **Save / load / replay**               | 23, 24, 25, 26, 70, 71, 108                                                                                                             |
@@ -62,7 +62,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **16.** AI players submit `EngineAction` through `ActionPipeline` — there is no back-door mutation path for AI.
 
-**17.** AI receives `PlayerSnapshot` by default (honest AI). Omniscient mode (`GameSnapshot` access) must be declared explicitly in the game's AI configuration and is logged at game start.
+**17.** AI receives a `PlayerSnapshot` **produced by `StateProjector.project()`** by default (honest AI), on **every** state-delivery path — the seed handed to `AIStateMachine.setInitialState` at agent construction as much as the per-tick `AgentManager` fan-out (`tickAll` / `onGameStart` / `onGameEnd`). Structurally widening a `GameSnapshot` into `PlayerSnapshot` shape by spread is not a projection: it type-checks (TypeScript does not excess-property-check spread-in members) while carrying `seed`, `turnClock`, `turnNumber`, `hostPlayerId`, `timers`, `committedTurns`, and every game-local root field. Omniscient mode (`GameSnapshot` access) must be declared explicitly in the game's AI configuration and is logged at game start; the sanctioned omniscient spread lives solely in `AgentManager` and in `buildDefaultAIPlayerAgent`'s seed branch.
 
 **18.** `AIParams` are passed by value (frozen) to every lifecycle method — AI state and command implementations must not mutate them.
 

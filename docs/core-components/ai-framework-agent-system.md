@@ -18,7 +18,7 @@ The simulation engine works exclusively with `PlayerId`. It has no concept of wh
 - AI actions are validated and logged identically to human actions.
 - Determinism and auditability are preserved.
 - Games can mix human and AI players freely without engine changes.
-- AI is **honest by default** — it sees only its own `PlayerSnapshot`, respecting fog of war.
+- AI is **honest by default** — it sees only its own `PlayerSnapshot`, respecting fog of war. This holds on **every** state-delivery path: the snapshot an agent is seeded with at construction is projected exactly like the per-tick fan-out (Invariant #17).
 
 ---
 
@@ -85,7 +85,7 @@ AI players are provisioned **in the lobby**, before the match starts, so the hos
 
 - `LobbyAgentSlot` (`{ slotIndex, kind, omniscient? }`) marks a seat as AI on the synced `LobbyState.agentSlots`. Adding or removing an AI is a **host-only** write (mirroring the host-authored match-setting rule, Invariant #99) and rebroadcasts to every peer, so all clients render the same roster — humans in the player list, AI in a separate sub-list. The Add-AI control is disabled when the lobby is full.
 - The host **auto-removes** an AI slot when admitting a human would otherwise exceed `maxPlayers`, so a human join never bounces off an AI-filled lobby.
-- At match start the host materialises each `agentSlot` into an `AIPlayerAgent` through `HostedSessionAgents`, wiring the game-supplied `AIBrain`; from there the agent ticks via `AgentManager` like any other AI player (honest by default — it sees only its own `PlayerSnapshot`). The simulation still works purely in `PlayerId` and never learns a seat was lobby-provisioned.
+- At match start the host materialises each `agentSlot` into an `AIPlayerAgent` through `HostedSessionAgents`, wiring the game-supplied `AIBrain`; from there the agent ticks via `AgentManager` like any other AI player (honest by default — it sees only its own `PlayerSnapshot`). `buildDefaultAIPlayerAgent` projects the **seed** snapshot through the session's `StateProjector` before handing it to `AIStateMachine.setInitialState`, so an honest agent's very first `onEnter` is fog-respecting too — this matters most on the restore path, where the roster is seated _after_ a mid-game checkpoint is applied. The simulation still works purely in `PlayerId` and never learns a seat was lobby-provisioned.
 
 ---
 
@@ -306,7 +306,21 @@ class AIPlayerAgent<TParams extends AIParams = AIParams> implements PlayerAgent 
 
 ---
 
-## Per-Tick Lifecycle Diagram
+## Lifecycle Diagram
+
+Projection is not a per-tick concern — it gates **every** delivery, starting at
+construction (Invariant #17):
+
+```
+Agent construction (host seats the slot) → GameSnapshot
+     │
+     ▼
+[buildDefaultAIPlayerAgent({ initialSnapshot, projector, omniscient })]
+     │
+     ▼  honest: project(gameSnapshot, playerId) → PlayerSnapshot
+        omniscient: declared full-state spread
+   [AIStateMachine.setInitialState(...)] → currentState.onEnter(...)
+```
 
 ```
 Simulation tick N completes → GameSnapshot
@@ -340,8 +354,10 @@ Simulation tick N completes → GameSnapshot
 
 Omniscient mode is opt-in per `PlayerAgent` object, declared via `omniscient: true`. Games declare this in their player configuration; it is never the default.
 
+The honest row means a `PlayerSnapshot` **produced by `StateProjector.project()`**, not merely a value of that type. Spreading a `GameSnapshot` into `PlayerSnapshot` shape type-checks — TypeScript does not excess-property-check spread-in members — while carrying `seed`, `turnClock`, `turnNumber`, `hostPlayerId`, `timers`, `committedTurns` and every game-local root field. Only `AgentManager`'s omniscient branch and `buildDefaultAIPlayerAgent`'s omniscient seed branch may build a snapshot that way.
+
 > **Invariant #16** — AI players submit `EngineAction` through `ActionPipeline` — there is no back-door mutation path for AI.
-> **Invariant #17** — AI receives `PlayerSnapshot` by default (honest AI). Omniscient mode must be explicitly declared and is logged at game start.
+> **Invariant #17** — AI receives a `PlayerSnapshot` produced by `StateProjector.project()` by default (honest AI), on every state-delivery path — the construction-time seed as much as the per-tick fan-out. Omniscient mode must be explicitly declared and is logged at game start.
 
 ---
 

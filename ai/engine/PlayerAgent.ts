@@ -34,9 +34,12 @@ export interface PlayerAgent {
     /**
      * Omniscient mode flag — ONLY applies to kind: 'ai' agents.
      *
-     * When set to true, AgentManager bypasses the StateProjector and passes
-     * the raw GameSnapshot directly to onTick/onGameStart/onGameEnd (per
-     * Invariant #17). This is logged at game start.
+     * When set to true, AgentManager bypasses the StateProjector: it widens the
+     * full GameSnapshot into PlayerSnapshot shape by spread (adding viewerId,
+     * commitments, undoMeta and isMyTurn) and passes that to
+     * onTick/onGameStart/onGameEnd, so no fog or owner-only masking is applied
+     * (per Invariant #17). This is logged at game start. The host shell's agent
+     * factory applies the same carve-out to the construction-time seed.
      *
      * The standard AIPlayerAgent constructor defaults this to false and accepts
      * an explicit opt-in via { omniscient: true }.

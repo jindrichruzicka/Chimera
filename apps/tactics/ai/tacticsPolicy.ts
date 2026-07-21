@@ -23,8 +23,9 @@
  *     `setup.matchSettings`, so the decision stays a pure function of the snapshot.
  *
  * Honest vs omniscient (Invariant #17): the policy is built for the honest,
- * projected snapshot (the only shipping path — `omniscient` is opt-in and off by
- * default). It also reads correctly under an omniscient (projection-bypassed)
+ * projected snapshot (the shipping path — `omniscient` is opt-in and off by
+ * default; the construction-time seed is projected too). It also reads
+ * correctly under an omniscient (projection-bypassed)
  * snapshot: enemy `visibleTo` membership is honoured (so it never targets a
  * unit the engine would reject as not-visible) and stamina falls back to the raw
  * ledger — so it self-ends its turn in either mode.

@@ -2357,6 +2357,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                             initialSnapshot: sessionRuntime.getSnapshot(),
                             dispatch: dispatchAiAction,
                             logger: lobbyLogger,
+                            // Same projector the broadcaster and the per-tick
+                            // agent fan-out use, so an honest agent's seed is
+                            // gated identically (Invariant #17).
+                            projector,
                             omniscient: agentSlot.omniscient ?? false,
                             createState: hostedGame.createAIState,
                         }),

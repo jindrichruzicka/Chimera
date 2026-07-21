@@ -5,10 +5,14 @@
  * Architecture reference: §4.9 — AI Framework and Agent System
  *
  * Invariants upheld:
- *   #17 — tickAll() calls projector.project() for each agent before calling
- *          onTick(), so AI players receive a PlayerSnapshot, never the raw
- *          GameSnapshot. Human agents are included in the uniform fan-out
- *          (HumanPlayerAgent.onTick is a no-op).
+ *   #17 — tickAll(), onGameStart() and onGameEnd() each call
+ *          projector.project() for every honest agent before invoking its
+ *          lifecycle method, so an honest AI player receives a projected
+ *          PlayerSnapshot, never a raw GameSnapshot. Human agents are included
+ *          in the uniform fan-out (HumanPlayerAgent.onTick is a no-op).
+ *          Scope note: this covers delivery to an ALREADY-CONSTRUCTED agent.
+ *          The snapshot an agent is seeded with at construction is gated by the
+ *          host shell's agent factory under the same invariant.
  */
 
 import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';

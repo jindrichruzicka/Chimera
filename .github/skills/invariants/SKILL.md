@@ -50,13 +50,15 @@ Boundary checks: `from.*electron/` and `from.*games/` inside `simulation/`/`ai/`
 
 ## Manual-Only
 
-| #     | Why                                                               |
-| ----- | ----------------------------------------------------------------- |
-| 4     | Renderer reads-not-writes — needs component code review           |
-| 12    | Pipeline step ordering — needs `ActionPipeline` reading           |
-| 13    | `ContentDatabase` immutability — constructor/mutation analysis    |
-| 23/33 | Atomic file writes (`.tmp` + rename) — FS impl reading            |
-| 44    | Float fields in `GameSnapshot` — type inspection (may be aliased) |
+| #     | Why                                                                           |
+| ----- | ----------------------------------------------------------------------------- |
+| 4     | Renderer reads-not-writes — needs component code review                       |
+| 8     | Outbound gate — needs the broadcast/IPC send paths read for direct reads      |
+| 12    | Pipeline step ordering — needs `ActionPipeline` reading                       |
+| 13    | `ContentDatabase` immutability — constructor/mutation analysis                |
+| 17    | Honest-AI projection on every delivery path — a raw spread type-checks anyway |
+| 23/33 | Atomic file writes (`.tmp` + rename) — FS impl reading                        |
+| 44    | Float fields in `GameSnapshot` — type inspection (may be aliased)             |
 
 ## Usage
 

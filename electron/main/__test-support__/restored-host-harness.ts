@@ -396,6 +396,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                             initialSnapshot: sessionRuntime.getSnapshot(),
                             dispatch: dispatchAiAction,
                             logger,
+                            projector,
                             omniscient: agentSlot.omniscient ?? false,
                             createState: contribution.createAIState,
                         }),

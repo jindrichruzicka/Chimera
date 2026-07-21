@@ -1,8 +1,15 @@
 /**
  * ai/__tests__/honest-ai-isolation.test.ts
  *
- * Regression coverage for Invariant #17: honest AI agents receive only the
- * projected PlayerSnapshot, while explicit omniscient agents receive full state.
+ * Regression coverage for Invariant #17 at the AgentManager FAN-OUT: honest AI
+ * agents receive only the projected PlayerSnapshot, while explicit omniscient
+ * agents receive full state.
+ *
+ * Scope: delivery to an already-constructed agent. The other #17 delivery path
+ * — the snapshot an agent is SEEDED with at construction — is covered by
+ * `electron/main/runtime/HostedSessionAgents.test.ts` (unit) and the restore
+ * scenario in `electron/main/__tests__/session-restore.integration.test.ts`,
+ * because the agent factory lives in the Electron host shell.
  *
  * Tests written first (TDD — red confirmed before implementation).
  */

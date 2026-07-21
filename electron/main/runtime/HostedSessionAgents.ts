@@ -3,6 +3,16 @@
  *
  * Host-session AI composition helpers. This module lives in Electron main
  * because it wires concrete AI engine objects to the host ActionPipeline.
+ *
+ * Architecture reference: §4.6 / §4.9
+ *
+ * Invariants upheld:
+ *   #17 — the snapshot an honest agent is SEEDED with is projected through
+ *          `StateProjector.project()`, exactly like every per-tick delivery in
+ *          `AgentManager`. Agent construction is a state-delivery path: the
+ *          seed reaches game code as `AIState.onEnter`'s argument. Only an
+ *          agent whose slot declares `omniscient` may seed from the full
+ *          `GameSnapshot`.
  */
 
 import {
@@ -20,7 +30,11 @@ import type {
     GamePhase,
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
-import { playerId, sceneId } from '@chimera-engine/simulation/engine/types.js';
+import { gamePhase, playerId, sceneId } from '@chimera-engine/simulation/engine/types.js';
+import type {
+    PlayerSnapshot,
+    StateProjector,
+} from '@chimera-engine/simulation/projection/StateProjector.js';
 import type { LobbyAgentSlot } from '@chimera-engine/networking';
 import type { ReplayPlayerMetadata } from '@chimera-engine/simulation/replay/ReplayFile.js';
 
@@ -49,6 +63,15 @@ export interface BuildDefaultAIPlayerAgentOptions {
     readonly initialSnapshot: Readonly<BaseGameSnapshot>;
     readonly dispatch: (action: ActionEnvelope) => void;
     readonly logger: Logger;
+    /**
+     * The session's projector — the SAME instance that projects every outbound
+     * broadcast and every per-tick agent delivery.
+     *
+     * Required, not optional: an omitted-and-defaulted projector would compile
+     * everywhere while silently seeding an honest agent from raw host state,
+     * which is exactly the Invariant #17 hole this parameter closes.
+     */
+    readonly projector: StateProjector;
     readonly omniscient?: boolean;
     /**
      * Optional factory for the AI's initial state. Defaults to the generic
@@ -61,6 +84,8 @@ export interface BuildDefaultAIPlayerAgentOptions {
 
 const DEFAULT_AI_STATE = 'engine:auto-end-turn';
 const DEFAULT_TURN_DEADLINE_MS = 30_000;
+/** The one phase the engine itself owns — every other value is the game's to choose. */
+const LOBBY_PHASE = gamePhase('lobby');
 
 export function resolveAgentSlot(
     metadata: HostedSessionAgentMetadata,
@@ -172,49 +197,119 @@ export function buildDefaultAIPlayerAgent(options: BuildDefaultAIPlayerAgentOpti
     const stateMachine = new AIStateMachineImpl({ logger: options.logger });
     const scheduler = new CommandSchedulerImpl();
     const context = new CommandContextImpl(options.dispatch, () => undefined, options.logger);
-    const createState = options.createState ?? createAutoEndTurnState;
+    const createState =
+        options.createState ?? ((pid: PlayerId) => createAutoEndTurnState(pid, options.logger));
     const initialState = createState(options.playerId);
     stateMachine.registerState(initialState);
-    stateMachine.setInitialState(
-        initialState.name,
-        {
-            ...options.initialSnapshot,
-            viewerId: options.playerId,
-            commitments: {},
-            undoMeta: { canUndo: false, canRedo: false },
-            isMyTurn: true,
-        },
-        {},
-        scheduler,
-        context,
-    );
+    // The seed reaches game code verbatim as `AIState.onEnter`'s snapshot, so
+    // it is a state delivery and must pass the same gate every tick does
+    // (Invariant #17). An honest agent is projected; an omniscient agent keeps
+    // its declared full-state access. The omniscient arm's hardcoded
+    // `isMyTurn: true` is preserved behaviour, not a derivation — `onEnter`
+    // runs synchronously on this object, so a game reading `isMyTurn` there
+    // reads that literal. Deriving it would be the better value, but changing
+    // what a declared-omniscient agent is seeded with is out of scope here.
+    const seed: PlayerSnapshot =
+        options.omniscient === true
+            ? {
+                  ...options.initialSnapshot,
+                  viewerId: options.playerId,
+                  commitments: {},
+                  undoMeta: { canUndo: false, canRedo: false },
+                  isMyTurn: true,
+              }
+            : options.projector.project(options.initialSnapshot, options.playerId);
+    stateMachine.setInitialState(initialState.name, seed, {}, scheduler, context);
 
     const brain = new AIBrain(stateMachine, scheduler, context, {});
     return new AIPlayerAgent(options.playerId, brain, { omniscient: options.omniscient ?? false });
 }
 
-function createAutoEndTurnState(playerIdToAdvance: PlayerId): AIState {
+function createAutoEndTurnState(playerIdToAdvance: PlayerId, logger: Logger): AIState {
+    // True while this policy's own `context.dispatch` is on the stack. The host
+    // re-ticks every agent from INSIDE that dispatch (`runHostAction` →
+    // `afterTick` → `tickAll`), which is the mechanism that lets a policy spend
+    // a whole turn in one go — and, for a policy that re-asks unconditionally,
+    // the mechanism that recurses to the drive-depth cap. Suppressing the
+    // re-entrant asks bounds this policy at one request per pump for EVERY
+    // reduction, including the two where the tick DOES advance while the seat
+    // stays active: a game contributing `mayEndTurn` (simultaneous turns) whose
+    // seat is still `isMyTurn` afterwards, and a round-robin over a one-seat
+    // roster, which hands the turn straight back.
+    let dispatching = false;
+    // Highest tick already asked to end. The re-entrancy guard covers a single
+    // pump; this covers repeat pumps at an UNCHANGED tick — a game with no
+    // `turnClock` projects `isMyTurn: true` for every viewer while
+    // `engine:end_turn` reduces to the identity, so every subsequent tick of
+    // the agent would re-issue a request that cannot make progress, each one
+    // costing a replay record, a broadcast and an autosave write.
+    //
+    // Both are per-agent and live as long as the agent object. That is a fresh
+    // object on a return-to-lobby restart and on a restore from the menu, but
+    // NOT on an in-session `saves:load`: `applyRestoredFileToActiveSession`
+    // swaps the snapshot without rebuilding agents, so a latch set at a later
+    // tick outlives a rewind to an earlier one. Harmless while that path does
+    // not re-tick agents; a future one that does would need the agents cleared
+    // alongside the snapshot.
+    let lastRequestedTick: number | null = null;
     return {
         name: DEFAULT_AI_STATE,
         onEnter: () => undefined,
         onTick: () => undefined,
+        // `isMyTurn` is the projected turn gate — the only turn signal a
+        // `PlayerSnapshot` carries. `turnClock` is host-local and absent from
+        // every projected snapshot, so reading it here made this policy inert
+        // for exactly the honest agents it is the default for. Reading the
+        // projected field also means a game's `resolveIsMyTurn` override
+        // (simultaneous turns) reaches the policy.
         onIdle: (snapshot, _tick, _params, _scheduler, context) => {
-            const turnClock = readTurnClock(snapshot);
-            if (turnClock?.activePlayerId !== playerIdToAdvance) {
+            if (dispatching) {
                 return;
             }
-            context.dispatch({
-                type: 'engine:end_turn',
-                playerId: playerIdToAdvance,
-                tick: snapshot.tick,
-                payload: {},
-            });
+            // Only a live match. A snapshot with no `turnClock` projects
+            // `isMyTurn: true` for every viewer, and `engine:return_to_lobby`
+            // drops the turn clock — so without this the policy ends turns in
+            // the lobby, rewriting the autosave slot with a lobby-phase file
+            // over the abandoned match's. A resolved match rejects `end_turn`
+            // outright (`match_already_resolved`). Both facts are engine-owned;
+            // a game's own phase vocabulary is open, so this must not be
+            // written as an allow-list of "playing" or the policy goes inert
+            // again for any game that names its phases differently.
+            if (snapshot.phase === LOBBY_PHASE || snapshot.gameResult !== null) {
+                return;
+            }
+            if (!snapshot.isMyTurn || lastRequestedTick === snapshot.tick) {
+                return;
+            }
+            lastRequestedTick = snapshot.tick;
+            dispatching = true;
+            try {
+                context.dispatch({
+                    type: 'engine:end_turn',
+                    playerId: playerIdToAdvance,
+                    tick: snapshot.tick,
+                    payload: {},
+                });
+            } catch (error) {
+                // `ActionPipeline` signals a rejected action by throwing, and
+                // nothing between here and the host action that drove the
+                // fan-out catches it — an escaping error would fail a human's
+                // action, or the realtime ticker's callback, on account of the
+                // AI. A game can supply `resolveIsMyTurn` (projection) without
+                // `mayEndTurn` (authorisation); they are separate seams, so a
+                // seat this policy believes is active can still be refused.
+                // Contained and logged, not silenced: the tick latch means the
+                // next tick retries, so a guard that rejects only temporarily
+                // (a commitment mode awaiting the other seats) still resolves.
+                logger.warn('hosted-session-agents:auto-end-turn-rejected', {
+                    playerId: playerIdToAdvance,
+                    tick: snapshot.tick,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            } finally {
+                dispatching = false;
+            }
         },
         onExit: () => undefined,
     };
-}
-
-function readTurnClock(snapshot: { readonly tick: number }): BaseGameSnapshot['turnClock'] {
-    const withTurnClock = snapshot as { readonly turnClock?: BaseGameSnapshot['turnClock'] };
-    return withTurnClock.turnClock;
 }

@@ -26,7 +26,9 @@
  *          `AgentCoordinator`, which in turn calls only agent lifecycle methods.
  *   #17 — fan-out calls receive the `StateProjector`; honest agents receive a
  *          `PlayerSnapshot`, while explicit omniscient AI agents may receive
- *          raw state through the coordinator's host-only exception.
+ *          raw state through the coordinator's host-only exception. This host
+ *          covers the fan-out only; the construction-time seed is gated
+ *          separately by the host shell's agent factory.
  */
 
 import type { AgentCoordinator } from './AgentCoordinator.js';
@@ -42,8 +44,10 @@ import type { BaseGameSnapshot, GameResult } from '../engine/types.js';
  *
  * The `StateProjector` passed at construction is reused for every lifecycle
  * call so the same projection policy is applied uniformly across all events.
- * Invariant #17: honest agents receive projected snapshots by default; only
- * explicit omniscient AI agents may bypass projection inside the coordinator.
+ * Invariant #17: honest agents receive projected snapshots by default; inside
+ * the coordinator, only explicit omniscient AI agents may bypass projection.
+ * The snapshot an agent is SEEDED with never reaches the coordinator — the
+ * host shell's agent factory applies the same gate there.
  *
  * Generic over `TAgent` — the agent value is forwarded to the coordinator and
  * never inspected by the host. Electron binds `TAgent` to `PlayerAgent`.

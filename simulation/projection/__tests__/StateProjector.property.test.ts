@@ -236,7 +236,7 @@ describe('StateProjector — projection property tests (F29)', () => {
     });
 });
 
-describe('Honest AI viewer — PlayerSnapshot passed to AI never contains opponent owner-only fields (Invariant #17)', () => {
+describe('Honest AI viewer — project() output never contains opponent owner-only fields (Invariant #17)', () => {
     it('AI viewer receives only its own owner-only fields; opponent fields are null across 10 000 random snapshots', () => {
         assert(
             property(arbitraryGameSnapshot(), (snapshot: ArbitraryGameSnapshot) => {

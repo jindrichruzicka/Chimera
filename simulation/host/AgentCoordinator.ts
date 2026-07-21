@@ -26,7 +26,9 @@ import type { BaseGameSnapshot, GameResult } from '../engine/types.js';
  * Holds the per-session player agents and drives them through the game
  * lifecycle. The `StateProjector` is threaded into every fan-out call so the
  * coordinator can project the full host state down to each agent's
- * `PlayerSnapshot` before delivery (Invariant #17).
+ * `PlayerSnapshot` before delivery (Invariant #17). Agents arrive already
+ * constructed, so the snapshot they were SEEDED with is outside this port's
+ * reach — the host shell that builds them applies the same gate.
  */
 export interface AgentCoordinator<TAgent> {
     /** Register a player agent before the first tick. */

@@ -34,8 +34,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';
-import type { ActionEnvelope } from '@chimera-engine/simulation/engine/types.js';
+import type { ActionEnvelope, PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
 import {
     ALLOW_SPECTATORS_DEFAULT,
     ALLOW_SPECTATORS_SETTING,
@@ -119,12 +120,42 @@ async function flushProviderEvents(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function buildHost(provider: InMemoryMultiplayerProvider): RestoredHostHarness {
+function buildHost(
+    provider: InMemoryMultiplayerProvider,
+    gameContribution: MainGameContribution = contribution,
+): RestoredHostHarness {
     return buildRestoredHostHarness({
         provider,
-        contribution,
+        contribution: gameContribution,
         lobbySetup: buildTacticsLobbySetup(TEST_PALETTE),
     });
+}
+
+/**
+ * The tactics contribution with an `AIState.onEnter` that records the snapshot
+ * each AI agent is SEEDED with.
+ *
+ * `MainGameContribution.createAIState` is forwarded verbatim into
+ * `buildDefaultAIPlayerAgent`, whose `setInitialState` call hands the seed
+ * straight to `onEnter` — and the state machine retains nothing afterwards, so
+ * this is the only seam through which the seed is observable.
+ */
+function recordingContribution(
+    seeds: { readonly pid: PlayerId; readonly snapshot: PlayerSnapshot }[],
+): MainGameContribution {
+    return {
+        ...contribution,
+        createAIState: (pid) => {
+            const inner = createTacticsAIState(pid);
+            return {
+                ...inner,
+                onEnter: (snapshot, params, scheduler, context) => {
+                    seeds.push({ pid, snapshot });
+                    inner.onEnter(snapshot, params, scheduler, context);
+                },
+            };
+        },
+    };
 }
 
 function moveAction(
@@ -1082,6 +1113,88 @@ describe('session restore protocol (F68 / #827) — integration', () => {
             { kind: 'game-start', tick: savedTick },
         ]);
         expect(host.activeRuntime()!.getSnapshot().tick).toBe(savedTick);
+
+        await host.lobbyManager.closeLobby();
+    });
+
+    it('S1o: an honest AI seated after the checkpoint is SEEDED from the projection, never the raw checkpoint (#887, Invariant #17)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const seeds: { readonly pid: PlayerId; readonly snapshot: PlayerSnapshot }[] = [];
+        const host = buildHost(provider, recordingContribution(seeds));
+        const aiSeat = playerId('ai-1');
+
+        // ── Host + one honest AI (NO `omniscient`), so the whole roster is
+        // local and the restore completes without waiting on a remote. ────────
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 2,
+            agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+        });
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        // Play a move so the checkpoint is a real mid-game state carrying the
+        // other seat's hidden information, not a bare start position.
+        const runtime = host.activeRuntime();
+        expect(runtime).not.toBeNull();
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime!.getSnapshot().tick, HOST_UNIT, 0, 1),
+        );
+        const savedTick = runtime!.getSnapshot().tick;
+        const file = runtime!.captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
+        expect(file.session.seats).toStrictEqual([
+            { playerId: hostInfo.hostId, control: 'host', slotIndex: 0 },
+            { playerId: aiSeat, control: 'ai', slotIndex: 1 },
+        ]);
+        await host.saveManager.save(file);
+        await host.lobbyManager.closeLobby();
+        await flushProviderEvents();
+
+        // ── Restore: `seatRestoredRoster` registers the AI AFTER
+        // `applyRestoredFile`, so its seed comes off the mid-game checkpoint. ──
+        const restoreMark = seeds.length;
+        const loaded = await host.saveManager.restoreFromSave(QUALIFIED_SLOT);
+        await host.coordinator.restoreSession(loaded);
+
+        const seeded = seeds.slice(restoreMark).filter((entry) => entry.pid === aiSeat);
+        expect(seeded).toHaveLength(1);
+        const aiSeed = seeded[0]!.snapshot;
+
+        // It really IS the restored checkpoint — a lobby-snapshot seed would be tick 0.
+        expect(aiSeed.tick).toBe(savedTick);
+
+        // Host-only roots the projection never emits (the raw spread carried all of these).
+        for (const hostOnly of [
+            'seed',
+            'turnClock',
+            'turnNumber',
+            'hostPlayerId',
+            'timers',
+            'playerStamina', // tactics' every-seat stamina ledger
+        ]) {
+            expect(aiSeed).not.toHaveProperty(hostOnly);
+        }
+
+        // Fog of war, asserted against NAMED units rather than a re-derivation of
+        // the rule under test: re-deriving `ownerId === viewer || visibleTo…`
+        // here would move in lockstep with a broken `tacticsVisibilityRules` and
+        // stay green. The AI owns its own seat's unit and must not see the host's.
+        const checkpoint = host.activeRuntime()!.getSnapshot();
+        expect(aiSeed.entities[entityId(SEAT1_UNIT)]).toBeDefined();
+        expect(aiSeed.entities[entityId(HOST_UNIT)]).toBeUndefined();
+        expect(checkpoint.entities[entityId(HOST_UNIT)]).toBeDefined();
+
+        // `maskEntity` stripped the internal reveal list from every survivor.
+        for (const observed of Object.values(aiSeed.entities)) {
+            expect(observed).not.toHaveProperty('visibleTo');
+        }
+
+        // `maskPlayerState` masked the opponent's owner-only stamina.
+        const observedHost = aiSeed.players[hostInfo.hostId] as unknown as {
+            readonly stamina: unknown;
+        };
+        expect(observedHost.stamina).toBeNull();
 
         await host.lobbyManager.closeLobby();
     });
