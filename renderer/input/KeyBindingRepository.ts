@@ -24,7 +24,11 @@ interface SettingsStoreReader {
  * is active. Used by KeyBindingRepository, settings pages, and bootstrap logic
  * to access game-independent settings (e.g. engine key bindings, volume).
  *
- * Invariant #35 enforces that game schemas never shadow this reserved namespace key.
+ * This is a reserved gameId, not a settings namespace key, so Invariant #35 (which
+ * governs the four top-level namespaces inside a schema's defaults) does not apply
+ * to it. No runtime guard enforces the reservation — no schema is ever registered
+ * under this id, so reads resolve to ENGINE_DEFAULTS via Invariant #34 graceful
+ * degradation, and the reservation holds by convention only.
  */
 export const ENGINE_SETTINGS_GAME_ID = '__engine__';
 

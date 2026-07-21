@@ -624,6 +624,8 @@ const { tacticsCommitmentOrchestration } =
 const { tacticsResolveIsMyTurn } =
     await import('@chimera-engine/tactics/simulation/commitment/turnGate.js');
 const { tacticsSettingsSchema } = await import('@chimera-engine/tactics/settings-schema.js');
+const { SettingsNamespaceCollisionError } =
+    await import('@chimera-engine/simulation/settings/index.js');
 const { TACTICS_GAME_ID } = await import('@chimera-engine/tactics/simulation/constants.js');
 const { TACTICS_CONTENT_SCHEMAS, paletteFromCollections } =
     await import('@chimera-engine/tactics/content/tacticsContent.js');
@@ -4133,6 +4135,51 @@ describe('main() CHIMERA_DEBUG production guard (Invariant #27)', () => {
             await expect(main(makeTestContributions())).resolves.not.toThrow();
         } finally {
             process.env = origEnv;
+        }
+    });
+});
+
+// ─── settings namespace guard refuses startup (Invariant #35) ────────────────
+
+describe('main() game settings schema guard (Invariant #35)', () => {
+    it('refuses to start when a game schema does not carry the engine namespaces intact', async () => {
+        // SettingsManager is mocked in this suite, so the rejection is injected at
+        // the contribution seam — the guard's own logic is covered in
+        // SettingsManager.test.ts. What is pinned here is the composition root's
+        // response: without its try/catch this would only be an unhandled rejection,
+        // because consumer roots call `void main(...)` and this runs before
+        // app.whenReady(), leaving the user a live, windowless process.
+        const broken = makeTestContributions().map((contribution) => ({
+            ...contribution,
+            registerSettings: () => {
+                throw new SettingsNamespaceCollisionError(
+                    'Game schema for "broken-namespace-game" must carry the engine namespace shape for key(s): audio (Invariant #35).',
+                );
+            },
+        }));
+
+        appExit.mockClear();
+        dialogShowErrorBox.mockClear();
+        // stderr is the ONLY diagnostic a refusing binary produces, so pin it:
+        // without this, deleting the console.error leaves a shipped app that exits 1
+        // in total silence and the whole suite still passes.
+        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await expect(main(broken)).rejects.toThrow(/must carry the engine namespace shape/);
+            expect(appExit).toHaveBeenCalledWith(1);
+            expect(errSpy).toHaveBeenCalledWith(
+                expect.stringMatching(
+                    // The error NAME must appear: an Invariant #35 refusal and an
+                    // unrelated registerSettings bug both refuse to start, but must
+                    // not be reported under the same label.
+                    /refusing to start.*game settings registration failed \(SettingsNamespaceCollisionError\).*key\(s\): audio\b/is,
+                ),
+            );
+            // showErrorBox is MODAL and would hang a non-interactive launch instead
+            // of refusing — same forward ratchet as the CHIMERA_DEBUG guard above.
+            expect(dialogShowErrorBox).not.toHaveBeenCalled();
+        } finally {
+            errSpy.mockRestore();
         }
     });
 });

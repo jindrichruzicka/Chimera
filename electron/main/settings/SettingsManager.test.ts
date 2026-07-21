@@ -148,15 +148,215 @@ describe('SettingsManager.registerSchema()', () => {
         );
     });
 
-    it('throws SettingsNamespaceCollisionError when game schema has a key that shadows engine namespace', () => {
+    it('registers a pure engine-defaults schema without throwing (engine keys are legitimate)', () => {
         const mgr = makeManager();
-        // A schema whose game-specific key list contains no extra keys is fine
         const pureEngineSchema: GameSettingsSchema<EngineSettings> = {
-            gameId: 'bad-game',
+            gameId: 'pure-engine-game',
             defaults: { ...ENGINE_DEFAULTS },
             schema: engineSchema,
         };
-        expect(() => mgr.registerSchema(pureEngineSchema)).not.toThrow(); // pure engine keys are fine
+        expect(() => mgr.registerSchema(pureEngineSchema)).not.toThrow();
+    });
+
+    it('registers a schema with game-owned, non-shadowing keys without throwing', () => {
+        const mgr = makeManager();
+        // `showGrid` is a game-owned key that does not shadow an engine namespace.
+        expect(() => mgr.registerSchema(extSettingsSchema)).not.toThrow();
+    });
+
+    it('registers a schema that only adds game-specific control bindings without throwing', () => {
+        const mgr = makeManager();
+        // Mirrors apps/tactics exactly, including the `...ENGINE_DEFAULTS.controls`
+        // spread: that spread is what keeps the namespace intact if `controls` ever
+        // gains a second sub-key, so the fixture must not drop it.
+        const customBindingsSchema: GameSettingsSchema<EngineSettings> = {
+            gameId: 'bindings-game',
+            defaults: {
+                ...ENGINE_DEFAULTS,
+                controls: {
+                    ...ENGINE_DEFAULTS.controls,
+                    bindings: {
+                        ...ENGINE_DEFAULTS.controls.bindings,
+                        'game:end-turn': { primary: 'Enter' },
+                    },
+                },
+            },
+            schema: engineSchema,
+        };
+        expect(() => mgr.registerSchema(customBindingsSchema)).not.toThrow();
+    });
+
+    // Fixture gameIds deliberately contain NO reserved namespace name, so a
+    // `key(s): <name>` assertion can only be satisfied by the reported key list —
+    // a gameId like 'shadow-audio-game' would make every such assertion vacuous.
+    it('throws SettingsNamespaceCollisionError when a game default shadows an engine namespace key', () => {
+        const mgr = makeManager();
+        // A game that hijacks a reserved namespace for its own value: the value no
+        // longer carries the engine shape, so the namespace is not intact.
+        const shadowingSchema = {
+            gameId: 'hijack-scalar-game',
+            defaults: {
+                ...ENGINE_DEFAULTS,
+                audio: 'my-game-audio-mode',
+            },
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(shadowingSchema)).toThrow(SettingsNamespaceCollisionError);
+        expect(() => mgr.registerSchema(shadowingSchema)).toThrow(/key\(s\): audio\b/);
+    });
+
+    it('throws SettingsNamespaceCollisionError when a game redefines an engine namespace with a non-engine object shape', () => {
+        const mgr = makeManager();
+        // `controls` present but redefined with a game-specific shape (no engine
+        // `bindings` record) — a genuine shadow of the reserved namespace.
+        const shadowingSchema = {
+            gameId: 'hijack-object-game',
+            defaults: {
+                ...ENGINE_DEFAULTS,
+                controls: { scheme: 'wasd' },
+            },
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(shadowingSchema)).toThrow(SettingsNamespaceCollisionError);
+        expect(() => mgr.registerSchema(shadowingSchema)).toThrow(/key\(s\): controls\b/);
+    });
+
+    it('names every broken namespace in the error, not just the first', () => {
+        const mgr = makeManager();
+        // Two namespaces broken at once — pins the join over the full list.
+        const twoBrokenSchema = {
+            gameId: 'two-broken-game',
+            defaults: {
+                ...ENGINE_DEFAULTS,
+                audio: 'nope',
+                gameplay: { language: 'en-US' },
+            },
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(twoBrokenSchema)).toThrow(/key\(s\): audio, gameplay\b/);
+    });
+
+    it('rejects a namespace whose engine sub-keys are inherited rather than owned', () => {
+        const mgr = makeManager();
+        // Sub-keys reachable only via the prototype satisfy `in` but NOT the merge:
+        // deepMergeStripped copies own enumerable keys, so this would merge to `{}`
+        // and discard the user's stored audio overrides. Must be rejected.
+        const prototypeSchema = {
+            gameId: 'inherited-subkeys-game',
+            defaults: {
+                ...ENGINE_DEFAULTS,
+                audio: Object.create(ENGINE_DEFAULTS.audio) as unknown,
+            },
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(prototypeSchema)).toThrow(SettingsNamespaceCollisionError);
+        expect(() => mgr.registerSchema(prototypeSchema)).toThrow(/key\(s\): audio\b/);
+    });
+
+    it('registers an engine-shaped-but-out-of-range namespace value without throwing', () => {
+        const mgr = makeManager();
+        // masterVolume is typed as a plain `number`, so 1.5 is type-legal even though
+        // it is outside the engine Zod shape's 0–1 refinement. The namespace is still
+        // intact, and registration deliberately checks structure only — nothing
+        // range-checks `defaults` (getSettings/updateSettings validate stored user
+        // overrides and incoming patches, never the defaults), so this must not throw.
+        const outOfRangeSchema: GameSettingsSchema<EngineSettings> = {
+            gameId: 'out-of-range-game',
+            defaults: {
+                ...ENGINE_DEFAULTS,
+                audio: { ...ENGINE_DEFAULTS.audio, masterVolume: 1.5 },
+            },
+            schema: engineSchema,
+        };
+        expect(() => mgr.registerSchema(outOfRangeSchema)).not.toThrow();
+    });
+
+    it('throws SettingsNamespaceCollisionError when a reserved namespace carries only some engine sub-keys', () => {
+        const mgr = makeManager();
+        // `audio` present as an object but missing sfxVolume/musicVolume/muted. This
+        // is the case that makes the sub-key quantifier load-bearing: relaxing the
+        // check from "every sub-key" to "some sub-key" must fail this test.
+        const partialSchema = {
+            gameId: 'partial-namespace-game',
+            defaults: {
+                ...ENGINE_DEFAULTS,
+                audio: { masterVolume: 0.5 },
+            },
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(partialSchema)).toThrow(SettingsNamespaceCollisionError);
+        expect(() => mgr.registerSchema(partialSchema)).toThrow(/key\(s\): audio\b/);
+    });
+
+    it('accepts a namespace that adds extra sub-keys alongside the engine ones', () => {
+        const mgr = makeManager();
+        // The rule is "owns every engine sub-key", not "owns exactly them" —
+        // a namespace carrying extras stays intact and must register.
+        const extraSubKeySchema = {
+            gameId: 'extra-subkey-game',
+            defaults: {
+                ...ENGINE_DEFAULTS,
+                audio: { ...ENGINE_DEFAULTS.audio, gameEcho: true },
+            },
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(extraSubKeySchema)).not.toThrow();
+    });
+
+    it('throws SettingsNamespaceCollisionError when a reserved namespace is undefined via a type bypass', () => {
+        const mgr = makeManager();
+        const undefinedSchema = {
+            gameId: 'undefined-namespace-game',
+            defaults: { ...ENGINE_DEFAULTS, audio: undefined },
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(undefinedSchema)).toThrow(SettingsNamespaceCollisionError);
+        expect(() => mgr.registerSchema(undefinedSchema)).toThrow(/key\(s\): audio\b/);
+    });
+
+    it('throws SettingsNamespaceCollisionError when a reserved namespace is null via a type bypass', () => {
+        const mgr = makeManager();
+        // `null` is typeof 'object', so only the explicit null arm stops it — without
+        // that arm `hasOwn(null, ...)` would surface a raw TypeError instead.
+        const nulledSchema = {
+            gameId: 'nulled-namespace-game',
+            defaults: { ...ENGINE_DEFAULTS, audio: null },
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(nulledSchema)).toThrow(SettingsNamespaceCollisionError);
+        expect(() => mgr.registerSchema(nulledSchema)).toThrow(/key\(s\): audio\b/);
+    });
+
+    it('throws SettingsNamespaceCollisionError when a reserved namespace is an array carrying the sub-keys', () => {
+        const mgr = makeManager();
+        // An array with the engine sub-keys attached as properties owns them all, so
+        // only the explicit Array.isArray arm rejects it. mergeAll would otherwise
+        // treat a non-plain-object as the namespace.
+        const arrayNamespace: unknown[] = [];
+        Object.assign(arrayNamespace, ENGINE_DEFAULTS.audio);
+        const arraySchema = {
+            gameId: 'array-namespace-game',
+            defaults: { ...ENGINE_DEFAULTS, audio: arrayNamespace },
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(arraySchema)).toThrow(SettingsNamespaceCollisionError);
+        expect(() => mgr.registerSchema(arraySchema)).toThrow(/key\(s\): audio\b/);
+    });
+
+    it('throws SettingsNamespaceCollisionError when a reserved namespace is omitted entirely', () => {
+        const mgr = makeManager();
+        // Omission is rejected for the same reason as a hijack: mergeAll() walks the
+        // base tree, so a registered schema missing `audio` would serve settings with
+        // no audio AND silently discard the user's stored audio overrides — strictly
+        // worse than an unregistered game, which falls back to ENGINE_DEFAULTS.
+        const { audio: _omitted, ...withoutAudio } = ENGINE_DEFAULTS;
+        const missingSchema = {
+            gameId: 'omitted-namespace-game',
+            defaults: withoutAudio,
+            schema: engineSchema,
+        } as unknown as GameSettingsSchema<EngineSettings>;
+        expect(() => mgr.registerSchema(missingSchema)).toThrow(SettingsNamespaceCollisionError);
+        expect(() => mgr.registerSchema(missingSchema)).toThrow(/key\(s\): audio\b/);
     });
 });
 
@@ -306,9 +506,9 @@ describe('SettingsManager broadcastChange', () => {
     });
 });
 
-// ── BLOCK-3: validate loaded JSON in getSettings() ────────────────────────────
+// ── validate loaded JSON in getSettings() ─────────────────────────────────────
 
-describe('SettingsManager.getSettings() — corrupt JSON validation (BLOCK-3)', () => {
+describe('SettingsManager.getSettings() — corrupt JSON validation', () => {
     it('returns defaults and logs a warning when stored overrides fail schema validation', async () => {
         const repo = new InMemorySettingsRepository();
         // Corrupt override: audio.masterVolume should be a number but is a string
@@ -359,9 +559,9 @@ describe('SettingsManager.getSettings() — corrupt JSON validation (BLOCK-3)', 
     });
 });
 
-// ── overrides persistence (BLOCK-1, WARN-2, WARN-7) ──────────────────────────
+// ── overrides-only persistence ───────────────────────────────────────────────
 
-describe('SettingsManager.updateSettings() — overrides-only persistence (BLOCK-1)', () => {
+describe('SettingsManager.updateSettings() — overrides-only persistence', () => {
     it('repo.load() after a single-field update returns only the changed key, not all defaults', async () => {
         const repo = new InMemorySettingsRepository();
         const mgr = new SettingsManager(repo);
@@ -449,7 +649,7 @@ describe('SettingsManager.updateSettings() — overrides-only persistence (BLOCK
     });
 });
 
-// ── Legacy keyBindings migration (WARN-1 fix) ─────────────────────────────────
+// ── Legacy keyBindings migration ──────────────────────────────────────────────
 
 describe('SettingsManager.getSettings() — legacy controls.keyBindings migration', () => {
     function makeLogger() {

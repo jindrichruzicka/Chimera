@@ -3568,8 +3568,40 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         },
         logger.child({ module: 'settings' }),
     );
-    for (const game of Object.values(mainGameRegistry)) {
-        game.registerSettings(settingsManager);
+    // Invariant #35: a game whose schema does not hand back the reserved engine
+    // namespaces intact must REFUSE to start, rather than run on a silently degraded
+    // settings tree — mergeAll() walks the base tree, so a shadowed, partial or
+    // missing namespace drops both the namespace and the user's stored overrides.
+    //
+    // The failure must TERMINATE the process here, in the engine. Consumer
+    // composition roots launch this as `void main(...)`, so a bare throw is only an
+    // UnhandledPromiseRejection: Electron prints a warning and keeps the process
+    // alive with no window, which is not a refusal to start. This runs before
+    // app.whenReady(), so without the exit the user gets a live, windowless process.
+    // The rethrow preserves the contract for tests and any awaiting caller.
+    try {
+        for (const game of Object.values(mainGameRegistry)) {
+            game.registerSettings(settingsManager);
+        }
+    } catch (err: unknown) {
+        // The error name distinguishes an Invariant #35 refusal from an unrelated
+        // bug in a game's registerSettings callback — both must refuse to start,
+        // but they must not be reported under the same label.
+        const name = err instanceof Error ? err.name : 'Error';
+        const message = err instanceof Error ? err.message : String(err);
+        // @chimera-review: Invariant #67 sanctioned exception (fatal startup
+        // refusal). Unlike the #27/#77 guard above, the root logger EXISTS here —
+        // but its pino sink buffers, and a refusal reason that fails to flush
+        // before the immediate app.exit(1) leaves a binary that exits 1 in total
+        // silence. stderr is synchronous.
+        console.error(
+            `fatal: refusing to start — game settings registration failed (${name}): ${message}`,
+        );
+        // Deliberately NO dialog.showErrorBox here: it is MODAL and blocks until
+        // dismissed, so a binary launched non-interactively would hang forever
+        // instead of refusing. Refusing must be deterministic and immediate.
+        app.exit(1);
+        throw err;
     }
     registerSettingsHandlers({
         ipcMain,

@@ -6,8 +6,10 @@
  *   #34 — registerSchema() must be called before getSettings/updateSettings
  *          for a game.  Calling getSettings for an unregistered gameId returns
  *          engine defaults and does NOT throw (graceful degradation).
- *   #35 — Game schema keys must not shadow engine namespace keys
- *          (audio, display, gameplay, controls).  Enforced in registerSchema().
+ *   #35 — The reserved engine namespaces (audio, display, gameplay, controls)
+ *          must reach registerSchema() intact: present, an object, owning every
+ *          engine sub-key.  Shadowing, partial and missing namespaces are all
+ *          rejected there.
  *   #67 — Constructed with injected dependencies; no raw console.* calls.
  */
 
@@ -25,8 +27,56 @@ import {
     SettingsMerger,
 } from '@chimera-engine/simulation/settings/index.js';
 
-/** Top-level engine namespace keys that game schemas must not shadow (Invariant #35). */
-const ENGINE_NAMESPACE_KEYS = new Set(['audio', 'display', 'gameplay', 'controls']);
+/**
+ * The reserved engine namespace keys, each mapped to the sub-keys it must carry.
+ * Derived once from ENGINE_DEFAULTS, so a new engine namespace — or a new sub-key
+ * inside one — is picked up automatically instead of drifting from this guard.
+ * Typed by `keyof EngineSettings` so indexing needs no fail-open fallback.
+ */
+const ENGINE_NAMESPACE_SUB_KEYS = Object.freeze(
+    Object.fromEntries(
+        // Object.entries widens the namespace values to `any`; naming the entry type
+        // keeps Object.keys() type-safe without an inline cast at the call site.
+        (Object.entries(ENGINE_DEFAULTS) as [string, Record<string, unknown>][]).map(
+            ([key, value]) => [key, Object.freeze(Object.keys(value))],
+        ),
+    ) as Record<keyof EngineSettings, readonly string[]>,
+);
+
+const ENGINE_NAMESPACE_KEYS = Object.freeze(
+    Object.keys(ENGINE_NAMESPACE_SUB_KEYS) as (keyof EngineSettings)[],
+);
+
+/**
+ * A reserved namespace is *intact* when `defaults` carries it as a plain object that
+ * owns every engine sub-key for that namespace.
+ *
+ * Ownership matters: `deepMergeStripped` copies OWN enumerable keys and seeds its
+ * result from `{...base}`, so a sub-key reachable only through the prototype chain
+ * would satisfy `in` here and still merge to `{}` — silently dropping the namespace
+ * and the user's stored overrides for it. `Object.hasOwn` keeps this guard aligned
+ * with the merge's own-key semantics.
+ *
+ * Structure only: sub-key PRESENCE is checked, never sub-value types or ranges, so
+ * `controls: { bindings: 'wasd' }` passes here. That ceiling is deliberate. Game
+ * `defaults` are trusted first-party input from the composition root and are not
+ * range-checked on any runtime path — `getSettings()`/`updateSettings()` validate
+ * stored user overrides and incoming patches, never `schema.defaults`. Validating
+ * defaults against `engineSettingsZodShape` would also be wrong here: its
+ * refinements (`.min(0).max(1)`, `.int()`) are stricter than the plain `number` the
+ * `EngineSettings` type promises, so type-legal game defaults would be rejected.
+ */
+function isNamespaceIntact(key: keyof EngineSettings, defaults: Record<string, unknown>): boolean {
+    // An omitted namespace and one explicitly set to `undefined` both read as
+    // `undefined` here, so the non-object check below rejects them alike — no
+    // separate `key in defaults` branch (it would be unreachable).
+    const value = defaults[key];
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        return false;
+    }
+    const record = value as Record<string, unknown>;
+    return ENGINE_NAMESPACE_SUB_KEYS[key].every((subKey) => Object.hasOwn(record, subKey));
+}
 
 /**
  * Deep-merges `incoming` into `current`, keeping all keys from both.
@@ -105,7 +155,8 @@ export class SettingsManager {
      *
      * Throws `SettingsNamespaceCollisionError` if:
      * - The same gameId was already registered.
-     * - The schema's game-specific default keys shadow an engine namespace key.
+     * - A reserved engine namespace (audio, display, gameplay, controls) does not
+     *   arrive intact — hijacked, partial, or missing (Invariant #35).
      */
     registerSchema<T extends EngineSettings>(schema: GameSettingsSchema<T>): void {
         if (this.schemas.has(schema.gameId)) {
@@ -114,17 +165,25 @@ export class SettingsManager {
             );
         }
 
-        // Invariant #35: game-specific keys (keys beyond the five engine namespaces)
-        // must not shadow engine namespace keys.
-        const allKeys = Object.keys(schema.defaults);
-        const gameSpecificKeys = allKeys.filter((k) => !ENGINE_NAMESPACE_KEYS.has(k));
-
-        // Defence in depth: gameSpecificKeys already excludes ENGINE_NAMESPACE_KEYS, so this
-        // never fires today, but it guards the invariant if the filter above ever changes.
-        const colliding = gameSpecificKeys.filter((k) => ENGINE_NAMESPACE_KEYS.has(k));
-        if (colliding.length > 0) {
+        // Invariant #35: a game must not shadow the reserved engine namespace keys
+        // (audio, display, gameplay, controls). A bare name match cannot express that,
+        // because a game schema legitimately CONTAINS all four — `defaults` is typed
+        // `T extends EngineSettings` and games spread ENGINE_DEFAULTS (see
+        // apps/tactics), so matching on the name alone would reject every real game.
+        //
+        // The enforceable form is that each reserved namespace must arrive INTACT
+        // (see isNamespaceIntact). One uniform rule covers every way a game can fail
+        // to hand back the engine's namespace: hijacking the name for its own value,
+        // supplying a partial namespace, or omitting it. All are rejected at startup
+        // rather than silently degrading at merge time — a registered-but-incomplete
+        // namespace is worse than an unregistered game, which still falls back to
+        // ENGINE_DEFAULTS, because mergeAll() walks the base tree and would drop the
+        // user's stored overrides for the missing namespace.
+        const defaults = schema.defaults as Record<string, unknown>;
+        const broken = ENGINE_NAMESPACE_KEYS.filter((key) => !isNamespaceIntact(key, defaults));
+        if (broken.length > 0) {
             throw new SettingsNamespaceCollisionError(
-                `Game schema for ${JSON.stringify(schema.gameId)} shadows engine namespace key(s): ${colliding.join(', ')}`,
+                `Game schema for ${JSON.stringify(schema.gameId)} must carry the engine namespace shape for key(s): ${broken.join(', ')} (Invariant #35).`,
             );
         }
 

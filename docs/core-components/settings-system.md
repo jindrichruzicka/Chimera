@@ -64,7 +64,12 @@ interface EngineSettings {
 }
 ```
 
-> **Invariant #35** — Game-defined settings keys must not shadow the four top-level engine namespace keys (`audio`, `display`, `gameplay`, `controls`). `registerSchema()` throws `SettingsNamespaceCollisionError` if violated. `GameSettingsPageDefinition` `game-field.path` entries must be backed by the registered game settings schema.
+> **Invariant #35** — The four top-level engine namespaces (`audio`, `display`, `gameplay`, `controls`) must reach `registerSchema()` **intact**: each present in the game's `defaults`, an object, and owning every engine sub-key. Shadowing a reserved namespace with a game value, supplying a partial one, and omitting one are all rejected with `SettingsNamespaceCollisionError`. `GameSettingsPageDefinition` `game-field.path` entries must be backed by the registered game settings schema.
+>
+> A bare key-name check cannot express this: `GameSettingsSchema<T extends EngineSettings>` means every game's `defaults` legitimately _contains_ all four keys (games spread `...ENGINE_DEFAULTS`), so matching on the name would reject every real game. All three failure modes degrade the merge identically — `deepMergeStripped` seeds from `{...base}` and walks `Object.keys(base)`, so a broken namespace drops both the namespace and the user's stored overrides for it, leaving a registered game worse off than an unregistered one (which still falls back to `ENGINE_DEFAULTS`). Sub-key **ownership** is what is checked (`Object.hasOwn`, matching the merge's own-key semantics — an inherited sub-key would satisfy `in` yet still merge to `{}`).
+>
+> The check is structural — sub-key ownership only, never sub-value types or ranges, so `controls: { bindings: 'wasd' }` passes. Game `defaults` are trusted first-party input and are range-validated on no runtime path: `getSettings()`/`updateSettings()` validate stored user overrides and incoming patches, never `schema.defaults`. The engine composition root wraps registration and calls `app.exit(1)` on refusal, because consumer roots launch `main()` as `void main(...)`, where a bare throw would otherwise leave a live, windowless process rather than refusing to start.
+>
 > **Invariant #36** — Settings are never read by the simulation core. Game parameters that affect simulation outcomes must be declared as match config, transmitted during lobby setup.
 
 ---
@@ -134,20 +139,25 @@ interface SettingsRepository {
 ## SettingsManager
 
 ```typescript
-// electron/main/settings-manager.ts
+// electron/main/settings/SettingsManager.ts
 
 interface SettingsManager {
-    // Must be called before getSettings() / updateSettings() for a game
-    registerSchema<T>(schema: GameSettingsSchema<T>): void;
+    // Must be called before getSettings() / updateSettings() for a game.
+    // Rejects a schema whose reserved engine namespaces are not intact (Invariant #35).
+    registerSchema<T extends EngineSettings>(schema: GameSettingsSchema<T>): void;
 
-    // Returns ResolvedSettings (engine + game + user merged)
-    getSettings(gameId?: string): Promise<ResolvedSettings>;
+    // Returns ResolvedSettings (game defaults + user overrides merged);
+    // engine defaults if the gameId is unregistered (Invariant #34)
+    getSettings(gameId: string): Promise<ResolvedSettings>;
 
-    // Deep-merges patch into user overrides; saves; broadcasts onChange
-    updateSettings(patch: Partial<UserSettings>, gameId?: string): Promise<void>;
+    // Validates patch, merges into user overrides only, saves, broadcasts
+    updateSettings(gameId: string, patch: Partial<UserSettings>): Promise<ResolvedSettings>;
 
-    // Deletes user overrides; reverts to engine + game defaults
-    resetSettings(gameId?: string): Promise<void>;
+    // Deletes user overrides; reverts to the game's registered defaults
+    resetSettings(gameId: string): Promise<ResolvedSettings>;
+
+    // IPC-boundary validation: returns the validated, unknown-key-stripped patch
+    validatePatchForGame(gameId: string, patch: Partial<UserSettings>): Partial<UserSettings>;
 }
 ```
 
@@ -159,17 +169,22 @@ interface SettingsManager {
 
 ```
 App Start
-  1. SettingsManager.registerSchema(engineSchema)            ← always first
-  2. SettingsManager.registerSchema(gameSchema)              ← per game at init
-  3. SettingsManager.getSettings('<game>')
+  1. Composition root: SettingsManager.registerSchema(gameSchema)   ← per game contribution
+       → Invariant #35 intact-check; on refusal the engine logs to
+         stderr and app.exit(1)s — the app does not start
+       (no engine schema is registered; engine-wide reads use the reserved
+        '__engine__' id, which resolves to ENGINE_DEFAULTS via Invariant #34
+        graceful degradation)
+  2. SettingsManager.getSettings('<game>')
        → SettingsRepository.load('<game>')                  ← reads userData/settings/<game>.json
-       → SettingsMerger.mergeAll(engineDef, gameDef, userOverrides)
+       → SettingsMerger.mergeAll(gameDefaults, userOverrides)
+         (gameDefaults carry the full engine+game tree — games spread ENGINE_DEFAULTS)
        → returns ResolvedSettings
 
 User Changes Volume
-  1. Renderer: window.__chimera.settings.update({ audio: { masterVolume: 0.7 } }, '<game>')
-     → IPC → SettingsManager.updateSettings(patch, '<game>')
-     → SettingsMerger.mergeAll(..., newOverrides)
+  1. Renderer: window.__chimera.settings.update('<game>', { audio: { masterVolume: 0.7 } })
+     → IPC → SettingsManager.updateSettings('<game>', patch)
+     → validatePatch → merge into user OVERRIDES only (never the defaults tree)
      → SettingsRepository.save('<game>', newOverrides)   ← atomic write
      → broadcast onChange → renderer → settingsStore.applySettings(resolved)
 
@@ -177,7 +192,7 @@ Settings UI Reset
   1. window.__chimera.settings.reset('<game>')
      → SettingsManager.resetSettings('<game>')
      → SettingsRepository.reset('<game>')               ← deletes userData file
-     → broadcast onChange → renderer with engine+game defaults
+     → broadcast onChange → renderer with the game's registered defaults
 ```
 
 ---

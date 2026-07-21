@@ -206,8 +206,10 @@ export interface GameMainMenuDefinition {
  * is rejected by TypeScript.
  *
  * Game-defined fields must use `kind: 'game-field'` with their game settings
- * path. Runtime game schema registration enforces the engine namespace collision
- * guard from invariant #35.
+ * path. Per Invariant #35, a `game-field.path` must be backed by the registered
+ * game settings schema; `registerSchema()` does not see page definitions — it
+ * enforces the namespace half of #35 (reserved namespaces arriving intact in a
+ * schema's defaults), not the `path` half.
  */
 export type EngineSettingsFieldId =
     | 'audio.masterVolume'

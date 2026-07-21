@@ -83,11 +83,14 @@ export const ENGINE_DEFAULTS: EngineSettings = {
 // ─── Namespace collision guard ────────────────────────────────────────────────
 
 /**
- * Thrown by `SettingsManager.registerSchema()` when a game-defined settings key
- * shadows one of the four reserved engine namespace keys
- * (`audio`, `display`, `gameplay`, `controls`).
+ * Thrown by `SettingsManager.registerSchema()` when one of the four reserved engine
+ * namespaces (`audio`, `display`, `gameplay`, `controls`) does not reach it intact —
+ * shadowed by a game-defined value, carrying only some engine sub-keys, or missing
+ * altogether — and when the same `gameId` is registered twice.
  *
- * Enforces Invariant #35.
+ * Enforces Invariant #35. The name predates the widening: a game omitting a reserved
+ * namespace is not a "collision", but it is rejected by the same guard, because a
+ * missing namespace degrades the merge exactly as a shadowed one does.
  */
 export class SettingsNamespaceCollisionError extends Error {
     public override readonly name = 'SettingsNamespaceCollisionError';
