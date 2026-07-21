@@ -1,6 +1,6 @@
 ---
 title: 'Content Database and DataRefs'
-description: 'DataRef<T> branded type, ContentDatabase interface, ContentLoader, JSON file layouts, usage in ActionDefinitions, and all content-related error types.'
+description: 'DataRef<T> branded type, ContentDatabase interface, ContentLoader, JSON file layouts, the enforced item-id grammar, what load-time ref validation does and does not catch, usage in ActionDefinitions, and all content-related error types.'
 tags: [content, database, data-refs, json, game-data, simulation]
 ---
 
@@ -73,8 +73,8 @@ interface DataObject {
 }
 ```
 
-> **Invariant #13** — `ContentDatabase` is immutable after `ContentLoader.load()` returns. It is never stored inside `GameSnapshot`.
-> **Invariant #14** — `ContentDatabase` is loaded and all schemas/refs validated before the tick loop starts. A failed load is a fatal startup error.
+> **Invariant #13** — `ContentDatabase` is immutable after `ContentLoader.load()` returns: every item is frozen **recursively**, so nested objects and arrays are immutable too (within the JSON domain Invariant #15 mandates — a non-JSON value reachable only through the programmatic factory is frozen but not descended into, and an array-buffer view is skipped entirely, since `Object.freeze` throws on a non-empty typed array). It is never stored inside `GameSnapshot`.
+> **Invariant #14** — `ContentDatabase` is loaded and all schemas/refs validated before the tick loop starts. A failed load is a fatal startup error and the app terminates (`app.exit(1)`). Ref validation is **on by default** (`ContentLoadOptions.validateRefs`), and its soundness rests on the enforced [item-id grammar](#item-id-grammar) — both below.
 > **Invariant #15** — Game content must never contain executable code. Only JSON; pure data.
 > **Invariant #46** — `ContentDatabase` is optional. Games that declare no content (e.g. Tic Tac Toe) pass no `db` to `PipelineContext`.
 
@@ -125,7 +125,37 @@ The `ContentLoader` detects which format is in use by checking whether the path 
 }
 ```
 
-Any string containing `:` whose left side matches a known collection type is treated as a `DataRef`. TypeScript schemas declare the field type as `DataRef<T>`.
+A string is treated as a `DataRef` when **both** halves qualify: the part left of the first `:` matches a known collection type, and the part right of it satisfies the item-id grammar below. TypeScript schemas declare the field type as `DataRef<T>`.
+
+Refs are recognised wherever a string appears in loaded JSON — as a value, inside an array, and as an **object key**, at any depth ([exact scope](#what-ref-validation-does-and-does-not-catch)). A map keyed by ref is a first-class authoring shape:
+
+```json
+// units/warrior.json — per-ref data, keyed by ref
+{ "id": "warrior", "resistances": { "damage-types:fire": 50, "damage-types:physical": 20 } }
+```
+
+Both halves matter because ref validation runs on every load (Invariant #14, below): the left-side rule keeps timestamps and URLs (`2024-01-01T00:00:00Z`, `https://…`) from being mistaken for refs, and the id-half rule does the same for prose that happens to open with a collection name (`"units: 3 required"`).
+
+### Item-id grammar
+
+Every item id must be a **non-empty string with no whitespace** (`ITEM_ID_SHAPE`, `/^\S+$/`). Non-ASCII, dotted, slashed and colon-bearing ids are all legal — `parseRef` splits a ref on its **first** colon, so `units:tier:elite` resolves id `tier:elite`. A violating id is rejected as a `ContentSchemaError` by `createContentDatabase` — the single factory every construction path funnels through, so a directly-built database obeys the grammar too. `ContentLoader` repeats the check at merge time for one reason: it runs before the duplicate check, so two id-less items are reported as malformed rather than as a `ContentConflictError`. The regex is exported from `@chimera-engine/simulation/content` for reuse in a game's own Zod id schema.
+
+The grammar is enforced, not merely assumed, because ref detection depends on it. An id like `"Fire Mage"` would otherwise be legal _and_ unreferenceable: both a correct and a dangling `"units:Fire Mage"` would be skipped as prose, silently exempting that item from ref validation. With the grammar enforced, a string the id-half rule rejects cannot name any item, so skipping it can never skip a resolvable ref.
+
+### What ref validation does and does not catch
+
+Stated so it can be falsified: **every string reachable from a loaded item through object entries and array elements — keys as well as values, at any depth — whose prefix names a known collection and whose id half matches `ITEM_ID_SHAPE` must resolve, or the load fails.** Anything that sentence does not cover is not diagnosed at load. Those two traversals are exactly what JSON can express, so the only strings outside them live in shapes a programmatic `inline` source can build and a JSON file cannot: a symbol-keyed property, a non-index property on an array, a `Map`/`Set`'s contents.
+
+| String                               | At load       | Why                                           |
+| ------------------------------------ | ------------- | --------------------------------------------- |
+| `units:champion` (no such item)      | **fatal**     | both halves qualify — the case #14 exists for |
+| `{ "units:champion": 1 }` (as a key) | **fatal**     | keys are walked too                           |
+| `units:` / `units:Fire Mage`         | not diagnosed | cannot name a legal item (id grammar)         |
+| `unit:warrior` (prefix typo)         | not diagnosed | prefix names no known collection              |
+| `2024-01-01T00:00:00Z`, `https://…`  | not diagnosed | prefix names no known collection              |
+| `units:warrior_name` (i18n key)      | **fatal**     | indistinguishable from a ref                  |
+
+The undiagnosed strings reach `resolveRef()` at call time and throw `UnknownDataRefError` there. The last row is the deliberate converse cost: in untyped JSON nothing separates a ref from a string shaped like one, so a game that names a collection after another of its namespaces will hit a false positive. `validateRefs: false` is the escape hatch.
 
 ---
 
@@ -139,14 +169,19 @@ type ContentSource =
 interface ContentLoader {
     // Merges sources in order; later sources add items to earlier collections.
     // Throws ContentConflictError if same (collectionType, id) appears in two sources.
-    // Throws ContentSchemaError if a registered schema rejects an item.
-    // Throws UnknownDataRefError if validateRefs:true and a ref points nowhere.
+    // Throws ContentSchemaError if a registered schema rejects an item, or if an
+    // id violates ITEM_ID_SHAPE — that branch fires with no schema registered.
+    // Throws UnknownDataRefError if a ref points nowhere (unless validateRefs:false).
     load(sources: ContentSource[], options?: ContentLoadOptions): Promise<ContentDatabase>;
 }
 
 interface ContentLoadOptions {
     schemas?: Partial<Record<string, ZodSchema>>;
-    validateRefs?: boolean; // default false (warn only)
+    // Default TRUE — Invariant #14 requires refs validated before the tick loop,
+    // so a plain load(sources, { schemas }) checks them. Pass false only for a
+    // deliberately partial load whose refs resolve against a database this call
+    // does not build (e.g. staged base/expansion loads).
+    validateRefs?: boolean;
 }
 ```
 
@@ -158,8 +193,11 @@ const db = await createContentLoader().load(
         { type: 'directory', path: 'games/<game>/data' }, // base game
         { type: 'directory', path: 'games/<game>-expansion/data' }, // expansion
     ],
-    { schemas: { 'damage-types': DamageTypeSchema, units: UnitSchema }, validateRefs: true },
+    { schemas: { 'damage-types': DamageTypeSchema, units: UnitSchema } },
 );
+// Both sources are merged before refs are checked, so an expansion may point at
+// base-game items. A staged load — one `load()` call per source — would need
+// `validateRefs: false` on every call but the last.
 ```
 
 ---
@@ -214,7 +252,9 @@ class ContentSchemaError extends Error {
         public readonly id: string,
         cause: unknown,
     ) {
-        super(`Schema validation failed for '${collectionType}:${id}'`);
+        // "content", not "schema": also thrown for an id-grammar violation in a
+        // collection that has no registered schema. The reason is in `cause`.
+        super(`Content validation failed for '${collectionType}:${id}'`);
         this.cause = cause;
     }
 }

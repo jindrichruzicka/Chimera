@@ -7,9 +7,11 @@
 //   inline     — accepts a pre-parsed DataObject[] array (testing / programmatic)
 //
 // Invariants:
-//   #14 — failed load throws; never produces a partial DB silently
+//   #14 — schemas AND refs are validated on every load (refs by default, see
+//         ContentLoadOptions.validateRefs); a failed load throws and never
+//         produces a partial DB silently
 //   #15 — only .json files are read; executable code in data dirs is never executed
-//   #13 — returned ContentDatabase is immutable (via createContentDatabase)
+//   #13 — returned ContentDatabase is deeply immutable (via createContentDatabase)
 
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -17,7 +19,9 @@ import type { ZodType } from 'zod';
 import {
     ContentConflictError,
     ContentSchemaError,
+    ITEM_ID_SHAPE,
     UnknownDataRefError,
+    assertValidItemId,
     createContentDatabase,
     type ContentDatabase,
 } from './ContentDatabase';
@@ -48,14 +52,18 @@ export interface ContentLoadOptions {
      */
     schemas?: Partial<Record<string, ZodType>>;
     /**
-     * When `true`, every `DataRef`-shaped string value in every item is checked
+     * When enabled, every `DataRef`-shaped string value in every item is checked
      * against the final database.  A ref that points to a non-existent item
      * throws `UnknownDataRefError`.
      *
      * Ref detection: any string value of the form `"<collectionType>:<id>"`
-     * where `collectionType` is a known collection in the database.
+     * where `collectionType` is a known collection in the database and `<id>`
+     * satisfies the enforced item-id grammar (see `walkForRefs`).
      *
-     * Defaults to `false`.
+     * **Defaults to `true`** — Invariant #14 requires refs validated before the
+     * tick loop, so every production load checks them without opting in. Pass
+     * `false` only for a deliberately partial load whose refs resolve against a
+     * database this call does not build (e.g. staged base/expansion loads).
      */
     validateRefs?: boolean;
 }
@@ -70,8 +78,10 @@ export interface ContentLoader {
      * collections already introduced by earlier sources.
      *
      * @throws {ContentConflictError}  Duplicate `(collectionType, id)` across sources.
-     * @throws {ContentSchemaError}    A Zod schema rejected an item.
-     * @throws {UnknownDataRefError}   `validateRefs: true` and a ref points nowhere.
+     * @throws {ContentSchemaError}    A registered Zod schema rejected an item,
+     *   or an item id violates {@link ITEM_ID_SHAPE} — which fires even for a
+     *   collection with no registered schema.
+     * @throws {UnknownDataRefError}   A ref points nowhere (unless `validateRefs: false`).
      */
     load(sources: ContentSource[], options?: ContentLoadOptions): Promise<ContentDatabase>;
 }
@@ -108,8 +118,10 @@ export function createContentLoader(): ContentLoader {
                 })),
             );
 
-            // Optional ref-integrity check (runs after all sources are merged).
-            if (options.validateRefs === true) {
+            // Ref-integrity check (runs after all sources are merged). On by
+            // default — Invariant #14; `validateRefs: false` is the explicit
+            // opt-out for a deliberately partial load.
+            if (options.validateRefs !== false) {
                 checkRefs(db);
             }
 
@@ -125,6 +137,8 @@ export function createContentLoader(): ContentLoader {
 /**
  * Merge a flat list of items into the mutable accumulator map.
  * Throws `ContentConflictError` on duplicate `(collectionType, id)`.
+ * Throws `ContentSchemaError` when an id is missing, non-string, or violates
+ * {@link ITEM_ID_SHAPE}.
  */
 function mergeItems(
     collections: Map<string, Map<string, DataObject & Record<string, unknown>>>,
@@ -139,6 +153,14 @@ function mergeItems(
     }
 
     for (const item of items) {
+        // The property's home is `createContentDatabase` (Invariant #14's
+        // precondition), which would catch every case below. Calling the same
+        // assertion here — rather than restating the rule — buys exactly one
+        // thing: it runs BEFORE the duplicate check, so two id-less items are
+        // reported as malformed instead of as a `ContentConflictError` over a
+        // Map keyed on `undefined`. Both throws are otherwise identical.
+        assertValidItemId(collectionType, item.id);
+
         if (col.has(item.id)) {
             throw new ContentConflictError(collectionType, item.id);
         }
@@ -238,10 +260,8 @@ async function loadDirectory(
  * Walk every item in every collection and check that all `DataRef`-shaped
  * string values (`"collectionType:id"`) resolve to a known item.
  *
- * Detection: a string is treated as a DataRef candidate only when its left
- * side of the first `:` exactly matches a collection type that exists in the
- * database.  Other colon-containing strings (timestamps, URLs, etc.) are
- * silently skipped.
+ * Detection lives in {@link walkForRefs} — see it for the two conditions a
+ * string must satisfy.  Everything else (timestamps, URLs, prose) is skipped.
  *
  * @throws {UnknownDataRefError} When a ref points to a non-existent item in
  *   a known collection.
@@ -257,6 +277,23 @@ function checkRefs(db: ContentDatabase): void {
 
 /**
  * Recursively walk a plain object / array looking for DataRef-shaped strings.
+ *
+ * Every string reachable through object entries and array elements is examined
+ * — **keys** as well as values, at any depth — because a map keyed by ref is a
+ * legitimate way to author per-ref data.  Those two traversals are exactly what
+ * JSON can express, so loaded content is covered in full; a shape only an
+ * `inline` source can supply (a symbol key, a non-index property on an array, a
+ * `Map`/`Set`'s contents) is not reached.
+ *
+ * A string is a ref candidate only when **both** halves qualify: the part left
+ * of the first `:` exactly matches a known collection type, and the part right
+ * of it matches {@link ITEM_ID_SHAPE}.  Everything else — timestamps, URLs,
+ * prose — is skipped.
+ *
+ * The id half is tested against the *same* grammar `mergeItems` enforces on
+ * every item id, which is what makes the second condition sound rather than a
+ * guess: a string it rejects cannot name any item in the database, so skipping
+ * it can never skip a resolvable ref.
  */
 function walkForRefs(value: unknown, db: ContentDatabase, knownCollections: Set<string>): void {
     if (typeof value === 'string') {
@@ -265,7 +302,7 @@ function walkForRefs(value: unknown, db: ContentDatabase, knownCollections: Set<
             const collectionType = value.slice(0, colon);
             if (knownCollections.has(collectionType)) {
                 const id = value.slice(colon + 1);
-                if (!db.has(collectionType, id)) {
+                if (ITEM_ID_SHAPE.test(id) && !db.has(collectionType, id)) {
                     throw new UnknownDataRefError(value);
                 }
             }
@@ -281,7 +318,13 @@ function walkForRefs(value: unknown, db: ContentDatabase, knownCollections: Set<
     }
 
     if (value !== null && typeof value === 'object') {
-        for (const v of Object.values(value as Record<string, unknown>)) {
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+            // Keys are checked as well as values: a map-shaped field keyed by
+            // ref (`resistances: { 'damage-types:fire': 50 }`) is a first-class
+            // way to author per-ref data, and walking values alone would exempt
+            // every ref written that way from the integrity check. An ordinary
+            // field name contains no colon, so it exits at the first test.
+            walkForRefs(k, db, knownCollections);
             walkForRefs(v, db, knownCollections);
         }
     }

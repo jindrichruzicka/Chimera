@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { ContentConflictError, ContentSchemaError, UnknownDataRefError } from './ContentDatabase';
 import { createContentLoader } from './ContentLoader';
+import type { DataObject } from './DataRef';
 
 // ---------------------------------------------------------------------------
 // ContentLoader — unit and integration tests
@@ -209,16 +210,45 @@ describe('ContentLoader — schema validation', () => {
 // ─── Ref-integrity validation ─────────────────────────────────────────────────
 
 describe('ContentLoader — ref-integrity validation', () => {
-    it('validateRefs: false (default) does not throw on a dangling DataRef', async () => {
+    it('validates refs by default — a dangling DataRef rejects with no options passed', async () => {
         const loader = createContentLoader();
-        // 'player-colors:teal' does not exist — but validateRefs defaults to false
-        const db = await loader.load([
-            {
-                type: 'inline',
-                collectionType: 'abilities',
-                items: [{ id: 'taunt', requiresColor: 'player-colors:teal' }],
-            },
-        ]);
+        // Invariant #14: refs are checked before the tick loop, so the default
+        // production call — `load(sources, { schemas })` — must reject this.
+        await expect(
+            loader.load([
+                {
+                    type: 'inline',
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue' }],
+                },
+                {
+                    type: 'inline',
+                    collectionType: 'abilities',
+                    items: [{ id: 'taunt', requiresColor: 'player-colors:teal' }],
+                },
+            ]),
+        ).rejects.toThrow(UnknownDataRefError);
+    });
+
+    it('validateRefs: false explicitly opts out of the check', async () => {
+        const loader = createContentLoader();
+        // 'player-colors:teal' does not exist — the caller has declared this a
+        // deliberately partial load.
+        const db = await loader.load(
+            [
+                {
+                    type: 'inline',
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue' }],
+                },
+                {
+                    type: 'inline',
+                    collectionType: 'abilities',
+                    items: [{ id: 'taunt', requiresColor: 'player-colors:teal' }],
+                },
+            ],
+            { validateRefs: false },
+        );
         expect(db.has('abilities', 'taunt')).toBe(true);
     });
 
@@ -442,6 +472,40 @@ describe('ContentLoader — items are frozen (M7)', () => {
         const item = db.getById('player-colors', 'blue');
         expect(Object.isFrozen(item)).toBe(true);
     });
+
+    // Invariant #13 holds all the way down, over the real JSON.parse path — a
+    // shallow freeze would leave every nested object and array mutable.
+    it('nested objects and arrays of a directory-loaded item are frozen too', async () => {
+        const dir = path.join(tmpDir, 'units');
+        await fs.mkdir(dir);
+        await fs.writeFile(
+            path.join(dir, 'warrior.json'),
+            JSON.stringify({
+                id: 'warrior',
+                stats: { hp: 10, armour: { physical: 2 } },
+                attacks: [{ name: 'slash', damage: 3 }],
+            }),
+        );
+
+        const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
+        const item = db.getByIdOrThrow<
+            DataObject & {
+                stats: { hp: number; armour: { physical: number } };
+                attacks: { damage: number }[];
+            }
+        >('units', 'warrior');
+
+        expect(() => {
+            item.stats.hp = 99;
+        }).toThrow(TypeError);
+        expect(() => {
+            item.stats.armour.physical = 99;
+        }).toThrow(TypeError);
+        expect(() => {
+            item.attacks[0]!.damage = 99;
+        }).toThrow(TypeError);
+        expect(item.stats.hp).toBe(10);
+    });
 });
 
 describe('ContentLoader — schema validation on directory source', () => {
@@ -618,4 +682,187 @@ describe('ContentLoader — validateRefs false-positive prevention (H5)', () => 
             ),
         ).rejects.toThrow(UnknownDataRefError);
     });
+
+    // Refs are now checked by default (Invariant #14), so this heuristic runs
+    // over every game's content. Prose that happens to start with a collection
+    // name must not become a fatal startup error.
+    it('does not throw on prose whose prefix is a known collection ("units: 3 required")', async () => {
+        const loader = createContentLoader();
+        const db = await loader.load([
+            {
+                type: 'inline',
+                collectionType: 'units',
+                items: [{ id: 'warrior', description: 'units: 3 required' }],
+            },
+        ]);
+        expect(db.has('units', 'warrior')).toBe(true);
+    });
+
+    it('does not throw on a sentence containing a colon after a known collection name', async () => {
+        const loader = createContentLoader();
+        const db = await loader.load([
+            {
+                type: 'inline',
+                collectionType: 'units',
+                items: [{ id: 'warrior', hint: 'units:warrior and friends' }],
+            },
+        ]);
+        expect(db.has('units', 'warrior')).toBe(true);
+    });
+
+    it('still throws for a well-formed ref id that resolves nowhere', async () => {
+        const loader = createContentLoader();
+        await expect(
+            loader.load([
+                {
+                    type: 'inline',
+                    collectionType: 'units',
+                    items: [{ id: 'warrior', upgradesTo: 'units:champion' }],
+                },
+            ]),
+        ).rejects.toThrow(UnknownDataRefError);
+    });
+
+    // A ref is just as legal as an object KEY as it is as a value — a
+    // map-shaped field (`resistances: { 'damage-types:fire': 50 }`) is the
+    // natural way to author per-ref data. Walking values only would exempt
+    // every such ref from the integrity check.
+    it('throws for a dangling ref used as an object key', async () => {
+        const loader = createContentLoader();
+        await expect(
+            loader.load([
+                { type: 'inline', collectionType: 'damage-types', items: [{ id: 'physical' }] },
+                {
+                    type: 'inline',
+                    collectionType: 'units',
+                    items: [{ id: 'warrior', resistances: { 'damage-types:fire': 50 } }],
+                },
+            ]),
+        ).rejects.toThrow(UnknownDataRefError);
+    });
+
+    it('throws for a dangling ref key nested inside an array element', async () => {
+        const loader = createContentLoader();
+        await expect(
+            loader.load([
+                { type: 'inline', collectionType: 'damage-types', items: [{ id: 'physical' }] },
+                {
+                    type: 'inline',
+                    collectionType: 'units',
+                    items: [{ id: 'warrior', tiers: [{ mods: { 'damage-types:fire': 1 } }] }],
+                },
+            ]),
+        ).rejects.toThrow(UnknownDataRefError);
+    });
+
+    it('accepts a resolvable ref used as an object key', async () => {
+        const loader = createContentLoader();
+        const db = await loader.load([
+            { type: 'inline', collectionType: 'damage-types', items: [{ id: 'fire' }] },
+            {
+                type: 'inline',
+                collectionType: 'units',
+                items: [{ id: 'warrior', resistances: { 'damage-types:fire': 50 } }],
+            },
+        ]);
+        expect(db.has('units', 'warrior')).toBe(true);
+    });
+
+    // The id grammar is deliberately "any non-whitespace run", not a slug
+    // allow-list: an id may be non-ASCII, dotted, or itself contain colons
+    // (`parseRef` splits on the FIRST colon). Narrowing the grammar would make
+    // dangling refs to those perfectly legal ids silently unvalidated.
+    it.each([
+        ['non-ASCII', 'units:héro'],
+        ['colon-bearing (parseRef splits on the first colon)', 'units:tier:elite'],
+        ['dotted', 'units:v1.0.0'],
+        ['slash-bearing', 'units:squad/alpha'],
+    ])('still throws for a dangling %s id', async (_label, ref) => {
+        const loader = createContentLoader();
+        await expect(
+            loader.load([
+                { type: 'inline', collectionType: 'units', items: [{ id: 'warrior', ref }] },
+            ]),
+        ).rejects.toThrow(UnknownDataRefError);
+    });
+});
+
+// ─── Item-id grammar (the precondition ref detection relies on) ───────────────
+//
+// Ref detection can only treat `"<collection>:<id>"` as a ref when the id half
+// is distinguishable from prose. That is sound only if no legal item id can
+// look like prose — so the grammar is ENFORCED here rather than assumed. A game
+// that ids an item `"Fire Mage"` would otherwise get NO ref validation for it:
+// both a correct and a dangling `"units:Fire Mage"` would be skipped as prose.
+
+describe('ContentLoader — item id grammar (Invariant #14 precondition)', () => {
+    it.each([
+        ['whitespace', 'Fire Mage'],
+        ['a tab', 'fire\tmage'],
+        ['empty', ''],
+        ['whitespace-only', '   '],
+    ])('rejects an inline item whose id is %s', async (_label, id) => {
+        const loader = createContentLoader();
+        await expect(
+            loader.load([{ type: 'inline', collectionType: 'units', items: [{ id }] }]),
+        ).rejects.toThrow(ContentSchemaError);
+    });
+
+    // The only behaviour the merge-time check adds over the factory's: it runs
+    // BEFORE the duplicate check, so two items that both lack an id are
+    // reported as malformed rather than as a `ContentConflictError` over a Map
+    // keyed on `undefined`. Delete the merge-time check and this flips.
+    it('reports two id-less items in one source as malformed, not as a duplicate', async () => {
+        const loader = createContentLoader();
+        const err = await loader
+            .load([
+                {
+                    type: 'inline',
+                    collectionType: 'units',
+                    items: [{}, {}] as unknown as { id: string }[],
+                },
+            ])
+            .catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(ContentSchemaError);
+        expect(err).not.toBeInstanceOf(ContentConflictError);
+    });
+
+    it('rejects an item whose id is not a string', async () => {
+        const loader = createContentLoader();
+        await expect(
+            loader.load([
+                {
+                    type: 'inline',
+                    collectionType: 'units',
+                    // Untyped JSON can carry anything; the cast mirrors what a
+                    // hand-authored data file would deliver at runtime.
+                    items: [{ id: 42 } as unknown as { id: string }],
+                },
+            ]),
+        ).rejects.toThrow(ContentSchemaError);
+    });
+
+    it('rejects a directory-loaded item whose id contains whitespace', async () => {
+        const dir = path.join(tmpDir, 'units');
+        await fs.mkdir(dir);
+        await fs.writeFile(
+            path.join(dir, 'Fire Mage.json'),
+            JSON.stringify({ id: 'Fire Mage', name: 'Fire Mage' }),
+        );
+
+        await expect(
+            createContentLoader().load([{ type: 'directory', path: tmpDir }]),
+        ).rejects.toThrow(ContentSchemaError);
+    });
+
+    it.each([['warrior'], ['tier-1'], ['v1.0.0'], ['héro'], ['tier:elite'], ['squad/alpha']])(
+        'accepts the legal id %s',
+        async (id) => {
+            const db = await createContentLoader().load([
+                { type: 'inline', collectionType: 'units', items: [{ id }] },
+            ]);
+            expect(db.has('units', id)).toBe(true);
+        },
+    );
 });

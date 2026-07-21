@@ -26,6 +26,7 @@ export {
     type ContentCollection,
     ContentConflictError,
     ContentSchemaError,
+    ITEM_ID_SHAPE,
     UnknownDataRefError,
     createContentDatabase,
 } from './ContentDatabase';

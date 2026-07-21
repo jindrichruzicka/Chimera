@@ -5,7 +5,9 @@
  * directory from the runtime `gameAssetsRoot` and hands over the game's schemas.
  *
  * A load or validation failure is fatal (Invariant #14): content is verified
- * before the tick loop / lobby comes up, never silently skipped.
+ * before the tick loop / lobby comes up, never silently skipped. That covers
+ * both halves of the invariant — the game's Zod schemas and cross-collection
+ * `DataRef` integrity, which the loader checks by default.
  *
  * `toGameContent` flattens a loaded database into the plain, agnostic
  * `GameContent` shape (collection → items) that is both transmitted to the
@@ -31,7 +33,8 @@ import type { ZodType } from 'zod';
  * (i.e. one that declares no content) is absent from the map, so its
  * `PipelineContext.db` stays `undefined` (Invariant #46).
  *
- * @throws if any game's content fails to load or validate (Invariant #14).
+ * @throws if any game's content fails to load or validate — a rejected schema
+ *   or a `DataRef` pointing at a non-existent item (Invariant #14).
  */
 export async function loadAllGameContent(
     gameAssetsRoot: string,
@@ -40,10 +43,24 @@ export async function loadAllGameContent(
     const dbs = new Map<string, ContentDatabase>();
     for (const [gameId, schemas] of Object.entries(schemasByGameId)) {
         const dataDir = path.join(gameAssetsRoot, gameId, 'data');
-        const db = await createContentLoader().load([{ type: 'directory', path: dataDir }], {
-            schemas,
-        });
-        dbs.set(gameId, db);
+        try {
+            const db = await createContentLoader().load([{ type: 'directory', path: dataDir }], {
+                schemas,
+            });
+            dbs.set(gameId, db);
+        } catch (err: unknown) {
+            // The loader is game-agnostic, so its errors carry a ref string or a
+            // collection/id pair but never the game they came from. This is a
+            // fatal startup path over every registered game — attribute the
+            // failure rather than leaving the developer to guess which data tree
+            // it was, keeping the original as `cause`.
+            throw new Error(
+                `Failed to load content for game '${gameId}' from ${dataDir}: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+                { cause: err },
+            );
+        }
     }
     return dbs;
 }

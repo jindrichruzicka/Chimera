@@ -1320,9 +1320,29 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         contentDbs = await loadAllGameContent(gameAssetsRoot, contentSchemasByGameId);
     } catch (err: unknown) {
         logger.error(
-            'fatal: game content failed to load',
+            'fatal: refusing to start — game content failed to load',
             err instanceof Error ? err : new Error(String(err)),
         );
+        // The injected logger is the reporting channel (Invariant #67) — but on
+        // its own it reports nothing here. The pino sink buffers (minLength
+        // 4096) and writes to the log FILE only, and `app.exit()` emits no
+        // 'before-quit', so the entry above would die in the buffer and the
+        // binary would exit 1 leaving no record anywhere. This drains it.
+        try {
+            pinoSink.flushSync();
+        } catch {
+            // Guarded exactly as `startPeriodicFlush` does: a throw here would
+            // skip the `app.exit(1)` below and reinstate the windowless hang
+            // this block exists to prevent.
+        }
+        // Refusing means TERMINATING. The composition root launches this as
+        // `void main(...)`, so a bare throw is only an UnhandledPromiseRejection:
+        // Electron prints a warning and keeps the process alive with no window,
+        // which is a hung binary rather than the refusal Invariant #14 requires.
+        // Deliberately NO modal `showErrorBox` — it blocks until dismissed, so a
+        // non-interactive launch would hang instead of refusing. The rethrow
+        // preserves the contract for tests and any awaiting caller.
+        app.exit(1);
         throw err;
     }
 
@@ -3594,10 +3614,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         const name = err instanceof Error ? err.name : 'Error';
         const message = err instanceof Error ? err.message : String(err);
         // @chimera-review: Invariant #67 sanctioned exception (fatal startup
-        // refusal). Unlike the #27/#77 guard above, the root logger EXISTS here —
-        // but its pino sink buffers, and a refusal reason that fails to flush
-        // before the immediate app.exit(1) leaves a binary that exits 1 in total
-        // silence. stderr is synchronous.
+        // refusal). Unlike the #27/#77 guard above the root logger EXISTS here,
+        // so the buffering sink is no longer a reason to bypass it: draining it
+        // with flushSync() before the exit, as the Invariant #14 refusal does,
+        // reports through the logger just as immediately. This site is simply
+        // not migrated yet; stderr keeps it from exiting 1 in silence until it
+        // is, and the exception lapses when it does.
         console.error(
             `fatal: refusing to start — game settings registration failed (${name}): ${message}`,
         );

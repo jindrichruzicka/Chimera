@@ -23,8 +23,14 @@ interface ProjectorOptionsForTest {
 }
 
 // ── pino mock — prevent SonicBoom from opening real file descriptors ──────────
+// `flushSync` mirrors the real SonicBoom destination: a fatal startup refusal
+// calls it so the logged reason reaches the log file — the sink buffers and
+// `app.exit()` emits no 'before-quit' to drain it.
+const { fakeDest } = vi.hoisted(() => ({
+    fakeDest: { write: vi.fn<(data: string) => void>(), flushSync: vi.fn<() => void>() },
+}));
+
 vi.mock('pino', () => {
-    const fakeDest = { write: vi.fn<(data: string) => void>() };
     const destination = vi.fn(() => fakeDest);
     const pinoFn = Object.assign(vi.fn(), { destination });
     return { default: pinoFn };
@@ -4050,6 +4056,68 @@ describe('main() CHIMERA_DEV_HARNESS guard', () => {
     // covered at the unit level in startup.test.ts — this suite's electron mock
     // is packaged so the game-assets root walk resolves from the source
     // __dirname, and flipping it here would only exercise path resolution.
+});
+
+// ─── Fatal content load (Invariant #14) ─────────────────────────────────────
+
+describe('main() fatal content load (Invariant #14)', () => {
+    it('refuses and TERMINATES when a game’s content fails to load', async () => {
+        // Invariant #14 says the game "does not start with incomplete content".
+        // Refusing means TERMINATING: the composition root launches this as
+        // `void main(...)`, so a bare throw is only an UnhandledPromiseRejection
+        // — Electron prints a warning and keeps the process alive with no
+        // window, which is a hung binary, not a refusal. Same reasoning, and the
+        // same `app.exit(1)`, as the Invariant #27 startup guard below.
+        //
+        // Ref validation is on by default, so a dangling DataRef — not just
+        // malformed JSON — reaches this path, which is now the likeliest way a
+        // real game trips it.
+        vi.resetModules();
+        vi.doMock('./content/loadGameContent.js', async (importOriginal) => ({
+            ...(await importOriginal<typeof LoadGameContentModule>()),
+            loadAllGameContent: vi.fn(() =>
+                Promise.reject(
+                    new Error(
+                        "Failed to load content for game 'tactics' from /x/data: Cannot resolve DataRef 'units:champion'",
+                    ),
+                ),
+            ),
+        }));
+        appExit.mockClear();
+        fakeDest.write.mockClear();
+        fakeDest.flushSync.mockClear();
+        try {
+            const fresh = await import('./index.js');
+            await expect(fresh.main(makeTestContributions())).rejects.toThrow(/units:champion/);
+            expect(appExit).toHaveBeenCalledWith(1);
+            // The log file is the ONLY record a refusing binary leaves, and the
+            // pino sink buffers (minLength 4096) with no 'before-quit' to drain
+            // it — so the refusal must flush, and must flush BEFORE the exit.
+            // The real `app.exit()` never returns, so a flush placed after it
+            // would never run; the mocked exit does return, which is why the
+            // ordering needs its own assertion rather than a bare
+            // `toHaveBeenCalled()`.
+            // The reason itself, pinned directly rather than through the flush:
+            // `createPinoSink` opens its destination lazily on the first write,
+            // so with nothing logged the flush degrades to a no-op and a
+            // deleted `logger.error` would be caught only by that accident —
+            // which evaporates the moment anything logs earlier in `main()`.
+            expect(fakeDest.write).toHaveBeenCalledWith(
+                expect.stringMatching(/refusing to start.*game content failed to load/),
+            );
+            expect(fakeDest.flushSync).toHaveBeenCalled();
+            expect(fakeDest.flushSync.mock.invocationCallOrder[0]!).toBeLessThan(
+                appExit.mock.invocationCallOrder[0]!,
+            );
+            // FORWARD ratchet: a modal showErrorBox BLOCKS until dismissed, so a
+            // packaged binary launched non-interactively would hang instead of
+            // refusing.
+            expect(dialogShowErrorBox).not.toHaveBeenCalled();
+        } finally {
+            vi.doUnmock('./content/loadGameContent.js');
+            vi.resetModules();
+        }
+    });
 });
 
 // ─── CHIMERA_DEBUG production guard (Invariant #27) ──────────────────────────

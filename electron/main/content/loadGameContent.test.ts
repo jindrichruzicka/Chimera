@@ -3,7 +3,9 @@
  *
  * Round-trip test for the startup content loader against the real apps/ tree,
  * plus the plain-collection flattener. Exercises the game-supplied schemas
- * (a malformed colour would fail the load — Invariant #14).
+ * (a malformed colour would fail the load — Invariant #14); the other half of
+ * that invariant, cross-collection ref integrity, is covered against a synthetic
+ * assets root in `electron/main/__tests__/loadGameContent.integration.test.ts`.
  */
 
 import path from 'path';
@@ -14,12 +16,11 @@ import {
 } from '@chimera-engine/tactics/content/tacticsContent.js';
 import { loadAllGameContent, toGameContent } from './loadGameContent.js';
 
-// Repo `apps/` dir: electron/main/content → up 3 → repo root → apps (game apps
-// relocated from games/ in F63 #782).
+// Repo `apps/` dir: electron/main/content → up 3 → repo root → apps.
 const APPS_ROOT = path.resolve(__dirname, '../../..', 'apps');
 
 // The per-game schema map the host derives from the injected contributions and
-// hands to the loader (formerly the static gameContentRegistry; F64-prep #788).
+// hands to the loader.
 const TACTICS_SCHEMAS = { tactics: TACTICS_CONTENT_SCHEMAS };
 
 describe('loadAllGameContent', () => {

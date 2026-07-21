@@ -5,7 +5,7 @@ import {
     UnknownDataRefError,
     createContentDatabase,
 } from './ContentDatabase';
-import { buildRef } from './DataRef';
+import { buildRef, type DataObject } from './DataRef';
 
 // ---------------------------------------------------------------------------
 // ContentDatabase — in-memory implementation
@@ -243,6 +243,190 @@ describe('ContentDatabase immutability', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Deep immutability (invariant #13) — nested objects and arrays are frozen too
+//
+// A shallow `Object.freeze(item)` leaves every nested object and array mutable,
+// so "immutable after load" would hold exactly one level deep. Today's shipping
+// content items are flat, so these tests are the only thing standing between a
+// nested content field and a silently mutable ContentDatabase.
+// ---------------------------------------------------------------------------
+
+// Item with two levels of nesting: an object, an array of primitives, and an
+// array of objects.
+function makeNestedDb() {
+    return createContentDatabase([
+        {
+            collectionType: 'units',
+            items: [
+                {
+                    id: 'warrior',
+                    stats: { hp: 10, armour: { physical: 2 } },
+                    tags: ['melee', 'frontline'],
+                    attacks: [{ name: 'slash', damage: 3 }],
+                },
+            ],
+        },
+    ]);
+}
+
+describe('ContentDatabase deep immutability (invariant #13)', () => {
+    it('a nested object field cannot be mutated', () => {
+        const item = makeNestedDb().getByIdOrThrow<
+            DataObject & { stats: { hp: number; armour: { physical: number } } }
+        >('units', 'warrior');
+        expect(() => {
+            item.stats.hp = 99;
+        }).toThrow(TypeError);
+        expect(item.stats.hp).toBe(10);
+    });
+
+    it('a doubly-nested object field cannot be mutated', () => {
+        const item = makeNestedDb().getByIdOrThrow<
+            DataObject & { stats: { armour: { physical: number } } }
+        >('units', 'warrior');
+        expect(() => {
+            item.stats.armour.physical = 99;
+        }).toThrow(TypeError);
+        expect(item.stats.armour.physical).toBe(2);
+    });
+
+    it('a nested array cannot have an element replaced or appended', () => {
+        const item = makeNestedDb().getByIdOrThrow<DataObject & { tags: string[] }>(
+            'units',
+            'warrior',
+        );
+        expect(() => {
+            item.tags[0] = 'ranged';
+        }).toThrow(TypeError);
+        expect(() => item.tags.push('siege')).toThrow(TypeError);
+        expect(item.tags).toEqual(['melee', 'frontline']);
+    });
+
+    it('objects inside a nested array cannot be mutated', () => {
+        const item = makeNestedDb().getByIdOrThrow<
+            DataObject & { attacks: { name: string; damage: number }[] }
+        >('units', 'warrior');
+        expect(() => {
+            item.attacks[0]!.damage = 99;
+        }).toThrow(TypeError);
+        expect(item.attacks[0]!.damage).toBe(3);
+    });
+
+    it('freezes nested values of an item the caller already shallow-froze', () => {
+        // `Object.isFrozen` is not a sound visited-marker: this item is already
+        // frozen at the top level, but its array is not.
+        const preFrozen = Object.freeze({ id: 'mage', tags: ['caster'] });
+        const db = createContentDatabase([{ collectionType: 'units', items: [preFrozen] }]);
+        const item = db.getByIdOrThrow<DataObject & { tags: string[] }>('units', 'mage');
+        expect(() => {
+            item.tags[0] = 'melee';
+        }).toThrow(TypeError);
+    });
+
+    // `createContentDatabase` is documented for direct programmatic/test use, so
+    // it can be handed values JSON could never produce. Those are outside the
+    // freeze domain, but they must not blow up the load with an engine-internal
+    // TypeError that names neither the collection nor the item.
+    it('does not throw on a value outside the JSON domain (typed array)', () => {
+        const lookup = new Uint8Array([1, 2, 3]);
+        const empty = new Uint8Array();
+        const db = createContentDatabase([
+            { collectionType: 'units', items: [{ id: 'warrior', lookup, empty }] },
+        ]);
+        expect(db.has('units', 'warrior')).toBe(true);
+        expect(Object.isFrozen(db.getById('units', 'warrior'))).toBe(true);
+        // An array-buffer view is skipped outright — not frozen either. One rule
+        // for every view rather than two, and the docs say so; pinned here so
+        // they can be falsified. (`Object.freeze` throws only on a non-empty
+        // view, so the empty one proves the skip is by kind, not by luck.)
+        expect(Object.isFrozen(lookup)).toBe(false);
+        expect(Object.isFrozen(empty)).toBe(false);
+    });
+
+    // The recursion domain is JSON. These pin each branch of that decision —
+    // without them the whole plain-container check can be deleted and the suite
+    // stays green.
+    it('freezes a nested non-JSON container but does not walk it', () => {
+        const inner = { hp: 10 };
+        const nested = new Map([['a', inner]]);
+        const db = createContentDatabase([
+            { collectionType: 'units', items: [{ id: 'warrior', nested }] },
+        ]);
+
+        expect(Object.isFrozen(nested)).toBe(true);
+        // Documented limit: a Map's entries are not own enumerable properties,
+        // so freezing it does not make its contents immutable.
+        expect(Object.isFrozen(inner)).toBe(false);
+        expect(db.has('units', 'warrior')).toBe(true);
+    });
+
+    it('freezes a nested class instance but does not walk into it', () => {
+        class Vec {
+            constructor(public parts: { x: number }) {}
+        }
+        const pos = new Vec({ x: 1 });
+        createContentDatabase([{ collectionType: 'units', items: [{ id: 'warrior', pos }] }]);
+
+        expect(Object.isFrozen(pos)).toBe(true);
+        // Deliberate: a class instance is outside the JSON content contract, so
+        // the engine does not attempt deep immutability there.
+        expect(Object.isFrozen(pos.parts)).toBe(false);
+    });
+
+    it('walks a nested null-prototype object', () => {
+        const inner = { hp: 10 };
+        const bare = Object.assign(Object.create(null) as Record<string, unknown>, { inner });
+        createContentDatabase([{ collectionType: 'units', items: [{ id: 'warrior', bare }] }]);
+
+        expect(Object.isFrozen(bare)).toBe(true);
+        expect(Object.isFrozen(inner)).toBe(true);
+    });
+
+    it('terminates on a self-referential item instead of recursing forever', () => {
+        const cyclic: DataObject & Record<string, unknown> = { id: 'loop' };
+        cyclic['self'] = cyclic;
+        const db = createContentDatabase([{ collectionType: 'units', items: [cyclic] }]);
+        expect(Object.isFrozen(db.getById('units', 'loop'))).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Item-id grammar (invariant #14's precondition)
+//
+// `ContentLoader` rejects a malformed id at merge time for a well-attributed
+// error, but the grammar is a property of every ContentDatabase, not just
+// loaded ones: ref detection is only sound because no item id can look like
+// prose. Enforcing at the factory — the single funnel every construction path
+// goes through, the same reasoning as the deep freeze — keeps that true for a
+// database built directly, so a future ref check over a caller-supplied db
+// cannot silently reopen the hole.
+// ---------------------------------------------------------------------------
+
+describe('createContentDatabase item-id grammar (invariant #14)', () => {
+    it.each([
+        ['whitespace', 'Fire Mage'],
+        ['empty', ''],
+        ['non-string', 42 as unknown as string],
+    ])('rejects an item whose id is %s', (_label, id) => {
+        expect(() => createContentDatabase([{ collectionType: 'units', items: [{ id }] }])).toThrow(
+            ContentSchemaError,
+        );
+    });
+
+    it.each([['warrior'], ['tier-1'], ['héro'], ['tier:elite']])(
+        'accepts the legal id %s',
+        (id) => {
+            expect(
+                createContentDatabase([{ collectionType: 'units', items: [{ id }] }]).has(
+                    'units',
+                    id,
+                ),
+            ).toBe(true);
+        },
+    );
+});
+
+// ---------------------------------------------------------------------------
 // createContentDatabase — factory
 // ---------------------------------------------------------------------------
 
@@ -376,7 +560,7 @@ describe('ContentSchemaError', () => {
     it('has the exact §4.8 message', () => {
         const cause = new Error('bad schema');
         const err = new ContentSchemaError('player-colors', 'blue', cause);
-        expect(err.message).toBe("Schema validation failed for 'player-colors:blue'");
+        expect(err.message).toBe("Content validation failed for 'player-colors:blue'");
     });
 
     it('preserves the cause', () => {
