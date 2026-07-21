@@ -112,20 +112,6 @@ export class UnknownRendererGameError extends Error {
     }
 }
 
-/**
- * Thrown when {@link getDefaultRendererGameId} is read before any consumer app
- * has registered a default renderer game. The renderer ships no game-specific
- * code, so it has no fallback game to offer — fail loud rather than guess.
- */
-export class NoDefaultRendererGameError extends Error {
-    constructor() {
-        super(
-            'No default renderer game registered. A consumer app must register a renderer game contribution (isDefault: true) before the shell reads the default.',
-        );
-        this.name = 'NoDefaultRendererGameError';
-    }
-}
-
 /** Async factory producing a fully loaded renderer game bundle. */
 export type RendererGameLoader = () => Promise<LoadedRendererGame>;
 /** Async factory producing only a renderer game's shell bundle. */
@@ -144,8 +130,6 @@ export interface RendererGameContribution {
     readonly gameId: string;
     readonly loadGame: RendererGameLoader;
     readonly loadShell: RendererGameShellLoader;
-    /** When true, this game becomes the renderer default (lobby/menus pick it). */
-    readonly isDefault?: boolean;
 }
 
 // Mutable, module-singleton registry populated at runtime by the consumer app's
@@ -153,7 +137,6 @@ export interface RendererGameContribution {
 // itself names no game.
 const rendererGameLoaders = new Map<string, RendererGameLoader>();
 const rendererGameShellLoaders = new Map<string, RendererGameShellLoader>();
-let defaultRendererGameId: string | null = null;
 
 /**
  * Register a consumer app's renderer contribution. Called once at startup from
@@ -163,23 +146,6 @@ let defaultRendererGameId: string | null = null;
 export function registerRendererGame(contribution: RendererGameContribution): void {
     rendererGameLoaders.set(contribution.gameId, contribution.loadGame);
     rendererGameShellLoaders.set(contribution.gameId, contribution.loadShell);
-    if (contribution.isDefault === true) {
-        defaultRendererGameId = contribution.gameId;
-    }
-}
-
-/**
- * The renderer's default game id — selected by the lobby/menus when no explicit
- * `gameId` is supplied. Read at call time (not module-eval) so it resolves after
- * the consumer app has registered its contribution at startup.
- *
- * @throws {NoDefaultRendererGameError} when no default has been registered yet.
- */
-export function getDefaultRendererGameId(): string {
-    if (defaultRendererGameId === null) {
-        throw new NoDefaultRendererGameError();
-    }
-    return defaultRendererGameId;
 }
 
 /**
@@ -304,5 +270,4 @@ export function getRendererGameMenuCommand(
 export function _resetRendererGameRegistryForTest(): void {
     rendererGameLoaders.clear();
     rendererGameShellLoaders.clear();
-    defaultRendererGameId = null;
 }

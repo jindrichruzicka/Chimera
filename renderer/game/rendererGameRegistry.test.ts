@@ -16,11 +16,9 @@ import type { GameIconSet } from '../components/ui/icons/registry.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
 import {
     _resetRendererGameRegistryForTest,
-    getDefaultRendererGameId,
     getRendererGameMenuCommand,
     loadRendererGame,
     loadRendererGameShell,
-    NoDefaultRendererGameError,
     registerRendererGame,
     type GameTranslations,
     type LoadedRendererGame,
@@ -28,6 +26,7 @@ import {
     type RendererGameContribution,
     UnknownRendererGameError,
 } from './rendererGameRegistry';
+import * as registryModule from './rendererGameRegistry';
 
 const FAKE_BOARD: LoadedRendererGame['registry']['board'] = () => null;
 
@@ -57,7 +56,6 @@ function registerFake(overrides?: Partial<RendererGameContribution>): void {
         gameId: 'fake',
         loadGame: () => Promise.resolve(game),
         loadShell: () => Promise.resolve(game.shell ?? fakeShell()),
-        isDefault: true,
         ...overrides,
     });
 }
@@ -87,7 +85,6 @@ describe('rendererGameRegistry', () => {
             gameId: 'fake',
             loadGame: () => Promise.resolve(fakeGame({ shell })),
             loadShell: () => Promise.resolve(shell),
-            isDefault: true,
         });
 
         const loaded = await loadRendererGameShell('fake');
@@ -124,7 +121,6 @@ describe('rendererGameRegistry', () => {
                 gameId: 'fake',
                 loadGame: () => Promise.resolve(fakeGame({ shell })),
                 loadShell: () => Promise.resolve(shell),
-                isDefault: true,
             });
 
             await loadRendererGameShell('fake');
@@ -141,7 +137,6 @@ describe('rendererGameRegistry', () => {
                 gameId: 'fake',
                 loadGame: () => Promise.resolve(fakeGame({ shell })),
                 loadShell: () => Promise.resolve(shell),
-                isDefault: true,
             });
 
             await loadRendererGame('fake');
@@ -196,7 +191,6 @@ describe('rendererGameRegistry', () => {
                 gameId: 'fake',
                 loadGame: () => Promise.resolve(fakeGame({ shell })),
                 loadShell: () => Promise.resolve(shell),
-                isDefault: true,
             });
         }
 
@@ -269,7 +263,6 @@ describe('rendererGameRegistry', () => {
                 gameId: 'fake',
                 loadGame: () => Promise.resolve(fakeGame({ shell })),
                 loadShell: () => Promise.resolve(shell),
-                isDefault: true,
             });
         }
 
@@ -358,7 +351,6 @@ describe('rendererGameRegistry', () => {
                 gameId: 'fake',
                 loadGame: () => Promise.resolve(fakeGame({ shell })),
                 loadShell: () => Promise.resolve(shell),
-                isDefault: true,
             });
 
             await loadRendererGame('fake');
@@ -399,7 +391,6 @@ describe('rendererGameRegistry', () => {
                 gameId: 'fake',
                 loadGame: () => Promise.resolve(fakeGame({ shell })),
                 loadShell: () => Promise.resolve(shell),
-                isDefault: true,
             });
         }
 
@@ -451,7 +442,6 @@ describe('rendererGameRegistry', () => {
                 gameId: 'fake',
                 loadGame: () => Promise.resolve(fakeGame({ shell })),
                 loadShell: () => Promise.resolve(shell),
-                isDefault: true,
             });
 
             await loadRendererGame('fake');
@@ -487,22 +477,16 @@ describe('rendererGameRegistry', () => {
         await expect(loadRendererGameShell('fake')).rejects.toThrow(UnknownRendererGameError);
     });
 
-    describe('getDefaultRendererGameId', () => {
-        it('returns the id of the contribution registered as default', () => {
-            registerFake({ gameId: 'fake', isDefault: true });
+    it('exposes no way to ask the registry which game to use', () => {
+        // The engine names and derives no game: every lookup takes an explicit
+        // gameId supplied from outside (the URL). A "which game am I?" query
+        // would reintroduce an implied default — the seam this registry removed.
+        registerFake({ gameId: 'fake' });
 
-            expect(getDefaultRendererGameId()).toBe('fake');
-        });
+        const registryApi = Object.keys(registryModule);
 
-        it('throws NoDefaultRendererGameError when no default is registered', () => {
-            registerFake({ isDefault: false });
-
-            expect(() => getDefaultRendererGameId()).toThrow(NoDefaultRendererGameError);
-        });
-
-        it('throws NoDefaultRendererGameError before any game is registered', () => {
-            expect(() => getDefaultRendererGameId()).toThrow(NoDefaultRendererGameError);
-        });
+        expect(registryApi).not.toContain('getRegisteredRendererGameId');
+        expect(registryApi).not.toContain('getDefaultRendererGameId');
     });
 
     describe('LoadedRendererGame.shell type contract (#617)', () => {
@@ -579,7 +563,7 @@ describe('rendererGameRegistry', () => {
             expectTypeOf<Commands[GameMenuCommandId]>().toEqualTypeOf<(() => void) | undefined>();
         });
 
-        it('RendererGameContribution carries the loaders and an optional default flag', () => {
+        it('RendererGameContribution carries the id and the two loaders', () => {
             expectTypeOf<RendererGameContribution['gameId']>().toEqualTypeOf<string>();
             expectTypeOf<RendererGameContribution['loadGame']>().toEqualTypeOf<
                 () => Promise<LoadedRendererGame>
@@ -587,8 +571,8 @@ describe('rendererGameRegistry', () => {
             expectTypeOf<RendererGameContribution['loadShell']>().toEqualTypeOf<
                 () => Promise<LoadedRendererGameShell>
             >();
-            expectTypeOf<RendererGameContribution['isDefault']>().toEqualTypeOf<
-                boolean | undefined
+            expectTypeOf<keyof RendererGameContribution>().toEqualTypeOf<
+                'gameId' | 'loadGame' | 'loadShell'
             >();
         });
     });

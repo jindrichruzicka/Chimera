@@ -3,15 +3,16 @@
 // renderer/shell/useActiveShellGameId.ts
 //
 // Resolves the active shell game id for renderer-wide providers (i18n, icons):
-// the URL `?gameId=` (present on the menu/settings routes) wins everywhere,
-// falling back to the store's `activeGameId` (set on lobby/game entry) — EXCEPT
-// on the lobby route. The lobby is the URL-context-only screen: hosting from
-// the engine-default shell creates a session whose gameId is merely the
-// registry default, and that id alone must not pull the game's branding (token
-// overrides, translations, icons) into the engine-default lobby. Every other
-// route keeps the session fallback — a direct-game boot lands on `/game` or
-// `/settings` with a bare URL and still needs its game's translations and
-// branding. `null` ⇒ no game context.
+// the URL `?gameId=` wins everywhere, falling back to the store's `activeGameId`
+// (set on lobby/game entry) so a direct-game boot that lands bare on `/game` or
+// `/settings` still gets its game's translations and branding. `null` ⇒ no game
+// context at all.
+//
+// EXCEPT on the lobby, which is URL-context-only. A session can be established
+// with no `?gameId=` in the URL (Join needs none — the host's response carries
+// the game), and that session's id alone must NOT pull the game's branding into
+// an engine-default lobby. The branding a screen shows has to follow the context
+// its URL declares, or the engine-default lobby silently becomes a game's.
 //
 // The URL is read from `window.location.search` in an effect keyed on the
 // pathname (re-read on every navigation), NOT via `useSearchParams()`: that hook

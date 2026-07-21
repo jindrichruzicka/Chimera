@@ -18,6 +18,13 @@ vi.mock('../state/saveStoreBootstrap', () => ({
     bootstrapSaveStore: vi.fn(),
 }));
 
+// The active shell game id (URL `?gameId=` ?? live session) — the ONLY source of
+// game context. Mocked so each test states the context explicitly.
+let mockActiveShellGameId: string | null = null;
+vi.mock('../shell/useActiveShellGameId', () => ({
+    useActiveShellGameId: () => mockActiveShellGameId,
+}));
+
 import { bootstrapSaveStore } from '../state/saveStoreBootstrap';
 import { SaveStoreBootstrap } from './SaveStoreBootstrap';
 
@@ -32,6 +39,8 @@ beforeEach(() => {
     document.body.appendChild(container);
     root = createRoot(container);
     mounted = true;
+    // Default to a game context present; the no-context case sets this to null.
+    mockActiveShellGameId = 'some-game';
     bootstrapSaveStoreMock.mockReset();
 });
 
@@ -53,30 +62,35 @@ describe('SaveStoreBootstrap', () => {
         expect(bootstrapSaveStoreMock).not.toHaveBeenCalled();
     });
 
-    it('invokes bootstrapSaveStore with the saves bridge and the default gameId', () => {
+    it('names NO game when there is no game context — the engine invents none', () => {
+        // Regression guard: this component used to default the id to the literal
+        // 'tactics', so the game-agnostic engine core named a concrete game and
+        // fetched its saves on every route, including a bare `/main-menu`.
+        bootstrapSaveStoreMock.mockReturnValue(vi.fn());
+        const saves = { list: vi.fn(), onSlotUpdate: vi.fn(), onRestoreStatus: vi.fn() };
+        (globalThis as { __chimera?: unknown }).__chimera = { saves };
+        mockActiveShellGameId = null;
+
+        act(() => {
+            root.render(<SaveStoreBootstrap />);
+        });
+
+        expect(bootstrapSaveStoreMock).not.toHaveBeenCalled();
+    });
+
+    it('bootstraps with the active shell game id when a game context exists', () => {
         const unsubscribe = vi.fn();
         bootstrapSaveStoreMock.mockReturnValue(unsubscribe);
         const saves = { list: vi.fn(), onSlotUpdate: vi.fn(), onRestoreStatus: vi.fn() };
         (globalThis as { __chimera?: unknown }).__chimera = { saves };
+        mockActiveShellGameId = 'some-game';
 
         act(() => {
             root.render(<SaveStoreBootstrap />);
         });
 
         expect(bootstrapSaveStoreMock).toHaveBeenCalledTimes(1);
-        expect(bootstrapSaveStoreMock).toHaveBeenCalledWith(saves, 'tactics');
-    });
-
-    it('passes the activeGameId prop through to bootstrapSaveStore', () => {
-        bootstrapSaveStoreMock.mockReturnValue(vi.fn());
-        const saves = { list: vi.fn(), onSlotUpdate: vi.fn(), onRestoreStatus: vi.fn() };
-        (globalThis as { __chimera?: unknown }).__chimera = { saves };
-
-        act(() => {
-            root.render(<SaveStoreBootstrap activeGameId="custom-game" />);
-        });
-
-        expect(bootstrapSaveStoreMock).toHaveBeenCalledWith(saves, 'custom-game');
+        expect(bootstrapSaveStoreMock).toHaveBeenCalledWith(saves, 'some-game');
     });
 
     it('calls the unsubscribe returned by bootstrapSaveStore on unmount', () => {

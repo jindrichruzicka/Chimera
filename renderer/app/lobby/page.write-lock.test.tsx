@@ -17,7 +17,6 @@ vi.mock('next/navigation', () => ({
 // an empty shell so these write-lock tests exercise the engine-default panel and
 // never trigger a real `games/*` dynamic import.
 vi.mock('../../game/rendererGameRegistry', () => ({
-    getDefaultRendererGameId: () => 'tactics',
     loadRendererGameShell: () => Promise.resolve({}),
 }));
 
@@ -104,6 +103,9 @@ function renderLobbyPageElement(): React.ReactElement {
 
 describe('LobbyPage write lock', () => {
     beforeEach(() => {
+        // The URL a real launch produces: `?gameId=` always arrives externally,
+        // and hosting needs it (the engine picks no game).
+        window.history.replaceState({}, '', '/lobby?gameId=tactics');
         mockLobbyState = null;
         host.mockReset();
         join.mockReset();

@@ -1,20 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import {
-    getDefaultRendererGameId,
-    loadRendererGame,
-    loadRendererGameShell,
-} from '@chimera-engine/renderer/game';
+import { loadRendererGame, loadRendererGameShell } from '@chimera-engine/renderer/game';
 import { tacticsRendererContribution } from './register';
 
 describe('tactics renderer composition root', () => {
-    it('registers tactics as the default renderer game on import', () => {
-        expect(getDefaultRendererGameId()).toBe('tactics');
-    });
-
-    it('exposes a contribution flagged as the default', () => {
+    it('exposes a contribution for tactics', () => {
         expect(tacticsRendererContribution.gameId).toBe('tactics');
-        expect(tacticsRendererContribution.isDefault).toBe(true);
     });
 
     it('wires the registry so the tactics bundle resolves through the seam', async () => {

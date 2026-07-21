@@ -60,19 +60,27 @@ describe('useActiveShellGameId', () => {
         expect(screen.getByTestId('game-id').textContent).toBe('demo');
     });
 
-    it('ignores the store activeGameId on the bare lobby (no default-game branding)', () => {
-        // An active lobby sets activeGameId, but a bare /lobby is the
-        // engine-default shell — the hosted game's id alone must not pull the
-        // game's branding (tokens/i18n/icons) into it.
+    it('drops the session fallback on a bare lobby — branding follows the URL alone', () => {
+        // A session can exist with no `?gameId=` (Join needs none), and that id
+        // must not brand an engine-default lobby: no game translations, icons,
+        // token overrides or cursor may reach a screen with no declared context.
         useSettingsStore.setState({ activeGameId: 'demo', settings: {} });
         renderAt('/lobby', '');
         expect(screen.getByTestId('game-id').textContent).toBe('null');
     });
 
-    it('ignores the store activeGameId on the lobby with a trailing slash (static export)', () => {
+    it('drops the session fallback on the lobby with a trailing slash (static export)', () => {
         useSettingsStore.setState({ activeGameId: 'demo', settings: {} });
         renderAt('/lobby/', '');
         expect(screen.getByTestId('game-id').textContent).toBe('null');
+    });
+
+    it('keeps the session fallback on non-lobby routes (direct-game boot)', () => {
+        // `/game` and `/settings` legitimately run bare after a direct boot and
+        // still need the in-play game's translations and branding.
+        useSettingsStore.setState({ activeGameId: 'demo', settings: {} });
+        renderAt('/game', '');
+        expect(screen.getByTestId('game-id').textContent).toBe('demo');
     });
 
     it('resolves null with no URL context and no store context', () => {

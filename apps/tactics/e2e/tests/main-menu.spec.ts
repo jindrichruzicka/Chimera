@@ -19,6 +19,9 @@ const MAIN_MENU_QUIT_OBSERVED_KEY = '__chimeraMainMenuQuitObserved';
 test.describe('Main Menu', () => {
     test.beforeEach(async ({ mainWindow }) => {
         const mainMenu = new MainMenuPage(mainWindow);
+        // Deliberately NO `?gameId=`: this spec covers the engine's own default
+        // main menu (Play / Settings / Quit). With no game context the engine
+        // must stay game-agnostic — nothing from a game may reach this screen.
         await mainMenu.goto();
     });
 
@@ -31,6 +34,35 @@ test.describe('Main Menu', () => {
         await mainMenu.openComponentGallery();
 
         await expect(mainWindow).toHaveURL(/\/component-gallery/);
+    });
+
+    test('the game-less menu is genuinely game-free — engine tokens and backdrop', async ({
+        mainWindow,
+    }) => {
+        // The button labels alone cannot catch a game bleeding onto this screen:
+        // a game's `:root` token override is injected by a CSS import with no
+        // teardown, so it would theme the engine-default menu while every label
+        // assertion still passed. Pin the engine's own token values instead.
+        // The e2e tsconfig carries no DOM lib, so reach the browser globals
+        // through a narrow cast (the same pattern as main-menu-custom.spec.ts).
+        const probe = await mainWindow.evaluate(() => {
+            const browser = globalThis as unknown as {
+                document: { documentElement: unknown };
+                getComputedStyle(element: unknown): { getPropertyValue(name: string): string };
+            };
+            const root = browser.getComputedStyle(browser.document.documentElement);
+            return {
+                accent: root.getPropertyValue('--ch-color-accent').trim(),
+                backdropBlur: root.getPropertyValue('--ch-overlay-backdrop-blur').trim(),
+            };
+        });
+
+        // renderer/styles/tokens.css — the engine's neutral zinc chrome.
+        expect(probe.accent.toLowerCase()).toBe('#3f3f46');
+        expect(probe.backdropBlur).toBe('0');
+
+        const background = mainWindow.getByTestId('shell-background');
+        await expect(background).toHaveAttribute('data-shell-background-kind', 'engine-default');
     });
 
     test('Play button navigates to /lobby', async ({ mainWindow }) => {

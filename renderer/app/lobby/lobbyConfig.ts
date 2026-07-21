@@ -1,9 +1,15 @@
-import { getDefaultRendererGameId } from '../../game/rendererGameRegistry';
+import { resolveShellGameId } from '../../shell/resolveMainMenuGameId';
 import { themeId as makeThemeId } from '../../theme/types';
 import type { ThemeId } from '../../theme/types';
 
 export interface LobbyConfig {
-    readonly gameId: string;
+    /**
+     * The game this lobby hosts for, read from `?gameId=` alone. The engine names
+     * and derives no game: a bare URL yields `null`, never a fallback pick from
+     * the registry. `null` ⇒ no game context, so hosting is unavailable (joining
+     * still is — the host's response carries the game).
+     */
+    readonly gameId: string | null;
     readonly maxPlayers: number;
     readonly themeId?: ThemeId;
 }
@@ -14,13 +20,13 @@ const MAX_MAX_PLAYERS = 16;
 
 export function getDefaultLobbyConfig(): LobbyConfig {
     return {
-        gameId: getDefaultRendererGameId(),
+        gameId: null,
         maxPlayers: DEFAULT_MAX_PLAYERS,
     };
 }
 
 export function parseLobbyConfig(searchParams: URLSearchParams): LobbyConfig {
-    const gameId = searchParams.get('gameId') ?? getDefaultRendererGameId();
+    const gameId = resolveShellGameId(searchParams);
 
     const rawMaxPlayers = searchParams.get('maxPlayers');
     const hasValidInteger = rawMaxPlayers !== null && /^-?\d+$/.test(rawMaxPlayers.trim());

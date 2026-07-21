@@ -307,6 +307,23 @@ describe('ReplaysPage', () => {
         expect(push).toHaveBeenCalledWith('/main-menu');
     });
 
+    it('lists no replays and names no game when the URL has no gameId', async () => {
+        // Regression guard: the page used to fall back to the literal 'tactics',
+        // so a game-less URL queried a concrete game's replays. With no game
+        // context there is nothing to list — the engine invents no game.
+        window.history.replaceState({}, '', '/replays');
+        const list = vi.fn(() => Promise.resolve([makeItem()]));
+        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_ITEM]));
+        installBridge({ list, perspectiveList });
+
+        renderPage();
+
+        await screen.findByTestId('replays-close-btn');
+
+        expect(list).not.toHaveBeenCalled();
+        expect(perspectiveList).not.toHaveBeenCalled();
+    });
+
     it('renders a delete button on every row of both kinds', async () => {
         installBridge({
             list: vi.fn(() => Promise.resolve([makeItem()])),

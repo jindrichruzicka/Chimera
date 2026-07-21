@@ -234,11 +234,20 @@ OWN seat's **player attributes** (`LobbyPlayerEntry.attributes`, e.g. unit colou
 including how the agreed configuration becomes `snapshot.setup` — lives in §4.37.12 below and the
 [Customizable Lobby Contract](customizable-lobby-contract.md).
 
-Lobby URLs that omit an explicit `gameId` stay on the engine-default shell background path, even
-when `LobbyConfig` defaults to a known game for host/join requests. This prevents the lobby route
-from importing the default game's global token overrides or remounting the shell background during
-plain `/main-menu` → `/lobby` navigation. Lobby URLs that provide an explicit `themeId` without an
-explicit `gameId` follow the same engine-default shell background path.
+Game context reaches the renderer **only** as an external `?gameId=` — the launcher stamps it
+(`buildRendererGameLaunchUrl`) and `withShellGameId` carries it across in-app navigation. The engine
+never names, stores, or derives a game of its own, so no route may fall back to "the registered
+game": a URL without `?gameId=` genuinely has no game context. Every shell route resolves it through
+the one reader, `resolveShellGameId`, and renders its engine defaults when the answer is `null`.
+
+For the lobby that means a single id — the URL's — drives both the host request and the shell
+branding, so a `LobbyScreen` can never disagree with the game being hosted. A game-provided
+`LobbyScreen` renders when the active session's `gameId` matches it; an explicit `?gameId=` naming a
+different game than the session hosts falls back to the engine-default panel. With no `gameId` at
+all there is nothing to host, so the `Host` action is disabled — joining stays available because the
+host's response carries the game. This is distinct from the engine defaults a game opts into by
+contributing no shell (a fresh `create-chimera-game` scaffold): there the game context is present and
+the engine simply supplies the default menu, settings, lobby, and background.
 
 ---
 

@@ -16,14 +16,12 @@ import { load__GamePascal__RendererGame, load__GamePascal__RendererGameShell } f
 
 /**
  * __Game Title__'s renderer-side contribution. Exported for the composition-root
- * test; registered into the host below. `isDefault: true` makes it the renderer's
- * default game (the lobby/menus pick it).
+ * test; registered into the host below.
  */
 export const __gameCamel__RendererContribution: RendererGameContribution = {
     gameId: __GAME_CONSTANT___GAME_ID,
     loadGame: load__GamePascal__RendererGame,
     loadShell: load__GamePascal__RendererGameShell,
-    isDefault: true,
 };
 
 registerRendererGame(__gameCamel__RendererContribution);

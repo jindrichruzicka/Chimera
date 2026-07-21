@@ -55,7 +55,6 @@ let mockStartGame = vi.fn(async (): Promise<void> => undefined);
 let mockLobbyShell: Partial<LoadedRendererGameShell> = {};
 
 vi.mock('../../game/rendererGameRegistry', () => ({
-    getDefaultRendererGameId: () => 'tactics',
     loadRendererGameShell: () => Promise.resolve(mockLobbyShell),
 }));
 
@@ -174,9 +173,11 @@ describe('LobbyPage pending actions', () => {
         mockLobbyState = null;
         mockPush.mockReset();
         mockStartGame = vi.fn(async () => undefined);
-        // jsdom location persists across tests in a file; start each from a clean,
-        // gameId-less URL so navigation that now reads `?gameId=` is deterministic.
-        window.history.replaceState({}, '', '/lobby');
+        // jsdom location persists across tests in a file; reset each to the URL a
+        // real launch produces — `?gameId=` is always supplied externally, and
+        // hosting needs it (the engine picks no game). Tests that exercise the
+        // no-game-context state override this explicitly.
+        window.history.replaceState({}, '', '/lobby?gameId=tactics');
 
         Object.defineProperty(window, '__chimera', {
             value: {
@@ -958,17 +959,25 @@ describe('LobbyPage game-provided lobby screen', () => {
         expect(screen.queryByTestId('stub-lobby-screen')).toBeNull();
     });
 
-    it('keeps the engine-default panel on a bare URL — no default-game shell fallback', async () => {
-        // The registry would deliver a LobbyScreen for the hosted game, but the
-        // URL carries no explicit ?gameId= (the engine-default shell context),
-        // so the lobby must stay engine-branded — mirroring the main menu's
-        // "shell override resolves ONLY from ?gameId=" rule.
+    it('keeps the engine-default panel on a bare URL — no game context to brand from', async () => {
+        // The registry would deliver a LobbyScreen, but game context arrives ONLY
+        // as an external `?gameId=`; the engine derives none. With no context the
+        // lobby stays engine-default rather than guessing a game.
         window.history.pushState({}, '', '/lobby');
 
         renderLobbyPage();
 
         expect(await screen.findByTestId('active-lobby-panel')).toBeTruthy();
         expect(screen.queryByTestId('stub-lobby-screen')).toBeNull();
+    });
+
+    it('disables hosting with no game context — the engine picks no game', async () => {
+        window.history.pushState({}, '', '/lobby');
+        mockLobbyState = null;
+
+        renderLobbyPage();
+
+        expect(await screen.findByTestId('host-lobby')).toBeDisabled();
     });
 
     it('keeps the engine-default panel when the explicit gameId does not match the lobby game', async () => {

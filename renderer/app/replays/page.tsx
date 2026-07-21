@@ -177,11 +177,13 @@ export default function ReplaysPage(): React.ReactElement {
     const router = useRouter();
     // Read at render time (not in an effect), so guard the static-prerender pass
     // where `window` is absent — the real query string is read on the client.
+    // Replays are game-scoped and the engine names no game, so a URL with no
+    // `?gameId=` has nothing to list rather than a game to fall back on.
     const gameId = React.useMemo(
         () =>
             resolveShellGameId(
                 new URLSearchParams(typeof window !== 'undefined' ? window.location.search : ''),
-            ) ?? 'tactics',
+            ),
         [],
     );
     const [state, setState] = React.useState<LoadState>({ status: 'loading' });
@@ -199,12 +201,17 @@ export default function ReplaysPage(): React.ReactElement {
     // empty and the on-disk files are left untouched.
     const fetchReplays = React.useCallback(
         () =>
-            Promise.all([
-                showDeterministic
-                    ? replayApi.list(gameId)
-                    : Promise.resolve([] as readonly ReplayListItem[]),
-                replayApi.perspective.list(gameId),
-            ]),
+            gameId === null
+                ? Promise.resolve([[], []] as [
+                      readonly ReplayListItem[],
+                      readonly ReplayListItem[],
+                  ])
+                : Promise.all([
+                      showDeterministic
+                          ? replayApi.list(gameId)
+                          : Promise.resolve([] as readonly ReplayListItem[]),
+                      replayApi.perspective.list(gameId),
+                  ]),
         [replayApi, gameId, showDeterministic],
     );
 
@@ -258,23 +265,19 @@ export default function ReplaysPage(): React.ReactElement {
             // Trailing slash matches next.config `trailingSlash: true`. The
             // player reads `?path=`/`?kind=` reactively via `useSearchParams`,
             // so the query survives this soft navigation. Carry the active
-            // `?gameId=` from the URL onto the player route (resolved fresh, not the
-            // page's 'tactics' fallback) so leaving the replay keeps resolving the
-            // game's shell/menu instead of dropping to the engine default.
+            // `?gameId=` onto the player route so leaving the replay keeps
+            // resolving the game's shell/menu instead of dropping to the default.
             const target = `/replays/player/?path=${encodeURIComponent(path)}&kind=perspective`;
-            const shellGameId = resolveShellGameId(new URLSearchParams(window.location.search));
-            router.push(withShellGameId(target, shellGameId));
+            router.push(withShellGameId(target, gameId));
         },
-        [router],
+        [router, gameId],
     );
 
     const handleClose = React.useCallback(() => {
-        // Return to the main menu, carrying the active `?gameId=` from the URL
-        // (resolved fresh, nullable) so we don't fabricate the page's 'tactics'
-        // fallback — main-menu deliberately has no default-game fallback.
-        const shellGameId = resolveShellGameId(new URLSearchParams(window.location.search));
-        router.push(withShellGameId('/main-menu', shellGameId));
-    }, [router]);
+        // Return to the main menu carrying the active `?gameId=`; a game-less URL
+        // stays game-less, so the menu shows the engine default.
+        router.push(withShellGameId('/main-menu', gameId));
+    }, [router, gameId]);
 
     const handleRequestDelete = React.useCallback((path: string, kind: ReplayKind) => {
         setPendingDelete({ path, kind });

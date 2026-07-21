@@ -1,33 +1,27 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-    _resetRendererGameRegistryForTest,
-    registerRendererGame,
-} from '../../game/rendererGameRegistry';
-import { parseLobbyConfig } from './lobbyConfig';
+import { describe, expect, it } from 'vitest';
+import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 
 describe('parseLobbyConfig', () => {
-    beforeEach(() => {
-        _resetRendererGameRegistryForTest();
-        registerRendererGame({
-            gameId: 'tactics',
-            loadGame: () => Promise.reject(new Error('not loaded in lobbyConfig test')),
-            loadShell: () => Promise.reject(new Error('not loaded in lobbyConfig test')),
-            isDefault: true,
-        });
-    });
-
-    afterEach(() => {
-        _resetRendererGameRegistryForTest();
-    });
-
-    it('uses defaults when params are missing', () => {
+    it('resolves a null gameId when the param is missing — the engine picks no game', () => {
         const config = parseLobbyConfig(new URLSearchParams(''));
 
         expect(config).toEqual({
-            gameId: 'tactics',
+            gameId: null,
             maxPlayers: 4,
             themeId: undefined,
         });
+    });
+
+    it('resolves a null gameId for a blank/whitespace param', () => {
+        expect(parseLobbyConfig(new URLSearchParams('gameId=')).gameId).toBeNull();
+        expect(parseLobbyConfig(new URLSearchParams('gameId=%20%20')).gameId).toBeNull();
+    });
+
+    it('never consults the renderer game registry for a fallback', () => {
+        // No game is registered here at all. A registry-derived default would
+        // throw or invent an id; the URL is the only source of game context.
+        expect(() => parseLobbyConfig(new URLSearchParams(''))).not.toThrow();
+        expect(getDefaultLobbyConfig().gameId).toBeNull();
     });
 
     it('uses provided gameId and maxPlayers when valid', () => {

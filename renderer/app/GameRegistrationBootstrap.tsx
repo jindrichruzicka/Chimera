@@ -11,7 +11,7 @@
 // `registerRendererGame(...)`. The import lives at module scope here, and the
 // component is a `'use client'` module mounted at the root of `AppShell`, so the
 // registration is evaluated as the client bundle loads — before any page effect
-// reads the registry via `loadRendererGame`/`getDefaultRendererGameId`.
+// reads the registry via `loadRendererGame`/`loadRendererGameShell`.
 //
 // It MUST live in a `'use client'` module: `layout.tsx`/`AppShell.tsx` are Server
 // Components whose module side effects are stripped from the client bundle, where

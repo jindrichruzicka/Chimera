@@ -123,7 +123,8 @@ The lobby screen uses two small renderer-local helpers to keep component code ty
 
 Rules enforced by `parseLobbyConfig`:
 
-- `gameId` defaults to the configured default game's id when absent.
+- `gameId` comes from `?gameId=` alone and is `null` when absent — the engine derives no game
+  (a `null` `gameId` disables hosting; joining is unaffected).
 - `maxPlayers` accepts only integer strings.
 - Invalid values fall back to `4`.
 - Final `maxPlayers` is clamped to `[2, 16]`.

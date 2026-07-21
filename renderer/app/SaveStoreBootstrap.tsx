@@ -16,28 +16,21 @@
 
 import { useEffect } from 'react';
 import { bootstrapSaveStore } from '../state/saveStoreBootstrap';
+import { useActiveShellGameId } from '../shell/useActiveShellGameId';
 import type { SavesAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 
 /**
- * Default game identifier used by the initial `list()` fetch when no
- * route-specific override is supplied. Only `'tactics'` is registered so
- * far; later this can route through a shared "active game" store.
+ * Save slots are game-scoped, so this bootstrap needs a concrete game to list
+ * for. It takes that from {@link useActiveShellGameId} — the URL's `?gameId=`,
+ * falling back to the live session — because the engine names and derives no
+ * game of its own. With no game context there is nothing to list, so the
+ * subscriptions stay unwired until a game is actually in play.
  */
-const DEFAULT_ACTIVE_GAME_ID = 'tactics';
+export function SaveStoreBootstrap(): null {
+    const activeGameId = useActiveShellGameId();
 
-export interface SaveStoreBootstrapProps {
-    /**
-     * Game identifier passed to `bootstrapSaveStore`. Defaults to
-     * `'tactics'` so the root layout can mount this component without
-     * threading the active game through props.
-     */
-    readonly activeGameId?: string;
-}
-
-export function SaveStoreBootstrap({
-    activeGameId = DEFAULT_ACTIVE_GAME_ID,
-}: SaveStoreBootstrapProps = {}): null {
     useEffect(() => {
+        if (activeGameId === null) return;
         const chimera = (globalThis as { __chimera?: { saves?: SavesAPI } }).__chimera;
         if (!chimera?.saves) return;
         const unsubscribe = bootstrapSaveStore(chimera.saves, activeGameId);

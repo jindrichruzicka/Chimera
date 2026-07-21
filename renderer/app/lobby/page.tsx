@@ -14,7 +14,7 @@ import { LOBBY_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import { loadRendererGameShell } from '../../game/rendererGameRegistry';
-import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
+import { withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 import { useGameContent } from '../../state/useGameContent';
@@ -84,9 +84,6 @@ export default function LobbyPage() {
     const [pendingAction, setPendingAction] = useState<PendingAction>(null);
     const [error, setError] = useState<string | null>(null);
     const [lobbyConfig, setLobbyConfig] = useState(getDefaultLobbyConfig);
-    // Explicit shell game context from `?gameId=` — unlike lobbyConfig.gameId it
-    // has NO registry-default fallback, mirroring the main menu's rule.
-    const [shellGameId, setShellGameId] = useState<string | null>(null);
     const isMountedRef = useRef(true);
 
     const gameId = lobbyConfig.gameId;
@@ -98,15 +95,10 @@ export default function LobbyPage() {
     const previousLobbyStateRef = useRef(lobbyState);
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
 
-    // A game-branded lobby (LobbyScreen + its content) renders only in that
-    // game's explicit shell context: the URL's `?gameId=` must name the game the
-    // active lobby actually hosts. A bare URL is the engine-default shell — the
-    // hosted game's registry-default id alone must NOT pull in its branding
-    // (shell overrides resolve ONLY from `?gameId=`, no default-game fallback).
-    const activeShellGameId =
-        lobbyState !== null && shellGameId !== null && lobbyState.info.gameId === shellGameId
-            ? shellGameId
-            : null;
+    // A game-branded lobby (LobbyScreen + its content) renders when the active
+    // session hosts the game this page's URL names — the same id `handleHost`
+    // sends, so the branding can never disagree with the game being hosted.
+    const activeShellGameId = gameId !== null && lobbyState?.info.gameId === gameId ? gameId : null;
 
     // Load the active game's shell so a game-provided LobbyScreen can replace the
     // engine default. Keyed on gameId so it only reloads when the game changes.
@@ -133,9 +125,7 @@ export default function LobbyPage() {
     // Read URL-driven lobby options after mount to avoid hydration drift.
     useEffect(() => {
         isMountedRef.current = true;
-        const searchParams = new URLSearchParams(window.location.search);
-        setLobbyConfig(parseLobbyConfig(searchParams));
-        setShellGameId(resolveShellGameId(searchParams));
+        setLobbyConfig(parseLobbyConfig(new URLSearchParams(window.location.search)));
 
         return () => {
             isMountedRef.current = false;
@@ -150,6 +140,13 @@ export default function LobbyPage() {
     }, []);
 
     const handleHost = async () => {
+        // Hosting names the game to run; the engine never picks one, so with no
+        // `?gameId=` context there is nothing to host. The Host action is disabled
+        // in that state — this guard keeps the invariant at the call site too.
+        if (gameId === null) {
+            return;
+        }
+
         try {
             setPendingAction('hosting');
             setError(null);
@@ -231,9 +228,9 @@ export default function LobbyPage() {
 
     const handleClose = (): void => {
         // menu ↔ lobby are both UI screens — no fade between them (the fade marks
-        // entering/leaving the game scene, not this hop).
-        const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
-        router.push(withShellGameId('/main-menu', explicitGameId));
+        // entering/leaving the game scene, not this hop). `gameId` is the URL's
+        // own value, so carrying it back preserves the context we arrived with.
+        router.push(withShellGameId('/main-menu', gameId));
     };
 
     const handleModalClose = (): void => {
@@ -368,7 +365,9 @@ export default function LobbyPage() {
                   variant: 'primary',
                   testId: 'host-lobby',
                   dismiss: false,
-                  disabled: pendingAction !== null,
+                  // No `?gameId=` context ⇒ no game to host (the engine picks
+                  // none). Joining stays available: the host's response names it.
+                  disabled: pendingAction !== null || gameId === null,
                   onClick: () => {
                       void handleHost();
                   },

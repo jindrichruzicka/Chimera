@@ -24,7 +24,6 @@ export const tacticsRendererContribution: RendererGameContribution = {
     gameId: TACTICS_GAME_ID,
     loadGame: loadTacticsRendererGame,
     loadShell: loadTacticsRendererGameShell,
-    isDefault: true,
 };
 
 registerRendererGame(tacticsRendererContribution);
