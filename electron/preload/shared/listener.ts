@@ -109,10 +109,10 @@ export function subscribeValidatedPush<T>(
  * LOUD (a rejected action disappearing would be a debugging nightmare) stay
  * on the throwing {@link subscribeValidatedPush}.
  *
- * `logInvalid` defaults to `console.error` — the preload layer has no
- * injected logger, and the renderer devtools console is where a developer
- * looks first. It is injectable so tests stay spy-free and a future preload
- * logger can slot in.
+ * `logInvalid` defaults to `console.error` — Invariant #67 exception (b): the
+ * preload layer has no injected logger, and the renderer devtools console is
+ * where a developer looks first. It is injectable so tests stay spy-free and a
+ * future preload logger can slot in.
  */
 export function subscribeGuardedPush<T>(
     port: PushListenerPort,

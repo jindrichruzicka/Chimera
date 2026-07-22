@@ -508,6 +508,51 @@ export default tseslint.config(
         },
     },
 
+    // Invariant #67 — no main-process module emits logs via raw `console.*`; all
+    // structured logging flows through the injected Logger. Exactly one call site
+    // takes the exception: the Invariant #27/#77 startup guard in
+    // electron/main/index.ts, which must be the first statement in main() and so
+    // runs before the root logger is constructed. It carries a targeted disable
+    // plus the @chimera-review comment the invariant requires, which is what makes
+    // this rule a ratchet rather than a formality — a second raw console call
+    // cannot be added without an explicit, reviewable disable.
+    //
+    // NO `ignores`, deliberately. Test files are covered too: none of them call
+    // `console.*` today (`vi.spyOn(console, 'error')` passes `console` as an
+    // argument, not a member call, so the rule does not see it), and an `ignores`
+    // entry for `__tests__/**` would also exempt `__tests__/fixtures/`, silently
+    // neutering the smoke test in electron/main/__tests__/eslint-no-console.test.ts
+    // that proves this zone is wired — a config-object `ignores` still applies
+    // under `--no-ignore`, unlike the global ignores at the top of this file.
+    // That test asserts this object's own shape AND the RESOLVED config of a file
+    // from every subtree, not only the fixtures: an `ignores` added here, or a
+    // subtree added to the GLOBAL ignores above, would otherwise disable the rule
+    // where it matters while every fixture case still passed.
+    //
+    // Covers every module that runs in a main process: the engine's own tree and
+    // each consumer composition root (`apps/*/electron/main.ts`, which calls
+    // `main()`) — including a `--workspace` scaffold, which lands in `apps/`.
+    // A STANDALONE scaffold is not covered and cannot be from here: it ships no
+    // eslint flat config at all (see `buildStandaloneVscodeLaunchJson`).
+    //
+    // Two neighbours are deliberately out, as a scope call rather than because
+    // enforcement is impossible there. The preload layer would in fact ratchet
+    // identically — Invariant #67(b) sanctions it, and it has exactly one
+    // `console.*` call site today (`electron/preload/shared/listener.ts`), so one
+    // targeted disable would do — but preload is a different layer with a
+    // different logging story, and extending the ban there is its own change.
+    // `apps/*/electron/build-main.ts` and the app-level verify scripts are the
+    // genuine exclusion: Node build tooling that never runs in the app, whose
+    // console output IS its interface. Sinks that write to stdout/stderr
+    // (`createStdoutSink`, `createStderrSink`) are transport, not `console.*`,
+    // and are unaffected.
+    {
+        files: ['electron/main/**/*.{ts,tsx}', 'apps/*/electron/main.ts'],
+        rules: {
+            'no-console': 'error',
+        },
+    },
+
     // Invariant #76 — fromFloat() is only permitted at content-load time.
     // Enabled for simulation/**; overridden to 'off' for the loaders exemption path.
     // Rule implementation: tools/eslint-plugin-chimera/rules/no-fromfloat-in-simulation.ts

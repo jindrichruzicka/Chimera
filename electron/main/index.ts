@@ -41,6 +41,9 @@ import {
     createPinoSink,
     createMemorySink,
     createStdoutSink,
+    createStderrSink,
+    createMinLevelSink,
+    createFanOutSink,
     startPeriodicFlush,
     type Logger,
     type LoggerSink,
@@ -1166,6 +1169,62 @@ function createProductionLoggerSink(logsDir: string): FlushableSink {
 }
 
 /**
+ * Report a fatal refusal and TERMINATE the process — the single shape every
+ * refusal raised after the root logger exists must take (Invariant #67).
+ * Exported for its own tests, not for consumers; `main()` is the only caller.
+ *
+ * Three separate obligations, in this order, each of which has failed in this
+ * codebase before:
+ *
+ * 1. **Report through the injected logger** at `fatal`, never `console.*`. The
+ *    level is the one thing that makes these findable in a packaged binary's log
+ *    file, which is the only record it leaves, so it matches what the event is:
+ *    the process is about to end. (`handleUncaughtException` reports the
+ *    comparable event at the same level.) The `try` is
+ *    defence in depth rather than the primary protection — `createFanOutSink`
+ *    already isolates each transport, so no single sink failure reaches here —
+ *    but the exit below must not depend on every layer of the logging stack
+ *    staying total. A `console.error` could not throw at all (Node's global
+ *    console is constructed with `ignoreErrors: true`); the injected logger is
+ *    a deeper stack, so it is treated as fallible.
+ * 2. **Drain the sink.** It buffers (`minLength: 4096`) and `app.exit()` emits
+ *    no 'before-quit', so without this the entry dies in the buffer and the log
+ *    file — the only record a packaged binary leaves — never gets it. Guarded
+ *    as `startPeriodicFlush` is: an unflushable sink must not cost the exit.
+ * 3. **Exit non-zero.** Consumer composition roots launch this as
+ *    `void main(...)`, so a bare throw is only an UnhandledPromiseRejection:
+ *    Electron prints a warning and keeps the process alive with no window,
+ *    which is not a refusal. Callers that also need to preserve the contract
+ *    for an awaiting caller rethrow after this returns.
+ *
+ * Deliberately NO `dialog.showErrorBox`: it is MODAL and blocks until
+ * dismissed, so a non-interactively launched binary would hang instead of
+ * refusing.
+ *
+ * Both dependencies are narrowed to the members used, so a test double is a
+ * literal rather than a cast.
+ */
+export function refuseToStart(
+    logger: Pick<Logger, 'fatal'>,
+    sink: Pick<FlushableSink, 'flushSync'>,
+    message: string,
+    err: unknown,
+): void {
+    try {
+        logger.fatal(message, err instanceof Error ? err : new Error(String(err)));
+    } catch {
+        // A reporting failure must not cost the exit; there is nowhere left to
+        // report it to, since the logger is what just failed.
+    }
+    try {
+        sink.flushSync();
+    } catch {
+        // Best-effort: an unflushable sink must not turn a refusal into a hang.
+    }
+    app.exit(1);
+}
+
+/**
  * Select the renderer URL the main window boots into. A packaged build
  * whose hosted game declares a `logoScreen` launches into that route; every
  * other boot (no declaration, dev, E2E) launches into the main menu exactly
@@ -1221,10 +1280,16 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         assertProductionDevHarnessGuard(process.env, app.isPackaged);
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        // Invariant #67 sanctioned exception: the root Logger is not constructed
-        // until later in main(), and this guard must be the FIRST statement so no
-        // debug surface initialises before an illegal combination is caught. There
-        // is no injected logger to reach for, so the refusal reason goes to stderr.
+        // @chimera-review: Invariant #67 sanctioned exception — the only
+        // `console.*` call site in electron/main. The root Logger is not
+        // constructed until later, and this guard must be the FIRST statement so
+        // no debug surface initialises before an illegal combination is caught.
+        // There is no injected logger to reach for, so the refusal reason goes to
+        // stderr. Every refusal raised after the logger exists goes through
+        // `refuseToStart` instead; the `no-console` ESLint zone over
+        // electron/main/** keeps this exception singular, and
+        // __tests__/eslint-no-console.test.ts keeps that zone wired.
+        // eslint-disable-next-line no-console
         console.error(`fatal: refusing to start — ${message}`);
         // Deliberately NO dialog.showErrorBox here: it is MODAL and blocks
         // until dismissed, so a packaged binary launched non-interactively
@@ -1270,8 +1335,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // so the renderer can fetch recent entries for export/debug.
     const memorySink = createMemorySink();
 
-    // Fan-out sink: entries go to both the Pino file sink and the in-memory
-    // ring buffer so `chimera:logs:readRecent` has data to return.
+    // The durable record: a daily-rotated file under <userData>/logs. Buffered
+    // (minLength 4096), so anything that must survive an immediate exit drains
+    // it explicitly — see `refuseToStart`.
     const pinoSink = createProductionLoggerSink(path.join(userData, 'logs'));
     // Dev harness (§4.32): stream every entry to stdout too — the orchestrator
     // pipes child stdout with a `[p<i>]` prefix, so `dev:mp` shows each
@@ -1283,13 +1349,30 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     if (harnessFlags !== null) {
         startPeriodicFlush(pinoSink, 1_000);
     }
-    const combinedSink: LoggerSink = {
-        write(entry) {
-            pinoSink.write(entry);
-            memorySink.write(entry);
-            harnessStdoutSink?.write(entry);
-        },
-    };
+    // Dev terminal mirror: an unpackaged, non-harness launch (`pnpm start`)
+    // echoes error/fatal entries to stderr, so a fatal startup refusal is
+    // visible in the terminal it was launched from — the Pino sink above writes
+    // to the log FILE only. A sink is not a `console.*` call site (Invariant
+    // #67), the same standing the harness stdout sink has. Level-filtered
+    // because the root logger applies no threshold of its own: unfiltered, a
+    // dev boot would put every `info` entry on the terminal. Mutually exclusive
+    // with `harnessStdoutSink` so `dev:mp` does not print each entry twice.
+    const devConsoleSink =
+        harnessFlags === null && !app.isPackaged
+            ? createMinLevelSink('error', createStderrSink())
+            : null;
+    // Isolated legs, not a hand-rolled fan-out: these transports fail
+    // independently, and the Pino sink is written first, so an `EBADF` there
+    // would otherwise take the ring buffer and whichever console mirror is wired
+    // leaving a fatal refusal with nothing on disk and nothing on the terminal.
+    // A failing leg is announced by name on the legs that still work, so a
+    // broken file sink cannot fail silently.
+    const combinedSink: LoggerSink = createFanOutSink({
+        file: pinoSink,
+        memory: memorySink,
+        harnessStdout: harnessStdoutSink,
+        devStderr: devConsoleSink,
+    });
     const crashLogSink = new LogRingBufferSink(combinedSink);
 
     // Construct the root main-process logger once (invariant 67). Child
@@ -1319,30 +1402,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     try {
         contentDbs = await loadAllGameContent(gameAssetsRoot, contentSchemasByGameId);
     } catch (err: unknown) {
-        logger.error(
-            'fatal: refusing to start — game content failed to load',
-            err instanceof Error ? err : new Error(String(err)),
-        );
-        // The injected logger is the reporting channel (Invariant #67) — but on
-        // its own it reports nothing here. The pino sink buffers (minLength
-        // 4096) and writes to the log FILE only, and `app.exit()` emits no
-        // 'before-quit', so the entry above would die in the buffer and the
-        // binary would exit 1 leaving no record anywhere. This drains it.
-        try {
-            pinoSink.flushSync();
-        } catch {
-            // Guarded exactly as `startPeriodicFlush` does: a throw here would
-            // skip the `app.exit(1)` below and reinstate the windowless hang
-            // this block exists to prevent.
-        }
-        // Refusing means TERMINATING. The composition root launches this as
-        // `void main(...)`, so a bare throw is only an UnhandledPromiseRejection:
-        // Electron prints a warning and keeps the process alive with no window,
-        // which is a hung binary rather than the refusal Invariant #14 requires.
-        // Deliberately NO modal `showErrorBox` — it blocks until dismissed, so a
-        // non-interactive launch would hang instead of refusing. The rethrow
-        // preserves the contract for tests and any awaiting caller.
-        app.exit(1);
+        // Report + drain + terminate, all three in the shape Invariant #67
+        // requires of a post-logger refusal (see `refuseToStart`). Invariant #14
+        // is what makes this fatal: the game does not start with incomplete
+        // content. The rethrow preserves the contract for tests and any awaiting
+        // caller.
+        refuseToStart(logger, pinoSink, 'refusing to start — game content failed to load', err);
         throw err;
     }
 
@@ -3612,21 +3677,16 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         // bug in a game's registerSettings callback — both must refuse to start,
         // but they must not be reported under the same label.
         const name = err instanceof Error ? err.name : 'Error';
-        const message = err instanceof Error ? err.message : String(err);
-        // @chimera-review: Invariant #67 sanctioned exception (fatal startup
-        // refusal). Unlike the #27/#77 guard above the root logger EXISTS here,
-        // so the buffering sink is no longer a reason to bypass it: draining it
-        // with flushSync() before the exit, as the Invariant #14 refusal does,
-        // reports through the logger just as immediately. This site is simply
-        // not migrated yet; stderr keeps it from exiting 1 in silence until it
-        // is, and the exception lapses when it does.
-        console.error(
-            `fatal: refusing to start — game settings registration failed (${name}): ${message}`,
+        // Report + drain + terminate in the shape Invariant #67 requires of a
+        // post-logger refusal (see `refuseToStart`). The drain matters most here:
+        // the log file is the only record a packaged binary leaves, the dev
+        // stderr mirror being unpackaged-only.
+        refuseToStart(
+            logger,
+            pinoSink,
+            `refusing to start — game settings registration failed (${name})`,
+            err,
         );
-        // Deliberately NO dialog.showErrorBox here: it is MODAL and blocks until
-        // dismissed, so a binary launched non-interactively would hang forever
-        // instead of refusing. Refusing must be deterministic and immediate.
-        app.exit(1);
         throw err;
     }
     registerSettingsHandlers({
@@ -3852,11 +3912,19 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 .bootstrap()
                 .then(() => createWindow())
                 .catch((err: unknown) => {
-                    logger.error(
+                    // Same post-logger refusal shape as the #14/#35 sites
+                    // (Invariant #67). Neither harness affordance puts this entry
+                    // ON DISK: `app.exit(1)` fires synchronously, well inside the
+                    // 1s periodic flush interval, and the stdout sink writes to a
+                    // pipe, where the orchestrator relays it to the developer's
+                    // terminal but an exit can truncate a write still in flight.
+                    // The drain is what leaves the reason in the log file.
+                    refuseToStart(
+                        logger,
+                        pinoSink,
                         'dev harness bootstrap failed — exiting this instance',
-                        err instanceof Error ? err : new Error(String(err)),
+                        err,
                     );
-                    app.exit(1);
                 });
             return;
         }

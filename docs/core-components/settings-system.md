@@ -170,8 +170,10 @@ interface SettingsManager {
 ```
 App Start
   1. Composition root: SettingsManager.registerSchema(gameSchema)   ← per game contribution
-       → Invariant #35 intact-check; on refusal the engine logs to
-         stderr and app.exit(1)s — the app does not start
+       → Invariant #35 intact-check; on refusal the engine reports through
+         the injected logger, flushes the log sink, and app.exit(1)s — the
+         app does not start (Invariant #67: the reason lands in
+         <userData>/logs/, and a dev launch also mirrors it to stderr)
        (no engine schema is registered; engine-wide reads use the reserved
         '__engine__' id, which resolves to ENGINE_DEFAULTS via Invariant #34
         graceful degradation)

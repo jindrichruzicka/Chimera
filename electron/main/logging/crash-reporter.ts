@@ -55,6 +55,9 @@ export interface CrashReporterOptions {
      * logging and dumping is complete. Use this to flush any async log sink
      * (e.g. `pinoSink.flushSync()`) so buffered entries reach disk before the
      * process terminates. Optional — if omitted, no flush is performed.
+     *
+     * May throw: the exit is not conditional on it, so an unflushable sink
+     * costs its own buffered entries and nothing more.
      */
     readonly flush?: () => void;
     /**
@@ -257,7 +260,16 @@ async function handleUncaughtException(
     const { logger, crashesDir, proc, getSnapshot, getRecentLogs, getAppVersion, autosave } =
         options;
 
-    logger.fatal('uncaughtException — writing crash dump', err, { stack: err.stack });
+    // Guarded, exactly as the report in `refuseToStart` is: this call runs
+    // through the injected logger's whole sink stack, it sits outside the
+    // `try…finally` that owns `proc.exit(1)`, and the process is already in an
+    // undefined state. A failure to report the crash must not be what leaves the
+    // crashed process alive and windowless.
+    try {
+        logger.fatal('uncaughtException — writing crash dump', err, { stack: err.stack });
+    } catch {
+        // There is nowhere left to report this to — the logger is what failed.
+    }
 
     try {
         if (autosave !== undefined) {
@@ -280,7 +292,13 @@ async function handleUncaughtException(
         }
     } finally {
         // Flush any async log sink so buffered entries reach disk before exit.
-        options.flush?.();
+        // Guarded exactly as the drain in `refuseToStart` is: an unflushable
+        // sink must cost its own buffered entries, never the exit.
+        try {
+            options.flush?.();
+        } catch {
+            // Best-effort — the crash dump above is already on disk.
+        }
         proc.exit(1);
     }
 }

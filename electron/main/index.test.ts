@@ -583,6 +583,7 @@ const {
     createDefaultPlayerProfile,
     ensureActiveProfile,
     resolveInitialEntitiesForGame,
+    refuseToStart,
     main,
 } = await import('./index.js');
 const {
@@ -4207,17 +4208,98 @@ describe('main() CHIMERA_DEBUG production guard (Invariant #27)', () => {
     });
 });
 
+// ─── the shared fatal-refusal shape (Invariant #67) ──────────────────────────
+
+describe('refuseToStart', () => {
+    const fakeLogger = (
+        fatal: (message: string, err?: Error) => void = () => {},
+    ): Parameters<typeof refuseToStart>[0] => ({ fatal });
+
+    beforeEach(() => {
+        appExit.mockClear();
+    });
+
+    it('reports through the logger, then flushes, then exits — in that order', () => {
+        // Invariant #67: every refusal raised after the root logger exists shares
+        // one shape, and the order is the whole point. The sink buffers
+        // (minLength 4096) and `app.exit()` emits no 'before-quit', so a flush
+        // after the exit never runs — the real `app.exit()` does not return, which
+        // a mocked one cannot show.
+        const fatal = vi.fn<(message: string, err?: Error) => void>();
+        const flushSync = vi.fn<() => void>();
+        const cause = new Error('boom');
+
+        refuseToStart(fakeLogger(fatal), { flushSync }, 'refusing to start — nope', cause);
+
+        expect(fatal).toHaveBeenCalledWith('refusing to start — nope', cause);
+        expect(appExit).toHaveBeenCalledWith(1);
+        expect(fatal.mock.invocationCallOrder[0]!).toBeLessThan(
+            flushSync.mock.invocationCallOrder[0]!,
+        );
+        expect(flushSync.mock.invocationCallOrder[0]!).toBeLessThan(
+            appExit.mock.invocationCallOrder[0]!,
+        );
+    });
+
+    it('wraps a non-Error reason so the logger always receives an Error', () => {
+        const fatal = vi.fn<(message: string, err?: Error) => void>();
+
+        refuseToStart(fakeLogger(fatal), { flushSync: () => {} }, 'nope', 'a bare string');
+
+        expect(fatal.mock.calls[0]?.[1]).toBeInstanceOf(Error);
+        expect(fatal.mock.calls[0]?.[1]?.message).toBe('a bare string');
+    });
+
+    it('still flushes and exits when the logger itself throws', () => {
+        // The fan-out sink writes to the Pino sink FIRST and unguarded, and
+        // `createPinoSink.write` opens a file descriptor (a date rollover, a
+        // destroyed SonicBoom), so `logger.error` can throw. Unguarded that would
+        // skip the exit below and leave the live, windowless process this call
+        // exists to prevent — the same failure the console sinks are guarded for.
+        const flushSync = vi.fn<() => void>();
+
+        expect(() =>
+            refuseToStart(
+                fakeLogger(() => {
+                    throw new Error('sink write failed');
+                }),
+                { flushSync },
+                'nope',
+                new Error('original'),
+            ),
+        ).not.toThrow();
+        expect(flushSync).toHaveBeenCalled();
+        expect(appExit).toHaveBeenCalledWith(1);
+    });
+
+    it('still exits when the flush throws', () => {
+        expect(() =>
+            refuseToStart(
+                fakeLogger(),
+                {
+                    flushSync: () => {
+                        throw new Error('EBADF');
+                    },
+                },
+                'nope',
+                new Error('original'),
+            ),
+        ).not.toThrow();
+        expect(appExit).toHaveBeenCalledWith(1);
+    });
+});
+
 // ─── settings namespace guard refuses startup (Invariant #35) ────────────────
 
 describe('main() game settings schema guard (Invariant #35)', () => {
-    it('refuses to start when a game schema does not carry the engine namespaces intact', async () => {
-        // SettingsManager is mocked in this suite, so the rejection is injected at
-        // the contribution seam — the guard's own logic is covered in
-        // SettingsManager.test.ts. What is pinned here is the composition root's
-        // response: without its try/catch this would only be an unhandled rejection,
-        // because consumer roots call `void main(...)` and this runs before
-        // app.whenReady(), leaving the user a live, windowless process.
-        const broken = makeTestContributions().map((contribution) => ({
+    // SettingsManager is mocked in this suite, so the rejection is injected at
+    // the contribution seam — the guard's own logic is covered in
+    // SettingsManager.test.ts. What is pinned here is the composition root's
+    // response: without its try/catch this would only be an unhandled rejection,
+    // because consumer roots call `void main(...)` and this runs before
+    // app.whenReady(), leaving the user a live, windowless process.
+    const brokenContributions = (): MainGameContribution[] =>
+        makeTestContributions().map((contribution) => ({
             ...contribution,
             registerSettings: () => {
                 throw new SettingsNamespaceCollisionError(
@@ -4226,28 +4308,213 @@ describe('main() game settings schema guard (Invariant #35)', () => {
             },
         }));
 
+    it('refuses to start when a game schema does not carry the engine namespaces intact', async () => {
+        const broken = brokenContributions();
+
         appExit.mockClear();
         dialogShowErrorBox.mockClear();
-        // stderr is the ONLY diagnostic a refusing binary produces, so pin it:
-        // without this, deleting the console.error leaves a shipped app that exits 1
-        // in total silence and the whole suite still passes.
+        // This describe has no beforeEach, and `invocationCallOrder` is a single
+        // counter shared by every mock in the module — without clearing both, the
+        // ordering assertion below reads an earlier test's flush and passes
+        // whatever this one does.
+        fakeDest.write.mockClear();
+        fakeDest.flushSync.mockClear();
+        // Invariant #67: the refusal reports through the INJECTED logger. Pinned
+        // negatively so a regression to `console.error` fails here rather than
+        // quietly reinstating the exception this site no longer takes.
         const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        // The dev stderr mirror is unpackaged-only and this suite's app.isPackaged
+        // is `true` (the shipped shape), so no refusal text may reach stderr here.
+        const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
         try {
             await expect(main(broken)).rejects.toThrow(/must carry the engine namespace shape/);
             expect(appExit).toHaveBeenCalledWith(1);
-            expect(errSpy).toHaveBeenCalledWith(
+            // The log file is the record a refusing binary leaves. The sink writes
+            // `JSON.stringify(entry)`, whose key order puts `message` before
+            // `error`, so one regex spans both: the error NAME must appear in the
+            // message — an Invariant #35 refusal and an unrelated registerSettings
+            // bug both refuse to start, but must not be reported under the same
+            // label — and the offending key comes from the serialised error.
+            expect(fakeDest.write).toHaveBeenCalledWith(
                 expect.stringMatching(
-                    // The error NAME must appear: an Invariant #35 refusal and an
-                    // unrelated registerSettings bug both refuse to start, but must
-                    // not be reported under the same label.
                     /refusing to start.*game settings registration failed \(SettingsNamespaceCollisionError\).*key\(s\): audio\b/is,
                 ),
             );
+            // The sink buffers (minLength 4096) and `app.exit()` emits no
+            // 'before-quit', so the entry above only becomes a record once it is
+            // flushed — and the flush must precede the exit. The real `app.exit()`
+            // never returns; the mocked one does, which is why a bare
+            // `toHaveBeenCalled()` would pass with the flush written after it.
+            expect(fakeDest.flushSync).toHaveBeenCalled();
+            expect(fakeDest.flushSync.mock.invocationCallOrder[0]!).toBeLessThan(
+                appExit.mock.invocationCallOrder[0]!,
+            );
+            expect(errSpy).not.toHaveBeenCalled();
             // showErrorBox is MODAL and would hang a non-interactive launch instead
             // of refusing — same forward ratchet as the CHIMERA_DEBUG guard above.
             expect(dialogShowErrorBox).not.toHaveBeenCalled();
+            expect(stderrSpy).not.toHaveBeenCalledWith(expect.stringMatching(/refusing to start/));
         } finally {
+            stderrSpy.mockRestore();
             errSpy.mockRestore();
+        }
+    });
+
+    it('mirrors the refusal to stderr on a dev launch, so it is not log-file-only', async () => {
+        // The migration off `console.error` moves the reason into the log FILE:
+        // the production pino sink writes nowhere else, and the stdout sink is
+        // wired only under CHIMERA_DEV_HARNESS. An unpackaged, non-harness launch
+        // (`pnpm start`) therefore gets a dev stderr mirror in the fan-out. This
+        // asserts the mirror is WIRED, not merely constructible — the sink and its
+        // level filter are unit-tested in logging/logger.test.ts.
+        mockAppIsPackaged.value = false;
+        vi.resetModules();
+        // Unpackaged resolves the game-assets root relative to the SOURCE
+        // __dirname (electron/main), which does not reach <root>/apps — the
+        // packaged walk this suite otherwise relies on. Content loading is not
+        // what this case is about, so stub it.
+        vi.doMock('./content/loadGameContent.js', async (importOriginal) => ({
+            ...(await importOriginal<typeof LoadGameContentModule>()),
+            loadAllGameContent: vi.fn(async () => new Map()),
+        }));
+        const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        try {
+            const fresh = await import('./index.js');
+            await expect(fresh.main(brokenContributions())).rejects.toThrow(
+                /must carry the engine namespace shape/,
+            );
+
+            expect(stderrSpy).toHaveBeenCalledWith(
+                expect.stringMatching(
+                    /^fatal \[root\] refusing to start — game settings registration failed \(SettingsNamespaceCollisionError\).*key\(s\): audio\b/,
+                ),
+            );
+            // Level-filtered to error and above: the logger applies no threshold
+            // of its own, so an unfiltered mirror would put every startup `info`
+            // entry on a dev terminal.
+            expect(stderrSpy).not.toHaveBeenCalledWith(expect.stringMatching(/^info /));
+        } finally {
+            stderrSpy.mockRestore();
+            mockAppIsPackaged.value = true;
+            vi.doUnmock('./content/loadGameContent.js');
+            vi.resetModules();
+        }
+    });
+
+    it('under the dev harness the refusal goes to stdout only, never twice', async () => {
+        // The harness stdout sink and the dev stderr mirror are mutually
+        // exclusive: `dev:mp` pipes each instance's stdout with a `[p<i>]` prefix,
+        // so a second console sink would double every line in that terminal.
+        // Without this case the `harnessFlags === null` half of the gate is
+        // unpinned — dropping it leaves the whole suite green, because every other
+        // test runs with the harness off.
+        mockAppIsPackaged.value = false;
+        vi.stubEnv('CHIMERA_DEV_HARNESS', '1');
+        vi.resetModules();
+        vi.doMock('./content/loadGameContent.js', async (importOriginal) => ({
+            ...(await importOriginal<typeof LoadGameContentModule>()),
+            loadAllGameContent: vi.fn(async () => new Map()),
+        }));
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+        const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        try {
+            const fresh = await import('./index.js');
+            await expect(fresh.main(brokenContributions())).rejects.toThrow(
+                /must carry the engine namespace shape/,
+            );
+
+            expect(stdoutSpy).toHaveBeenCalledWith(
+                expect.stringMatching(/refusing to start — game settings registration failed/),
+            );
+            expect(stderrSpy).not.toHaveBeenCalledWith(expect.stringMatching(/refusing to start/));
+        } finally {
+            stderrSpy.mockRestore();
+            stdoutSpy.mockRestore();
+            mockAppIsPackaged.value = true;
+            vi.unstubAllEnvs();
+            vi.doUnmock('./content/loadGameContent.js');
+            vi.resetModules();
+        }
+    });
+});
+
+// ─── dev-harness bootstrap refusal (Invariant #67, §4.32) ────────────────────
+
+describe('main() dev-harness bootstrap failure', () => {
+    it('drains the sink before exiting, like the other post-logger refusals', async () => {
+        // The third `refuseToStart` caller, and the one whose wiring is easiest
+        // to lose: it is reachable only under CHIMERA_DEV_HARNESS with an
+        // auto-flow flag, so every other test in this file runs straight past it.
+        // Its drain matters MORE than the other two sites', not less — the
+        // periodic harness flush runs on a 1s interval that `app.exit(1)` beats,
+        // and the stdout sink writes to a pipe an exit can truncate mid-write.
+        // Without this case, reverting the site to `logger.error(...); exit(1)`
+        // leaves the whole suite green.
+        mockAppIsPackaged.value = false;
+        vi.stubEnv('CHIMERA_DEV_HARNESS', '1');
+        const origArgv = process.argv;
+        process.argv = [...origArgv, '--dev-auto-host'];
+        vi.resetModules();
+        vi.doMock('./content/loadGameContent.js', async (importOriginal) => ({
+            ...(await importOriginal<typeof LoadGameContentModule>()),
+            loadAllGameContent: vi.fn(async () => new Map()),
+        }));
+        vi.doMock('./dev/DevHarnessCoordinator.js', () => ({
+            DevHarnessCoordinator: class {
+                bootstrap(): Promise<never> {
+                    return Promise.reject(new Error('no peer to host for'));
+                }
+                onLobbyStateChanged(): void {}
+            },
+        }));
+
+        let resolveReady: () => void = () => {};
+        appWhenReady.mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    resolveReady = resolve;
+                }),
+        );
+        const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+        try {
+            const fresh = await import('./index.js');
+            await fresh.main(makeTestContributions());
+
+            resolveReady();
+            // Two turns: one for the whenReady handler, one for the rejected
+            // bootstrap chain's `.catch`.
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            // Scoped to the window between THIS refusal's own log write and the
+            // exit, not `flushSync.invocationCallOrder[0]`. The harness arm calls
+            // `startPeriodicFlush(pinoSink, 1_000)` and discards the disposer, so
+            // an interval from an earlier harness case is still ticking
+            // `fakeDest.flushSync` here — and `clearMocks` clears recorded calls
+            // before the test, not during it. Measured: with the drain removed
+            // and 1.5s of wait added above, an index-0 assertion passes green.
+            const reportIndex = fakeDest.write.mock.calls.findIndex(
+                ([line]) => typeof line === 'string' && line.includes('dev harness bootstrap'),
+            );
+            expect(reportIndex).toBeGreaterThanOrEqual(0);
+            const reportedAt = fakeDest.write.mock.invocationCallOrder[reportIndex]!;
+            const exitedAt = appExit.mock.invocationCallOrder[0]!;
+
+            expect(
+                fakeDest.flushSync.mock.invocationCallOrder.filter(
+                    (order) => order > reportedAt && order < exitedAt,
+                ),
+            ).not.toHaveLength(0);
+            expect(appExit).toHaveBeenCalledWith(1);
+        } finally {
+            stdoutSpy.mockRestore();
+            process.argv = origArgv;
+            mockAppIsPackaged.value = true;
+            vi.unstubAllEnvs();
+            vi.doUnmock('./dev/DevHarnessCoordinator.js');
+            vi.doUnmock('./content/loadGameContent.js');
+            vi.resetModules();
         }
     });
 });

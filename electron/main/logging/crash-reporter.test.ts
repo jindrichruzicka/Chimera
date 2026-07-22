@@ -339,6 +339,63 @@ describe('registerCrashReporter', () => {
         exitSpy.mockRestore();
     });
 
+    it('still exits when the flush option throws', async () => {
+        // The drain must never cost the exit. An unflushable sink here would
+        // otherwise skip `proc.exit(1)` and leave the crashed process alive and
+        // windowless — the same hazard `refuseToStart` guards against on the
+        // startup-refusal path.
+        const logger = makeLogger();
+        const proc = makeProcess();
+        const app = makeApp();
+
+        const options: CrashReporterOptions = {
+            logger,
+            crashesDir: path.join(tmpDir, 'crashes'),
+            getSnapshot: () => null,
+            process: proc as unknown as NodeJS.Process,
+            app,
+            flush: () => {
+                throw new Error('sonic boom destroyed');
+            },
+        };
+
+        registerCrashReporter(options);
+        proc._emit('uncaughtException', new Error('flush throws'));
+
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(proc.exit).toHaveBeenCalledWith(1);
+    });
+
+    it('still exits when the fatal log write throws', async () => {
+        // `logger.fatal` is the first thing the handler does, and it sits
+        // outside the `try…finally` that owns `proc.exit(1)`, so it is guarded
+        // on its own — the exit must not depend on every layer of the logging
+        // stack staying total while the process is already crashing.
+        const logger = makeLogger();
+        const proc = makeProcess();
+        const app = makeApp();
+
+        vi.spyOn(logger, 'fatal').mockImplementation(() => {
+            throw new Error('sink down');
+        });
+
+        const options: CrashReporterOptions = {
+            logger,
+            crashesDir: path.join(tmpDir, 'crashes'),
+            getSnapshot: () => null,
+            process: proc as unknown as NodeJS.Process,
+            app,
+        };
+
+        registerCrashReporter(options);
+        proc._emit('uncaughtException', new Error('fatal throws'));
+
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(proc.exit).toHaveBeenCalledWith(1);
+    });
+
     it('writes appVersion and recentLogs into the crash dump JSON', async () => {
         const logger = makeLogger();
         const proc = makeProcess();

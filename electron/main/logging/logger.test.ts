@@ -4,10 +4,13 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import pino from 'pino';
 import {
+    createFanOutSink,
     createLogger,
     createMemorySink,
+    createMinLevelSink,
     createNoopLogger,
     createPinoSink,
+    createStderrSink,
     createStdoutSink,
     startPeriodicFlush,
 } from './logger.js';
@@ -430,6 +433,264 @@ describe('createStdoutSink', () => {
 
         expect(lines[0]).toContain('error [dev-harness] dev harness bootstrap failed');
         expect(lines[0]).toContain('scenario gameId mismatch');
+    });
+
+    it('swallows a throwing writer', () => {
+        // Every refusal in main() logs through the fan-out sink and then calls
+        // app.exit(1) (see `refuseToStart`). A console mirror that threw — EPIPE
+        // once the parent closed the pipe — would propagate out of
+        // `logger.error`, skip the exit, and leave the windowless process the
+        // refusal exists to prevent. The file sink is the record; this echo is
+        // best-effort.
+        const sink = createStdoutSink(() => {
+            throw new Error('EPIPE');
+        });
+
+        expect(() => sink.write(entry())).not.toThrow();
+    });
+});
+
+describe('createStderrSink', () => {
+    const entry = (overrides: Partial<LogEntry> = {}): LogEntry => ({
+        level: 'fatal',
+        message: 'refusing to start — game settings registration failed',
+        timestamp: 1000,
+        source: { process: 'main', module: 'root' },
+        ...overrides,
+    });
+
+    it('renders the same line shape as the stdout sink, through the injected writer', () => {
+        const lines: string[] = [];
+        const sink = createStderrSink((line) => lines.push(line));
+
+        sink.write(entry({ error: { name: 'SettingsNamespaceCollisionError', message: 'audio' } }));
+
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toBe(
+            'fatal [root] refusing to start — game settings registration failed — audio\n',
+        );
+    });
+
+    it('writes to process.stderr by default', () => {
+        // The point of this sink: the terminal a dev launch was started from.
+        // stdout would be the wrong stream, and is already taken by the dev
+        // harness sink, whose orchestrator prefixes and relays it.
+        const written = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        try {
+            createStderrSink().write(entry({ message: 'boom' }));
+
+            expect(written).toHaveBeenCalledWith('fatal [root] boom\n');
+        } finally {
+            written.mockRestore();
+        }
+    });
+
+    it('swallows a throwing writer', () => {
+        const sink = createStderrSink(() => {
+            throw new Error('EPIPE');
+        });
+
+        expect(() => sink.write(entry())).not.toThrow();
+    });
+
+    it('swallows an entry it cannot format', () => {
+        // Formatting is inside the guard too, not only the write: the context is
+        // rendered with JSON.stringify, which throws on a circular reference. The
+        // console sinks are an echo, so an unrenderable entry must be dropped
+        // rather than raised at `logger.error` — which in a refusal path sits
+        // directly above `app.exit(1)`.
+        const circular: Record<string, unknown> = {};
+        circular['self'] = circular;
+        const lines: string[] = [];
+        const sink = createStderrSink((line) => lines.push(line));
+
+        expect(() => sink.write(entry({ context: circular }))).not.toThrow();
+        expect(lines).toHaveLength(0);
+    });
+});
+
+describe('createFanOutSink', () => {
+    const entry = (message = 'an entry'): LogEntry => ({
+        level: 'error',
+        message,
+        timestamp: 1000,
+        source: { process: 'main', module: 'root' },
+    });
+
+    const isNotice = (e: LogEntry): boolean => e.message.startsWith('log sink');
+
+    it('writes to every sink, in declaration order, and skips absent ones', () => {
+        const order: string[] = [];
+        const sink = createFanOutSink({
+            a: { write: () => order.push('a') },
+            absent: null,
+            b: { write: () => order.push('b') },
+            unset: undefined,
+        });
+
+        sink.write(entry());
+
+        expect(order).toEqual(['a', 'b']);
+    });
+
+    it('isolates the legs: a throwing sink does not deny the others or the caller', () => {
+        // The regression this exists for: the Pino file sink is written FIRST and
+        // `createPinoSink.write` opens a file descriptor, so a rollover or a
+        // destroyed SonicBoom can throw. Unisolated, that swallowed the memory
+        // sink and whichever console mirror was wired with it — so a fatal refusal exited 1
+        // with nothing in the log file AND nothing on the terminal, the exact
+        // silence the refusal reporting exists to prevent.
+        const seen: string[] = [];
+        const sink = createFanOutSink({
+            file: {
+                write: () => {
+                    throw new Error('EBADF');
+                },
+            },
+            memory: { write: (e) => seen.push(e.message) },
+            mirror: { write: (e) => seen.push(`mirror:${e.message}`) },
+        });
+
+        expect(() => sink.write(entry('refusal'))).not.toThrow();
+        // Both survivors get the entry itself (they also get one notice about
+        // the dead leg — asserted below, filtered out here).
+        expect(seen.filter((m) => !m.includes('log sink'))).toEqual(['refusal', 'mirror:refusal']);
+    });
+
+    it('reports a failed leg on the surviving legs instead of dropping it silently', () => {
+        // Isolation alone makes a broken transport INVISIBLE: the Pino file sink
+        // is the durable record, and in production nothing else calls it, so a
+        // permanently failing fd would leave the log file empty with no signal
+        // on any channel. The surviving legs are the only place left to say so.
+        const seen: LogEntry[] = [];
+        const sink = createFanOutSink({
+            file: {
+                write: () => {
+                    throw new Error('EBADF');
+                },
+            },
+            memory: { write: (e) => void seen.push(e) },
+        });
+
+        sink.write(entry('refusal'));
+
+        expect(seen).toHaveLength(2);
+        // The provoking entry first: a leg's own delivery must not be delayed by
+        // another leg's failure, and the notice reads as following what caused it.
+        expect(seen[0]!.message).toBe('refusal');
+        const notice = seen[1]!;
+        expect(notice.level).toBe('error');
+        // Named, not positional: the index into the surviving-leg array means a
+        // different transport in a packaged build than under `dev:mp`.
+        expect(notice.message).toContain('log sink "file"');
+        expect(notice.error?.message).toBe('EBADF');
+    });
+
+    it('reports an uninterrupted run of failures once, not once per entry', () => {
+        // A leg that fails on every write (a closed fd) must not turn the
+        // surviving legs into a firehose of identical notices — the signal is
+        // "this transport is broken", and it is worth exactly one line.
+        const seen: LogEntry[] = [];
+        const sink = createFanOutSink({
+            file: {
+                write: () => {
+                    throw new Error('EBADF');
+                },
+            },
+            stdout: {
+                write: () => {
+                    throw new Error('EPIPE');
+                },
+            },
+            memory: { write: (e) => void seen.push(e) },
+        });
+
+        sink.write(entry('one'));
+        sink.write(entry('two'));
+
+        expect(seen.filter(isNotice)).toHaveLength(2);
+        expect(seen.filter((e) => !isNotice(e)).map((e) => e.message)).toEqual(['one', 'two']);
+    });
+
+    it('reports a leg again after it recovers and fails a second time', () => {
+        // The latch is per RUN of failures, not per leg for the session. A leg
+        // has two unrelated failure modes — `createPinoSink.write` throws on a
+        // dead fd (permanent) AND on an entry it cannot serialise (transient,
+        // one bad `context`). Latching for the session on the transient one
+        // would spend the leg's only announcement on a sink that is still
+        // working, and then swallow the genuine EBADF that follows.
+        const seen: LogEntry[] = [];
+        let failing = true;
+        const sink = createFanOutSink({
+            file: {
+                write: () => {
+                    if (failing) {
+                        throw new Error('unserialisable context');
+                    }
+                },
+            },
+            memory: { write: (e) => void seen.push(e) },
+        });
+
+        sink.write(entry('bad context')); // announced
+        failing = false;
+        sink.write(entry('healthy again')); // clears the latch
+        failing = true;
+        sink.write(entry('genuinely dead')); // must be announced again
+
+        const notices = seen.filter(isNotice);
+        expect(notices).toHaveLength(2);
+        expect(notices[1]!.error?.message).toBe('unserialisable context');
+    });
+
+    it('never lets the notice itself throw, or re-notify about the notice', () => {
+        // Both legs broken: the notice for the first is attempted on the second,
+        // which also throws. That must not escape, and must not recurse.
+        const sink = createFanOutSink({
+            first: {
+                write: () => {
+                    throw new Error('first down');
+                },
+            },
+            second: {
+                write: () => {
+                    throw new Error('second down');
+                },
+            },
+        });
+
+        expect(() => sink.write(entry('refusal'))).not.toThrow();
+    });
+});
+
+describe('createMinLevelSink', () => {
+    const entry = (level: LogEntry['level']): LogEntry => ({
+        level,
+        message: `a ${level} entry`,
+        timestamp: 1000,
+        source: { process: 'main', module: 'root' },
+    });
+
+    it('drops entries below the threshold and forwards the rest unchanged', () => {
+        const seen: LogEntry[] = [];
+        const sink = createMinLevelSink('error', { write: (e) => void seen.push(e) });
+
+        for (const level of ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const) {
+            sink.write(entry(level));
+        }
+
+        expect(seen.map((e) => e.level)).toEqual(['error', 'fatal']);
+        expect(seen[0]).toStrictEqual(entry('error'));
+    });
+
+    it('forwards everything at the lowest threshold', () => {
+        const seen: LogEntry[] = [];
+        const sink = createMinLevelSink('trace', { write: (e) => void seen.push(e) });
+
+        sink.write(entry('trace'));
+        sink.write(entry('fatal'));
+
+        expect(seen).toHaveLength(2);
     });
 });
 

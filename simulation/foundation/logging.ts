@@ -1,10 +1,10 @@
-// shared/logging.ts
+// simulation/foundation/logging.ts
 //
 // Shared log schema for the main process, renderer, and simulation layer
-// (architecture §4.27). Declared in `shared/` because both sides of the
-// preload bridge need to agree on the shape — the renderer emits via
-// `window.__chimera.logs` and the main process writes via the
-// structured `Logger` interface declared in `electron/main/logger.ts`.
+// (architecture §4.27). Declared here rather than in `electron/` because both
+// sides of the preload bridge need to agree on the shape — the renderer emits
+// via `window.__chimera.logs` and the main process writes via the structured
+// `Logger` interface re-exported from `electron/main/logging/logger.ts`.
 //
 // Kept dependency-free and side-effect-free so `simulation/` and `ai/` can
 // import these types without dragging Electron or DOM symbols along.
@@ -14,12 +14,12 @@ export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 /**
  * Structured logger interface consumed by every main-process manager and by the
- * simulation layer (which imports it via `shared/` to respect module boundaries).
+ * simulation layer.
  *
- * Intentionally kept in `shared/` so `simulation/` and `ai/` can accept an
- * injected `Logger` without importing from `electron/`.
+ * Intentionally declared here so `simulation/` and `ai/` can accept an injected
+ * `Logger` without importing from `electron/`.
  *
- * Production implementations live in `electron/main/logger.ts`.
+ * Production implementations live in `electron/main/logging/logger.ts`.
  * `error` and `fatal` accept an optional `Error` because these levels are almost
  * always paired with an exception; trace/debug/info/warn take only a message and
  * a context object.
