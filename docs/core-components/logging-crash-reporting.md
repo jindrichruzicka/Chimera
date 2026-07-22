@@ -132,10 +132,25 @@ Crash dumps are written atomically (`.tmp` + rename) — a partially-written dum
 
 ```typescript
 // renderer/logging/rendererLogger.ts
-// Forwards: console.warn, console.error, window.onerror, window.onunhandledrejection
-// → main process via logs IPC namespace.
+// Forwards: console.warn, console.error, and window addEventListener('error') /
+// addEventListener('unhandledrejection') — composing with pre-existing handlers,
+// never clobbering window.onerror — → main process via logs IPC namespace.
 // console.log preserved locally but NOT forwarded (PII/volume hygiene).
 ```
+
+The renderer bridge is **interception, not injection**. There is no `Logger` to inject: `installRendererLogger` patches `console.warn` and `console.error` and forwards each call over `window.__chimera.logs`. In `renderer/**` those two methods therefore _are_ the sanctioned channel (Invariant #67), and "migrate `console.*` to the logger" is the wrong instinct there — the main-process rule does not transfer. Four properties follow from that, and none of them is visible from a call site. All but one are pinned by tests rather than by convention; the exception — silence — is pinned only in its swallowing half, as its paragraph notes.
+
+**Installed before the first render-phase log.** An entry emitted before the patch lands is not degraded, it is gone — so the install must precede everything React evaluates, not merely the siblings of whatever mounts it. `<LoggingBootstrap />` is `AppShell`'s **first child**, outside `<Providers>`, and installs **during its render** rather than in a `useEffect`: React runs a parent's render strictly before any child's effect, so an effect-scoped install misses everything its ancestors log while rendering. This was a live defect — `Providers`' AudioManager-init warn reached devtools and never reached the log file, so a player whose Web Audio init failed ran a silent game with nothing in the record to say so. The guarantee is bounded at React: client-bundle **module evaluation** precedes every render and sits outside the bridge — including the `chimera-game-registration` side-effect import (`GameRegistrationBootstrap`), which runs an adopter's `register.ts` as the bundle loads — so module-scope code must not log expecting forwarding; anything it emits reaches devtools only. `renderer/app/AppShell.test.tsx` pins the ordering end to end by making that exact warn reach a `logsApi` stub; `renderer/app/LoggingBootstrap.test.tsx` pins the install's idempotency, its re-arm across StrictMode's simulated remount (every Next host in the tree sets `reactStrictMode: true`), its refusal to claim a bridge another owner installed, and its exact teardown (console methods restored **and** window listeners removed); `renderer/app/LoggingBootstrap.ssr.test.tsx` pins that the render-phase install stays inert during the static-export prerender, where `window` does not exist.
+
+**An `Error` argument keeps its stack.** `console.error('…', err)` carries the first `Error` among the arguments through to `LogEntry.error` as `{ name, message, stack }`; the stack is what makes a renderer error actionable, and `String(err)` drops it. The threaded `Error` is **removed from the composed `message`** — its detail travels once, in the `error` field, so the main-process logger does not print it twice — while the remaining arguments compose `message` unchanged; an `Error` that is the only argument becomes the message (`name: message`). Fields are truncated renderer-side to the `chimera:logs:emit` schema caps (message 4096 / `source.module` 256 / name 256 / message 4096 / stack 8192): the handler drops a failing entry rather than truncating it, so an oversized field must cost characters, never the whole entry. That covers every string field the schema **names**, including the `module` a call site hands `emitRendererError`. The `window` `error` / `unhandledrejection` handlers are the exception to the `error` route: they still report their stack through `context.stack`, and the bridge truncates that `stack` to the same 8192, so every string the bridge itself composes is bounded, not only the ones a validator would reject.
+
+`context` is the single unbounded field, and deliberately so — it carries arbitrary structured diagnostics, and a size budget would have to be a serialization pass on every emit. The schema constrains its **shape** and not its **extent**: `z.record(z.string(), z.unknown())`, so neither the record nor any string inside it has a size bound. Both halves have consequences a call site should know. An oversized `context` cannot cost the entry — but it is written to the log file at whatever size it arrives, so it is the one place where a caller can bloat the record. And because the handler drops rather than repairs, a `context` that is not a record — an array, a string, a number — costs the **whole entry**, silently. Pass a plain object or nothing.
+
+**A failed forward is silent.** Every `logsApi.emit` call is wrapped in a swallow-all guard so the IPC bridge throwing can never re-enter the console patch — and unlike the main-process fan-out, whose failing legs are announced by name on the survivors, nothing announces a renderer forward that threw. The entry survives only in devtools. Isolation without announcement is a deliberate trade-off here: the renderer has no second durable channel to announce on. The swallow itself is pinned in `renderer/logging/rendererLogger.test.ts`; that nothing announces the failure is the absence of a mechanism, which no test can observe.
+
+**`console.log` is not forwarded, deliberately.** It stays local for PII/volume hygiene. A call site that needs a durable record moves up to `warn`/`error`; it does not get `console.log` hooked. `renderer/logging/rendererLogger.test.ts` pins this, so a later "the bridge should catch everything" change has to fail a test rather than quietly reverse the policy.
+
+`emitRendererError(logsApi, message, error, context, module)` is the direct path for call sites that have an `Error` and a module name in hand — it skips the console patch entirely and is what `RootErrorBoundary` uses.
 
 ---
 
@@ -145,11 +160,11 @@ Crash dumps are written atomically (`.tmp` + rename) — a partially-written dum
 // renderer/components/shell/RootErrorBoundary.tsx
 
 // On catch:
-//   1. Forward error via rendererLogger.error()
+//   1. Forward error via emitRendererError()
 //   2. Render <CrashFallback /> with:
 //        • "An unexpected error occurred."
 //        • "Return to Main Menu" (resets app state)
-//        • "Restart Application" (calls system.quit() + relaunch)
+//        • "Restart Application" (calls system.relaunch(); main does app.relaunch() + app.exit(0))
 //        • Crash ID for bug reports
 ```
 
@@ -160,16 +175,25 @@ Crash dumps are written atomically (`.tmp` + rename) — a partially-written dum
 `ToastHost` (§4.30) must be mounted as a **sibling** of `RootErrorBoundary`, NOT inside it. If a component crashes, the error boundary replaces its subtree with `<CrashFallback />`; a toast inside that subtree would disappear at the moment the user most needs it.
 
 ```tsx
-// renderer/app/providers.tsx
-export function AppShell({ children }: { children: ReactNode }) {
+// renderer/app/AppShell.tsx  (abridged — the provider stack is omitted)
+export function AppShell({ children }: { readonly children: ReactNode }) {
     return (
         <>
-            <RootErrorBoundary>{children}</RootErrorBoundary>
-            <ToastHost /> {/* sibling — survives boundary catches */}
+            {/* first — patches console.* before <Providers> renders */}
+            <LoggingBootstrap />
+            <Providers>
+                {/* … theme / i18n / icon / fade providers … */}
+                <div style={{ position: 'relative', zIndex: 'var(--ch-z-raised)' }}>
+                    <RootErrorBoundary>{children}</RootErrorBoundary>
+                    <ToastHost /> {/* sibling — survives boundary catches */}
+                </div>
+            </Providers>
         </>
     );
 }
 ```
+
+Two orderings, one file, both load-bearing: `ToastHost` beside `RootErrorBoundary` (never inside), and `LoggingBootstrap` ahead of `Providers` (never inside). `renderer/app/layout.test.tsx` pins the first, `renderer/app/AppShell.test.tsx` the second.
 
 ---
 

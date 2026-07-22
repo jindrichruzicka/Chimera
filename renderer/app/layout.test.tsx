@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 // renderer/app/layout.test.tsx
 //
-// Tests for the root layout CSP meta tag (WARN-1 / #193).
+// Tests for the root layout CSP meta tag.
 
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installMatchMedia } from '../__test-support__/installMatchMedia';
+import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi';
 import { useToastStore } from '../state/toastStore';
 import { AppShell } from './AppShell';
 import RootLayout from './layout';
@@ -35,20 +37,6 @@ vi.mock('next/navigation', () => ({
 }));
 
 const TOAST_ID = '00000000-0000-4000-8000-000000000645';
-
-function installMatchMedia(): void {
-    Object.defineProperty(window, 'matchMedia', {
-        configurable: true,
-        value: vi.fn().mockImplementation((query: string) => ({
-            matches: false,
-            media: query,
-            onchange: null,
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-            dispatchEvent: vi.fn(() => true),
-        })),
-    });
-}
 
 function renderLayoutDocument(children: React.ReactNode = null): Document {
     const markup = `<!DOCTYPE html>${renderToStaticMarkup(<RootLayout>{children}</RootLayout>)}`;
@@ -152,10 +140,7 @@ describe('RootLayout', () => {
 
     it('installs renderer logging from the window.__chimera.logs IPC surface', () => {
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        const logsApi = {
-            emit: vi.fn(),
-            readRecent: vi.fn(() => Promise.resolve([])),
-        };
+        const logsApi = createRecordingLogsApi();
         (window as unknown as { __chimera: { logs?: typeof logsApi } }).__chimera.logs = logsApi;
 
         const rendered = render(

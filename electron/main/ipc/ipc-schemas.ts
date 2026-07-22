@@ -476,10 +476,24 @@ export const LogSourceSchema = z.union([
     z.object({ process: z.literal('simulation'), module: z.string() }),
 ]);
 
+// Capped like `message` below — every string field this schema *names* is
+// bounded (§9.1): `message`, `source.module`, and these three. `context` is
+// named but bounded in shape only, so neither it nor any string inside it has
+// a size bound; §4.27 states why. Every patched renderer
+// console.warn/console.error carrying an Error emits one of these, so the
+// field is reachable at volume rather than once per crash. The renderer
+// truncates to these exact caps in
+// serialiseError (renderer/logging/rendererLogger.ts — the two sides cannot
+// share a constant across the electron/renderer boundary), so on the
+// RendererLogEntrySchema channel an oversized field means a producer that
+// bypassed the bridge, and the entry is dropped like any other malformed
+// payload. LogEntrySchema shares these caps as a plain bound only: main-side
+// producers build their LogErrorInfo without truncation and are not validated
+// by it in production.
 export const LogErrorInfoSchema = z.object({
-    name: z.string(),
-    message: z.string(),
-    stack: z.string().optional(),
+    name: z.string().max(256),
+    message: z.string().max(4096),
+    stack: z.string().max(8192).optional(),
 });
 
 export const LogEntrySchema = z.object({
@@ -497,9 +511,14 @@ export const LogEntrySchema = z.object({
  * is intentionally absent so any renderer-supplied value is stripped by
  * Zod before the handler sees it. The handler unconditionally sets
  * `process: 'renderer'` on the trusted entry (§9.1, Invariant #1).
+ *
+ * `module` reaches the sink verbatim, so it carries the same cap as the
+ * other renderer-supplied strings; `makeEntry` truncates to it renderer-side
+ * (renderer/logging/rendererLogger.ts) because this handler drops on
+ * validation failure rather than truncating.
  */
 export const RendererLogSourceSchema = z.object({
-    module: z.string(),
+    module: z.string().max(256),
 });
 
 /**

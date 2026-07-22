@@ -25,78 +25,90 @@ import { Providers } from './providers';
 
 export function AppShell({ children }: { readonly children: ReactNode }): React.ReactElement {
     return (
-        <Providers>
-            <ThemeProvider>
-                {/*
-                 * Opt-in i18n runtime. The TokenModeI18nProvider wrapper feeds
-                 * <I18nProvider> the `showTokens` debug flag from debugI18nStore
-                 * (flipped by the global F4 hotkey — I18nTokenModeToggle —
-                 * round-tripped through the main-process debug bridge back into
-                 * DebugI18nBootstrap). With the flag off — its default,
-                 * and always in production — it resolves engine English at zero
-                 * cost, so single-language / no-i18n games are unaffected.
-                 * Settings locale, declared languages, and the game override
-                 * bundle are wired elsewhere; this makes useTranslate() available
-                 * to pages and the bootstraps below.
-                 */}
-                <TokenModeI18nProvider>
+        <>
+            {/*
+             * First child of the shell root, and deliberately OUTSIDE
+             * <Providers> (§4.27, Invariant #67). The renderer logging bridge
+             * patches console.warn/console.error during LoggingBootstrap's
+             * render — not in an effect — and React renders siblings in order,
+             * so everything below is covered, including what <Providers> logs
+             * while rendering. Mounting it inside <Providers> drops that
+             * provider's own render-phase warns. Do not reorder: pinned by
+             * renderer/app/AppShell.test.tsx.
+             */}
+            <LoggingBootstrap />
+            <Providers>
+                <ThemeProvider>
                     {/*
-                     * Game-contributed UI icons: ActiveGameIconProvider resolves
-                     * the active game's `icons` set from the registry shell seam
-                     * and publishes it to <Icon> via IconContext, so a game glyph
-                     * (<Icon name="game.<id>.*">) renders with the engine's
-                     * currentColor + token sizing — inside an <IconButton> or on
-                     * its own. Inert (engine icons only) for a no-icon game, and
-                     * mounted above {children} + the game screens so every <Icon>
-                     * resolves a game glyph. Ordering vs i18n is irrelevant
-                     * (independent contexts).
+                     * Opt-in i18n runtime. The TokenModeI18nProvider wrapper feeds
+                     * <I18nProvider> the `showTokens` debug flag from debugI18nStore
+                     * (flipped by the global F4 hotkey — I18nTokenModeToggle —
+                     * round-tripped through the main-process debug bridge back into
+                     * DebugI18nBootstrap). With the flag off — its default,
+                     * and always in production — it resolves engine English at zero
+                     * cost, so single-language / no-i18n games are unaffected.
+                     * Settings locale, declared languages, and the game override
+                     * bundle are wired elsewhere; this makes useTranslate() available
+                     * to pages and the bootstraps below.
                      */}
-                    <ActiveGameIconProvider>
+                    <TokenModeI18nProvider>
                         {/*
-                         * App-level fade for cross-screen route transitions
-                         * (main-menu ↔ lobby ↔ game). Lives above {children} so its
-                         * opacity survives Next.js soft navigation; the bootstraps
-                         * (GameStoreBootstrap drives the lobby⇄game fades) and the
-                         * pages all consume this provider via useFade(). Distinct from
-                         * GameShell's own inner FadeProvider, which only fades in-game
-                         * scene swaps.
+                         * Game-contributed UI icons: ActiveGameIconProvider resolves
+                         * the active game's `icons` set from the registry shell seam
+                         * and publishes it to <Icon> via IconContext, so a game glyph
+                         * (<Icon name="game.<id>.*">) renders with the engine's
+                         * currentColor + token sizing — inside an <IconButton> or on
+                         * its own. Inert (engine icons only) for a no-icon game, and
+                         * mounted above {children} + the game screens so every <Icon>
+                         * resolves a game glyph. Ordering vs i18n is irrelevant
+                         * (independent contexts).
                          */}
-                        <ScreenFadeRoot>
-                            <GameRegistrationBootstrap />
-                            <DebugI18nBootstrap />
+                        <ActiveGameIconProvider>
                             {/*
-                             * App-level (not GameShell) so F4 flips token mode on
-                             * every shell route — main menu, settings, lobby —
-                             * where the F9 Inspector toggle is unavailable.
+                             * App-level fade for cross-screen route transitions
+                             * (main-menu ↔ lobby ↔ game). Lives above {children} so its
+                             * opacity survives Next.js soft navigation; the bootstraps
+                             * (GameStoreBootstrap drives the lobby⇄game fades) and the
+                             * pages all consume this provider via useFade(). Distinct from
+                             * GameShell's own inner FadeProvider, which only fades in-game
+                             * scene swaps.
                              */}
-                            <I18nTokenModeToggle />
-                            <LoggingBootstrap />
-                            <SettingsBootstrap />
-                            <LobbyStoreBootstrap />
-                            <GameStoreBootstrap />
-                            <SaveStoreBootstrap />
-                            <ReplayNavigationBridge />
-                            <ReplayExportToastBridge />
-                            <PlayerConnectionToastBridge />
-                            <PlayerLeftToastBridge />
-                            <ProfileRejectedToastBridge />
-                            <React.Suspense fallback={null}>
-                                <ShellBackgroundHost />
-                            </React.Suspense>
-                            <div style={{ position: 'relative', zIndex: 'var(--ch-z-raised)' }}>
-                                <ConnectionStatusIndicator />
-                                <RootErrorBoundary>{children}</RootErrorBoundary>
+                            <ScreenFadeRoot>
+                                <GameRegistrationBootstrap />
+                                <DebugI18nBootstrap />
                                 {/*
-                                 * App-level so the waiting modal survives the
-                                 * /saves → /game route hop mid-restore.
+                                 * App-level (not GameShell) so F4 flips token mode on
+                                 * every shell route — main menu, settings, lobby —
+                                 * where the F9 Inspector toggle is unavailable.
                                  */}
-                                <RestoreWaitingOverlay />
-                                <ToastHost />
-                            </div>
-                        </ScreenFadeRoot>
-                    </ActiveGameIconProvider>
-                </TokenModeI18nProvider>
-            </ThemeProvider>
-        </Providers>
+                                <I18nTokenModeToggle />
+                                <SettingsBootstrap />
+                                <LobbyStoreBootstrap />
+                                <GameStoreBootstrap />
+                                <SaveStoreBootstrap />
+                                <ReplayNavigationBridge />
+                                <ReplayExportToastBridge />
+                                <PlayerConnectionToastBridge />
+                                <PlayerLeftToastBridge />
+                                <ProfileRejectedToastBridge />
+                                <React.Suspense fallback={null}>
+                                    <ShellBackgroundHost />
+                                </React.Suspense>
+                                <div style={{ position: 'relative', zIndex: 'var(--ch-z-raised)' }}>
+                                    <ConnectionStatusIndicator />
+                                    <RootErrorBoundary>{children}</RootErrorBoundary>
+                                    {/*
+                                     * App-level so the waiting modal survives the
+                                     * /saves → /game route hop mid-restore.
+                                     */}
+                                    <RestoreWaitingOverlay />
+                                    <ToastHost />
+                                </div>
+                            </ScreenFadeRoot>
+                        </ActiveGameIconProvider>
+                    </TokenModeI18nProvider>
+                </ThemeProvider>
+            </Providers>
+        </>
     );
 }

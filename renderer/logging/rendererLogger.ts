@@ -33,6 +33,29 @@ export interface RendererLogEmitter {
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
+// Field caps mirrored from the main-process `chimera:logs:emit` schema
+// (electron/main/ipc/ipc-schemas.ts, LogErrorInfoSchema / RendererLogEntrySchema).
+// The handler DROPS an entry that fails validation rather than truncating it,
+// so the renderer truncates first: an oversized stack must cost characters,
+// never the whole entry. The two sides cannot share a constant — renderer code
+// must not import from electron/** — so each cites the other.
+//
+// MAX_ERROR_STACK_LENGTH additionally bounds the `context.stack` the window
+// handlers write (§4.27). The schema bounds `context`'s shape but not its
+// extent, so an oversized value there cannot cost an entry — this bound is
+// this module's own, so that every string the bridge itself composes is
+// bounded rather than only the ones a validator would reject.
+//
+// A caller's `context` is the one thing no cap covers: it carries arbitrary
+// structured diagnostics and passes through as given. That is not free of
+// consequence — the schema still requires a record, so a caller handing
+// emitRendererError a non-record `context` costs the whole entry.
+const MAX_MESSAGE_LENGTH = 4096;
+const MAX_MODULE_LENGTH = 256;
+const MAX_ERROR_NAME_LENGTH = 256;
+const MAX_ERROR_MESSAGE_LENGTH = 4096;
+const MAX_ERROR_STACK_LENGTH = 8192;
+
 function now(): number {
     return Date.now();
 }
@@ -46,9 +69,9 @@ function makeEntry(
 ): LogEntry {
     return {
         level,
-        message,
+        message: message.slice(0, MAX_MESSAGE_LENGTH),
         timestamp: now(),
-        source: { process: 'renderer', module: moduleName },
+        source: { process: 'renderer', module: moduleName.slice(0, MAX_MODULE_LENGTH) },
         ...(context !== undefined && { context }),
         ...(error !== undefined && { error: serialiseError(error) }),
     };
@@ -56,14 +79,36 @@ function makeEntry(
 
 function serialiseError(error: Error): NonNullable<LogEntry['error']> {
     return {
-        name: error.name,
-        message: error.message,
-        ...(error.stack !== undefined && { stack: error.stack }),
+        name: error.name.slice(0, MAX_ERROR_NAME_LENGTH),
+        message: error.message.slice(0, MAX_ERROR_MESSAGE_LENGTH),
+        ...(error.stack !== undefined && { stack: error.stack.slice(0, MAX_ERROR_STACK_LENGTH) }),
     };
 }
 
-function argsToMessage(args: unknown[]): string {
+function argsToMessage(args: readonly unknown[]): string {
     return args.map((a) => (typeof a === 'string' ? a : String(a))).join(' ');
+}
+
+/**
+ * Split the first `Error` out of a patched console call's arguments.
+ *
+ * The stack is the one thing that makes a renderer error actionable, and
+ * `String(err)` drops it — so the first `Error` is threaded into `makeEntry`'s
+ * `error` parameter (`LogEntry.error` carries `name`/`message`/`stack`) and
+ * removed from the composed message: its detail travels once, in the `error`
+ * field, so the main-process logger does not print it twice. The remaining
+ * arguments compose the message unchanged.
+ */
+function splitFirstError(args: readonly unknown[]): { error?: Error; rest: readonly unknown[] } {
+    const index = args.findIndex((a) => a instanceof Error);
+    if (index === -1) return { rest: args };
+    return { error: args[index] as Error, rest: args.filter((_, i) => i !== index) };
+}
+
+/** The message for a console call, with a readable fallback for a lone Error. */
+function composeMessage(rest: readonly unknown[], error: Error | undefined): string {
+    if (rest.length > 0 || error === undefined) return argsToMessage(rest);
+    return `${error.name}: ${error.message}`;
 }
 
 // ── idempotency guard ──────────────────────────────────────────────────────────
@@ -81,19 +126,21 @@ let installed = false;
  * All logsApi.emit calls are wrapped in try/catch to prevent re-entry if
  * the IPC bridge itself throws.
  *
- * Idempotent: calling more than once is a no-op until the returned teardown
- * is called. The teardown restores original console methods, removes event
+ * Idempotent: a second call while installed returns `null` — NOT a teardown —
+ * so a caller can never claim ownership of a patch it did not create. A no-op
+ * teardown would read as ownership, and a stale claim to it survives Fast
+ * Refresh (this module's `installed` latch persists while a caller module
+ * re-evaluates) and blocks every future re-install while reporting success.
+ * The real teardown restores original console methods, removes event
  * listeners, and resets the installed guard.
  *
  * @param logsApi — the `window.__chimera.logs` namespace (or any compatible
  *   stub for tests).
- * @returns A teardown function that undoes all patches.
+ * @returns A teardown function that undoes all patches, or `null` if the
+ *   bridge was already installed and this call changed nothing.
  */
-export function installRendererLogger(logsApi: LogsAPI): () => void {
-    if (installed)
-        return (): void => {
-            /* already installed — no-op teardown */
-        };
+export function installRendererLogger(logsApi: LogsAPI): (() => void) | null {
+    if (installed) return null;
     installed = true;
 
     const origWarn = console.warn;
@@ -102,7 +149,8 @@ export function installRendererLogger(logsApi: LogsAPI): () => void {
     console.warn = (...args: unknown[]): void => {
         origWarn(...args);
         try {
-            logsApi.emit(makeEntry('warn', argsToMessage(args)));
+            const { error, rest } = splitFirstError(args);
+            logsApi.emit(makeEntry('warn', composeMessage(rest, error), undefined, error));
         } catch {
             // swallow — prevent re-entry if IPC bridge throws
         }
@@ -111,7 +159,8 @@ export function installRendererLogger(logsApi: LogsAPI): () => void {
     console.error = (...args: unknown[]): void => {
         origError(...args);
         try {
-            logsApi.emit(makeEntry('error', argsToMessage(args)));
+            const { error, rest } = splitFirstError(args);
+            logsApi.emit(makeEntry('error', composeMessage(rest, error), undefined, error));
         } catch {
             // swallow — prevent re-entry if IPC bridge throws
         }
@@ -123,7 +172,7 @@ export function installRendererLogger(logsApi: LogsAPI): () => void {
         const message = error?.message ?? e.message ?? 'Uncaught error';
         const context: Record<string, unknown> = {};
         if (error?.stack !== undefined) {
-            context['stack'] = error.stack;
+            context['stack'] = error.stack.slice(0, MAX_ERROR_STACK_LENGTH);
         }
         try {
             logsApi.emit(
@@ -140,7 +189,7 @@ export function installRendererLogger(logsApi: LogsAPI): () => void {
         const message = reason instanceof Error ? reason.message : String(reason);
         const context: Record<string, unknown> = {};
         if (reason instanceof Error && reason.stack !== undefined) {
-            context['stack'] = reason.stack;
+            context['stack'] = reason.stack.slice(0, MAX_ERROR_STACK_LENGTH);
         }
         try {
             logsApi.emit(

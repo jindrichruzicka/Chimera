@@ -203,7 +203,7 @@ describe('JoinLobbyParamsSchema', () => {
         ).toBe(false);
     });
 
-    it('strips renderer-supplied claims — seat claims are main-side only (#822)', () => {
+    it('strips renderer-supplied claims — seat claims are main-side only', () => {
         // Session-ticket claims are injected by the composition root after
         // this schema runs; a renderer must never be able to smuggle them in.
         const result = JoinLobbyParamsSchema.safeParse({
@@ -725,6 +725,107 @@ describe('RendererLogEntrySchema', () => {
             }).success,
         ).toBe(true);
     });
+
+    // The error fields are capped like message is — every string field the
+    // schema names is bounded (§9.1); `context` is bounded in shape only, so
+    // neither it nor any string inside it has a size bound. Every patched
+    // renderer console.warn/console.error
+    // carrying an Error sends one, so the field is reachable at volume rather
+    // than once per crash. The renderer truncates
+    // to these caps in serialiseError (renderer/logging/rendererLogger.ts),
+    // so on this channel an oversized field means a producer bypassing the
+    // bridge — dropped like any malformed payload.
+    it('accepts an error object at the field caps (name 256 / message 4096 / stack 8192)', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                error: {
+                    name: 'N'.repeat(256),
+                    message: 'm'.repeat(4096),
+                    stack: 's'.repeat(8192),
+                },
+            }).success,
+        ).toBe(true);
+    });
+
+    it('rejects error.stack longer than 8192 characters', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                error: { name: 'Error', message: 'boom', stack: 's'.repeat(8193) },
+            }).success,
+        ).toBe(false);
+    });
+
+    it('rejects error.message longer than 4096 characters', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                error: { name: 'Error', message: 'm'.repeat(4097) },
+            }).success,
+        ).toBe(false);
+    });
+
+    it('rejects error.name longer than 256 characters', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                error: { name: 'N'.repeat(257), message: 'boom' },
+            }).success,
+        ).toBe(false);
+    });
+
+    // `source.module` is renderer-supplied like the fields above, and reaches
+    // the sink verbatim (ipc-handlers.ts writes `module: parsed.source.module`
+    // onto the trusted entry), so it is capped too. The renderer truncates to
+    // the same 256 in makeEntry — a call site handing emitRendererError a long
+    // module name must cost characters, never the whole entry.
+    it('rejects source.module longer than 256 characters', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                source: { module: 'M'.repeat(257) },
+            }).success,
+        ).toBe(false);
+    });
+
+    it('accepts source.module of exactly 256 characters', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                source: { module: 'M'.repeat(256) },
+            }).success,
+        ).toBe(true);
+    });
+
+    // `context` is the one renderer-supplied field with no size bound: it
+    // carries arbitrary structured diagnostics, so the schema constrains its
+    // shape and not its extent. Both halves matter to a caller — an oversized
+    // value costs nothing, but a non-record `context` costs the whole entry,
+    // because the handler drops on validation failure rather than repairing.
+    it('accepts a context far larger than any capped field — size is not bounded', () => {
+        const context: Record<string, unknown> = {};
+        for (let i = 0; i < 2000; i += 1) context[`k${String(i)}`] = 'v'.repeat(100);
+        const result = RendererLogEntrySchema.safeParse({ ...VALID_RENDERER_ENTRY, context });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(JSON.stringify(result.data.context).length).toBeGreaterThan(200_000);
+        }
+    });
+
+    it.each([
+        ['an array', [1, 2, 3]],
+        ['a string', 'not-a-record'],
+        ['a number', 42],
+        ['null', null],
+    ])(
+        'rejects a context that is %s — shape is validated even though size is not',
+        (_label, context) => {
+            expect(
+                RendererLogEntrySchema.safeParse({ ...VALID_RENDERER_ENTRY, context }).success,
+            ).toBe(false);
+        },
+    );
 
     it('strips source.process entirely — renderer-supplied process is never in the parsed output', () => {
         // A renderer claiming to be 'main' must not appear in the parsed source.
