@@ -6,6 +6,7 @@ import type { ButtonVariant } from '../../theme/types';
 import { COMMON_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import { useEscapeLayer } from '../shell/EscapeStack';
+import { emitRendererError } from '../../logging/rendererLogger';
 import { Button } from './Button';
 import styles from './Modal.module.css';
 import { useExitPresence } from './useExitPresence';
@@ -179,13 +180,26 @@ export function Modal({
     // Run the action, then close unless it opted out (`dismiss: false`). A
     // throwing dismissing action must never wedge the dialog open — and since
     // closing unmounts the modal, letting the throw propagate into React's
-    // dispatch would only crash the surrounding tree, so contain it here
-    // (surfaced for debugging).
+    // dispatch would only crash the surrounding tree, so contain it here and
+    // forward it (Invariant #67): the Error reaches the log file with its stack
+    // and a named module. emitRendererError alone — console.* is forwarded too,
+    // so a console.* call would double the entry.
     const runAction = (action: ModalAction) => () => {
         try {
             action.onClick?.();
         } catch (error) {
-            console.error('[Modal] action threw:', error);
+            const logsApi = (
+                globalThis as Record<string, unknown> & {
+                    __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                }
+            ).__chimera?.logs;
+            emitRendererError(
+                logsApi,
+                '[Modal] action threw',
+                error instanceof Error ? error : new Error(String(error)),
+                undefined,
+                'modal',
+            );
         } finally {
             if (action.dismiss !== false) {
                 onClose();

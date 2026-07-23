@@ -82,4 +82,38 @@ describe('HomePage (boot-smoke page)', () => {
         expect(screen.queryByTestId('main-menu-settings')).toBeNull();
         expect(screen.queryByTestId('main-menu-quit')).toBeNull();
     });
+
+    it('reports a live bridge on the unforwarded console.log (§4.27), not console.warn', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        render(<HomePage />);
+
+        await waitFor(() =>
+            expect(console.log).toHaveBeenCalledWith('[chimera] preload bridge live', {
+                os: 'macos',
+                version: 'test',
+            }),
+        );
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('routes a preload-bridge failure to the forwarded console.warn, not console.log', async () => {
+        const failure = new Error('ipc-broken');
+        (
+            window as unknown as { __chimera: { system: { platform: () => Promise<unknown> } } }
+        ).__chimera.system.platform = vi.fn(() => Promise.reject(failure));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        render(<HomePage />);
+
+        await waitFor(() =>
+            expect(warn).toHaveBeenCalledWith(
+                '[chimera] preload bridge platform() failed',
+                failure,
+            ),
+        );
+        expect(console.log).not.toHaveBeenCalledWith(
+            '[chimera] preload bridge platform() failed',
+            failure,
+        );
+    });
 });

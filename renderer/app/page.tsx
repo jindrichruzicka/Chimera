@@ -20,11 +20,17 @@ import { logPlatformOnBoot } from './bootSmoke';
 
 export default function HomePage() {
     useEffect(() => {
-        void logPlatformOnBoot(window.__chimera, (message, detail) => {
+        // §4.27: the healthy round-trip stays on `console.log`, which the
+        // renderer logger deliberately does not forward (PII/volume hygiene).
+        // A bridge failure routes to `console.warn`, which the renderer logger's
+        // patch forwards to the log file — passing the Error as an arg so its
+        // stack survives.
+        void logPlatformOnBoot(window.__chimera, (level, message, detail) => {
+            const sink = level === 'warn' ? console.warn : console.log;
             if (detail === undefined) {
-                console.log(message);
+                sink(message);
             } else {
-                console.log(message, detail);
+                sink(message, detail);
             }
         });
     }, []);

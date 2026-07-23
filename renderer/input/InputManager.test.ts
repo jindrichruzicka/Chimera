@@ -17,6 +17,7 @@ import { createInputActionRegistry } from './InputActionRegistry.js';
 import { createInputManager } from './InputManager.js';
 import type { InputManager } from './InputManager.js';
 import type { KeyBindingRepository } from './KeyBindingRepository.js';
+import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi.js';
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
@@ -896,20 +897,30 @@ describe('InputManager — subscriber exception isolation', () => {
         expect(safe).toHaveBeenCalledOnce();
     });
 
-    it('subscriber exception is reported via console.error and not swallowed silently', () => {
+    it('subscriber exception is forwarded as a named, stack-carrying entry, not swallowed silently', () => {
         const err = new Error('subscriber boom');
         const throwing = vi.fn(() => {
             throw err;
         });
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
 
-        manager.onAction('engine:toggle-menu', throwing);
-        fireKeydown('Escape');
+        try {
+            manager.onAction('engine:toggle-menu', throwing);
+            fireKeydown('Escape');
 
-        expect(errorSpy).toHaveBeenCalledOnce();
-        expect(errorSpy.mock.calls[0]![1]).toBe(err);
-
-        errorSpy.mockRestore();
+            // Invariant #67: the thrown Error reaches the log file with its stack
+            // and a named module — not a String(err) under the 'global' catch-all.
+            expect(logs.emitCalls).toHaveLength(1);
+            const entry = logs.emitCalls[0]!;
+            expect(entry.level).toBe('error');
+            expect(entry.source.module).toBe('input-manager');
+            expect(entry.source.module).not.toBe('global');
+            expect(entry.error?.stack).toBeDefined();
+            expect(entry.error?.message).toBe('subscriber boom');
+        } finally {
+            Reflect.deleteProperty(globalThis, '__chimera');
+        }
     });
 });
 

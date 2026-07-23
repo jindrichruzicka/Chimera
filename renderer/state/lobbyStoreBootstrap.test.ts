@@ -21,6 +21,7 @@ import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { bootstrapLobbyStore } from './lobbyStoreBootstrap';
 import { useLobbyStore } from './lobbyStore';
 import { useLobbyUiStore } from './lobbyUiStore';
+import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -333,24 +334,36 @@ describe('bootstrapLobbyStore()', () => {
         expect(useLobbyStore.getState().hasLoadedInitialState).toBe(true);
     });
 
-    // ── WARN-2: replay error must be logged ───────────────────────────────────
+    // ── replay error must be forwarded, not swallowed ─────────────────────────
 
-    it('[WARN-2] logs a warning when getCurrentState rejects', async () => {
+    it('forwards a named, stack-carrying entry when getCurrentState rejects', async () => {
         const lobbyApi = makeLobbyApi();
         const err = new Error('IPC schema validation failure');
         vi.mocked(lobbyApi.getCurrentState).mockRejectedValueOnce(err);
         const systemApi = makeSystemApi();
 
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
 
-        bootstrapLobbyStore(lobbyApi, systemApi);
-        await Promise.resolve();
-        await Promise.resolve();
+        try {
+            bootstrapLobbyStore(lobbyApi, systemApi);
+            await Promise.resolve();
+            await Promise.resolve();
 
-        expect(warnSpy).toHaveBeenCalled();
-        expect(useLobbyStore.getState().hasLoadedInitialState).toBe(true);
-
-        warnSpy.mockRestore();
+            // Invariant #67: schema drift is observable in the log file with its
+            // stack and origin, not as a one-line String(err) under 'global'.
+            expect(logs.emitCalls).toHaveLength(1);
+            const entry = logs.emitCalls[0]!;
+            expect(entry.level).toBe('error');
+            expect(entry.source.module).toBe('lobby-store-bootstrap');
+            expect(entry.source.module).not.toBe('global');
+            expect(entry.error?.stack).toBeDefined();
+            expect(entry.message).toContain('Failed to replay lobby state');
+            // Control flow unchanged: still degrades and continues.
+            expect(useLobbyStore.getState().hasLoadedInitialState).toBe(true);
+        } finally {
+            Reflect.deleteProperty(globalThis, '__chimera');
+        }
     });
 
     it('[WARN-1] does not clear fresher pushed lobby state when replay rejects late', async () => {

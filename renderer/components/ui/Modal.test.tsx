@@ -8,6 +8,7 @@ import { EscapeStackProvider, useEscapeLayer } from '../shell/EscapeStack';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { Modal } from './Modal';
 import modalCss from './Modal.module.css?raw';
+import { createRecordingLogsApi } from '../../logging/__test-support__/RecordingLogsApi.js';
 
 // Simulates a non-Modal overlay layer (key-capture, Drawer, …) registered above
 // the Modal on the shared escape stack. Must mount after the Modal so its layer
@@ -155,23 +156,41 @@ describe('Modal', () => {
         expect(onClose).toHaveBeenCalledOnce();
     });
 
-    it('still closes even if an action throws', () => {
+    it('still closes even if an action throws, forwarding a named, stack-carrying entry', () => {
         const onClose = vi.fn();
         const boom = vi.fn(() => {
             throw new Error('boom');
         });
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
 
-        render(
-            <Modal open title="Danger" onClose={onClose} actions={[{ label: 'Go', onClick: boom }]}>
-                Body
-            </Modal>,
-        );
+        try {
+            render(
+                <Modal
+                    open
+                    title="Danger"
+                    onClose={onClose}
+                    actions={[{ label: 'Go', onClick: boom }]}
+                >
+                    Body
+                </Modal>,
+            );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Go' }));
-        expect(boom).toHaveBeenCalledOnce();
-        expect(onClose).toHaveBeenCalledOnce();
-        expect(errorSpy).toHaveBeenCalledOnce();
+            fireEvent.click(screen.getByRole('button', { name: 'Go' }));
+            expect(boom).toHaveBeenCalledOnce();
+            expect(onClose).toHaveBeenCalledOnce();
+
+            // Invariant #67: the thrown Error reaches the log file with its stack
+            // and a named module, not a String(err) under the 'global' catch-all.
+            expect(logs.emitCalls).toHaveLength(1);
+            const entry = logs.emitCalls[0]!;
+            expect(entry.level).toBe('error');
+            expect(entry.source.module).toBe('modal');
+            expect(entry.source.module).not.toBe('global');
+            expect(entry.error?.stack).toBeDefined();
+        } finally {
+            Reflect.deleteProperty(globalThis, '__chimera');
+        }
     });
 
     it('applies the action variant and test id to the rendered button', () => {
@@ -245,29 +264,36 @@ describe('Modal', () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 
-    it('does not close when a non-dismissing action throws', () => {
+    it('does not close when a non-dismissing action throws, still forwarding the entry', () => {
         const onClose = vi.fn();
         const boom = vi.fn(() => {
             throw new Error('boom');
         });
-        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
 
-        render(
-            <Modal
-                open
-                title="Danger"
-                onClose={onClose}
-                actions={[{ label: 'Go', dismiss: false, onClick: boom }]}
-            >
-                Body
-            </Modal>,
-        );
+        try {
+            render(
+                <Modal
+                    open
+                    title="Danger"
+                    onClose={onClose}
+                    actions={[{ label: 'Go', dismiss: false, onClick: boom }]}
+                >
+                    Body
+                </Modal>,
+            );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Go' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Go' }));
 
-        expect(boom).toHaveBeenCalledOnce();
-        expect(errorSpy).toHaveBeenCalledOnce();
-        expect(onClose).not.toHaveBeenCalled();
+            expect(boom).toHaveBeenCalledOnce();
+            expect(logs.emitCalls).toHaveLength(1);
+            expect(logs.emitCalls[0]?.source.module).toBe('modal');
+            expect(logs.emitCalls[0]?.error?.stack).toBeDefined();
+            expect(onClose).not.toHaveBeenCalled();
+        } finally {
+            Reflect.deleteProperty(globalThis, '__chimera');
+        }
     });
 
     it('forwards disabled to the rendered action button and ignores clicks on it', () => {

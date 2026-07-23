@@ -8,14 +8,25 @@
 // When the preload bridge is live the logger records the host platform; when
 // it is missing or fails the logger records the failure, which surfaces a
 // broken bridge immediately in devtools.
+//
+// The logger port carries a severity (§4.27, Invariant #67): success is an
+// `info` the page adapter leaves on the unforwarded `console.log`, while both
+// failure paths are a `warn` the adapter routes to the forwarded
+// `console.warn` — a broken bridge in a packaged build (blank window) then
+// lands in the log file, not only a devtools console nobody has open. This
+// module stays DOM-free and bridge-free: the routing decision lives here (it
+// knows success from failure), the transport lives in the page.
 
 import type { ChimeraAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 
 /** Narrow slice of `ChimeraAPI` needed by the boot smoke. */
 export type BootSmokeBridge = Pick<ChimeraAPI, 'system'>;
 
-/** Structured logger port. Production callers wrap `console.log`. */
-export type BootSmokeLogger = (message: string, detail?: unknown) => void;
+/**
+ * Structured logger port. `info` is the healthy round-trip (unforwarded in
+ * production); `warn` is a bridge failure the caller forwards to the log file.
+ */
+export type BootSmokeLogger = (level: 'info' | 'warn', message: string, detail?: unknown) => void;
 
 /**
  * Probe the preload bridge by invoking `system.platform()`. Success and
@@ -27,13 +38,13 @@ export async function logPlatformOnBoot(
     logger: BootSmokeLogger,
 ): Promise<void> {
     if (!bridge) {
-        logger('[chimera] preload bridge unavailable');
+        logger('warn', '[chimera] preload bridge unavailable');
         return;
     }
     try {
         const info = await bridge.system.platform();
-        logger('[chimera] preload bridge live', info);
+        logger('info', '[chimera] preload bridge live', info);
     } catch (error) {
-        logger('[chimera] preload bridge platform() failed', error);
+        logger('warn', '[chimera] preload bridge platform() failed', error);
     }
 }

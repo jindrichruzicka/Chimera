@@ -14,6 +14,7 @@
 
 import type { SettingsAPI, Unsubscribe } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useSettingsStore } from './settingsStore';
+import { emitRendererError } from '../logging/rendererLogger';
 
 const ENGINE_SETTINGS_GAME_ID = '__engine__';
 
@@ -45,7 +46,22 @@ export function bootstrapSettingsStore(api: SettingsAPI): Unsubscribe {
         })
         .catch((error: unknown) => {
             if (!disposed) {
-                console.warn('[settingsStoreBootstrap] Failed to replay engine settings:', error);
+                // Invariant #67: forward the failure with its stack and a named
+                // module. emitRendererError alone — no console.* — because no
+                // developer is watching this bootstrap path and a console call
+                // would double the entry (console.* is forwarded too).
+                const logsApi = (
+                    globalThis as Record<string, unknown> & {
+                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                    }
+                ).__chimera?.logs;
+                emitRendererError(
+                    logsApi,
+                    '[settingsStoreBootstrap] Failed to replay engine settings',
+                    error instanceof Error ? error : new Error(String(error)),
+                    undefined,
+                    'settings-store-bootstrap',
+                );
             }
         });
 

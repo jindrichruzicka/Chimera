@@ -3,6 +3,7 @@ import { loadRendererGame } from '../game/rendererGameRegistry';
 import type { InputAction } from '../input/InputAction.js';
 import type { InputActionRegistry } from '../input/InputActionRegistry.js';
 import { useSettingsStore } from '../state/settingsStore';
+import { emitRendererError } from '../logging/rendererLogger';
 
 export function getSettingsApi(): SettingsAPI | null {
     const chimera = (globalThis as { __chimera?: { settings: SettingsAPI } }).__chimera;
@@ -25,9 +26,20 @@ export async function hydrateActiveGameSettings(
         }
     } catch (error: unknown) {
         if (!isDisposed()) {
-            console.warn(
-                `[SettingsBootstrap] Failed to hydrate settings for '${activeGameId}':`,
-                error,
+            // Invariant #67: forward with stack + named module (not 'global').
+            // emitRendererError alone — console.* is forwarded too, so a console.*
+            // call would double it.
+            const logsApi = (
+                globalThis as Record<string, unknown> & {
+                    __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                }
+            ).__chimera?.logs;
+            emitRendererError(
+                logsApi,
+                `[SettingsBootstrap] Failed to hydrate settings for '${activeGameId}'`,
+                error instanceof Error ? error : new Error(String(error)),
+                undefined,
+                'settings-bootstrap',
             );
         }
     }
@@ -53,9 +65,20 @@ export async function registerActiveGameInputActions(
         }
     } catch (error: unknown) {
         if (!isDisposed()) {
-            console.warn(
-                `[SettingsBootstrap] Failed to register input actions for '${activeGameId}':`,
-                error,
+            // Invariant #67: forward with stack + named module (not 'global').
+            // emitRendererError alone — console.* is forwarded too, so a console.*
+            // call would double it.
+            const logsApi = (
+                globalThis as Record<string, unknown> & {
+                    __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                }
+            ).__chimera?.logs;
+            emitRendererError(
+                logsApi,
+                `[SettingsBootstrap] Failed to register input actions for '${activeGameId}'`,
+                error instanceof Error ? error : new Error(String(error)),
+                undefined,
+                'settings-bootstrap',
             );
         }
     }

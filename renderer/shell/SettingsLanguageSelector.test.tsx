@@ -11,6 +11,7 @@ import { I18nProvider } from '../i18n/I18nProvider';
 import * as rendererGameRegistry from '../game/rendererGameRegistry';
 import { useSettingsStore } from '../state/settingsStore';
 import { SettingsLanguageSelector } from './SettingsLanguageSelector';
+import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi.js';
 
 const GAME_ID = 'tactics';
 
@@ -100,6 +101,29 @@ describe('SettingsLanguageSelector', () => {
         await user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'cs-CZ');
 
         expect(mockUpdate).toHaveBeenCalledWith(GAME_ID, { gameplay: { language: 'cs-CZ' } });
+    });
+
+    it('forwards a named, stack-carrying entry when updating the language fails', async () => {
+        // Invariant #67: a degrade-and-continue language-update failure lands on
+        // the forwarded logging path with its stack and a named module.
+        const err = new Error('settings ipc down');
+        mockUpdate.mockReset();
+        mockUpdate.mockRejectedValueOnce(err);
+        const logs = createRecordingLogsApi();
+        (window as unknown as { __chimera: { logs: unknown } }).__chimera.logs = logs;
+
+        const user = userEvent.setup();
+        render(<SettingsLanguageSelector gameId={GAME_ID} languages={LANGUAGES} />);
+
+        await user.selectOptions(screen.getByRole('combobox', { name: 'Language' }), 'cs-CZ');
+
+        await waitFor(() => expect(logs.emitCalls).toHaveLength(1));
+        const entry = logs.emitCalls[0]!;
+        expect(entry.level).toBe('error');
+        expect(entry.source.module).toBe('settings-language-selector');
+        expect(entry.source.module).not.toBe('global');
+        expect(entry.error?.stack).toBeDefined();
+        expect(entry.message).toContain('Failed to update language');
     });
 
     it('marks the control with the stable settings-language testid', () => {

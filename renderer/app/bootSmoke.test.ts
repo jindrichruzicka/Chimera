@@ -24,29 +24,33 @@ function makeBridge(
 }
 
 describe('logPlatformOnBoot', () => {
-    it('logs the resolved platform info when the bridge is live', async () => {
+    // The logger port carries a severity so the page adapter can route success
+    // to the unforwarded `console.log` (§4.27) and both failure paths to the
+    // forwarded `console.warn` — the messages wanted in the log file when a
+    // packaged build boots to a blank window.
+    it('logs the resolved platform info at info level when the bridge is live', async () => {
         const logger = vi.fn();
         const bridge = makeBridge(() => Promise.resolve({ os: 'macos', version: '14.0' }));
 
         await logPlatformOnBoot(bridge, logger);
 
         expect(logger).toHaveBeenCalledTimes(1);
-        expect(logger).toHaveBeenCalledWith('[chimera] preload bridge live', {
+        expect(logger).toHaveBeenCalledWith('info', '[chimera] preload bridge live', {
             os: 'macos',
             version: '14.0',
         });
     });
 
-    it('logs an unavailable-bridge message when the bridge is missing', async () => {
+    it('logs an unavailable-bridge message at warn level when the bridge is missing', async () => {
         const logger = vi.fn();
 
         await logPlatformOnBoot(undefined, logger);
 
         expect(logger).toHaveBeenCalledTimes(1);
-        expect(logger).toHaveBeenCalledWith('[chimera] preload bridge unavailable');
+        expect(logger).toHaveBeenCalledWith('warn', '[chimera] preload bridge unavailable');
     });
 
-    it('logs the error when platform() rejects', async () => {
+    it('logs the error at warn level when platform() rejects', async () => {
         const logger = vi.fn();
         const failure = new Error('ipc-broken');
         const bridge = makeBridge(() => Promise.reject(failure));
@@ -54,7 +58,11 @@ describe('logPlatformOnBoot', () => {
         await logPlatformOnBoot(bridge, logger);
 
         expect(logger).toHaveBeenCalledTimes(1);
-        expect(logger).toHaveBeenCalledWith('[chimera] preload bridge platform() failed', failure);
+        expect(logger).toHaveBeenCalledWith(
+            'warn',
+            '[chimera] preload bridge platform() failed',
+            failure,
+        );
     });
 
     it('awaits the platform() promise before returning', async () => {
@@ -69,7 +77,7 @@ describe('logPlatformOnBoot', () => {
         expect(logger).not.toHaveBeenCalled();
         resolve?.({ os: 'linux', version: '6.0' });
         await done;
-        expect(logger).toHaveBeenCalledWith('[chimera] preload bridge live', {
+        expect(logger).toHaveBeenCalledWith('info', '[chimera] preload bridge live', {
             os: 'linux',
             version: '6.0',
         });

@@ -19,6 +19,7 @@ import type {
 import { bootstrapSettingsStore } from './settingsStoreBootstrap';
 import { useSettingsStore } from './settingsStore';
 import { ENGINE_SETTINGS_GAME_ID } from '../input/KeyBindingRepository.js';
+import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -142,22 +143,29 @@ describe('bootstrapSettingsStore()', () => {
         expect(useSettingsStore.getState().settings['__engine__']).toBe(fresherPushedSettings);
     });
 
-    it('warns when initial engine settings replay fails', async () => {
+    it('forwards a named, stack-carrying entry when initial engine settings replay fails', async () => {
         const error = new Error('settings unavailable');
         const api = makeApi();
         vi.mocked(api.get).mockRejectedValue(error);
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
 
         try {
             bootstrapSettingsStore(api);
             await flushPromiseJobs();
 
-            expect(warn).toHaveBeenCalledWith(
-                '[settingsStoreBootstrap] Failed to replay engine settings:',
-                error,
-            );
+            // Invariant #67: the failure lands on the forwarded logging path with
+            // its stack intact and its module named — not a flattened String(err)
+            // under the 'global' catch-all.
+            expect(logs.emitCalls).toHaveLength(1);
+            const entry = logs.emitCalls[0]!;
+            expect(entry.level).toBe('error');
+            expect(entry.source.module).toBe('settings-store-bootstrap');
+            expect(entry.source.module).not.toBe('global');
+            expect(entry.error?.stack).toBeDefined();
+            expect(entry.message).toContain('Failed to replay engine settings');
         } finally {
-            warn.mockRestore();
+            Reflect.deleteProperty(globalThis, '__chimera');
         }
     });
 

@@ -25,6 +25,7 @@ import {
     fireEvent,
     render as baseRender,
     screen,
+    waitFor,
     within,
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -42,6 +43,7 @@ import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import type { ResolvedSettings } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { GameLanguage } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { LoadedRendererGame, LoadedRendererGameShell } from '../../game/rendererGameRegistry';
+import { createRecordingLogsApi } from '../../logging/__test-support__/RecordingLogsApi.js';
 
 const { mockLoadRendererGame, mockLoadRendererGameShell, mockPush } = vi.hoisted(() => ({
     mockLoadRendererGame: vi.fn(),
@@ -634,6 +636,27 @@ describe('SettingsPage — master volume slider (AC #2)', () => {
         const slider = screen.getByLabelText(/master volume/i);
         fireEvent.change(slider, { target: { value: '0.4' } });
         expect(mockUpdate).toHaveBeenCalledWith(GAME_ID, { audio: { masterVolume: 0.4 } });
+    });
+
+    it('forwards a named, stack-carrying entry when a settings update fails', async () => {
+        // Invariant #67: a degrade-and-continue update failure lands on the
+        // forwarded logging path with its stack and a named module — not a
+        // flattened String(err) under the 'global' catch-all.
+        const err = new Error('update ipc down');
+        mockUpdate.mockRejectedValueOnce(err);
+        const logs = createRecordingLogsApi();
+        (window as unknown as { __chimera: { logs: unknown } }).__chimera.logs = logs;
+
+        await renderSettingsPage();
+        fireEvent.change(screen.getByLabelText(/master volume/i), { target: { value: '0.4' } });
+
+        await waitFor(() => expect(logs.emitCalls).toHaveLength(1));
+        const entry = logs.emitCalls[0]!;
+        expect(entry.level).toBe('error');
+        expect(entry.source.module).toBe('settings-page');
+        expect(entry.source.module).not.toBe('global');
+        expect(entry.error?.stack).toBeDefined();
+        expect(entry.message).toContain('Failed to update settings');
     });
 
     it('slider initial value reflects settings from the store', async () => {

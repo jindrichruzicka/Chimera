@@ -22,6 +22,7 @@ import type {
 import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useLobbyStore } from './lobbyStore';
 import { useLobbyUiStore } from './lobbyUiStore';
+import { emitRendererError } from '../logging/rendererLogger';
 
 function syncLocalSeatsFromLobbyState(lobbyState: LobbyState): void {
     const { localPlayerId } = useLobbyUiStore.getState();
@@ -182,9 +183,24 @@ export function bootstrapLobbyStore(
         })
         .catch((err: unknown) => {
             if (active) {
-                // Log the error so schema drift / main-process bugs are
-                // observable in production rather than silently swallowed.
-                console.warn('[lobbyStoreBootstrap] Failed to replay lobby state:', err);
+                // Forward the error so schema drift / main-process bugs are
+                // observable in the log file (Invariant #67) — with the stack and
+                // a named module, not a one-line String(err) under 'global'.
+                // emitRendererError alone: no console.* (which is forwarded too,
+                // so it would double the entry) and no developer is watching this
+                // bootstrap path.
+                const logsApi = (
+                    globalThis as Record<string, unknown> & {
+                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                    }
+                ).__chimera?.logs;
+                emitRendererError(
+                    logsApi,
+                    '[lobbyStoreBootstrap] Failed to replay lobby state',
+                    err instanceof Error ? err : new Error(String(err)),
+                    undefined,
+                    'lobby-store-bootstrap',
+                );
                 if (isReplayCurrent()) {
                     useLobbyStore.getState().applyLobbyState(null);
                 }

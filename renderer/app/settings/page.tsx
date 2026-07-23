@@ -39,6 +39,7 @@ import { loadRendererGame } from '../../game/rendererGameRegistry';
 import { ENGINE_SETTINGS_GAME_ID } from '../../input/KeyBindingRepository.js';
 import { useInputManager } from '../../input/InputManagerContext.js';
 import { useOptionalInputActionRegistry } from '../../input/InputActionRegistryContext.js';
+import { emitRendererError } from '../../logging/rendererLogger';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import { SETTINGS_KEYS } from '../../i18n/engine-keys';
@@ -319,8 +320,24 @@ export default function SettingsPage(): React.ReactElement {
                         setRebindStatus((previous) => ({ ...previous, [id]: { ok: false } }));
                     }
                 })
-                .catch((error) => {
-                    console.error('[SettingsPage] rebind failed:', error);
+                .catch((error: unknown) => {
+                    // Invariant #67: forward with the Error's stack and a named
+                    // module (not 'global'). emitRendererError alone — console.*
+                    // is forwarded too, so a console call here would double the
+                    // entry. This convention holds for every catch in this
+                    // component.
+                    const logsApi = (
+                        globalThis as Record<string, unknown> & {
+                            __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                        }
+                    ).__chimera?.logs;
+                    emitRendererError(
+                        logsApi,
+                        '[SettingsPage] rebind failed',
+                        error instanceof Error ? error : new Error(String(error)),
+                        undefined,
+                        'settings-page',
+                    );
                 });
         },
         [inputManager],
@@ -373,8 +390,19 @@ export default function SettingsPage(): React.ReactElement {
                     setRebindStatus((previous) => ({ ...previous, [id]: { ok: false } }));
                 }
             })
-            .catch((error) => {
-                console.error('[SettingsPage] force-rebind failed:', error);
+            .catch((error: unknown) => {
+                const logsApi = (
+                    globalThis as Record<string, unknown> & {
+                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                    }
+                ).__chimera?.logs;
+                emitRendererError(
+                    logsApi,
+                    '[SettingsPage] force-rebind failed',
+                    error instanceof Error ? error : new Error(String(error)),
+                    undefined,
+                    'settings-page',
+                );
             });
     }
 
@@ -388,8 +416,19 @@ export default function SettingsPage(): React.ReactElement {
                     return next;
                 });
             })
-            .catch((error) => {
-                console.error('[SettingsPage] resetBinding failed:', error);
+            .catch((error: unknown) => {
+                const logsApi = (
+                    globalThis as Record<string, unknown> & {
+                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                    }
+                ).__chimera?.logs;
+                emitRendererError(
+                    logsApi,
+                    '[SettingsPage] resetBinding failed',
+                    error instanceof Error ? error : new Error(String(error)),
+                    undefined,
+                    'settings-page',
+                );
             });
     }
 
@@ -397,8 +436,19 @@ export default function SettingsPage(): React.ReactElement {
         useSettingsStore
             .getState()
             .updateSettings(gameId, patch)
-            .catch((error) => {
-                console.error('[SettingsPage] Failed to update settings:', error);
+            .catch((error: unknown) => {
+                const logsApi = (
+                    globalThis as Record<string, unknown> & {
+                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                    }
+                ).__chimera?.logs;
+                emitRendererError(
+                    logsApi,
+                    '[SettingsPage] Failed to update settings',
+                    error instanceof Error ? error : new Error(String(error)),
+                    undefined,
+                    'settings-page',
+                );
             });
     }
 
@@ -406,8 +456,19 @@ export default function SettingsPage(): React.ReactElement {
         useSettingsStore
             .getState()
             .resetSettings(gameId)
-            .catch((error) => {
-                console.error('[SettingsPage] Failed to reset settings:', error);
+            .catch((error: unknown) => {
+                const logsApi = (
+                    globalThis as Record<string, unknown> & {
+                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+                    }
+                ).__chimera?.logs;
+                emitRendererError(
+                    logsApi,
+                    '[SettingsPage] Failed to reset settings',
+                    error instanceof Error ? error : new Error(String(error)),
+                    undefined,
+                    'settings-page',
+                );
             });
     }
 
