@@ -150,9 +150,15 @@
     --ch-button-font-weight: 700;
     --ch-button-font-weight-primary: var(--ch-button-font-weight);
     --ch-button-letter-spacing: 0px;
+    /* Base (unsized) sizing tokens: the public per-instance override surface
+       (Invariant #85). The .sm/.md/.lg Button classes rebind these from the
+       scale variants below, so a sized Button never reads these defaults; they
+       resolve to the medium size to match the component's default size="md". */
+    --ch-button-font-size: var(--ch-button-font-size-md);
     --ch-button-font-size-sm: 1rem;
     --ch-button-font-size-md: 1.125rem;
     --ch-button-font-size-lg: 1.25rem;
+    --ch-button-line-height: var(--ch-button-line-height-md);
     --ch-button-line-height-sm: 1.5rem;
     --ch-button-line-height-md: 1.75rem;
     --ch-button-line-height-lg: 2rem;
@@ -176,11 +182,13 @@
         box-shadow var(--ch-duration-fast) var(--ch-easing-standard),
         color var(--ch-duration-fast) var(--ch-easing-standard),
         transform var(--ch-duration-fast) var(--ch-easing-standard);
+    --ch-button-min-width: var(--ch-button-min-width-md);
     --ch-button-min-width-sm: calc(var(--ch-space-xl) * 4);
     --ch-button-min-width-md: calc(var(--ch-space-xl) * 5);
     --ch-button-min-width-lg: calc(var(--ch-space-xl) * 6);
     --ch-divider-length-sm: var(--ch-button-min-width-sm);
     --ch-divider-length-lg: var(--ch-button-min-width-lg);
+    --ch-button-padding: var(--ch-button-padding-md);
     --ch-button-padding-sm: 0.375rem 1.5rem;
     --ch-button-padding-md: 0.5rem 2rem;
     --ch-button-padding-lg: 0.75rem 2.5rem;

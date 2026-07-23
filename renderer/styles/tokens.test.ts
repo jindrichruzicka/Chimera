@@ -207,9 +207,11 @@ const expectedTokens = [
     '--ch-button-font-weight',
     '--ch-button-font-weight-primary',
     '--ch-button-letter-spacing',
+    '--ch-button-font-size',
     '--ch-button-font-size-sm',
     '--ch-button-font-size-md',
     '--ch-button-font-size-lg',
+    '--ch-button-line-height',
     '--ch-button-line-height-sm',
     '--ch-button-line-height-md',
     '--ch-button-line-height-lg',
@@ -223,11 +225,13 @@ const expectedTokens = [
     '--ch-button-transform-hover-ghost',
     '--ch-button-transform-active',
     '--ch-button-transition',
+    '--ch-button-min-width',
     '--ch-button-min-width-sm',
     '--ch-button-min-width-md',
     '--ch-button-min-width-lg',
     '--ch-divider-length-sm',
     '--ch-divider-length-lg',
+    '--ch-button-padding',
     '--ch-button-padding-sm',
     '--ch-button-padding-md',
     '--ch-button-padding-lg',
@@ -659,6 +663,26 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-button-padding-sm')).toBe('0.375rem 1.5rem');
         expect(extractTokenValue(css, '--ch-button-padding-md')).toBe('0.5rem 2rem');
         expect(extractTokenValue(css, '--ch-button-padding-lg')).toBe('0.75rem 2.5rem');
+    });
+
+    it('defaults the base button sizing tokens to the medium size (public per-instance override surface)', () => {
+        const css = readTokensCss();
+
+        // The base (unsized) sizing tokens are the public customization surface
+        // games override per instance (Invariant #85); the Button `.sm/.md/.lg`
+        // classes rebind them from the scale variants, so a sized Button never
+        // reads these defaults. They resolve to the medium size to match the
+        // component's default `size="md"`.
+        expect(extractTokenValue(css, '--ch-button-font-size')).toBe(
+            'var(--ch-button-font-size-md)',
+        );
+        expect(extractTokenValue(css, '--ch-button-line-height')).toBe(
+            'var(--ch-button-line-height-md)',
+        );
+        expect(extractTokenValue(css, '--ch-button-min-width')).toBe(
+            'var(--ch-button-min-width-md)',
+        );
+        expect(extractTokenValue(css, '--ch-button-padding')).toBe('var(--ch-button-padding-md)');
     });
 
     describe('WCAG contrast contract', () => {

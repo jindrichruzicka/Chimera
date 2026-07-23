@@ -552,9 +552,15 @@ itself, locked token-for-token by `renderer/styles/tokens.test.ts`.
 /* ── Button Shape & Elevation (representative) ──────────────
  * The full group also carries per-variant color/bg/border (+ -hover) tokens
  * and a sm|md|lg size scale (font-size / line-height / padding / min-width),
- * plus the parallel IconButton and ToggleButton groups — see tokens.css. */
+ * plus the parallel IconButton and ToggleButton groups — see tokens.css.
+ * The four sizing properties also expose an unsized base token
+ * (--ch-button-font-size / -line-height / -min-width / -padding) that defaults
+ * to the medium step; the .sm/.md/.lg classes rebind them from the scale
+ * variants for the size prop, and games may override a base token per instance
+ * (Invariant #85) to tailor a single button without inventing new names. */
 --ch-button-radius: var(--ch-radius-md);
 --ch-button-font-weight: 700;
+--ch-button-font-size: var(--ch-button-font-size-md);
 --ch-button-shadow: var(--ch-shadow-sm);
 --ch-button-shadow-hover: var(--ch-shadow-md), var(--ch-glow-accent);
 --ch-button-shadow-hover-danger: var(--ch-shadow-md), var(--ch-glow-danger);
