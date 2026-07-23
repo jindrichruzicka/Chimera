@@ -1,5 +1,3 @@
-import type { PlayerId } from './types.js';
-
 /**
  * Controls per-game undo rules for the UndoManager.
  *
@@ -15,17 +13,14 @@ export interface UndoPolicy {
     readonly maxUndoSteps: number;
     /** Whether undo can cross turn boundaries. */
     readonly crossTurnUndo: boolean;
-    /** Player IDs that must all consent before an undo is executed. */
-    readonly requireConsentFrom: readonly PlayerId[];
 }
 
 /**
  * Default undo policy: undo is allowed, unlimited steps within a turn,
- * no cross-turn undo, and no consent required.
+ * and no cross-turn undo.
  */
 export const DEFAULT_UNDO_POLICY: UndoPolicy = {
     allowUndo: true,
     maxUndoSteps: 0,
     crossTurnUndo: false,
-    requireConsentFrom: [],
 } satisfies UndoPolicy;

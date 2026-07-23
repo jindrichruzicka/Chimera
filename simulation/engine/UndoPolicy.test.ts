@@ -16,10 +16,6 @@ describe('UndoPolicy', () => {
             expect(DEFAULT_UNDO_POLICY.crossTurnUndo).toBe(false);
         });
 
-        it('requires consent from no players by default', () => {
-            expect(DEFAULT_UNDO_POLICY.requireConsentFrom).toEqual([]);
-        });
-
         it('satisfies the UndoPolicy interface', () => {
             const policy: UndoPolicy = DEFAULT_UNDO_POLICY;
             expect(policy).toBeDefined();

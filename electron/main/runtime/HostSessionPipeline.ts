@@ -268,7 +268,9 @@ export function buildHostSessionPipeline(
         typeof broadcastTickFnOrOptions === 'function' ? broadcastTickFnOrOptions : undefined;
     const resolvedOptions =
         typeof broadcastTickFnOrOptions === 'function' ? options : broadcastTickFnOrOptions;
-    const history = new InMemoryActionHistory();
+    const history = new InMemoryActionHistory(
+        resolvedOptions?.logger !== undefined ? { logger: resolvedOptions.logger } : undefined,
+    );
     const reducer = new StateReducer(registry);
 
     /**
@@ -297,6 +299,7 @@ export function buildHostSessionPipeline(
 
     const pipeline = new ActionPipeline(registry, {
         ...(resolvedOptions?.gameId !== undefined ? { gameId: resolvedOptions.gameId } : {}),
+        ...(resolvedOptions?.logger !== undefined ? { logger: resolvedOptions.logger } : {}),
         context: {
             undoManager,
             history,

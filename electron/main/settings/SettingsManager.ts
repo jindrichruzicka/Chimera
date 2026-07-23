@@ -197,6 +197,16 @@ export class SettingsManager {
      */
     async getSettings(gameId: string): Promise<ResolvedSettings> {
         const schema = this.schemas.get(gameId);
+        if (schema === undefined) {
+            // Invariant #34: an unregistered gameId degrades to engine defaults
+            // rather than throwing — but the fallback must be observable.
+            this.logger?.warn(
+                'getSettings called for unregistered gameId; returning engine defaults.',
+                {
+                    gameId,
+                },
+            );
+        }
         const defaults = schema?.defaults ?? ENGINE_DEFAULTS;
         const rawOverrides = await this.repo.load(gameId);
 

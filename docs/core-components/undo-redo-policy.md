@@ -18,7 +18,6 @@ interface UndoPolicy {
     allowUndo: boolean;
     maxUndoSteps: number; // 0 = unlimited within current turn
     crossTurnUndo: boolean; // Allow undoing past END_TURN? Default: false
-    requireConsentFrom: PlayerId[]; // Empty = no consent; use for cooperative games
 }
 
 // Default: free unrestricted undo within your turn, cleared on END_TURN
@@ -26,7 +25,6 @@ const DEFAULT_UNDO_POLICY: UndoPolicy = {
     allowUndo: true,
     maxUndoSteps: 0,
     crossTurnUndo: false,
-    requireConsentFrom: [],
 };
 ```
 
@@ -55,12 +53,11 @@ Chimera's undo system combines two classical patterns:
 
 ### Turn Boundary Rules
 
-| Scenario                                    | Behaviour                                         |
-| ------------------------------------------- | ------------------------------------------------- |
-| Undo within own turn (default policy)       | Always allowed; no consent needed                 |
-| `END_TURN` already dispatched               | Undo blocked unless `crossTurnUndo: true`         |
-| Multi-player consent (`requireConsentFrom`) | UNDO action dispatched; others confirm or decline |
-| Undo past `TURN_MEMENTO_RETENTION=4`        | Blocked; memento no longer exists                 |
+| Scenario                              | Behaviour                                 |
+| ------------------------------------- | ----------------------------------------- |
+| Undo within own turn (default policy) | Always allowed                            |
+| `END_TURN` already dispatched         | Undo blocked unless `crossTurnUndo: true` |
+| Undo past `TURN_MEMENTO_RETENTION=4`  | Blocked; memento no longer exists         |
 
 ---
 

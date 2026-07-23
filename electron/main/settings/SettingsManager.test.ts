@@ -390,6 +390,31 @@ describe('SettingsManager.getSettings()', () => {
         expect(settings).toMatchObject(ENGINE_DEFAULTS);
     });
 
+    it('logs a warn on the injected logger for an unregistered gameId (Invariant #34)', async () => {
+        const warnSpy = vi.fn();
+        const logger = {
+            trace: vi.fn(),
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: warnSpy,
+            error: vi.fn(),
+            fatal: vi.fn(),
+            child: vi.fn().mockReturnThis(),
+        };
+        // No schema registered for this gameId → engine-defaults fallback path.
+        const mgr2 = new SettingsManager(new InMemorySettingsRepository(), undefined, logger);
+
+        const settings = await mgr2.getSettings('never-registered');
+
+        // Graceful degradation: still returns engine defaults, does not throw.
+        expect(settings).toMatchObject(ENGINE_DEFAULTS);
+        // Invariant #34: the fallback must be observable via exactly one warn.
+        expect(warnSpy).toHaveBeenCalledOnce();
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('unregistered'), {
+            gameId: 'never-registered',
+        });
+    });
+
     it('merges game-specific defaults when schema has extra fields', async () => {
         const mgr2 = makeManager();
         mgr2.registerSchema(extSettingsSchema);

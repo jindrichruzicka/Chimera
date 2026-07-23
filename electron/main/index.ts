@@ -1617,7 +1617,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // membership is modelled on the host, so `team`-scope routing is inert today.
     const chatRelay = new ChatRelay(lobbyLogger, playerDirectory);
     const profileRepository = new FileProfileRepository(path.join(userData, 'profiles'));
-    const profileManager = new ProfileManager(profileRepository);
+    // Invariant #67: inject a Logger child so ProfileManager's diagnostics reach
+    // the durable logging path rather than a noop.
+    const profileManager = new ProfileManager(
+        profileRepository,
+        logger.child({ module: 'profile' }),
+    );
     // Dev-harness seed-copy (§4.32): a `--dev-profile-file` fixture becomes the
     // instance's persisted + active profile before normal resolution. The dynamic
     // import keeps the dev graph out of the production RUNTIME graph — never

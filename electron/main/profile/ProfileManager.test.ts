@@ -17,6 +17,8 @@ import {
     type PlayerProfile,
 } from '@chimera-engine/simulation/profile/ProfileSchema.js';
 
+import { createLogger, createMemorySink } from '../logging/logger.js';
+
 import {
     NoActiveProfileError,
     NoPendingCandidateError,
@@ -39,6 +41,25 @@ function makeProfile(id: string, displayName: string): PlayerProfile {
 // ─── ProfileManager tests ──────────────────────────────────────────────────────
 
 describe('ProfileManager', () => {
+    // ── dependency injection (Invariant #67) ───────────────────────────────────
+
+    it('accepts an injected Logger child and continues to serve profiles (Invariant #67)', async () => {
+        // The constructor's Logger slot is the contract under test — the typechecker
+        // is the red gate (before it exists, this second argument is TS2554). At
+        // runtime we confirm the injected manager still behaves like the bare one.
+        const repo = new InMemoryProfileRepository();
+        const profile = makeProfile('p1', 'Alice');
+        await repo.save(profile);
+
+        const logger = createLogger({
+            source: { process: 'main', module: 'profile' },
+            sink: createMemorySink(),
+        });
+        const manager = new ProfileManager(repo, logger);
+
+        expect(await manager.getLocal(localProfileId('p1'))).toEqual(profile);
+    });
+
     // ── getLocal ──────────────────────────────────────────────────────────────
 
     it('getLocal returns the profile from the repository', async () => {

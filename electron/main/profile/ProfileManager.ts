@@ -16,8 +16,10 @@
  * Invariants upheld:
  *   #2  — zero imports from renderer/, games/*, or any DOM API.
  *   #60 — Only the local machine's profiles are ever persisted here.
+ *   #67 — Constructed with an injected Logger child (structured logging path).
  */
 
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
 import type {
     LocalProfileId,
     PlayerProfile,
@@ -78,7 +80,13 @@ export class ProfileManager {
     private current: PlayerProfile | null = null;
     private candidate: PlayerProfile | null = null;
 
-    constructor(private readonly repository: ProfileRepository) {}
+    constructor(
+        private readonly repository: ProfileRepository,
+        // Invariant #67: every main-process manager is constructed with an
+        // injected Logger child so any diagnostic it emits reaches the durable
+        // logging path rather than a noop. Optional so in-process tests may omit it.
+        private readonly logger?: Logger,
+    ) {}
 
     /**
      * Loads a profile from the injected repository and activates it as the
