@@ -39,6 +39,7 @@ import { useSettingsStore } from '../../state/settingsStore';
 import { useInputManager } from '../../input/InputManagerContext.js';
 import type { InputManager } from '../../input/InputManager.js';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
+import type { InputActionRegistry } from '../../input/InputActionRegistry.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import type { ResolvedSettings } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { GameLanguage } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
@@ -55,6 +56,27 @@ const { mockLoadRendererGame, mockLoadRendererGameShell, mockPush } = vi.hoisted
 vi.mock('../../input/InputManagerContext.js', () => ({
     InputManagerContext: { Provider: ({ children }: { children: React.ReactNode }) => children },
     useInputManager: vi.fn(),
+}));
+
+// useInputActionRegistry() now throws outside the app-root provider (Invariant #83). The page
+// only forwards the registry into the input-action registration effect (never dereferences it
+// during render), so a stub registry keeps every render hermetic without mounting Providers.
+const { stubInputActionRegistry } = vi.hoisted(() => ({
+    stubInputActionRegistry: {
+        register: (): void => {},
+        get: (): never => {
+            throw new Error('unused input action registry stub');
+        },
+        has: (): boolean => false,
+        getAll: (): readonly [] => [],
+    } satisfies InputActionRegistry,
+}));
+
+vi.mock('../../input/InputActionRegistryContext.js', () => ({
+    InputActionRegistryContext: {
+        Provider: ({ children }: { children: React.ReactNode }) => children,
+    },
+    useInputActionRegistry: () => stubInputActionRegistry,
 }));
 
 vi.mock('../../game/rendererGameRegistry', () => ({

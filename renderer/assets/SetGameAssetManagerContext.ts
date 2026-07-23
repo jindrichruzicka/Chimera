@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext } from 'react';
+import { createContext, useContext } from 'react';
 
 import type { AssetManager } from '../assets/AssetManager';
 
@@ -18,3 +18,14 @@ import type { AssetManager } from '../assets/AssetManager';
 export const SetGameAssetManagerContext = createContext<
     ((manager: AssetManager | null) => void) | null
 >(null);
+
+export function useSetGameAssetManager(): (manager: AssetManager | null) => void {
+    const setGameAssetManager = useContext(SetGameAssetManagerContext);
+    if (setGameAssetManager === null) {
+        throw new Error(
+            'useSetGameAssetManager() must be used within the app root (inside <Providers>).',
+        );
+    }
+
+    return setGameAssetManager;
+}

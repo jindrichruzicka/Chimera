@@ -27,9 +27,9 @@ import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import type { AssetResolver } from '../../assets/AssetResolver';
 import type { AudioManager } from '../../audio/AudioManager.js';
 import { useAudioManager } from '../../audio/AudioManagerContext.js';
-import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
+import { useSetGameAssetManager } from '../../assets/SetGameAssetManagerContext';
 import type { InputAction } from '../../input/InputAction.js';
-import { useOptionalInputActionRegistry } from '../../input/InputActionRegistryContext.js';
+import { useInputActionRegistry } from '../../input/InputActionRegistryContext.js';
 import { useActiveScreen } from '../../state/uiStore.js';
 import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
@@ -242,9 +242,10 @@ function useGameAssetManager(
 ): AssetManager {
     // SetGameAssetManagerContext is provided by Providers and allows GameShell to wire the
     // game-level AssetManager into the app-level DelegatingAssetManager so the AudioManager
-    // (which is app-level) can load game-specific audio assets.  If the context is absent
-    // (e.g. in unit tests that don't mount Providers), the wiring is simply skipped.
-    const setGameAssetManager = React.useContext(SetGameAssetManagerContext);
+    // (which is app-level) can load game-specific audio assets. Registry-mode GameShell always
+    // runs under Providers, so the throwing hook (Invariant #83) makes a missing provider a
+    // loud error rather than a silent no-op; tests mount the provider via the shell wrapper.
+    const setGameAssetManager = useSetGameAssetManager();
 
     const assetManager = React.useMemo(
         () => injectedAssetManager ?? createAssetManager(createUnconfiguredAssetResolver()),
@@ -259,9 +260,9 @@ function useGameAssetManager(
 
     // Register the game AssetManager as the active delegate for the app-level AudioManager.
     React.useEffect(() => {
-        setGameAssetManager?.(assetManager);
+        setGameAssetManager(assetManager);
         return () => {
-            setGameAssetManager?.(null);
+            setGameAssetManager(null);
         };
     }, [assetManager, setGameAssetManager]);
 
@@ -285,10 +286,10 @@ function useStopAudioOnGameEnd(audioManager: AudioManager, isGameEnded: boolean)
 }
 
 function useRegisterInputActions(inputActions: readonly InputAction[] | undefined): void {
-    const inputActionRegistry = useOptionalInputActionRegistry();
+    const inputActionRegistry = useInputActionRegistry();
 
     React.useEffect(() => {
-        if (inputActionRegistry === null || inputActions === undefined) {
+        if (inputActions === undefined) {
             return;
         }
 

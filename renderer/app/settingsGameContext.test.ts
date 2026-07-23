@@ -48,7 +48,7 @@ describe('settingsGameContext — forwarded diagnostics (Invariant #67)', () => 
         const err = new Error('game load failed');
         mockLoadRendererGame.mockRejectedValue(err);
         // loadRendererGame rejects before the registry is touched, so a bare
-        // non-null stand-in is enough to pass the null guard.
+        // stand-in satisfies the (now non-nullable) registry parameter.
         const registry = {} as unknown as InputActionRegistry;
         const logs = createRecordingLogsApi();
         (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };

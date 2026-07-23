@@ -16,7 +16,10 @@ import { useAssetManager } from '../../assets/AssetManagerContext.js';
 import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
 import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerContext.js';
 import { createAudioManagerSpy } from '../../audio/__test-support__/AudioManagerStubs.js';
-import { createInputActionRegistry } from '../../input/InputActionRegistry.js';
+import {
+    createInputActionRegistry,
+    type InputActionRegistry,
+} from '../../input/InputActionRegistry.js';
 import { InputActionRegistryContext } from '../../input/InputActionRegistryContext.js';
 import { useUiStore } from '../../state/uiStore.js';
 import {
@@ -235,27 +238,25 @@ describe('GameShell page object locators', () => {
         const inputRegistry = createInputActionRegistry();
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
 
-        render(
-            <InputActionRegistryContext.Provider value={inputRegistry}>
-                {wrapWithAudio(
-                    <GameShell
-                        registry={{
-                            board: () => <div data-testid="registry-board">Registry board</div>,
-                        }}
-                        inputActions={[
-                            {
-                                id: 'game:end-turn',
-                                description: 'End current turn',
-                                category: 'Game',
-                                oneShot: true,
-                            },
-                        ]}
-                        snapshot={snapshot}
-                        sendAction={vi.fn()}
-                        localPlayerId={playerId('p1')}
-                    />,
-                )}
-            </InputActionRegistryContext.Provider>,
+        renderWithAudio(
+            <GameShell
+                registry={{
+                    board: () => <div data-testid="registry-board">Registry board</div>,
+                }}
+                inputActions={[
+                    {
+                        id: 'game:end-turn',
+                        description: 'End current turn',
+                        category: 'Game',
+                        oneShot: true,
+                    },
+                ]}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+            undefined,
+            { inputRegistry },
         );
 
         expect(inputRegistry.get('game:end-turn')).toEqual({
@@ -869,19 +870,38 @@ function makeSceneId(raw: string): NonNullable<PlayerSnapshot['sceneId']> {
     return raw as NonNullable<PlayerSnapshot['sceneId']>;
 }
 
+interface ShellContextOverrides {
+    readonly inputRegistry?: InputActionRegistry;
+    readonly setGameAssetManager?: (manager: AssetManager | null) => void;
+}
+
 function renderWithAudio(
     element: React.ReactElement,
     audioManager = createAudioManagerSpy(),
+    overrides: ShellContextOverrides = {},
 ): ReturnType<typeof render> {
-    return render(wrapWithAudio(element, audioManager));
+    return render(wrapWithAudio(element, audioManager, overrides));
 }
 
+// Registry-mode GameShell consumes the app-level AudioManager, InputActionRegistry, and
+// SetGameAssetManager contexts through throwing hooks (Invariant #83), so every registry-mode
+// render mounts all three. Callers override the registry or the delegation setter when a test
+// asserts against a specific instance.
 function wrapWithAudio(
     element: React.ReactElement,
     audioManager = createAudioManagerSpy(),
+    overrides: ShellContextOverrides = {},
 ): React.ReactElement {
+    const inputRegistry = overrides.inputRegistry ?? createInputActionRegistry();
+    const setGameAssetManager = overrides.setGameAssetManager ?? vi.fn();
     return (
-        <AudioManagerContext.Provider value={audioManager}>{element}</AudioManagerContext.Provider>
+        <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
+            <InputActionRegistryContext.Provider value={inputRegistry}>
+                <AudioManagerContext.Provider value={audioManager}>
+                    {element}
+                </AudioManagerContext.Provider>
+            </InputActionRegistryContext.Provider>
+        </SetGameAssetManagerContext.Provider>
     );
 }
 
@@ -891,18 +911,16 @@ describe('SetGameAssetManagerContext delegation wiring', () => {
         const setGameAssetManager = vi.fn();
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
 
-        const { unmount } = render(
-            <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
-                <AudioManagerContext.Provider value={createAudioManagerSpy()}>
-                    <GameShell
-                        registry={{ board: () => <div /> }}
-                        snapshot={snapshot}
-                        sendAction={vi.fn()}
-                        localPlayerId={playerId('p1')}
-                        assetManager={assetManager}
-                    />
-                </AudioManagerContext.Provider>
-            </SetGameAssetManagerContext.Provider>,
+        const { unmount } = renderWithAudio(
+            <GameShell
+                registry={{ board: () => <div /> }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={assetManager}
+            />,
+            undefined,
+            { setGameAssetManager },
         );
 
         expect(setGameAssetManager).toHaveBeenCalledWith(assetManager);
@@ -910,24 +928,6 @@ describe('SetGameAssetManagerContext delegation wiring', () => {
         unmount();
 
         expect(setGameAssetManager).toHaveBeenLastCalledWith(null);
-    });
-
-    it('silently skips delegation wiring when SetGameAssetManagerContext is not provided', () => {
-        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
-
-        // Should not throw even when the context is absent (tests / non-Providers trees)
-        expect(() =>
-            render(
-                wrapWithAudio(
-                    <GameShell
-                        registry={{ board: () => <div /> }}
-                        snapshot={snapshot}
-                        sendAction={vi.fn()}
-                        localPlayerId={playerId('p1')}
-                    />,
-                ),
-            ),
-        ).not.toThrow();
     });
 });
 

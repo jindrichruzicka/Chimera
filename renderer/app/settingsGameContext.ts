@@ -46,14 +46,10 @@ export async function hydrateActiveGameSettings(
 }
 
 export async function registerActiveGameInputActions(
-    inputActionRegistry: InputActionRegistry | null,
+    inputActionRegistry: InputActionRegistry,
     activeGameId: string,
     isDisposed: () => boolean,
 ): Promise<void> {
-    if (inputActionRegistry === null) {
-        return;
-    }
-
     try {
         const game = await loadRendererGame(activeGameId);
         if (isDisposed()) {

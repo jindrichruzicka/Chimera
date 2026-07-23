@@ -168,7 +168,11 @@ describe('SettingsBootstrap', () => {
         useSettingsStore.setState({ settings: {}, activeGameId: 'tactics' });
 
         await act(async () => {
-            root.render(<SettingsBootstrap />);
+            root.render(
+                <InputActionRegistryContext.Provider value={createInputActionRegistry()}>
+                    <SettingsBootstrap />
+                </InputActionRegistryContext.Provider>,
+            );
         });
         await act(async () => {
             await flushPromiseJobs();
@@ -193,7 +197,11 @@ describe('SettingsBootstrap', () => {
         setUrlGameId('tactics');
 
         await act(async () => {
-            root.render(<SettingsBootstrap />);
+            root.render(
+                <InputActionRegistryContext.Provider value={createInputActionRegistry()}>
+                    <SettingsBootstrap />
+                </InputActionRegistryContext.Provider>,
+            );
         });
         await act(async () => {
             await flushPromiseJobs();
@@ -213,7 +221,11 @@ describe('SettingsBootstrap', () => {
         (globalThis as { __chimera?: { settings: SettingsAPI } }).__chimera = { settings };
 
         await act(async () => {
-            root.render(<SettingsBootstrap />);
+            root.render(
+                <InputActionRegistryContext.Provider value={createInputActionRegistry()}>
+                    <SettingsBootstrap />
+                </InputActionRegistryContext.Provider>,
+            );
         });
         await act(async () => {
             await flushPromiseJobs();

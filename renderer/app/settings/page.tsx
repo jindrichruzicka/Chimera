@@ -38,7 +38,7 @@ import { Toggle } from '../../components/ui/Toggle';
 import { loadRendererGame } from '../../game/rendererGameRegistry';
 import { ENGINE_SETTINGS_GAME_ID } from '../../input/KeyBindingRepository.js';
 import { useInputManager } from '../../input/InputManagerContext.js';
-import { useOptionalInputActionRegistry } from '../../input/InputActionRegistryContext.js';
+import { useInputActionRegistry } from '../../input/InputActionRegistryContext.js';
 import { emitRendererError } from '../../logging/rendererLogger';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
@@ -258,7 +258,7 @@ export default function SettingsPage(): React.ReactElement {
     const gameId = activeGameId ?? ENGINE_SETTINGS_GAME_ID;
     const resolvedSettings = useSettingsStore((state) => state.settings[gameId]);
     const inputManager = useInputManager();
-    const inputActionRegistry = useOptionalInputActionRegistry();
+    const inputActionRegistry = useInputActionRegistry();
 
     const [capturingId, setCapturingId] = React.useState<InputActionId | null>(null);
     const capturedBindingsRef = React.useRef<Partial<Record<InputActionId, KeyBinding>>>({});

@@ -12,7 +12,7 @@ import { usePathname } from 'next/navigation';
 import { bootstrapSettingsStore } from '../state/settingsStoreBootstrap';
 import { useLobbyStore } from '../state/lobbyStore';
 import { useSettingsStore } from '../state/settingsStore';
-import { useOptionalInputActionRegistry } from '../input/InputActionRegistryContext.js';
+import { useInputActionRegistry } from '../input/InputActionRegistryContext.js';
 import { resolveShellGameId } from '../shell/resolveMainMenuGameId';
 import {
     getSettingsApi,
@@ -28,7 +28,7 @@ function selectActiveLobbyGameId(state: {
 
 export function SettingsBootstrap(): null {
     const activeGameId = useLobbyStore(selectActiveLobbyGameId);
-    const inputActionRegistry = useOptionalInputActionRegistry();
+    const inputActionRegistry = useInputActionRegistry();
     const urlGameId = useUrlShellGameId();
 
     useEffect(() => {

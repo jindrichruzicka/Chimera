@@ -6,6 +6,13 @@ import type { InputActionRegistry } from './InputActionRegistry.js';
 
 export const InputActionRegistryContext = createContext<InputActionRegistry | null>(null);
 
-export function useOptionalInputActionRegistry(): InputActionRegistry | null {
-    return useContext(InputActionRegistryContext);
+export function useInputActionRegistry(): InputActionRegistry {
+    const inputActionRegistry = useContext(InputActionRegistryContext);
+    if (inputActionRegistry === null) {
+        throw new Error(
+            'useInputActionRegistry() must be used within the app root (inside <Providers>).',
+        );
+    }
+
+    return inputActionRegistry;
 }
