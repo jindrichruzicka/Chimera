@@ -103,6 +103,13 @@ export interface RestoredHostHarness {
     activeRuntime(): SessionRuntime | null;
     /** The host's own action path (mirrors `dispatchRendererAction`). */
     dispatchHostAction(action: ActionEnvelope): void;
+    /**
+     * Live-apply an in-session SAME-MATCH restore (mirrors the `saves:load`
+     * in-session branch in `index.ts`): swap the snapshot through the Invariant
+     * #24 apply helper, then rebuild the agent roster against the restored
+     * checkpoint. The menu-restore flow uses `coordinator.restoreSession`.
+     */
+    restoreInSession(file: SaveFile): void;
     events(): readonly HarnessEvent[];
     /** Every action an AI seat routed through the host fan-out. */
     aiActions(): readonly ActionEnvelope[];
@@ -158,6 +165,8 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
     /** AI-removal host-ledger reconcile seam (#838) — assigned in `onSessionHosted`. */
     let removeAiSeat: ((slotIndex: number) => void) | null = null;
     let seatRestoredRoster: ((seats: readonly SaveSeat[]) => Promise<void>) | null = null;
+    /** In-session same-match restore agent-rebuild seam — assigned in `onSessionHosted`. */
+    let rebuildAgentsAgainstRestoredSnapshot: (() => void) | null = null;
     /** Return-to-lobby (#737) host-local reset seam — assigned in `onSessionHosted`. */
     let resetActiveSessionToLobby: (() => void) | null = null;
     /** Start-suppression gate for an in-flight restore (F68 #823). */
@@ -513,6 +522,18 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 tryStartGame();
             };
 
+            // mirrors index.ts::rebuildAgentsAgainstRestoredSnapshot — an
+            // in-session same-match restore swaps the snapshot underneath the live
+            // agents; rebuild the roster (clear + re-seat, the `removeAiSeat` idiom)
+            // so each re-seeds its construction seed from the restored checkpoint.
+            // AgentManager has no per-agent unregister.
+            rebuildAgentsAgainstRestoredSnapshot = (): void => {
+                agentManager.clear();
+                for (const [pid, slot] of [...playerSlotIndexById]) {
+                    registerSlotAgent(pid, slot);
+                }
+            };
+
             const registeredPlayers = new Set<PlayerId>(initialPlayerIds);
             for (const slot of initialPlayerSlots) {
                 registerSlotAgent(slot.playerId, slot.slotIndex);
@@ -650,6 +671,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                     syncLiveAgentSlots = null;
                     removeAiSeat = null;
                     seatRestoredRoster = null;
+                    rebuildAgentsAgainstRestoredSnapshot = null;
                     resetActiveSessionToLobby = null;
                     restoreSeatingActive = false;
                     sessionRestoreCoordinator.noteSessionClosed();
@@ -785,6 +807,12 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 throw new Error('restored-host-harness: no hosted session is active');
             }
             dispatchRendererAction(action);
+        },
+        restoreInSession: (file) => {
+            // Mirrors the `saves:load` in-session same-match branch in `index.ts`:
+            // apply the checkpoint, then rebuild the agents against it.
+            applyRestoredFileToActiveSession(file);
+            rebuildAgentsAgainstRestoredSnapshot?.();
         },
         events: () => events,
         aiActions: () =>

@@ -5836,9 +5836,25 @@ describe('main() — session restore wiring (#823)', () => {
             );
         });
 
+        it('rebuilds the AI agent roster when live-applying an in-session same-match load (#907)', async () => {
+            const { matchId } = await hostAndStartMatch();
+            // Isolate the assertion from any rebuilds during host/start setup.
+            mockAgentManagerInstance.clear.mockClear();
+
+            await loadSlot(makeRestoreSaveFile(MIXED_ROSTER, { matchId, tick: 77 }));
+
+            // The snapshot swapped underneath the agents, whose host-local state
+            // (scheduler/state-machine/latches) was accumulated against the
+            // discarded snapshot. AgentManager has no per-agent unregister, so a
+            // consistent restore (Invariant #24 — snapshot AND agents) requires
+            // clear() + re-seat so each agent re-seeds from the restored checkpoint.
+            expect(mockAgentManagerInstance.clear).toHaveBeenCalledOnce();
+        });
+
         it('rejects an in-session load of a different match and leaves the snapshot untouched', async () => {
             const { matchId } = await hostAndStartMatch();
             mockStateBroadcasterInstance.broadcast.mockClear();
+            mockAgentManagerInstance.clear.mockClear();
 
             await expect(
                 loadSlot(makeRestoreSaveFile(MIXED_ROSTER, { matchId: 'other-match', tick: 99 })),
@@ -5849,6 +5865,8 @@ describe('main() — session restore wiring (#823)', () => {
                 expect.objectContaining({ tick: 99 }),
                 expect.anything(),
             );
+            // A rejected load touches neither the snapshot nor the agents.
+            expect(mockAgentManagerInstance.clear).not.toHaveBeenCalled();
             // The live match identity is unchanged.
             const file = await autosaveManifest();
             expect(file.session.matchId).toBe(matchId);

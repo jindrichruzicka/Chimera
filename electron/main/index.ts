@@ -1686,6 +1686,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // SessionRestoreCoordinator can drive seating from outside; null when no
     // hosted session is live.
     let seatRestoredRoster: ((seats: readonly SaveSeat[]) => Promise<void>) | null = null;
+    // Rebuilds the AI agent roster after an in-session same-match restore swaps
+    // the snapshot underneath the agents, so each re-seeds its host-local state
+    // from the restored checkpoint. Assigned inside `onSessionHosted` (the
+    // `seatRestoredRoster` pattern) so the `saves:load` in-session branch can
+    // drive it from outside; null when no hosted session is live.
+    let rebuildAgentsAgainstRestoredSnapshot: (() => void) | null = null;
     // Suppresses `tryStartGame` between restore-hosting and roster completion:
     // `onSessionHosted` fires a start attempt DURING `hostLobby` and local-seat
     // re-adds fire more, all before the checkpoint is applied — without this
@@ -2727,6 +2733,27 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
             };
 
+            // In-session same-match `saves:load` swaps the authoritative snapshot
+            // underneath the live AI agents, whose host-local state (command
+            // scheduler, state machine, auto-end-turn latches, and any per-entity
+            // maps a realtime director retains) was accumulated against the now
+            // discarded snapshot and is NOT part of the rewound snapshot. Rebuild
+            // the roster so each agent re-seeds its construction seed from the
+            // RESTORED snapshot (Invariant #17) — leaving the whole hosted session
+            // consistent with the restored file, not just the snapshot (Invariant
+            // #24). AgentManager has no per-agent unregister, so this is the same
+            // clear() + re-seat idiom as `resetActiveSessionToLobby` / `removeAiSeat`.
+            // The match continues live: no `tryStartGame`, no ticker restart, no
+            // `onGameStart` re-fire — only the agents are rebuilt. Called by the
+            // in-session branch AFTER `applyRestoredFile`, so `registerSlotAgent`'s
+            // `sessionRuntime.getSnapshot()` seed is already the checkpoint.
+            rebuildAgentsAgainstRestoredSnapshot = (): void => {
+                agentManager.clear();
+                for (const [pid, slot] of [...playerSlotIndexById]) {
+                    registerSlotAgent(pid, slot);
+                }
+            };
+
             // Classify each JOIN by match phase + spectator policy (Invariant
             // #114): lobby / reconnect → player (unchanged); a fresh
             // running-match join → spectator when the game declares the
@@ -2962,6 +2989,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     broadcastRestoredSnapshot = null;
                     resetActiveSessionToLobby = null;
                     seatRestoredRoster = null;
+                    rebuildAgentsAgainstRestoredSnapshot = null;
                     restoreSeatingActive = false;
                     // Aborts an in-flight restore / re-arms a completed one so
                     // a later menu-load can restore again.
@@ -3456,6 +3484,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     // flow so the roster is re-seated from the manifest.
                     if (currentMatchId !== null && file.session.matchId === currentMatchId) {
                         applyRestoredFileToActiveSession(file);
+                        // The snapshot swapped underneath the live agents; rebuild
+                        // the roster so each re-seeds from the restored checkpoint.
+                        // Runs after the apply so the seed reads the restored
+                        // snapshot; the menu-restore flow (which re-seats via
+                        // `seatRestoredRoster`) never reaches this branch.
+                        rebuildAgentsAgainstRestoredSnapshot?.();
                         return;
                     }
                     throw new Error(

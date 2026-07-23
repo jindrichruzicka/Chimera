@@ -244,13 +244,11 @@ function createAutoEndTurnState(playerIdToAdvance: PlayerId, logger: Logger): AI
     // the agent would re-issue a request that cannot make progress, each one
     // costing a replay record, a broadcast and an autosave write.
     //
-    // Both are per-agent and live as long as the agent object. That is a fresh
-    // object on a return-to-lobby restart and on a restore from the menu, but
-    // NOT on an in-session `saves:load`: `applyRestoredFileToActiveSession`
-    // swaps the snapshot without rebuilding agents, so a latch set at a later
-    // tick outlives a rewind to an earlier one. Harmless while that path does
-    // not re-tick agents; a future one that does would need the agents cleared
-    // alongside the snapshot.
+    // Both are per-agent and live as long as the agent object — a fresh object
+    // on a return-to-lobby restart, on a restore from the menu, AND on an
+    // in-session `saves:load`: that path now rebuilds the agent roster alongside
+    // the snapshot swap (index.ts `rebuildAgentsAgainstRestoredSnapshot`), so a
+    // latch set at a later tick cannot outlive a rewind to an earlier one.
     let lastRequestedTick: number | null = null;
     return {
         name: DEFAULT_AI_STATE,

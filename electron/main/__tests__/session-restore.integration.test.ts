@@ -1560,4 +1560,71 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await clientA.manager.closeLobby();
         await host.lobbyManager.closeLobby();
     });
+
+    it('S6: in-session same-match restore rebuilds the AI agents, re-seeding them from the restored checkpoint (#907)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        // The AI carries retained host-local state (command scheduler + state
+        // machine inside the real tactics policy); `recordingContribution`
+        // observes the only external seam — the seed handed to `onEnter` at
+        // construction — so a re-seed proves the agent was rebuilt.
+        const seeds: { readonly pid: PlayerId; readonly snapshot: PlayerSnapshot }[] = [];
+        const host = buildHost(provider, recordingContribution(seeds));
+        const aiSeeds = (): readonly { readonly snapshot: PlayerSnapshot }[] =>
+            seeds.filter((seed) => seed.pid === AI_SEAT);
+
+        // ── Original session: host + remote human + host-time AI slot ─────────
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 3,
+            agentSlots: [{ slotIndex: 2, kind: 'ai', omniscient: true }],
+        });
+        const clientA = buildRestoreClientHarness(provider, { gameId: TACTICS_GAME_ID });
+        await clientA.manager.joinLobby({ address: hostInfo.sessionId });
+        await flushProviderEvents();
+
+        await clientA.manager.updatePlayerReadyState(true);
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        expect(runtime).not.toBeNull();
+        // Seeded exactly once, at game-start.
+        expect(aiSeeds()).toHaveLength(1);
+
+        // Advance to the checkpoint tick, capture it, then advance further so a
+        // restore is a genuine rewind (later state discarded).
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime!.getSnapshot().tick, HOST_UNIT, 0, 1),
+        );
+        const restoredTick = runtime!.getSnapshot().tick;
+        const earlierFile = runtime!.captureSaveFile({
+            gameId: TACTICS_GAME_ID,
+            slotId: SLOT_ID,
+        });
+        expect(earlierFile.session.matchId).toBe(runtime!.getSnapshot().matchId);
+
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime!.getSnapshot().tick, HOST_UNIT, 0, 2),
+        );
+        expect(runtime!.getSnapshot().tick).toBeGreaterThan(restoredTick);
+
+        // ── In-session same-match live-apply (rewind to the earlier checkpoint) ──
+        host.restoreInSession(earlierFile);
+
+        // The authoritative snapshot rewound…
+        expect(host.activeRuntime()!.getSnapshot().tick).toBe(restoredTick);
+        // …and the AI agent was torn down and rebuilt: a NEW seed was delivered,
+        // taken from the RESTORED snapshot (Invariant #17), so host-local state
+        // accumulated against the discarded later snapshot cannot outlive the
+        // rewind. A rebuilt agent is definitionally a freshly-seeded agent at the
+        // restored tick (Invariant #24 — snapshot AND agents consistent).
+        expect(aiSeeds()).toHaveLength(2);
+        expect(aiSeeds().at(-1)!.snapshot.tick).toBe(restoredTick);
+        expect(aiSeeds().at(-1)!.snapshot.viewerId).toBe(AI_SEAT);
+
+        await clientA.manager.closeLobby();
+        await host.lobbyManager.closeLobby();
+    });
 });
