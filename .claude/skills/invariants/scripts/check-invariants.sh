@@ -44,6 +44,9 @@ violation() {
 #     cross-check against production code, not against the tests themselves.
 #   * Fixture files under __tests__/fixtures/ are excluded — they are
 #     intentionally-bad inputs for ESLint smoke tests.
+#   * Generated build output (out/, .next/, dist/) is pruned — it mirrors the
+#     source (the authority), so scanning it only adds noise and could raise a
+#     false positive on an emitted bundle (e.g. a game's apps/<game>/renderer/out/).
 #
 # Usage: check_grep <invariant-number> <grep-pattern> <directory...>
 check_grep() {
@@ -66,6 +69,7 @@ check_grep() {
             --include="*.ts" --include="*.tsx" --include="*.js" \
             --exclude="*.test.ts" --exclude="*.test.tsx" \
             --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            --exclude-dir="out" --exclude-dir=".next" --exclude-dir="dist" \
             -E "${pattern}" "${existing_dirs[@]}" 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         || true
@@ -83,27 +87,34 @@ check_grep() {
 #
 # Usage in a pipeline: match a candidate-import RE below, then drop engine
 # packages with `grep -vE "${ENGINE_PKG_EXCLUDE_RE}"`.
-ENGINE_PKG_EXCLUDE_RE="@chimera-engine/(shared|simulation|ai|networking|renderer|electron)[/'\"]"
+ENGINE_PKG_EXCLUDE_RE="@chimera-engine/(simulation|ai|networking|renderer|electron)[/'\"]"
 # Static `import … from`/`export … from` of a games/ path or any @chimera-engine/ pkg.
 GAME_IMPORT_STATIC_RE="from ['\"][^'\"]*(games/|@chimera-engine/)"
 # Static + dynamic `import('…')` of a games/ path or any @chimera-engine/ pkg.
 GAME_IMPORT_ANY_RE="(from|import\()[[:space:]]*['\"][^'\"]*(games/|@chimera-engine/)"
 
-# ─── Check 1 & 43: no Math.random / Date.now / performance.now in simulation or ai ───
+# ─── Check 1 & 43: no Math.random / Date.now / performance.now (sim/ai + per-game) ───
 # Covers both invariant 2 (purity) and invariant 43 (no non-deterministic APIs).
+# Scans the engine simulation/ ai/ packages AND the relocated per-game gameplay
+# dirs apps/<game>/{simulation,ai} (F63).
 check_grep "2/43" \
     'Math\.random|Date\.now|performance\.now' \
-    simulation ai
+    simulation ai apps/*/simulation apps/*/ai
 
-# ─── Check 2: simulation/ ai/ networking/ must not import from renderer/ ──────
+# ─── Check 2: simulation/ ai/ networking/ (+ per-game) must not import renderer/ ──────
+# Also scans the per-game gameplay dirs apps/<game>/{simulation,ai}. The pattern
+# catches both a `renderer/` path and the bare `@chimera-engine/renderer` package root
+# (no subpath), which a plain `.*renderer/` pattern would miss.
 check_grep "1" \
-    "from ['\"].*renderer/" \
-    simulation ai networking
+    "from ['\"]([^'\"]*renderer/|@chimera-engine/renderer['\"])" \
+    simulation ai networking apps/*/simulation apps/*/ai
 
-# ─── Check 3: simulation/ ai/ networking/ must not import from electron/ ──────
+# ─── Check 3: simulation/ ai/ networking/ (+ per-game) must not import electron/ ──────
+# Mirrors Check 2: adds apps/<game>/{simulation,ai} and catches the bare
+# `@chimera-engine/electron` package root alongside an `electron/` path.
 check_grep "1" \
-    "from ['\"].*electron/" \
-    simulation ai networking
+    "from ['\"]([^'\"]*electron/|@chimera-engine/electron['\"])" \
+    simulation ai networking apps/*/simulation apps/*/ai
 
 # ─── Check 4: simulation/ ai/ networking/ must not import a game ──────────────
 # A game is a relative/bare games/ path or a non-engine @chimera-engine/<game> package
@@ -129,11 +140,13 @@ check_grep "1" \
     "from ['\"].*electron/main/" \
     renderer
 
-# ─── Check 6: GameSnapshot must not be imported in preload or renderer ────────
-# Invariant 3: GameSnapshot never leaves the main process.
+# ─── Check 6: GameSnapshot must not appear in preload, renderer, or game surfaces ──
+# Invariant 3: GameSnapshot never leaves the main process. Scans the engine
+# renderer AND the per-game renderer-process surfaces
+# apps/<game>/{screens,shell,scene,renderer}.
 check_grep "3" \
     'GameSnapshot' \
-    electron/preload renderer
+    electron/preload renderer apps/*/screens apps/*/shell apps/*/scene apps/*/renderer
 
 # ─── Check 7: GameShell / InGameMenuHost must not import games/ (inv 48 & 80) ─
 # These engine-renderer shell components stay game-agnostic; the
@@ -325,7 +338,7 @@ fi
 # __tests__/, index.ts and CLAUDE.md (issue #765). It must contain no
 # game-specific subtree (e.g. a re-introduced policies/<game>/) nor a stray
 # game source file at top level (e.g. tacticsPolicy.ts) — game-specific AI
-# belongs in games/<name>/ai/. The import-direction half of this invariant
+# belongs in apps/<game>/ai/. The import-direction half of this invariant
 # (ai/ must not import games/*) is enforced by Check 4 (invariant 47).
 #
 # Directories: only the framework dirs below are allowed as immediate children.
@@ -337,13 +350,13 @@ if [[ -d ai ]]; then
     while IFS= read -r dir; do
         case "$(basename "${dir}")" in
             engine|__tests__|dist) ;;
-            *) violation "106" "${dir}/  (non-framework dir under ai/; game-specific AI belongs in games/<name>/ai/)" ;;
+            *) violation "106" "${dir}/  (non-framework dir under ai/; game-specific AI belongs in apps/<game>/ai/)" ;;
         esac
     done < <(find ai -mindepth 1 -maxdepth 1 -type d ! -name node_modules | sort)
     while IFS= read -r file; do
         case "$(basename "${file}")" in
             index.ts) ;;
-            *) violation "106" "${file}  (non-framework file under ai/; game-specific AI belongs in games/<name>/ai/)" ;;
+            *) violation "106" "${file}  (non-framework file under ai/; game-specific AI belongs in apps/<game>/ai/)" ;;
         esac
     done < <(find ai -mindepth 1 -maxdepth 1 -type f \( -name '*.ts' -o -name '*.tsx' \) | sort)
 fi
@@ -387,15 +400,15 @@ for token_guard_dir in ai shared; do
     )
 done
 
-# ─── Check 13: shared/ is the zero-dependency foundation leaf (invariant 1) ───
-# `@chimera-engine/shared` is the foundation/contract layer and must point inward only —
-# it must not import from simulation, ai, networking, renderer, or electron.
-# Relocate the contract type into shared and re-export from the old home instead
-# (issue #758). Cross-package imports use `@chimera-engine/<pkg>` specifiers; the leading
-# `@chimera-engine/shared` package is excluded by listing only the forbidden packages.
+# ─── Check 13: simulation/ is the zero-dependency foundation leaf (invariant 1) ───
+# `@chimera-engine/simulation` is the foundation/contract layer (it absorbed the former
+# `shared/` package, issue #758) and must point inward only — it must not import from
+# ai, networking, renderer, or electron. Cross-package imports use `@chimera-engine/<pkg>`
+# specifiers; `simulation` is omitted from the forbidden alternation because a
+# simulation-internal `@chimera-engine/simulation` import is not a back-edge.
 check_grep "1" \
-    "from ['\"]@chimera-engine/(simulation|ai|networking|renderer|electron)[/'\"]" \
-    shared
+    "from ['\"]@chimera-engine/(ai|networking|renderer|electron)[/'\"]" \
+    simulation
 
 # ─── Check 14: networking/ exposes provider interfaces only (invariant 47) ────
 # `@chimera-engine/networking`'s sole source top-level members are provider/ (the
@@ -452,8 +465,9 @@ if [[ -d electron/main ]]; then
 fi
 
 # ─── Check 16: the renderer names no game (invariants 94 & #784) ─────────────
-# The main-menu/lobby/game/settings/saves/component-gallery pages are
-# game-agnostic, AND the renderer game-registration seam (renderer/game/) is now
+# Every renderer/app/* page (main-menu, lobby, game, settings, saves,
+# component-gallery, debug, replays, logo-screen, …) is game-agnostic, AND the
+# renderer game-registration seam (renderer/game/) is now
 # game-agnostic too (#784): the registry became a runtime injection point
 # (registerRendererGame) and the tactics loaders moved to the consumer app
 # (apps/tactics/renderer/register.ts). None of these may import a games/* module
@@ -466,18 +480,10 @@ fi
 # (issues #774, #784). Matches static + dynamic specifiers; engine @chimera-engine/*
 # packages and comment lines are filtered out. No file is exempt — the renderer
 # registry seam is scanned alongside the shell pages.
-SHELL_PAGE_DIRS=(
-    renderer/app/main-menu
-    renderer/app/lobby
-    renderer/app/game
-    renderer/app/settings
-    renderer/app/saves
-    renderer/app/component-gallery
-    renderer/app/debug
-    renderer/app/replays
-    renderer/game
-)
-for shell_page_dir in "${SHELL_PAGE_DIRS[@]}"; do
+# Glob every page dir under renderer/app/ (so pages added later are covered
+# automatically — the old hardcoded list had already gone stale, missing
+# logo-screen) plus the renderer game-registration seam renderer/game/.
+for shell_page_dir in renderer/app/*/ renderer/game; do
     [[ -d "${shell_page_dir}" ]] || continue
     while IFS= read -r match; do
         violation "94" "${match}"
@@ -493,24 +499,28 @@ for shell_page_dir in "${SHELL_PAGE_DIRS[@]}"; do
     )
 done
 
-# ─── Check 17: game renderer surfaces use only the public ui/chat barrels (inv 96)
-# A game's React surfaces — games/<name>/screens/*.tsx and
-# games/<name>/shell/*.tsx — may reach the shared library ONLY through the two
-# public barrels @chimera-engine/renderer/components/ui and
-# @chimera-engine/renderer/components/chat. Every other @chimera-engine/renderer/* specifier
-# (stores, IPC bridges, shell/, R3F, hooks, asset managers, stylesheets, or a
-# deep component-file path behind either barrel) is a renderer internal and is
-# forbidden. Mirrors the ESLint rule chimera/no-game-renderer-internals, which
-# remains the comprehensive authority (it also guards non-surface game files and
-# relative renderer paths); this review-gate check guards the two surface dirs
-# the invariant names, matched through the package specifier across the cut
-# (issue #774). The barrel allow-list is tail-anchored to the closing quote so
-# `.../ui` and `.../ui/index.js` pass while `.../ui/Button.js` is flagged. Bare
+# ─── Check 17: game renderer surfaces use only the public renderer barrels (inv 96)
+# A game's React surfaces — apps/<name>/screens/*.tsx and apps/<name>/shell/*.tsx —
+# may reach the shared library ONLY through the public barrels
+# @chimera-engine/renderer/components/{ui,chat,r3f} and the top-level
+# @chimera-engine/renderer/{i18n,game} (the i18n runtime and the game-registration
+# seam) — the five public surfaces chimera/no-game-renderer-internals sanctions.
+# Every other @chimera-engine/renderer/* specifier
+# (stores, IPC bridges, shell/, hooks, asset managers, stylesheets, or a deep
+# component-file path behind any barrel) is a renderer internal and is forbidden.
+# Mirrors the ESLint rule chimera/no-game-renderer-internals, which remains the
+# comprehensive authority (it also guards non-surface game files and relative
+# renderer paths); this review-gate check guards the two surface dirs the invariant
+# names, matched through the package specifier across the cut (issue #774). The
+# barrel allow-list is tail-anchored to the closing quote so `.../ui` and
+# `.../ui/index.js` pass while `.../ui/Button.js` is flagged; note i18n and game
+# are TOP-LEVEL subpaths (@chimera-engine/renderer/{i18n,game}), NOT under
+# components/. Bare
 # `renderer/` paths are intentionally NOT matched: a game's own renderer/ helper
-# (games/<name>/renderer/*) is not a boundary crossing.
-RENDERER_BARREL_RE="@chimera-engine/renderer/components/(ui|chat)(/index(\.(ts|js))?)?['\"]"
+# (apps/<name>/renderer/*) is not a boundary crossing.
+RENDERER_BARREL_RE="@chimera-engine/renderer/(components/(ui|chat|r3f)|i18n|game)(/index(\.(ts|js))?)?['\"]"
 GAME_SURFACE_DIRS=()
-for surface_dir in games/*/screens games/*/shell; do
+for surface_dir in apps/*/screens apps/*/shell; do
     [[ -d "${surface_dir}" ]] && GAME_SURFACE_DIRS+=("${surface_dir}")
 done
 if [[ ${#GAME_SURFACE_DIRS[@]} -gt 0 ]]; then
@@ -531,7 +541,8 @@ fi
 # ─── Check 18: i18n runtime stays renderer-only (invariant 110) ──────────────
 # The i18n RUNTIME — translation resolution, the ICU formatter, and the React
 # binding, all under renderer/i18n/ — is a renderer concern. simulation/, ai/,
-# and networking/ must never import or reference it. The ONLY i18n surface
+# networking/, and the per-game gameplay dirs apps/<game>/{simulation,ai} must
+# never import or reference it. The ONLY i18n surface
 # allowed in simulation/ is the declarative language CONTRACT in
 # simulation/foundation/game-manifest-contract.ts (GameLanguage,
 # GameManifest.languages, resolveGameLanguages/firstLanguageCode) — a language
@@ -545,7 +556,7 @@ fi
 # simulation/bridge/debug-api-types.ts is not flagged.
 check_grep "110" \
     'renderer/i18n|useTranslate|I18nProvider|formatMessage|TranslationBundle|TranslationKey' \
-    simulation ai networking
+    simulation ai networking apps/*/simulation apps/*/ai
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo

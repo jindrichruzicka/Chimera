@@ -190,48 +190,51 @@ test_games_import_in_simulation_detected() {
     fi
 }
 
-# Test: @chimera-engine/simulation import inside shared/ → violation [invariant-1]
-# shared/ is the zero-dependency foundation leaf (issue #758).
-test_simulation_import_in_shared_detected() {
+# Test: @chimera-engine/ai import inside simulation/ → violation [invariant-1]
+# simulation/ is the zero-dependency foundation leaf (it absorbed the former
+# shared/ package, issue #758). Uses an `ai` back-edge so ONLY Check 13 fires —
+# Check 2 is renderer-only and Check 4 filters engine-package specifiers.
+test_engine_import_in_simulation_leaf_detected() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/messages.ts" \
-        "import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';"
+    plant_file "${tmp}" "simulation/foundation/messages.ts" \
+        "import type { PlayerAgent } from '@chimera-engine/ai/engine/PlayerAgent.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
 
     if [[ ${exit_code} -ne 0 ]]; then
         if echo "${out}" | grep -q '\[invariant-1\]'; then
-            pass "@chimera-engine/simulation import in shared/ detected as [invariant-1]"
+            pass "@chimera-engine/ai import in simulation/ detected as [invariant-1]"
         else
-            fail "shared/ back-edge detected but invariant number missing:"
+            fail "simulation/ back-edge detected but invariant number missing:"
             echo "${out}" | sed 's/^/       /' >&2
         fi
     else
-        fail "@chimera-engine/simulation import in shared/ not detected (exit 0)"
+        fail "@chimera-engine/ai import in simulation/ not detected (exit 0)"
     fi
 }
 
-# Test: @chimera-engine/shared self-import inside shared/ is NOT a back-edge → no violation.
-# Confirms the leaf check excludes the shared package itself.
-test_shared_self_import_not_flagged() {
+# Test: @chimera-engine/simulation self-import inside simulation/ is NOT a back-edge → no
+# violation. Confirms the leaf check omits the simulation package from the
+# forbidden alternation.
+test_simulation_self_import_not_flagged() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "shared/game-screen-contract.ts" \
-        "import type { GameContent } from '@chimera-engine/shared/game-content-contract.js';"
+    plant_file "${tmp}" "simulation/foundation/game-screen-contract.ts" \
+        "import type { GameContent } from '@chimera-engine/simulation/game-content-contract.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
 
     if [[ ${exit_code} -eq 0 ]]; then
-        pass "@chimera-engine/shared self-import in shared/ not flagged"
+        pass "@chimera-engine/simulation self-import in simulation/ not flagged"
     else
-        fail "@chimera-engine/shared self-import in shared/ wrongly flagged:"
+        fail "@chimera-engine/simulation self-import in simulation/ wrongly flagged:"
         echo "${out}" | sed 's/^/       /' >&2
     fi
 }
@@ -1406,7 +1409,7 @@ test_renderer_internal_in_game_surface_detected() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "games/tactics/screens/TacticsDebugPanel.tsx" \
+    plant_file "${tmp}" "apps/tactics/screens/TacticsDebugPanel.tsx" \
         "import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';"
 
     local out exit_code
@@ -1431,7 +1434,7 @@ test_renderer_deep_ui_in_game_surface_detected() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "games/tactics/shell/TacticsShellBackground.tsx" \
+    plant_file "${tmp}" "apps/tactics/shell/TacticsShellBackground.tsx" \
         "import { Button } from '@chimera-engine/renderer/components/ui/Button.js';"
 
     local out exit_code
@@ -1455,9 +1458,9 @@ test_clean_game_surface_passes() {
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
-    plant_file "${tmp}" "games/tactics/screens/TacticsGameHud.tsx" \
+    plant_file "${tmp}" "apps/tactics/screens/TacticsGameHud.tsx" \
         "import { Button } from '@chimera-engine/renderer/components/ui';"
-    plant_file "${tmp}" "games/tactics/shell/TacticsShellChat.tsx" \
+    plant_file "${tmp}" "apps/tactics/shell/TacticsShellChat.tsx" \
         "import { ChatPanel } from '@chimera-engine/renderer/components/chat/index.js';"
 
     local out exit_code
@@ -1471,6 +1474,338 @@ test_clean_game_surface_passes() {
     fi
 }
 
+# ─── Relocated per-game gameplay code (apps/<game>/, F63) ───────────────────────
+# The per-game gameplay dirs apps/<game>/{simulation,ai} carry the same
+# determinism/boundary invariants as the engine simulation/ ai/ packages, and the
+# renderer surfaces apps/<game>/{screens,shell,scene,renderer} carry the
+# GameSnapshot-containment and public-barrel invariants. These fixtures prove the
+# checks bind on the relocated dirs, not just the engine packages.
+
+# Test: Math.random() in apps/<game>/simulation/ → violation [invariant-2/43]
+test_math_random_in_app_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/simulation/Reducer.ts" \
+        "export function reduce() { return Math.random(); }"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-2/43\]'; then
+            pass "Math.random() in apps/<game>/simulation/ detected as [invariant-2/43]"
+        else
+            fail "apps/<game>/simulation Math.random() detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "Math.random() in apps/<game>/simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test: Date.now() in apps/<game>/ai/ → violation [invariant-2/43]
+test_date_now_in_app_ai_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/ai/Agent.ts" \
+        "export function tick() { return Date.now(); }"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-2/43\]'; then
+            pass "Date.now() in apps/<game>/ai/ detected as [invariant-2/43]"
+        else
+            fail "apps/<game>/ai Date.now() detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "Date.now() in apps/<game>/ai/ not detected (exit 0)"
+    fi
+}
+
+# Test: import from renderer/ inside apps/<game>/simulation/ → violation [invariant-1]
+test_renderer_import_in_app_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/simulation/Bad.ts" \
+        "import { foo } from '../../../renderer/hooks/useFoo';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-1\]'; then
+            pass "renderer/ import in apps/<game>/simulation/ detected as [invariant-1]"
+        else
+            fail "apps/<game>/simulation renderer import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "renderer/ import in apps/<game>/simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test: bare @chimera-engine/renderer specifier (no subpath) in simulation/ → violation
+# [invariant-1]. The tightened Check 2 pattern catches the package root, which a
+# `.*renderer/` path pattern would miss.
+test_bare_renderer_specifier_in_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/engine/Bad.ts" \
+        "import { foo } from '@chimera-engine/renderer';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-1\]'; then
+            pass "bare @chimera-engine/renderer specifier in simulation/ detected as [invariant-1]"
+        else
+            fail "bare renderer specifier detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "bare @chimera-engine/renderer specifier in simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test: import from electron/ inside simulation/ → violation [invariant-1]
+# (Check 3 had no test before this.)
+test_electron_import_in_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/engine/Bad.ts" \
+        "import { app } from '../../electron/main/index';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-1\]'; then
+            pass "electron/ import in simulation/ detected as [invariant-1]"
+        else
+            fail "simulation electron import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "electron/ import in simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test: import from electron/ inside apps/<game>/simulation/ → violation [invariant-1]
+test_electron_import_in_app_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/simulation/Bad.ts" \
+        "import { app } from '../../../electron/main/index';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-1\]'; then
+            pass "electron/ import in apps/<game>/simulation/ detected as [invariant-1]"
+        else
+            fail "apps/<game>/simulation electron import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "electron/ import in apps/<game>/simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test: bare @chimera-engine/electron specifier (no subpath) in simulation/ → violation
+# [invariant-1] (tightened Check 3 pattern).
+test_bare_electron_specifier_in_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/engine/Bad.ts" \
+        "import type { AppApi } from '@chimera-engine/electron';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-1\]'; then
+            pass "bare @chimera-engine/electron specifier in simulation/ detected as [invariant-1]"
+        else
+            fail "bare electron specifier detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "bare @chimera-engine/electron specifier in simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test: GameSnapshot referenced in apps/<game>/screens/ → violation [invariant-3]
+# Renderer-process game surfaces must not name the main-process-only snapshot type.
+test_game_snapshot_in_app_screen_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/screens/TacticsBad.tsx" \
+        "import type { GameSnapshot } from '../simulation/types';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-3\]'; then
+            pass "GameSnapshot in apps/<game>/screens/ detected as [invariant-3]"
+        else
+            fail "apps/<game>/screens GameSnapshot detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "GameSnapshot in apps/<game>/screens/ not detected (exit 0)"
+    fi
+}
+
+# Test: a game import under renderer/app/logo-screen/ → violation [invariant-94]
+# The old hardcoded SHELL_PAGE_DIRS array missed logo-screen; the renderer/app/*/
+# glob covers every page dir, including ones added after the check was written.
+test_games_import_in_globbed_shell_page_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/logo-screen/page.tsx" \
+        "import { tacticsLogo } from '@chimera-engine/tactics/screens/index.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-94\]'; then
+            pass "game import under renderer/app/logo-screen/ detected as [invariant-94]"
+        else
+            fail "globbed shell-page game import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "game import under renderer/app/logo-screen/ not detected (exit 0)"
+    fi
+}
+
+# Test: game surface importing the r3f, i18n, and game public barrels → NOT flagged
+# ui/chat/r3f (under components/) plus the TOP-LEVEL i18n runtime and the game-
+# registration seam @chimera-engine/renderer/game are the five public surfaces that
+# chimera/no-game-renderer-internals sanctions; Check 17's allowlist mirrors them.
+# The game-seam fixture sits in a scanned surface dir on purpose, so it exercises
+# the RENDERER_BARREL_RE allowlist rather than an unscanned dir.
+test_r3f_i18n_game_barrels_in_game_surface_pass() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/screens/TacticsScene.tsx" \
+        "import { PerfProbe } from '@chimera-engine/renderer/components/r3f';"
+    plant_file "${tmp}" "apps/tactics/shell/TacticsShellHud.tsx" \
+        "import { useTranslate } from '@chimera-engine/renderer/i18n';"
+    plant_file "${tmp}" "apps/tactics/shell/TacticsGameSeam.tsx" \
+        "import { registerRendererGame } from '@chimera-engine/renderer/game';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "r3f + i18n + game public barrels in a game surface not flagged"
+    else
+        fail "r3f/i18n/game public barrels in a game surface wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test: generated build output under a scanned dir is NOT scanned → no violation
+# apps/<game>/renderer/ carries gitignored Next output (out/, .next/); check_grep
+# prunes out/.next/dist so a stray forbidden string in an emitted bundle cannot
+# raise a false positive pointing at generated code.
+test_build_output_dir_not_scanned() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/renderer/out/bundle.js" \
+        "const leaked = 'GameSnapshot';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "generated build output (out/) not scanned (no false positive)"
+    else
+        fail "generated build output (out/) wrongly scanned:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test: i18n runtime symbol referenced in simulation/ → violation [invariant-110]
+# useTranslate is a renderer-only runtime symbol; the simulation layer must not name
+# it. (Check 18 had no test before this.)
+test_i18n_runtime_in_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/engine/Bad.ts" \
+        "export const label = useTranslate();"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-110\]'; then
+            pass "useTranslate in simulation/ detected as [invariant-110]"
+        else
+            fail "simulation i18n runtime symbol detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "useTranslate in simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test: i18n runtime symbol in apps/<game>/simulation/ → violation [invariant-110]
+test_i18n_runtime_in_app_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/simulation/Bad.ts" \
+        "export const label = useTranslate();"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-110\]'; then
+            pass "useTranslate in apps/<game>/simulation/ detected as [invariant-110]"
+        else
+            fail "apps/<game>/simulation i18n runtime symbol detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "useTranslate in apps/<game>/simulation/ not detected (exit 0)"
+    fi
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -1479,8 +1814,8 @@ test_math_random_in_simulation_detected
 test_date_now_in_ai_detected
 test_renderer_import_in_simulation_detected
 test_games_import_in_simulation_detected
-test_simulation_import_in_shared_detected
-test_shared_self_import_not_flagged
+test_engine_import_in_simulation_leaf_detected
+test_simulation_self_import_not_flagged
 test_game_snapshot_in_preload_detected
 test_comment_mention_not_flagged
 test_test_title_string_not_flagged
@@ -1533,6 +1868,19 @@ test_clean_shell_page_passes
 test_renderer_internal_in_game_surface_detected
 test_renderer_deep_ui_in_game_surface_detected
 test_clean_game_surface_passes
+test_math_random_in_app_simulation_detected
+test_date_now_in_app_ai_detected
+test_renderer_import_in_app_simulation_detected
+test_bare_renderer_specifier_in_simulation_detected
+test_electron_import_in_simulation_detected
+test_electron_import_in_app_simulation_detected
+test_bare_electron_specifier_in_simulation_detected
+test_game_snapshot_in_app_screen_detected
+test_games_import_in_globbed_shell_page_detected
+test_r3f_i18n_game_barrels_in_game_surface_pass
+test_build_output_dir_not_scanned
+test_i18n_runtime_in_simulation_detected
+test_i18n_runtime_in_app_simulation_detected
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then
