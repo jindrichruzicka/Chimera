@@ -558,6 +558,164 @@ check_grep "110" \
     'renderer/i18n|useTranslate|I18nProvider|formatMessage|TranslationBundle|TranslationKey' \
     simulation ai networking apps/*/simulation apps/*/ai
 
+# NOTE: the per-game i18n-runtime containment (Invariant #110 for
+# apps/<game>/{simulation,ai}) lives in Check 18 above — its dir list already
+# includes apps/*/simulation apps/*/ai, so it is intentionally not duplicated as
+# a separate per-game check below.
+
+# ─── Check 19: gameplay purity — no env reads or node I/O (invariants 43, 2) ──
+# validate()/reduce() must be pure: no environment reads and no I/O (Invariant
+# #43). Scans the engine simulation/ ai/ packages AND the per-game gameplay dirs
+# apps/<game>/{simulation,ai}, flagging `process.env` reads and imports of node
+# built-in I/O/process modules (fs, child_process, sockets, etc.) in both the
+# `node:`-prefixed and bare-specifier forms.
+#
+# Two engine infrastructure files carry a SANCTIONED, non-reducer I/O surface and
+# are path-exempted (startup/projection infrastructure, not validate()/reduce()):
+#   * simulation/foundation/constants.ts — the IS_DEBUG_MODE env read gated by
+#     Invariant #27 (a production runtime asserts it is false at startup).
+#   * simulation/content/ContentLoader.ts — the content-DB loader's fs read
+#     (§4.8); a failed load throws fatally at main startup, never inside a tick.
+# node:crypto is deliberately NOT in the module list: simulation/projection/
+# CommitmentScheme.ts uses it under the §8 commitment mandate (and carries its own
+# `@chimera-review:` marker), so it is neither matched nor exempted here.
+PURITY_IO_RE="process\.env|(from|import\(|require\()[[:space:]]*['\"](node:)?(fs|child_process|net|http|https|dns|dgram|tls|readline|cluster|worker_threads)['\"/]"
+PURITY_DIRS=()
+for purity_dir in simulation ai apps/*/simulation apps/*/ai; do
+    [[ -d "${purity_dir}" ]] && PURITY_DIRS+=("${purity_dir}")
+done
+if [[ ${#PURITY_DIRS[@]} -gt 0 ]]; then
+    while IFS= read -r match; do
+        file="${match%%:*}"
+        case "${file}" in
+            simulation/foundation/constants.ts) ;;
+            simulation/content/ContentLoader.ts) ;;
+            *) violation "2/43" "${match}" ;;
+        esac
+    done < <(
+        grep -rnE \
+            --include="*.ts" --include="*.tsx" --include="*.js" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            --exclude-dir="out" --exclude-dir=".next" --exclude-dir="dist" \
+            "${PURITY_IO_RE}" "${PURITY_DIRS[@]}" 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
+# ─── Check 20: games must not register engine: action types (invariant 11) ────
+# The `engine:` action namespace is reserved; a game must not REGISTER an action
+# type in it. Registration puts a string literal in the `type:` field of an
+# ActionDefinition, so this flags a `type: 'engine:…'` literal in per-game
+# gameplay code apps/<game>/{simulation,ai}.
+#
+# False positives avoided by shape: a game legitimately REFERENCES the engine's
+# own end-turn action to re-emit it — e.g. `const ENGINE_END_TURN =
+# 'engine:end_turn'` (an assignment, not a `type:` literal) and an emission
+# `{ type: ENGINE_END_TURN_ACTION, … }` (a `type:` with an identifier, not a
+# literal). Neither matches the `type:`-literal registration shape.
+check_grep "11" \
+    "type:[[:space:]]*['\"]engine:" \
+    apps/*/simulation apps/*/ai
+
+# ─── Check 21: no float literals in per-game simulation state (invariants 75, 44) ─
+# FixedPoint (bigint Q32.32) is the ONLY allowed fractional representation in a
+# game snapshot; floating-point is forbidden in simulation state (Invariants #44,
+# #75). Flags decimal number literals in per-game simulation logic
+# apps/<game>/simulation.
+#
+# FP-suppression path (the highest false-positive risk in the set): a decimal in a
+# FULL-LINE comment — e.g. an architecture section citation like `§4.6` on a
+# `*`-prefixed JSDoc line — is dropped by check_grep's comment filter, so the
+# JSDoc citations in the tree are not flagged. That filter suppresses FULL-LINE
+# comments only: a decimal in a TRAILING comment (e.g. `x = 0 // §4.6`) still
+# fires, as does a decimal in CODE (e.g. inside a version string like "v1.5").
+# Move such a citation onto its own full-line comment, or narrow the pattern at
+# that site. `.test.ts` fixtures (which assert non-integers are rejected) are
+# excluded by check_grep.
+check_grep "75/44" \
+    '[0-9]+\.[0-9]' \
+    apps/*/simulation
+
+# ─── Check 22: game screens barrel exports only React.lazy screens (invariant 87) ─
+# Every screen exported from a game's screens barrel apps/<game>/screens/index.ts(x)
+# must be wrapped in React.lazy(() => import('./…')); an eager same-dir static
+# import of a screen COMPONENT defeats the per-game bundle split. Flags a static
+# same-dir value import/re-export (`… from './…'`) in the barrel. A React.lazy
+# dynamic `import('./…')` call has no `from` clause so it does not match; static
+# imports from parent dirs (`../simulation`, `../styles`) or packages are
+# same-package and allowed. Type-only same-dir specifiers (`import type … from
+# './…'`, `export type … from './…'`) are excluded — they are erased at compile
+# time and pull no runtime component into the eager graph, so they fall outside
+# Invariant #87. That exclusion is anchored to the STATEMENT start (via the
+# `path:line:` prefix, the same technique as Check 24's comment filter), so an
+# `import type`/`export type` phrase in a TRAILING comment on a genuine
+# value-import line cannot mask the violation.
+for screens_barrel in apps/*/screens/index.ts apps/*/screens/index.tsx; do
+    [[ -f "${screens_barrel}" ]] || continue
+    while IFS= read -r match; do
+        violation "87" "${match}"
+    done < <(
+        grep -HnE \
+            "from[[:space:]]*['\"]\./" "${screens_barrel}" 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(import|export)[[:space:]]+type[[:space:]]' \
+        || true
+    )
+done
+
+# ─── Check 23: game lobby/shell surfaces perform no privileged lobby writes (inv 100) ─
+# A game's lobby/shell/screen surfaces must not write the IPC-mirrored lobbyStore,
+# call LobbyManager, or reach the lobby through the debug bridge; they receive
+# setMatchSetting/setPlayerAttribute as props and call those engine-provided
+# setters (Invariant #100). Scans apps/<game>/{shell,screens} for a LobbyManager
+# or lobbyStore reference, or a `__chimera.….lobby` access. The legitimate
+# `__chimera.replay` reads (the replay export bridge) do not match, and the
+# engine-provided useLobbyApi() hook is deliberately not flagged.
+check_grep "100" \
+    'LobbyManager|lobbyStore|__chimera.*\.lobby' \
+    apps/*/shell apps/*/screens
+
+# ─── Check 24: game fonts are local — no external font URLs (invariant 97) ────
+# Game-owned fonts must be committed to the game package and referenced by local
+# game-asset paths; GameFontFace.src must not be an external URL and runtime font
+# loading must not fetch Google Fonts CSS or fonts.gstatic.com files (Invariant
+# #97). Scans a game's shell/styles/screens/assets surfaces — INCLUDING .css — for
+# a fonts.gstatic.com / fonts.googleapis.com reference or a `url(https://…)` in a
+# stylesheet. Local `src: 'game-id/fonts/…woff2'` relative paths (the sanctioned
+# form) do not match.
+#
+# NOTE: this check matches URL text containing `://`, so it deliberately does NOT
+# use the shared loose comment filter (`:[[:space:]]*(//…)`), which would drop
+# every match — the `//` in `https://` reads as a comment marker to that filter.
+# It anchors the comment filter to the `path:line:` prefix instead, so only a line
+# whose CONTENT starts with a comment marker (a genuine comment) is suppressed.
+# Consequence: a font URL cited in a full-line comment (content starting with
+# `//`, `/*`, or `*`) is suppressed, but a TRAILING comment on a code line — e.g.
+# a `src: '…woff2'; // was https://fonts.gstatic.com/…` provenance note — DOES
+# trip the gate. A trailing-comment URL cannot be told apart from a code URL by
+# grep, because `https://` itself contains `//`; keep any font-URL provenance note
+# on its own full-line comment.
+FONT_DIRS=()
+for font_dir in apps/*/shell apps/*/styles apps/*/screens apps/*/assets; do
+    [[ -d "${font_dir}" ]] && FONT_DIRS+=("${font_dir}")
+done
+if [[ ${#FONT_DIRS[@]} -gt 0 ]]; then
+    while IFS= read -r match; do
+        violation "97" "${match}"
+    done < <(
+        grep -rnE \
+            --include="*.ts" --include="*.tsx" --include="*.css" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            --exclude-dir="out" --exclude-dir=".next" --exclude-dir="dist" \
+            "fonts\.gstatic\.com|fonts\.googleapis\.com|url\(['\"]?https?://" "${FONT_DIRS[@]}" 2>/dev/null \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then
