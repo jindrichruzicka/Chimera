@@ -7,7 +7,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 # Architecture Invariants
 
 > These invariants are the hard rules of the Chimera engine. A single violation is a BLOCK finding.
-> Related: [System Overview](system-overview-and-context.md) · [Module Boundaries](module-boundaries-file-tree.md)
+> Related: [System Overview](system-overview-and-context.md) · [Module Boundaries](module-boundaries-file-tree.md) · [Invariant Roll-Call](f73-invariant-roll-call.md) (per-invariant enforcement status)
 
 ---
 
