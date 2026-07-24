@@ -600,6 +600,54 @@ plant_repo_shaped_root() {
     plant_file "${root}" "simulation/foundation/constants.ts" \
         "export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
     mkdir -p "${root}/.github/skills/invariants"
+    # Named trust-gate pins (Check 25) are marker-gated on pnpm-workspace.yaml, so
+    # a repo-shaped root must carry each mandated gate at its site or Check 25
+    # fires. Mirror the real repo's gate calls here (needle-per-file), so the
+    # marker-present repo-shaped fixtures (16c/16d and the Check-25 cases below)
+    # stay green.
+    plant_file "${root}" "electron/main/runtime/StateBroadcaster.ts" \
+        "export class StateBroadcaster { send() { return this.projector.project(snap, viewerId); } }"
+    plant_file "${root}" "electron/main/runtime/SessionRuntime.ts" \
+        "export class SessionRuntime { load() { return this.commitmentScheme.verify(reveal, envelope); } }"
+    plant_file "${root}" "renderer/components/shell/GameShell.tsx" \
+        "export const GameShell = () => { assetManager.dispose(); };"
+    plant_file "${root}" "electron/main/saves/FileSaveRepository.ts" \
+        "export class FileSaveRepository { async save() { await fs.rename(tmp, dest); } }"
+    plant_file "${root}" "electron/main/profile/ProfileGate.ts" \
+        "export function gate() { return admit(rawProfile, existingLocalIds); }"
+    plant_file "${root}" "electron/main/lobby/LobbyManager.ts" \
+        "export class LobbyManager { onChat() { return this.chatRelay.relay(input, deliver); } }"
+}
+
+# ─── Assertion helpers for the Check 25–31 fixtures ───────────────
+# The Check 1–24 cases above inline their run/assert logic. The batch below is
+# larger and follows one of two shapes, so it uses these two wrappers to stay
+# readable — same run_from_root call, same pass/fail reporting.
+
+# Assert the script FIRES <tag> against a planted temp <root>.
+# Usage: expect_violation <root> <tag> <label>
+expect_violation() {
+    local root="$1" tag="$2" label="$3" out exit_code
+    out=$(run_from_root "${root}" 2>&1) && exit_code=0 || exit_code=$?
+    if [[ ${exit_code} -ne 0 ]] && echo "${out}" | grep -q "\[invariant-${tag}\]"; then
+        pass "${label} → [invariant-${tag}]"
+    else
+        fail "${label} — expected [invariant-${tag}] (exit ${exit_code})"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Assert the script stays SILENT (exit 0) against a planted temp <root>.
+# Usage: expect_clean <root> <label>
+expect_clean() {
+    local root="$1" label="$2" out exit_code
+    out=$(run_from_root "${root}" 2>&1) && exit_code=0 || exit_code=$?
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "${label} (clean)"
+    else
+        fail "${label} — expected clean exit 0"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
 }
 
 # Test 16c: repo-shaped root with the marker RENAMED → probe fires.
@@ -1806,6 +1854,239 @@ test_i18n_runtime_in_app_simulation_detected() {
     fi
 }
 
+# ═══ Check 25: named trust-gate file-pins ════════════════════════
+
+# A renamed gate call (project( → emit() with the file in place → fires.
+test_trust_gate_pin_renamed_call_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_repo_shaped_root "${tmp}"
+    plant_file "${tmp}" "pnpm-workspace.yaml" "packages:\n  - 'apps/*'"
+    plant_file "${tmp}" "electron/main/runtime/StateBroadcaster.ts" \
+        "export class StateBroadcaster { send() { return this.projector.emit(snap, viewerId); } }"
+    expect_violation "${tmp}" "8" "Check 25: renamed StateProjector gate (project→emit)"
+}
+
+# A mandated gate file that moved away (missing) → fires.
+test_trust_gate_pin_missing_file_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_repo_shaped_root "${tmp}"
+    plant_file "${tmp}" "pnpm-workspace.yaml" "packages:\n  - 'apps/*'"
+    rm -f "${tmp}/electron/main/runtime/StateBroadcaster.ts"
+    expect_violation "${tmp}" "8" "Check 25: moved/missing StateBroadcaster gate file"
+}
+
+# The gate surviving ONLY in a comment must NOT satisfy the pin (anti-vacuity).
+test_trust_gate_pin_commented_call_still_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_repo_shaped_root "${tmp}"
+    plant_file "${tmp}" "pnpm-workspace.yaml" "packages:\n  - 'apps/*'"
+    plant_file "${tmp}" "electron/main/lobby/LobbyManager.ts" \
+        "export class LobbyManager { onChat() { /* was this.chatRelay.relay(input, deliver); */ return null; } }"
+    expect_violation "${tmp}" "73" "Check 25: ChatRelay gate present only in a comment"
+}
+
+# All six gates present at their sites (marker armed) → silent.
+test_trust_gate_pins_all_present_inert() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_repo_shaped_root "${tmp}"
+    plant_file "${tmp}" "pnpm-workspace.yaml" "packages:\n  - 'apps/*'"
+    expect_clean "${tmp}" "Check 25: all trust-gate pins present at their sites"
+}
+
+# ═══ Check 26: IPC handler containment ═══════════════════════════
+
+test_rogue_ipc_handler_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/rogue-ipc.ts" \
+        "export function wire(ipcMain: XIpc) { ipcMain.handle('x', () => 1); }"
+    expect_violation "${tmp}" "5" "Check 26: ipcMain.handle in a non-allowlisted module"
+}
+
+test_ipc_handler_in_barrel_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/ipc/ipc-handlers.ts" \
+        "export function wire(ipcMain: XIpc) { ipcMain.handle('x', () => 1); ipcMain.on('y', () => 2); }"
+    expect_clean "${tmp}" "Check 26: ipcMain.handle in the sanctioned barrel"
+}
+
+test_ipc_handler_in_debug_bridge_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/debug-bridge.ts" \
+        "export function wire(ipcMain: XIpc) { ipcMain.handle('debug', () => 1); }"
+    expect_clean "${tmp}" "Check 26: ipcMain.handle in the sanctioned debug bridge"
+}
+
+test_non_ipc_handle_on_not_flagged() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/wiring.ts" \
+        "export function wire(app: XApp, protocol: XProto) { protocol.handle('chimera', () => 1); app.on('ready', () => 2); }"
+    expect_clean "${tmp}" "Check 26: protocol.handle/app.on are not IPC registrations"
+}
+
+# ═══ Check 27: applyRestoredFile entrypoint containment ══════════
+
+test_rogue_applyrestoredfile_caller_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/rogue-restore.ts" \
+        "export function bad(rt: XRuntime, f: XFile) { rt.applyRestoredFile(f); }"
+    expect_violation "${tmp}" "24" "Check 27: applyRestoredFile called outside the allowlist"
+}
+
+test_applyrestoredfile_in_composition_root_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/index.ts" \
+        "const apply = (f: XFile) => activeSession.applyRestoredFile(f);"
+    expect_clean "${tmp}" "Check 27: applyRestoredFile in the composition root"
+}
+
+test_applyrestoredfile_in_test_support_harness_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/__test-support__/restored-host-harness.ts" \
+        "const apply = (f: XFile) => activeSession.applyRestoredFile(f);"
+    expect_clean "${tmp}" "Check 27: applyRestoredFile in the restored-host harness"
+}
+
+# ═══ Check 28: TimerManager.advance sole consumer ════════════════
+
+test_timer_advance_outside_tick_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/simulation/BadReducer.ts" \
+        "import { TimerManager } from '@chimera-engine/simulation'; export const r = () => TimerManager.advance(reg);"
+    expect_violation "${tmp}" "55" "Check 28: TimerManager.advance() outside engine:tick"
+}
+
+test_timer_advance_in_engine_actions_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "simulation/engine/EngineActions.ts" \
+        "export const tick = () => { const { next } = TimerManager.advance(orig); return next; };"
+    expect_clean "${tmp}" "Check 28: TimerManager.advance() in the engine:tick reducer"
+}
+
+test_timer_advance_definition_not_flagged() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "simulation/engine/GameTimer.ts" \
+        "export const TimerManager = { advance(registry: XReg) { return registry; } };"
+    expect_clean "${tmp}" "Check 28: the advance() method definition is not a qualified call"
+}
+
+# ═══ Check 29: authoritative-state hygiene ═══════════════════════
+
+test_camera_field_in_projection_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "simulation/projection/PlayerView.ts" \
+        "export interface PlayerView { zoom: number; lookAt: XVec; }"
+    expect_violation "${tmp}" "32/57/59" "Check 29: camera field (zoom) in a projection type"
+}
+
+test_settings_field_in_persistence_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "simulation/persistence/SaveFile.ts" \
+        "export interface SaveFile { settings: XSettings; }"
+    expect_violation "${tmp}" "32/57/59" "Check 29: settings field in a SaveFile type"
+}
+
+# A profile field carrying an https:// default must still fire — the row-anchored
+# comment filter must not read the `://` as a comment marker.
+test_profile_field_with_url_default_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/simulation/Snapshot.ts" \
+        "export const defaults = { avatar: 'https://cdn.example/a.png' };"
+    expect_violation "${tmp}" "32/57/59" "Check 29: profile field (avatar) with an https:// default"
+}
+
+test_clean_snapshot_type_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "simulation/projection/PlayerView.ts" \
+        "export interface PlayerView { hp: bigint; team: number; }"
+    expect_clean "${tmp}" "Check 29: a snapshot type with no settings/camera/profile fields"
+}
+
+# ═══ Check 30: engine CSS token discipline ═══════════════════════
+
+test_keyframes_in_component_module_css_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "renderer/components/ui/Spinner.module.css" \
+        "@keyframes spin { from { opacity: 0; } to { opacity: 1; } }"
+    expect_violation "${tmp}" "109" "Check 30(a): module-local @keyframes in a component module CSS"
+}
+
+test_hex_literal_in_ui_module_css_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "renderer/components/ui/Button.module.css" \
+        ".button { color: #ff3366; }"
+    expect_violation "${tmp}" "86" "Check 30(b): hardcoded hex literal in engine ui CSS"
+}
+
+test_rgba_literal_in_ui_module_css_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "renderer/components/ui/Badge.module.css" \
+        ".badge { background: rgba(0, 0, 0, 0.5); }"
+    expect_violation "${tmp}" "86" "Check 30(b): hardcoded rgba() literal in engine ui CSS"
+}
+
+test_var_token_in_ui_module_css_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "renderer/components/ui/Button.module.css" \
+        ".button { color: var(--ch-color-text); background: var(--ch-color-bg); }"
+    expect_clean "${tmp}" "Check 30(b): engine ui CSS referencing var(--ch-*) tokens"
+}
+
+test_undeclared_override_token_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "renderer/styles/tokens.css" \
+        ":root { --ch-color-accent: rebeccapurple; --ch-button-bg: black; }"
+    plant_file "${tmp}" "apps/tactics/styles/tokens-override.css" \
+        ":root { --ch-color-accent: teal; --ch-button-madeup: white; }"
+    expect_violation "${tmp}" "85" "Check 30(c): override declares a --ch-* absent from tokens.css"
+}
+
+test_redeclared_override_token_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "renderer/styles/tokens.css" \
+        ":root { --ch-color-accent: rebeccapurple; --ch-button-bg: black; }"
+    plant_file "${tmp}" "apps/tactics/styles/tokens-override.css" \
+        ":root { --ch-color-accent: teal; --ch-button-bg: navy; }"
+    expect_clean "${tmp}" "Check 30(c): override redefines only tokens declared in tokens.css"
+}
+
+# ═══ Check 31: main-process logging & egress hygiene ═════════════
+
+test_console_log_in_main_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/lobby/LobbyManager.ts" \
+        "export function log() { console.log('hi'); }"
+    expect_violation "${tmp}" "67" "Check 31: raw console.log in a main-process module"
+}
+
+test_console_in_composition_root_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/index.ts" \
+        "function main() { console.error('fatal: refusing to start'); }"
+    expect_clean "${tmp}" "Check 31: the sanctioned startup-guard console in index.ts"
+}
+
+# The https:// argument contains `://`; the row-anchored filter must not drop it.
+test_fetch_https_egress_in_main_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/telemetry.ts" \
+        "export async function send() { await fetch('https://telemetry.example/x'); }"
+    expect_violation "${tmp}" "69" "Check 31: fetch() network egress in main"
+}
+
+test_node_https_import_in_main_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/telemetry.ts" \
+        "import https from 'node:https'; export const client = https;"
+    expect_violation "${tmp}" "69" "Check 31: node:https client import in main"
+}
+
+test_chimera_protocol_not_flagged_as_egress() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "electron/main/protocol.ts" \
+        "export function reg(protocol: XProto) { protocol.handle('chimera', (r) => r); const opt = { supportFetchAPI: true }; }"
+    expect_clean "${tmp}" "Check 31: chimera:// protocol registration is not egress"
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -1881,6 +2162,35 @@ test_r3f_i18n_game_barrels_in_game_surface_pass
 test_build_output_dir_not_scanned
 test_i18n_runtime_in_simulation_detected
 test_i18n_runtime_in_app_simulation_detected
+test_trust_gate_pin_renamed_call_detected
+test_trust_gate_pin_missing_file_detected
+test_trust_gate_pin_commented_call_still_detected
+test_trust_gate_pins_all_present_inert
+test_rogue_ipc_handler_detected
+test_ipc_handler_in_barrel_passes
+test_ipc_handler_in_debug_bridge_passes
+test_non_ipc_handle_on_not_flagged
+test_rogue_applyrestoredfile_caller_detected
+test_applyrestoredfile_in_composition_root_passes
+test_applyrestoredfile_in_test_support_harness_passes
+test_timer_advance_outside_tick_detected
+test_timer_advance_in_engine_actions_passes
+test_timer_advance_definition_not_flagged
+test_camera_field_in_projection_detected
+test_settings_field_in_persistence_detected
+test_profile_field_with_url_default_detected
+test_clean_snapshot_type_passes
+test_keyframes_in_component_module_css_detected
+test_hex_literal_in_ui_module_css_detected
+test_rgba_literal_in_ui_module_css_detected
+test_var_token_in_ui_module_css_passes
+test_undeclared_override_token_detected
+test_redeclared_override_token_passes
+test_console_log_in_main_detected
+test_console_in_composition_root_passes
+test_fetch_https_egress_in_main_detected
+test_node_https_import_in_main_detected
+test_chimera_protocol_not_flagged_as_egress
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then

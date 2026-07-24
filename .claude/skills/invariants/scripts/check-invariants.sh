@@ -716,6 +716,292 @@ if [[ ${#FONT_DIRS[@]} -gt 0 ]]; then
     )
 fi
 
+# ─── Check 25: named trust-gate file-pins (invariants 8, 9, 21, 23, 61, 73) ──
+# Each invariant below mandates a NAMED gate — a specific call that must run at a
+# specific site. A refactor that renames the local field/method, or moves the
+# file, silently removes the gate; these pins turn that into a loud failure that
+# forces a conscious re-pin (update the table below). Presence is asserted against
+# COMMENT-STRIPPED source (reusing strip_js_comments, which is string-aware) so a
+# commented-out mention of the call can neither satisfy a pin nor mask a removal.
+#
+# Marker-gated on REPO_MARKER (pnpm-workspace.yaml) so the harness's throwaway
+# fixture roots stay inert, exactly like Check 9 — the repo-shaped-root harness
+# fixture plants all six files with their needles (plant_repo_shaped_root), so the
+# marker-present harness cases stay green.
+#
+# The needle is deliberately refactor-sensitive: the gate's receiver/method name
+# is part of it, so `this.projector.project(` → `this.projector.emit(`
+# (Invariant #8) trips the pin. Where the qualified `Class.method(` spelling
+# exists only in comments (admit()/relay()), the needle pins the real call site.
+assert_pin() {
+    local inv="$1"
+    local file="$2"
+    local needle="$3"
+    local stripped
+    if [[ ! -f "${file}" ]]; then
+        violation "${inv}" "${file}: mandated trust-gate file is missing — it moved or was renamed; re-pin it in check-invariants.sh (Check 25)"
+        return
+    fi
+    # Capture the stripped source first, THEN grep a here-string. Piping
+    # strip_js_comments directly into `grep -q` is unsafe under `set -o pipefail`:
+    # grep closes the pipe on its first match, the awk stripper dies with SIGPIPE,
+    # and pipefail would propagate that non-zero status so `! pipeline` fires a
+    # false violation exactly when the needle IS present.
+    stripped=$(strip_js_comments "${file}")
+    if ! grep -qF -- "${needle}" <<<"${stripped}"; then
+        violation "${inv}" "${file}: mandated trust-gate '${needle}' not found in code — the gate was renamed or removed; re-pin it consciously (Check 25)"
+    fi
+}
+if [[ -f "${REPO_MARKER}" ]]; then
+    assert_pin "8" "electron/main/runtime/StateBroadcaster.ts" "this.projector.project("
+    assert_pin "9" "electron/main/runtime/SessionRuntime.ts" "this.commitmentScheme.verify("
+    assert_pin "21" "renderer/components/shell/GameShell.tsx" "assetManager.dispose("
+    assert_pin "23" "electron/main/saves/FileSaveRepository.ts" "fs.rename(tmp, dest)"
+    assert_pin "61" "electron/main/profile/ProfileGate.ts" "admit(rawProfile"
+    assert_pin "73" "electron/main/lobby/LobbyManager.ts" "this.chatRelay.relay("
+fi
+
+# ─── Check 26: IPC handler registrations are contained (invariant 5) ──────────
+# Invariant #5: all IPC methods are declared in ipc-handlers.ts (exposed through
+# preload/api.ts). A non-comment ipcMain.handle()/ipcMain.on() registration may
+# appear ONLY in the sanctioned barrel electron/main/ipc/ipc-handlers.ts and the
+# debug bridge electron/main/debug-bridge.ts (the #3/#27 debug exception). A new
+# IPC module must be added to the allowlist case below — that forced edit is the
+# review point. Anchored on `ipcMain.` so unrelated EventEmitter/Electron APIs
+# (protocol.handle, webContents.on, app.on, screen.on, proc.on) do not match.
+# Test files (which build fake ipcMain objects) and comment lines are excluded.
+if [[ -d electron/main ]]; then
+    while IFS= read -r match; do
+        file="${match%%:*}"
+        case "${file}" in
+            electron/main/ipc/ipc-handlers.ts) ;;
+            electron/main/debug-bridge.ts) ;;
+            *) violation "5" "${match}" ;;
+        esac
+    done < <(
+        grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="node_modules" \
+            'ipcMain\.(handle|on)\(' electron/main 2>/dev/null \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
+# ─── Check 27: applyRestoredFile is the only disk→live-state entrypoint (inv 24) ─
+# Invariant #24: SessionRuntime.applyRestoredFile() is the ONLY entry point for
+# replacing the live GameSnapshot from a file. References to that identifier may
+# resolve only to the composition root (electron/main/index.ts), the method's home
+# (SessionRuntime.ts), the menu-restore coordinator (SessionRestoreCoordinator.ts),
+# and the restored-host test harness (restored-host-harness.ts, a non-.test.ts file
+# that mirrors the composition root's single apply helper). A new caller —
+# production OR test-support — must be added to the allowlist case below; that
+# forced edit is the review point. Comment lines (JSDoc citing the method) and
+# test files are excluded.
+if [[ -d electron/main ]]; then
+    while IFS= read -r match; do
+        file="${match%%:*}"
+        case "${file}" in
+            electron/main/index.ts) ;;
+            electron/main/runtime/SessionRuntime.ts) ;;
+            electron/main/runtime/SessionRestoreCoordinator.ts) ;;
+            electron/main/__test-support__/restored-host-harness.ts) ;;
+            *) violation "24" "${match}" ;;
+        esac
+    done < <(
+        grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="node_modules" \
+            'applyRestoredFile' electron/main 2>/dev/null \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
+# ─── Check 28: TimerManager.advance() has one consumer (invariant 55) ─────────
+# Invariant #55: the engine:tick reducer is the ONLY consumer of
+# TimerManager.advance(). Game action reducers may create or cancel timers but must
+# NOT call advance(). The sole sanctioned call site is
+# simulation/engine/EngineActions.ts (the engine:tick reducer). The definition in
+# simulation/engine/GameTimer.ts is a shorthand object method `advance(registry…`
+# with no `TimerManager.` receiver, so it does not match the qualified-call
+# pattern; and the unrelated ai/engine CommandScheduler.advance() is not matched
+# either, because the pattern is anchored on the `TimerManager.` receiver.
+TIMER_ADVANCE_DIRS=()
+for timer_dir in simulation ai apps/*/simulation apps/*/ai; do
+    [[ -d "${timer_dir}" ]] && TIMER_ADVANCE_DIRS+=("${timer_dir}")
+done
+if [[ ${#TIMER_ADVANCE_DIRS[@]} -gt 0 ]]; then
+    while IFS= read -r match; do
+        file="${match%%:*}"
+        case "${file}" in
+            simulation/engine/EngineActions.ts) ;;
+            *) violation "55" "${match}" ;;
+        esac
+    done < <(
+        grep -rnE \
+            --include="*.ts" --include="*.tsx" --include="*.js" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            --exclude-dir="out" --exclude-dir=".next" --exclude-dir="dist" \
+            'TimerManager\.advance\(' "${TIMER_ADVANCE_DIRS[@]}" 2>/dev/null \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
+# ─── Check 29: authoritative state carries no settings/camera/profile (32/57/59) ─
+# Invariants #32/#57/#59: settings, camera parameters (zoom/lookAt/fov/position),
+# and player-profile data (displayName/avatar) are NEVER stored in GameSnapshot,
+# PlayerSnapshot, SaveFile, or any projection type — each has a separate,
+# non-replayed lifecycle. Flags any of those field identifiers in the engine
+# snapshot/persistence/projection dirs and per-game simulation.
+#
+# FP-adjudication path: `settings` is a common word and the highest false-positive
+# risk in this set. The clean tree has zero hits. This grep honours NO suppression
+# marker — a `@chimera-review:` comment records a reviewed exception for a human but
+# does not silence the check. Clearing a genuine non-authoritative use means renaming
+# the field, or adding a code-level exemption here (a pattern-exclusion or a `case`
+# path-exempt, as Check 19 does for node:crypto).
+#
+# This is inlined rather than routed through check_grep so it can use the
+# row-anchored comment filter: a field with a URL default (e.g.
+# `avatar: 'https://…'`) contains `://`, which the shared loose filter would read
+# as a `:` + `//` comment marker and silently drop — the exact violation this
+# check exists to catch.
+HYGIENE_DIRS=()
+for hygiene_dir in simulation/engine simulation/persistence simulation/projection apps/*/simulation; do
+    [[ -d "${hygiene_dir}" ]] && HYGIENE_DIRS+=("${hygiene_dir}")
+done
+if [[ ${#HYGIENE_DIRS[@]} -gt 0 ]]; then
+    while IFS= read -r match; do
+        violation "32/57/59" "${match}"
+    done < <(
+        grep -rnE \
+            --include="*.ts" --include="*.tsx" --include="*.js" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            --exclude-dir="out" --exclude-dir=".next" --exclude-dir="dist" \
+            '\b(settings|zoom|lookAt|fov|displayName|avatar)\b' "${HYGIENE_DIRS[@]}" 2>/dev/null \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
+# ─── Check 30: engine CSS token discipline (invariants 109, 86, 85) ───────────
+# (a) Invariant #109: engine UI motion keyframes live ONLY in
+#     renderer/styles/animations.css; a module-local @keyframes in a component or
+#     app *.module.css breaks token indirection (CSS Modules hash keyframe names).
+# (b) Invariant #86: engine UI components (renderer/components/ui) reference
+#     var(--ch-*) tokens — never a hardcoded hex/rgb/hsl colour literal.
+# (c) Invariant #85: a game token OVERRIDE file (apps/<game>/styles) may only
+#     REDEFINE tokens declared in renderer/styles/tokens.css; declaring a NEW
+#     --ch-* name there is a module-boundary violation. This is the check that
+#     would have caught an earlier tactics Button override that declared a new
+#     --ch-button-* token absent from the engine tokens.css.
+
+# 30(a): module-local @keyframes in component/app module CSS.
+CSS_KEYFRAME_DIRS=()
+for kf_dir in renderer/components renderer/app; do
+    [[ -d "${kf_dir}" ]] && CSS_KEYFRAME_DIRS+=("${kf_dir}")
+done
+if [[ ${#CSS_KEYFRAME_DIRS[@]} -gt 0 ]]; then
+    while IFS= read -r match; do
+        violation "109" "${match}"
+    done < <(
+        grep -rnE --include="*.module.css" \
+            --exclude-dir="node_modules" --exclude-dir="out" \
+            --exclude-dir=".next" --exclude-dir="dist" \
+            '@keyframes' "${CSS_KEYFRAME_DIRS[@]}" 2>/dev/null \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
+# 30(b): hardcoded colour literals in engine ui module CSS. Matches a hex literal
+# (#rgb..#rrggbbaa) or an rgb()/rgba()/hsl()/hsla() function form. A 1–2 digit
+# `#nn` invariant reference in a comment is too short for the {3,8} hex class, and
+# full-line CSS comments are stripped by the shared filter — but a hex in a TRAILING
+# comment still fires (as with the Check 21 float literal).
+if [[ -d renderer/components/ui ]]; then
+    while IFS= read -r match; do
+        violation "86" "${match}"
+    done < <(
+        grep -rnE --include="*.module.css" \
+            --exclude-dir="node_modules" --exclude-dir="out" \
+            --exclude-dir=".next" --exclude-dir="dist" \
+            '#[0-9a-fA-F]{3,8}\b|\b(rgba?|hsla?)\(' renderer/components/ui 2>/dev/null \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
+# 30(c): a game override declaring a --ch-* name absent from tokens.css. The
+# authority set is the --ch-* names DECLARED (name followed by `:`) in tokens.css;
+# a `var(--ch-…)` REFERENCE (name followed by `)`) is not a declaration and is not
+# collected. Scope is apps/*/styles only (Invariant #85's override surface).
+# Known limitation: a --ch-* declaration inside a CSS comment in an override is a
+# false positive — keep commentary off declaration-shaped lines.
+TOKENS_FILE="renderer/styles/tokens.css"
+if [[ -f "${TOKENS_FILE}" ]]; then
+    tokens_declared=$(
+        grep -oE '(^|[^A-Za-z0-9-])--ch-[a-zA-Z0-9-]+[[:space:]]*:' "${TOKENS_FILE}" \
+            | grep -oE -- '--ch-[a-zA-Z0-9-]+' | sort -u
+    )
+    for override in apps/*/styles/*.css; do
+        [[ -f "${override}" ]] || continue
+        while IFS= read -r name; do
+            [[ -z "${name}" ]] && continue
+            if ! grep -qxF -- "${name}" <<<"${tokens_declared}"; then
+                violation "85" "${override}: declares ${name}, which is not declared in ${TOKENS_FILE} (Invariant #85: a game override may only redefine engine tokens)"
+            fi
+        done < <(
+            grep -oE '(^|[^A-Za-z0-9-])--ch-[a-zA-Z0-9-]+[[:space:]]*:' "${override}" \
+                | grep -oE -- '--ch-[a-zA-Z0-9-]+' | sort -u
+        )
+    done
+fi
+
+# ─── Check 31: main-process logging & egress hygiene (invariants 67, 69) ──────
+# (67) No raw console.* in electron/main production code — every manager logs via
+#      its injected Logger child. The sole sanctioned exception is the startup
+#      guard in electron/main/index.ts (it runs before the root logger exists and
+#      writes the refusal reason to stderr via console.error). That file is
+#      case-exempted here; it is comprehensively guarded by the no-console ESLint
+#      zone over electron/main/** and pinned by
+#      electron/main/__tests__/eslint-no-console.test.ts — this grep is a
+#      complementary early-warning for the other main-process modules.
+# (69) No automatic network egress from electron/main: no fetch() call and no
+#      node http/https client import. Telemetry egress is the #69 target. The
+#      custom chimera:// protocol (protocol.handle, supportFetchAPI) and Electron
+#      did-navigate httpResponseCode params are not client calls and do not match
+#      the narrow patterns below, so no exemption is needed.
+MAIN_EGRESS_RE="\bfetch\(|(from|import\(|require\()[[:space:]]*['\"](node:)?https?['\"]"
+if [[ -d electron/main ]]; then
+    while IFS= read -r match; do
+        file="${match%%:*}"
+        case "${file}" in
+            electron/main/index.ts) ;;
+            *) violation "67" "${match}" ;;
+        esac
+    done < <(
+        grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="node_modules" --exclude-dir="__tests__" \
+            --exclude-dir="__test-support__" \
+            'console\.' electron/main 2>/dev/null \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+    while IFS= read -r match; do
+        violation "69" "${match}"
+    done < <(
+        grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="node_modules" --exclude-dir="__tests__" \
+            --exclude-dir="__test-support__" \
+            "${MAIN_EGRESS_RE}" electron/main 2>/dev/null \
+        | grep -vE '^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then
