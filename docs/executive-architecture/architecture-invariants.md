@@ -140,7 +140,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **51.** Clients never drive a scene change. A client that wishes to transition sends a domain action; host-side policy decides whether to honour it via `SceneManager.requestTransition()`.
 
-**52.** Required assets for a scene MUST be declared in its `SceneDescriptor.requiredAssets`. Assets loaded on-demand inside the new scene will cause visual pop-in and are flagged by the `validate-assets` CI tool.
+**52.** Required assets for a scene MUST be declared in its `SceneDescriptor.requiredAssets`. Assets loaded on-demand inside the new scene will cause visual pop-in. `validate-assets` verifies that every **declared** `AssetRef` — in `requiredAssets`, asset manifests, content JSON, and font `src` — resolves on disk, and that `requiredAssets` and content-JSON refs additionally appear in an asset manifest (Invariant #22); it does **not** scan `useAsset`/`AssetManager.load` call sites, so it cannot detect an _undeclared_ on-demand load — that completeness is a code-review/lint concern (follow-up #908).
 
 **53.** `TransitionOverlay` is a renderer-only component. The simulation and Electron main process have no knowledge of fade state. Fade timing must never gate an authoritative simulation event — the `SceneReadyAction` is dispatched _after_ the fade completes, not as a cause of it.
 

@@ -158,12 +158,12 @@ renderer/components/shell/
 
 ### Invariants
 
-| #   | Rule                                                                                                                                    |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| #49 | Scene transitions are host-authoritative. `engine:scene_prepare` and `engine:scene_commit` rejected if dispatcher is not host.          |
-| #50 | `SceneDescriptor.initialize()` and `teardown()` are pure reducers. No I/O, no `Date.now()`, no `Math.random()`. Use `ctx.rng`.          |
-| #51 | Clients never drive a scene change directly. A client dispatches a domain action; host policy calls `SceneManager.requestTransition()`. |
-| #52 | Required assets for a scene MUST be declared in `SceneDescriptor.requiredAssets`. CI `validate-assets` tool flags on-demand assets.     |
+| #   | Rule                                                                                                                                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #49 | Scene transitions are host-authoritative. `engine:scene_prepare` and `engine:scene_commit` rejected if dispatcher is not host.                                                                                                                                                              |
+| #50 | `SceneDescriptor.initialize()` and `teardown()` are pure reducers. No I/O, no `Date.now()`, no `Math.random()`. Use `ctx.rng`.                                                                                                                                                              |
+| #51 | Clients never drive a scene change directly. A client dispatches a domain action; host policy calls `SceneManager.requestTransition()`.                                                                                                                                                     |
+| #52 | Required assets for a scene MUST be declared in `SceneDescriptor.requiredAssets` (else visual pop-in). `validate-assets` checks declared refs resolve on disk (and `requiredAssets`/content refs are manifest-listed); it does not detect undeclared on-demand loads (review/lint concern). |
 
 ---
 
