@@ -71,7 +71,7 @@ const rule: Rule.RuleModule = {
         docs: {
             description:
                 'Disallow fromFloat() from simulation/engine/FixedPoint inside simulation/ hot paths (Invariant #76). Only simulation/content/loaders/** may call fromFloat().',
-            url: 'https://github.com/jindrichruzicka/Chimera/issues/400',
+            url: 'https://github.com/jindrichruzicka/Chimera/blob/main/docs/core-components/fixed-point-math.md#eslint-enforcement',
         },
         messages: {
             noFromFloat:
