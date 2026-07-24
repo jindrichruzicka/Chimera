@@ -98,6 +98,14 @@ ruleTester.run('chimera/no-fromfloat-in-simulation', rule, {
             filename: 'simulation/content/loaders/tiles/TileLoader.ts',
             code: `${IMPORT_FIXED_POINT_ALIAS}\nconst v = fromFloat(3.14);`,
         },
+
+        // 8. Engine AI (a bare `ai/` path) is NOT a fromFloat-forbidden zone —
+        // parity with the engine fromFloat config zone, which is simulation-only.
+        // Only per-game AI (apps/<game>/ai/) fires; a bare `ai/` path must not.
+        {
+            filename: 'ai/engine/AIController.ts',
+            code: `${IMPORT_FIXED_POINT_ALIAS}\nconst v = fromFloat(1.0);`,
+        },
     ],
 
     // ── Invalid — rule MUST fire ─────────────────────────────────────────────
@@ -147,6 +155,24 @@ ruleTester.run('chimera/no-fromfloat-in-simulation', rule, {
                 'const x = 1;',
             ].join('\n'),
             errors: [{ messageId: 'missingChimeraReview' }],
+        },
+
+        // 7. fromFloat() inside a per-game simulation hot path
+        // (apps/<game>/simulation) — the path contains `/simulation/`, so the
+        // guard fires as it does for the engine.
+        {
+            filename: 'apps/tactics/simulation/actions.ts',
+            code: `${IMPORT_FIXED_POINT_ALIAS}\nconst v = fromFloat(1.5);`,
+            errors: [{ messageId: 'noFromFloat' }],
+        },
+
+        // 8. fromFloat() inside a per-game AI path (apps/<game>/ai) — the guard
+        // must fire here even though the path has no `/simulation/` segment.
+        // This is the case the internal-guard widening exists for.
+        {
+            filename: 'apps/tactics/ai/tacticsPolicy.ts',
+            code: `${IMPORT_FIXED_POINT_ALIAS}\nconst v = fromFloat(2.5);`,
+            errors: [{ messageId: 'noFromFloat' }],
         },
     ],
 });

@@ -18,5 +18,18 @@
         "types": ["node", "react", "react-dom"]
     },
     "include": ["**/*.ts", "**/*.tsx"],
-    "exclude": ["node_modules", "out", "dist", "electron/**", "e2e/**"]
+    // The simulation/ and ai/ __tests__/fixtures dirs hold the per-game
+    // determinism/fromFloat lint fixtures, which deliberately import a deep
+    // @chimera-engine/simulation/engine/* specifier that does not type-resolve; they are
+    // excluded here for the same reason the root tsconfig excludes them (this app
+    // config overrides — not merges — the inherited exclude, so it must repeat them).
+    "exclude": [
+        "node_modules",
+        "out",
+        "dist",
+        "electron/**",
+        "e2e/**",
+        "simulation/__tests__/fixtures/**",
+        "ai/__tests__/fixtures/**"
+    ]
 }

@@ -56,6 +56,9 @@ export default tseslint.config(
             'electron/main/__tests__/fixtures/**',
             'electron/preload/__tests__/fixtures/**',
             'renderer/__tests__/fixtures/**',
+            // Per-game determinism/fromFloat zone fixtures.
+            'apps/*/simulation/__tests__/fixtures/**',
+            'apps/*/ai/__tests__/fixtures/**',
             // CJS bridge shim for eslint.config.mjs — uses require() / module.exports by design.
             'tools/eslint-plugin-chimera/plugin.cjs',
             // Playwright output directories — generated artefacts, not source.
@@ -101,6 +104,13 @@ export default tseslint.config(
                         'electron/main/__tests__/fixtures/*.ts',
                         'electron/preload/__tests__/fixtures/*.ts',
                         'renderer/__tests__/fixtures/*.ts',
+                        // Per-game determinism/fromFloat fixtures are excluded from the
+                        // app tsconfig program (they intentionally import an unresolvable
+                        // deep specifier to trip the rule), so — like the sibling fixtures
+                        // above — the project service lints them via the default inferred
+                        // project rather than a named one.
+                        'apps/*/simulation/__tests__/fixtures/*.ts',
+                        'apps/*/ai/__tests__/fixtures/*.ts',
                     ],
                 },
                 tsconfigRootDir: import.meta.dirname,
@@ -156,6 +166,7 @@ export default tseslint.config(
             'ai/**/*.{ts,tsx}',
             'apps/*/actions/**/*.{ts,tsx}',
             'apps/*/simulation/**/*.{ts,tsx}',
+            'apps/*/ai/**/*.{ts,tsx}',
         ],
         rules: {
             'no-restricted-syntax': [
@@ -189,18 +200,19 @@ export default tseslint.config(
         },
     },
 
-    // AI + game simulation layers (apps/*/simulation, legacy apps/*/actions):
-    // forbid importing the UI/host/game/networking layers.
+    // AI + game simulation layers (apps/*/simulation, apps/*/ai, legacy
+    // apps/*/actions): forbid importing the UI/host/game/networking layers.
     // `@chimera-engine/ai` depends on `@chimera-engine/simulation` ONLY (Invariant #1):
     // now that the package is consumed through its `exports` map, the realistic
     // violation is the `@chimera-engine/<pkg>` workspace-alias form, so both the alias
     // and the legacy relative-path forms are forbidden. (simulation/ has its own
-    // stricter zero-dependency leaf rule below.) See issue #764.
+    // stricter zero-dependency leaf rule below.)
     {
         files: [
             'ai/**/*.{ts,tsx}',
             'apps/*/actions/**/*.{ts,tsx}',
             'apps/*/simulation/**/*.{ts,tsx}',
+            'apps/*/ai/**/*.{ts,tsx}',
         ],
         rules: {
             'no-restricted-imports': [
@@ -227,7 +239,7 @@ export default tseslint.config(
                                 '**/apps/*',
                             ],
                             message:
-                                'ai/ and game simulation code (apps/*/simulation) must not import from networking, renderer, electron, or game-app aliases — @chimera-engine/simulation (plus sibling-relative game modules) is the only dependency (Invariant #1). See coding-standards.md §3, issue #764.',
+                                'ai/ and game gameplay code (apps/*/simulation, apps/*/ai) must not import from networking, renderer, electron, or game-app aliases — @chimera-engine/simulation (plus sibling-relative game modules) is the only dependency (Invariant #1). See coding-standards.md §3.',
                         },
                     ],
                 },
@@ -554,11 +566,17 @@ export default tseslint.config(
     },
 
     // Invariant #76 — fromFloat() is only permitted at content-load time.
-    // Enabled for simulation/**; overridden to 'off' for the loaders exemption path.
+    // Enabled for engine simulation/** AND per-game gameplay code
+    // (apps/*/simulation/**, apps/*/ai/**); overridden to 'off' for the loaders
+    // exemption path and test files. The rule's own path guard mirrors this zone
+    // (fires on /simulation/ and apps/<game>/ai/), so both must stay in sync.
     // Rule implementation: tools/eslint-plugin-chimera/rules/no-fromfloat-in-simulation.ts
-    // Issue: #400
     {
-        files: ['simulation/**/*.{ts,tsx}'],
+        files: [
+            'simulation/**/*.{ts,tsx}',
+            'apps/*/simulation/**/*.{ts,tsx}',
+            'apps/*/ai/**/*.{ts,tsx}',
+        ],
         plugins: { chimera: chimeraPlugin },
         rules: {
             'chimera/no-fromfloat-in-simulation': 'error',
@@ -570,11 +588,18 @@ export default tseslint.config(
             'chimera/no-fromfloat-in-simulation': 'off',
         },
     },
-    // Test files inside simulation/ may call fromFloat() to exercise the function
-    // under test. They are not hot simulation paths (Invariant #76 applies to
-    // validate()/reduce() calls, not test code).
+    // Test files inside simulation/ and per-game gameplay dirs may call
+    // fromFloat() to exercise the function under test. They are not hot paths
+    // (Invariant #76 applies to validate()/reduce() calls, not test code).
     {
-        files: ['simulation/**/*.test.{ts,tsx}', 'simulation/**/*.spec.{ts,tsx}'],
+        files: [
+            'simulation/**/*.test.{ts,tsx}',
+            'simulation/**/*.spec.{ts,tsx}',
+            'apps/*/simulation/**/*.test.{ts,tsx}',
+            'apps/*/simulation/**/*.spec.{ts,tsx}',
+            'apps/*/ai/**/*.test.{ts,tsx}',
+            'apps/*/ai/**/*.spec.{ts,tsx}',
+        ],
         rules: {
             'chimera/no-fromfloat-in-simulation': 'off',
         },

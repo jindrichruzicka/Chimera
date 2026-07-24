@@ -5,8 +5,9 @@
  *
  * Flags any call to `fromFloat` whose binding was imported from
  * `simulation/engine/FixedPoint` (or any path that resolves to it) when the
- * call site is inside `simulation/**` — EXCEPT files under
- * `simulation/content/loaders/**`.
+ * call site is inside a hot gameplay path: `simulation/**` (engine or per-game
+ * `apps/<game>/simulation/**`) or per-game AI `apps/<game>/ai/**` — EXCEPT files
+ * under `simulation/content/loaders/**`.
  *
  * Architecture reference: §4.31 — Fixed-Point Math (Q32.32)
  * Invariant #76: fromFloat() is permitted only at content-load time; must not
@@ -36,16 +37,25 @@ function isFixedPointSource(source: string): boolean {
     return /(?:^|\/)FixedPoint(?:\.(?:js|ts))?$/.test(source);
 }
 
+// Matches a per-game AI path: `apps/<game>/ai/...` (any depth), anchored so a
+// bare engine `ai/` path does NOT match — the engine fromFloat zone is
+// simulation-only, so only per-game AI is a forbidden zone.
+const APP_AI_PATH = /(?:^|\/)apps\/[^/]+\/ai\//;
+
 /**
- * Returns true if `filename` is inside `simulation/` but NOT inside
- * `simulation/content/loaders/`.
+ * Returns true if `filename` is a hot gameplay path where fromFloat() is
+ * forbidden: inside `simulation/` (engine or per-game `apps/<game>/simulation/`)
+ * OR inside per-game AI (`apps/<game>/ai/`) — EXCEPT `simulation/content/loaders/`,
+ * the one sanctioned place to call fromFloat().
  *
  * Handles both absolute paths and workspace-relative paths, and normalises
  * Windows backslashes.
  */
-function isInSimulationNonLoader(filename: string): boolean {
+function isInFromFloatForbiddenZone(filename: string): boolean {
     const n = filename.replace(/\\/g, '/');
-    if (!n.includes('/simulation/') && !n.startsWith('simulation/')) return false;
+    const inSimulation = n.includes('/simulation/') || n.startsWith('simulation/');
+    const inGameAi = APP_AI_PATH.test(n);
+    if (!inSimulation && !inGameAi) return false;
     // Loaders are the sanctioned place to call fromFloat(), so exempt them.
     if (n.includes('/simulation/content/loaders/') || n.includes('simulation/content/loaders/')) {
         return false;
@@ -76,8 +86,9 @@ const rule: Rule.RuleModule = {
     },
 
     create(context) {
-        // Only run inside simulation/ (excluding loaders).
-        if (!isInSimulationNonLoader(context.filename)) {
+        // Only run inside a fromFloat-forbidden zone: simulation/ (engine or
+        // per-game) and per-game AI, excluding simulation/content/loaders/.
+        if (!isInFromFloatForbiddenZone(context.filename)) {
             return {};
         }
 
