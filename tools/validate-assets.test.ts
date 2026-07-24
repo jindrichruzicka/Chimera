@@ -293,6 +293,7 @@ interface HostFixture {
     readonly assetLoaderSourceFiles?: readonly string[];
     readonly gameFontSourceFiles?: readonly string[];
     readonly rendererPublicAssetFiles?: readonly string[];
+    readonly onDemandLoadSourceFiles?: readonly string[];
     readonly files: Readonly<Record<string, string>>;
 }
 
@@ -319,6 +320,10 @@ function createHost(fixture: HostFixture): WorkspaceFileHost {
             (fixture.gameFontSourceFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
         findRendererPublicAssetFiles: async () =>
             (fixture.rendererPublicAssetFiles ?? []).map((relativePath) =>
+                toAbsolutePath(relativePath),
+            ),
+        findOnDemandLoadSourceFiles: async () =>
+            (fixture.onDemandLoadSourceFiles ?? []).map((relativePath) =>
                 toAbsolutePath(relativePath),
             ),
         readFile: async (filePath) => {
@@ -354,6 +359,315 @@ describe('formatAssetValidationReport', () => {
 
         expect(report.ok).toBe(true);
         expect(output).toBe('[validate-assets] Checked 0 asset refs; all files exist.\n');
+    });
+});
+
+// ── on-demand asset load detection (Invariant #52) ────────────────────────────
+
+describe('on-demand asset load detection', () => {
+    it('flags an undeclared on-demand load with a literal ref as a hard error', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/screens/board.tsx'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        import { useAsset } from '@chimera-engine/renderer';
+                        export function Board() {
+                            return useAsset('tactics/foo/undeclared.png');
+                        }
+                    `,
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(toAssetValidationExitCode(report)).toBe(1);
+        expect(report.undeclaredOnDemandLoads.map((load) => load.ref)).toContain(
+            'tactics/foo/undeclared.png',
+        );
+        expect(output).toContain('Undeclared on-demand asset loads');
+    });
+
+    it('passes an on-demand load whose literal ref is declared in a manifest', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/screens/board.tsx'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        export function Board(assets) {
+                            return assets.load('tactics/icons/shield.png');
+                        }
+                    `,
+                    'apps/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/icons/shield.png', kind: 'texture', priority: 'critical' },
+                            ],
+                        };
+                    `,
+                    'apps/tactics/assets/icons/shield.png': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.undeclaredOnDemandLoads).toHaveLength(0);
+        expect(report.unresolvedOnDemandLoads).toHaveLength(0);
+    });
+
+    it('warns without failing when an on-demand load ref is dynamic', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/screens/board.tsx'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        export function Board(props) {
+                            return useAsset(props.ref);
+                        }
+                    `,
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(true);
+        expect(toAssetValidationExitCode(report)).toBe(0);
+        expect(report.unresolvedOnDemandLoads).toHaveLength(1);
+        expect(output).toContain('Warning:');
+    });
+
+    it('resolves a manifest-const member ref and passes when declared (tier B)', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/screens/board.tsx'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        import { tacticsAudioRefs } from '../asset-manifest';
+                        export function Board(assetManager) {
+                            return assetManager.load(tacticsAudioRefs.step);
+                        }
+                    `,
+                    'apps/tactics/asset-manifest.ts': `
+                        export const tacticsAudioRefs = {
+                            step: 'tactics/audio/sfx/step.wav',
+                        } as const;
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/audio/sfx/step.wav', kind: 'audio-clip', priority: 'deferred' },
+                            ],
+                        };
+                    `,
+                    'apps/tactics/assets/audio/sfx/step.wav': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.undeclaredOnDemandLoads).toHaveLength(0);
+        expect(report.unresolvedOnDemandLoads).toHaveLength(0);
+    });
+
+    it('flags a manifest-const member ref that is not declared anywhere (tier B)', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/screens/board.tsx'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        import { tacticsAudioRefs } from '../asset-manifest';
+                        export function Board(assetManager) {
+                            return assetManager.load(tacticsAudioRefs.reveal);
+                        }
+                    `,
+                    'apps/tactics/asset-manifest.ts': `
+                        export const tacticsAudioRefs = {
+                            reveal: 'tactics/audio/sfx/reveal.wav',
+                        } as const;
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [],
+                        };
+                    `,
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(false);
+        expect(report.undeclaredOnDemandLoads.map((load) => load.ref)).toContain(
+            'tactics/audio/sfx/reveal.wav',
+        );
+    });
+
+    it('scopes manifest-const resolution per-game so identical const names never cross-resolve', async () => {
+        // Two games each export `const sharedRefs = { icon: '<game>/icon.png' }`. Alpha's
+        // on-demand load must resolve to alpha/icon.png (declared → ok), NOT beta/icon.png
+        // (which a workspace-global last-wins map would incorrectly pick and flag).
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/alpha/screens/a.tsx'],
+                assetManifestFiles: ['apps/alpha/asset-manifest.ts', 'apps/beta/asset-manifest.ts'],
+                files: {
+                    'apps/alpha/screens/a.tsx': `
+                        import { sharedRefs } from '../asset-manifest';
+                        export function A(assetManager) {
+                            return assetManager.load(sharedRefs.icon);
+                        }
+                    `,
+                    'apps/alpha/asset-manifest.ts': `
+                        export const sharedRefs = { icon: 'alpha/icon.png' } as const;
+                        export const alphaManifest = {
+                            gameId: 'alpha',
+                            entries: [{ ref: 'alpha/icon.png', kind: 'texture', priority: 'critical' }],
+                        };
+                    `,
+                    'apps/beta/asset-manifest.ts': `
+                        export const sharedRefs = { icon: 'beta/icon.png' } as const;
+                        export const betaManifest = { gameId: 'beta', entries: [] };
+                    `,
+                    'apps/alpha/assets/icon.png': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.undeclaredOnDemandLoads).toHaveLength(0);
+        expect(report.unresolvedOnDemandLoads).toHaveLength(0);
+    });
+
+    it('derives per-game scope even when an ancestor directory is named "apps"', async () => {
+        // A checkout under an ancestor dir literally named `apps` must not collapse every
+        // game to the same id: gameId is derived from the path RELATIVE to workspaceRoot.
+        const root = '/srv/apps/Chimera';
+        const abs = (relativePath: string): string => `${root}/${relativePath}`;
+        const files = new Map<string, string>([
+            [
+                abs('apps/alpha/screens/a.tsx'),
+                `
+                    import { sharedRefs } from '../asset-manifest';
+                    export function A(assetManager) { return assetManager.load(sharedRefs.icon); }
+                `,
+            ],
+            [
+                abs('apps/alpha/asset-manifest.ts'),
+                `
+                    export const sharedRefs = { icon: 'alpha/icon.png' } as const;
+                    export const alphaManifest = {
+                        gameId: 'alpha',
+                        entries: [{ ref: 'alpha/icon.png', kind: 'texture', priority: 'critical' }],
+                    };
+                `,
+            ],
+            [
+                abs('apps/beta/asset-manifest.ts'),
+                `
+                    export const sharedRefs = { icon: 'beta/icon.png' } as const;
+                    export const betaManifest = { gameId: 'beta', entries: [] };
+                `,
+            ],
+            [abs('apps/alpha/assets/icon.png'), ''],
+        ]);
+        const host: WorkspaceFileHost = {
+            findDataJsonFiles: async () => [],
+            findSceneSourceFiles: async () => [],
+            findAssetManifestFiles: async () => [
+                abs('apps/alpha/asset-manifest.ts'),
+                abs('apps/beta/asset-manifest.ts'),
+            ],
+            findOnDemandLoadSourceFiles: async () => [abs('apps/alpha/screens/a.tsx')],
+            readFile: async (filePath) => {
+                const contents = files.get(filePath);
+                if (contents === undefined) {
+                    throw new Error(`Missing fixture file: ${filePath}`);
+                }
+                return contents;
+            },
+            fileExists: async (filePath) => files.has(filePath),
+        };
+
+        const report = await validateAssetWorkspace({ workspaceRoot: root, host });
+
+        // Alpha's `sharedRefs.icon` must resolve to alpha/icon.png (declared), not beta's.
+        expect(report.ok).toBe(true);
+        expect(report.undeclaredOnDemandLoads).toHaveLength(0);
+        expect(report.unresolvedOnDemandLoads).toHaveLength(0);
+    });
+
+    it('resolves a buildAssetRef(...) on-demand load and flags it when undeclared', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/screens/board.tsx'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        export function Board(assetManager) {
+                            return assetManager.load(buildAssetRef('tactics', 'foo/x.png'));
+                        }
+                    `,
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(false);
+        expect(report.undeclaredOnDemandLoads.map((load) => load.ref)).toContain(
+            'tactics/foo/x.png',
+        );
+    });
+
+    it('ignores .get/.load calls on non-asset receivers', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/scene/registry.ts'],
+                files: {
+                    'apps/tactics/scene/registry.ts': `
+                        export function boot(store, loader, map, sceneId, key) {
+                            store.get('inventory/slot');
+                            loader.load('https://example.com/x.png');
+                            map.get(key);
+                            return this.descriptors.get(sceneId);
+                        }
+                    `,
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.undeclaredOnDemandLoads).toHaveLength(0);
+        expect(report.unresolvedOnDemandLoads).toHaveLength(0);
+    });
+
+    it('does not crash or flag an asset-manager call with no arguments', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/screens/board.tsx'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        export function Board(assetManager) {
+                            assetManager.get();
+                            return null;
+                        }
+                    `,
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.undeclaredOnDemandLoads).toHaveLength(0);
+        expect(report.unresolvedOnDemandLoads).toHaveLength(0);
     });
 });
 

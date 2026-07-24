@@ -18,13 +18,16 @@ import {
     isPropertyDeclaration,
     isSatisfiesExpression,
     isStringLiteral,
+    isVariableDeclaration,
 } from 'typescript';
 import type {
     ArrayLiteralExpression,
+    CallExpression,
     Expression,
     Node,
     ObjectLiteralExpression,
     PropertyName,
+    SourceFile,
 } from 'typescript';
 
 import {
@@ -39,6 +42,7 @@ export interface WorkspaceFileHost {
     findAssetLoaderSourceFiles?(workspaceRoot: string): Promise<readonly string[]>;
     findGameFontSourceFiles?(workspaceRoot: string): Promise<readonly string[]>;
     findRendererPublicAssetFiles?(workspaceRoot: string): Promise<readonly string[]>;
+    findOnDemandLoadSourceFiles?(workspaceRoot: string): Promise<readonly string[]>;
     readFile(filePath: string): Promise<string>;
     fileExists(filePath: string): Promise<boolean>;
 }
@@ -53,7 +57,8 @@ export type AssetReferenceSourceKind =
     | 'data-json'
     | 'scene-required-assets'
     | 'asset-manifest'
-    | 'game-fonts';
+    | 'game-fonts'
+    | 'on-demand-load';
 
 export interface AssetReferenceSource {
     readonly kind: AssetReferenceSourceKind;
@@ -93,6 +98,16 @@ export interface UnknownAssetManifestKind {
     readonly ref?: string;
 }
 
+/** A statically-resolved on-demand load whose ref is declared in no asset surface (hard error). */
+export type UndeclaredOnDemandLoad = AssetReference;
+
+/** An on-demand load whose argument could not be statically resolved to a ref (warning, not a failure). */
+export interface UnresolvedOnDemandLoad {
+    readonly callee: string;
+    readonly source: AssetReferenceSource;
+    readonly reason: string;
+}
+
 export interface AssetValidationReport {
     readonly ok: boolean;
     readonly checkedRefs: number;
@@ -102,6 +117,8 @@ export interface AssetValidationReport {
     readonly malformed: readonly MalformedAssetReference[];
     readonly unmanifested: readonly UnmanifestedAssetReference[];
     readonly unknownKinds: readonly UnknownAssetManifestKind[];
+    readonly undeclaredOnDemandLoads: readonly UndeclaredOnDemandLoad[];
+    readonly unresolvedOnDemandLoads: readonly UnresolvedOnDemandLoad[];
 }
 
 interface CollectedAssetReferences {
@@ -111,6 +128,12 @@ interface CollectedAssetReferences {
 
 interface CollectedAssetManifestReferences extends CollectedAssetReferences {
     readonly kinds: readonly UnknownAssetManifestKind[];
+}
+
+interface CollectedOnDemandLoads {
+    readonly refs: readonly AssetReference[];
+    readonly unresolved: readonly UnresolvedOnDemandLoad[];
+    readonly malformed: readonly MalformedAssetReference[];
 }
 
 export type AssetValidationExitCode = 0 | 1;
@@ -144,12 +167,16 @@ export async function validateAssetWorkspace(
     const rendererPublicAssetFiles = [
         ...(await (host.findRendererPublicAssetFiles?.(workspaceRoot) ?? [])),
     ].sort();
+    const onDemandLoadSourceFiles = [
+        ...(await (host.findOnDemandLoadSourceFiles?.(workspaceRoot) ?? [])),
+    ].sort();
 
     const refs: AssetReference[] = [];
     const manifestRefs: AssetReference[] = [];
     const fontRefs: AssetReference[] = [];
     const manifestKinds: UnknownAssetManifestKind[] = [];
     const malformed: MalformedAssetReference[] = [];
+    const manifestConstMembers = new Map<string, string>();
 
     for (const filePath of dataJsonFiles) {
         const sourceText = await host.readFile(filePath);
@@ -172,12 +199,36 @@ export async function validateAssetWorkspace(
         manifestRefs.push(...collected.refs);
         manifestKinds.push(...collected.kinds);
         malformed.push(...collected.malformed);
+        // Key the tier-B const map by the manifest's own game so an identically-named
+        // const in another game's manifest cannot cross-resolve an on-demand load
+        // (a manifest lives at apps/<gameId>/asset-manifest.ts).
+        const manifestGameId = gameIdFromPath(workspaceRoot, filePath);
+        if (manifestGameId !== undefined) {
+            for (const [member, ref] of collectManifestConstMembers(sourceText, filePath)) {
+                manifestConstMembers.set(`${manifestGameId} ${member}`, ref);
+            }
+        }
     }
 
     for (const filePath of gameFontSourceFiles) {
         const sourceText = await host.readFile(filePath);
         const collected = collectGameFontRefs(sourceText, filePath);
         fontRefs.push(...collected.refs);
+        malformed.push(...collected.malformed);
+    }
+
+    const onDemandRefs: AssetReference[] = [];
+    const unresolvedOnDemandLoads: UnresolvedOnDemandLoad[] = [];
+    for (const filePath of onDemandLoadSourceFiles) {
+        const sourceText = await host.readFile(filePath);
+        const collected = collectOnDemandAssetLoadRefs(
+            sourceText,
+            filePath,
+            workspaceRoot,
+            manifestConstMembers,
+        );
+        onDemandRefs.push(...collected.refs);
+        unresolvedOnDemandLoads.push(...collected.unresolved);
         malformed.push(...collected.malformed);
     }
 
@@ -223,12 +274,25 @@ export async function validateAssetWorkspace(
     const unmanifested = refs.filter((ref) => !manifestRefSet.has(ref.ref));
     const unknownKinds = manifestKinds.filter((entry) => !assetLoaderKinds.has(entry.kind));
 
+    // An on-demand load is "declared" if its ref appears in ANY declared surface
+    // (data JSON, scene requiredAssets, asset manifest, or font src). Manifest
+    // coverage per Invariant #22 is enforced transitively by `unmanifested`, so a
+    // declared-but-unmanifested ref is already flagged there — no double-counting.
+    const declaredRefSet = new Set(
+        [...refs, ...manifestRefs, ...fontRefs].map((reference) => reference.ref),
+    );
+    const undeclaredOnDemandLoads = onDemandRefs.filter(
+        (reference) => !declaredRefSet.has(reference.ref),
+    );
+
     missing.sort(compareReferenceFailures);
     missingFontSources.sort(compareReferenceFailures);
     forbiddenRendererPublicAssets.sort(compareForbiddenRendererPublicAssets);
     malformed.sort(compareMalformedFailures);
     unmanifested.sort(compareAssetReferenceFailures);
     unknownKinds.sort(compareUnknownKindFailures);
+    undeclaredOnDemandLoads.sort(compareAssetReferenceFailures);
+    unresolvedOnDemandLoads.sort(compareUnresolvedOnDemandLoads);
 
     return {
         ok:
@@ -237,7 +301,8 @@ export async function validateAssetWorkspace(
             forbiddenRendererPublicAssets.length === 0 &&
             malformed.length === 0 &&
             unmanifested.length === 0 &&
-            unknownKinds.length === 0,
+            unknownKinds.length === 0 &&
+            undeclaredOnDemandLoads.length === 0,
         checkedRefs: refs.length + fontRefs.length,
         missing,
         missingFontSources,
@@ -245,6 +310,8 @@ export async function validateAssetWorkspace(
         malformed,
         unmanifested,
         unknownKinds,
+        undeclaredOnDemandLoads,
+        unresolvedOnDemandLoads,
     };
 }
 
@@ -258,7 +325,11 @@ export function formatAssetValidationReport(
 ): string {
     const root = resolve(workspaceRoot);
     if (report.ok) {
-        return `[validate-assets] Checked ${report.checkedRefs} asset refs; all files exist.\n`;
+        const okLines = [
+            `[validate-assets] Checked ${report.checkedRefs} asset refs; all files exist.`,
+        ];
+        appendUnresolvedOnDemandWarnings(okLines, report, root);
+        return `${okLines.join('\n')}\n`;
     }
 
     const lines: string[] = ['[validate-assets] Asset validation failed.'];
@@ -324,7 +395,46 @@ export function formatAssetValidationReport(
         }
     }
 
+    if (report.undeclaredOnDemandLoads.length > 0) {
+        lines.push(
+            '',
+            'Undeclared on-demand asset loads (ref declared in no manifest/requiredAssets/data JSON/font surface):',
+        );
+        for (const load of report.undeclaredOnDemandLoads) {
+            lines.push(`- ${load.ref}`, `  source: ${formatSource(load.source, root)}`);
+        }
+    }
+
+    appendUnresolvedOnDemandWarnings(lines, report, root);
+
     return `${lines.join('\n')}\n`;
+}
+
+/**
+ * Warnings are diagnostics, not failures: they surface unresolved (dynamic/computed)
+ * on-demand load call sites in BOTH the ok and failed outputs, and never affect
+ * `report.ok`. Appends nothing when the warn bucket is empty, so the success message
+ * stays byte-identical when there is nothing to warn about.
+ */
+function appendUnresolvedOnDemandWarnings(
+    lines: string[],
+    report: AssetValidationReport,
+    workspaceRoot: string,
+): void {
+    if (report.unresolvedOnDemandLoads.length === 0) {
+        return;
+    }
+    lines.push(
+        '',
+        'Warning: on-demand asset load call sites that could not be statically verified:',
+    );
+    for (const load of report.unresolvedOnDemandLoads) {
+        lines.push(
+            `- ${load.callee}`,
+            `  source: ${formatSource(load.source, workspaceRoot)}`,
+            `  reason: ${load.reason}`,
+        );
+    }
 }
 
 export function createNodeWorkspaceFileHost(): WorkspaceFileHost {
@@ -337,6 +447,8 @@ export function createNodeWorkspaceFileHost(): WorkspaceFileHost {
         findGameFontSourceFiles: async (workspaceRoot) => findGameFontSourceFiles(workspaceRoot),
         findRendererPublicAssetFiles: async (workspaceRoot) =>
             findRendererPublicAssetFiles(workspaceRoot),
+        findOnDemandLoadSourceFiles: async (workspaceRoot) =>
+            findOnDemandLoadSourceFiles(workspaceRoot),
         readFile: async (filePath) => readFile(filePath, 'utf8'),
         fileExists: async (filePath) => {
             try {
@@ -604,6 +716,145 @@ function collectAssetLoaderKinds(sourceText: string, filePath: string): readonly
     }
 }
 
+/**
+ * Pre-scans a manifest source file for `const X = { member: '<ref>' as ... }` object
+ * literals, yielding `[`${constName}.${member}`, refString]` entries. Enables tier-B
+ * resolution of on-demand load args expressed as a manifest-const member access
+ * (e.g. `tacticsAudioRefs.step`) without a TypeChecker. Keyed by source-text name,
+ * which the real `import { tacticsAudioRefs }` pattern preserves; the caller further
+ * scopes these by game so same-named consts in two games never cross-resolve.
+ */
+function collectManifestConstMembers(
+    sourceText: string,
+    filePath: string,
+): readonly (readonly [string, string])[] {
+    const sourceFile = createSourceFile(
+        filePath,
+        sourceText,
+        ScriptTarget.Latest,
+        true,
+        getScriptKind(filePath),
+    );
+    const members: [string, string][] = [];
+
+    visit(sourceFile);
+
+    return members;
+
+    function visit(node: Node): void {
+        if (
+            isVariableDeclaration(node) &&
+            isIdentifier(node.name) &&
+            node.initializer !== undefined
+        ) {
+            const objectLiteral = unwrapObjectLiteral(node.initializer);
+            if (objectLiteral !== undefined) {
+                collectConstMembers(node.name.text, objectLiteral);
+            }
+        }
+
+        forEachChild(node, visit);
+    }
+
+    function collectConstMembers(constName: string, objectLiteral: ObjectLiteralExpression): void {
+        for (const property of objectLiteral.properties) {
+            if (!isPropertyAssignment(property)) {
+                continue;
+            }
+            const memberName = propertyKeyText(property.name);
+            if (memberName === undefined) {
+                continue;
+            }
+            const value = readStringExpression(property.initializer);
+            if (value !== undefined) {
+                members.push([`${constName}.${memberName}`, value]);
+            }
+        }
+    }
+}
+
+/**
+ * AST-scans scene/screen source for on-demand asset load call sites — `useAsset(...)`,
+ * `<assetReceiver>.load(...)`, `<assetReceiver>.get(...)` — and resolves the first
+ * argument to a ref key. String literals and `buildAssetRef(g, p)` (tier A) and
+ * manifest-const member accesses (tier B, via `manifestConstMembers`) become refs;
+ * anything dynamic/computed (tier C) becomes an `unresolved` warning and never throws.
+ * The `.load`/`.get` matchers are receiver-gated on `/asset/iu` to avoid firing on the
+ * many unrelated `Map.get` / `loader.load` call sites in the scan scope.
+ */
+function collectOnDemandAssetLoadRefs(
+    sourceText: string,
+    filePath: string,
+    workspaceRoot: string,
+    manifestConstMembers: ReadonlyMap<string, string>,
+): CollectedOnDemandLoads {
+    const sourceFile = createSourceFile(
+        filePath,
+        sourceText,
+        ScriptTarget.Latest,
+        true,
+        getScriptKind(filePath),
+    );
+    const refs: AssetReference[] = [];
+    const unresolved: UnresolvedOnDemandLoad[] = [];
+    const malformed: MalformedAssetReference[] = [];
+    const fileGameId = gameIdFromPath(workspaceRoot, filePath);
+
+    visit(sourceFile);
+
+    return { refs, unresolved, malformed };
+
+    function visit(node: Node): void {
+        if (isCallExpression(node)) {
+            const callee = matchOnDemandLoadCallee(node);
+            if (callee !== undefined) {
+                collectLoadCall(node, callee);
+            }
+        }
+
+        forEachChild(node, visit);
+    }
+
+    function collectLoadCall(call: CallExpression, callee: string): void {
+        const firstArg = call.arguments[0];
+        if (firstArg === undefined) {
+            return;
+        }
+
+        const source: AssetReferenceSource = {
+            kind: 'on-demand-load',
+            filePath,
+            location: `${callee} (${describeCallSite(sourceFile, call)})`,
+        };
+
+        // Tier A — string literal / buildAssetRef(g, p).
+        const literal = readStringExpression(firstArg);
+        if (literal !== undefined) {
+            collectCandidate(literal, source, refs, malformed);
+            return;
+        }
+
+        // Tier B — manifest-const member access (e.g. tacticsAudioRefs.step),
+        // resolved only against the SAME game's manifest consts so an identically-named
+        // const in another game's manifest cannot cross-resolve this load.
+        const memberKey = readMemberAccessKey(firstArg);
+        if (memberKey !== undefined && fileGameId !== undefined) {
+            const resolved = manifestConstMembers.get(`${fileGameId} ${memberKey}`);
+            if (resolved !== undefined) {
+                collectCandidate(resolved, source, refs, malformed);
+                return;
+            }
+        }
+
+        // Tier C — dynamic / computed / unresolved. Warn, never crash.
+        unresolved.push({
+            callee,
+            source,
+            reason: 'on-demand load argument is not a statically resolvable AssetRef',
+        });
+    }
+}
+
 function collectCandidate(
     value: string,
     source: AssetReferenceSource,
@@ -711,6 +962,105 @@ function isBuildAssetRefCall(expression: Expression): boolean {
     return false;
 }
 
+/**
+ * Returns a display label for an on-demand load callee, or undefined when the call
+ * is not one: `useAsset(...)` (exact identifier), or `<recv>.load(...)`/`<recv>.get(...)`
+ * where the receiver name matches `/asset/iu`. The receiver gate is what keeps the very
+ * generic `.load`/`.get` matchers from firing on unrelated Map/loader call sites; the
+ * cost is a deliberate false-negative — a load through an aliased or destructured
+ * receiver whose name lacks "asset" (e.g. `const { load } = useAssetManager()`) is not
+ * scanned at all, rather than warned. Keep asset-manager receivers named accordingly.
+ */
+function matchOnDemandLoadCallee(call: CallExpression): string | undefined {
+    const target = call.expression;
+    if (isIdentifier(target)) {
+        return target.text === 'useAsset' ? 'useAsset' : undefined;
+    }
+    if (isPropertyAccessExpression(target)) {
+        const method = target.name.text;
+        if ((method === 'load' || method === 'get') && isAssetManagerReceiver(target.expression)) {
+            return `${receiverName(target.expression)}.${method}`;
+        }
+    }
+    return undefined;
+}
+
+function isAssetManagerReceiver(receiver: Expression): boolean {
+    if (isIdentifier(receiver)) {
+        return /asset/iu.test(receiver.text);
+    }
+    if (isPropertyAccessExpression(receiver)) {
+        return /asset/iu.test(receiver.name.text);
+    }
+    if (isCallExpression(receiver)) {
+        // e.g. useAssetManager().load(ref)
+        const callee = receiver.expression;
+        if (isIdentifier(callee)) {
+            return /asset/iu.test(callee.text);
+        }
+        if (isPropertyAccessExpression(callee)) {
+            return /asset/iu.test(callee.name.text);
+        }
+    }
+    return false;
+}
+
+function receiverName(receiver: Expression): string {
+    if (isIdentifier(receiver)) {
+        return receiver.text;
+    }
+    if (isPropertyAccessExpression(receiver)) {
+        return receiver.name.text;
+    }
+    if (isCallExpression(receiver)) {
+        const callee = receiver.expression;
+        if (isIdentifier(callee)) {
+            return `${callee.text}()`;
+        }
+        if (isPropertyAccessExpression(callee)) {
+            return `${callee.name.text}()`;
+        }
+    }
+    return 'assets';
+}
+
+/** Resolves a `<identifier>.<member>` access to the key `"identifier.member"` (tier-B lookup). */
+function readMemberAccessKey(expression: Expression): string | undefined {
+    if (isAsExpression(expression) || isSatisfiesExpression(expression)) {
+        return readMemberAccessKey(expression.expression);
+    }
+    if (isPropertyAccessExpression(expression) && isIdentifier(expression.expression)) {
+        return `${expression.expression.text}.${expression.name.text}`;
+    }
+    return undefined;
+}
+
+function describeCallSite(sourceFile: SourceFile, call: CallExpression): string {
+    const { line } = sourceFile.getLineAndCharacterOfPosition(call.getStart(sourceFile));
+    return `L${line + 1}`;
+}
+
+function propertyKeyText(name: PropertyName): string | undefined {
+    if (isIdentifier(name) || isStringLiteral(name)) {
+        return name.text;
+    }
+    return undefined;
+}
+
+/**
+ * The `<gameId>` of a workspace `apps/<gameId>/...` path, or undefined for a non-app
+ * path. Relativizes against `workspaceRoot` first so an ancestor directory that happens
+ * to be named `apps` (e.g. a checkout under `/srv/apps/Chimera`) cannot be mistaken for
+ * the workspace apps root — mirrors the renderer-public resolution above.
+ */
+function gameIdFromPath(workspaceRoot: string, filePath: string): string | undefined {
+    const segments = relative(workspaceRoot, filePath).split(/[\\/]/u);
+    if (segments[0] !== 'apps') {
+        return undefined;
+    }
+    return segments[1];
+}
+
 function isRequiredAssetsName(name: PropertyName): boolean {
     return isPropertyName(name, 'requiredAssets');
 }
@@ -748,6 +1098,17 @@ async function findSceneSourceFiles(workspaceRoot: string): Promise<readonly str
 
     for (const root of roots) {
         files.push(...(await collectFiles(root, isSceneSourceFile)));
+    }
+
+    return files.sort();
+}
+
+async function findOnDemandLoadSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
+    const roots = [resolve(workspaceRoot, 'apps'), resolve(workspaceRoot, 'simulation', 'scene')];
+    const files: string[] = [];
+
+    for (const root of roots) {
+        files.push(...(await collectFiles(root, isOnDemandLoadSourceFile)));
     }
 
     return files.sort();
@@ -822,6 +1183,22 @@ function isSceneSourceFile(filePath: string): boolean {
     return /\.tsx?$/u.test(filePath);
 }
 
+const buildOrDependencyDirectories = new Set(['node_modules', 'dist', '.next', 'out', 'build']);
+const onDemandLoadDirectories = new Set(['scene', 'scenes', 'screen', 'screens']);
+
+// Scope: scene + screen source only (Invariant #52's "on-demand inside the new scene"),
+// excluding build output and dependencies so the generic `.get`/`.load` scan stays narrow.
+function isOnDemandLoadSourceFile(filePath: string): boolean {
+    if (!isSceneSourceFile(filePath)) {
+        return false;
+    }
+    const segments = filePath.split(/[\\/]/u);
+    if (segments.some((segment) => buildOrDependencyDirectories.has(segment))) {
+        return false;
+    }
+    return segments.some((segment) => onDemandLoadDirectories.has(segment));
+}
+
 function isAssetLoaderSourceFile(filePath: string): boolean {
     if (!isSceneSourceFile(filePath)) {
         return false;
@@ -878,6 +1255,16 @@ function compareForbiddenRendererPublicAssets(
     right: ForbiddenRendererPublicAsset,
 ): number {
     return compareStrings(left.filePath, right.filePath);
+}
+
+function compareUnresolvedOnDemandLoads(
+    left: UnresolvedOnDemandLoad,
+    right: UnresolvedOnDemandLoad,
+): number {
+    return compareStrings(
+        `${left.source.filePath}\u0000${left.source.location}\u0000${left.callee}`,
+        `${right.source.filePath}\u0000${right.source.location}\u0000${right.callee}`,
+    );
 }
 
 function referenceSortKey(
