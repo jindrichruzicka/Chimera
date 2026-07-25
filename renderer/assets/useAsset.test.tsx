@@ -158,6 +158,9 @@ function createAssetManagerStub(load: AssetManager['load'] = createUnusedLoad())
         get(): null {
             return null;
         },
+        getManifestMetadata(): unknown {
+            return undefined;
+        },
         load,
         dispose(): void {},
     };

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 vi.mock('three', () => ({
     TextureLoader: class TextureLoader {
@@ -646,5 +646,81 @@ describe('DefaultAssetManager', () => {
 
         // Removed ref must be rejected.
         await expect(manager.load(removedRef)).rejects.toThrow(UnknownAssetManifestEntryError);
+    });
+});
+
+describe('DefaultAssetManager.getManifestMetadata', () => {
+    it('returns a registered entry metadata verbatim, kind-agnostically', () => {
+        const manager = new DefaultAssetManager(createResolver());
+        const textureRef = buildAssetRef<TextureAsset>('tactics', 'textures/hd.webp');
+        const audioRef = buildAssetRef<AudioClipAsset>('tactics', 'audio/theme.ogg');
+        const textureMetadata = { variant: 'hd' };
+        const audioMetadata = { cues: { chorus: 5 }, durationSeconds: 10 };
+
+        manager.registerManifest({
+            gameId: 'tactics',
+            entries: [
+                {
+                    ref: textureRef,
+                    kind: 'texture',
+                    priority: 'deferred',
+                    metadata: textureMetadata,
+                },
+                {
+                    ref: audioRef,
+                    kind: 'audio-clip',
+                    priority: 'deferred',
+                    metadata: audioMetadata,
+                },
+            ],
+        });
+
+        // Returned by reference — the accessor never copies or interprets the value.
+        expect(manager.getManifestMetadata(textureRef)).toBe(textureMetadata);
+        expect(manager.getManifestMetadata(audioRef)).toBe(audioMetadata);
+    });
+
+    it('returns undefined for a ref absent from the active manifest', () => {
+        const manager = new DefaultAssetManager(createResolver());
+        const ref = buildAssetRef<AudioClipAsset>('tactics', 'audio/never-registered.ogg');
+
+        expect(manager.getManifestMetadata(ref)).toBeUndefined();
+    });
+
+    it('returns undefined for a registered entry that declares no metadata', () => {
+        const manager = new DefaultAssetManager(createResolver());
+        const ref = buildAssetRef<TextureAsset>('tactics', 'textures/plain.webp');
+        registerManifest(manager, [createManifestEntry(ref, 'texture')]);
+
+        expect(manager.getManifestMetadata(ref)).toBeUndefined();
+    });
+
+    it('is a pure synchronous read that triggers no decode or load side effect', () => {
+        const resolver = createResolver();
+        const resolveSpy = vi.spyOn(resolver, 'resolve');
+        const manualLoader = createManualLoader();
+        const manager = new DefaultAssetManager(resolver, manualLoader.registry);
+        const ref = buildAssetRef<TextureAsset>('tactics', 'textures/with-metadata.webp');
+        const metadata = { variant: 'hd' };
+        manager.registerManifest({
+            gameId: 'tactics',
+            entries: [{ ref, kind: 'texture', priority: 'deferred', metadata }],
+        });
+
+        expect(manager.getManifestMetadata(ref)).toBe(metadata);
+        // A pure read must not resolve a URL, invoke a loader, or populate the cache.
+        expect(resolveSpy).not.toHaveBeenCalled();
+        expect(manualLoader.calls).toHaveLength(0);
+        expect(manager.get(ref)).toBeNull();
+    });
+
+    it('exposes getManifestMetadata as a kind-agnostic (ref: AssetRef) => unknown channel', () => {
+        const manager = new DefaultAssetManager(createResolver());
+        const ref = buildAssetRef<AudioClipAsset>('tactics', 'audio/theme.ogg');
+
+        expectTypeOf<AssetManager['getManifestMetadata']>().toEqualTypeOf<
+            (ref: AssetRef) => unknown
+        >();
+        expectTypeOf(manager.getManifestMetadata(ref)).toBeUnknown();
     });
 });

@@ -71,6 +71,17 @@ export interface AssetManager {
     load<TAssetKind extends AssetKind>(
         ref: AssetRef<TAssetKind>,
     ): Promise<ResolvedAsset<TAssetKind>>;
+    /**
+     * Synchronously reads a registered manifest entry's opaque `metadata`,
+     * verbatim, with no interpretation and no decode/load side effect. Returns
+     * `undefined` when the ref is unknown or the entry declares no metadata.
+     *
+     * Kind-agnostic: it carries no audio (or any other domain) knowledge and
+     * returns `unknown`. It will be the sole channel by which `renderer/audio`
+     * reads a clip's cue sheet at `play()` time — only that layer interprets the
+     * value (Invariant #124).
+     */
+    getManifestMetadata(ref: AssetRef): unknown;
     dispose(): void;
 }
 
@@ -143,6 +154,10 @@ export class DefaultAssetManager implements AssetManager {
 
         const asset = this.loadedAssets.get(key);
         return asset === undefined ? null : (asset as ResolvedAsset<TAssetKind>);
+    }
+
+    getManifestMetadata(ref: AssetRef): unknown {
+        return this.manifestEntries.get(ref.toString())?.metadata;
     }
 
     load<TAssetKind extends AssetKind>(

@@ -29,6 +29,10 @@ class DefaultDelegatingAssetManager implements DelegatingAssetManager {
         return this.delegate?.get(ref) ?? null;
     }
 
+    getManifestMetadata(ref: AssetRef): unknown {
+        return this.delegate?.getManifestMetadata(ref);
+    }
+
     load<TAssetKind extends AssetKind>(
         ref: AssetRef<TAssetKind>,
     ): Promise<ResolvedAsset<TAssetKind>> {

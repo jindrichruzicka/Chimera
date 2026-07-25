@@ -18,6 +18,9 @@ function createAssetManagerStub(): AssetManager {
         get(): null {
             return null;
         },
+        getManifestMetadata(): unknown {
+            return undefined;
+        },
         async load(): Promise<never> {
             throw new Error('unused asset manager stub');
         },

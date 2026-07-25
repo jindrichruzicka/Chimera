@@ -10,6 +10,7 @@ function makeStubAssetManager(): AssetManager {
         registerManifest: vi.fn(),
         preloadCritical: vi.fn(async () => undefined),
         get: vi.fn(() => null),
+        getManifestMetadata: vi.fn(() => undefined),
         load: vi.fn(async () => {
             throw new Error('unreachable stub load');
         }),
@@ -87,6 +88,29 @@ describe('DelegatingAssetManager', () => {
 
         expect(delegate.get).toHaveBeenCalledWith(ref);
         expect(result).toBe(fakeAsset);
+    });
+
+    it('forwards getManifestMetadata() to the current delegate', () => {
+        const mgr = createDelegatingAssetManager();
+        const delegate = makeStubAssetManager();
+        const metadata = { cues: { chorus: 5 } };
+        vi.mocked(delegate.getManifestMetadata).mockReturnValueOnce(metadata);
+        mgr.setDelegate(delegate);
+
+        const ref = 'tactics/audio/theme.ogg' as Parameters<typeof mgr.getManifestMetadata>[0];
+        const result = mgr.getManifestMetadata(ref);
+
+        expect(delegate.getManifestMetadata).toHaveBeenCalledWith(ref);
+        expect(result).toBe(metadata);
+    });
+
+    it('returns undefined for getManifestMetadata() when no delegate is set', () => {
+        const mgr = createDelegatingAssetManager();
+        expect(
+            mgr.getManifestMetadata(
+                'tactics/audio/theme.ogg' as Parameters<typeof mgr.getManifestMetadata>[0],
+            ),
+        ).toBeUndefined();
     });
 
     it('clears the delegate on setDelegate(null) and rejects load() again', async () => {

@@ -285,6 +285,7 @@ function createGameAssetManagerStub(): AssetManager {
         registerManifest: vi.fn(),
         preloadCritical: vi.fn(async () => undefined),
         get: vi.fn(() => null),
+        getManifestMetadata: vi.fn(() => undefined),
         load: vi.fn(async () => {
             throw new Error('unused match asset manager mock');
         }),

@@ -107,6 +107,9 @@ describe('AssetPreloader', () => {
             get(): null {
                 return null;
             },
+            getManifestMetadata(): unknown {
+                return undefined;
+            },
             async load(): Promise<never> {
                 throw new Error('AssetPreloader should not load assets directly.');
             },

@@ -130,6 +130,10 @@ class AssetManagerDouble implements AssetManager {
         return null;
     }
 
+    public getManifestMetadata(): unknown {
+        return undefined;
+    }
+
     public load<TAssetKind extends AssetKind>(
         ref: AssetRef<TAssetKind>,
     ): Promise<ResolvedAsset<TAssetKind>> {
