@@ -2,6 +2,7 @@ import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/conten
 
 import type { AssetManager, ResolvedAsset } from '../assets/AssetManager';
 import { AudioBus, type AudioBusId, type AudioBusOptions } from './AudioBus';
+import type { FadeCurve } from './Cue';
 
 export type { AudioBusId } from './AudioBus';
 
@@ -53,6 +54,8 @@ const DEFAULT_BUS_ID: AudioBusId = 'sfx';
 const DEFAULT_PRIORITY = 0;
 const DEFAULT_VOLUME = 1;
 const BUS_IDS: readonly AudioBusId[] = ['master', 'music', 'sfx', 'voice'];
+const GAIN_RAMP_EPSILON = 1e-4;
+const EQUAL_POWER_WAYPOINTS = 64;
 
 export class DefaultAudioManager implements AudioManager {
     private readonly audioContext: AudioContext;
@@ -365,6 +368,166 @@ function clampUnit(value: number): number {
     }
 
     return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * @internal Stage-1 gain-ramp primitive shared by the fade verbs (§4.25, Invariant #120).
+ *
+ * Cancels any prior automation and re-anchors at the held value — preferring
+ * `cancelAndHoldAtTime`, falling back to `cancelScheduledValues` + `setValueAtTime`
+ * (the pattern {@link AudioBus.duck} uses) — then schedules a ramp to `target` over
+ * `[startTime, endTime]` in the requested {@link FadeCurve}. It writes ONLY the passed
+ * `AudioParam`; callers pass a voice's own stage-1 gain, so the per-bus and master
+ * gains are never touched (Invariant #116). The `exponential` curve degrades to
+ * linear when the platform lacks `exponentialRampToValueAtTime` or throws from it;
+ * `equalPower` is composed from `linearRampToValueAtTime`, so it has nothing to
+ * detect. The helper never throws: a `startTime` that is negative or non-finite is
+ * a no-op, a non-finite or backwards `endTime` applies the target instantly, and a
+ * `target` that is non-finite or outside `[0, 1]` is clamped into range. Both time
+ * guards exist because a spec-compliant `AudioParam` throws `RangeError` on a
+ * negative or non-finite time, and the fade verbs derive their times from authored
+ * cue metadata.
+ *
+ * Precondition: `startTime` must not be in the future relative to
+ * `AudioContext.currentTime`. The re-anchor reads `param.value`, which is the value
+ * at `currentTime`, so a future `startTime` would anchor the curve at a stale
+ * departure. Callers pass `audioContext.currentTime`, as {@link AudioBus.duck} does.
+ */
+export function scheduleGainRamp(
+    param: AudioParam,
+    target: number,
+    startTime: number,
+    endTime: number,
+    curve: FadeCurve = 'linear',
+): void {
+    if (!Number.isFinite(startTime) || startTime < 0) {
+        // No usable anchor time — a spec-compliant AudioParam throws RangeError for a
+        // negative or non-finite time on every automation method, including the
+        // cancel calls the reanchor would make, so write nothing at all.
+        return;
+    }
+
+    const held = reanchorGain(param, startTime);
+    const clampedTarget = clampUnit(target);
+
+    if (!Number.isFinite(endTime) || endTime <= startTime) {
+        // Empty or backwards window: jump straight to the target, no ramp.
+        param.setValueAtTime(clampedTarget, startTime);
+        return;
+    }
+
+    if (curve === 'exponential' && typeof param.exponentialRampToValueAtTime === 'function') {
+        try {
+            scheduleExponentialRamp(param, held, clampedTarget, startTime, endTime);
+            return;
+        } catch {
+            // Present but unusable on this platform — degrade to linear exactly as a
+            // failed feature-detect does. Anything already written is a departure
+            // anchor at startTime, which the linear ramp below then ramps away from.
+        }
+    }
+
+    if (curve === 'equalPower') {
+        scheduleEqualPowerRamp(param, held, clampedTarget, startTime, endTime);
+        return;
+    }
+
+    // `linear`, plus the degrade path for an `exponential` ramp this platform cannot run.
+    param.linearRampToValueAtTime(clampedTarget, endTime);
+}
+
+/**
+ * Cancels prior automation and returns the held departure value. Prefers
+ * `cancelAndHoldAtTime` (which holds the running curve's value); if it is absent
+ * or throws, falls back to `cancelScheduledValues` + an explicit `setValueAtTime`
+ * anchor — matching {@link AudioBus.duck}.
+ */
+function reanchorGain(param: AudioParam, startTime: number): number {
+    if (typeof param.cancelAndHoldAtTime === 'function') {
+        try {
+            param.cancelAndHoldAtTime(startTime);
+            return param.value;
+        } catch {
+            // Unsupported on this platform — fall through to the manual reanchor.
+        }
+    }
+
+    param.cancelScheduledValues(startTime);
+    const held = param.value;
+    param.setValueAtTime(held, startTime);
+    return held;
+}
+
+/**
+ * Exponential ramp with both endpoints clamped off zero to {@link GAIN_RAMP_EPSILON},
+ * because exponential automation is undefined through zero — the curve is defined by
+ * a ratio, so neither endpoint can be 0. A legitimately-zero departure therefore falls
+ * back to linear (nothing can leave zero exponentially); a legitimately-zero target
+ * ramps to the epsilon then hard-sets true zero, which is inaudible but exact.
+ */
+function scheduleExponentialRamp(
+    param: AudioParam,
+    held: number,
+    target: number,
+    startTime: number,
+    endTime: number,
+): void {
+    if (held <= 0) {
+        // Departure is legitimately 0 — an exponential ramp cannot start from zero.
+        param.linearRampToValueAtTime(target, endTime);
+        return;
+    }
+
+    if (held < GAIN_RAMP_EPSILON) {
+        param.setValueAtTime(GAIN_RAMP_EPSILON, startTime);
+    }
+
+    if (target <= 0) {
+        param.exponentialRampToValueAtTime(GAIN_RAMP_EPSILON, endTime);
+        param.setValueAtTime(0, endTime);
+        return;
+    }
+
+    param.exponentialRampToValueAtTime(Math.max(target, GAIN_RAMP_EPSILON), endTime);
+}
+
+/**
+ * Equal-power ramp as a piecewise-linear quarter-wave of
+ * {@link EQUAL_POWER_WAYPOINTS} `linearRampToValueAtTime` waypoints — never
+ * `setValueCurveAtTime`, which does not compose with cancellation. The waypoints
+ * depart from the re-anchored `held` value, so the curve is click-free after a
+ * cancel-and-reanchor, and the final waypoint lands exactly on `target`/`endTime`.
+ */
+function scheduleEqualPowerRamp(
+    param: AudioParam,
+    held: number,
+    target: number,
+    startTime: number,
+    endTime: number,
+): void {
+    const span = endTime - startTime;
+    const rising = target >= held;
+    for (let waypoint = 1; waypoint <= EQUAL_POWER_WAYPOINTS; waypoint += 1) {
+        const progress = waypoint / EQUAL_POWER_WAYPOINTS;
+        const value =
+            waypoint === EQUAL_POWER_WAYPOINTS
+                ? target
+                : equalPowerValue(held, target, rising, progress);
+        param.linearRampToValueAtTime(value, startTime + span * progress);
+    }
+}
+
+/**
+ * The equal-power quarter-wave sample at `progress` ∈ (0, 1): `sin` easing for a
+ * rising fade-in, `cos` easing for a falling fade-out. Direction-awareness is what
+ * makes a symmetric crossfade complementary — incoming `sin` and outgoing `cos`
+ * keep `g_in² + g_out²` constant with no mid-fade dip (§4.25, Invariant #120).
+ */
+function equalPowerValue(held: number, target: number, rising: boolean, progress: number): number {
+    const quarter = (progress * Math.PI) / 2;
+    return rising
+        ? held + (target - held) * Math.sin(quarter)
+        : target + (held - target) * Math.cos(quarter);
 }
 
 function isAudioBuffer(value: unknown): value is AudioBuffer {

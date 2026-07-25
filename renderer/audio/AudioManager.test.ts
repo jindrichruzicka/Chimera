@@ -9,10 +9,20 @@ import {
 
 import type { AssetManager, ResolvedAsset } from '../assets/AssetManager';
 import { useSettingsStore } from '../state/settingsStore';
-import { createAudioManager, DefaultAudioManager, type AudioManagerOptions } from './AudioManager';
+import {
+    createAudioManager,
+    DefaultAudioManager,
+    scheduleGainRamp,
+    type AudioManagerOptions,
+} from './AudioManager';
 
 interface ScheduledGainCall {
-    readonly method: 'cancelScheduledValues' | 'setValueAtTime' | 'linearRampToValueAtTime';
+    readonly method:
+        | 'cancelScheduledValues'
+        | 'setValueAtTime'
+        | 'linearRampToValueAtTime'
+        | 'cancelAndHoldAtTime'
+        | 'exponentialRampToValueAtTime';
     readonly value?: number;
     readonly time: number;
 }
@@ -42,6 +52,97 @@ class FakeAudioParam {
         this.value = value;
         this.calls.push({ method: 'linearRampToValueAtTime', value, time });
         return this;
+    }
+
+    public cancelAndHoldAtTime(time: number): this {
+        this.calls.push({ method: 'cancelAndHoldAtTime', time });
+        return this;
+    }
+
+    public exponentialRampToValueAtTime(value: number, time: number): this {
+        this.value = value;
+        this.calls.push({ method: 'exponentialRampToValueAtTime', value, time });
+        return this;
+    }
+}
+
+/** Models an AudioParam on a platform lacking `cancelAndHoldAtTime` and
+ * `exponentialRampToValueAtTime`, so the ramp helper must feature-detect and
+ * degrade to linear (cancelScheduledValues + setValueAtTime + linearRamp). */
+class FakeLinearOnlyAudioParam {
+    public value = 1;
+    public readonly calls: ScheduledGainCall[] = [];
+
+    public cancelScheduledValues(time: number): this {
+        this.calls.push({ method: 'cancelScheduledValues', time });
+        return this;
+    }
+
+    public setValueAtTime(value: number, time: number): this {
+        this.value = value;
+        this.calls.push({ method: 'setValueAtTime', value, time });
+        return this;
+    }
+
+    public linearRampToValueAtTime(value: number, time: number): this {
+        this.value = value;
+        this.calls.push({ method: 'linearRampToValueAtTime', value, time });
+        return this;
+    }
+}
+
+/** `cancelAndHoldAtTime` is present but throws (some browsers), so the helper's
+ * try/catch must fall back to cancelScheduledValues + setValueAtTime. */
+class FakeThrowingCancelHoldAudioParam extends FakeAudioParam {
+    public override cancelAndHoldAtTime(): never {
+        throw new Error('cancelAndHoldAtTime is unsupported on this platform.');
+    }
+}
+
+/** `exponentialRampToValueAtTime` is present but throws, the same platform-defect
+ * shape `FakeThrowingCancelHoldAudioParam` models for the reanchor: a feature-detect
+ * alone cannot see it, so the helper must catch and degrade to linear. */
+class FakeThrowingExponentialAudioParam extends FakeAudioParam {
+    public override exponentialRampToValueAtTime(): never {
+        throw new Error('exponentialRampToValueAtTime is unsupported on this platform.');
+    }
+}
+
+/** Models a spec-compliant AudioParam's TIME constraints: every automation method
+ * throws `RangeError` when the time is negative or non-finite. The plain fakes accept
+ * any number, so only this one can prove the helper never sends an unschedulable time
+ * into a real param. Value constraints are pinned separately, by the exact-value
+ * assertions on the clamping tests. */
+class FakeStrictTimeAudioParam extends FakeAudioParam {
+    public override cancelScheduledValues(time: number): this {
+        assertSchedulableTime(time);
+        return super.cancelScheduledValues(time);
+    }
+
+    public override setValueAtTime(value: number, time: number): this {
+        assertSchedulableTime(time);
+        return super.setValueAtTime(value, time);
+    }
+
+    public override linearRampToValueAtTime(value: number, time: number): this {
+        assertSchedulableTime(time);
+        return super.linearRampToValueAtTime(value, time);
+    }
+
+    public override cancelAndHoldAtTime(time: number): this {
+        assertSchedulableTime(time);
+        return super.cancelAndHoldAtTime(time);
+    }
+
+    public override exponentialRampToValueAtTime(value: number, time: number): this {
+        assertSchedulableTime(time);
+        return super.exponentialRampToValueAtTime(value, time);
+    }
+}
+
+function assertSchedulableTime(time: number): void {
+    if (!Number.isFinite(time) || time < 0) {
+        throw new RangeError(`AudioParam time ${time} is negative or not finite.`);
     }
 }
 
@@ -448,6 +549,406 @@ describe('DefaultAudioManager', () => {
     });
 });
 
+describe('scheduleGainRamp', () => {
+    it('writes only the passed voice gain, leaving bus and master gain untouched (#116)', async () => {
+        const { assetManager, context, manager } = createManager();
+        const ref = audioRef('audio/music/theme.ogg');
+        assetManager.resolve(ref, createAudioBuffer('theme'));
+        manager.play(ref, { bus: 'music', volume: 0.8 });
+        await flushAudioLoad();
+
+        const busGains = [
+            expectGain(context, 0), // master
+            expectGain(context, 1), // music
+            expectGain(context, 2), // sfx
+            expectGain(context, 3), // voice bus
+        ];
+        const voiceGain = expectGain(context, 4); // the played voice's stage-1 gain
+        const busCallsBefore = busGains.map((gain) => gain.gain.calls.length);
+        const voiceCallsBefore = voiceGain.gain.calls.length;
+
+        scheduleGainRamp(asAudioParam(voiceGain.gain), 0.2, 10, 12, 'linear');
+
+        expect(voiceGain.gain.calls.length).toBeGreaterThan(voiceCallsBefore);
+        expect(busGains.map((gain) => gain.gain.calls.length)).toEqual(busCallsBefore);
+    });
+
+    it('cancel-and-reanchors then linearly ramps to the target', () => {
+        const param = new FakeAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), 0.25, 10, 12, 'linear');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: 12 },
+        ]);
+    });
+
+    it('exponentially ramps to a positive target with no terminal zero', () => {
+        const param = new FakeAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), 0.3, 10, 12, 'exponential');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 0.3, time: 12 },
+        ]);
+    });
+
+    it('ramps exponentially to the 1e-4 epsilon then hard-sets true zero when the target is 0 (#120)', () => {
+        const param = new FakeAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), 0, 10, 12, 'exponential');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 1e-4, time: 12 },
+            { method: 'setValueAtTime', value: 0, time: 12 },
+        ]);
+    });
+
+    it('falls back to linear when the departure value is legitimately 0 (#120)', () => {
+        const param = new FakeAudioParam();
+        param.value = 0;
+
+        scheduleGainRamp(asAudioParam(param), 0.5, 10, 12, 'exponential');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.5, time: 12 },
+        ]);
+    });
+
+    it('clamps a legitimately-tiny departure up to the epsilon before an exponential ramp (#120)', () => {
+        const param = new FakeAudioParam();
+        param.value = 5e-5; // 0 < held < 1e-4
+
+        scheduleGainRamp(asAudioParam(param), 0.5, 10, 12, 'exponential');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'setValueAtTime', value: 1e-4, time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 0.5, time: 12 },
+        ]);
+    });
+
+    it('renders equalPower as >=64 linear waypoints from the held value to the target (#120)', () => {
+        const param = new FakeAudioParam(); // held 1
+
+        scheduleGainRamp(asAudioParam(param), 0, 10, 12, 'equalPower');
+
+        expect(param.calls[0]).toEqual({ method: 'cancelAndHoldAtTime', time: 10 });
+        const waypoints = param.calls.slice(1);
+        expect(waypoints.length).toBeGreaterThanOrEqual(64);
+        expect(waypoints.every((call) => call.method === 'linearRampToValueAtTime')).toBe(true);
+        for (let index = 0; index < waypoints.length; index += 1) {
+            const call = waypoints[index];
+            expect(call).toBeDefined();
+            expect(call?.time).toBeGreaterThan(10);
+            expect(call?.time).toBeLessThanOrEqual(12);
+            if (index > 0) {
+                expect(call?.time).toBeGreaterThan(waypoints[index - 1]?.time ?? Number.NaN);
+                // Monotone fall from the held value (1) down to the target (0).
+                expect(call?.value).toBeLessThanOrEqual(waypoints[index - 1]?.value ?? Number.NaN);
+            }
+            expect(call?.value).toBeGreaterThanOrEqual(0);
+            expect(call?.value).toBeLessThanOrEqual(1);
+        }
+        expect(waypoints.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 12,
+        });
+    });
+
+    it('shapes an equalPower fade-out as the cosine quarter-wave, not 1 - sin (#120)', () => {
+        const param = new FakeAudioParam(); // held 1, falling to 0
+
+        scheduleGainRamp(asAudioParam(param), 0, 10, 12, 'equalPower');
+
+        const waypoints = param.calls.slice(1);
+        // A quarter of the way through (time 10.5), an equal-power fade-out sits at
+        // cos(pi/8) ~= 0.9239, NOT the 1 - sin(pi/8) ~= 0.6173 a sin-only curve gives.
+        const quarter = waypoints.find((call) => call.time === 10.5);
+        expect(quarter?.value).toBeCloseTo(Math.cos(Math.PI / 8), 4);
+        const threeQuarter = waypoints.find((call) => call.time === 11.5);
+        expect(threeQuarter?.value).toBeCloseTo(Math.cos((3 * Math.PI) / 8), 4);
+    });
+
+    it('offsets an equalPower partial fade-out by both endpoints, never overshooting the target (#120)', () => {
+        const param = new FakeAudioParam();
+        param.value = 0.8; // partial fall 0.8 -> 0.2; neither endpoint is 0 or 1
+
+        scheduleGainRamp(asAudioParam(param), 0.2, 10, 12, 'equalPower');
+
+        const waypoints = param.calls.slice(1);
+        // Falling: target + (held - target) * cos(progress * pi/2), so the first
+        // waypoint departs from just under the re-anchored 0.8 — never near 0.
+        expect(waypoints[0]?.value).toBeCloseTo(0.2 + 0.6 * Math.cos(Math.PI / 128), 6);
+        const midpoint = waypoints.find((call) => call.time === 11);
+        expect(midpoint?.value).toBeCloseTo(0.2 + 0.6 * Math.cos(Math.PI / 4), 6);
+        // The waypoint before the forced final one approaches the target from
+        // above — it must not undershoot and force a reversal back up to 0.2.
+        expect(waypoints.at(-2)?.value).toBeGreaterThanOrEqual(0.2);
+        expect(waypoints.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0.2,
+            time: 12,
+        });
+    });
+
+    it('offsets an equalPower partial fade-in by both endpoints, never undershooting the departure (#120)', () => {
+        const param = new FakeAudioParam();
+        param.value = 0.3; // partial rise 0.3 -> 0.9
+
+        scheduleGainRamp(asAudioParam(param), 0.9, 10, 12, 'equalPower');
+
+        const waypoints = param.calls.slice(1);
+        // Rising: held + (target - held) * sin(progress * pi/2), so the first
+        // waypoint departs from just above the re-anchored 0.3 — never near 0.
+        expect(waypoints[0]?.value).toBeCloseTo(0.3 + 0.6 * Math.sin(Math.PI / 128), 6);
+        expect(waypoints[0]?.value).toBeGreaterThanOrEqual(0.3);
+        const midpoint = waypoints.find((call) => call.time === 11);
+        expect(midpoint?.value).toBeCloseTo(0.3 + 0.6 * Math.sin(Math.PI / 4), 6);
+        expect(waypoints.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0.9,
+            time: 12,
+        });
+    });
+
+    it('keeps a symmetric equalPower crossfade at constant power (g_in^2 + g_out^2 = 1) (#120)', () => {
+        const incoming = new FakeAudioParam();
+        incoming.value = 0; // rising 0 -> 1 (fade-in)
+        const outgoing = new FakeAudioParam(); // held 1, falling 1 -> 0 (fade-out)
+
+        scheduleGainRamp(asAudioParam(incoming), 1, 10, 12, 'equalPower');
+        scheduleGainRamp(asAudioParam(outgoing), 0, 10, 12, 'equalPower');
+
+        const inWaypoints = incoming.calls.slice(1);
+        const outWaypoints = outgoing.calls.slice(1);
+        expect(inWaypoints.length).toBe(outWaypoints.length);
+        for (let index = 0; index < inWaypoints.length; index += 1) {
+            const gIn = inWaypoints[index]?.value ?? Number.NaN;
+            const gOut = outWaypoints[index]?.value ?? Number.NaN;
+            expect(gIn * gIn + gOut * gOut).toBeCloseTo(1, 4);
+        }
+    });
+
+    it('clamps a tiny departure to the epsilon after a manual reanchor when cancelAndHoldAtTime throws (#120)', () => {
+        const param = new FakeThrowingCancelHoldAudioParam();
+        param.value = 5e-5; // 0 < held < 1e-4, on the manual-reanchor path
+
+        scheduleGainRamp(asAudioParam(param), 0.5, 10, 12, 'exponential');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelScheduledValues', time: 10 },
+            { method: 'setValueAtTime', value: 5e-5, time: 10 },
+            { method: 'setValueAtTime', value: 1e-4, time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 0.5, time: 12 },
+        ]);
+    });
+
+    it('reanchors via cancelScheduledValues + setValueAtTime when cancelAndHoldAtTime is absent', () => {
+        const param = new FakeLinearOnlyAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), 0.25, 10, 12, 'linear');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelScheduledValues', time: 10 },
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: 12 },
+        ]);
+    });
+
+    it('degrades an exponential ramp to linear when exponentialRampToValueAtTime is absent', () => {
+        const param = new FakeLinearOnlyAudioParam();
+
+        expect(() =>
+            scheduleGainRamp(asAudioParam(param), 0.3, 10, 12, 'exponential'),
+        ).not.toThrow();
+
+        expect(param.calls).toEqual([
+            { method: 'cancelScheduledValues', time: 10 },
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.3, time: 12 },
+        ]);
+    });
+
+    it('renders equalPower with plain linear ramps even on a linear-only platform', () => {
+        const param = new FakeLinearOnlyAudioParam();
+
+        expect(() => scheduleGainRamp(asAudioParam(param), 0, 10, 12, 'equalPower')).not.toThrow();
+
+        expect(param.calls[0]).toEqual({ method: 'cancelScheduledValues', time: 10 });
+        expect(param.calls[1]).toEqual({ method: 'setValueAtTime', value: 1, time: 10 });
+        const waypoints = param.calls.slice(2);
+        expect(waypoints.length).toBeGreaterThanOrEqual(64);
+        expect(waypoints.every((call) => call.method === 'linearRampToValueAtTime')).toBe(true);
+        expect(waypoints.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 12,
+        });
+    });
+
+    it('falls back to cancel + set when cancelAndHoldAtTime throws', () => {
+        const param = new FakeThrowingCancelHoldAudioParam();
+
+        expect(() => scheduleGainRamp(asAudioParam(param), 0.4, 10, 12, 'linear')).not.toThrow();
+
+        expect(param.calls).toEqual([
+            { method: 'cancelScheduledValues', time: 10 },
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.4, time: 12 },
+        ]);
+    });
+
+    it('degrades an exponential ramp to linear when exponentialRampToValueAtTime throws', () => {
+        const param = new FakeThrowingExponentialAudioParam();
+
+        expect(() =>
+            scheduleGainRamp(asAudioParam(param), 0.3, 10, 12, 'exponential'),
+        ).not.toThrow();
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.3, time: 12 },
+        ]);
+    });
+
+    it('keeps the departure anchor already written when an exponential ramp throws', () => {
+        const param = new FakeThrowingExponentialAudioParam();
+        param.value = 5e-5; // 0 < held < 1e-4, so the epsilon anchor lands before the throw
+
+        expect(() =>
+            scheduleGainRamp(asAudioParam(param), 0.5, 10, 12, 'exponential'),
+        ).not.toThrow();
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'setValueAtTime', value: 1e-4, time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.5, time: 12 },
+        ]);
+    });
+
+    it('schedules normally at startTime 0, the boundary the negative-time guard rejects from', () => {
+        // 0 is the only value classified differently by `startTime < 0` and `<= 0`, so it
+        // is the one input that separates the guard from one that no-ops a legal ramp.
+        const param = new FakeAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), 0.25, 0, 2, 'linear');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 0 },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: 2 },
+        ]);
+    });
+
+    it('writes nothing and does not throw when startTime is negative or not finite', () => {
+        for (const startTime of [
+            Number.NaN,
+            Number.POSITIVE_INFINITY,
+            Number.NEGATIVE_INFINITY,
+            -1,
+            -0.000_1,
+        ]) {
+            const param = new FakeAudioParam();
+
+            expect(() =>
+                scheduleGainRamp(asAudioParam(param), 0.5, startTime, 12, 'linear'),
+            ).not.toThrow();
+
+            expect(param.calls).toEqual([]);
+            expect(param.value).toBe(1);
+        }
+    });
+
+    it('never lets an unschedulable time reach a spec-compliant AudioParam', () => {
+        // A real AudioParam throws RangeError on a negative or non-finite time from
+        // every automation method — including the cancel calls the reanchor makes —
+        // so the helper's "never throws" contract only holds if it filters them first.
+        const unschedulable = [Number.NaN, Number.POSITIVE_INFINITY, -1];
+
+        for (const curve of ['linear', 'exponential', 'equalPower'] as const) {
+            for (const startTime of unschedulable) {
+                const param = new FakeStrictTimeAudioParam();
+
+                expect(() =>
+                    scheduleGainRamp(asAudioParam(param), 0.5, startTime, 12, curve),
+                ).not.toThrow();
+
+                expect(param.calls).toEqual([]);
+            }
+
+            for (const endTime of unschedulable) {
+                const param = new FakeStrictTimeAudioParam();
+
+                expect(() =>
+                    scheduleGainRamp(asAudioParam(param), 0.5, 10, endTime, curve),
+                ).not.toThrow();
+            }
+        }
+    });
+
+    it('applies the clamped target instantly when endTime is not finite', () => {
+        for (const endTime of [Number.NaN, Number.POSITIVE_INFINITY]) {
+            const param = new FakeAudioParam();
+
+            scheduleGainRamp(asAudioParam(param), 0.5, 10, endTime, 'linear');
+
+            expect(param.calls).toEqual([
+                { method: 'cancelAndHoldAtTime', time: 10 },
+                { method: 'setValueAtTime', value: 0.5, time: 10 },
+            ]);
+        }
+    });
+
+    it('clamps a legitimately-tiny target up to the epsilon on an exponential ramp (#120)', () => {
+        const param = new FakeAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), 5e-5, 10, 12, 'exponential'); // 0 < target < 1e-4
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 1e-4, time: 12 },
+        ]);
+    });
+
+    it('defaults to the linear curve when none is passed', () => {
+        const param = new FakeAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), 0.25, 10, 12);
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: 12 },
+        ]);
+    });
+
+    it('clamps a non-finite target to 0 rather than scheduling NaN', () => {
+        const param = new FakeAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), Number.NaN, 10, 12, 'linear');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 12 },
+        ]);
+    });
+
+    it('applies the clamped target instantly when the ramp window is empty or backwards', () => {
+        const param = new FakeAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), 0.5, 12, 12, 'linear');
+
+        expect(param.calls).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 12 },
+            { method: 'setValueAtTime', value: 0.5, time: 12 },
+        ]);
+    });
+});
+
 function createManager(options: { readonly poolSize?: number } = {}): {
     readonly assetManager: AssetManagerDouble;
     readonly context: FakeAudioContext;
@@ -538,6 +1039,11 @@ function createDeferred<TValue>(): DeferredValue<TValue> {
 function asAudioNode<TAudioNode extends AudioNode>(node: object): TAudioNode {
     // @chimera-review: Audio tests provide narrow Web Audio doubles for the members used by AudioBus and AudioManager; this cast avoids creating a real AudioContext in unit tests.
     return node as unknown as TAudioNode;
+}
+
+function asAudioParam(param: object): AudioParam {
+    // @chimera-review: Gain-ramp tests exercise scheduleGainRamp against narrow AudioParam doubles that record the automation calls used by the helper; this cast keeps the tests off a real AudioContext.
+    return param as unknown as AudioParam;
 }
 
 function asAudioContext(context: FakeAudioContext): AudioContext {
