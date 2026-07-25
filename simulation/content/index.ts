@@ -22,6 +22,13 @@ export {
 export { type AssetPriority, type AssetManifestEntry, type AssetManifest } from './AssetManifest';
 
 export {
+    audioClipEntry,
+    type AudioClipMetadata,
+    type AudioCueName,
+    type WellKnownAudioCueName,
+} from './audioManifest';
+
+export {
     type ContentDatabase,
     type ContentCollection,
     ContentConflictError,
