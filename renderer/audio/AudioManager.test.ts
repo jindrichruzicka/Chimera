@@ -11,6 +11,12 @@
  *          cues clamp, and a post-clamp-collapsed window is dropped.
  *   #119 — a scheduled stop drives release through the native `onended` handler,
  *          never a wall-clock timer.
+ *   #120 — every stage-1 ramp cancels and re-anchors first; an exponential fade
+ *          cannot depart from zero, so its floor is the epsilon, not silence.
+ *   #121 — ops requested before `startVoice` are parked on the `VoiceRecord` and
+ *          applied atomically at `t0` in the order `releaseOnStart` →
+ *          `pendingFadeIn` → `pendingFadeTo` → `linkedFadeOut`; no ramp is ever
+ *          scheduled against a null source.
  *   #124 — the cue sheet is read only through `getManifestMetadata` and parsed
  *          only here, in `renderer/audio`.
  *   #126 — the public `AudioHandle` gains no fields and is never spread-built.
@@ -21,6 +27,12 @@
  * deliberately green against that same baseline — they exist to bound the guards, not
  * to drive them. The `AudioHandle` type pin is red at `tsc` rather than in vitest
  * (`expectTypeOf` is erased at runtime), so both gates must run.
+ *
+ * For #121 the load-bearing red is the precedence order itself: `pendingFadeIn` is the
+ * only slot with a production writer, so the other three are parked through
+ * {@link writeVoiceIntents} — the same seam `fadeOut`/`fadeTo`/`crossfade` will use —
+ * and the ordering is asserted from the voice gain's own call log rather than a global
+ * invocation index.
  */
 
 import {
@@ -49,7 +61,10 @@ import {
     scheduleGainRamp,
     type AudioHandle,
     type AudioManagerOptions,
+    type PlayOptions,
+    type VoicePhase,
 } from './AudioManager';
+import type { FadeInSpec, FadeToSpec } from './Cue';
 
 interface ScheduledGainCall {
     readonly method:
@@ -97,6 +112,21 @@ class FakeAudioParam {
     public exponentialRampToValueAtTime(value: number, time: number): this {
         this.value = value;
         this.calls.push({ method: 'exponentialRampToValueAtTime', value, time });
+        return this;
+    }
+}
+
+/**
+ * Models the one thing every other double here gets wrong: a real `AudioParam.value`
+ * reports `[[current value]]` — the value at the START of the current render quantum —
+ * so automation scheduled in this same JS turn is INVISIBLE to it. The write-through
+ * `value` on {@link FakeAudioParam} is a convenience for seeding a departure, and it
+ * silently makes any "write the value, then read it back" bug look correct. A caller
+ * that just wrote its own departure must pass it, not re-read it.
+ */
+class FakeQuantizedAudioParam extends FakeAudioParam {
+    public override setValueAtTime(value: number, time: number): this {
+        this.calls.push({ method: 'setValueAtTime', value, time });
         return this;
     }
 }
@@ -194,7 +224,12 @@ class FakeAudioNode {
 }
 
 class FakeGainNode extends FakeAudioNode {
-    public readonly gain = new FakeAudioParam();
+    public readonly gain: FakeAudioParam;
+
+    public constructor(gain: FakeAudioParam = new FakeAudioParam()) {
+        super();
+        this.gain = gain;
+    }
 }
 
 class FakePannerNode extends FakeAudioNode {
@@ -229,6 +264,8 @@ class FakeAudioContext {
     public currentTime = 10;
     /** Arms every source created from here on to refuse a scheduled stop. */
     public failNextStopSchedule = false;
+    /** Hands out {@link FakeQuantizedAudioParam} gains — the spec-faithful `value`. */
+    public quantizedGainParams = false;
     public readonly createdGainNodes: FakeGainNode[] = [];
     public readonly createdPannerNodes: FakePannerNode[] = [];
     public readonly createdSources: FakeAudioBufferSourceNode[] = [];
@@ -236,7 +273,9 @@ class FakeAudioContext {
     public readonly close = vi.fn((): Promise<void> => Promise.resolve());
 
     public createGain(): GainNode {
-        const node = new FakeGainNode();
+        const node = new FakeGainNode(
+            this.quantizedGainParams ? new FakeQuantizedAudioParam() : new FakeAudioParam(),
+        );
         this.createdGainNodes.push(node);
         return asAudioNode<GainNode>(node);
     }
@@ -952,7 +991,7 @@ describe('DefaultAudioManager — dynamic cue validation', () => {
         expect(handle.valid).toBe(true);
         expect(source.loop).toBe(true);
         expect(source.stop).not.toHaveBeenCalled();
-        expect(readVoiceSchedule(manager, handle).scheduledStopAt).toBeNull();
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBeNull();
         expect(warn).toHaveBeenCalledTimes(1);
         expect(String(warn.mock.calls[0]?.[0])).toContain('loop with no scheduled end');
     });
@@ -1228,7 +1267,7 @@ describe('DefaultAudioManager — loop regions', () => {
         expect(source.stop).toHaveBeenCalledWith(14);
         expect(handle.valid).toBe(true);
         expect(source.loop).toBe(true);
-        expect(readVoiceSchedule(manager, handle).scheduledStopAt).toBeNull();
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBeNull();
         // Containment must not make the failure invisible: the caller asked for a
         // bounded loop and is getting an unbounded one.
         expect(warn).toHaveBeenCalledTimes(1);
@@ -1242,7 +1281,7 @@ describe('DefaultAudioManager — loop regions', () => {
         await flushAudioLoad();
 
         expect(context.createdSources).toHaveLength(1);
-        expect(readVoiceSchedule(manager, handle).scheduledStopAt).toBe(14);
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(14);
     });
 
     it('records the playhead anchors a later fade derives its timing from (#122)', async () => {
@@ -1256,7 +1295,7 @@ describe('DefaultAudioManager — loop regions', () => {
         context.currentTime = 12;
         await flushAudioLoad();
 
-        expect(readVoiceSchedule(manager, handle)).toMatchObject({
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
             startOffsetSeconds: 5,
             startedAtContextTime: 12,
         });
@@ -1300,6 +1339,380 @@ describe('DefaultAudioManager — loop regions', () => {
             source.finish();
         }).not.toThrow();
         expect(source.disconnect).toHaveBeenCalledOnce();
+    });
+});
+
+// ─── fade-in and pending intents (#121) ─────────────────────────────────────────
+
+describe('DefaultAudioManager — fade-in and pending intents', () => {
+    it('parks PlayOptions.fadeIn on the record as a pending intent (#121)', () => {
+        const { manager, handle } = createLoadingVoice({
+            playOptions: { fadeIn: { durationMs: 750, curve: 'equalPower' } },
+        });
+
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'loading',
+            pendingFadeIn: { durationMs: 750, curve: 'equalPower' },
+            pendingFadeTo: null,
+            linkedFadeOut: null,
+            releaseOnStart: false,
+        });
+    });
+
+    it('schedules no ramp while the voice is loading, and never on a bus gain (#121, #116)', async () => {
+        const { context, manager, handle, start } = createLoadingVoice({
+            playOptions: { fadeIn: { durationMs: 500 } },
+        });
+        writeVoiceIntents(manager, handle, {
+            pendingFadeTo: { to: 0.25, durationMs: 200 },
+            linkedFadeOut: vi.fn(),
+        });
+
+        // Only the four bus gains exist: there is no stage-1 gain for a ramp to write
+        // to, which is precisely why an intent arriving now has to be parked.
+        expect(context.createdGainNodes).toHaveLength(4);
+        // Snapshots, not ramp counts: #116 says these are never WRITTEN by a fade op, so
+        // a stray setValueAtTime or cancel has to fail here too, not just a ramp.
+        const busCallsBefore = context.createdGainNodes.map((gain) => [...gain.gain.calls]);
+        expect(busCallsBefore.map(countGainRamps)).toEqual([0, 0, 0, 0]);
+
+        await start();
+
+        expect(context.createdGainNodes).toHaveLength(5);
+        expect(context.createdGainNodes.slice(0, 4).map((gain) => gain.gain.calls)).toEqual(
+            busCallsBefore,
+        );
+        expect(countGainRamps(expectGain(context, 4).gain.calls)).toBeGreaterThan(0);
+    });
+
+    it('applies pending intents at t0 in the fixed precedence order (#121)', async () => {
+        const { context, manager, handle, start } = createLoadingVoice({
+            playOptions: { fadeIn: { durationMs: 500 } },
+        });
+        const linkedCalls: { readonly startedAt: number; readonly gainWrites: number }[] = [];
+        writeVoiceIntents(manager, handle, {
+            pendingFadeTo: { to: 0.25, durationMs: 200 },
+            linkedFadeOut: (startedAt) => {
+                linkedCalls.push({
+                    startedAt,
+                    gainWrites: expectGain(context, 4).gain.calls.length,
+                });
+            },
+        });
+
+        expect(context.createdSources).toHaveLength(0);
+        expect(linkedCalls).toHaveLength(0);
+
+        await start();
+
+        const gainCalls = expectGain(context, 4).gain.calls;
+        expect(gainCalls).toEqual([
+            // pendingFadeIn: the floor at t0, then the ramp up to `volume`…
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 1, time: 10.5 },
+            // …then pendingFadeTo re-anchors over it and takes the voice elsewhere.
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: 10.2 },
+        ]);
+        // The linkage fires last, on the same t0, with every gain write already laid
+        // down. Counting writes AT the call is what makes that an ordering claim about
+        // this voice rather than about whatever else the manager touched.
+        expect(linkedCalls).toEqual([{ startedAt: 10, gainWrites: gainCalls.length }]);
+    });
+
+    it('never creates a source when releaseOnStart was set before the voice started (#121)', async () => {
+        const warn = spyOnWarn();
+        const { context, manager, handle, start } = createLoadingVoice({
+            // `from: 'end'` with an over-long `to` collapses only AFTER clamping, so
+            // resolveVoiceSchedule warns for it. A silent run therefore proves the
+            // short-circuit precedes schedule resolution, not merely node creation —
+            // a voice about to be torn down must not narrate playback that continues.
+            playOptions: { from: 'end', to: 20, fadeIn: { durationMs: 500 } },
+        });
+        const linked = vi.fn();
+        writeVoiceIntents(manager, handle, {
+            releaseOnStart: true,
+            pendingFadeTo: { to: 0.25, durationMs: 200 },
+            linkedFadeOut: linked,
+        });
+
+        await start();
+
+        expect(context.createdSources).toHaveLength(0);
+        expect(context.createdGainNodes).toHaveLength(4);
+        expect(linked).not.toHaveBeenCalled();
+        expect(handle.valid).toBe(false);
+        expect(() => readVoiceRecord(manager, handle)).toThrow();
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('moves the voice from loading to playing and clears every applied intent (#121)', async () => {
+        const { manager, handle, start } = createLoadingVoice({
+            playOptions: { fadeIn: { durationMs: 500 } },
+        });
+        writeVoiceIntents(manager, handle, {
+            pendingFadeTo: { to: 0.25, durationMs: 200 },
+            linkedFadeOut: vi.fn(),
+        });
+
+        expect(readVoiceRecord(manager, handle).phase).toBe('loading');
+
+        await start();
+
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'playing',
+            pendingFadeIn: null,
+            pendingFadeTo: null,
+            linkedFadeOut: null,
+        });
+    });
+
+    it('ramps a fade-in from silence up to volume (#121, #120)', async () => {
+        const { context, start } = createLoadingVoice({
+            playOptions: { volume: 0.8, fadeIn: { durationMs: 500 } },
+        });
+
+        await start();
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.8, time: 10.5 },
+        ]);
+    });
+
+    it('departs an exponential fade-in from the curve floor, not from zero (#121, #120)', async () => {
+        // Exponential automation is a ratio and cannot leave zero: a floor of 0 makes
+        // scheduleGainRamp fall back to linear, silently discarding the authored curve.
+        const { context, start } = createLoadingVoice({
+            playOptions: { fadeIn: { durationMs: 500, curve: 'exponential' } },
+        });
+
+        await start();
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1e-4, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 1, time: 10.5 },
+        ]);
+    });
+
+    it('departs a fade-in from the floor it wrote, not from what the param can report (#121, #120)', async () => {
+        // A real AudioParam's `value` reports the last RENDERED quantum, so the floor
+        // this voice just scheduled is invisible to it and reading it back yields the
+        // node's default gain of 1. `equalPower` derives every waypoint from that
+        // departure, so the misread does not merely soften the fade — with volume 0.5 it
+        // inverts it into a climb to ~1.0 in one waypoint followed by a decay, i.e. an
+        // overshoot to double the requested volume where a fade-IN was authored.
+        const { context, start } = createLoadingVoice({
+            quantizedGainParams: true,
+            playOptions: {
+                volume: 0.5,
+                loop: true,
+                fadeIn: { durationMs: 640, curve: 'equalPower' },
+            },
+        });
+
+        await start();
+
+        const calls = expectGain(context, 4).gain.calls;
+        expect(calls[0]).toEqual({ method: 'setValueAtTime', value: 0, time: 10 });
+
+        const waypoints = calls.filter((call) => call.method === 'linearRampToValueAtTime');
+        expect(waypoints).toHaveLength(64);
+        // Rising from the floor: the first waypoint is a hair above silence, every one
+        // stays within the requested volume, and the last lands exactly on it.
+        expect(waypoints[0]?.value).toBeCloseTo(0.5 * Math.sin(Math.PI / 128), 12);
+        for (const waypoint of waypoints) {
+            expect(waypoint.value).toBeLessThanOrEqual(0.5);
+        }
+        expect(waypoints.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0.5,
+            time: 10.64,
+        });
+    });
+
+    it('leaves the fade-in window unclamped when the voice has no scheduled end (#121)', async () => {
+        const { context, start } = createLoadingVoice({
+            playOptions: { loop: true, fadeIn: { durationMs: 4000 } },
+        });
+
+        await start();
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 1, time: 14 },
+        ]);
+    });
+
+    it('applies a non-positive fade-in duration instantly rather than ramping (#121)', async () => {
+        const { context, start } = createLoadingVoice({
+            playOptions: { volume: 0.6, fadeIn: { durationMs: 0 } },
+        });
+
+        await start();
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'setValueAtTime', value: 0.6, time: 10 },
+        ]);
+    });
+
+    it('truncates a fade-in that outlasts the scheduled end instead of steepening it (#121)', async () => {
+        // Bounded to 2 s of a 10 s clip, so scheduledStopAt is 12 while the authored
+        // fade wants 14. The authored quantity is the RATE, so the window is cut and
+        // the target comes down with it — the voice never reaches `volume`.
+        const { context, start } = createLoadingVoice({
+            playOptions: { from: 0, to: 2, fadeIn: { durationMs: 4000 } },
+        });
+
+        await start();
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.5, time: 12 },
+        ]);
+    });
+
+    it.each([
+        ['NaN', Number.NaN],
+        ['+Infinity', Number.POSITIVE_INFINITY],
+    ])(
+        'applies a %s fade-in duration instantly on a bounded voice, as no fade at all (#121)',
+        async (_label, durationMs) => {
+            // Both non-finite durations must land here. Clamping is what would otherwise
+            // split them: NaN falls straight through to an instant set, while +Infinity
+            // clamps to zero progress and would hold the floor for the voice's whole
+            // life — the same garbage input silencing the voice instead of playing it.
+            const { context, start } = createLoadingVoice({
+                playOptions: { volume: 0.4, from: 0, to: 2, fadeIn: { durationMs } },
+            });
+
+            await start();
+
+            expect(expectGain(context, 4).gain.calls).toEqual([
+                { method: 'setValueAtTime', value: 0, time: 10 },
+                { method: 'cancelAndHoldAtTime', time: 10 },
+                { method: 'setValueAtTime', value: 0.4, time: 10 },
+            ]);
+        },
+    );
+
+    it('applies a non-finite fade-in duration the same way with no scheduled end (#121)', async () => {
+        // The unbounded voice is the half that already worked; pinning both is what
+        // stops the outcome depending on whether the voice happens to be bounded.
+        const { context, start } = createLoadingVoice({
+            playOptions: {
+                volume: 0.4,
+                loop: true,
+                fadeIn: { durationMs: Number.POSITIVE_INFINITY },
+            },
+        });
+
+        await start();
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'setValueAtTime', value: 0.4, time: 10 },
+        ]);
+    });
+
+    it('truncates along the authored curve, not a linear proportion of it (#121, #120)', async () => {
+        const { context, start } = createLoadingVoice({
+            playOptions: { from: 0, to: 2, fadeIn: { durationMs: 4000, curve: 'equalPower' } },
+        });
+
+        await start();
+
+        const calls = expectGain(context, 4).gain.calls;
+        const last = calls[calls.length - 1];
+        expect(last?.method).toBe('linearRampToValueAtTime');
+        expect(last?.time).toBe(12);
+        // Halfway through an equal-power quarter-wave is sin(π/4), not 0.5.
+        expect(last?.value).toBeCloseTo(Math.SQRT1_2, 10);
+        expect(last?.value).toBeLessThan(1);
+    });
+
+    it('truncates an exponential fade-in geometrically, not linearly (#121, #120)', async () => {
+        // The third curve's truncation branch. Geometric interpolation from the 1e-4
+        // epsilon to 1 at half the window is 1e-2 — two orders of magnitude away from
+        // the 0.5 a linear fallback would give, so this cannot pass by coincidence.
+        const { context, start } = createLoadingVoice({
+            playOptions: { from: 0, to: 2, fadeIn: { durationMs: 4000, curve: 'exponential' } },
+        });
+
+        await start();
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1e-4, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 1e-2, time: 12 },
+        ]);
+    });
+
+    it('truncates an exponential fade-in to a silent voice without a terminal zero (#121, #120)', async () => {
+        // `volume: 0` is legal, and a geometric interpolation TO zero is degenerate —
+        // every intermediate collapses to 0. Falling back to linear keeps a real
+        // intermediate, which the ramp then clamps to the epsilon; going geometric
+        // instead would hand scheduleGainRamp a zero target and append a hard
+        // setValueAtTime(0) this voice never asked for.
+        const { context, start } = createLoadingVoice({
+            playOptions: {
+                volume: 0,
+                from: 0,
+                to: 2,
+                fadeIn: { durationMs: 4000, curve: 'exponential' },
+            },
+        });
+
+        await start();
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1e-4, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 1e-4, time: 12 },
+        ]);
+    });
+
+    it('clamps a pending fadeTo to the scheduled end without lowering its target (#121)', async () => {
+        const { context, manager, handle, start } = createLoadingVoice({
+            playOptions: { from: 0, to: 2 },
+        });
+        writeVoiceIntents(manager, handle, { pendingFadeTo: { to: 0.25, durationMs: 4000 } });
+
+        await start();
+
+        // Asymmetric with fade-in on purpose: `to` is an absolute ceiling the caller
+        // named, so only the WINDOW clamps — truncating it would rewrite the request.
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: 12 },
+        ]);
+    });
+
+    it('contains a throwing linked fade-out without losing the incoming voice (#121)', async () => {
+        const warn = spyOnWarn();
+        const { context, manager, handle, start } = createLoadingVoice();
+        writeVoiceIntents(manager, handle, {
+            linkedFadeOut: () => {
+                throw new Error('the outgoing voice is gone');
+            },
+        });
+
+        await start();
+
+        expect(expectSource(context, 0).start).toHaveBeenCalledOnce();
+        expect(handle.valid).toBe(true);
+        // Containment must not make the failure invisible: name what survived.
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('the incoming voice started normally');
     });
 });
 
@@ -1433,6 +1846,11 @@ describe('AudioHandle — public shape', () => {
             'startedAtContextTime',
             'startOffsetSeconds',
             'scheduledStopAt',
+            'phase',
+            'releaseOnStart',
+            'pendingFadeIn',
+            'pendingFadeTo',
+            'linkedFadeOut',
             'sheet',
             'from',
             'to',
@@ -1494,6 +1912,45 @@ describe('scheduleGainRamp', () => {
 
         expect(voiceGain.gain.calls.length).toBeGreaterThan(voiceCallsBefore);
         expect(busGains.map((gain) => gain.gain.calls.length)).toEqual(busCallsBefore);
+    });
+
+    it('prefers an explicit departure over what the param reports', () => {
+        // The param still reports its default 1 because a setValueAtTime does not move
+        // `[[current value]]`; the caller knows better and says so.
+        const param = new FakeQuantizedAudioParam();
+        param.setValueAtTime(0, 10);
+
+        scheduleGainRamp(asAudioParam(param), 1, 10, 12, 'equalPower', 0);
+
+        const waypoints = param.calls.filter((call) => call.method === 'linearRampToValueAtTime');
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(Math.sin(Math.PI / 128), 12);
+    });
+
+    it('anchors the fallback re-anchor at an explicit departure, not the stale value', () => {
+        // The fallback path WRITES its anchor, so a stale read is audible on every curve
+        // — and `cancelScheduledValues` has just dropped whatever the caller scheduled.
+        const param = new FakeLinearOnlyAudioParam();
+
+        scheduleGainRamp(asAudioParam(param), 1, 10, 12, 'linear', 0);
+
+        expect(param.calls).toEqual([
+            { method: 'cancelScheduledValues', time: 10 },
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'linearRampToValueAtTime', value: 1, time: 12 },
+        ]);
+    });
+
+    it('falls back to the param value when no departure is given', () => {
+        const param = new FakeQuantizedAudioParam();
+        param.setValueAtTime(0, 10);
+
+        scheduleGainRamp(asAudioParam(param), 0.25, 10, 12, 'equalPower');
+
+        // Departing from the unchanged reported value of 1 — the behaviour a caller that
+        // does NOT know its own departure must keep getting.
+        const waypoints = param.calls.filter((call) => call.method === 'linearRampToValueAtTime');
+        expect(waypoints[0]?.value).toBeCloseTo(0.25 + 0.75 * Math.cos(Math.PI / 128), 12);
     });
 
     it('cancel-and-reanchors then linearly ramps to the target', () => {
@@ -1941,36 +2398,95 @@ function spyOnWarn(): MockInstance<typeof console.warn> {
     return vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 }
 
+/** The internal `VoiceRecord` slice the tests assert on, behind one cast site. */
+interface ObservableVoiceRecord {
+    scheduledStopAt: number | null;
+    startedAtContextTime: number | null;
+    startOffsetSeconds: number;
+    /** Bound to the production union, so a phase added later fails `tsc` here. */
+    phase: VoicePhase;
+    releaseOnStart: boolean;
+    pendingFadeIn: FadeInSpec | null;
+    pendingFadeTo: FadeToSpec | null;
+    linkedFadeOut: ((startedAt: number) => void) | null;
+}
+
 /**
- * Read a live voice's internal `scheduledStopAt`. This change writes the field for the
- * fade verbs to consume later, so no public surface exposes it yet — and without a
- * reader the difference between "stop scheduled" and "stop refused" is unobservable,
- * which is exactly the state a later ramp clamp must not be misled by.
+ * Read a live voice's internal schedule and pending-intent state. These fields are
+ * written for the fade verbs to consume later, so no public surface exposes them yet —
+ * and without a reader the difference between "stop scheduled" and "stop refused", or
+ * between "intent parked" and "intent lost", is unobservable, which is exactly the
+ * state a later ramp clamp must not be misled by.
  */
-function readVoiceSchedule(
-    manager: DefaultAudioManager,
-    handle: AudioHandle,
-): {
-    readonly scheduledStopAt: number | null;
-    readonly startedAtContextTime: number | null;
-    readonly startOffsetSeconds: number;
-} {
+function readVoiceRecord(manager: DefaultAudioManager, handle: AudioHandle): ObservableVoiceRecord {
     // @chimera-review: reaches the manager's private voice map because these fields have no public reader until the fade verbs land; asserting them here is what stops them becoming unverifiable write-only state.
-    const { voices } = manager as unknown as {
-        voices: Map<
-            string,
-            {
-                scheduledStopAt: number | null;
-                startedAtContextTime: number | null;
-                startOffsetSeconds: number;
-            }
-        >;
-    };
+    const { voices } = manager as unknown as { voices: Map<string, ObservableVoiceRecord> };
     const record = voices.get(handle.id);
     if (record === undefined) {
         throw new Error(`Expected a live voice for handle ${handle.id}.`);
     }
     return record;
+}
+
+/**
+ * Park pre-start intents on a loading voice's record — the seam `fadeOut`, `fadeTo`,
+ * and `crossfade` will write through once they land. Until then `pendingFadeIn` is the
+ * only slot with a production writer, so without this helper the precedence order of
+ * Invariant #121 would be write-only state no test could reach.
+ */
+function writeVoiceIntents(
+    manager: DefaultAudioManager,
+    handle: AudioHandle,
+    intents: Partial<ObservableVoiceRecord>,
+): void {
+    Object.assign(readVoiceRecord(manager, handle), intents);
+}
+
+/**
+ * A voice held in the `'loading'` phase: `play()` has returned, but the asset promise
+ * is still pending, so `startVoice` has not run and `source`/`gainNode` are both null.
+ * That window is the only place a pre-start intent can be observed unapplied.
+ */
+function createLoadingVoice(
+    options: {
+        readonly bufferSeconds?: number;
+        readonly metadata?: unknown;
+        readonly playOptions?: PlayOptions;
+        /** Give the voice a gain whose `value` cannot see same-turn automation. */
+        readonly quantizedGainParams?: boolean;
+    } = {},
+): {
+    readonly context: FakeAudioContext;
+    readonly manager: DefaultAudioManager;
+    readonly handle: AudioHandle;
+    /** Resolve the pending load and drain the microtask hops, running `startVoice`. */
+    readonly start: () => Promise<void>;
+} {
+    const { assetManager, context, manager } = createManager();
+    // Set before play(), so the voice's own stage-1 gain is created quantized while the
+    // four bus gains (built in the constructor) stay on the ordinary double.
+    context.quantizedGainParams = options.quantizedGainParams ?? false;
+    const ref = audioRef('audio/music/theme.ogg');
+    if ('metadata' in options) {
+        assetManager.registerMetadata(ref, options.metadata);
+    }
+    const deferred = assetManager.defer(ref);
+    const handle = manager.play(ref, options.playOptions ?? {});
+
+    return {
+        context,
+        manager,
+        handle,
+        start: async (): Promise<void> => {
+            deferred.resolve(createAudioBuffer('theme', options.bufferSeconds ?? 10));
+            await flushAudioLoad();
+        },
+    };
+}
+
+/** How many gain ramps a call log holds — the write a fade is made of. */
+function countGainRamps(calls: readonly ScheduledGainCall[]): number {
+    return calls.filter((call) => call.method.endsWith('RampToValueAtTime')).length;
 }
 
 /** The recorded `source.start` arguments, so a test can assert an ABSENT third arg. */

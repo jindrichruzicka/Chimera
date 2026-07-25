@@ -186,10 +186,15 @@ describe('CrossfadeOptions', () => {
     });
 
     it('is assignable to Omit<PlayOptions, "fadeIn"> (tracks PlayOptions forward)', () => {
-        // NOTE(later): once PlayOptions gains `fadeIn`, add a `@ts-expect-error`
-        // pin that CrossfadeOptions rejects it. Today `Omit<…,'fadeIn'>` is a
-        // legal no-op (PlayOptions has no fadeIn yet), so such a pin would be
-        // vacuous — deferred to the PlayOptions-extension task.
         expectTypeOf<CrossfadeOptions>().toMatchTypeOf<Omit<PlayOptions, 'fadeIn'>>();
+    });
+
+    it('rejects fadeIn — the crossfade owns the fade', () => {
+        // `Omit<…, 'fadeIn'>` stopped being a no-op the moment PlayOptions gained the
+        // key, so this pin is no longer vacuous: a crossfade's incoming fade is derived
+        // from its own `durationMs`/`curve`, and a second one would fight it.
+        // @ts-expect-error: `fadeIn` is omitted from CrossfadeOptions
+        const bad: CrossfadeOptions = { durationMs: 2000, fadeIn: { durationMs: 500 } };
+        expect(bad).toBeDefined();
     });
 });

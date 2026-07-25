@@ -31,6 +31,11 @@ function cueDependency(cue: Cue | undefined): string | number | undefined {
  *
  * Equivalent option values keep the same callback identity across rerenders,
  * even when callers pass a newly created options object.
+ *
+ * `PlayOptions.fadeIn` is deliberately NOT part of the key yet: it lands with the
+ * live-handle verbs (`fadeOut`/`fadeTo`/`crossfade`) and their own hook, which is where
+ * the whole fade surface gets keyed together. Until then a rerender that changes ONLY
+ * `fadeIn` hands back the previous callback, and the previous fade is what plays.
  */
 export function useSound(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): () => AudioHandle {
     const audioManager = useAudioManager();

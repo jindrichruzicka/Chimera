@@ -4,7 +4,7 @@ import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/conten
 import type { AssetManager, ResolvedAsset } from '../assets/AssetManager';
 import { AudioBus, type AudioBusId, type AudioBusOptions } from './AudioBus';
 import { parseAudioCueSheet, resolveCue, resolveCueWindow } from './audioCueSheet';
-import type { Cue, FadeCurve, LoopRegion } from './Cue';
+import type { Cue, FadeCurve, FadeInSpec, FadeToSpec, LoopRegion } from './Cue';
 
 export type { AudioBusId } from './AudioBus';
 
@@ -30,6 +30,13 @@ export interface PlayOptions {
     readonly to?: Cue;
     /** Loop bounds; setting this IMPLIES `loop = true` (Invariant #117). */
     readonly loopRegion?: LoopRegion;
+    /**
+     * Start-time fade from the curve floor up to `volume`. The ramp is laid down at the
+     * voice's REAL start `t0`, which `play()` returns long before — so this is parked on
+     * the voice and applied by `startVoice` (Invariant #121). Its end clamps to any
+     * scheduled end, truncating rather than steepening: see {@link resolveFadeInRamp}.
+     */
+    readonly fadeIn?: FadeInSpec;
 }
 
 export interface AudioHandle {
@@ -53,6 +60,19 @@ export interface AudioManagerOptions {
     readonly busOptions?: AudioBusOptions;
     readonly poolSize?: number;
 }
+
+/**
+ * Where a voice is in its lifecycle. `'loading'` spans `play()` returning to
+ * `startVoice` running — a window of at least two microtask hops plus a load and a
+ * decode, throughout which `source` and `gainNode` are both null and an op has nothing
+ * to write to. `'fading-out'` is written by `fadeOut` in a later task; it is declared
+ * here because the phase set is what the ramp verbs and voice preemption discriminate
+ * on (§4.25, Invariants #119/#123), not because anything sets it yet.
+ *
+ * @internal Exported only so tests reading the private `VoiceRecord` bind to this union
+ * rather than hand-copying it — a copy would drift silently when a phase is added.
+ */
+export type VoicePhase = 'loading' | 'playing' | 'fading-out';
 
 /**
  * All start-time / offset / schedule context for a voice. It lives here and never on
@@ -92,6 +112,24 @@ interface VoiceRecord {
      * scheduled.
      */
     scheduledStopAt: number | null;
+    phase: VoicePhase;
+    /**
+     * Precedence step 1 of Invariant #121: a release requested before the voice started.
+     * Honoured by short-circuiting `startVoice`, so the source is never created at all.
+     * Written by `fadeOut` in a later task, when a pre-start fade has nothing to ramp.
+     */
+    releaseOnStart: boolean;
+    /** Step 2: {@link PlayOptions.fadeIn}, the one intent with a writer today. */
+    pendingFadeIn: FadeInSpec | null;
+    /** Step 3: a ramp-to-absolute requested pre-start. Written by `fadeTo` in a later task. */
+    pendingFadeTo: FadeToSpec | null;
+    /**
+     * Step 4: a crossfade's linked fade-out of the OUTGOING voice, fired with this
+     * voice's real `t0` so both curves cover the identical window (§4.25). A thunk
+     * rather than a descriptor: this record owns only WHEN the linkage fires, while
+     * `crossfade` — a later task — owns what it does.
+     */
+    linkedFadeOut: ((startedAt: number) => void) | null;
     source: AudioBufferSourceNode | null;
     gainNode: GainNode | null;
     pannerNode: PannerNode | null;
@@ -115,6 +153,7 @@ const DEFAULT_VOLUME = 1;
 const BUS_IDS: readonly AudioBusId[] = ['master', 'music', 'sfx', 'voice'];
 const GAIN_RAMP_EPSILON = 1e-4;
 const EQUAL_POWER_WAYPOINTS = 64;
+const DEFAULT_FADE_CURVE: FadeCurve = 'linear';
 
 export class DefaultAudioManager implements AudioManager {
     private readonly audioContext: AudioContext;
@@ -175,6 +214,11 @@ export class DefaultAudioManager implements AudioManager {
             startedAtContextTime: null,
             startOffsetSeconds: 0,
             scheduledStopAt: null,
+            phase: 'loading',
+            releaseOnStart: false,
+            pendingFadeIn: opts.fadeIn ?? null,
+            pendingFadeTo: null,
+            linkedFadeOut: null,
             source: null,
             gainNode: null,
             pannerNode: null,
@@ -384,6 +428,15 @@ export class DefaultAudioManager implements AudioManager {
             return;
         }
 
+        // Precedence step 1 of Invariant #121. This runs BEFORE schedule resolution, not
+        // merely before node creation: resolving emits cue warnings that narrate what
+        // playback does next, and a voice that is about to be torn down would make every
+        // one of them a lie.
+        if (record.releaseOnStart) {
+            this.releaseVoice(record, { stopSource: false });
+            return;
+        }
+
         // Resolve before creating any node, so an abandoned play leaves no orphan.
         const schedule = this.resolveVoiceSchedule(record, buffer.duration);
         if (schedule === null) {
@@ -405,11 +458,17 @@ export class DefaultAudioManager implements AudioManager {
         source.onended = () => {
             this.releaseVoice(record, { stopSource: false });
         };
-        gainNode.gain.setValueAtTime(record.volume, this.audioContext.currentTime);
+        // One `t0`, read once and used for the gain floor, the start, the stop maths and
+        // every pending ramp — "applied atomically at t0" is only true if there is a
+        // single t0 to apply them at.
+        const startedAt = this.audioContext.currentTime;
+        // A fade-in departs from its curve's floor rather than from `volume`, and this
+        // write is also what anchors the ramp: `scheduleGainRamp` re-anchors at the value
+        // the param holds.
+        gainNode.gain.setValueAtTime(initialVoiceGain(record), startedAt);
         this.connectVoice(record, source, gainNode);
 
         record.startOffsetSeconds = schedule.entryOffsetSeconds;
-        const startedAt = this.audioContext.currentTime;
         record.startedAtContextTime = startedAt;
 
         try {
@@ -423,6 +482,9 @@ export class DefaultAudioManager implements AudioManager {
             // A source that never started cannot be stopped; scheduling one throws.
             return;
         }
+
+        // Only now — a voice whose `start()` was refused never played.
+        record.phase = 'playing';
 
         if (schedule.playDurationSeconds !== null) {
             const stopAt = startedAt + schedule.playDurationSeconds;
@@ -447,6 +509,65 @@ export class DefaultAudioManager implements AudioManager {
             }
         } else if (!schedule.loop) {
             record.scheduledStopAt = startedAt + (buffer.duration - schedule.entryOffsetSeconds);
+        }
+
+        // Last, because every ramp below clamps against `scheduledStopAt`.
+        this.applyPendingIntents(record, gainNode, startedAt);
+    }
+
+    /**
+     * Precedence steps 2–4 of Invariant #121, at the voice's real start `t0`. Takes the
+     * stage-1 `gainNode` as an argument rather than reading `record.gainNode`, so "no
+     * ramp is ever scheduled against a null source" holds by construction rather than by
+     * a guard someone could later drop. Each slot is cleared as it is consumed, so the
+     * record never advertises an intent that has already been laid down.
+     */
+    private applyPendingIntents(record: VoiceRecord, gainNode: GainNode, startedAt: number): void {
+        // The gain `startVoice` just wrote at `t0`. It has to be handed to the ramps
+        // explicitly: `param.value` reports the last rendered quantum, so it cannot see a
+        // write made in this same turn. The first ramp consumes it — after that the param
+        // is mid-curve and its own held value is the only truth.
+        let departure: number | undefined = initialVoiceGain(record);
+
+        const fadeIn = record.pendingFadeIn;
+        if (fadeIn !== null) {
+            record.pendingFadeIn = null;
+            const curve = fadeIn.curve ?? DEFAULT_FADE_CURVE;
+            const ramp = resolveFadeInRamp(record, fadeIn.durationMs, startedAt, curve);
+            scheduleGainRamp(gainNode.gain, ramp.target, startedAt, ramp.endTime, curve, departure);
+            departure = undefined;
+        }
+
+        const fadeTo = record.pendingFadeTo;
+        if (fadeTo !== null) {
+            record.pendingFadeTo = null;
+            // Only the WINDOW clamps here, deliberately unlike the fade-in above: `to` is
+            // an absolute ceiling the caller named, so lowering it would silently rewrite
+            // the request, whereas a fade-in's target is derived from `volume` and its
+            // authored quantity is the rate.
+            const endTime = clampRampEnd(record, startedAt + fadeTo.durationMs / 1000);
+            scheduleGainRamp(
+                gainNode.gain,
+                fadeTo.to,
+                startedAt,
+                endTime,
+                fadeTo.curve ?? DEFAULT_FADE_CURVE,
+                departure,
+            );
+        }
+
+        const linkedFadeOut = record.linkedFadeOut;
+        if (linkedFadeOut !== null) {
+            record.linkedFadeOut = null;
+            try {
+                linkedFadeOut(startedAt);
+            } catch {
+                // A crossfade's outgoing voice is not this voice's problem to die over,
+                // but the containment must still name what survived rather than hide it.
+                console.warn(
+                    'Audio linked fade-out failed and was skipped; the incoming voice started normally, so the outgoing one keeps playing unfaded.',
+                );
+            }
         }
     }
 
@@ -748,6 +869,16 @@ function clampUnit(value: number): number {
  * `AudioContext.currentTime`. The re-anchor reads `param.value`, which is the value
  * at `currentTime`, so a future `startTime` would anchor the curve at a stale
  * departure. Callers pass `audioContext.currentTime`, as {@link AudioBus.duck} does.
+ *
+ * Pass `departure` when the caller ITSELF just wrote the value the ramp must leave from.
+ * `param.value` reports `[[current value]]` — the parameter's value at the start of the
+ * current render quantum — and a `setValueAtTime` scheduled in this same turn does not
+ * move it, so reading it back would anchor at the node's previous gain (a fresh
+ * `GainNode` reports its `defaultValue` of 1). That misread is silent for a `linear`
+ * ramp on the `cancelAndHoldAtTime` path, but `equalPower` derives every waypoint from
+ * the departure and the fallback path writes it as an explicit anchor — so a fade-in
+ * from silence would invert into a ramp down from full gain. Omit it whenever the
+ * departure is genuinely unknown, such as over a ramp already in flight.
  */
 export function scheduleGainRamp(
     param: AudioParam,
@@ -755,6 +886,7 @@ export function scheduleGainRamp(
     startTime: number,
     endTime: number,
     curve: FadeCurve = 'linear',
+    departure?: number,
 ): void {
     if (!Number.isFinite(startTime) || startTime < 0) {
         // No usable anchor time — a spec-compliant AudioParam throws RangeError for a
@@ -763,7 +895,7 @@ export function scheduleGainRamp(
         return;
     }
 
-    const held = reanchorGain(param, startTime);
+    const held = reanchorGain(param, startTime, departure);
     const clampedTarget = clampUnit(target);
 
     if (!Number.isFinite(endTime) || endTime <= startTime) {
@@ -796,20 +928,23 @@ export function scheduleGainRamp(
  * Cancels prior automation and returns the held departure value. Prefers
  * `cancelAndHoldAtTime` (which holds the running curve's value); if it is absent
  * or throws, falls back to `cancelScheduledValues` + an explicit `setValueAtTime`
- * anchor — matching {@link AudioBus.duck}.
+ * anchor — matching {@link AudioBus.duck}. A caller-supplied `departure` wins over
+ * `param.value` on BOTH paths: the getter cannot see automation scheduled in this same
+ * turn, and the fallback path's `cancelScheduledValues` would in any case drop the
+ * caller's own anchor event before it could take effect.
  */
-function reanchorGain(param: AudioParam, startTime: number): number {
+function reanchorGain(param: AudioParam, startTime: number, departure?: number): number {
     if (typeof param.cancelAndHoldAtTime === 'function') {
         try {
             param.cancelAndHoldAtTime(startTime);
-            return param.value;
+            return departure ?? param.value;
         } catch {
             // Unsupported on this platform — fall through to the manual reanchor.
         }
     }
 
     param.cancelScheduledValues(startTime);
-    const held = param.value;
+    const held = departure ?? param.value;
     param.setValueAtTime(held, startTime);
     return held;
 }
@@ -884,6 +1019,109 @@ function equalPowerValue(held: number, target: number, rising: boolean, progress
     return rising
         ? held + (target - held) * Math.sin(quarter)
         : target + (held - target) * Math.cos(quarter);
+}
+
+/** A voice's stage-1 gain at `t0`: its `volume`, or a fade-in's {@link fadeInFloor}. */
+function initialVoiceGain(record: VoiceRecord): number {
+    const fadeIn = record.pendingFadeIn;
+    return fadeIn === null ? record.volume : fadeInFloor(fadeIn.curve ?? DEFAULT_FADE_CURVE);
+}
+
+/**
+ * The gain a fade-in departs from. Exponential automation is defined by a ratio and so
+ * cannot leave zero — {@link scheduleGainRamp} falls back to linear when the departure
+ * is 0, which would silently discard an authored `exponential` fade-in. That curve
+ * therefore departs from the same `1e-4` epsilon (−80 dB, inaudible) the primitive
+ * already clamps its endpoints to; every other curve departs from true silence.
+ */
+function fadeInFloor(curve: FadeCurve): number {
+    return curve === 'exponential' ? GAIN_RAMP_EPSILON : 0;
+}
+
+/**
+ * Clamp a ramp end to the voice's scheduled end. The authored bound is authoritative and
+ * a fade never extends it (§4.25); a voice with no determinate end — an unbounded loop —
+ * has nothing to clamp against.
+ */
+function clampRampEnd(record: VoiceRecord, rampEnd: number): number {
+    const scheduledStopAt = record.scheduledStopAt;
+    return scheduledStopAt === null ? rampEnd : Math.min(rampEnd, scheduledStopAt);
+}
+
+/**
+ * A fade-in's window and target, TRUNCATED rather than compressed when it outlasts the
+ * voice's scheduled end. What a fade-in authors is a RATE, so a shorter window has to
+ * lower the target — the alternative, holding the target at `volume`, would steepen the
+ * curve into a faster fade the caller never asked for and reach full volume at the exact
+ * instant the source stops. A truncated fade-in may therefore never reach `volume`
+ * (§4.25, Invariant #121).
+ */
+function resolveFadeInRamp(
+    record: VoiceRecord,
+    durationMs: number,
+    startedAt: number,
+    curve: FadeCurve,
+): { readonly endTime: number; readonly target: number } {
+    const authoredEnd = startedAt + durationMs / 1000;
+    if (!Number.isFinite(authoredEnd)) {
+        // A non-finite duration names no window at all, so it is not a fade — hand the
+        // non-finite end straight to scheduleGainRamp's own guard, which applies the
+        // target instantly. Handled BEFORE the clamp, because clamping is what would
+        // otherwise split the two non-finite inputs apart: `NaN` falls through to an
+        // instant full-volume set, while `+Infinity` on a bounded voice clamps to zero
+        // progress and holds the floor for the voice's whole life. Same garbage input,
+        // opposite outcomes, one of them silence.
+        return { endTime: authoredEnd, target: record.volume };
+    }
+
+    const clampedEnd = clampRampEnd(record, authoredEnd);
+    if (clampedEnd >= authoredEnd) {
+        return { endTime: authoredEnd, target: record.volume };
+    }
+
+    // Reaching here means the scheduled end fell strictly inside the authored window, so
+    // the span below is positive — every writer of `scheduledStopAt` puts it at or after
+    // the start. `clampUnit` is what keeps a future writer that broke that from producing
+    // a nonsense target rather than a crash.
+    const progress = clampUnit((clampedEnd - startedAt) / (authoredEnd - startedAt));
+    return {
+        endTime: clampedEnd,
+        target: fadeCurveValue(curve, fadeInFloor(curve), record.volume, progress),
+    };
+}
+
+/**
+ * The value a fade curve holds `progress` of the way from `from` to `to`. Used to
+ * truncate a clamped fade-in along the curve it authored rather than along a straight
+ * line through it.
+ *
+ * What this fixes exactly is the ENDPOINT — the gain the voice has reached when it is
+ * cut off. `linear` and `exponential` are self-similar under the shortened window, so
+ * the truncated ramp also traces the authored path; an `equalPower` quarter-wave is not,
+ * so it re-eases over the shorter window to the same endpoint. Matching the path there
+ * too would need a sub-curve `scheduleGainRamp` has no way to express, and the pairing
+ * that makes `equalPower` worth having is a crossfade's two curves, not one fade's tail.
+ *
+ * The `to > 0` condition on the exponential branch mirrors the target half of
+ * {@link scheduleExponentialRamp}'s own zero handling, so the truncated target and the
+ * ramp actually scheduled agree in shape. Its departure half needs no mirror here: the
+ * only departure this is ever called with is {@link fadeInFloor}, which for
+ * `exponential` is the non-zero epsilon precisely so that ramp cannot degrade. The two
+ * can still diverge on a platform where `exponentialRampToValueAtTime` is present but
+ * throws; the endpoint stays below `volume` either way, which is the property that
+ * matters.
+ */
+function fadeCurveValue(curve: FadeCurve, from: number, to: number, progress: number): number {
+    if (curve === 'equalPower') {
+        return equalPowerValue(from, to, to >= from, progress);
+    }
+
+    if (curve === 'exponential' && to > 0) {
+        // Geometric interpolation — the shape `exponentialRampToValueAtTime` traces.
+        return from * Math.pow(to / from, progress);
+    }
+
+    return from + (to - from) * progress;
 }
 
 function isAudioBuffer(value: unknown): value is AudioBuffer {

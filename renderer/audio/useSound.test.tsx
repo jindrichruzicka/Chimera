@@ -81,7 +81,8 @@ describe('useSound', () => {
 
     it('updates the play callback when a cue option changes', () => {
         // Every PlayOptions field must be keyed, or a rerender hands back a callback
-        // that still plays the previous cue.
+        // that still plays the previous cue. `fadeIn` is the one deliberate exception —
+        // see the hook's own note; it is keyed by the hooks task, not this one.
         const audioManager = createAudioManagerSpy();
         const { result, rerender } = renderHook<
             () => AudioHandle,

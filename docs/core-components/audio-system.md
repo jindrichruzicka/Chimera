@@ -173,7 +173,7 @@ export interface PlayOptions {
     readonly from?: Cue; // play-from-cue → start(when, offsetSec). Default 'start' (0).
     readonly to?: Cue; // play-to-cue. Non-loop: buffer window. Loop: elapsed play duration.
     readonly loopRegion?: LoopRegion; // → source.loopStart/loopEnd; IMPLIES loop = true.
-    readonly fadeIn?: FadeInSpec; // start-time fade from silence up to `volume`.
+    readonly fadeIn?: FadeInSpec; // start-time fade from the curve floor up to `volume`; truncated by a scheduled end.
 }
 
 // Fade-out target — each variant ramps stage-1 gain to 0, then stops:
@@ -268,7 +268,7 @@ audio.play(musicRef, {
 
 **Fades** —
 
-- **In** (`PlayOptions.fadeIn`): `startVoice` sets stage-1 gain to the curve floor at `t0`, ramps to `volume` over `durationMs` (ramp end clamped to any scheduled end — the window is never extended).
+- **In** (`PlayOptions.fadeIn`): `startVoice` sets stage-1 gain to the curve floor at `t0` — `0`, or the `1e-4` epsilon for `exponential`, which cannot leave zero — and ramps to `volume` over `durationMs`. A ramp end past the voice's scheduled end is **truncated, not compressed**: the window clamps to `scheduledStopAt` (never extended) _and_ the target comes down to the value the authored curve holds at that moment, so the fade keeps the rate it authored and may never reach `volume`.
 - **Out then stop** (`fadeOut`): `{ overMs }` ramps `[now, now+overMs]`; `{ toCue }` ramps to exactly when the playhead reaches the cue (`cueContextTime = startedAtContextTime + (resolvedCueSec − startOffsetSeconds)`, loop-period-aware); `{ toEnd }` ramps to the voice's scheduled end. All then `source.stop(rampEnd)` so native `onended` is the single release path. Cue already passed → immediate silence + stop + warn. No scheduled end (infinite loop) → 250 ms ramp, logged.
 - **To-hold** (`fadeTo`): ramps to the absolute `to`, rewrites the ceiling, keeps playing.
 - **Curves**: `linear` (default); `exponential` with **both** endpoints clamped off zero (a target of 0 ramps to the epsilon then `setValueAtTime(0)`; falls back to linear only when the **departure** is legitimately 0, which no exponential ramp can leave); `equalPower` as a ≥ 64-waypoint piecewise-linear approximation of the sin/cos quarter-wave — its waypoints depart from the re-anchored held value (established by the re-anchor itself, not by a waypoint at the start time), so it composes with cancel-and-reanchor (never `setValueCurveAtTime`). A curve that needs an optional `AudioParam` method is feature-detected and degrades to linear when that method is missing or throws; `equalPower` is composed from `linearRampToValueAtTime`, so it has nothing to detect.
@@ -312,7 +312,7 @@ Failure behaviour is fail-soft: incoming decode fails → outgoing keeps playing
 | End-point cue unresolvable / `> duration` (`to`, `loopEnd`) | Dynamic tier: clamp to `duration`, or drop window and continue + warn.                                                                                            |
 | `to ≤ from`, both bounds synchronously finite               | Static reject at `play()` → invalid handle, no voice reserved.                                                                                                    |
 | `from` at/beyond loop window (looping voice)                | Folded into the loop: `entryOffset = loopStart + ((from − loopStart) mod (loopEnd − loopStart))`.                                                                 |
-| `fadeIn.durationMs` longer than a bounded play window       | Ramp end clamped to `min(t0+durationMs, scheduledStopAt)`; window never extended; may not reach `volume`.                                                         |
+| `fadeIn.durationMs` longer than a bounded play window       | Ramp end clamped to `min(t0+durationMs, scheduledStopAt)`; window never extended; target truncated along the authored curve, so it may not reach `volume`.        |
 | `fadeOut{toCue}` where cue already passed                   | Immediate `setValueAtTime(0)` + `stop(now)` + warn — no ramp into the past.                                                                                       |
 | Later fade whose `rampEnd` would pass a native end          | Clamped to `min(scheduledStopAt, rampEnd)` — native end authoritative.                                                                                            |
 | `fadeTo{ to: 0, curve: 'exponential' }`                     | Exponential ramp to the `1e-4` epsilon then `setValueAtTime(0)`; ceiling becomes 0. Linear fallback only when the _departure_ is legitimately 0 (Invariant #120). |
@@ -341,9 +341,9 @@ Failure behaviour is fail-soft: incoming decode fails → outgoing keeps playing
 
 ### Landing this design (remaining follow-up)
 
-Landed so far: `Cue.ts`, `audioCueSheet.ts`, `AssetManager.getManifestMetadata`, the stage-1 gain-ramp primitive, the sim-side cue-sheet types and `audioClipEntry` builder, `PlayOptions.from`/`to`/`loopRegion` with two-tier validation, and the `useSound` keys for those three. Still outstanding:
+Landed so far: `Cue.ts`, `audioCueSheet.ts`, `AssetManager.getManifestMetadata`, the stage-1 gain-ramp primitive, the sim-side cue-sheet types and `audioClipEntry` builder, `PlayOptions.from`/`to`/`loopRegion` with two-tier validation, the `useSound` keys for those three, and `PlayOptions.fadeIn` with the `VoiceRecord` phase/intent fields and their atomic `t0` application. Still outstanding:
 
-1. **`renderer/audio`** — the `VoiceRecord` phase/intent fields, `PlayOptions.fadeIn`, and the `fadeOut`/`fadeTo`/`crossfade` verbs.
+1. **`renderer/audio`** — the `fadeOut`/`fadeTo`/`crossfade` verbs. They write the intent slots that already exist and are already ordered: `releaseOnStart` (pre-start `fadeOut`), `pendingFadeTo` (pre-start `fadeTo`), and `linkedFadeOut` (a `crossfade`'s linkage, held as a thunk so the record owns only _when_ it fires).
 2. **Voice preemption** — the `'fading-out'`-first ranking and `MUSIC_PRIORITY` (#123).
 3. **`useSound`** memo key list gains `fadeIn`; live-handle verbs (`fadeOut`/`fadeTo`/`crossfade`) get a separate `useMusicTrack`/`useAudioHandle` hook that obtains the manager via `useAudioManager()` only (Invariant #84).
 4. **`docs/architecture-overview.md` §4.25** — extend the summary line (cue/fade/crossfade + the new `getManifestMetadata` channel).
