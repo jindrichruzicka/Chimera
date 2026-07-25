@@ -6,11 +6,25 @@ import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/conten
 
 import type { AudioHandle, PlayOptions } from './AudioManager';
 import { useAudioManager } from './AudioManagerContext.js';
+import type { Cue } from './Cue';
 
 const DEFAULT_BUS = 'sfx';
 const DEFAULT_LOOP = false;
 const DEFAULT_VOLUME = 1;
 const DEFAULT_PRIORITY = 0;
+
+/**
+ * Collapse a {@link Cue} to a scalar memo key. A `{ name }` cue is a fresh object on
+ * every render, so keying on identity would churn the callback; keying on the bare
+ * name would instead collide with the symbolic `'start'`/`'end'` bounds, hence the
+ * prefix. `undefined` stays distinct from every authored cue.
+ */
+function cueDependency(cue: Cue | undefined): string | number | undefined {
+    if (cue === undefined || typeof cue === 'number' || typeof cue === 'string') {
+        return cue;
+    }
+    return `name:${cue.name}`;
+}
 
 /**
  * Returns a memoized callback that plays the provided sound reference.
@@ -30,6 +44,10 @@ export function useSound(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): () 
             opts?.position?.[0],
             opts?.position?.[1],
             opts?.position?.[2],
+            cueDependency(opts?.from),
+            cueDependency(opts?.to),
+            cueDependency(opts?.loopRegion?.start),
+            cueDependency(opts?.loopRegion?.end),
         ],
     );
 

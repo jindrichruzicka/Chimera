@@ -50,6 +50,11 @@ export interface PlayOptions {
     volume?: number; // [0, 1]; multiplied with bus gain
     position?: Vector3Tuple; // If present, played as spatial (THREE.PositionalAudio)
     priority?: number; // Lower-priority sounds dropped when pool is full
+
+    // Cue extensions — see Cue, Fade & Crossfade Extensions below.
+    from?: Cue; // Play-from-cue. Default 'start' (0).
+    to?: Cue; // Play-to-cue. Non-loop: buffer window. Loop: elapsed play duration.
+    loopRegion?: LoopRegion; // Native loop points; IMPLIES loop = true.
 }
 
 export type AudioBusId = 'master' | 'music' | 'sfx' | 'voice';
@@ -216,20 +221,43 @@ getManifestMetadata(ref: AssetRef): unknown;
 
 ### Feature semantics
 
-**Play-from-cue** — `from` resolves to `startOffsetSeconds`, clamps to `[0, duration]`, and is passed as the offset arg of `source.start(when, offset)`.
+**Play-from-cue** — `from` resolves to `anchorSeconds`, clamped to `[0, duration]`. That value is passed as the offset arg of `source.start(when, offset)` — except when a loop **window** actually resolved, in which case it is first folded into that window and the folded result is `startOffsetSeconds` (see the table below). A whole-buffer loop has no window and is never folded.
 
 ```typescript
 audio.play(sfxRef, { from: 1.5 });
 audio.play(musicRef, { from: { name: 'chorus' } });
 ```
 
-**Play-to-cue** — `durationSec = resolve(to) − startOffsetSeconds` (same formula both branches). Non-loop: passed as the 3rd arg of `source.start(when, offset, durationSec)` → native `onended` → release. Loop: `to` bounds **total elapsed play duration**, realised by `source.stop(startedAtContextTime + durationSec)` anchored to the real start (never call time). Overrun clamps the window to `buffer.duration`.
+**Play-to-cue** — `durationSec = resolve(to) − anchorSeconds` (same formula both branches), where `anchorSeconds` is the resolved, clamped `from` **before any loop fold**. Non-loop: passed as the 3rd arg of `source.start(when, offset, durationSec)` → native `onended` → release. Loop: `to` bounds **total elapsed play duration**, realised by `source.stop(startedAtContextTime + durationSec)` anchored to the real start (never call time). Overrun clamps the window to `buffer.duration`, so the longest bound `to` can express is one pass of the clip (`duration − from`) — an over-long `to` on a looping voice clamps rather than extending across wraps.
+
+Two distinct offsets fall out of this, and conflating them is a defect:
+
+| Quantity             | Value                                         | Consumed by                                                |
+| -------------------- | --------------------------------------------- | ---------------------------------------------------------- |
+| `anchorSeconds`      | resolved, clamped `from` — **pre**-fold       | the `to` window length                                     |
+| `startOffsetSeconds` | the loop-folded `entryOffset` — **post**-fold | `start()`'s offset argument, and fade-to-cue timing (#122) |
+
+The **static** order gate consumes neither: it runs before any buffer exists and compares the _raw, unclamped_ seconds a cue resolves to synchronously. That is a third quantity, and deliberately so — see the two-tier rule above.
+
+Measuring the window from the folded entry point would systematically overrun the authored bound (folding only ever _decreases_ the offset) and would break the static gate, which must be able to reject `{ loop, from: 9, to: 8, loopRegion: [2,6] }` without the buffer.
 
 ```typescript
 audio.play(voiceRef, { from: 'start', to: 3.2 }); // play first 3.2 s, then release
 ```
 
 **Loop points** — `loopRegion: { start, end }` sets `source.loop = true; loopStart; loopEnd` and **implies `loop = true`**. `loop: true` with no region uses the sheet's `defaultLoopRegion` if present, else whole-buffer. This is the intro-then-loop pattern: playback runs from `from` into `[loopStart, loopEnd)`, then loops that region forever.
+
+A failing loop region degrades by **provenance**, mirroring the two-tier rule above, and `loop` and `loopRegion` count as **separate authored intents**:
+
+| Authored                                      | Region unresolvable (`start` anchor) | Region collapses after clamping |
+| --------------------------------------------- | ------------------------------------ | ------------------------------- |
+| `loopRegion` only                             | abandon the play (#118)              | looping is disabled             |
+| `loop: true` + `loopRegion`                   | abandon the play (#118)              | whole-buffer loop               |
+| `loop: true` only (sheet `defaultLoopRegion`) | whole-buffer loop                    | whole-buffer loop               |
+
+An **explicit** `loopRegion` is authored intent, so its `start` is a load-bearing anchor and an unresolvable one abandons the play. A region that merely _collapses_ cannot be honoured either way, but it must not silently discard a `loop: true` the caller asked for in its own right — only a loop that the region itself implied goes away with it. A **sheet-supplied `defaultLoopRegion`** is an engine default the caller never asked for, so any failure degrades to a whole-buffer loop with one warning and can never silence the play. The realistic trigger is a sheet whose `durationSeconds` overstates the clip: the region then sits past `buffer.duration` through no fault of the call site.
+
+Every degrade path emits a warning naming the outcome that actually happened. The manager never re-logs `resolveCueWindow`'s message where the two differ — that helper is consequence-neutral by contract, so its `abandon` wording says "abandoning playback" even on paths that continue.
 
 ```typescript
 audio.play(musicRef, {
@@ -295,7 +323,7 @@ Failure behaviour is fail-soft: incoming decode fails → outgoing keeps playing
 
 ### Invariants introduced by this design (#116–#126)
 
-> The canonical text for these now lives in [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md#design-stage-invariants-pending-implementation) under **Design-stage invariants (pending implementation)** — held **separate from the enforced/roll-called 115** because the behaviour is not yet implemented. The table below is a local summary; the **Enforcement** column is the tier each will hold **on graduation**. No `check-invariants` Check, ESLint rule, `validate-assets` gate, or test asserts them yet (see _Landing this design_). Numbers continue from the current maximum (#115).
+> The canonical text for these now lives in [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md#design-stage-invariants-pending-implementation) under **Design-stage invariants (pending implementation)** — held **separate from the enforced/roll-called 115** because the behaviour is still landing. The table below is a local summary; the **Enforcement** column is the tier each will hold **on graduation**. No `check-invariants` Check, ESLint rule, or `validate-assets` gate asserts them yet (see _Landing this design_); the unit tests of the parts already implemented do tag the invariant they pin, but no mechanical gate does. Numbers continue from the current maximum (#115).
 
 | #    | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Enforcement            |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
@@ -311,11 +339,13 @@ Failure behaviour is fail-soft: incoming decode fails → outgoing keeps playing
 | #125 | `validate-assets` validates every `'audio-clip'` cue sheet at build time: each cue second finite, `≥ 0`, `≤ durationSeconds`; `defaultLoopRegion` names exist with `end > start`; a sheet declaring `cues` without `durationSeconds` **fails**; malformed sheets fail CI.                                                                                                                                                                                                                              | enforced               |
 | #126 | The public `AudioHandle` gains no fields; all start-time / offset / phase / schedule context lives on the internal `VoiceRecord`; the handle is never spread-built.                                                                                                                                                                                                                                                                                                                                    | code-verified          |
 
-### Landing this design (follow-up — not done in this pass)
+### Landing this design (remaining follow-up)
 
-1. **`renderer/audio`** — implement the contracts above via TDD (new `Cue.ts`, `audioCueSheet.ts`; `VoiceRecord` phase/intent fields; `fadeOut`/`fadeTo`/`crossfade`; `AssetManager.getManifestMetadata`).
-2. **`simulation/foundation/audio-cue-sheet.ts`** + **`simulation/content/audioManifest.ts`** — the pure cue-sheet types and the `audioClipEntry` authoring builder (`AssetManifestEntry` itself stays `metadata?: unknown`, unchanged).
-3. **`useSound`** memo key list gains `from`/`to`/`loopRegion`/`fadeIn`; live-handle verbs (`fadeOut`/`fadeTo`/`crossfade`) get a separate `useMusicTrack`/`useAudioHandle` hook that obtains the manager via `useAudioManager()` only (Invariant #84).
+Landed so far: `Cue.ts`, `audioCueSheet.ts`, `AssetManager.getManifestMetadata`, the stage-1 gain-ramp primitive, the sim-side cue-sheet types and `audioClipEntry` builder, `PlayOptions.from`/`to`/`loopRegion` with two-tier validation, and the `useSound` keys for those three. Still outstanding:
+
+1. **`renderer/audio`** — the `VoiceRecord` phase/intent fields, `PlayOptions.fadeIn`, and the `fadeOut`/`fadeTo`/`crossfade` verbs.
+2. **Voice preemption** — the `'fading-out'`-first ranking and `MUSIC_PRIORITY` (#123).
+3. **`useSound`** memo key list gains `fadeIn`; live-handle verbs (`fadeOut`/`fadeTo`/`crossfade`) get a separate `useMusicTrack`/`useAudioHandle` hook that obtains the manager via `useAudioManager()` only (Invariant #84).
 4. **`docs/architecture-overview.md` §4.25** — extend the summary line (cue/fade/crossfade + the new `getManifestMetadata` channel).
 5. **F73 roll-call** (`f73-invariant-roll-call.md` + its `.github` mirror) — graduate #116–#126 from the design-stage section of [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md#design-stage-invariants-pending-implementation) (where their text already lives) into the numbered roll-call, updating the total and per-invariant classification; add `check-invariants` fixture cases where a static check is feasible (e.g. the sim→renderer import-ban backing #124).
 6. **`validate-assets` tooling** — add the cue-sheet build gate (#125) with red-first anti-rot fixtures.

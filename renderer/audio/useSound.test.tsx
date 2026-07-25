@@ -79,6 +79,70 @@ describe('useSound', () => {
         expect(result.current).not.toBe(initialPlay);
     });
 
+    it('updates the play callback when a cue option changes', () => {
+        // Every PlayOptions field must be keyed, or a rerender hands back a callback
+        // that still plays the previous cue.
+        const audioManager = createAudioManagerSpy();
+        const { result, rerender } = renderHook<
+            () => AudioHandle,
+            { ref: AssetRef<AudioClipAsset>; opts: PlayOptions }
+        >(({ ref, opts }) => useSound(ref, opts), {
+            initialProps: { ref: SOUND_REF, opts: { from: 1 } },
+            wrapper: createWrapper(audioManager),
+        });
+
+        const afterFrom = result.current;
+        rerender({ ref: SOUND_REF, opts: { from: 5 } });
+        expect(result.current).not.toBe(afterFrom);
+
+        const afterTo = result.current;
+        rerender({ ref: SOUND_REF, opts: { from: 5, to: 8 } });
+        expect(result.current).not.toBe(afterTo);
+
+        const afterRegion = result.current;
+        rerender({ ref: SOUND_REF, opts: { from: 5, to: 8, loopRegion: { start: 1, end: 2 } } });
+        expect(result.current).not.toBe(afterRegion);
+
+        const afterRegionEnd = result.current;
+        rerender({ ref: SOUND_REF, opts: { from: 5, to: 8, loopRegion: { start: 1, end: 3 } } });
+        expect(result.current).not.toBe(afterRegionEnd);
+    });
+
+    it('distinguishes a named cue from the symbolic bound sharing its name', () => {
+        // `{ name: 'start' }` and `'start'` are different cues; keying both to the bare
+        // string would collapse them and freeze the callback across a real change.
+        const audioManager = createAudioManagerSpy();
+        const { result, rerender } = renderHook<
+            () => AudioHandle,
+            { ref: AssetRef<AudioClipAsset>; opts: PlayOptions }
+        >(({ ref, opts }) => useSound(ref, opts), {
+            initialProps: { ref: SOUND_REF, opts: { from: 'start' } },
+            wrapper: createWrapper(audioManager),
+        });
+        const initialPlay = result.current;
+
+        rerender({ ref: SOUND_REF, opts: { from: { name: 'start' } } });
+
+        expect(result.current).not.toBe(initialPlay);
+    });
+
+    it('returns a stable play callback when an equal named cue is passed again', () => {
+        const audioManager = createAudioManagerSpy();
+        const { result, rerender } = renderHook(({ ref, opts }) => useSound(ref, opts), {
+            initialProps: {
+                ref: SOUND_REF,
+                opts: { from: { name: 'chorus' } } satisfies PlayOptions,
+            },
+            wrapper: createWrapper(audioManager),
+        });
+        const initialPlay = result.current;
+
+        // A freshly created but equal cue object must not churn the callback.
+        rerender({ ref: SOUND_REF, opts: { from: { name: 'chorus' } } });
+
+        expect(result.current).toBe(initialPlay);
+    });
+
     it('returns a stable play callback when options are omitted', () => {
         const audioManager = createAudioManagerSpy();
         const { result, rerender } = renderHook(({ ref }) => useSound(ref), {

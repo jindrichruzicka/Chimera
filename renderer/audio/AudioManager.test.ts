@@ -1,4 +1,38 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+/**
+ * renderer/audio/AudioManager.test.ts
+ *
+ * Architecture reference: §4.25 — Audio System → Cue, Fade & Crossfade Extensions.
+ *
+ * Invariants upheld:
+ *   #117 — provenance-scoped two-tier cue validation; `loopRegion` implies `loop`;
+ *          a looping `to` bounds elapsed play duration, not a buffer wrap.
+ *   #118 — cue resolution is fail-soft: it never throws into a caller, an
+ *          unresolvable load-bearing anchor abandons with one warning, end-point
+ *          cues clamp, and a post-clamp-collapsed window is dropped.
+ *   #119 — a scheduled stop drives release through the native `onended` handler,
+ *          never a wall-clock timer.
+ *   #124 — the cue sheet is read only through `getManifestMetadata` and parsed
+ *          only here, in `renderer/audio`.
+ *   #126 — the public `AudioHandle` gains no fields and is never spread-built.
+ *
+ * Written test-first. The load-bearing red is the static-rejection case: against an
+ * `AudioManager` that ignores `from`/`to`/`loopRegion` such a play reserves a voice,
+ * preempts a live one, and starts a load. The deferral and no-warning cases are
+ * deliberately green against that same baseline — they exist to bound the guards, not
+ * to drive them. The `AudioHandle` type pin is red at `tsc` rather than in vitest
+ * (`expectTypeOf` is erased at runtime), so both gates must run.
+ */
+
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    expectTypeOf,
+    it,
+    vi,
+    type MockInstance,
+} from 'vitest';
 
 import {
     buildAssetRef,
@@ -13,6 +47,7 @@ import {
     createAudioManager,
     DefaultAudioManager,
     scheduleGainRamp,
+    type AudioHandle,
     type AudioManagerOptions,
 } from './AudioManager';
 
@@ -171,9 +206,19 @@ class FakePannerNode extends FakeAudioNode {
 class FakeAudioBufferSourceNode extends FakeAudioNode {
     public buffer: AudioBuffer | null = null;
     public loop = false;
+    // Web Audio defaults. `loopStart === loopEnd === 0` is the spec's "loop the whole
+    // buffer" sentinel, so an untouched pair is itself an assertable state.
+    public loopStart = 0;
+    public loopEnd = 0;
     public onended: ((this: AudioBufferSourceNode, event: Event) => unknown) | null = null;
-    public readonly start = vi.fn();
-    public readonly stop = vi.fn();
+    /** Models a platform that accepts a bare `stop()` but refuses a scheduled one. */
+    public rejectScheduledStop = false;
+    public readonly start = vi.fn<(when?: number, offset?: number, duration?: number) => void>();
+    public readonly stop = vi.fn<(when?: number) => void>((when?: number) => {
+        if (this.rejectScheduledStop && when !== undefined) {
+            throw new Error('stop(when) is unsupported on this platform.');
+        }
+    });
 
     public finish(): void {
         this.onended?.call(asAudioNode<AudioBufferSourceNode>(this), new Event('ended'));
@@ -182,6 +227,8 @@ class FakeAudioBufferSourceNode extends FakeAudioNode {
 
 class FakeAudioContext {
     public currentTime = 10;
+    /** Arms every source created from here on to refuse a scheduled stop. */
+    public failNextStopSchedule = false;
     public readonly createdGainNodes: FakeGainNode[] = [];
     public readonly createdPannerNodes: FakePannerNode[] = [];
     public readonly createdSources: FakeAudioBufferSourceNode[] = [];
@@ -196,6 +243,7 @@ class FakeAudioContext {
 
     public createBufferSource(): AudioBufferSourceNode {
         const source = new FakeAudioBufferSourceNode();
+        source.rejectScheduledStop = this.failNextStopSchedule;
         this.createdSources.push(source);
         return asAudioNode<AudioBufferSourceNode>(source);
     }
@@ -220,6 +268,7 @@ class AssetManagerDouble implements AssetManager {
     public readonly loadCalls: AssetRef<AudioClipAsset>[] = [];
 
     private readonly assets = new Map<string, Promise<ResolvedAsset<AudioClipAsset>>>();
+    private readonly manifestMetadata = new Map<string, unknown>();
 
     public registerManifest(): void {}
 
@@ -231,8 +280,9 @@ class AssetManagerDouble implements AssetManager {
         return null;
     }
 
-    public getManifestMetadata(): unknown {
-        return undefined;
+    /** Mirrors DefaultAssetManager: `undefined` for a ref with no manifest entry. */
+    public getManifestMetadata(ref: AssetRef): unknown {
+        return this.manifestMetadata.get(ref.toString());
     }
 
     public load<TAssetKind extends AssetKind>(
@@ -257,7 +307,34 @@ class AssetManagerDouble implements AssetManager {
         this.assets.set(ref.toString(), deferred.promise);
         return deferred;
     }
+
+    /**
+     * Attach an OPAQUE metadata value to a ref, exactly as an
+     * `AssetManifestEntry.metadata` slot would (Invariant #124). Deliberately typed
+     * `unknown` so tests can register hostile junk as well as a valid cue sheet.
+     */
+    public registerMetadata(ref: AssetRef<AudioClipAsset>, metadata: unknown): void {
+        this.manifestMetadata.set(ref.toString(), metadata);
+    }
 }
+
+/** An AssetManager whose metadata channel throws, proving `play()` contains it. */
+class ThrowingMetadataAssetManagerDouble extends AssetManagerDouble {
+    public override getManifestMetadata(): never {
+        throw new Error('getManifestMetadata is unavailable.');
+    }
+}
+
+/**
+ * Authoring sheet for a nominally 10 s clip: an intro tail, a `[2, 6)` loop region,
+ * and an outro. Tests pair it with a SHORTER decoded buffer to exercise the clamp
+ * and drop paths, since the authored `durationSeconds` is never a range gate.
+ */
+const THEME_CUE_SHEET = {
+    cues: { intro: 0, loopStart: 2, chorus: 4, loopEnd: 6, outro: 9 },
+    defaultLoopRegion: ['loopStart', 'loopEnd'],
+    durationSeconds: 10,
+} as const;
 
 const managers: DefaultAudioManager[] = [];
 
@@ -546,6 +623,852 @@ describe('DefaultAudioManager', () => {
                 'AudioContext is not available in this environment.',
             );
         });
+    });
+});
+
+// ─── static cue validation — synchronous reject at play() (#117) ────────────────
+
+describe('DefaultAudioManager — static cue validation', () => {
+    it('rejects a to-before-from window at play() without reserving a voice (#117)', async () => {
+        // poolSize 1: every code path that reaches reserveVoiceSlot() preempts the
+        // live voice. A static reject returns BEFORE it, so the incumbent survives —
+        // that survival is how "no voice reserved" is observable from outside.
+        const { assetManager, context, manager } = createManager({ poolSize: 1 });
+        const liveRef = audioRef('audio/music/theme.ogg');
+        const rejectedRef = audioRef('audio/sfx/rejected.ogg');
+        assetManager.resolve(liveRef, createAudioBuffer('theme', 10));
+        assetManager.resolve(rejectedRef, createAudioBuffer('rejected', 10));
+        const liveHandle = manager.play(liveRef, { priority: 0 });
+        await flushAudioLoad();
+        const liveSource = expectSource(context, 0);
+        const warn = spyOnWarn();
+
+        const rejected = manager.play(rejectedRef, { from: 5, priority: 99, to: 2 });
+
+        expect(rejected.valid).toBe(false);
+        expect(liveHandle.valid).toBe(true);
+        expect(liveSource.stop).not.toHaveBeenCalled();
+        expect(assetManager.loadCalls).toEqual([liveRef]);
+        expect(warn).toHaveBeenCalledTimes(1);
+
+        await flushAudioLoad();
+
+        expect(context.createdSources).toHaveLength(1);
+    });
+
+    it('rejects a zero-length window whose to equals its from (#117)', () => {
+        const { assetManager, manager, ref } = createCuedManager();
+        spyOnWarn();
+
+        expect(manager.play(ref, { from: 3, to: 3 }).valid).toBe(false);
+        expect(assetManager.loadCalls).toEqual([]);
+    });
+
+    it('treats "start" as a synchronously finite bound (#117)', () => {
+        const { assetManager, manager, ref } = createCuedManager();
+        spyOnWarn();
+
+        expect(manager.play(ref, { from: 'start', to: 0 }).valid).toBe(false);
+        expect(assetManager.loadCalls).toEqual([]);
+    });
+
+    it('treats a negative bound as synchronously finite, not clamp-dependent (#117)', () => {
+        const { assetManager, manager, ref } = createCuedManager();
+        spyOnWarn();
+
+        expect(manager.play(ref, { from: 5, to: -1 }).valid).toBe(false);
+        expect(assetManager.loadCalls).toEqual([]);
+    });
+
+    it('compares raw bounds, so a low-clamping pair in order is not already out of order (#117)', () => {
+        // Both clamp to 0 and the window will collapse, but `-3 < 0` is IN order — the
+        // static tier only fires on an order that is already wrong.
+        const { assetManager, manager, ref } = createCuedManager();
+        spyOnWarn();
+
+        expect(manager.play(ref, { from: -3, to: 0 }).valid).toBe(true);
+        expect(assetManager.loadCalls).toEqual([ref]);
+    });
+
+    it('rejects a named pair resolved from the cue sheet parsed inside play (#117)', () => {
+        // Nothing has been decoded yet, so passing this gate proves the sheet was read
+        // and parsed synchronously inside play() (Invariant #124).
+        const { assetManager, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        spyOnWarn();
+
+        const handle = manager.play(ref, { from: { name: 'loopEnd' }, to: { name: 'loopStart' } });
+
+        expect(handle.valid).toBe(false);
+        expect(assetManager.loadCalls).toEqual([]);
+    });
+
+    it('rejects a loopRegion whose end is at or before its start (#117)', () => {
+        const { assetManager, manager, ref } = createCuedManager();
+        spyOnWarn();
+
+        expect(manager.play(ref, { loopRegion: { start: 6, end: 2 } }).valid).toBe(false);
+        expect(manager.play(ref, { loopRegion: { start: 4, end: 4 } }).valid).toBe(false);
+        expect(assetManager.loadCalls).toEqual([]);
+    });
+
+    it('defers to the dynamic tier for any bound that needs the decoded buffer (#117)', () => {
+        const { assetManager, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        spyOnWarn();
+
+        // 'end' is buffer-relative and an absent cue name is unresolvable without the
+        // sheet; neither may be statically rejected, however wrong the pair looks.
+        expect(manager.play(ref, { from: 'end', to: 2 }).valid).toBe(true);
+        expect(manager.play(ref, { from: { name: 'nope' }, to: 1 }).valid).toBe(true);
+        expect(assetManager.loadCalls).toHaveLength(2);
+    });
+
+    it('defers an infinite bound rather than rejecting it statically (#117)', () => {
+        // The signed infinities are what make the finiteness guard load-bearing: they
+        // COMPARE. `2 <= +Infinity` and `-Infinity <= 5` are both true, so dropping the
+        // guard would statically reject each of these. NaN cannot pin it — every NaN
+        // comparison is false, so a NaN bound never rejects with or without the guard.
+        const { assetManager, manager, ref } = createCuedManager();
+        spyOnWarn();
+
+        expect(manager.play(ref, { from: Number.POSITIVE_INFINITY, to: 2 }).valid).toBe(true);
+        expect(manager.play(ref, { from: 5, to: Number.NEGATIVE_INFINITY }).valid).toBe(true);
+        expect(manager.play(ref, { from: Number.NaN, to: 2 }).valid).toBe(true);
+        expect(assetManager.loadCalls).toHaveLength(3);
+    });
+
+    it('never statically rejects a single bound that is in order against the default (#117)', () => {
+        const { assetManager, manager, ref } = createCuedManager();
+        const warn = spyOnWarn();
+
+        expect(manager.play(ref, { to: 2 }).valid).toBe(true);
+        expect(manager.play(ref, { from: 5 }).valid).toBe(true);
+        expect(assetManager.loadCalls).toHaveLength(2);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('defaults an omitted from to "start" when gating a to-only window (#117)', () => {
+        // Without the `?? 'start'` default these escape the gate entirely: there is no
+        // second bound to compare against, so nothing is out of order.
+        const { assetManager, manager, ref } = createCuedManager();
+        spyOnWarn();
+
+        expect(manager.play(ref, { to: 0 }).valid).toBe(false);
+        expect(manager.play(ref, { to: -1 }).valid).toBe(false);
+        expect(assetManager.loadCalls).toEqual([]);
+    });
+
+    it('treats a cue name matching only an Object prototype member as absent (#118)', async () => {
+        // `cues` is a plain object, so a bare index reaches Object.prototype and yields
+        // the `constructor` FUNCTION. BOTH bounds must be prototype names: relational
+        // comparison of two functions coerces each to a string, so `fn <= fn` is TRUE
+        // and an unguarded read would statically REJECT this play. A prototype name
+        // paired with a real number mixes types, compares false, and hides the bug.
+        const { assetManager, context, manager, ref } = createCuedManager({
+            metadata: { cues: { chorus: 4 }, durationSeconds: 10 },
+        });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, {
+            from: { name: 'constructor' },
+            to: { name: 'constructor' },
+        });
+
+        // Deferred, not statically rejected: the load started and the handle is live.
+        expect(handle.valid).toBe(true);
+        expect(assetManager.loadCalls).toEqual([ref]);
+
+        await flushAudioLoad();
+
+        // …and the dynamic tier then abandons it, treating the name as absent.
+        expect(handle.valid).toBe(false);
+        expect(context.createdSources).toHaveLength(0);
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a numeric value inherited from a polluted Object prototype (#118)', () => {
+        // `typeof` alone rejects every REAL Object.prototype member, since none is a
+        // number. Only a prototype polluted with a numeric property separates the
+        // own-key check from it — without `Object.hasOwn` this pair resolves to 5/5
+        // and statically rejects.
+        const { assetManager, manager, ref } = createCuedManager({
+            metadata: { cues: { chorus: 4 }, durationSeconds: 10 },
+        });
+        spyOnWarn();
+        const polluted = Object.prototype as unknown as Record<string, unknown>;
+
+        try {
+            polluted['inherited'] = 5;
+
+            expect(
+                manager.play(ref, { from: { name: 'inherited' }, to: { name: 'inherited' } }).valid,
+            ).toBe(true);
+            expect(assetManager.loadCalls).toEqual([ref]);
+        } finally {
+            Reflect.deleteProperty(polluted, 'inherited');
+        }
+    });
+
+    it('names the offending window in each static rejection warning (#117)', () => {
+        const { manager, ref } = createCuedManager();
+        const warn = spyOnWarn();
+
+        manager.play(ref, { from: 5, to: 2 });
+
+        expect(String(warn.mock.calls[0]?.[0])).toBe(
+            'Audio play window [5s, 2s] is already out of order; rejecting play().',
+        );
+
+        warn.mockClear();
+        manager.play(ref, { loopRegion: { start: 6, end: 3 } });
+
+        expect(String(warn.mock.calls[0]?.[0])).toBe(
+            'Audio loop region [6s, 3s] is already out of order; rejecting play().',
+        );
+    });
+});
+
+// ─── dynamic cue validation — resolve, clamp, drop at startVoice (#117, #118) ───
+
+describe('DefaultAudioManager — dynamic cue validation', () => {
+    it('abandons the play with one warning when a load-bearing from cue is unresolvable (#118)', async () => {
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { from: { name: 'missing' } });
+        await flushAudioLoad();
+
+        expect(handle.valid).toBe(false);
+        // Resolution precedes node creation, so an abandoned play leaves no orphan.
+        expect(context.createdSources).toHaveLength(0);
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns once, naming only from, when both bounds are unresolvable (#118)', async () => {
+        const { manager, ref } = createCuedManager({ metadata: { durationSeconds: 10 } });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { from: { name: 'badFrom' }, to: { name: 'badTo' } });
+        await flushAudioLoad();
+
+        expect(handle.valid).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('badFrom');
+        expect(String(warn.mock.calls[0]?.[0])).not.toContain('badTo');
+    });
+
+    it('gates from against the decoded duration, not the authored durationSeconds (#118)', async () => {
+        // The sheet claims 10 s and places `chorus` at 4 s, but the clip decodes to 3 s.
+        const { context, manager, ref } = createCuedManager({
+            bufferSeconds: 3,
+            metadata: THEME_CUE_SHEET,
+        });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { from: { name: 'chorus' } });
+        await flushAudioLoad();
+
+        expect(handle.valid).toBe(false);
+        expect(context.createdSources).toHaveLength(0);
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('clamps a to beyond the decoded duration down to the buffer end (#118)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { from: 2, to: 50 });
+        await flushAudioLoad();
+
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 2, 8);
+    });
+
+    it('clamps a negative from up to the buffer start without warning (#118)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const warn = spyOnWarn();
+
+        manager.play(ref, { from: -3, to: 4 });
+        await flushAudioLoad();
+
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 0, 4);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('drops a window that collapses only after clamping and keeps the from anchor (#118)', async () => {
+        // Sheet places `outro` at 9 s; the clip decodes to 3 s, so `to` clamps to 3 and
+        // meets `from` exactly. The bound is dropped; the resolved anchor is kept.
+        const { context, manager, ref } = createCuedManager({
+            bufferSeconds: 3,
+            metadata: THEME_CUE_SHEET,
+        });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { from: 3, to: { name: 'outro' } });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(handle.valid).toBe(true);
+        expect(source.start).toHaveBeenCalledWith(0, 3);
+        expect(expectStartArgs(source)[2]).toBeUndefined();
+        expect(source.stop).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns once when an abandoning loop region accompanies a collapsing window (#118)', async () => {
+        // The window drops ("continuing playback") and the region abandons. Resolving
+        // the region first keeps the surviving outcome the only thing reported.
+        const { context, manager, ref } = createCuedManager({
+            bufferSeconds: 3,
+            metadata: THEME_CUE_SHEET,
+        });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, {
+            from: 3,
+            to: { name: 'outro' },
+            loopRegion: { start: { name: 'nope' }, end: 6 },
+        });
+        await flushAudioLoad();
+
+        expect(handle.valid).toBe(false);
+        expect(context.createdSources).toHaveLength(0);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('nope');
+        expect(String(warn.mock.calls[0]?.[0])).not.toContain('continuing playback');
+    });
+
+    it('names the unbounded outcome when a looping voice loses its to bound (#118)', async () => {
+        // The sibling of the non-loop drop, and a different outcome: with no `to` left
+        // and `loop` still on, this voice has NO determinate end. Saying "playback
+        // continues" here would understate it.
+        const { context, manager, ref } = createCuedManager({
+            bufferSeconds: 3,
+            metadata: THEME_CUE_SHEET,
+        });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { loop: true, from: 3, to: { name: 'outro' } });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(handle.valid).toBe(true);
+        expect(source.loop).toBe(true);
+        expect(source.stop).not.toHaveBeenCalled();
+        expect(readVoiceSchedule(manager, handle).scheduledStopAt).toBeNull();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('loop with no scheduled end');
+    });
+
+    it('logs no warning for a fully resolvable cue window (#118)', async () => {
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const warn = spyOnWarn();
+
+        manager.play(ref, { from: { name: 'loopStart' }, to: { name: 'outro' } });
+        await flushAudioLoad();
+
+        expect(warn).not.toHaveBeenCalled();
+    });
+});
+
+// ─── play-from / play-to scheduling (#117) ──────────────────────────────────────
+
+describe('DefaultAudioManager — cue scheduling', () => {
+    it('starts at offset zero with no duration argument when no cues are given (#117)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref);
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.start).toHaveBeenCalledWith(0, 0);
+        expect(expectStartArgs(source)[2]).toBeUndefined();
+    });
+
+    it('passes the resolved from cue as the start offset argument (#117)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { from: 2.5 });
+        await flushAudioLoad();
+
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 2.5);
+    });
+
+    it('passes a non-loop window length as the third start argument (#117)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { from: 2, to: 6 });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        // The native duration argument bounds the voice; no scheduled stop is needed.
+        expect(source.start).toHaveBeenCalledWith(0, 2, 4);
+        expect(source.stop).not.toHaveBeenCalled();
+    });
+
+    it('resolves named from and to cues against the clip cue sheet (#124)', async () => {
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+
+        manager.play(ref, { from: { name: 'chorus' }, to: { name: 'outro' } });
+        await flushAudioLoad();
+
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 4, 5);
+    });
+});
+
+// ─── loop regions (#117) ────────────────────────────────────────────────────────
+
+describe('DefaultAudioManager — loop regions', () => {
+    it('sets loop, loopStart, and loopEnd from an explicit loopRegion (#117)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        // No `loop: true` — the region alone implies it.
+        manager.play(ref, { loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.loop).toBe(true);
+        expect(source.loopStart).toBe(2);
+        expect(source.loopEnd).toBe(6);
+    });
+
+    it('resolves a named loopRegion against the cue sheet (#124)', async () => {
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+
+        manager.play(ref, {
+            loopRegion: { start: { name: 'loopStart' }, end: { name: 'loopEnd' } },
+        });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.loopStart).toBe(2);
+        expect(source.loopEnd).toBe(6);
+    });
+
+    it('falls back to the sheet defaultLoopRegion when loop is true with no region (#117)', async () => {
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+
+        manager.play(ref, { loop: true });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.loop).toBe(true);
+        expect(source.loopStart).toBe(2);
+        expect(source.loopEnd).toBe(6);
+    });
+
+    it('loops the whole buffer when the sheet declares no defaultLoopRegion (#117)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { loop: true });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.loop).toBe(true);
+        // Untouched: `loopStart === loopEnd === 0` is Web Audio's whole-buffer sentinel,
+        // so the manager must not write bounds it did not resolve.
+        expect(source.loopStart).toBe(0);
+        expect(source.loopEnd).toBe(0);
+    });
+
+    it('disables looping when an explicit loopRegion collapses after clamping (#118)', async () => {
+        const { context, manager, ref } = createCuedManager({ bufferSeconds: 1 });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { loopRegion: { start: 1, end: 'end' } });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(handle.valid).toBe(true);
+        expect(source.loop).toBe(false);
+        expect(source.start).toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
+        // The resolver's own wording describes dropping a PLAY window. The outcome here
+        // is narrower, and the message must say which one actually happened.
+        expect(String(warn.mock.calls[0]?.[0])).toContain('disabling looping');
+    });
+
+    it('keeps an explicitly requested loop when its loopRegion collapses (#117)', async () => {
+        // `loop: true` and `loopRegion` are SEPARATE authored intents. A region that
+        // cannot be honoured takes an implied loop with it (test above), but must not
+        // silently discard a loop the caller asked for in its own right — the same
+        // provenance rule that keeps a bad sheet default from silencing a play.
+        const { context, manager, ref } = createCuedManager({ bufferSeconds: 1 });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { loop: true, loopRegion: { start: 1, end: 'end' } });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(handle.valid).toBe(true);
+        expect(source.loop).toBe(true);
+        expect(source.loopStart).toBe(0);
+        expect(source.loopEnd).toBe(0);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('looping the whole buffer instead');
+    });
+
+    it('abandons the play when an explicit loopRegion anchor is unresolvable (#118)', async () => {
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { loopRegion: { start: { name: 'nope' }, end: 6 } });
+        await flushAudioLoad();
+
+        expect(handle.valid).toBe(false);
+        expect(context.createdSources).toHaveLength(0);
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('degrades a sheet defaultLoopRegion beyond the decoded buffer to a whole-buffer loop', async () => {
+        // The author wrote `loop: true`, not a region: an engine-supplied default that
+        // no longer fits the decoded clip must warn and degrade, never silence the play.
+        const { context, manager, ref } = createCuedManager({
+            bufferSeconds: 1,
+            metadata: THEME_CUE_SHEET,
+        });
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(handle.valid).toBe(true);
+        expect(source.loop).toBe(true);
+        expect(source.loopStart).toBe(0);
+        expect(source.loopEnd).toBe(0);
+        expect(warn).toHaveBeenCalledTimes(1);
+        // The resolver reports this as an ABANDON. Re-logging that verbatim would tell
+        // the operator playback stopped while it is in fact still looping, so the
+        // manager must own a message naming the outcome that actually happened.
+        expect(String(warn.mock.calls[0]?.[0])).toContain('looping the whole buffer instead');
+        expect(String(warn.mock.calls[0]?.[0])).not.toContain('abandoning playback');
+    });
+
+    it('folds a from beyond the loop window back into the loop period (#117)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        // period = 6 - 2 = 4; (9 - 2) mod 4 = 3; entry = 2 + 3 = 5.
+        manager.play(ref, { from: 9, loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.start).toHaveBeenCalledWith(0, 5);
+        expect(source.loopStart).toBe(2);
+        expect(source.loopEnd).toBe(6);
+    });
+
+    it('leaves a from before the loop window untouched for the intro-then-loop pattern (#117)', async () => {
+        // The anchor must sit a FULL PERIOD or more before the window for the guard to
+        // be observable (`loopStart - from >= period`): JS `%` keeps the dividend's
+        // sign, so folding this anyway gives `3 + (-3 % 2)` = 2 — a silently late entry
+        // that skips the intro. A nearer anchor folds to itself and proves nothing,
+        // which is what the earlier `from: 0.5` with `[2, 6]` did.
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { from: 0, loopRegion: { start: 3, end: 5 } });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.start).toHaveBeenCalledWith(0, 0);
+        expect(source.loopStart).toBe(3);
+        expect(source.loopEnd).toBe(5);
+    });
+
+    it('stops a looping voice at the real start plus the elapsed window length (#117)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { loop: true, from: 2, to: 6 });
+        // Decode latency: the clock advances between play() and startVoice. Anchoring to
+        // call time would give 14; the schedule must anchor to the REAL start.
+        context.currentTime = 12;
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.stop).toHaveBeenCalledWith(16);
+        // A looping voice must never receive the native duration argument, which bounds
+        // a buffer window rather than total elapsed play time.
+        expect(expectStartArgs(source)[2]).toBeUndefined();
+    });
+
+    it('measures a folded voice to from the raw anchor, not the folded entry point (#117)', async () => {
+        // from 9 folds to entry 5 (period 4), but `to: 10` was authored against the raw
+        // anchor: 10 − 9 = 1 s of material. Measuring from the folded entry would give
+        // 10 − 5 = 5 s and overrun the authored bound five-fold.
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { from: 9, to: 10, loopRegion: { start: 2, end: 6 } });
+        context.currentTime = 12;
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.start).toHaveBeenCalledWith(0, 5);
+        expect(source.stop).toHaveBeenCalledWith(13);
+    });
+
+    it('clamps a looping to beyond the buffer to one pass of the clip (#117)', async () => {
+        // `to` is a position on the buffer timeline, so the longest elapsed bound is
+        // `duration − from`. Asking for 60 s of a 10 s clip yields 8 s, not 60.
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { loop: true, from: 2, to: 60 });
+        await flushAudioLoad();
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(18);
+    });
+
+    it('advertises no scheduled end when the stop cannot be scheduled (#117)', async () => {
+        // A voice whose stop was refused keeps looping. Nothing may later read a
+        // scheduled end off it, so the failed schedule must leave no trace.
+        const { context, manager, ref } = createCuedManager();
+        const warn = spyOnWarn();
+        context.failNextStopSchedule = true;
+
+        const handle = manager.play(ref, { loop: true, from: 2, to: 6 });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.stop).toHaveBeenCalledWith(14);
+        expect(handle.valid).toBe(true);
+        expect(source.loop).toBe(true);
+        expect(readVoiceSchedule(manager, handle).scheduledStopAt).toBeNull();
+        // Containment must not make the failure invisible: the caller asked for a
+        // bounded loop and is getting an unbounded one.
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('loop with no scheduled end');
+    });
+
+    it('records the scheduled end when the stop is accepted (#117)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref, { loop: true, from: 2, to: 6 });
+        await flushAudioLoad();
+
+        expect(context.createdSources).toHaveLength(1);
+        expect(readVoiceSchedule(manager, handle).scheduledStopAt).toBe(14);
+    });
+
+    it('records the playhead anchors a later fade derives its timing from (#122)', async () => {
+        // Nothing in this change reads these, so without an assertion they are
+        // unverifiable write-only state; a fade would silently inherit whatever they
+        // happen to hold. Folded entry (period 4, (9-2) mod 4 = 3 → 5) and a real
+        // start time advanced past the play() call.
+        const { context, manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref, { from: 9, loopRegion: { start: 2, end: 6 } });
+        context.currentTime = 12;
+        await flushAudioLoad();
+
+        expect(readVoiceSchedule(manager, handle)).toMatchObject({
+            startOffsetSeconds: 5,
+            startedAtContextTime: 12,
+        });
+    });
+
+    it('releases a looping voice through onended when its scheduled stop fires (#119)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref, { loop: true, to: 4 });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(handle.valid).toBe(true);
+        // The release rides the native `onended`; no wall-clock timer schedules it.
+        // Fake timers are installed for the whole file, so a stray setTimeout would show.
+        expect(vi.getTimerCount()).toBe(0);
+
+        source.finish();
+
+        expect(handle.valid).toBe(false);
+    });
+
+    it('lets an explicit stop supersede a scheduled stop without double-releasing', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { loop: true, to: 4 });
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+
+        expect(() => {
+            manager.stop(handle);
+        }).not.toThrow();
+
+        expect(handle.valid).toBe(false);
+        expect(source.stop).toHaveBeenCalledTimes(2);
+        expect(source.disconnect).toHaveBeenCalledOnce();
+
+        // The scheduled stop still fires afterwards on a real context. Release nulled
+        // the handler, so it must reach nothing — pinning single-release directly
+        // rather than inferring it from the disconnect count.
+        expect(() => {
+            source.finish();
+        }).not.toThrow();
+        expect(source.disconnect).toHaveBeenCalledOnce();
+    });
+});
+
+// ─── cue-sheet provenance (#124) ────────────────────────────────────────────────
+
+describe('DefaultAudioManager — cue sheet provenance', () => {
+    it('reads the cue sheet once per play and caches it on the voice (#124)', async () => {
+        const { assetManager, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const readMetadata = vi.spyOn(assetManager, 'getManifestMetadata');
+
+        manager.play(ref, { from: { name: 'chorus' } });
+
+        expect(readMetadata).toHaveBeenCalledExactlyOnceWith(ref);
+
+        await flushAudioLoad();
+
+        // Still once: startVoice resolves against the cached sheet, never a second read.
+        expect(readMetadata).toHaveBeenCalledOnce();
+    });
+
+    it('still honours raw-second cues when the manifest declares no metadata (#118)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { from: 1, to: 3 });
+        await flushAudioLoad();
+
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 1, 2);
+    });
+
+    it('still honours raw-second cues when the manifest metadata is malformed (#118)', async () => {
+        const { context, manager, ref } = createCuedManager({ metadata: { cues: 'nope' } });
+        const warn = spyOnWarn();
+
+        manager.play(ref, { from: 1, to: 3 });
+        await flushAudioLoad();
+
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 1, 2);
+        expect(warn).not.toHaveBeenCalled();
+
+        // A named cue has no sheet to resolve against, so it abandons rather than guessing.
+        const named = manager.play(ref, { from: { name: 'chorus' } });
+        await flushAudioLoad();
+
+        expect(named.valid).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('never throws out of play for hostile manifest metadata (#118)', () => {
+        const hostile: readonly unknown[] = [
+            () => undefined,
+            Symbol('opaque'),
+            [1, 2, 3],
+            createSelfReferentialValue(),
+            { cues: { intro: Number.NaN }, durationSeconds: 10 },
+        ];
+        spyOnWarn();
+
+        for (const metadata of hostile) {
+            const { manager, ref } = createCuedManager({ metadata });
+            expect(() => manager.play(ref, { from: 1, to: 3 })).not.toThrow();
+        }
+    });
+
+    it('contains a throwing metadata channel and plays with no sheet (#118)', async () => {
+        const assetManager = new ThrowingMetadataAssetManagerDouble();
+        const context = new FakeAudioContext();
+        const manager = new DefaultAudioManager(assetManager, {
+            audioContext: asAudioContext(context),
+        });
+        managers.push(manager);
+        const ref = audioRef('audio/music/theme.ogg');
+        assetManager.resolve(ref, createAudioBuffer('theme', 10));
+
+        const handle = manager.play(ref, { from: 1, to: 3 });
+        await flushAudioLoad();
+
+        expect(handle.valid).toBe(true);
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 1, 2);
+    });
+});
+
+// ─── AudioHandle public shape (#126) ────────────────────────────────────────────
+
+/**
+ * Invariant #126: the public `AudioHandle` gains NO fields — every start-time,
+ * offset, and schedule value lives on the internal `VoiceRecord` — and the
+ * trust-boundary handle is never spread-built.
+ *
+ * Three layers, because no single one is sufficient:
+ *   (a) TYPE — catches any member added to the interface, including optional ones.
+ *       Erased at runtime, so `vitest run` can never fail on it; `tsc` is what
+ *       enforces it. Blind to a field added only to the private handle class.
+ *   (b) OWN KEYS — catches any new own enumerable property at runtime, including
+ *       names nobody thought to deny. Blind to prototype accessors.
+ *   (c) DENYLIST — `toHaveProperty` walks the prototype chain, so it is the only
+ *       layer that catches a schedule value exposed as a class getter. Name-based,
+ *       so it is only as good as the list; keep it in sync with `VoiceRecord`.
+ */
+describe('AudioHandle — public shape', () => {
+    const PUBLIC_KEYS = ['bus', 'id', 'priority', 'ref'] as const;
+
+    it('exposes exactly id, ref, bus, priority, and valid (#126)', async () => {
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { from: { name: 'chorus' }, to: { name: 'outro' } });
+        await flushAudioLoad();
+
+        expectTypeOf<keyof AudioHandle>().toEqualTypeOf<
+            'id' | 'ref' | 'bus' | 'priority' | 'valid'
+        >();
+
+        // `valid` is a prototype accessor, so the only extra own key is the handle
+        // class's validity flag (TS `private` is compile-time only). Adding any
+        // schedule field to the handle pushes this past the expected count.
+        const ownKeys = Object.keys(handle);
+        expect(ownKeys.filter((key) => PUBLIC_KEYS.includes(key as never)).sort()).toEqual([
+            ...PUBLIC_KEYS,
+        ]);
+        expect(ownKeys).toHaveLength(PUBLIC_KEYS.length + 1);
+    });
+
+    it('carries no schedule context even when every cue option is used (#126)', async () => {
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, {
+            from: { name: 'intro' },
+            to: { name: 'outro' },
+            loopRegion: { start: { name: 'loopStart' }, end: { name: 'loopEnd' } },
+        });
+        await flushAudioLoad();
+
+        for (const leaked of [
+            'startedAtContextTime',
+            'startOffsetSeconds',
+            'scheduledStopAt',
+            'sheet',
+            'from',
+            'to',
+            'loop',
+            'loopRegion',
+            'loopStart',
+            'loopEnd',
+            'source',
+            'gainNode',
+            'pannerNode',
+            'position',
+            'sequence',
+            'volume',
+        ]) {
+            expect(handle).not.toHaveProperty(leaked);
+        }
+    });
+
+    it('builds the handle from a class, never from a spread literal (#126)', async () => {
+        const { manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { from: 2, to: 6 });
+        await flushAudioLoad();
+
+        // A `{ ...record }` literal cannot produce a prototype accessor — its `valid`
+        // would be an own data property frozen at build time.
+        expect(Object.getOwnPropertyDescriptor(handle, 'valid')).toBeUndefined();
+        const proto: unknown = Object.getPrototypeOf(handle);
+        expect(proto).not.toBe(Object.prototype);
+        expect(typeof Object.getOwnPropertyDescriptor(proto as object, 'valid')?.get).toBe(
+            'function',
+        );
+
+        // …and the behavioural proof: the handle tracks the live voice.
+        expect(handle.valid).toBe(true);
+        manager.stop(handle);
+        expect(handle.valid).toBe(false);
     });
 });
 
@@ -969,17 +1892,94 @@ function audioRef(relativePath: string): AssetRef<AudioClipAsset> {
     return buildAssetRef<AudioClipAsset>('tactics', relativePath);
 }
 
-function createAudioBuffer(name: string): AudioBuffer {
+function createAudioBuffer(name: string, durationSeconds = 1): AudioBuffer {
+    const sampleRate = 48_000;
     return {
-        duration: 1,
+        duration: durationSeconds,
         getChannelData(): Float32Array {
             return new Float32Array(0);
         },
-        length: 48_000,
+        length: Math.round(durationSeconds * sampleRate),
         name,
         numberOfChannels: 1,
-        sampleRate: 48_000,
+        sampleRate,
     } as unknown as AudioBuffer;
+}
+
+/**
+ * Build a manager whose single ref carries `metadata` and decodes to a buffer of
+ * `bufferSeconds`. The two are deliberately independent: an authoring sheet may
+ * overstate the clip length, and every range check must use the DECODED duration.
+ */
+function createCuedManager(
+    options: {
+        readonly bufferSeconds?: number;
+        readonly metadata?: unknown;
+        readonly poolSize?: number;
+    } = {},
+): {
+    readonly assetManager: AssetManagerDouble;
+    readonly context: FakeAudioContext;
+    readonly manager: DefaultAudioManager;
+    readonly ref: AssetRef<AudioClipAsset>;
+} {
+    const created =
+        options.poolSize === undefined
+            ? createManager()
+            : createManager({ poolSize: options.poolSize });
+    const ref = audioRef('audio/music/theme.ogg');
+    // `in` rather than `!== undefined`, so a test can register a literal `undefined`.
+    if ('metadata' in options) {
+        created.assetManager.registerMetadata(ref, options.metadata);
+    }
+    created.assetManager.resolve(ref, createAudioBuffer('theme', options.bufferSeconds ?? 10));
+    return { ...created, ref };
+}
+
+/** Silences and counts the renderer's fail-soft warning channel. */
+function spyOnWarn(): MockInstance<typeof console.warn> {
+    return vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+}
+
+/**
+ * Read a live voice's internal `scheduledStopAt`. This change writes the field for the
+ * fade verbs to consume later, so no public surface exposes it yet — and without a
+ * reader the difference between "stop scheduled" and "stop refused" is unobservable,
+ * which is exactly the state a later ramp clamp must not be misled by.
+ */
+function readVoiceSchedule(
+    manager: DefaultAudioManager,
+    handle: AudioHandle,
+): {
+    readonly scheduledStopAt: number | null;
+    readonly startedAtContextTime: number | null;
+    readonly startOffsetSeconds: number;
+} {
+    // @chimera-review: reaches the manager's private voice map because these fields have no public reader until the fade verbs land; asserting them here is what stops them becoming unverifiable write-only state.
+    const { voices } = manager as unknown as {
+        voices: Map<
+            string,
+            {
+                scheduledStopAt: number | null;
+                startedAtContextTime: number | null;
+                startOffsetSeconds: number;
+            }
+        >;
+    };
+    const record = voices.get(handle.id);
+    if (record === undefined) {
+        throw new Error(`Expected a live voice for handle ${handle.id}.`);
+    }
+    return record;
+}
+
+/** The recorded `source.start` arguments, so a test can assert an ABSENT third arg. */
+function expectStartArgs(source: FakeAudioBufferSourceNode): readonly (number | undefined)[] {
+    const call = source.start.mock.calls[0];
+    if (call === undefined) {
+        throw new Error('Expected source.start to have been called.');
+    }
+    return call;
 }
 
 function expectGain(context: FakeAudioContext, index: number): FakeGainNode {
@@ -1011,6 +2011,13 @@ async function flushAudioLoad(): Promise<void> {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
+}
+
+/** A cyclic object graph — hostile input a naive metadata walk would hang on. */
+function createSelfReferentialValue(): unknown {
+    const value: Record<string, unknown> = { durationSeconds: 10 };
+    value['self'] = value;
+    return value;
 }
 
 function createDeferred<TValue>(): DeferredValue<TValue> {

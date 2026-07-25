@@ -1,8 +1,10 @@
+import type { AudioClipMetadata } from '@chimera-engine/simulation/foundation/audio-cue-sheet.js';
 import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AssetManager, ResolvedAsset } from '../assets/AssetManager';
 import { AudioBus, type AudioBusId, type AudioBusOptions } from './AudioBus';
-import type { FadeCurve } from './Cue';
+import { parseAudioCueSheet, resolveCue, resolveCueWindow } from './audioCueSheet';
+import type { Cue, FadeCurve, LoopRegion } from './Cue';
 
 export type { AudioBusId } from './AudioBus';
 
@@ -14,6 +16,20 @@ export interface PlayOptions {
     readonly volume?: number;
     readonly position?: AudioPosition;
     readonly priority?: number;
+    /** Play-from-cue; resolves to `start()`'s offset argument. Defaults to `'start'` (0). */
+    readonly from?: Cue;
+    /**
+     * Play-to-cue. On a non-looping voice this bounds a buffer window; on a looping
+     * voice it bounds TOTAL ELAPSED PLAY DURATION, not a position within the buffer.
+     *
+     * Either way `to` resolves as a position on the buffer timeline and is clamped to
+     * `[0, duration]` first, so the longest bound it can express is `duration − from`,
+     * i.e. at most one pass of the clip. A looping voice cannot be asked to play for
+     * longer than its own buffer this way; an over-long `to` clamps silently.
+     */
+    readonly to?: Cue;
+    /** Loop bounds; setting this IMPLIES `loop = true` (Invariant #117). */
+    readonly loopRegion?: LoopRegion;
 }
 
 export interface AudioHandle {
@@ -38,15 +54,58 @@ export interface AudioManagerOptions {
     readonly poolSize?: number;
 }
 
+/**
+ * All start-time / offset / schedule context for a voice. It lives here and never on
+ * the public {@link AudioHandle}, whose shape stays frozen (Invariant #126).
+ */
 interface VoiceRecord {
     readonly handle: ManagedAudioHandle;
+    /** The REQUESTED loop intent (`loopRegion` implies `true`). The EFFECTIVE flag is
+     * resolved per-start, since a collapsed loop window may disable looping. */
     readonly loop: boolean;
+    /**
+     * Whether `loop: true` was authored in its own right, rather than implied by
+     * `loopRegion`. The two are separate intents: a region that cannot be honoured
+     * takes an IMPLIED loop down with it, but must not discard an explicit one.
+     */
+    readonly loopRequested: boolean;
     readonly position: AudioPosition | null;
     readonly sequence: number;
     readonly volume: number;
+    /** The clip's cue sheet, parsed once synchronously at `play()`. */
+    readonly sheet: AudioClipMetadata | null;
+    readonly from: Cue | null;
+    readonly to: Cue | null;
+    readonly loopRegion: LoopRegion | null;
+    /**
+     * A playhead anchor. With {@link startOffsetSeconds} it lets the fade verbs derive
+     * a cue's wall-clock position from `AudioContext.currentTime` alone, with no timer.
+     * `AudioContext.currentTime` at the moment `source.start()` was called.
+     */
+    startedAtContextTime: number | null;
+    /** `start()`'s offset argument — the POST-fold entry point into the buffer. */
+    startOffsetSeconds: number;
+    /**
+     * Absolute context time this voice is scheduled to end, or `null` when it has no
+     * determinate end (an unbounded loop) or when scheduling the stop failed. A fade
+     * clamps its ramp end to this, so it must never name a stop that was not
+     * scheduled.
+     */
+    scheduledStopAt: number | null;
     source: AudioBufferSourceNode | null;
     gainNode: GainNode | null;
     pannerNode: PannerNode | null;
+}
+
+/** A voice's resolved playback schedule, against a decoded buffer's real duration. */
+interface VoiceSchedule {
+    /** The EFFECTIVE loop flag: `false` when a requested loop window collapsed. */
+    readonly loop: boolean;
+    /** `start()`'s offset argument, after folding into the loop window. */
+    readonly entryOffsetSeconds: number;
+    /** `to`'s window length, measured from the PRE-FOLD anchor; `null` when unbounded. */
+    readonly playDurationSeconds: number | null;
+    readonly loopWindow: { readonly startSeconds: number; readonly endSeconds: number } | null;
 }
 
 const DEFAULT_POOL_SIZE = 32;
@@ -85,6 +144,17 @@ export class DefaultAudioManager implements AudioManager {
             return handle;
         }
 
+        // Static tier: both bounds knowable without the buffer AND already out of
+        // order. Runs BEFORE reserveVoiceSlot() so a rejected play neither preempts a
+        // live voice nor starts a load (Invariant #117).
+        const sheet = this.readCueSheet(ref);
+        const staticRejection = findStaticCueRejection(opts, sheet);
+        if (staticRejection !== null) {
+            console.warn(staticRejection);
+            handle.invalidate();
+            return handle;
+        }
+
         this.reserveVoiceSlot();
         if (this.voices.size >= this.poolSize) {
             handle.invalidate();
@@ -93,10 +163,18 @@ export class DefaultAudioManager implements AudioManager {
 
         const record: VoiceRecord = {
             handle,
-            loop: opts.loop ?? false,
+            loop: opts.loopRegion !== undefined || (opts.loop ?? false),
+            loopRequested: opts.loop ?? false,
             position: opts.position ?? null,
             sequence: this.nextSequence,
             volume: clampUnit(opts.volume ?? DEFAULT_VOLUME),
+            sheet,
+            from: opts.from ?? null,
+            to: opts.to ?? null,
+            loopRegion: opts.loopRegion ?? null,
+            startedAtContextTime: null,
+            startOffsetSeconds: 0,
+            scheduledStopAt: null,
             source: null,
             gainNode: null,
             pannerNode: null,
@@ -211,8 +289,105 @@ export class DefaultAudioManager implements AudioManager {
         return selected;
     }
 
+    /**
+     * Read and validate the clip's cue sheet. Synchronous and side-effect free (no
+     * decode, no load), so it can run inside `play()` before any voice is reserved.
+     * A delegating or game-supplied AssetManager must never throw out of `play()`.
+     */
+    private readCueSheet(ref: AssetRef<AudioClipAsset>): AudioClipMetadata | null {
+        try {
+            return parseAudioCueSheet(this.assetManager.getManifestMetadata(ref));
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * The DYNAMIC validation tier: resolve every cue against the decoded buffer,
+     * clamping to `[0, duration]`. Returns `null` when a load-bearing anchor could
+     * not resolve and the play must be abandoned (Invariant #118); warnings are
+     * emitted here, one per defect.
+     */
+    private resolveVoiceSchedule(record: VoiceRecord, duration: number): VoiceSchedule | null {
+        const sheet = record.sheet;
+
+        // `from` is a load-bearing anchor: unresolvable abandons the play.
+        const anchor = resolveCue(record.from ?? 'start', { sheet, duration, role: 'anchor' });
+        if (anchor.kind === 'abandon') {
+            console.warn(anchor.warning);
+            return null;
+        }
+        const anchorSeconds = anchor.seconds;
+
+        // The loop region resolves BEFORE `to`, because it is the other operation that
+        // can abandon. Resolving `to` first would let a dropped window log "continuing
+        // playback" moments before the region abandoned the play — two warnings, the
+        // first contradicting the outcome (Invariant #118 specifies one).
+        let loop = record.loop;
+        let loopWindow: VoiceSchedule['loopWindow'] = null;
+        if (loop) {
+            const resolvedLoop = resolveLoopWindow(record, record.loopRequested, {
+                sheet,
+                duration,
+            });
+            if (resolvedLoop === null) {
+                return null;
+            }
+            loop = resolvedLoop.loop;
+            loopWindow = resolvedLoop.window;
+        }
+
+        // `to` is an end-point: it clamps and never abandons. A window that collapses
+        // only AFTER clamping drops just that bound — the anchor already resolved, so
+        // playback continues from it.
+        let playDurationSeconds: number | null = null;
+        if (record.to !== null) {
+            const end = resolveCue(record.to, { sheet, duration, role: 'endpoint' });
+            // An endpoint never abandons; the fallback keeps the union exhaustive for TS.
+            const endSeconds = end.kind === 'resolved' ? end.seconds : duration;
+            if (endSeconds <= anchorSeconds) {
+                // What survives differs by branch, so the message must too: a bounded
+                // non-loop voice falls back to its natural end, but a looping one is
+                // left with NO determinate end at all, which is worth saying out loud.
+                const outcome = loop
+                    ? 'the voice will loop with no scheduled end'
+                    : 'playback continues to the natural end of the clip';
+                console.warn(
+                    `Audio play bound to=${endSeconds}s is at or before from=${anchorSeconds}s after clamping to [0, ${duration}s]; dropping the bound — ${outcome}.`,
+                );
+            } else {
+                playDurationSeconds = endSeconds - anchorSeconds;
+            }
+        }
+
+        // Entering at or past the loop window folds back into it, so an over-long
+        // `from` lands inside the loop rather than past its end. The guard is what
+        // keeps the fold off an anchor BEFORE the window: JS `%` keeps the dividend's
+        // sign, so folding one anyway adds a negative remainder to `loopStart`. It
+        // changes the result once the anchor is a full period or more early
+        // (`loopStart - anchor >= period`) — e.g. `from: 0` with `[3, 5]` would give
+        // `3 + (-3 % 2)` = 2, silently skipping the intro. Nearer anchors happen to
+        // fold to themselves, so the guard states the intent rather than patching a
+        // single case.
+        let entryOffsetSeconds = anchorSeconds;
+        if (loopWindow !== null && anchorSeconds >= loopWindow.startSeconds) {
+            const period = loopWindow.endSeconds - loopWindow.startSeconds;
+            entryOffsetSeconds =
+                loopWindow.startSeconds + ((anchorSeconds - loopWindow.startSeconds) % period);
+        }
+
+        return { loop, entryOffsetSeconds, playDurationSeconds, loopWindow };
+    }
+
     private startVoice(record: VoiceRecord, buffer: AudioBuffer): void {
         if (this.disposed || !record.handle.valid || !this.voices.has(record.handle.id)) {
+            return;
+        }
+
+        // Resolve before creating any node, so an abandoned play leaves no orphan.
+        const schedule = this.resolveVoiceSchedule(record, buffer.duration);
+        if (schedule === null) {
+            this.releaseVoice(record, { stopSource: false });
             return;
         }
 
@@ -222,17 +397,56 @@ export class DefaultAudioManager implements AudioManager {
         record.gainNode = gainNode;
 
         source.buffer = buffer;
-        source.loop = record.loop;
+        source.loop = schedule.loop;
+        if (schedule.loopWindow !== null) {
+            source.loopStart = schedule.loopWindow.startSeconds;
+            source.loopEnd = schedule.loopWindow.endSeconds;
+        }
         source.onended = () => {
             this.releaseVoice(record, { stopSource: false });
         };
         gainNode.gain.setValueAtTime(record.volume, this.audioContext.currentTime);
         this.connectVoice(record, source, gainNode);
 
+        record.startOffsetSeconds = schedule.entryOffsetSeconds;
+        const startedAt = this.audioContext.currentTime;
+        record.startedAtContextTime = startedAt;
+
         try {
-            source.start();
+            if (!schedule.loop && schedule.playDurationSeconds !== null) {
+                source.start(0, schedule.entryOffsetSeconds, schedule.playDurationSeconds);
+            } else {
+                source.start(0, schedule.entryOffsetSeconds);
+            }
         } catch {
             this.releaseVoice(record, { stopSource: false });
+            // A source that never started cannot be stopped; scheduling one throws.
+            return;
+        }
+
+        if (schedule.playDurationSeconds !== null) {
+            const stopAt = startedAt + schedule.playDurationSeconds;
+            if (schedule.loop) {
+                // On a looping voice `to` bounds ELAPSED PLAY DURATION, so the stop is
+                // anchored to the real start — never `start()`'s third argument, whose
+                // meaning under `loop` is not portable.
+                try {
+                    source.stop(stopAt);
+                    record.scheduledStopAt = stopAt;
+                } catch {
+                    // Unschedulable on this platform. `scheduledStopAt` stays null so it
+                    // never advertises an end that was not scheduled — but the caller
+                    // asked for a bounded loop and is getting an unbounded one, so say
+                    // so rather than letting the containment hide it.
+                    console.warn(
+                        `Audio voice could not schedule its stop at ${stopAt}s; the requested play bound is dropped and the voice will loop with no scheduled end.`,
+                    );
+                }
+            } else {
+                record.scheduledStopAt = stopAt;
+            }
+        } else if (!schedule.loop) {
+            record.scheduledStopAt = startedAt + (buffer.duration - schedule.entryOffsetSeconds);
         }
     }
 
@@ -336,6 +550,148 @@ class ManagedAudioHandle implements AudioHandle {
     public invalidate(): void {
         this.isValid = false;
     }
+}
+
+/**
+ * Seconds knowable WITHOUT the decoded buffer: a finite raw number, `'start'`, or a
+ * `{ name }` present in the parsed sheet. `null` means "defer to the dynamic tier" —
+ * `'end'`, an absent cue name, or a non-finite number (Invariant #117).
+ */
+function resolveCueStatically(cue: Cue, sheet: AudioClipMetadata | null): number | null {
+    if (cue === 'start') {
+        return 0;
+    }
+    if (cue === 'end') {
+        return null;
+    }
+    if (typeof cue === 'number') {
+        return Number.isFinite(cue) ? cue : null;
+    }
+
+    const cues = sheet?.cues;
+    if (cues === undefined) {
+        return null;
+    }
+    // `cues` is a plain object, so a bare index reaches Object.prototype: `{ name:
+    // 'constructor' }` hands back a FUNCTION through a `number`-typed slot. That is
+    // corrective, not cosmetic — relational comparison of two functions ToPrimitives
+    // BOTH to strings, so `constructor <= constructor` is TRUE and the order gate
+    // below would statically reject a play that must defer. (A prototype name against
+    // a real number mixes types and is always false, so only a same-kind pair shows it.)
+    //
+    // An own-key check is the only filter that ALSO survives a prototype polluted with
+    // a numeric property — a `typeof`/`isFinite` test would happily return that — so it
+    // is the one guard here rather than one of two. Own values need no further
+    // validation: `parseAudioCueSheet` has already proved every one finite and in range.
+    return Object.hasOwn(cues, cue.name) ? (cues[cue.name] ?? null) : null;
+}
+
+/**
+ * Compare a pair of bounds on RAW, unclamped seconds. Clamping is monotone on every
+ * live branch (`x < 0 → 0`, `x ∈ [0, d] → x`, `x > d → d` or abandon), so a raw
+ * `end <= start` can never become a valid window once the buffer is known — which is
+ * what makes the reject sound without `buffer.duration`. Comparing raw values is also
+ * what keeps `[-3, 0]` out of the static tier: it is not ALREADY out of order.
+ */
+function staticOrderViolation(
+    start: Cue,
+    end: Cue,
+    sheet: AudioClipMetadata | null,
+): string | null {
+    const startSeconds = resolveCueStatically(start, sheet);
+    const endSeconds = resolveCueStatically(end, sheet);
+    if (startSeconds === null || endSeconds === null) {
+        return null;
+    }
+    return endSeconds <= startSeconds ? `[${startSeconds}s, ${endSeconds}s]` : null;
+}
+
+/** The static-tier verdict: a warning to log before rejecting, or `null` to proceed. */
+function findStaticCueRejection(opts: PlayOptions, sheet: AudioClipMetadata | null): string | null {
+    if (opts.to !== undefined) {
+        // The `?? 'start'` default matters: without it `{ to: 0 }` escapes the gate.
+        const violation = staticOrderViolation(opts.from ?? 'start', opts.to, sheet);
+        if (violation !== null) {
+            return `Audio play window ${violation} is already out of order; rejecting play().`;
+        }
+    }
+
+    const region = opts.loopRegion;
+    if (region !== undefined) {
+        const violation = staticOrderViolation(region.start, region.end, sheet);
+        if (violation !== null) {
+            return `Audio loop region ${violation} is already out of order; rejecting play().`;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Resolve a looping voice's `[loopStart, loopEnd)` region. `null` abandons the play.
+ *
+ * Failure consequence is scoped by PROVENANCE, and the two authored intents are kept
+ * separate. An explicit `loopRegion` is authored intent, so its load-bearing start
+ * anchor abandons the play when unresolvable (Invariant #118). A collapsed region
+ * cannot be honoured, but whether the voice still LOOPS depends on where the loop
+ * intent came from: an explicit `loop: true` survives as a whole-buffer loop, while a
+ * loop implied only by the region goes away with it. A sheet-supplied
+ * `defaultLoopRegion` is an engine default the caller never asked for — it degrades to
+ * a whole-buffer loop and can never silence a play the author only marked `loop`.
+ *
+ * @param loopRequestedExplicitly whether the caller passed `loop: true` in its own
+ *   right, as opposed to `loop` being implied by `loopRegion`.
+ */
+function resolveLoopWindow(
+    record: VoiceRecord,
+    loopRequestedExplicitly: boolean,
+    ctx: { readonly sheet: AudioClipMetadata | null; readonly duration: number },
+): { readonly loop: boolean; readonly window: VoiceSchedule['loopWindow'] } | null {
+    const region = record.loopRegion;
+    if (region !== null) {
+        const resolved = resolveCueWindow(region.start, region.end, ctx);
+        if (resolved.kind === 'abandon') {
+            // The play really is abandoned, so the resolver's outcome wording is
+            // accurate; only its subject is missing, and with `from` also in play the
+            // operator needs to know which bound failed.
+            console.warn(`Audio loop region is unresolvable. ${resolved.warning}`);
+            return null;
+        }
+        if (resolved.kind === 'dropped') {
+            // The resolver's "dropping the window" wording describes a PLAY window. The
+            // outcome here is narrower and must be named, along with which bounds
+            // collapsed — the resolver's `dropped` variant carries no seconds back, so
+            // re-resolve the end-point to report it.
+            const end = resolveCue(region.end, { ...ctx, role: 'endpoint' });
+            const endSeconds = end.kind === 'resolved' ? end.seconds : ctx.duration;
+            const outcome = loopRequestedExplicitly
+                ? 'looping the whole buffer instead'
+                : 'disabling looping';
+            console.warn(
+                `Audio loop region end ${endSeconds}s is at or before its start after clamping to [0, ${ctx.duration}s]; ${outcome} and continuing playback.`,
+            );
+            return { loop: loopRequestedExplicitly, window: null };
+        }
+        return { loop: true, window: resolved };
+    }
+
+    const names = ctx.sheet?.defaultLoopRegion;
+    if (names === undefined) {
+        return { loop: true, window: null };
+    }
+
+    const resolved = resolveCueWindow({ name: names[0] }, { name: names[1] }, ctx);
+    if (resolved.kind !== 'window') {
+        // NEVER re-log the resolver's message here: its `abandon` variant says
+        // "abandoning playback", and this path does the opposite. The caller asked only
+        // for `loop: true`, so an engine-supplied default that no longer fits the
+        // decoded clip degrades instead of silencing the play.
+        console.warn(
+            `Audio clip's defaultLoopRegion ["${names[0]}", "${names[1]}"] does not fit the decoded buffer [0, ${ctx.duration}s]; looping the whole buffer instead.`,
+        );
+        return { loop: true, window: null };
+    }
+    return { loop: true, window: resolved };
 }
 
 function voiceHasLowerPreemptionRank(candidate: VoiceRecord, selected: VoiceRecord): boolean {

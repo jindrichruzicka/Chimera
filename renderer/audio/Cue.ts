@@ -8,9 +8,9 @@ import type { PlayOptions } from './AudioManager';
  * System → Cue, Fade & Crossfade Extensions).
  *
  * These are pure types. The resolver that turns a {@link Cue} into seconds lives
- * in `renderer/audio/audioCueSheet.ts`; the `AudioManager` verbs that consume
- * these specs (`fadeOut`/`fadeTo`/`crossfade`) and the `PlayOptions` extension
- * (`from`/`to`/`loopRegion`/`fadeIn`) land in later F74 tasks.
+ * in `renderer/audio/audioCueSheet.ts`. `PlayOptions` already consumes
+ * `from`/`to`/`loopRegion`; the `AudioManager` verbs that consume the fade specs
+ * (`fadeOut`/`fadeTo`/`crossfade`) and the `fadeIn` option land in later F74 tasks.
  *
  * `AudioCueName` is defined sim-side and flows sim → renderer, never the reverse
  * (Invariant #124); it is imported here as a type only.
