@@ -148,6 +148,56 @@ Feature issue: [#875](https://github.com/jindrichruzicka/Chimera/issues/875).
 chat, latency/late-join catch-up buffering, and spectating a replay rather than a
 live match — all candidates for a follow-up.
 
+### F74 — Audio Cues, Fades & Crossfade
+
+Lands the design-stage **Cue, Fade & Crossfade Extensions** of the Audio System
+(§4.25) as working, TDD'd code, adding five renderer-only capabilities on top of
+the existing 32-voice pool and three-stage bus graph **without reshaping either**:
+**play-from-cue**, **play-to-cue**, **loop points**, **fades** (fade-in,
+fade-out-to-end-or-cue, fade-to-hold), and **crossfade / two simultaneous tracks**.
+Every new behaviour writes only a voice's own **stage-1 `GainNode`** and leans on
+native `AudioBufferSourceNode` scheduling (`start(when, offset, duration)`,
+`loopStart`/`loopEnd`, `source.stop(when)`) rather than JS timers, so all timing is
+driven by `AudioContext.currentTime` and nothing crosses into the deterministic
+simulation (Invariant #63).
+
+Cue sheets are authored **sim-side** as opaque `AudioClipMetadata` in the existing
+`AssetManifestEntry.metadata` slot (typed `unknown`, extends Invariant #20) and
+parsed **only** by `renderer/audio`; `validate-assets` range-checks every cue at
+build time. Cue resolution is **fail-soft** — an unresolvable load-bearing cue
+abandons that play with a warning rather than throwing. Live-handle verbs
+(`fadeOut`/`fadeTo`/`crossfade`) reach the manager through a new
+`useMusicTrack`/`useAudioHandle` hook (via `useAudioManager()` only, Invariant #84),
+while the public `AudioHandle` gains no fields. This feature graduates design-stage
+invariants **#116–#126** into the enforced/roll-called set. **Tactics**
+(`apps/tactics`) is the reference adopter.
+
+| Task                                                                      | Issue                                                         |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Sim-side cue-sheet types (`AudioCueName`, `AudioClipMetadata`)            | [#910](https://github.com/jindrichruzicka/Chimera/issues/910) |
+| `audioClipEntry` manifest authoring builder                               | [#911](https://github.com/jindrichruzicka/Chimera/issues/911) |
+| Renderer Cue/fade types + fail-soft `parseAudioCueSheet` + resolver       | [#912](https://github.com/jindrichruzicka/Chimera/issues/912) |
+| `AssetManager.getManifestMetadata` read channel                           | [#913](https://github.com/jindrichruzicka/Chimera/issues/913) |
+| Stage-1 gain ramp primitive (cancel-and-reanchor, curves, feature-detect) | [#914](https://github.com/jindrichruzicka/Chimera/issues/914) |
+| `from`/`to`/`loopRegion` in `play()` + two-tier cue validation            | [#915](https://github.com/jindrichruzicka/Chimera/issues/915) |
+| `fadeIn` + `VoiceRecord` phase/intent + atomic `t0` application           | [#916](https://github.com/jindrichruzicka/Chimera/issues/916) |
+| `AudioManager.fadeOut` (timer-free single-release)                        | [#917](https://github.com/jindrichruzicka/Chimera/issues/917) |
+| `AudioManager.fadeTo` (ramp-to-absolute-and-hold)                         | [#918](https://github.com/jindrichruzicka/Chimera/issues/918) |
+| `AudioManager.crossfade` (linked fade on a shared `t0`)                   | [#919](https://github.com/jindrichruzicka/Chimera/issues/919) |
+| Voice-preemption rework + `MUSIC_PRIORITY`                                | [#920](https://github.com/jindrichruzicka/Chimera/issues/920) |
+| `useSound` keys + `useMusicTrack`/`useAudioHandle` hook                   | [#921](https://github.com/jindrichruzicka/Chimera/issues/921) |
+| `validate-assets` cue-sheet build gate                                    | [#922](https://github.com/jindrichruzicka/Chimera/issues/922) |
+| E2E, docs, and invariants #116–#126 (feature-review gate)                 | [#923](https://github.com/jindrichruzicka/Chimera/issues/923) |
+
+Feature issue: [#909](https://github.com/jindrichruzicka/Chimera/issues/909).
+
+**Out of scope (deferred):** variable playback rate / pitch-shift / time-stretch
+(the rate is fixed at `1`), a higher-level `MusicDirector` layer, per-cue DSP
+effects / filters / EQ / reverb and 3D/spatial/HRTF panning, streaming
+(`MediaElementAudioSource`) playback, resizing the 32-voice pool or reshaping the
+three-stage bus graph, and cross-clip / global cue registries — all candidates for
+a follow-up.
+
 ---
 
 ## Cross-References

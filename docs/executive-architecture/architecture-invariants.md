@@ -282,6 +282,48 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
+## Design-stage invariants (pending implementation)
+
+> **#116–#126** are introduced by the audio **cue / loop-point / fade / crossfade** design (§4.25 — [Audio System → Cue, Fade & Crossfade Extensions](../core-components/audio-system.md#cue-fade--crossfade-extensions)). They describe **not-yet-implemented** behaviour and are therefore held **separate from the enforced/roll-called set of 115**: no `check-invariants` Check, ESLint rule, `validate-assets` gate, or dedicated test asserts them yet, so the [F73 roll-call](f73-invariant-roll-call.md) count and its coverage summary are unchanged. Each graduates into the numbered set above — updating the roll-call's total and its enforced/code-verified/doc-only classification — when its guard and tests land per the audio doc's _Landing this design_ checklist. The **Held-by** column records the _intended_ enforcement tier on graduation.
+
+| #    | Held-by (on graduation)                           |
+| ---- | ------------------------------------------------- |
+| #116 | code-verified (spy)                               |
+| #117 | code-verified                                     |
+| #118 | code-verified                                     |
+| #119 | code-verified                                     |
+| #120 | code-verified                                     |
+| #121 | code-verified                                     |
+| #122 | code-verified                                     |
+| #123 | code-verified                                     |
+| #124 | enforced-by (sim→renderer import-ban) + type test |
+| #125 | enforced-by (`validate-assets`)                   |
+| #126 | code-verified                                     |
+
+**116.** (design-stage) Every fade, crossfade, fade-in, and cue operation writes **exclusively** to a voice's own stage-1 `GainNode`; the per-bus and master `GainNode`s are never written by these operations, so the three gain stages (`voiceGain → busGain → masterGain`) compose purely multiplicatively — a bus `duck` during a crossfade attenuates both tracks together, and a settings change mid-fade survives. Intended verification: a unit test spies the bus/master gain automation and asserts they stay untouched while the voice gain is written; not ESLint-enforceable (the target node is a runtime value indistinguishable to the linter) (§4.25).
+
+**117.** (design-stage) Cue validation is two-tier, discriminated by **provenance**: a _static_ synchronous reject at `play()` (already-invalid handle, **no** voice reserved) fires only when both bounds resolve to finite seconds synchronously — a raw number, `'start'`, or a `{ name }` present in the parsed sheet — **and** the order is already invalid (`to ≤ from`, `loopEnd ≤ loopStart`); otherwise a _dynamic_ resolve-clamp-`[0, duration]`-then-drop-window at `startVoice` applies (any `'end'`-relative or clamp-dependent bound). A `loopRegion` implies `loop = true`. For a looping voice `to` bounds **total elapsed play duration** (`resolve(to) − startOffsetSeconds`, realized by `source.stop(startedAtContextTime + …)`), never a buffer-wrap position (§4.25).
+
+**118.** (design-stage) Cue/second resolution is **fail-soft** and never throws into a caller. A load-bearing unresolvable `{ name }` (e.g. `from` on a non-loop voice, name absent) or a `from` beyond `buffer.duration` abandons that play/fade as an invalid handle with one warning; a raw second and any end-point cue (`to`, `loopEnd`) clamp; a window collapsed only **after** clamping is dropped and playback continues; `parseAudioCueSheet` returns `null` for absent/malformed metadata (§4.25).
+
+**119.** (design-stage) Fade-out-then-stop is realized **only** by scheduling `source.stop(rampEnd)` so the existing native `source.onended` handler drives the sole `releaseVoice` path — **no wall-clock timer schedules a release.** A voice stays in the pool with `handle.valid === true` for the whole ramp (phase `'fading-out'`, `scheduledStopAt` set, still re-targetable) and is invalidated exactly once, guarded by `voices.delete(id)` returning true (§4.25).
+
+**120.** (design-stage) Any operation starting a new stage-1 ramp first cancels prior automation and re-anchors at the held value (`cancelAndHoldAtTime(now)` in try/catch, else `cancelScheduledValues(now)` + `setValueAtTime(param.value, now)` — the pattern `AudioBus.duck` already uses). Exponential ramps clamp **both** departure and target off zero to a `1e-4` epsilon (terminal `setValueAtTime(0)` only when the requested target is 0; fall back to linear when an endpoint is legitimately 0). `equalPower` is a piecewise-linear `linearRampToValueAtTime` waypoint curve whose first waypoint equals the re-anchored held value — never `setValueCurveAtTime`, which does not compose with cancellation. Every curve is feature-detected and degrades to linear (§4.25).
+
+**121.** (design-stage) Any fade-in/out/to or crossfade linkage requested before a voice's source has started is stored on the `VoiceRecord` and applied atomically in `startVoice` at the real start time `t0`, in the fixed order `releaseOnStart` (never creates a source) → `pendingFadeIn` → `pendingFadeTo` → `linkedFadeOut`. No ramp is ever scheduled against a null source (§4.25).
+
+**122.** (design-stage) Fade-to-cue and fade-to-end timing is computed from `startedAtContextTime`, `startOffsetSeconds`, and `AudioContext.currentTime` (dividing by the fixed `playbackRate === 1`) — never wall-clock/`setTimeout` — so a fade completes at the intended sample position regardless of main-thread jitter (§4.25).
+
+**123.** (design-stage) Voice preemption ranks candidates: `'fading-out'` voices first (cheapest to reclaim), then looping/music voices as worse candidates than any equal-or-higher-priority non-looping voice, then lower priority, then older sequence. **No voice class is hard-exempt**, so a saturated 32-voice pool never deadlocks a higher-priority request; music continuity is achieved via a high recommended `MUSIC_PRIORITY` constant. A long music crossfade's dying tail may be reclaimed by an SFX burst — the _incoming_ track's continuity is preserved, only the already-dying tail is cut (§4.25).
+
+**124.** (design-stage) Authored cue sheets exist only as `AudioClipMetadata` inside an `'audio-clip'` `AssetManifestEntry.metadata` and are structurally **opaque to `simulation/`/`ai/`** (extends Invariant #20): the simulation contract types `metadata` as `unknown`, `AudioCueName`/`AudioClipMetadata` are **defined sim-side** (`simulation/foundation/audio-cue-sheet.ts`) and consumed by the renderer — never the reverse — and the only reader/resolver is `renderer/audio` (import-banned from sim). The `audioClipEntry` builder only _writes_ the value; `AudioClipAsset`'s decoded shape is unchanged; cue names resolve only against the referenced clip's own sheet (no cross-clip lookup). Backed by the sim→renderer import ban and a type-key anti-rot test (§4.25, extends #20).
+
+**125.** (design-stage) `validate-assets` validates every `'audio-clip'` cue sheet as a build-blocking check: each cue second is finite, `≥ 0`, and `≤ durationSeconds`; `defaultLoopRegion` names both exist in `cues` with `end > start`; a sheet that declares `cues` or `defaultLoopRegion` **without** `durationSeconds` fails (so every named cue is range-checked at build time, not just soft-clamped at runtime); malformed sheets fail CI (§4.25, extends #22).
+
+**126.** (design-stage) The public `AudioHandle` gains no fields; all start-time / offset / phase / schedule context lives on the internal `VoiceRecord`. The trust-boundary handle type is never spread-built (§4.25).
+
+---
+
 ## Cross-References
 
 - [System Overview](system-overview-and-context.md) — §1 executive architecture
