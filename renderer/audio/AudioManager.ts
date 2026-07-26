@@ -51,6 +51,7 @@ export interface AudioManager {
     play(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): AudioHandle;
     stop(handle: AudioHandle): void;
     fadeOut(handle: AudioHandle, spec: FadeOutSpec): void;
+    fadeTo(handle: AudioHandle, spec: FadeToSpec): void;
     stopAll(bus?: AudioBusId): void;
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
     dispose(): void;
@@ -93,7 +94,37 @@ interface VoiceRecord {
     readonly loopRequested: boolean;
     readonly position: AudioPosition | null;
     readonly sequence: number;
-    readonly volume: number;
+    /**
+     * The voice's SETTLED ceiling: the gain a `fadeTo` last named as absolute, or
+     * `PlayOptions.volume` if none has. It is what the voice's gain returns to being
+     * bounded by once no ramp is in flight — NOT where every ramp lands, since a `fadeOut`
+     * lands at `0` and never travels here at all.
+     *
+     * Rewritten only by {@link applyFadeToRamp} — so by the `fadeTo` verb on both its
+     * paths, the live one and the pre-start intent applied at `t0`; every other verb reads
+     * it. Not by itself the bound {@link rampDeparture} caps against — read
+     * {@link voiceCeiling}, which covers the window in which any ramp is still travelling.
+     */
+    volume: number;
+    /**
+     * An upper bound on the gain that outranks {@link volume} until its `until`, or `null`
+     * when the two agree. See {@link CeilingHold}.
+     */
+    ceilingHold: CeilingHold | null;
+    /**
+     * The gain the stage-1 param holds EXACTLY, or `null` while a ramp is travelling.
+     *
+     * An instant application lands its target with no ramp at all, so from that moment
+     * until the next automation the value is known rather than estimated — and it has to
+     * be recorded, because `param.value` reports the start of the current render quantum
+     * and so cannot see a write made in this same turn. That gap is not the one-quantum
+     * slope error {@link rampDeparture} tolerates: an instant raise moves the gain
+     * arbitrarily far in zero time, and capping cannot repair a read that is too LOW.
+     *
+     * Written only by {@link scheduleVoiceRamp}, which is also the only thing that can
+     * invalidate it — so it is exact for exactly as long as it is non-null.
+     */
+    settledGain: number | null;
     /** The clip's cue sheet, parsed once synchronously at `play()`. */
     readonly sheet: AudioClipMetadata | null;
     readonly from: Cue | null;
@@ -149,7 +180,11 @@ interface VoiceRecord {
     releaseOnStart: boolean;
     /** Step 2: {@link PlayOptions.fadeIn}, filled by `play` itself rather than by a verb. */
     pendingFadeIn: FadeInSpec | null;
-    /** Step 3: a ramp-to-absolute requested pre-start. Written by `fadeTo` in a later task. */
+    /**
+     * Step 3: a ramp-to-absolute requested pre-start, written by
+     * {@link DefaultAudioManager.fadeTo}. One slot, so a later request supersedes an
+     * earlier one rather than queueing behind it.
+     */
     pendingFadeTo: FadeToSpec | null;
     /**
      * Step 4: a crossfade's linked fade-out of the OUTGOING voice, fired with this
@@ -161,6 +196,32 @@ interface VoiceRecord {
     source: AudioBufferSourceNode | null;
     gainNode: GainNode | null;
     pannerNode: PannerNode | null;
+}
+
+/**
+ * The gain bound that applies while a ramp is still travelling.
+ *
+ * {@link VoiceRecord.volume} says where the gain SETTLES, and no ramp is there yet: a
+ * `fadeTo` installs its absolute target as the ceiling at ramp START while the gain only
+ * arrives at `until`, and a `fadeOut` descends to `0` from wherever it was, on a
+ * trajectory that may sit above a ceiling an earlier fade already settled. Either way the
+ * voice spends the window legitimately off `volume`, and capping a departure read against
+ * it there would name a gain the voice has not reached. That is the very artifact
+ * {@link rampDeparture} exists to prevent, pointing the other way: on `equalPower` a step
+ * down inside one waypoint, on a platform without `cancelAndHoldAtTime` a hard
+ * `setValueAtTime` jump on every curve, and — when the cap reads `0` — an exponential
+ * ramp silently degraded to linear by its zero-departure branch.
+ *
+ * Recorded by {@link scheduleVoiceRamp} rather than by each verb, so the bound cannot fall
+ * behind a ramp whose author forgot it. Expiry is by comparison against
+ * `AudioContext.currentTime`, like every other schedule fact on the record — no timer
+ * holds it (§4.25).
+ */
+interface CeilingHold {
+    /** The highest gain the voice can be at until {@link until}. See {@link scheduleVoiceRamp}. */
+    readonly bound: number;
+    /** Absolute context time the ramp lands, after which {@link VoiceRecord.volume} governs. */
+    readonly until: number;
 }
 
 /** A resolved `[loopStart, loopEnd]` region in buffer-local seconds. */
@@ -256,6 +317,8 @@ export class DefaultAudioManager implements AudioManager {
             position: opts.position ?? null,
             sequence: this.nextSequence,
             volume: clampUnit(opts.volume ?? DEFAULT_VOLUME),
+            ceilingHold: null,
+            settledGain: null,
             sheet,
             from: opts.from ?? null,
             to: opts.to ?? null,
@@ -374,14 +437,56 @@ export class DefaultAudioManager implements AudioManager {
         // the voice's remaining life.
         record.scheduledStopAt = rampEnd;
         record.phase = 'fading-out';
-        scheduleGainRamp(
+        scheduleVoiceRamp(
+            record,
             started.gainNode.gain,
             0,
             now,
             rampEnd,
             spec.curve ?? DEFAULT_FADE_CURVE,
-            fadeOutDeparture(record, started.gainNode.gain),
+            rampDeparture(record, started.gainNode.gain, now),
         );
+    }
+
+    /**
+     * Ramp a live voice's stage-1 gain to the ABSOLUTE `spec.to` and hold it there — a dip
+     * or a swell, never a release (§4.25).
+     *
+     * Nothing about the voice's death moves: no `source.stop` is scheduled, `phase` and
+     * {@link VoiceRecord.scheduledStopAt} are left exactly as they were, and the ramp
+     * WINDOW — not its target — is what clamps against any stop already scheduled. So a
+     * voice already `'fading-out'` is re-targetable (Invariant #119) yet still dies on
+     * time, and its ramp is COMPRESSED into what remains rather than truncated the way a
+     * fade-in is: it reaches the full `to` at the clamped end. `fadeTo({ to: 1 })` on a
+     * dying voice therefore peaks at full gain on the exact sample `source.stop` fires — a
+     * hard cut, and the honest one, since Web Audio cannot un-schedule that stop and
+     * lowering the target would silently rewrite what the caller asked for.
+     *
+     * `to` becomes the voice's new ceiling, which is what keeps a later fade's departure
+     * bound honest (see {@link rampDeparture} and {@link CeilingHold}).
+     *
+     * A no-op on an invalid or already-released handle. A fade arriving before the voice
+     * has started is parked on {@link VoiceRecord.pendingFadeTo} instead — step 3 of
+     * Invariant #121 — and applied at the real `t0`.
+     */
+    public fadeTo(handle: AudioHandle, spec: FadeToSpec): void {
+        const record = this.voices.get(handle.id);
+        if (record === undefined) {
+            return;
+        }
+
+        const started = startedVoice(record);
+        if (started === null) {
+            // Still loading: there is no gain to ramp, so the request is parked. One slot,
+            // so a later fadeTo supersedes an earlier one rather than queueing behind it —
+            // two ramps over the same window would fight at `t0`.
+            record.pendingFadeTo = spec;
+            return;
+        }
+
+        const now = this.audioContext.currentTime;
+        const gain = started.gainNode.gain;
+        applyFadeToRamp(record, gain, spec, now, rampDeparture(record, gain, now));
     }
 
     public stopAll(bus?: AudioBusId): void {
@@ -654,40 +759,44 @@ export class DefaultAudioManager implements AudioManager {
     private applyPendingIntents(record: VoiceRecord, gainNode: GainNode, startedAt: number): void {
         // The gain `startVoice` just wrote at `t0`. It has to be handed to the ramps
         // explicitly: `param.value` reports the last rendered quantum, so it cannot see a
-        // write made in this same turn. Cleared after the first ramp consumes it because
-        // it then names a value the param has already left — NOT because `param.value` is
-        // trustworthy from there on: at `t0` the node has rendered nothing at all and
-        // still reports its default of 1. A `fadeTo` that lands second should bound the
-        // read the way {@link fadeOutDeparture} does rather than pass nothing; today it
-        // cannot be reached (`pendingFadeTo` has no writer until the `fadeTo` verb lands),
-        // and the bound belongs with the verb that makes `to` the new ceiling.
-        let departure: number | undefined = initialVoiceGain(record);
+        // write made in this same turn, and at `t0` the node has rendered nothing at all
+        // and still reports its default of 1. Reading it back here is never an option, so
+        // the value is threaded THROUGH each ramp rather than dropped after the first.
+        let departure = initialVoiceGain(record);
 
         const fadeIn = record.pendingFadeIn;
         if (fadeIn !== null) {
             record.pendingFadeIn = null;
             const curve = fadeIn.curve ?? DEFAULT_FADE_CURVE;
             const ramp = resolveFadeInRamp(record, fadeIn.durationMs, startedAt, curve);
-            scheduleGainRamp(gainNode.gain, ramp.target, startedAt, ramp.endTime, curve, departure);
-            departure = undefined;
+            scheduleVoiceRamp(
+                record,
+                gainNode.gain,
+                ramp.target,
+                startedAt,
+                ramp.endTime,
+                curve,
+                departure,
+            );
+            // A ramp has not progressed at its own start time, so the gain the NEXT ramp
+            // departs from is still the floor this one left — unless the fade-in named no
+            // window at all, in which case it `setValueAtTime`s its target right there and
+            // that target is the departure. Getting this backwards inverts the next curve.
+            if (isInstantRamp(startedAt, ramp.endTime)) {
+                departure = clampUnit(ramp.target);
+            }
         }
 
         const fadeTo = record.pendingFadeTo;
         if (fadeTo !== null) {
             record.pendingFadeTo = null;
-            // Only the WINDOW clamps here, deliberately unlike the fade-in above: `to` is
-            // an absolute ceiling the caller named, so lowering it would silently rewrite
-            // the request, whereas a fade-in's target is derived from `volume` and its
-            // authored quantity is the rate.
-            const endTime = clampRampEnd(record, startedAt + fadeTo.durationMs / 1000);
-            scheduleGainRamp(
-                gainNode.gain,
-                fadeTo.to,
-                startedAt,
-                endTime,
-                fadeTo.curve ?? DEFAULT_FADE_CURVE,
-                departure,
-            );
+            // SUPERSEDES the fade-in rather than composing with it. Both ramps anchor at
+            // the same `startedAt`, so this one's cancel-and-reanchor wipes the curve just
+            // scheduled and the fade-in survives only as the gain this departs from: a
+            // 2000 ms `fadeIn` followed by a pre-start `fadeTo` of 100 ms is a 100 ms ramp
+            // from silence, not a 2000 ms one interrupted. That is what "applied in
+            // precedence order" means here — later wins, on one shared `t0`.
+            applyFadeToRamp(record, gainNode.gain, fadeTo, startedAt, departure);
         }
 
         const linkedFadeOut = record.linkedFadeOut;
@@ -982,7 +1091,14 @@ function clampUnit(value: number): number {
 }
 
 /**
- * @internal Stage-1 gain-ramp primitive shared by the fade verbs (§4.25, Invariant #120).
+ * @internal The raw gain-ramp automation writer (§4.25, Invariant #120).
+ *
+ * A ramp on a VOICE's stage-1 gain goes through {@link scheduleVoiceRamp} instead, which
+ * wraps this and records the bound that ramp travels within. Calling this directly on a
+ * voice gain leaves {@link voiceCeiling} behind the automation, and the next fade departs
+ * from a gain the voice is not at — the defect the wrapper exists to make unreachable.
+ * Reach for this one only where there is no `VoiceRecord` to bound: the exported surface
+ * is for the tests that drive the primitive's own curve and platform-degrade behaviour.
  *
  * Cancels any prior automation and re-anchors at the held value — preferring
  * `cancelAndHoldAtTime`, falling back to `cancelScheduledValues` + `setValueAtTime`
@@ -1014,7 +1130,7 @@ function clampUnit(value: number): number {
  * from silence would invert into a ramp down from full gain.
  *
  * Two callers know better, for different reasons: one just WROTE the value (the fade-in
- * at `t0` passes the floor it laid down), and one can BOUND it ({@link fadeOutDeparture}
+ * at `t0` passes the floor it laid down), and one can BOUND it ({@link rampDeparture}
  * caps the read at the voice's ceiling, since a stale read reports a gain the voice
  * cannot be at). Omit it only when neither holds and the departure is genuinely unknown.
  */
@@ -1026,17 +1142,14 @@ export function scheduleGainRamp(
     curve: FadeCurve = 'linear',
     departure?: number,
 ): void {
-    if (!Number.isFinite(startTime) || startTime < 0) {
-        // No usable anchor time — a spec-compliant AudioParam throws RangeError for a
-        // negative or non-finite time on every automation method, including the
-        // cancel calls the reanchor would make, so write nothing at all.
+    if (!isSchedulableStart(startTime)) {
         return;
     }
 
     const held = reanchorGain(param, startTime, departure);
     const clampedTarget = clampUnit(target);
 
-    if (!Number.isFinite(endTime) || endTime <= startTime) {
+    if (isInstantRamp(startTime, endTime)) {
         // Empty or backwards window: jump straight to the target, no ramp.
         param.setValueAtTime(clampedTarget, startTime);
         return;
@@ -1060,6 +1173,28 @@ export function scheduleGainRamp(
 
     // `linear`, plus the degrade path for an `exponential` ramp this platform cannot run.
     param.linearRampToValueAtTime(clampedTarget, endTime);
+}
+
+/**
+ * Whether `startTime` is an anchor the automation methods will accept. A spec-compliant
+ * `AudioParam` throws `RangeError` for a negative or non-finite time on every one of them,
+ * including the cancel calls a reanchor makes, so {@link scheduleGainRamp} writes nothing
+ * at all for such a time — and {@link scheduleVoiceRamp} records nothing for it either.
+ * Shared so the write and the bookkeeping that describes it cannot disagree about which
+ * times are real.
+ */
+function isSchedulableStart(startTime: number): boolean {
+    return Number.isFinite(startTime) && startTime >= 0;
+}
+
+/**
+ * Whether a window names no ramp at all, so {@link scheduleGainRamp} applies its target
+ * instantly with a `setValueAtTime` at `startTime` instead. Shared with the callers that
+ * need to know which gain the param ends up holding there — a ramp leaves its departure
+ * behind at `startTime`, an instant application leaves its target.
+ */
+function isInstantRamp(startTime: number, endTime: number): boolean {
+    return !Number.isFinite(endTime) || endTime <= startTime;
 }
 
 /**
@@ -1177,8 +1312,12 @@ function fadeInFloor(curve: FadeCurve): number {
 }
 
 /**
- * The gain a fade-out departs from: what the param reports, capped at the voice's own
- * ceiling.
+ * The gain a fade verb on a LIVE voice departs from: what the param reports, capped at the
+ * voice's own ceiling — or {@link VoiceRecord.settledGain} outright, on the one path where
+ * the gain is known rather than estimated. Shared by {@link DefaultAudioManager.fadeOut}
+ * and {@link DefaultAudioManager.fadeTo}; the ramps laid down at `t0` need none of it,
+ * because they know the gain written there exactly — {@link initialVoiceGain} as
+ * `startVoice` set it, or an instant fade-in's own target where one landed over it.
  *
  * The cap is not defensive. `AudioParam.value` reports `[[current value]]` — the value
  * at the START of the current render quantum — so a gain written in this same one is
@@ -1190,24 +1329,156 @@ function fadeInFloor(curve: FadeCurve): number {
  * swell to double the requested volume — and on a platform without
  * `cancelAndHoldAtTime` it would step there outright, on every curve.
  *
- * A voice's stage-1 gain never exceeds `volume` — above the `1e-4` epsilon floor, which
- * {@link fadeInFloor} and {@link scheduleExponentialRamp} may write over a smaller
- * `volume`, inaudibly at −80 dB. So capping the read is exact whenever the param can see
- * the truth and a bounded over-estimate when it cannot.
+ * A voice's stage-1 gain never exceeds {@link voiceCeiling} — above the `1e-4` epsilon
+ * floor, which {@link fadeInFloor} and {@link scheduleExponentialRamp} may write over a
+ * smaller ceiling, inaudibly at −80 dB. So capping the read is exact whenever the param can
+ * see the truth and a bounded OVER-estimate when it cannot. Over-estimating is the only
+ * safe direction: it degrades into the artifact below, whereas an under-estimate is a step
+ * DOWN to a gain the voice was never at, which is what this exists to prevent.
  *
  * The residual it does NOT fix: inside the first quantum of a fade-in the voice's real
- * gain is the curve's floor while the param still reports 1, so a fade-out there departs
- * from the ceiling and rises to it before falling — a smaller version of the same
- * artifact, bounded now by what the caller asked for rather than by the node's default of
- * 1. Passing `record.volume`
- * unconditionally would cause that rise on EVERY mid-fade voice, which is why this reads
- * the param first and only caps it.
+ * gain is the curve's floor while the param still reports 1, so a fade departing there
+ * starts from the ceiling and moves to it first — a smaller version of the same artifact,
+ * bounded now by what the caller asked for rather than by the node's default of 1. Passing
+ * `record.volume` unconditionally would cause that on EVERY mid-fade voice, which is why
+ * this reads the param first and only caps it.
  *
- * A verb that RAISES the ceiling — `fadeTo`, in a later task — must update `volume` for
- * this to stay exact.
+ * What keeps the cap honest across a ceiling CHANGE is split in two.
+ * {@link DefaultAudioManager.fadeTo} installs its absolute target as the new `volume`,
+ * after computing this, so the cap still names the ceiling being replaced; and
+ * {@link scheduleVoiceRamp} records a {@link CeilingHold} for every non-instant ramp, in
+ * either direction and whichever verb wrote it, so the window before that ramp lands is
+ * never capped against a gain the voice has not reached.
  */
-function fadeOutDeparture(record: VoiceRecord, gain: AudioParam): number {
-    return Math.min(gain.value, record.volume);
+function rampDeparture(record: VoiceRecord, gain: AudioParam, now: number): number {
+    // Nothing to estimate while the last write was an instant one: `settledGain` IS the
+    // gain, and reading the param instead would take a value from before that write.
+    return record.settledGain ?? Math.min(gain.value, voiceCeiling(record, now));
+}
+
+/**
+ * The highest stage-1 gain the voice can be at `now`: an unexpired {@link CeilingHold}
+ * while a ramp is in flight, otherwise its settled ceiling.
+ *
+ * Pure expiry — the hold wins OUTRIGHT rather than through a `max` against `volume`,
+ * because it names the in-flight ramp's own two endpoints and is therefore a complete
+ * bound by itself; `volume` is simply not the operative fact until it expires. Nor would a
+ * `max` be merely redundant: a hold can legitimately sit BELOW the settled ceiling — a
+ * truncated fade-in climbs to less than `volume` — and there the tighter bound is the
+ * point, so a `max` would discard it.
+ */
+function voiceCeiling(record: VoiceRecord, now: number): number {
+    const hold = record.ceilingHold;
+    return hold === null || now >= hold.until ? record.volume : hold.bound;
+}
+
+/**
+ * The one write both `fadeTo` paths make: ramp `gain` to the clamped absolute target over
+ * the resolved window, and install that target as the voice's new ceiling (§4.25).
+ *
+ * Only the WINDOW clamps against the voice's scheduled end, never the target — the reason
+ * is authored surface and lives on {@link FadeToSpec} and
+ * {@link DefaultAudioManager.fadeTo}.
+ *
+ * `departure` is a parameter rather than something this derives, and that is the point: it
+ * has to name the gain the voice is at under the ceiling being REPLACED. Computed against
+ * the one installed below, {@link rampDeparture}'s cap would rise with the target and let a
+ * stale `param.value` through on every swell — the voice would start its ramp already at
+ * `to`. Taking it as an argument is what forces every caller to read it first.
+ */
+function applyFadeToRamp(
+    record: VoiceRecord,
+    gain: AudioParam,
+    spec: FadeToSpec,
+    startTime: number,
+    departure: number,
+): void {
+    const target = clampUnit(spec.to);
+    const endTime = resolveFadeToRampEnd(record, spec.durationMs, startTime);
+    // The ceiling moves at ramp start while the GAIN only arrives at it at `endTime`;
+    // recording the window it travels in is `scheduleVoiceRamp`'s job. But it describes
+    // that ramp as much as the bound does, so it moves only once the ramp is real — a
+    // ceiling LOWERED for automation that was never written would tighten the cap onto a
+    // gain the voice is still above.
+    const written = scheduleVoiceRamp(
+        record,
+        gain,
+        target,
+        startTime,
+        endTime,
+        spec.curve ?? DEFAULT_FADE_CURVE,
+        departure,
+    );
+    if (written) {
+        record.volume = target;
+    }
+}
+
+/**
+ * Schedule a stage-1 ramp on a live voice and record the bound it travels within — the one
+ * entry point every voice ramp goes through, so {@link voiceCeiling} cannot fall behind a
+ * verb that forgot to update it (§4.25, Invariant #120).
+ *
+ * The bound is the higher of the ramp's two endpoints, which is exact because every curve
+ * {@link scheduleGainRamp} writes is monotonic between them. Taking both ends rather than
+ * the departure alone is what makes it complete in either direction: a RISING ramp is above
+ * its departure for the whole window exactly as a falling one is above its target.
+ *
+ * An instant application bounds nothing, because there is no window to bound — and its
+ * `endTime` may be `+Infinity`, a deadline no `currentTime` ever passes, which would leave
+ * the headroom in place for the life of the voice. It records the opposite instead: the
+ * gain it lands is EXACT until the next automation, and this is the only place that can
+ * know it, since `param.value` cannot see a write made in this same turn.
+ *
+ * Being the single writer of both fields is what keeps each one true for exactly as long
+ * as it is set: every ramp invalidates the settled value, and every instant application
+ * retires the bound.
+ *
+ * Returns whether the automation was written. Both fields DESCRIBE that write, so an
+ * unschedulable `startTime` — which {@link scheduleGainRamp} declines entirely — records
+ * neither and reports `false`, leaving the caller's own bookkeeping to stand down too. The
+ * settled gain is the reason this cannot be left to the callee's silent no-op: it is
+ * believed OUTRIGHT by the next departure rather than merely capping a read, so one
+ * booked against automation that never happened would swell the next fade to it.
+ */
+function scheduleVoiceRamp(
+    record: VoiceRecord,
+    gain: AudioParam,
+    target: number,
+    startTime: number,
+    endTime: number,
+    curve: FadeCurve,
+    departure: number,
+): boolean {
+    if (!isSchedulableStart(startTime)) {
+        return false;
+    }
+
+    if (isInstantRamp(startTime, endTime)) {
+        record.ceilingHold = null;
+        record.settledGain = target;
+    } else {
+        record.ceilingHold = { bound: Math.max(departure, target), until: endTime };
+        record.settledGain = null;
+    }
+    scheduleGainRamp(gain, target, startTime, endTime, curve, departure);
+    return true;
+}
+
+/**
+ * The absolute context time a `fadeTo` ramp reaches its target. A non-finite window names
+ * no fade at all and is handed straight to {@link scheduleGainRamp}'s own guard, which
+ * applies the target instantly — resolved BEFORE the clamp, which is what would otherwise
+ * split the two non-finite inputs apart: `NaN` falls through to that instant application
+ * while `+Infinity` clamps to a bounded voice's scheduled end and becomes a full-length
+ * fade. Same garbage input, opposite outcomes.
+ *
+ * No floor at `now`, unlike a fade-out's: this time never reaches `source.stop`, and a
+ * window that resolves behind `startTime` is an instant application by the same guard.
+ */
+function resolveFadeToRampEnd(record: VoiceRecord, durationMs: number, startTime: number): number {
+    const authoredEnd = startTime + durationMs / 1000;
+    return Number.isFinite(authoredEnd) ? clampRampEnd(record, authoredEnd) : authoredEnd;
 }
 
 /**

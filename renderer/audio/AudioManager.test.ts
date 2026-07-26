@@ -32,18 +32,25 @@
  * to drive them. The `AudioHandle` type pin is red at `tsc` rather than in vitest
  * (`expectTypeOf` is erased at runtime), so both gates must run.
  *
- * For #121 the load-bearing red is the precedence order itself: `pendingFadeIn` and
- * `releaseOnStart` have production writers (`PlayOptions.fadeIn` and `fadeOut`), while
- * `pendingFadeTo` and `linkedFadeOut` have none — so the slots a test cannot fill through
- * a public verb are parked through {@link writeVoiceIntents}, the same seam
- * `fadeTo`/`crossfade` will use, and the ordering is asserted from the voice gain's own
- * call log rather than a global invocation index.
+ * For #121 the load-bearing red is the precedence order itself. Every slot but one now
+ * has a production writer (`PlayOptions.fadeIn`, `fadeOut` and `fadeTo`) and is driven
+ * through it; `linkedFadeOut` has none, so it alone is parked through
+ * {@link writeVoiceIntents}, the same seam `crossfade` will use, and the ordering is
+ * asserted from the voice gain's own call log rather than a global invocation index.
  *
  * For #119 the fade-out tests were written against a `fadeOut` with an empty body, so
  * every red is behavioural rather than "fadeOut is not a function". The load-bearing
  * ones are the timer-free release (a stray `setTimeout` shows in `vi.getTimerCount()`,
  * since fake timers are installed for the whole file), the ramp-end arithmetic, and the
  * refused-stop fallback — the reachability and clamp cases exist to bound them.
+ *
+ * `fadeTo` was likewise written against an empty body. Its load-bearing reds are the HOLD
+ * (no stop, no phase change, no rewritten end), the ceiling rewrite — pinned through the
+ * fade-out that departs from it, not just by reading the field — and the two departure
+ * orderings: capping against the ceiling being REPLACED, and taking the exact gain the
+ * param holds at `t0` rather than what it reports there. Those last three run on
+ * {@link FakeQuantizedAudioParam} with `equalPower`, because the write-through double and
+ * a `linear` ramp each hide the whole defect class on their own.
  */
 
 import {
@@ -1400,10 +1407,8 @@ describe('DefaultAudioManager — fade-in and pending intents', () => {
         const { context, manager, handle, start } = createLoadingVoice({
             playOptions: { fadeIn: { durationMs: 500 } },
         });
-        writeVoiceIntents(manager, handle, {
-            pendingFadeTo: { to: 0.25, durationMs: 200 },
-            linkedFadeOut: vi.fn(),
-        });
+        manager.fadeTo(handle, { to: 0.25, durationMs: 200 });
+        writeVoiceIntents(manager, handle, { linkedFadeOut: vi.fn() });
 
         // Only the four bus gains exist: there is no stage-1 gain for a ramp to write
         // to, which is precisely why an intent arriving now has to be parked.
@@ -1427,8 +1432,8 @@ describe('DefaultAudioManager — fade-in and pending intents', () => {
             playOptions: { fadeIn: { durationMs: 500 } },
         });
         const linkedCalls: { readonly startedAt: number; readonly gainWrites: number }[] = [];
+        manager.fadeTo(handle, { to: 0.25, durationMs: 200 });
         writeVoiceIntents(manager, handle, {
-            pendingFadeTo: { to: 0.25, durationMs: 200 },
             linkedFadeOut: (startedAt) => {
                 linkedCalls.push({
                     startedAt,
@@ -1468,11 +1473,8 @@ describe('DefaultAudioManager — fade-in and pending intents', () => {
             playOptions: { from: 'end', to: 20, fadeIn: { durationMs: 500 } },
         });
         const linked = vi.fn();
-        writeVoiceIntents(manager, handle, {
-            releaseOnStart: true,
-            pendingFadeTo: { to: 0.25, durationMs: 200 },
-            linkedFadeOut: linked,
-        });
+        manager.fadeTo(handle, { to: 0.25, durationMs: 200 });
+        writeVoiceIntents(manager, handle, { releaseOnStart: true, linkedFadeOut: linked });
 
         await start();
 
@@ -1488,10 +1490,8 @@ describe('DefaultAudioManager — fade-in and pending intents', () => {
         const { manager, handle, start } = createLoadingVoice({
             playOptions: { fadeIn: { durationMs: 500 } },
         });
-        writeVoiceIntents(manager, handle, {
-            pendingFadeTo: { to: 0.25, durationMs: 200 },
-            linkedFadeOut: vi.fn(),
-        });
+        manager.fadeTo(handle, { to: 0.25, durationMs: 200 });
+        writeVoiceIntents(manager, handle, { linkedFadeOut: vi.fn() });
 
         expect(readVoiceRecord(manager, handle).phase).toBe('loading');
 
@@ -1721,7 +1721,7 @@ describe('DefaultAudioManager — fade-in and pending intents', () => {
         const { context, manager, handle, start } = createLoadingVoice({
             playOptions: { from: 0, to: 2 },
         });
-        writeVoiceIntents(manager, handle, { pendingFadeTo: { to: 0.25, durationMs: 4000 } });
+        manager.fadeTo(handle, { to: 0.25, durationMs: 4000 });
 
         await start();
 
@@ -2483,6 +2483,662 @@ describe('DefaultAudioManager — fadeOut', () => {
     });
 });
 
+// ─── fadeTo (#116, #120, #121) ──────────────────────────────────────────────────
+
+describe('DefaultAudioManager — fadeTo', () => {
+    it('ramps to an absolute target and holds, never stopping the voice (#120)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+
+        manager.fadeTo(handle, { to: 0.3, durationMs: 800 });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.3, time: 10.8 },
+        ]);
+        // The whole point of a HOLD: nothing about the voice's death moves. A `fadeTo`
+        // that borrowed `fadeOut`'s tail would show up as a stop, a phase change, or a
+        // rewritten end — and the timer count catches a JS-side hold as well.
+        expect(source.stop).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+        expect(handle.valid).toBe(true);
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'playing',
+            scheduledStopAt: 20,
+        });
+    });
+
+    it('rewrites the voice ceiling to the clamped target (#120)', async () => {
+        const { manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { volume: 0.8 });
+        await flushAudioLoad();
+
+        manager.fadeTo(handle, { to: 0.3, durationMs: 800 });
+
+        expect(readVoiceRecord(manager, handle).volume).toBe(0.3);
+    });
+
+    it('leaves a later fadeOut departing from the ceiling it installed (#120)', async () => {
+        // What makes the ceiling write load-bearing rather than bookkeeping. The cap in
+        // `rampDeparture` is only exact while `volume` names the voice's CURRENT ceiling;
+        // a `fadeTo` that raised the gain and left `volume` behind would cap the next
+        // fade-out below the gain the voice is actually at, and it would fall from there.
+        const { context, manager, ref } = createCuedManager({ quantizedGainParams: true });
+        const handle = manager.play(ref, { volume: 0.25 });
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 1, durationMs: 0 });
+        context.currentTime = 11;
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        expect(waypoints).toHaveLength(64);
+        // Departs from the new ceiling of 1, not the `play()` volume of 0.25.
+        expect(waypoints[0]?.value).toBeCloseTo(Math.cos(Math.PI / 128), 12);
+    });
+
+    it('caps the departure at the ceiling it replaces, not the one it installs (#120)', async () => {
+        // Order-of-writes test. `AudioParam.value` reports the unrendered default of 1 on
+        // this quantized double, so the cap is the only thing standing between a swell to
+        // `to` and a departure the voice is really at. Installing the new ceiling FIRST
+        // would raise the cap above the old one and let that stale 1 through.
+        const { context, manager, ref } = createCuedManager({ quantizedGainParams: true });
+        const handle = manager.play(ref, { volume: 0.5 });
+        await flushAudioLoad();
+
+        manager.fadeTo(handle, { to: 1, durationMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.5 + 0.5 * Math.sin(Math.PI / 128), 12);
+        expect(waypoints.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 1,
+            time: 10.64,
+        });
+    });
+
+    it.each([
+        ['NaN', NaN],
+        ['+Infinity', Infinity],
+        ['zero', 0],
+        ['negative', -250],
+    ])(
+        'applies a %s durationMs instantly on a bounded voice (#120)',
+        async (_label, durationMs) => {
+            // Bounded on purpose: `+Infinity` is the input that separates resolving the
+            // non-finite window BEFORE the clamp from after it. Clamped first it would become
+            // `min(Infinity, scheduledStopAt)` — a full-length fade to the voice's own end,
+            // the opposite outcome from the `NaN` beside it, on the same garbage input.
+            const { context, manager, ref } = createCuedManager();
+            const handle = manager.play(ref);
+            await flushAudioLoad();
+
+            manager.fadeTo(handle, { to: 0.3, durationMs });
+
+            expect(expectGain(context, 4).gain.calls).toEqual([
+                { method: 'setValueAtTime', value: 1, time: 10 },
+                { method: 'cancelAndHoldAtTime', time: 10 },
+                { method: 'setValueAtTime', value: 0.3, time: 10 },
+            ]);
+            expect(countGainRamps(expectGain(context, 4).gain.calls)).toBe(0);
+            expect(readVoiceRecord(manager, handle).volume).toBe(0.3);
+        },
+    );
+
+    it('ramps an exponential fadeTo of 0 to the epsilon, then hard-sets the ceiling to 0 (#120)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        manager.fadeTo(handle, { to: 0, durationMs: 800, curve: 'exponential' });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 1e-4, time: 10.8 },
+            { method: 'setValueAtTime', value: 0, time: 10.8 },
+        ]);
+        // A silenced voice is still a HELD voice: the ceiling follows the target to true
+        // zero, and the source is untouched.
+        expect(readVoiceRecord(manager, handle).volume).toBe(0);
+        expect(expectSource(context, 0).stop).not.toHaveBeenCalled();
+    });
+
+    it('clamps the ramp end to the scheduled end without lowering its target (#120)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { from: 0, to: 2 });
+        await flushAudioLoad();
+
+        manager.fadeTo(handle, { to: 0.25, durationMs: 4000 });
+
+        // Asymmetric with fade-in on purpose: `to` is an absolute ceiling the caller
+        // named, so only the WINDOW clamps — truncating it would rewrite the request.
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: 12 },
+        ]);
+        expect(readVoiceRecord(manager, handle).volume).toBe(0.25);
+    });
+
+    it.each([
+        ['above the range', 1.5, 1],
+        ['below the range', -1, 0],
+        ['non-finite', NaN, 0],
+    ])('clamps a %s target into [0, 1] (#120)', async (_label, to, expected) => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        manager.fadeTo(handle, { to, durationMs: 800 });
+
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: expected,
+            time: 10.8,
+        });
+        // The ceiling records what was WRITTEN, not what was asked for — otherwise the
+        // next fade-out would cap its departure against a gain no param ever held.
+        expect(readVoiceRecord(manager, handle).volume).toBe(expected);
+    });
+
+    it('is a no-op on a handle whose voice has already been released', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+        manager.stop(handle);
+        const gainCallsAfterStop = [...expectGain(context, 4).gain.calls];
+
+        expect(() => {
+            manager.fadeTo(handle, { to: 0.3, durationMs: 800 });
+        }).not.toThrow();
+
+        expect(expectGain(context, 4).gain.calls).toEqual(gainCallsAfterStop);
+        expect(source.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it('writes only the voice gain, never a bus or master gain (#116)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        // Snapshots, not ramp counts: #116 says these are never WRITTEN by a fade op, so
+        // a stray setValueAtTime or cancel has to fail here too, not just a ramp.
+        const busCallsBefore = context.createdGainNodes
+            .slice(0, 4)
+            .map((gain) => [...gain.gain.calls]);
+
+        manager.fadeTo(handle, { to: 0.3, durationMs: 800 });
+
+        expect(context.createdGainNodes.slice(0, 4).map((gain) => gain.gain.calls)).toEqual(
+            busCallsBefore,
+        );
+        expect(countGainRamps(expectGain(context, 4).gain.calls)).toBe(1);
+    });
+
+    it('re-targets a fading-out voice without cancelling its scheduled stop (#119, #120)', async () => {
+        // Invariant #119 keeps a fading voice valid and re-targetable, and Web Audio has
+        // no way to un-schedule `source.stop` — so the honest outcome is that the gain
+        // moves and the death does not. Resetting the phase to `'playing'` here would
+        // claim a release that is still coming.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+        manager.fadeOut(handle, { overMs: 4000 });
+
+        manager.fadeTo(handle, { to: 1, durationMs: 8000 });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 14 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            // Clamped to the stop already scheduled, not the 18s the caller asked for.
+            { method: 'linearRampToValueAtTime', value: 1, time: 14 },
+        ]);
+        expect(source.stop).toHaveBeenCalledExactlyOnceWith(14);
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'fading-out',
+            scheduledStopAt: 14,
+            volume: 1,
+        });
+    });
+
+    it('departs a second fade from where a descending ramp really is, not its new ceiling (#120)', async () => {
+        // The ceiling is installed at ramp START but the gain only arrives there at the
+        // END, so for that whole window the voice is legitimately ABOVE `volume`. Capping
+        // the read against it there turns the bound that exists to prevent a step INTO one
+        // — the same artifact, just downwards.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 0.2, durationMs: 2000 });
+        // What the param reports once a quantum of that dip has rendered.
+        expectGain(context, 4).gain.value = 0.6;
+        context.currentTime = 11;
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(1);
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.6 * Math.cos(Math.PI / 128), 12);
+    });
+
+    it('anchors a mid-dip fade at the real gain without cancelAndHoldAtTime (#120)', async () => {
+        // The platform where the under-estimate is not a soft artifact but a hard step:
+        // the fallback re-anchor writes the departure as an explicit `setValueAtTime`, so
+        // a bound below the real gain lands as an audible jump on a plain linear ramp.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 0.2, durationMs: 2000 });
+        stubMissingCancelAndHold(expectGain(context, 4).gain);
+        expectGain(context, 4).gain.value = 0.6;
+        context.currentTime = 11;
+
+        manager.fadeOut(handle, { overMs: 640 });
+
+        expect(expectGain(context, 4).gain.calls.slice(-3)).toEqual([
+            { method: 'cancelScheduledValues', time: 11 },
+            { method: 'setValueAtTime', value: 0.6, time: 11 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 11.64 },
+        ]);
+    });
+
+    it('lets an exponential re-target depart from a dip still in flight (#120)', async () => {
+        // An under-estimated departure does not merely soften this one: a ceiling of 0
+        // caps the read to 0, and `scheduleExponentialRamp` treats a zero departure as
+        // the one case it must degrade to linear — silently discarding the authored curve.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 0, durationMs: 2000 });
+        expectGain(context, 4).gain.value = 0.5;
+        context.currentTime = 11;
+
+        manager.fadeTo(handle, { to: 1, durationMs: 800, curve: 'exponential' });
+
+        expect(expectGain(context, 4).gain.calls.slice(-2)).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 11 },
+            { method: 'exponentialRampToValueAtTime', value: 1, time: 11.8 },
+        ]);
+    });
+
+    it('departs a second fade from where a RISING ramp really is, not where it started (#120)', async () => {
+        // The mirror of the descending case, and the reason the bound spans BOTH ends of
+        // the ramp rather than just its departure: mid-swell the voice sits above where it
+        // set off from, so a bound of the departure alone would cap the read below the
+        // real gain — the same step down, arrived at from the other direction.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { volume: 0.2 });
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 1, durationMs: 2000 });
+        expectGain(context, 4).gain.value = 0.6;
+        context.currentTime = 11;
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(1);
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.6 * Math.cos(Math.PI / 128), 12);
+    });
+
+    it('holds nothing for an instant fadeTo, whose window can never expire (#120)', async () => {
+        // A non-finite duration applies its target at once, so there is no travelling ramp
+        // to hold a bound for — and its `endTime` is `+Infinity`, a deadline no
+        // `currentTime` ever passes. Recorded anyway, the headroom would outlive the voice
+        // and the ceiling rewrite would never take effect at all.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 0.2, durationMs: Infinity });
+        // Garbage-high, the read the cap exists for: the target landed at 0.2 at once.
+        expectGain(context, 4).gain.value = 1;
+        context.currentTime = 11;
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.2 * Math.cos(Math.PI / 128), 12);
+    });
+
+    it('caps at the new ceiling again once the descending ramp has landed (#120)', async () => {
+        // The bound above the ceiling is held only for the ramp's own window, and it
+        // expires by comparison against `currentTime` rather than by a timer. Held past
+        // the landing it would make the ceiling rewrite pointless.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 0.2, durationMs: 2000 });
+        // Garbage-high, the read the cap exists for: the dip landed at 0.2 long ago.
+        expectGain(context, 4).gain.value = 1;
+        context.currentTime = 12.5;
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(1);
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.2 * Math.cos(Math.PI / 128), 12);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('bounds a fade-in ramp at the target it will really reach, not at volume (#120, #121)', async () => {
+        // The fade-in is the third ramp on the one path, and its hold is TIGHTER than the
+        // ceiling rather than above it: a TRUNCATED fade-in stops at the value its curve
+        // holds when the voice ends, so `volume` is a gain it never reaches.
+        const { context, manager, handle, start } = createLoadingVoice({
+            playOptions: { from: 0, to: 2, fadeIn: { durationMs: 4000 } },
+        });
+        await start();
+        // The unrendered node's `defaultValue`, which is what a real param reports through
+        // a fade-in's first quantum — the exact read `rampDeparture` names as its residual.
+        // The doubles write through on a scheduled ramp, so without this the param would
+        // already report the truncated target and the bound would have nothing to do.
+        expectGain(context, 4).gain.value = 1;
+        context.currentTime = 11;
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(1);
+        expect(waypoints).toHaveLength(64);
+        // Half of `volume`: the fade-in was clamped to the scheduled end at 12, so it only
+        // ever climbs halfway up its 4000 ms curve.
+        expect(waypoints[0]?.value).toBeCloseTo(0.5 * Math.cos(Math.PI / 128), 12);
+    });
+
+    it('departs exactly after an instant raise the param cannot see yet (#120)', async () => {
+        // Two verbs in ONE render quantum. The instant application moves the gain to 1 with
+        // no ramp at all, so `param.value` — which reports the START of this quantum — is
+        // low by 0.75 rather than by a quantum of slope, and the cap cannot help: it bounds
+        // a read from ABOVE. Only the value we just wrote is the truth here.
+        const { context, manager, ref } = createCuedManager({ quantizedGainParams: true });
+        const handle = manager.play(ref, { volume: 0.25 });
+        await flushAudioLoad();
+        // A param that has rendered, truthfully reporting the voice's 0.25.
+        context.currentTime = 11;
+        expectGain(context, 4).gain.value = 0.25;
+
+        manager.fadeTo(handle, { to: 1, durationMs: 0 });
+        manager.fadeOut(handle, { overMs: 5000, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(-64);
+        expect(waypoints[0]?.value).toBeCloseTo(Math.cos(Math.PI / 128), 12);
+    });
+
+    it('does not freeze that stale read into the bound for the whole ramp (#120)', async () => {
+        // The consequence if it did: `voiceCeiling` returns `hold.bound` outright, so a
+        // departure taken from one bad read would outrank every TRUTHFUL read for the
+        // ramp's entire window — turning a one-turn error into a five-second one.
+        const { context, manager, ref } = createCuedManager({ quantizedGainParams: true });
+        const handle = manager.play(ref, { volume: 0.25 });
+        await flushAudioLoad();
+        context.currentTime = 11;
+        expectGain(context, 4).gain.value = 0.25;
+        manager.fadeTo(handle, { to: 1, durationMs: 0 });
+        manager.fadeOut(handle, { overMs: 5000 });
+        // A second on, the param has rendered and reports the descent correctly.
+        expectGain(context, 4).gain.value = 0.8;
+        context.currentTime = 12;
+
+        manager.fadeTo(handle, { to: 0.5, durationMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(-64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.5 + (0.8 - 0.5) * Math.cos(Math.PI / 128), 12);
+    });
+
+    it('records nothing when the ramp it books is refused an unschedulable time (#120)', async () => {
+        // The bookkeeping presumes the write lands. `scheduleGainRamp` writes NOTHING for a
+        // negative or non-finite start — a spec-compliant param throws `RangeError` on every
+        // method for one — so a ceiling or a settled gain booked for it would describe
+        // automation that never happened. This direction is worse than the bound it
+        // replaces: a settled gain is taken OUTRIGHT, so the next fade would swell to it
+        // instead of merely being capped.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { volume: 0.1 });
+        await flushAudioLoad();
+        const callsBefore = [...expectGain(context, 4).gain.calls];
+        context.currentTime = NaN;
+
+        manager.fadeTo(handle, { to: 0.9, durationMs: 800 });
+
+        expect(expectGain(context, 4).gain.calls).toEqual(callsBefore);
+        expect(readVoiceRecord(manager, handle).volume).toBe(0.1);
+
+        // And the next fade still departs from the truth, not from a gain nothing wrote.
+        expectGain(context, 4).gain.value = 0.1;
+        context.currentTime = 11;
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(-64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.1 * Math.cos(Math.PI / 128), 12);
+    });
+
+    it('expires the hold exactly ON its landing time, not one instant after (#120)', async () => {
+        // `now >= until`, so the boundary belongs to the settled ceiling: at `until` the
+        // ramp has arrived and `volume` is the truth. Only a read at exactly that time
+        // separates the two comparisons.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 0.2, durationMs: 2000 });
+        expectGain(context, 4).gain.value = 1;
+        context.currentTime = 12;
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(1);
+        expect(waypoints[0]?.value).toBeCloseTo(0.2 * Math.cos(Math.PI / 128), 12);
+    });
+
+    it('bounds a fade-out ramp too, not only the fadeTo that it superseded (#120)', async () => {
+        // Every ramp travels off the settled ceiling, not just a `fadeTo`'s. A fade-out
+        // that cancels an unfinished dip and outlives that dip's window leaves the voice
+        // descending on a trajectory ABOVE `volume` — which now names a gain the dip was
+        // cancelled before ever reaching.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 0.2, durationMs: 2000 });
+        expectGain(context, 4).gain.value = 0.8;
+        context.currentTime = 10.5;
+        manager.fadeOut(handle, { overMs: 8000 });
+        // Past the dip's `until` of 12, where its hold has rightly expired.
+        expectGain(context, 4).gain.value = 0.45;
+        context.currentTime = 14;
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(2);
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.45 * Math.cos(Math.PI / 128), 12);
+    });
+
+    it('anchors at the real gain on a superseded dip without cancelAndHoldAtTime (#120)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 0.2, durationMs: 2000 });
+        expectGain(context, 4).gain.value = 0.8;
+        context.currentTime = 10.5;
+        manager.fadeOut(handle, { overMs: 8000 });
+        stubMissingCancelAndHold(expectGain(context, 4).gain);
+        expectGain(context, 4).gain.value = 0.45;
+        context.currentTime = 14;
+
+        manager.fadeOut(handle, { overMs: 640 });
+
+        expect(expectGain(context, 4).gain.calls.slice(-3)).toEqual([
+            { method: 'cancelScheduledValues', time: 14 },
+            { method: 'setValueAtTime', value: 0.45, time: 14 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 14.64 },
+        ]);
+    });
+
+    it('keeps an exponential re-target usable on a voice fading out of a dip (#119, #120)', async () => {
+        // The compounding case: a dip to 0 settles the ceiling at 0, so once its own hold
+        // expires the cap reads 0 and `scheduleExponentialRamp` takes its zero-departure
+        // branch — discarding the authored curve on a voice that is really at 0.45.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeTo(handle, { to: 0, durationMs: 2000 });
+        expectGain(context, 4).gain.value = 0.8;
+        context.currentTime = 10.5;
+        manager.fadeOut(handle, { overMs: 8000 });
+        expectGain(context, 4).gain.value = 0.45;
+        context.currentTime = 14;
+
+        manager.fadeTo(handle, { to: 1, durationMs: 800, curve: 'exponential' });
+
+        expect(expectGain(context, 4).gain.calls.slice(-2)).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 14 },
+            { method: 'exponentialRampToValueAtTime', value: 1, time: 14.8 },
+        ]);
+    });
+
+    it('parks a fadeTo requested before the voice started, scheduling nothing (#121)', () => {
+        const { context, manager, handle } = createLoadingVoice();
+        // Only the four bus gains exist: there is no stage-1 gain for a ramp to write
+        // to, which is precisely why an intent arriving now has to be parked. Snapshots
+        // rather than ramp counts, so a stray setValueAtTime fails here too (#116).
+        expect(context.createdGainNodes).toHaveLength(4);
+        const busCallsBefore = context.createdGainNodes.map((gain) => [...gain.gain.calls]);
+
+        manager.fadeTo(handle, { to: 0.25, durationMs: 200 });
+
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'loading',
+            pendingFadeTo: { to: 0.25, durationMs: 200 },
+            releaseOnStart: false,
+        });
+        expect(context.createdGainNodes).toHaveLength(4);
+        expect(context.createdGainNodes.map((gain) => gain.gain.calls)).toEqual(busCallsBefore);
+    });
+
+    it('lets a second pre-start fadeTo replace the first (#121)', () => {
+        const { manager, handle } = createLoadingVoice();
+
+        manager.fadeTo(handle, { to: 0.25, durationMs: 200 });
+        manager.fadeTo(handle, { to: 0.75, durationMs: 900, curve: 'equalPower' });
+
+        // One slot, so the later request supersedes rather than queueing behind it —
+        // two ramps over the same window would fight at `t0`.
+        expect(readVoiceRecord(manager, handle).pendingFadeTo).toEqual({
+            to: 0.75,
+            durationMs: 900,
+            curve: 'equalPower',
+        });
+    });
+
+    it('never lets a pre-start fadeTo resurrect a voice released on start (#121)', async () => {
+        const { context, manager, handle, start } = createLoadingVoice();
+        manager.fadeOut(handle, { overMs: 500 });
+
+        manager.fadeTo(handle, { to: 1, durationMs: 500 });
+
+        await start();
+
+        // `releaseOnStart` is step 1 of the precedence order, so it short-circuits
+        // `startVoice` before any node exists for the parked fadeTo to write to.
+        expect(context.createdSources).toHaveLength(0);
+        expect(context.createdGainNodes).toHaveLength(4);
+        expect(handle.valid).toBe(false);
+    });
+
+    it('applies a pending fadeTo at t0 and rewrites the ceiling there too (#121)', async () => {
+        const { context, manager, handle, start } = createLoadingVoice();
+        manager.fadeTo(handle, { to: 0.25, durationMs: 200 });
+
+        await start();
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: 10.2 },
+        ]);
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'playing',
+            pendingFadeTo: null,
+            volume: 0.25,
+        });
+    });
+
+    it('departs a pending fadeTo from the fade-in floor the param really holds at t0 (#120, #121)', async () => {
+        // A ramp has not progressed at its own start time, so after the fade-in is laid
+        // down the gain at `t0` is still the floor it departed from. The quantized param
+        // reports the unrendered default of 1 there, and capping that read at the ceiling
+        // would not help — the voice is at silence, not at `volume`.
+        const { context, manager, handle, start } = createLoadingVoice({
+            quantizedGainParams: true,
+            playOptions: { fadeIn: { durationMs: 500 } },
+        });
+        manager.fadeTo(handle, { to: 0.5, durationMs: 640, curve: 'equalPower' });
+
+        await start();
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            // Drop the fade-in's own ramp, which the fadeTo then cancels over.
+            .slice(1);
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.5 * Math.sin(Math.PI / 128), 12);
+        expect(waypoints.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0.5,
+            time: 10.64,
+        });
+    });
+
+    it('departs a pending fadeTo from an INSTANT fade-in target, not from the floor (#120, #121)', async () => {
+        // The other half of the same rule. A fade-in with no window does not ramp — it
+        // SETS its target at `t0` — so the gain the next ramp departs from is that
+        // target, and passing the floor here would invert the curve.
+        const { context, manager, handle, start } = createLoadingVoice({
+            quantizedGainParams: true,
+            playOptions: { fadeIn: { durationMs: 0 } },
+        });
+        manager.fadeTo(handle, { to: 0.5, durationMs: 640, curve: 'equalPower' });
+
+        await start();
+
+        const waypoints = expectGain(context, 4).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.5 + 0.5 * Math.cos(Math.PI / 128), 12);
+    });
+});
+
 // ─── cue-sheet provenance (#124) ────────────────────────────────────────────────
 
 describe('DefaultAudioManager — cue sheet provenance', () => {
@@ -2613,6 +3269,8 @@ describe('AudioHandle — public shape', () => {
             'startedAtContextTime',
             'startOffsetSeconds',
             'scheduledStopAt',
+            'ceilingHold',
+            'settledGain',
             'phase',
             'releaseOnStart',
             'pendingFadeIn',
@@ -3182,6 +3840,8 @@ function spyOnWarn(): MockInstance<typeof console.warn> {
 
 /** The internal `VoiceRecord` slice the tests assert on, behind one cast site. */
 interface ObservableVoiceRecord {
+    /** The SETTLED voice ceiling, which `fadeTo` rewrites — not a copy of `PlayOptions`. */
+    volume: number;
     scheduledStopAt: number | null;
     startedAtContextTime: number | null;
     startOffsetSeconds: number;
@@ -3213,11 +3873,11 @@ function readVoiceRecord(manager: DefaultAudioManager, handle: AudioHandle): Obs
 }
 
 /**
- * Park pre-start intents on a loading voice's record — the seam `fadeTo` and `crossfade`
- * will write through once they land. `pendingFadeIn` and `releaseOnStart` have
- * production writers (`PlayOptions.fadeIn` and `fadeOut`); the other two do not, so
- * without this helper the precedence order of Invariant #121 would be write-only state
- * no test could reach.
+ * Park pre-start intents on a loading voice's record — the seam `crossfade` will write
+ * through once it lands. Every other slot now has a production writer
+ * (`PlayOptions.fadeIn`, `fadeOut` and `fadeTo`) and is driven through it; only
+ * `linkedFadeOut` has none, so without this helper the last step of Invariant #121's
+ * precedence order would be write-only state no test could reach.
  */
 function writeVoiceIntents(
     manager: DefaultAudioManager,

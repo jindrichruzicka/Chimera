@@ -9,10 +9,10 @@ import type { PlayOptions } from './AudioManager';
  *
  * These are pure types. The resolver that turns a {@link Cue} into seconds lives
  * in `renderer/audio/audioCueSheet.ts`. `PlayOptions` already consumes
- * `from`/`to`/`loopRegion` and {@link FadeInSpec} via `fadeIn`, and
- * {@link FadeOutSpec} reaches a voice through `AudioManager.fadeOut`;
- * {@link FadeToSpec} and {@link CrossfadeOptions} still await the `fadeTo` and
- * `crossfade` verbs, which land in later F74 tasks.
+ * `from`/`to`/`loopRegion` and {@link FadeInSpec} via `fadeIn`, while
+ * {@link FadeOutSpec} and {@link FadeToSpec} reach a voice through
+ * `AudioManager.fadeOut` and `AudioManager.fadeTo`; only {@link CrossfadeOptions}
+ * still awaits its verb, which lands in a later F74 task.
  *
  * `AudioCueName` is defined sim-side and flows sim → renderer, never the reverse
  * (Invariant #124); it is imported here as a type only.
@@ -72,11 +72,22 @@ export type FadeOutSpec =
     | { readonly toCue: Cue; readonly curve?: FadeCurve }
     | { readonly toEnd: true; readonly curve?: FadeCurve };
 
-/** Ramp a live voice's gain to an absolute target and hold (does not stop). */
+/**
+ * Ramp a live voice's gain to an absolute target and hold — a dip or a swell, never a
+ * release.
+ *
+ * Only the ramp WINDOW clamps to the voice's scheduled end, deliberately unlike a
+ * fade-in: `to` is an absolute ceiling the caller named, so lowering it would silently
+ * rewrite the request. The ramp is therefore COMPRESSED into what remains rather than
+ * truncated, and reaches the full `to` at the clamped end. Nothing about the voice's death
+ * moves either, and Web Audio cannot un-schedule a stop — so a voice already fading out is
+ * re-targetable but still dies on time, and `{ to: 1 }` on one peaks at full gain on the
+ * exact sample it stops.
+ */
 export interface FadeToSpec {
-    /** Absolute stage-1 gain, clamped `[0, 1]`; becomes the new ceiling. */
+    /** Absolute stage-1 gain, clamped `[0, 1]`; becomes the voice's new ceiling. */
     readonly to: number;
-    /** `≤ 0` or non-finite ⇒ applied instantly. */
+    /** `≤ 0` or non-finite ⇒ names no window, so it is applied instantly. */
     readonly durationMs: number;
     readonly curve?: FadeCurve;
 }
