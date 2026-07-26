@@ -4,7 +4,7 @@ import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/conten
 import type { AssetManager, ResolvedAsset } from '../assets/AssetManager';
 import { AudioBus, type AudioBusId, type AudioBusOptions } from './AudioBus';
 import { parseAudioCueSheet, resolveCue, resolveCueWindow } from './audioCueSheet';
-import type { Cue, FadeCurve, FadeInSpec, FadeToSpec, LoopRegion } from './Cue';
+import type { Cue, FadeCurve, FadeInSpec, FadeOutSpec, FadeToSpec, LoopRegion } from './Cue';
 
 export type { AudioBusId } from './AudioBus';
 
@@ -50,6 +50,7 @@ export interface AudioHandle {
 export interface AudioManager {
     play(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): AudioHandle;
     stop(handle: AudioHandle): void;
+    fadeOut(handle: AudioHandle, spec: FadeOutSpec): void;
     stopAll(bus?: AudioBusId): void;
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
     dispose(): void;
@@ -65,9 +66,10 @@ export interface AudioManagerOptions {
  * Where a voice is in its lifecycle. `'loading'` spans `play()` returning to
  * `startVoice` running — a window of at least two microtask hops plus a load and a
  * decode, throughout which `source` and `gainNode` are both null and an op has nothing
- * to write to. `'fading-out'` is written by `fadeOut` in a later task; it is declared
- * here because the phase set is what the ramp verbs and voice preemption discriminate
- * on (§4.25, Invariants #119/#123), not because anything sets it yet.
+ * to write to. `'fading-out'` is written by {@link DefaultAudioManager.fadeOut} and
+ * spans its ramp: the voice stays in the pool, valid and re-targetable, until the
+ * scheduled stop fires (§4.25, Invariant #119). Voice preemption discriminates on the
+ * same set (Invariant #123, still to land).
  *
  * @internal Exported only so tests reading the private `VoiceRecord` bind to this union
  * rather than hand-copying it — a copy would drift silently when a phase is added.
@@ -106,20 +108,46 @@ interface VoiceRecord {
     /** `start()`'s offset argument — the POST-fold entry point into the buffer. */
     startOffsetSeconds: number;
     /**
+     * The DECODED buffer's duration — the timeline `startVoice` actually scheduled
+     * against, so a later fade resolves a `{ toCue }` against it rather than the
+     * authoring sheet's `durationSeconds`, which may overstate the clip. `null` before
+     * the voice starts.
+     */
+    bufferDurationSeconds: number | null;
+    /**
+     * The EFFECTIVE loop window as started — a whole-buffer loop records
+     * `[0, duration]`, since `source.loopStart === loopEnd === 0` is the Web Audio
+     * sentinel for it and carries no period. `null` when the voice does not loop.
+     *
+     * Neither the requested `loop` nor `loopRegion` can stand in for this: a window
+     * that collapsed after clamping disables looping, and a region resolves against the
+     * decoded duration. Its length is the period {@link nextCueContextTime} wraps by.
+     */
+    loopWindowSeconds: LoopWindowSeconds | null;
+    /**
      * Absolute context time this voice is scheduled to end, or `null` when it has no
      * determinate end (an unbounded loop) or when scheduling the stop failed. A fade
      * clamps its ramp end to this, so it must never name a stop that was not
      * scheduled.
+     *
+     * `fadeOut` writes its own ramp end here, but only ever `min`-clamped against what
+     * this already holds and then floored at `now` — so a later fade can shorten a
+     * voice's REMAINING life and never extend it, even though `source.stop()` would
+     * itself accept a later time (§4.25). The floor is why "never later than before" is
+     * not quite the same claim: a voice whose stop has elapsed but whose `onended` has
+     * not yet been delivered records `now`, which is later than the stop it replaces and
+     * extends nothing audible.
      */
     scheduledStopAt: number | null;
     phase: VoicePhase;
     /**
      * Precedence step 1 of Invariant #121: a release requested before the voice started.
      * Honoured by short-circuiting `startVoice`, so the source is never created at all.
-     * Written by `fadeOut` in a later task, when a pre-start fade has nothing to ramp.
+     * Written by {@link DefaultAudioManager.fadeOut}, whose ramp has nothing to write to
+     * while the voice is still loading.
      */
     releaseOnStart: boolean;
-    /** Step 2: {@link PlayOptions.fadeIn}, the one intent with a writer today. */
+    /** Step 2: {@link PlayOptions.fadeIn}, filled by `play` itself rather than by a verb. */
     pendingFadeIn: FadeInSpec | null;
     /** Step 3: a ramp-to-absolute requested pre-start. Written by `fadeTo` in a later task. */
     pendingFadeTo: FadeToSpec | null;
@@ -135,6 +163,12 @@ interface VoiceRecord {
     pannerNode: PannerNode | null;
 }
 
+/** A resolved `[loopStart, loopEnd]` region in buffer-local seconds. */
+interface LoopWindowSeconds {
+    readonly startSeconds: number;
+    readonly endSeconds: number;
+}
+
 /** A voice's resolved playback schedule, against a decoded buffer's real duration. */
 interface VoiceSchedule {
     /** The EFFECTIVE loop flag: `false` when a requested loop window collapsed. */
@@ -143,7 +177,20 @@ interface VoiceSchedule {
     readonly entryOffsetSeconds: number;
     /** `to`'s window length, measured from the PRE-FOLD anchor; `null` when unbounded. */
     readonly playDurationSeconds: number | null;
-    readonly loopWindow: { readonly startSeconds: number; readonly endSeconds: number } | null;
+    readonly loopWindow: LoopWindowSeconds | null;
+}
+
+/**
+ * The nodes and playback timeline a STARTED voice ramps against. Obtained through
+ * {@link startedVoice}, which returns `null` for the one state where a fade verb has
+ * nothing to write to: a voice still `'loading'`, whose `play()` has returned but whose
+ * `startVoice` has not run.
+ */
+interface StartedVoice {
+    readonly source: AudioBufferSourceNode;
+    readonly gainNode: GainNode;
+    readonly startedAtContextTime: number;
+    readonly bufferDurationSeconds: number;
 }
 
 const DEFAULT_POOL_SIZE = 32;
@@ -154,6 +201,8 @@ const BUS_IDS: readonly AudioBusId[] = ['master', 'music', 'sfx', 'voice'];
 const GAIN_RAMP_EPSILON = 1e-4;
 const EQUAL_POWER_WAYPOINTS = 64;
 const DEFAULT_FADE_CURVE: FadeCurve = 'linear';
+/** The fade-out window substituted when `{ toEnd }` finds no end to ramp to (§4.25). */
+const DEFAULT_FADE_OUT_MS = 250;
 
 export class DefaultAudioManager implements AudioManager {
     private readonly audioContext: AudioContext;
@@ -213,6 +262,8 @@ export class DefaultAudioManager implements AudioManager {
             loopRegion: opts.loopRegion ?? null,
             startedAtContextTime: null,
             startOffsetSeconds: 0,
+            bufferDurationSeconds: null,
+            loopWindowSeconds: null,
             scheduledStopAt: null,
             phase: 'loading',
             releaseOnStart: false,
@@ -263,6 +314,74 @@ export class DefaultAudioManager implements AudioManager {
         }
 
         this.releaseVoice(record, { stopSource: true });
+    }
+
+    /**
+     * Ramp a live voice's stage-1 gain to `0` per `spec`, then stop it — Invariant #119.
+     *
+     * The release is realised ONLY by `source.stop(rampEnd)`, so the native
+     * `source.onended` handler installed at `startVoice` stays the sole `releaseVoice`
+     * path and no wall-clock timer ever schedules one. The voice therefore stays in the
+     * pool with `handle.valid === true` for the whole ramp (phase `'fading-out'`), and
+     * `valid` flips false exactly once, under `releaseVoice`'s `voices.delete` guard.
+     *
+     * A no-op on an invalid or already-released handle. A fade arriving before the
+     * voice has started parks {@link VoiceRecord.releaseOnStart} instead, so the source
+     * is never created at all (Invariant #121).
+     */
+    public fadeOut(handle: AudioHandle, spec: FadeOutSpec): void {
+        const record = this.voices.get(handle.id);
+        if (record === undefined) {
+            return;
+        }
+
+        const started = startedVoice(record);
+        if (started === null) {
+            // Still loading: there is no gain to ramp and no source to stop, so the
+            // release is parked rather than applied — step 1 of Invariant #121.
+            record.releaseOnStart = true;
+            return;
+        }
+
+        const now = this.audioContext.currentTime;
+        const { rampEnd, deferredWarning } = resolveFadeOutRampEnd(record, started, spec, now);
+
+        try {
+            started.source.stop(rampEnd);
+        } catch {
+            // The ramp's whole safety rests on the release it hands off to. Without a
+            // scheduled stop the voice would sit silent and unreleased forever, holding
+            // a pool slot, so it is stopped now — and the cut is said out loud rather
+            // than left as an unexplained missing fade.
+            console.warn(
+                `Audio fadeOut could not schedule its stop at ${rampEnd}s; the fade is dropped and the voice is stopped immediately.`,
+            );
+            this.releaseVoice(record, { stopSource: true });
+            return;
+        }
+
+        if (deferredWarning !== null) {
+            // Only now that the fade it narrates is going to happen. A voice reaches
+            // `{ toEnd }` with no scheduled end two ways, and ONE of them is a platform
+            // that refuses `stop(when)` — which refuses the stop above as well. Printed
+            // eagerly, the message would promise a substituted fade one statement before
+            // the message saying the fade was dropped (Invariant #118 specifies one).
+            console.warn(deferredWarning);
+        }
+
+        // Only now that the release exists. `rampEnd` was clamped against any stop
+        // already scheduled and then floored at `now`, so this write can only shorten
+        // the voice's remaining life.
+        record.scheduledStopAt = rampEnd;
+        record.phase = 'fading-out';
+        scheduleGainRamp(
+            started.gainNode.gain,
+            0,
+            now,
+            rampEnd,
+            spec.curve ?? DEFAULT_FADE_CURVE,
+            fadeOutDeparture(record, started.gainNode.gain),
+        );
     }
 
     public stopAll(bus?: AudioBusId): void {
@@ -468,8 +587,18 @@ export class DefaultAudioManager implements AudioManager {
         gainNode.gain.setValueAtTime(initialVoiceGain(record), startedAt);
         this.connectVoice(record, source, gainNode);
 
+        // The playhead timeline half of what {@link startedVoice} narrows on; the two
+        // nodes above are the other half. What makes "started" a single state rather than
+        // four independent ones is that this whole block is synchronous and non-reentrant
+        // — no caller can observe the half-written record between the two writes, and a
+        // throw in `connectVoice` reaches the load `.catch`, which releases the record out
+        // of the pool before anything can read it.
         record.startOffsetSeconds = schedule.entryOffsetSeconds;
         record.startedAtContextTime = startedAt;
+        record.bufferDurationSeconds = buffer.duration;
+        record.loopWindowSeconds = schedule.loop
+            ? (schedule.loopWindow ?? { startSeconds: 0, endSeconds: buffer.duration })
+            : null;
 
         try {
             if (!schedule.loop && schedule.playDurationSeconds !== null) {
@@ -525,8 +654,13 @@ export class DefaultAudioManager implements AudioManager {
     private applyPendingIntents(record: VoiceRecord, gainNode: GainNode, startedAt: number): void {
         // The gain `startVoice` just wrote at `t0`. It has to be handed to the ramps
         // explicitly: `param.value` reports the last rendered quantum, so it cannot see a
-        // write made in this same turn. The first ramp consumes it — after that the param
-        // is mid-curve and its own held value is the only truth.
+        // write made in this same turn. Cleared after the first ramp consumes it because
+        // it then names a value the param has already left — NOT because `param.value` is
+        // trustworthy from there on: at `t0` the node has rendered nothing at all and
+        // still reports its default of 1. A `fadeTo` that lands second should bound the
+        // read the way {@link fadeOutDeparture} does rather than pass nothing; today it
+        // cannot be reached (`pendingFadeTo` has no writer until the `fadeTo` verb lands),
+        // and the bound belongs with the verb that makes `to` the new ceiling.
         let departure: number | undefined = initialVoiceGain(record);
 
         const fadeIn = record.pendingFadeIn;
@@ -870,15 +1004,19 @@ function clampUnit(value: number): number {
  * at `currentTime`, so a future `startTime` would anchor the curve at a stale
  * departure. Callers pass `audioContext.currentTime`, as {@link AudioBus.duck} does.
  *
- * Pass `departure` when the caller ITSELF just wrote the value the ramp must leave from.
- * `param.value` reports `[[current value]]` — the parameter's value at the start of the
- * current render quantum — and a `setValueAtTime` scheduled in this same turn does not
- * move it, so reading it back would anchor at the node's previous gain (a fresh
+ * Pass `departure` whenever the caller knows the gain better than the getter can report
+ * it. `param.value` reports `[[current value]]` — the parameter's value at the start of
+ * the current render quantum — and a `setValueAtTime` scheduled in this same turn does
+ * not move it, so reading it back anchors at the node's previous gain (a fresh
  * `GainNode` reports its `defaultValue` of 1). That misread is silent for a `linear`
  * ramp on the `cancelAndHoldAtTime` path, but `equalPower` derives every waypoint from
  * the departure and the fallback path writes it as an explicit anchor — so a fade-in
- * from silence would invert into a ramp down from full gain. Omit it whenever the
- * departure is genuinely unknown, such as over a ramp already in flight.
+ * from silence would invert into a ramp down from full gain.
+ *
+ * Two callers know better, for different reasons: one just WROTE the value (the fade-in
+ * at `t0` passes the floor it laid down), and one can BOUND it ({@link fadeOutDeparture}
+ * caps the read at the voice's ceiling, since a stale read reports a gain the voice
+ * cannot be at). Omit it only when neither holds and the departure is genuinely unknown.
  */
 export function scheduleGainRamp(
     param: AudioParam,
@@ -1039,9 +1177,264 @@ function fadeInFloor(curve: FadeCurve): number {
 }
 
 /**
+ * The gain a fade-out departs from: what the param reports, capped at the voice's own
+ * ceiling.
+ *
+ * The cap is not defensive. `AudioParam.value` reports `[[current value]]` — the value
+ * at the START of the current render quantum — so a gain written in this same one is
+ * invisible to it, and a `GainNode` that has not yet rendered reports its `defaultValue`
+ * of 1. `cancelAndHoldAtTime` pins the PARAM's own value correctly and cannot help:
+ * `equalPower` derives every waypoint from this number JS-side, and the fallback
+ * re-anchor writes it as an explicit `setValueAtTime`. Left uncapped, a fade-OUT of a
+ * `volume: 0.5` voice would ramp UP to ~1.0 in its first waypoint before falling — a
+ * swell to double the requested volume — and on a platform without
+ * `cancelAndHoldAtTime` it would step there outright, on every curve.
+ *
+ * A voice's stage-1 gain never exceeds `volume` — above the `1e-4` epsilon floor, which
+ * {@link fadeInFloor} and {@link scheduleExponentialRamp} may write over a smaller
+ * `volume`, inaudibly at −80 dB. So capping the read is exact whenever the param can see
+ * the truth and a bounded over-estimate when it cannot.
+ *
+ * The residual it does NOT fix: inside the first quantum of a fade-in the voice's real
+ * gain is the curve's floor while the param still reports 1, so a fade-out there departs
+ * from the ceiling and rises to it before falling — a smaller version of the same
+ * artifact, bounded now by what the caller asked for rather than by the node's default of
+ * 1. Passing `record.volume`
+ * unconditionally would cause that rise on EVERY mid-fade voice, which is why this reads
+ * the param first and only caps it.
+ *
+ * A verb that RAISES the ceiling — `fadeTo`, in a later task — must update `volume` for
+ * this to stay exact.
+ */
+function fadeOutDeparture(record: VoiceRecord, gain: AudioParam): number {
+    return Math.min(gain.value, record.volume);
+}
+
+/**
+ * The nodes and timeline a fade verb writes against, or `null` while the voice is still
+ * `'loading'`. All four fields are `null` until `startVoice` writes them in one block at
+ * `t0`, and a record whose nodes have been dropped was deleted from `voices` first — so
+ * this is ONE state test, spelled four ways because TypeScript needs each narrowed.
+ */
+function startedVoice(record: VoiceRecord): StartedVoice | null {
+    const { source, gainNode, startedAtContextTime, bufferDurationSeconds } = record;
+    if (
+        source === null ||
+        gainNode === null ||
+        startedAtContextTime === null ||
+        bufferDurationSeconds === null
+    ) {
+        return null;
+    }
+
+    return { source, gainNode, startedAtContextTime, bufferDurationSeconds };
+}
+
+/** A fade-out's ramp end, with any message that must not be printed before its stop is. */
+interface FadeOutRamp {
+    /** The absolute context time the ramp reaches `0`. */
+    readonly rampEnd: number;
+    /**
+     * Held for {@link DefaultAudioManager.fadeOut} to print once `source.stop(rampEnd)` is
+     * accepted, because it narrates a fade the refusal path cancels. A diagnosis that
+     * survives that path is printed where it is found instead: the unreachable-cue warning
+     * names an immediate stop, which is what the refusal does too.
+     */
+    readonly deferredWarning: string | null;
+}
+
+/**
+ * The absolute context time a fade-out ramps to, for every {@link FadeOutSpec} variant.
+ * `min`-clamped against the voice's scheduled end and then floored at `now`, in that
+ * order, so it is never `NaN` and never in the past — the value goes straight to
+ * `source.stop`, which a spec-compliant node refuses for a negative or non-finite time.
+ *
+ * Three inputs fade over an empty window — an instant silence — and none of them lengthens
+ * the voice's remaining life. They do not all need the floor: a `{ toCue }` the playhead
+ * will not reach again and a zero `overMs` land ON `now` unaided, so the floor merely ties
+ * them. What it rescues is the two that resolve strictly BEHIND `now` — a negative `overMs`
+ * and a scheduled stop that has elapsed without its `onended` having been delivered yet.
+ */
+function resolveFadeOutRampEnd(
+    record: VoiceRecord,
+    started: StartedVoice,
+    spec: FadeOutSpec,
+    now: number,
+): FadeOutRamp {
+    const { rampEnd: authoredEnd, deferredWarning } = resolveAuthoredFadeOutEnd(
+        record,
+        started,
+        spec,
+        now,
+    );
+    if (!Number.isFinite(authoredEnd)) {
+        // A non-finite window names no fade at all, so the voice is silenced and
+        // stopped now. Handled BEFORE the clamp, which is what would otherwise split
+        // the two non-finite inputs apart: `NaN` falls through to an instant stop while
+        // `+Infinity` clamps to a bounded voice's scheduled end and becomes a
+        // full-length fade — same garbage input, opposite outcomes.
+        return { rampEnd: now, deferredWarning };
+    }
+
+    // `max(now, …)` rather than a second guard: a negative `overMs` and a scheduled end
+    // already behind us mean the same thing here as a cue that has passed.
+    return { rampEnd: Math.max(now, clampRampEnd(record, authoredEnd)), deferredWarning };
+}
+
+/** The ramp end each variant ASKS for, before clamping. May be non-finite. */
+function resolveAuthoredFadeOutEnd(
+    record: VoiceRecord,
+    started: StartedVoice,
+    spec: FadeOutSpec,
+    now: number,
+): FadeOutRamp {
+    if ('overMs' in spec) {
+        return { rampEnd: now + spec.overMs / 1000, deferredWarning: null };
+    }
+
+    if ('toEnd' in spec) {
+        const scheduledStopAt = record.scheduledStopAt;
+        if (scheduledStopAt !== null) {
+            return { rampEnd: scheduledStopAt, deferredWarning: null };
+        }
+        // No scheduled end, so there is nothing to ramp to. Substituting a short fade is
+        // the fail-soft outcome, but a caller who asked to fade "to the end" is getting
+        // something else entirely, so say which. The message states the observable fact
+        // and does not name a cause: an unbounded loop reaches this, and so does a
+        // BOUNDED loop whose `source.stop` `startVoice` could not schedule — that voice
+        // warned once already, and guessing between the two here would name the wrong one
+        // half the time.
+        //
+        // DEFERRED rather than printed here, because that second cause is a platform that
+        // refuses `stop(when)` — and it will refuse this fade's stop too, cancelling the
+        // substitution this message promises.
+        return {
+            rampEnd: now + DEFAULT_FADE_OUT_MS / 1000,
+            deferredWarning: `Audio fadeOut { toEnd } found no scheduled end on this voice; fading out over ${DEFAULT_FADE_OUT_MS}ms instead.`,
+        };
+    }
+
+    // `{ toCue }` — an end-point by nature, so it clamps to `[0, duration]` and never
+    // abandons, exactly as `play()` resolves its `to`.
+    const resolution = resolveCue(spec.toCue, {
+        sheet: record.sheet,
+        duration: started.bufferDurationSeconds,
+        role: 'endpoint',
+    });
+    // An endpoint never abandons; the fallback keeps the union exhaustive for TS.
+    const cueSeconds =
+        resolution.kind === 'resolved' ? resolution.seconds : started.bufferDurationSeconds;
+
+    const cueContextTime = nextCueContextTime(record, started, cueSeconds, now);
+    if (cueContextTime !== null) {
+        return { rampEnd: cueContextTime, deferredWarning: null };
+    }
+
+    // Both the AUTHORED cue and what it resolved to, because they can differ: an absent
+    // `{ name }` degrades to the buffer end without a warning of its own (Invariant
+    // #118). That end stays REACHABLE on a non-looping voice and on a whole-buffer loop,
+    // where a typo is therefore a silent full-length fade that never arrives here; it
+    // arrives only on a voice whose loop window is shorter than its buffer, where the
+    // degraded end lands past `loopEnd`. There a message naming only the seconds would
+    // leave the operator no way back to the call that caused it.
+    console.warn(
+        `Audio fadeOut cue ${describeCue(spec.toCue)} resolved to ${cueSeconds}s, which this voice never reaches again (${describeVoiceTimeline(record)}); silencing and stopping the voice immediately.`,
+    );
+    // Printed here, not deferred: it names an immediate stop, which is exactly what the
+    // refusal path performs as well, so it stays true whichever way the stop goes.
+    return { rampEnd: now, deferredWarning: null };
+}
+
+/**
+ * An authored {@link Cue} as written at the call site, for a warning — each variant
+ * rendered in its own source syntax so the text can be searched for verbatim. A numeric
+ * cue reads back redundantly when nothing clamped it (`cue 4s resolved to 4s`); that is
+ * the point, since the pair is what shows whether resolution moved it.
+ */
+function describeCue(cue: Cue): string {
+    if (typeof cue === 'number') {
+        return `${cue}s`;
+    }
+    return typeof cue === 'string' ? `'${cue}'` : `{ name: "${cue.name}" }`;
+}
+
+/** The schedule facts that decide whether a cue is still ahead, for a warning. */
+function describeVoiceTimeline(record: VoiceRecord): string {
+    const window = record.loopWindowSeconds;
+    const entry = `entered at ${record.startOffsetSeconds}s`;
+    return window === null
+        ? `${entry}, not looping`
+        : `${entry}, loop window [${window.startSeconds}s, ${window.endSeconds}s]`;
+}
+
+/**
+ * The context time the playhead NEXT reaches `cueSeconds`, or `null` when it never will
+ * — Invariant #122. Derived from `startedAtContextTime`, `startOffsetSeconds` and the
+ * effective loop window at a fixed `playbackRate` of 1, so it needs no timer and no
+ * sampling of where the playhead currently is.
+ *
+ * A looping voice runs its ENTRY pass from `startOffsetSeconds` out to the window end,
+ * then repeats `[loopStart, loopEnd]` forever, so a cue is reached in the entry pass,
+ * on some later pass, or never. "Never" covers a cue that has gone by on a non-looping
+ * voice, one before `loopStart` that only the intro played, and one past `loopEnd` — all
+ * the same thing from the caller's side, and all answered with `null`.
+ *
+ * The window is treated as CLOSED at `loopEnd`: that is where the playhead wraps, so a
+ * cue there is reached once per pass rather than never — which is what makes
+ * `{ toCue: 'end' }` on a whole-buffer loop a fade over the current pass instead of an
+ * instant cut.
+ */
+function nextCueContextTime(
+    record: VoiceRecord,
+    started: StartedVoice,
+    cueSeconds: number,
+    now: number,
+): number | null {
+    const startedAt = started.startedAtContextTime;
+    const entrySeconds = record.startOffsetSeconds;
+    const window = record.loopWindowSeconds;
+
+    if (window === null) {
+        // No loop: every position is passed exactly once. A cue BEHIND the entry point
+        // needs no test of its own — it lands before `startedAtContextTime`, which is
+        // necessarily behind `now`, so the one comparison covers both ways of missing.
+        const reachedAt = startedAt + (cueSeconds - entrySeconds);
+        return reachedAt > now ? reachedAt : null;
+    }
+
+    const { startSeconds: loopStart, endSeconds: loopEnd } = window;
+    const period = loopEnd - loopStart;
+
+    if (cueSeconds > loopEnd) {
+        // Past the window: the entry pass runs out to `loopEnd` and every pass after it
+        // wraps there, so the playhead never gets this far.
+        return null;
+    }
+
+    // A cue BEHIND the entry point is not in the entry pass at all, and needs no branch
+    // of its own: this lands it before `startedAtContextTime` — necessarily behind
+    // `now` — so it falls through to the period advance below, which puts it exactly one
+    // period on, at `(loopEnd − entry) + (cue − loopStart)`. The two are the same
+    // instant, and naming the wrap separately would only compute it twice.
+    const reachedAt = startedAt + (cueSeconds - entrySeconds);
+    if (reachedAt > now) {
+        return reachedAt;
+    }
+
+    // At or behind the playhead: the NEXT pass over it, if the loop returns there at
+    // all. A cue before `loopStart` was in the intro and is never replayed; a degenerate
+    // zero-length window replays nothing. `floor(…) + 1` rather than `ceil`, so a cue
+    // the playhead is sitting exactly on waits a whole period — a looping voice always
+    // has a next arrival, and fading over it beats the cut that a cue which never comes
+    // back has to take.
+    const repeats = cueSeconds >= loopStart && period > 0;
+    return repeats ? reachedAt + period * (Math.floor((now - reachedAt) / period) + 1) : null;
+}
+
+/**
  * Clamp a ramp end to the voice's scheduled end. The authored bound is authoritative and
- * a fade never extends it (§4.25); a voice with no determinate end — an unbounded loop —
- * has nothing to clamp against.
+ * a fade never extends it (§4.25); a voice with no scheduled end — an unbounded loop, or
+ * a bounded one whose stop could not be scheduled — has nothing to clamp against.
  */
 function clampRampEnd(record: VoiceRecord, rampEnd: number): number {
     const scheduledStopAt = record.scheduledStopAt;

@@ -37,6 +37,11 @@ const providerMocks = vi.hoisted(() => {
             valid: true,
         })),
         stop: vi.fn(),
+        // Kept in step with the AudioManager interface by hand: the `as unknown as`
+        // cast at the assertion site (its `ref` is a bare string, not an AssetRef)
+        // means a missing member cannot red `tsc` here the way it does for the noop
+        // manager in providers.tsx and the AudioManagerStubs doubles.
+        fadeOut: vi.fn(),
         stopAll: vi.fn(),
         duck: vi.fn(),
         dispose: vi.fn(),

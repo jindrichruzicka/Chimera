@@ -9,9 +9,10 @@ import type { PlayOptions } from './AudioManager';
  *
  * These are pure types. The resolver that turns a {@link Cue} into seconds lives
  * in `renderer/audio/audioCueSheet.ts`. `PlayOptions` already consumes
- * `from`/`to`/`loopRegion` and {@link FadeInSpec} via `fadeIn`; {@link FadeToSpec} and
- * {@link FadeOutSpec} reach a voice only through the `AudioManager` verbs
- * (`fadeOut`/`fadeTo`/`crossfade`), which land in later F74 tasks.
+ * `from`/`to`/`loopRegion` and {@link FadeInSpec} via `fadeIn`, and
+ * {@link FadeOutSpec} reaches a voice through `AudioManager.fadeOut`;
+ * {@link FadeToSpec} and {@link CrossfadeOptions} still await the `fadeTo` and
+ * `crossfade` verbs, which land in later F74 tasks.
  *
  * `AudioCueName` is defined sim-side and flows sim → renderer, never the reverse
  * (Invariant #124); it is imported here as a type only.
@@ -51,9 +52,20 @@ export interface LoopRegion {
 
 /**
  * Fade-out target — each variant ramps stage-1 gain to `0`, then stops:
- * - `{ overMs }` — ramp over `[now, now + overMs]`.
- * - `{ toCue }` — ramp until the playhead reaches the cue.
- * - `{ toEnd: true }` — ramp to the voice's scheduled end.
+ * - `{ overMs }` — ramp over `[now, now + overMs]`. A non-positive or non-finite
+ *   `overMs` names no window and silences the voice at once, as no fade at all.
+ * - `{ toCue }` — ramp until the playhead next reaches the cue, loop-period-aware. A
+ *   cue the playhead will not reach again — already passed, or outside the loop
+ *   window — silences and stops the voice immediately, with a warning. An unresolvable
+ *   `{ name }` degrades to the buffer end SILENTLY, since an end-point cue never
+ *   abandons: on any voice that still reaches its end a mistyped cue is a full-length
+ *   fade, not a diagnosed one.
+ * - `{ toEnd: true }` — ramp to the voice's scheduled end; a voice that has none falls
+ *   back to a 250 ms ramp, with a warning. Both an unbounded loop and a bounded one
+ *   whose stop the platform refused arrive there.
+ *
+ * Every variant's ramp end is clamped to any stop already scheduled, so a fade can
+ * shorten a voice's remaining life and never extend it.
  */
 export type FadeOutSpec =
     | { readonly overMs: number; readonly curve?: FadeCurve }

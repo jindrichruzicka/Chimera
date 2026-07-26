@@ -10,13 +10,17 @@
  *          unresolvable load-bearing anchor abandons with one warning, end-point
  *          cues clamp, and a post-clamp-collapsed window is dropped.
  *   #119 — a scheduled stop drives release through the native `onended` handler,
- *          never a wall-clock timer.
+ *          never a wall-clock timer; a fade-out keeps the handle valid across the
+ *          whole ramp and invalidates it exactly once, under `voices.delete`.
  *   #120 — every stage-1 ramp cancels and re-anchors first; an exponential fade
  *          cannot depart from zero, so its floor is the epsilon, not silence.
  *   #121 — ops requested before `startVoice` are parked on the `VoiceRecord` and
  *          applied atomically at `t0` in the order `releaseOnStart` →
  *          `pendingFadeIn` → `pendingFadeTo` → `linkedFadeOut`; no ramp is ever
  *          scheduled against a null source.
+ *   #122 — cue-relative fade timing is derived from `startedAtContextTime`,
+ *          `startOffsetSeconds`, the decoded duration and the effective loop window,
+ *          never from a wall-clock timer.
  *   #124 — the cue sheet is read only through `getManifestMetadata` and parsed
  *          only here, in `renderer/audio`.
  *   #126 — the public `AudioHandle` gains no fields and is never spread-built.
@@ -28,11 +32,18 @@
  * to drive them. The `AudioHandle` type pin is red at `tsc` rather than in vitest
  * (`expectTypeOf` is erased at runtime), so both gates must run.
  *
- * For #121 the load-bearing red is the precedence order itself: `pendingFadeIn` is the
- * only slot with a production writer, so the other three are parked through
- * {@link writeVoiceIntents} — the same seam `fadeOut`/`fadeTo`/`crossfade` will use —
- * and the ordering is asserted from the voice gain's own call log rather than a global
- * invocation index.
+ * For #121 the load-bearing red is the precedence order itself: `pendingFadeIn` and
+ * `releaseOnStart` have production writers (`PlayOptions.fadeIn` and `fadeOut`), while
+ * `pendingFadeTo` and `linkedFadeOut` have none — so the slots a test cannot fill through
+ * a public verb are parked through {@link writeVoiceIntents}, the same seam
+ * `fadeTo`/`crossfade` will use, and the ordering is asserted from the voice gain's own
+ * call log rather than a global invocation index.
+ *
+ * For #119 the fade-out tests were written against a `fadeOut` with an empty body, so
+ * every red is behavioural rather than "fadeOut is not a function". The load-bearing
+ * ones are the timer-free release (a stray `setTimeout` shows in `vi.getTimerCount()`,
+ * since fake timers are installed for the whole file), the ramp-end arithmetic, and the
+ * refused-stop fallback — the reachability and clamp cases exist to bound them.
  */
 
 import {
@@ -1285,10 +1296,11 @@ describe('DefaultAudioManager — loop regions', () => {
     });
 
     it('records the playhead anchors a later fade derives its timing from (#122)', async () => {
-        // Nothing in this change reads these, so without an assertion they are
-        // unverifiable write-only state; a fade would silently inherit whatever they
-        // happen to hold. Folded entry (period 4, (9-2) mod 4 = 3 → 5) and a real
-        // start time advanced past the play() call.
+        // Folded entry (period 4, (9-2) mod 4 = 3 → 5) and a real start time advanced
+        // past the play() call. The decoded duration and the EFFECTIVE loop window are
+        // recorded with them: the requested `loop`/`loopRegion` intents cannot stand in
+        // for either, since a collapsed window disables looping and the authoring
+        // sheet's durationSeconds is not the decoded one.
         const { context, manager, ref } = createCuedManager();
 
         const handle = manager.play(ref, { from: 9, loopRegion: { start: 2, end: 6 } });
@@ -1298,7 +1310,32 @@ describe('DefaultAudioManager — loop regions', () => {
         expect(readVoiceRecord(manager, handle)).toMatchObject({
             startOffsetSeconds: 5,
             startedAtContextTime: 12,
+            bufferDurationSeconds: 10,
+            loopWindowSeconds: { startSeconds: 2, endSeconds: 6 },
         });
+    });
+
+    it('records a whole-buffer loop as the window a cue-relative fade wraps by (#122)', async () => {
+        // A loop with no region has no loopStart/loopEnd on the source — the Web Audio
+        // sentinel for "loop the whole buffer" — so the period a fade wraps by is only
+        // knowable from the decoded duration.
+        const { manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            loopWindowSeconds: { startSeconds: 0, endSeconds: 10 },
+        });
+    });
+
+    it('records no loop window for a voice that does not loop (#122)', async () => {
+        const { manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        expect(readVoiceRecord(manager, handle).loopWindowSeconds).toBeNull();
     });
 
     it('releases a looping voice through onended when its scheduled stop fires (#119)', async () => {
@@ -1713,6 +1750,736 @@ describe('DefaultAudioManager — fade-in and pending intents', () => {
         // Containment must not make the failure invisible: name what survived.
         expect(warn).toHaveBeenCalledTimes(1);
         expect(String(warn.mock.calls[0]?.[0])).toContain('the incoming voice started normally');
+    });
+});
+
+// ─── fadeOut (#119, #122) ───────────────────────────────────────────────────────
+
+describe('DefaultAudioManager — fadeOut', () => {
+    it('ramps to silence and hands the release to the native onended path (#119)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+
+        manager.fadeOut(handle, { overMs: 500 });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 10.5 },
+        ]);
+        expect(source.stop).toHaveBeenCalledTimes(1);
+        expect(source.stop).toHaveBeenCalledWith(10.5);
+        // The whole point of #119: the stop IS the release schedule. Fake timers are
+        // installed for this whole file, so a wall-clock release would show up here.
+        expect(vi.getTimerCount()).toBe(0);
+        // The voice stays in the pool, valid and re-targetable, for the whole ramp.
+        expect(handle.valid).toBe(true);
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'fading-out',
+            scheduledStopAt: 10.5,
+        });
+    });
+
+    it('invalidates the handle exactly once, when the scheduled stop fires (#119)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+
+        manager.fadeOut(handle, { overMs: 500 });
+
+        // The premise: a voice mid-ramp, still in the pool. Without it the release
+        // below would only be re-proving the natural-end path.
+        expect(handle.valid).toBe(true);
+        expect(readVoiceRecord(manager, handle).phase).toBe('fading-out');
+        expect(source.stop).toHaveBeenCalledWith(10.5);
+
+        source.finish();
+
+        expect(handle.valid).toBe(false);
+        expect(source.disconnect).toHaveBeenCalledOnce();
+
+        // The `voices.delete` guard is what makes the second arrival inert rather than
+        // a double-release; `onended` was nulled, so this must reach nothing.
+        source.finish();
+
+        expect(source.disconnect).toHaveBeenCalledOnce();
+    });
+
+    it('writes only the voice gain, never a bus or master gain (#116)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        // Snapshots, not ramp counts: #116 says these are never WRITTEN by a fade op, so
+        // a stray setValueAtTime or cancel has to fail here too, not just a ramp.
+        const busCallsBefore = context.createdGainNodes
+            .slice(0, 4)
+            .map((gain) => [...gain.gain.calls]);
+
+        manager.fadeOut(handle, { overMs: 500 });
+
+        expect(context.createdGainNodes.slice(0, 4).map((gain) => gain.gain.calls)).toEqual(
+            busCallsBefore,
+        );
+        expect(countGainRamps(expectGain(context, 4).gain.calls)).toBe(1);
+    });
+
+    // Deliberately green against a no-op `fadeOut`: it bounds the guard rather than
+    // driving it, so a later refactor cannot turn a released handle into a write.
+    it('is a no-op on a handle whose voice has already been released', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+        manager.stop(handle);
+        const gainCallsAfterStop = [...expectGain(context, 4).gain.calls];
+        const stopCallCount = source.stop.mock.calls.length;
+
+        expect(() => {
+            manager.fadeOut(handle, { overMs: 500 });
+        }).not.toThrow();
+
+        expect(expectGain(context, 4).gain.calls).toEqual(gainCallsAfterStop);
+        expect(source.stop).toHaveBeenCalledTimes(stopCallCount);
+    });
+
+    it('parks a pre-start fade as releaseOnStart, so the source is never created (#121)', async () => {
+        const warn = spyOnWarn();
+        const { context, manager, handle, start } = createLoadingVoice({
+            playOptions: { fadeIn: { durationMs: 500 } },
+        });
+
+        manager.fadeOut(handle, { overMs: 500 });
+
+        // Nothing to ramp and nothing to stop: the intent is parked, not applied.
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'loading',
+            releaseOnStart: true,
+        });
+        expect(context.createdGainNodes).toHaveLength(4);
+
+        await start();
+
+        expect(context.createdSources).toHaveLength(0);
+        expect(context.createdGainNodes).toHaveLength(4);
+        expect(handle.valid).toBe(false);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('clamps the ramp end to the voice scheduled end rather than extending it (#119)', async () => {
+        // Bounded to 2 s of a 10 s clip, so scheduledStopAt is 12 while the fade wants 14.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { from: 0, to: 2 });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { overMs: 4000 });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 12 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12);
+    });
+
+    it('ramps toEnd exactly to the voice scheduled end (#122)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { from: 0, to: 3 });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { toEnd: true });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 13 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(13);
+    });
+
+    it('falls back to a 250 ms ramp when toEnd names no scheduled end (#119)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBeNull();
+
+        manager.fadeOut(handle, { toEnd: true });
+
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 10.25,
+        });
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10.25);
+        // An unbounded loop has no end to ramp to; the substitution must be visible.
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('no scheduled end');
+    });
+
+    it('says nothing about a toEnd substitution whose own stop is then refused (#118)', async () => {
+        // Both conditions come from ONE platform. A bounded LOOP is the shape that needs
+        // `source.stop(when)` to realise its end — a non-looping window rides `start()`'s
+        // duration argument instead — so the only way this voice reaches `fadeOut` with
+        // no scheduled end is the node having refused that stop at `play()`, and the same
+        // node refuses this fade's stop. Announcing the 250 ms substitution before the
+        // stop is accepted would promise a fade one statement ahead of the message saying
+        // the fade was dropped: the pair Invariant #118 allows one warning to rule out.
+        const { context, manager, ref } = createCuedManager();
+        context.failNextStopSchedule = true;
+        const handle = manager.play(ref, { loop: true, to: 2 });
+        await flushAudioLoad();
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBeNull();
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toEnd: true });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('the fade is dropped');
+    });
+
+    it('derives a toCue ramp end from the playhead anchors, not a timer (#122)', async () => {
+        // Entered at 2 s, so the outro cue at 9 s arrives 7 s after the real start.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { from: 2 });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { toCue: { name: 'outro' } });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 17 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(17);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('advances a toCue behind the playhead by one loop period (#122)', async () => {
+        // Whole-buffer loop of a 10 s clip entered at 0. Six seconds in, the cue at 4 s
+        // is behind the playhead — the next time it is reached is one period later.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+        context.currentTime = 16;
+
+        manager.fadeOut(handle, { toCue: 4 });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 16 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 24 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(24);
+    });
+
+    it('advances a toCue by WHOLE periods when the loop has run past it repeatedly (#122)', async () => {
+        // Thirty-five seconds into the same 10 s loop the cue at 4 s has gone by three
+        // times over. Adding one period rather than the whole quotient would name 24 s,
+        // already behind `now` — and the floor at `now` would serve that as an instant
+        // cut with nothing logged, since a cue that RESOLVED never takes the unreachable
+        // path that warns. Every other loop test sits inside the first period, where the
+        // quotient is 0 and the two arithmetics agree.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+        context.currentTime = 45;
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: 4 });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(54);
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 54,
+        });
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('reaches a toCue behind the loop entry only after the window wraps (#122)', async () => {
+        // Entry folds to 5 s inside the [2, 6) region, so the cue at 3 s is not in the
+        // entry pass at all: the playhead runs 5 → 6, wraps to 2, and reaches it at
+        // (6 - 5) + (3 - 2) = 2 s. A naive `cue - entry` would name a time in the past.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { from: 5, loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { toCue: 3 });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12);
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 12,
+        });
+    });
+
+    it('treats the loop START as reached too, so a cue sitting on it waits for the wrap (#122)', async () => {
+        // The window is closed at BOTH ends; until this, only the `loopEnd` end had a
+        // test. Entry folds to 5 s inside [2, 6), so the cue AT the loop start is behind the
+        // playhead: the voice runs 5 → 6, wraps, and arrives at 2 s one second later.
+        // `cue > loopStart` would call the most frequently reached point of the loop
+        // unreachable and cut the voice instead of fading it.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { from: 5, loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: { name: 'loopStart' } });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(11);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('treats the loop end as reached, so toCue "end" fades out over the pass (#122)', async () => {
+        // The playhead DOES reach loopEnd — that is where it wraps — so the window is
+        // closed at its end. Treating it as exclusive would make this an instant cut.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { loop: true, from: 4 });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { toCue: 'end' });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(16);
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 16,
+        });
+    });
+
+    it('silences and stops immediately when a toCue has already passed (#119)', async () => {
+        // Entered at 2 s and now 5 s in, so the chorus cue at 4 s went by 3 s ago and a
+        // non-looping voice never returns to it. No ramp into the past.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { from: 2 });
+        await flushAudioLoad();
+        context.currentTime = 15;
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: { name: 'chorus' } });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 15 },
+            { method: 'setValueAtTime', value: 0, time: 15 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(15);
+        expect(warn).toHaveBeenCalledTimes(1);
+        // The timeline segment is the half that tells an operator WHY the cue is out of
+        // reach; without it the message names seconds and no schedule to place them in.
+        expect(String(warn.mock.calls[0]?.[0])).toContain('entered at 2s, not looping');
+        expect(String(warn.mock.calls[0]?.[0])).toContain('stopping the voice immediately');
+    });
+
+    it('silences and stops immediately when a toCue lies outside the loop window (#122)', async () => {
+        // The outro at 9 s is past a [2, 6) loop: the playhead will never reach it, which
+        // is the same defect as a cue that has already gone by, and takes the same path.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { loop: true, loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: { name: 'outro' } });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'setValueAtTime', value: 0, time: 10 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('loop window [2s, 6s]');
+    });
+
+    it('never wraps a toCue on a voice whose requested loop was disabled (#122)', async () => {
+        // The region collapses after clamping, so looping is DISABLED even though the
+        // caller asked for it. Reading the requested intent instead of the effective
+        // schedule would leave a non-looping voice waiting for a wrap that never comes.
+        const warn = spyOnWarn();
+        const { context, manager, ref } = createCuedManager({ bufferSeconds: 1 });
+        const handle = manager.play(ref, { loopRegion: { start: 1, end: 'end' } });
+        await flushAudioLoad();
+        expect(expectSource(context, 0).loop).toBe(false);
+        expect(readVoiceRecord(manager, handle).loopWindowSeconds).toBeNull();
+        context.currentTime = 10.75;
+
+        manager.fadeOut(handle, { toCue: 0.5 });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10.75);
+        // One for the dropped region at play(), one for the cue that will not return.
+        expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('resolves a fade cue against the decoded duration, not the authoring sheet (#122)', async () => {
+        // The sheet claims 10 s but the clip decodes to 4, so the outro cue at 9 s is
+        // past the real end and clamps to the buffer. Trusting `durationSeconds` would
+        // put it beyond the loop window and cut the voice off instead of fading it.
+        const { context, manager, ref } = createCuedManager({
+            bufferSeconds: 4,
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: { name: 'outro' } });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(14);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('waits a whole period for a toCue the playhead is sitting exactly on (#122)', async () => {
+        // Right on the cue: there is no window left to fade over before this arrival, and
+        // a looping voice always has a next one. Fading over the next pass beats cutting
+        // the voice off, which is the outcome reserved for a cue that never comes back.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+        context.currentTime = 14;
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: 4 });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(24);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('names the authored cue, not just what it resolved to, when it is unreachable (#118)', async () => {
+        // A mistyped cue name degrades to the buffer end with no warning of its own. On
+        // a voice whose loop window is SHORTER than its buffer that lands past loopEnd,
+        // which is the one shape where a typo is diagnosed at all (the sibling test below
+        // pins the silent one). A message naming only the resolved seconds would leave no
+        // way back to the call that caused it.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { loop: true, loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: { name: 'chrous' } });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        const message = String(warn.mock.calls[0]?.[0]);
+        expect(message).toContain('{ name: "chrous" }');
+        expect(message).toContain('resolved to 10s');
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10);
+    });
+
+    it('lets an unresolvable cue name degrade to the buffer end in silence (#118)', async () => {
+        // The counterpart to the test above, and the reason its comment is narrow: an
+        // end-point cue never abandons, so on a voice that still reaches its buffer end —
+        // this one does not loop — the same typo resolves to a REACHABLE instant and
+        // becomes a full-length fade with no diagnosis at all. Documented in §4.25 as a
+        // limitation of end-point rules, not an accident here.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: { name: 'chrous' } });
+
+        expect(warn).not.toHaveBeenCalled();
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(20);
+    });
+
+    it('never waits for a passed toCue that lies in the intro, before the loop (#122)', async () => {
+        // The intro-then-loop pattern plays 0 → 6 once and then repeats [2, 6): the cue
+        // at 1 s is reached during that first pass and never again. Four seconds in, it
+        // is gone for good — the period advance must not offer it a second arrival.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+        context.currentTime = 14;
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: 1 });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(14);
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'setValueAtTime',
+            value: 0,
+            time: 14,
+        });
+        expect(warn).toHaveBeenCalledTimes(1);
+        // A raw-seconds cue renders as itself, so the pair shows resolution moved nothing.
+        expect(String(warn.mock.calls[0]?.[0])).toContain('cue 1s resolved to 1s');
+    });
+
+    it('stops now rather than dividing by a zero-length loop period (#122)', async () => {
+        // A degenerate empty clip loops a zero-length window, so no wait can ever end.
+        // Without the guard the period advance divides by zero and hands `NaN` on.
+        const { context, manager, ref } = createCuedManager({ bufferSeconds: 0 });
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { toCue: 'end' });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10);
+        expect(warn).toHaveBeenCalledTimes(1);
+        // A symbolic cue renders quoted as authored, not as the seconds it stands for.
+        expect(String(warn.mock.calls[0]?.[0])).toContain("cue 'end' resolved to 0s");
+        expect(String(warn.mock.calls[0]?.[0])).toContain('never reaches again');
+    });
+
+    it('shapes an equalPower fade-out as the falling quarter-wave (#120)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { volume: 0.5 });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        expect(waypoints).toHaveLength(64);
+        // Falling from the voice's own gain: cos easing, never above the departure.
+        expect(waypoints[0]?.value).toBeCloseTo(0.5 * Math.cos(Math.PI / 128), 12);
+        for (const waypoint of waypoints) {
+            expect(waypoint.value).toBeLessThanOrEqual(0.5);
+        }
+        expect(waypoints.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 10.64,
+        });
+    });
+
+    it('departs a fade-out from the voice ceiling, not from what the param reports (#120)', async () => {
+        // A real AudioParam's `value` reports the last RENDERED quantum, so a gain
+        // written in this same one is invisible to it and a fresh GainNode reports its
+        // default of 1. `equalPower` derives every waypoint from that departure, so at
+        // volume 0.5 the misread does not merely soften the fade — the first waypoint
+        // ramps UP to ~1.0 before the curve falls, a swell to double the requested
+        // volume at the head of a fade-OUT. `cancelAndHoldAtTime` pins the param's own
+        // value correctly and cannot help here: the waypoints are computed JS-side.
+        const { context, manager, ref } = createCuedManager({ quantizedGainParams: true });
+        const handle = manager.play(ref, { volume: 0.5 });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.5 * Math.cos(Math.PI / 128), 12);
+        for (const waypoint of waypoints) {
+            expect(waypoint.value).toBeLessThanOrEqual(0.5);
+        }
+    });
+
+    it('departs a re-fade from the gain the param has actually reached (#120)', async () => {
+        // The cap must not become a floor. A voice already partway down has to depart
+        // from where it IS, not from its ceiling — reading `volume` unconditionally
+        // would step a mid-fade voice back up to full gain before falling again, the
+        // same swell the stale read causes, just from the other direction.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.fadeOut(handle, { overMs: 4000 });
+        // What the param reports once a quantum of that ramp has rendered.
+        expectGain(context, 4).gain.value = 0.3;
+        context.currentTime = 11;
+
+        manager.fadeOut(handle, { overMs: 640, curve: 'equalPower' });
+
+        const waypoints = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .slice(1);
+        expect(waypoints).toHaveLength(64);
+        expect(waypoints[0]?.value).toBeCloseTo(0.3 * Math.cos(Math.PI / 128), 12);
+        expect(waypoints.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 11.64,
+        });
+    });
+
+    it('anchors the fallback re-anchor at the ceiling without cancelAndHoldAtTime (#120)', async () => {
+        // Without `cancelAndHoldAtTime` the departure is written as an explicit
+        // `setValueAtTime`, so a stale read is not merely a shaping error — it steps the
+        // voice up to full gain before the fade, on EVERY curve including linear.
+        const { context, manager, ref } = createCuedManager({ quantizedGainParams: true });
+        const handle = manager.play(ref, { volume: 0.25 });
+        await flushAudioLoad();
+        stubMissingCancelAndHold(expectGain(context, 4).gain);
+
+        manager.fadeOut(handle, { overMs: 500 });
+
+        expect(expectGain(context, 4).gain.calls.slice(1)).toEqual([
+            { method: 'cancelScheduledValues', time: 10 },
+            { method: 'setValueAtTime', value: 0.25, time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 10.5 },
+        ]);
+    });
+
+    it('ramps an exponential fade-out to the epsilon then hard-sets true zero (#120)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { overMs: 500, curve: 'exponential' });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'exponentialRampToValueAtTime', value: 1e-4, time: 10.5 },
+            { method: 'setValueAtTime', value: 0, time: 10.5 },
+        ]);
+    });
+
+    it.each([
+        ['NaN', Number.NaN],
+        ['+Infinity', Number.POSITIVE_INFINITY],
+        ['zero', 0],
+        ['negative', -250],
+    ])('applies a %s overMs instantly on a bounded voice (#119)', async (_label, overMs) => {
+        // All four name no usable window, and the voice is bounded on purpose: clamping
+        // is what would otherwise split them, since `min(+Infinity, scheduledStopAt)` is
+        // a full-length 2 s fade while NaN falls straight through to an instant one.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { from: 0, to: 2 });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { overMs });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'setValueAtTime', value: 0, time: 10 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10);
+    });
+
+    it('records now, not the elapsed stop it replaces, when onended is still owed (#119)', async () => {
+        // The one case where `scheduledStopAt` moves LATER: the voice's stop has gone by
+        // but `onended` has not been delivered, so the record is still in the pool. The
+        // write has to be the floored ramp end unconditionally. `min`-ing it against what
+        // the field already holds would leave the record naming 12 s while the source is
+        // scheduled to stop at 17 — breaking the field's own contract that it never names
+        // a stop that was not scheduled, and leaving every later fade to clamp against an
+        // elapsed time and collapse into an instant cut. Not a refused stop: nothing can
+        // schedule one in the past, since `resolveFadeOutRampEnd` floors at `now`.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { from: 0, to: 2 });
+        await flushAudioLoad();
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(12);
+        context.currentTime = 17;
+
+        manager.fadeOut(handle, { overMs: 500 });
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(17);
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(17);
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'setValueAtTime',
+            value: 0,
+            time: 17,
+        });
+    });
+
+    it('re-anchors and reschedules when a second fadeOut shortens the ramp (#120)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+
+        manager.fadeOut(handle, { overMs: 2000 });
+        manager.fadeOut(handle, { overMs: 500 });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 12 },
+            // The later op cancel-and-reanchors the in-flight ramp rather than stacking.
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 10.5 },
+        ]);
+        expect(source.stop).toHaveBeenNthCalledWith(1, 12);
+        expect(source.stop).toHaveBeenNthCalledWith(2, 10.5);
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(10.5);
+    });
+
+    it('never lets a second fadeOut extend a stop that is already scheduled (#119)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+
+        manager.fadeOut(handle, { overMs: 500 });
+        manager.fadeOut(handle, { overMs: 4000 });
+
+        // A fade may shorten a voice's life and never extend it, so the second call is
+        // clamped to the first stop rather than pushing it out to 14.
+        expect(source.stop).toHaveBeenNthCalledWith(2, 10.5);
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(10.5);
+    });
+
+    it('stops the voice immediately when the scheduled stop is refused (#119)', async () => {
+        // Without the release the ramp hands off to, a faded voice would sit silent and
+        // unreleased forever, holding a pool slot. Containment must not hide that.
+        const { context, manager, ref } = createCuedManager();
+        context.failNextStopSchedule = true;
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+        const warn = spyOnWarn();
+
+        manager.fadeOut(handle, { overMs: 500 });
+
+        expect(countGainRamps(expectGain(context, 4).gain.calls)).toBe(0);
+        expect(handle.valid).toBe(false);
+        expect(source.disconnect).toHaveBeenCalledOnce();
+        // The refused `stop(rampEnd)`, then the bare `stop()` the release adds. Dropping
+        // the second leaves every other assertion here green, and this voice would end on
+        // its own anyway — but a LOOPING one would play forever against no destination,
+        // its `onended` nulled, released in the pool's books only. Disconnecting is not
+        // stopping.
+        expect(source.stop).toHaveBeenCalledTimes(2);
+        expect(source.stop).toHaveBeenLastCalledWith();
+        expect(() => readVoiceRecord(manager, handle)).toThrow();
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('stopped immediately');
+    });
+
+    it('lets an explicit stop supersede a fade without double-releasing (#119)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+
+        manager.fadeOut(handle, { overMs: 500 });
+        expect(source.stop).toHaveBeenNthCalledWith(1, 10.5);
+
+        manager.stop(handle);
+
+        expect(handle.valid).toBe(false);
+        expect(source.disconnect).toHaveBeenCalledOnce();
+
+        // The fade's own stop still fires afterwards on a real context; release nulled
+        // the handler, so it must reach nothing.
+        source.finish();
+
+        expect(source.disconnect).toHaveBeenCalledOnce();
+    });
+
+    it('leaves nothing dangling when the manager is disposed mid-fade (#119)', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { overMs: 500 });
+        expect(readVoiceRecord(manager, handle).phase).toBe('fading-out');
+
+        manager.dispose();
+
+        expect(handle.valid).toBe(false);
+        expect(vi.getTimerCount()).toBe(0);
+        expect(context.close).toHaveBeenCalledOnce();
     });
 });
 
@@ -2373,6 +3140,8 @@ function createCuedManager(
         readonly bufferSeconds?: number;
         readonly metadata?: unknown;
         readonly poolSize?: number;
+        /** Give the voice a gain whose `value` cannot see same-turn automation. */
+        readonly quantizedGainParams?: boolean;
     } = {},
 ): {
     readonly assetManager: AssetManagerDouble;
@@ -2384,6 +3153,9 @@ function createCuedManager(
         options.poolSize === undefined
             ? createManager()
             : createManager({ poolSize: options.poolSize });
+    // Set after the constructor, so the voice's own stage-1 gain is created quantized
+    // while the four bus gains stay on the ordinary double.
+    created.context.quantizedGainParams = options.quantizedGainParams ?? false;
     const ref = audioRef('audio/music/theme.ogg');
     // `in` rather than `!== undefined`, so a test can register a literal `undefined`.
     if ('metadata' in options) {
@@ -2391,6 +3163,16 @@ function createCuedManager(
     }
     created.assetManager.resolve(ref, createAudioBuffer('theme', options.bufferSeconds ?? 10));
     return { ...created, ref };
+}
+
+/**
+ * Hide `cancelAndHoldAtTime` on ONE live voice's gain, modelling the platforms that
+ * lack it. An own property shadowing the prototype method, rather than a whole new
+ * double or a prototype edit: what needs proving is how the MANAGER re-anchors on such
+ * a platform, and the shadow cannot leak into another test's params.
+ */
+function stubMissingCancelAndHold(param: FakeAudioParam): void {
+    Object.defineProperty(param, 'cancelAndHoldAtTime', { configurable: true, value: undefined });
 }
 
 /** Silences and counts the renderer's fail-soft warning channel. */
@@ -2403,6 +3185,8 @@ interface ObservableVoiceRecord {
     scheduledStopAt: number | null;
     startedAtContextTime: number | null;
     startOffsetSeconds: number;
+    bufferDurationSeconds: number | null;
+    loopWindowSeconds: { readonly startSeconds: number; readonly endSeconds: number } | null;
     /** Bound to the production union, so a phase added later fails `tsc` here. */
     phase: VoicePhase;
     releaseOnStart: boolean;
@@ -2412,14 +3196,14 @@ interface ObservableVoiceRecord {
 }
 
 /**
- * Read a live voice's internal schedule and pending-intent state. These fields are
- * written for the fade verbs to consume later, so no public surface exposes them yet —
- * and without a reader the difference between "stop scheduled" and "stop refused", or
- * between "intent parked" and "intent lost", is unobservable, which is exactly the
- * state a later ramp clamp must not be misled by.
+ * Read a live voice's internal schedule and pending-intent state. No public surface
+ * exposes any of it — `AudioHandle` deliberately gains no fields (Invariant #126) — and
+ * without a reader the difference between "stop scheduled" and "stop refused", between
+ * "intent parked" and "intent lost", or between a voice mid-ramp and one already
+ * released, is unobservable.
  */
 function readVoiceRecord(manager: DefaultAudioManager, handle: AudioHandle): ObservableVoiceRecord {
-    // @chimera-review: reaches the manager's private voice map because these fields have no public reader until the fade verbs land; asserting them here is what stops them becoming unverifiable write-only state.
+    // @chimera-review: reaches the manager's private voice map because the handle exposes none of this schedule state by design; asserting it here is what stops it becoming unverifiable write-only state.
     const { voices } = manager as unknown as { voices: Map<string, ObservableVoiceRecord> };
     const record = voices.get(handle.id);
     if (record === undefined) {
@@ -2429,10 +3213,11 @@ function readVoiceRecord(manager: DefaultAudioManager, handle: AudioHandle): Obs
 }
 
 /**
- * Park pre-start intents on a loading voice's record — the seam `fadeOut`, `fadeTo`,
- * and `crossfade` will write through once they land. Until then `pendingFadeIn` is the
- * only slot with a production writer, so without this helper the precedence order of
- * Invariant #121 would be write-only state no test could reach.
+ * Park pre-start intents on a loading voice's record — the seam `fadeTo` and `crossfade`
+ * will write through once they land. `pendingFadeIn` and `releaseOnStart` have
+ * production writers (`PlayOptions.fadeIn` and `fadeOut`); the other two do not, so
+ * without this helper the precedence order of Invariant #121 would be write-only state
+ * no test could reach.
  */
 function writeVoiceIntents(
     manager: DefaultAudioManager,

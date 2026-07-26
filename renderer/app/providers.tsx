@@ -157,6 +157,9 @@ function createNoopAudioManager(): AudioManager {
         stop(): void {
             return;
         },
+        fadeOut(): void {
+            return;
+        },
         stopAll(): void {
             return;
         },

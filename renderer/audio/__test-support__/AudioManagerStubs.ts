@@ -7,6 +7,7 @@ export function createAudioManagerSpy(): AudioManager {
     return {
         play: vi.fn((ref: AssetRef<AudioClipAsset>) => makeAudioHandle(ref)),
         stop: vi.fn(),
+        fadeOut: vi.fn(),
         stopAll: vi.fn(),
         duck: vi.fn(),
         dispose: vi.fn(),
@@ -20,6 +21,8 @@ export function createAudioManagerStub(): AudioManager {
         },
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         stop(): void {},
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        fadeOut(): void {},
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         stopAll(): void {},
         // eslint-disable-next-line @typescript-eslint/no-empty-function
