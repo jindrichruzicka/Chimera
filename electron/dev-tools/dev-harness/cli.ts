@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * electron/dev-harness/cli.ts
+ * electron/dev-tools/dev-harness/cli.ts
  *
  * `chimera-dev-mp` — the dev multiplayer harness CLI (§4.32). Spawns one
  * auto-hosting Electron instance of the app in (or given via `--app`) plus

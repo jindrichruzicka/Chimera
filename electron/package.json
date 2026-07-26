@@ -17,7 +17,7 @@
     },
     "type": "module",
     "bin": {
-        "chimera-dev-mp": "dist/dev-harness/cli.js"
+        "chimera-dev-mp": "dist/dev-tools/dev-harness/cli.js"
     },
     "exports": {
         "./main": {
@@ -25,8 +25,8 @@
             "default": "./dist/main/index.js"
         },
         "./dev-harness": {
-            "types": "./dist/dev-harness/harness.d.ts",
-            "default": "./dist/dev-harness/harness.js"
+            "types": "./dist/dev-tools/dev-harness/harness.d.ts",
+            "default": "./dist/dev-tools/dev-harness/harness.js"
         },
         "./preload/api": {
             "types": "./dist/preload/api.d.ts",

@@ -75,7 +75,8 @@ chimera/
 │   │   └── dev/                     # Dev-harness graph; reached only via the CHIMERA_DEV_HARNESS-gated dynamic import (§4.32)
 │   │       ├── DevHarnessCoordinator.ts  # Auto host/join/seed/ready/start flow over the LobbyManager port
 │   │       └── dev-fixture-loader.ts     # Seed-profile + scenario loading, atomic announce write
-│   ├── dev-harness/                 # `chimera-dev-mp` bin + harness library (spawn planning, announce handshake); see §4.32
+│   ├── dev-tools/                   # Development-time CLIs published as bins of @chimera-engine/electron so standalone games run them too
+│   │   └── dev-harness/             # `chimera-dev-mp` bin + harness library (spawn planning, announce handshake); see §4.32
 │   ├── preload/
 │   │   ├── api.ts                   # Composes the following namespaces below into window.__chimera
 │   │   ├── api-types.ts             # Type-only module: ChimeraAPI, ChimeraExtensions, all namespace interfaces

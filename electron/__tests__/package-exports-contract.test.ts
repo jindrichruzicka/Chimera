@@ -33,7 +33,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,9 +62,15 @@ const EXPECTED_EXPORTS = {
     // builders behind the `chimera-dev-mp` bin. Dev-only-in-tarball follows the
     // debug-api precedent — the gate is the runtime env (Invariant #77), not
     // file presence.
+    //
+    // The SUBPATH is deliberately still `./dev-harness` although the sources now
+    // live under `dev-tools/dev-harness/`: the harness is one of several dev tools
+    // sharing that parent directory, but its published name is API a standalone
+    // scaffold's `dev:mp` depends on, so the relocation stays invisible to
+    // consumers. Only the dist target moved.
     './dev-harness': {
-        types: './dist/dev-harness/harness.d.ts',
-        default: './dist/dev-harness/harness.js',
+        types: './dist/dev-tools/dev-harness/harness.d.ts',
+        default: './dist/dev-tools/dev-harness/harness.js',
     },
     './preload/api': {
         types: './dist/preload/api.d.ts',
@@ -115,7 +121,31 @@ describe('@chimera-engine/electron package surface (issue #777)', () => {
     });
 
     it('ships the chimera-dev-mp bin from dist (§4.32 — the packaged dev multiplayer harness)', () => {
-        expect(manifest.bin).toEqual({ 'chimera-dev-mp': 'dist/dev-harness/cli.js' });
+        expect(manifest.bin).toEqual({ 'chimera-dev-mp': 'dist/dev-tools/dev-harness/cli.js' });
+    });
+
+    // Every assertion above compares the manifest against a literal, so the two
+    // drift together whenever both are edited — including onto a path that no
+    // longer exists. This test is the one that reads the emitted tree: a target
+    // repointed at nothing (or a source file moved without repointing its target)
+    // is otherwise invisible until `verify:pack` installs the tarball, which no
+    // pre-commit gate runs. It requires the package to have been built —
+    // `pnpm test` runs `build:packages` first; a bare `vitest --dir electron`
+    // does not, and fails here by design rather than passing on a stale surface.
+    it('resolves every declared export + bin target to a real file in the built dist/ (§4.32, Invariant #5)', () => {
+        const targets = [
+            ...Object.values(manifest.bin ?? {}),
+            ...Object.values(manifest.exports ?? {}).flatMap((value) => {
+                const entry = typeof value === 'string' ? { default: value } : value;
+                return [entry.types, entry.default].filter(
+                    (target): target is string => target !== undefined,
+                );
+            }),
+        ];
+        // Sanity floor: an empty/collapsed manifest must not pass vacuously.
+        expect(targets.length).toBeGreaterThanOrEqual(10);
+        const missing = targets.filter((target) => !existsSync(resolve(__dirname, '..', target)));
+        expect(missing).toEqual([]);
     });
 
     it('does not leak main-process internals — no `.` barrel and no broad wildcard subpath (Invariant #5)', () => {

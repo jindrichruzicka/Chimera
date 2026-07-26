@@ -1,5 +1,5 @@
 /**
- * electron/dev-harness/harness.ts
+ * electron/dev-tools/dev-harness/harness.ts
  *
  * Dev multiplayer harness library (§4.32): everything the `chimera-dev-mp`
  * CLI needs to plan and orchestrate N Electron instances of a Chimera app —

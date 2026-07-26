@@ -1,5 +1,5 @@
 /**
- * electron/dev-harness/harness.test.ts
+ * electron/dev-tools/dev-harness/harness.test.ts
  *
  * Unit tests for the dev multiplayer harness library (§4.32), ported from
  * tools/dev-multiplayer.test.ts when the harness moved into
@@ -565,8 +565,8 @@ describe('waitForAnyChildExit()', () => {
 
 describe('isDirectInvocation()', () => {
     it('returns true when argv[1] is the absolute path of the module URL', () => {
-        const url = 'file:///repo/electron/dev-harness/cli.ts';
-        expect(isDirectInvocation(url, '/repo/electron/dev-harness/cli.ts')).toBe(true);
+        const url = 'file:///repo/electron/dev-tools/dev-harness/cli.ts';
+        expect(isDirectInvocation(url, '/repo/electron/dev-tools/dev-harness/cli.ts')).toBe(true);
     });
 
     it('returns false when argv[1] is undefined (import via REPL, test runner)', () => {
@@ -574,8 +574,10 @@ describe('isDirectInvocation()', () => {
     });
 
     it('does not treat a suffix-match as a direct invocation', () => {
-        const url = 'file:///home/alice/project/electron/dev-harness/cli.ts';
-        expect(isDirectInvocation(url, '/different/root/electron/dev-harness/cli.ts')).toBe(false);
+        const url = 'file:///home/alice/project/electron/dev-tools/dev-harness/cli.ts';
+        expect(
+            isDirectInvocation(url, '/different/root/electron/dev-tools/dev-harness/cli.ts'),
+        ).toBe(false);
     });
 
     it('returns false when the URL is not a file:// URL', () => {

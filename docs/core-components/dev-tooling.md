@@ -25,6 +25,8 @@ Each instance boots, consumes its `--dev-*` flags, and automatically hosts or jo
 
 The harness ships as the **`chimera-dev-mp` bin of `@chimera-engine/electron`** (library subpath: `@chimera-engine/electron/dev-harness`), so a standalone scaffolded game (create-chimera-game) runs exactly the tool the monorepo does. Dev-only code in the published tarball follows the debug-api precedent: the gate is the runtime env (Invariant #77), not file presence.
 
+Its sources live at **`electron/dev-tools/dev-harness/`** — `dev-tools/` is the shared parent for development-time CLIs that must be reachable from a standalone game, and therefore have to live inside a published package rather than the never-published repo root `tools/`. The published names do **not** follow that directory: the bin stays `chimera-dev-mp` and the library subpath stays `@chimera-engine/electron/dev-harness`, because both are API a scaffolded app's `dev:mp` script depends on. Only the `dist/` targets in `electron/package.json` moved, and `electron/__tests__/package-exports-contract.test.ts` resolves every declared bin/export target against the built `dist/` so a relocation that forgets to repoint one fails the fast gate instead of surfacing at `verify:pack`.
+
 ---
 
 ## Scope and Non-Goals
