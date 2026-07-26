@@ -363,7 +363,7 @@ Landed so far: `Cue.ts`, `audioCueSheet.ts`, `AssetManager.getManifestMetadata`,
 2. **Voice preemption** — the `'fading-out'`-first ranking and `MUSIC_PRIORITY` (#123).
 3. **`useSound`** memo key list gains `fadeIn`; live-handle verbs (`fadeOut`/`fadeTo`/`crossfade`) get a separate `useMusicTrack`/`useAudioHandle` hook that obtains the manager via `useAudioManager()` only (Invariant #84).
 4. **`docs/architecture-overview.md` §4.25** — extend the summary line (cue/fade/crossfade + the new `getManifestMetadata` channel).
-5. **F73 roll-call** (`f73-invariant-roll-call.md` + its `.github` mirror) — graduate #116–#126 from the design-stage section of [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md#design-stage-invariants-pending-implementation) (where their text already lives) into the numbered roll-call, updating the total and per-invariant classification; add `check-invariants` fixture cases where a static check is feasible (e.g. the sim→renderer import-ban backing #124).
+5. **Invariant roll-call** (`docs/executive-architecture/invariant-roll-call.md`) — graduate #116–#126 from the design-stage section of [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md#design-stage-invariants-pending-implementation) (where their text already lives) into the numbered roll-call, updating the total and per-invariant classification; add `check-invariants` fixture cases where a static check is feasible (e.g. the sim→renderer import-ban backing #124).
 6. **`validate-assets` tooling** — add the cue-sheet build gate (#125) with red-first anti-rot fixtures.
 
 ---

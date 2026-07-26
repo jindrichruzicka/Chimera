@@ -1,12 +1,12 @@
 ---
-title: 'F73 — Architecture Invariants Roll-Call'
-description: 'Merge-readiness audit for the F73 Architecture Invariants Hardening feature: an explicit per-invariant enforcement roll-call (all 115) plus the full-gate and firing-proof record. Every invariant is classified enforced-by | code-verified | doc-only with concrete evidence.'
-tags: [invariants, review-gate, audit, roll-call, f73, hardening]
+title: 'Architecture Invariants Roll-Call'
+description: 'Merge-readiness audit of the architecture invariants hardening set: an explicit per-invariant enforcement roll-call (all 115) plus the full-gate and firing-proof record. Every invariant is classified enforced-by | code-verified | doc-only with concrete evidence.'
+tags: [invariants, review-gate, audit, roll-call, hardening]
 ---
 
-# F73 — Architecture Invariants Roll-Call
+# Architecture Invariants Roll-Call
 
-> Feature-review gate for **F73 — Architecture Invariants Hardening**. This is the
+> Review gate for the **architecture invariants hardening** set. This is the
 > merge-readiness record: it ratifies the whole hardening set, captures the full quality-gate
 > run, and — the artifact the original part-by-part audit lacked — classifies **every one of the
 > 115** [architecture invariants](architecture-invariants.md) by **how it is actually held up**.
@@ -48,7 +48,7 @@ testable; each names its nearest partial guard below.
 
 ## Gate run (merge-readiness record)
 
-Run on branch `feature/…-898`, base `main` @ `06205101`, 2026-07-24. All green:
+Run on the hardening branch, base `main` @ `06205101`, 2026-07-24. All green:
 
 | Step              | Command                                                    | Result                         |
 | ----------------- | ---------------------------------------------------------- | ------------------------------ |
@@ -107,7 +107,7 @@ The code-reviewer subagent does **not** run e2e; it was run explicitly here.
 | 36  | Simulation never reads settings                           | doc-only      | nearest: `simulation/` import-boundary zone + Check 13 (leaf) + Check 19 (no env reads)                                                                 |
 | 37  | `SaveManager` built with injected `SaveRepository`        | code-verified | `SaveManager.test.ts` › constructs with `InMemorySaveRepository`; no concrete import                                                                    |
 | 38  | `LobbyManager` built with injected provider               | enforced-by   | ESLint `no-main-provider-internals` (bans concrete-provider import); DI construction tests                                                              |
-| 39  | Broadcaster/router avoid provider-internal dirs           | enforced-by   | ESLint `no-main-provider-internals` + Check 15 (barrel-only) — _doc-drift #897 aligned_                                                                 |
+| 39  | Broadcaster/router avoid provider-internal dirs           | enforced-by   | ESLint `no-main-provider-internals` + Check 15 (barrel-only) — _invariant text aligned to enforcement_                                                  |
 | 40  | No provider swap during active session                    | doc-only      | nearest: `LobbyManager.test.ts` closeLobby lifecycle tests                                                                                              |
 | 41  | `InMemory` passes `File` contract suite                   | code-verified | shared `runSaveRepositoryContractTests` run for both (`SaveRepository.contract.test.ts` + `FileSaveRepository.test.ts`)                                 |
 | 42  | Tick action-driven, never wall-clock                      | enforced-by   | Check 1/43 (no Date.now/performance.now in sim); tick+1 asserted in pipeline tests                                                                      |
@@ -120,7 +120,7 @@ The code-reviewer subagent does **not** run e2e; it was run explicitly here.
 | 49  | Scene transitions host-authoritative                      | code-verified | `SceneManager.test.ts` › rejects scene_prepare from non-host; `SceneActionWiring.test.ts`                                                               |
 | 50  | Scene `initialize`/`teardown` pure reducers               | enforced-by   | Check 1/43 + Check 19 cover `simulation/scene`; code-verified `SceneManager.test.ts` (`ctx.rng`)                                                        |
 | 51  | Clients never drive scene change                          | code-verified | `SceneManager.test.ts` › host-side `requestTransition` policy; non-host rejected                                                                        |
-| 52  | Scene assets declared, not on-demand                      | enforced-by   | `validate-assets` declared-ref + manifest membership + on-demand static detector (#908); `validate-assets.test.ts`                                      |
+| 52  | Scene assets declared, not on-demand                      | enforced-by   | `validate-assets` declared-ref + manifest membership + on-demand static detector; `validate-assets.test.ts`                                             |
 | 53  | `TransitionOverlay` renderer-only; fade never gates sim   | doc-only      | nearest: Check 2 (sim has no fade knowledge); no test asserts SceneReadyAction ordering                                                                 |
 | 54  | Timer `remainingTicks` never wall-clock                   | enforced-by   | Check 1/43 (no Date.now in sim); code-verified `GameTimer.test.ts`                                                                                      |
 | 55  | `TimerManager.advance()` one consumer                     | enforced-by   | Check 28 (only `engine:tick` consumes advance)                                                                                                          |
@@ -218,7 +218,8 @@ except the 8 architectural principles honestly marked doc-only.
 Phase-C proof that the guards actually trip. The checker self-test harness
 (`check-invariants.test.sh`, **101 cases**) plants synthetic violations in repo-shaped fixture
 roots and asserts each Check both **fires** on a violation and **stays clean** on valid code
-(negative controls). It exercises the full Check 1–31 range, including the F73 additions/repairs:
+(negative controls). It exercises the full Check 1–31 range, including the hardening
+additions/repairs:
 
 - **Per-game gameplay checks (Checks 19–24):** `Math.random()`/`Date.now()` in
   `apps/<game>/{simulation,ai}`, `renderer/`/`electron/` imports in `apps/<game>/simulation`,
@@ -249,7 +250,7 @@ roots and asserts each Check both **fires** on a violation and **stays clean** o
 
 ## Per-guard red-first test record
 
-Each F73 guard-repair shipped a test that fails without its fix:
+Each guard-repair shipped a test that fails without its fix:
 
 | Guard (invariant)                   | Red-first test evidence                                                                                                                                                                                                                                                | Delivering commit(s)               |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |

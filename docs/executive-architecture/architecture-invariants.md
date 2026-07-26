@@ -7,7 +7,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 # Architecture Invariants
 
 > These invariants are the hard rules of the Chimera engine. A single violation is a BLOCK finding.
-> Related: [System Overview](system-overview-and-context.md) · [Module Boundaries](module-boundaries-file-tree.md) · [Invariant Roll-Call](f73-invariant-roll-call.md) (per-invariant enforcement status)
+> Related: [System Overview](system-overview-and-context.md) · [Module Boundaries](module-boundaries-file-tree.md) · [Invariant Roll-Call](invariant-roll-call.md) (per-invariant enforcement status)
 
 ---
 
@@ -284,7 +284,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ## Design-stage invariants (pending implementation)
 
-> **#116–#126** are introduced by the audio **cue / loop-point / fade / crossfade** design (§4.25 — [Audio System → Cue, Fade & Crossfade Extensions](../core-components/audio-system.md#cue-fade--crossfade-extensions)). They describe behaviour that is **still landing** and are therefore held **separate from the enforced/roll-called set of 115**: no `check-invariants` Check, ESLint rule, or `validate-assets` gate asserts any of them, so the [F73 roll-call](f73-invariant-roll-call.md) count and its coverage summary are unchanged. Unit tests **do** already assert the implemented parts, across `renderer/audio/` (`AudioManager.test.ts`, `audioCueSheet.test.ts`, `Cue.test.ts`) and `simulation/` (`foundation/audio-cue-sheet.test.ts`, `content/audioManifest.test.ts`), naming the invariant they pin in a test title or the file header. A test is not a mechanical gate and does not by itself graduate an invariant. Each graduates into the numbered set above — updating the roll-call's total and its enforced/code-verified/doc-only classification — when its guard and tests land per the audio doc's _Landing this design_ checklist. The **Held-by** column records the _intended_ enforcement tier on graduation.
+> **#116–#126** are introduced by the audio **cue / loop-point / fade / crossfade** design (§4.25 — [Audio System → Cue, Fade & Crossfade Extensions](../core-components/audio-system.md#cue-fade--crossfade-extensions)). They describe behaviour that is **still landing** and are therefore held **separate from the enforced/roll-called set of 115**: no `check-invariants` Check, ESLint rule, or `validate-assets` gate asserts any of them, so the [invariant roll-call](invariant-roll-call.md) count and its coverage summary are unchanged. Unit tests **do** already assert the implemented parts, across `renderer/audio/` (`AudioManager.test.ts`, `audioCueSheet.test.ts`, `Cue.test.ts`) and `simulation/` (`foundation/audio-cue-sheet.test.ts`, `content/audioManifest.test.ts`), naming the invariant they pin in a test title or the file header. A test is not a mechanical gate and does not by itself graduate an invariant. Each graduates into the numbered set above — updating the roll-call's total and its enforced/code-verified/doc-only classification — when its guard and tests land per the audio doc's _Landing this design_ checklist. The **Held-by** column records the _intended_ enforcement tier on graduation.
 
 | #    | Held-by (on graduation)                           |
 | ---- | ------------------------------------------------- |
