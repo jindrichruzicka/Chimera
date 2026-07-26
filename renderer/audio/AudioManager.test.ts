@@ -23,6 +23,9 @@
  *   #122 — cue-relative fade timing is derived from `startedAtContextTime`,
  *          `startOffsetSeconds`, the decoded duration and the effective loop window,
  *          never from a wall-clock timer.
+ *   #123 — preemption reclaims a `'fading-out'` voice first, then the lowest
+ *          priority, then — at equal priority — a looping voice before a one-shot,
+ *          then the oldest; no voice class is hard-exempt.
  *   #124 — the cue sheet is read only through `getManifestMetadata` and parsed
  *          only here, in `renderer/audio`.
  *   #126 — the public `AudioHandle` gains no fields and is never spread-built.
@@ -65,6 +68,18 @@
  * and "re-read the clock and got the same number" are indistinguishable, and every other
  * test in that block passes under either.
  *
+ * For #123 the preemption block was written against the two-tier ranker (priority, then
+ * age) — the `MUSIC_PRIORITY` constant landed first, being a value rather than the
+ * ranking — so its reds are behavioural. Where a red drives one term, it is built so the
+ * other terms point at the wrong voice; each test says which it is doing. The fences
+ * cover what no ranking term can be red about alone: the tier ORDER, the unfiltered
+ * SHAPE of the scan, and the constant's value.
+ *
+ * Tier 4 is an equivalent mutation, and deliberately so: `voices` iterates in ascending
+ * `sequence` and the min-scan keeps its incumbent on a tie, so the oldest voice wins with
+ * or without the term. It is there to make the relation total and independent of the
+ * container, not to change an outcome — no test here pins it, and none can.
+ *
  * `fadeTo` was likewise written against an empty body. Its load-bearing reds are the HOLD
  * (no stop, no phase change, no rewritten end), the ceiling rewrite — pinned through the
  * fade-out that departs from it, not just by reading the field — and the two departure
@@ -97,6 +112,7 @@ import { useSettingsStore } from '../state/settingsStore';
 import {
     createAudioManager,
     DefaultAudioManager,
+    MUSIC_PRIORITY,
     scheduleGainRamp,
     type AudioHandle,
     type AudioManagerOptions,
@@ -414,6 +430,24 @@ const THEME_CUE_SHEET = {
     durationSeconds: 10,
 } as const;
 
+/**
+ * Three voices whose ranking is order-INDEPENDENT under a total order and order-dependent
+ * under a merely partial one. Declared here rather than with the helpers at the foot of
+ * the file, where the other fixtures live: an `it.each` table is evaluated when the
+ * describe callback runs, which is still inside the temporal dead zone of a `const`
+ * declared below it.
+ *
+ * The correct pick is always `blip` — the lowest priority. Make the loop term DECISIVE,
+ * settling every pair whose loop flags differ on the "equal-or-higher priority" gate
+ * alone, and `bed`/`blip` and `bed`/`chime` each rank neither way while `blip`/`chime`
+ * still ranks. The scan then keeps `bed` whenever it is seeded with it and never
+ * displaces it, so leading with `bed` reaches `bed` and the other two orders reach
+ * `blip` — one row of the three is red.
+ */
+const PREEMPTION_BED = { name: 'bed', opts: { loop: true, priority: 5 } } as const;
+const PREEMPTION_BLIP = { name: 'blip', opts: { priority: 1 } } as const;
+const PREEMPTION_CHIME = { name: 'chime', opts: { priority: 3 } } as const;
+
 const managers: DefaultAudioManager[] = [];
 
 beforeEach(() => {
@@ -701,6 +735,325 @@ describe('DefaultAudioManager', () => {
                 'AudioContext is not available in this environment.',
             );
         });
+    });
+});
+
+// ─── voice preemption — the reclamation ranking (#123) ──────────────────────────
+
+describe('DefaultAudioManager — voice preemption', () => {
+    it('recommends 100 for music, the value §4.25 quotes (#123)', () => {
+        // Nothing else pins the exact value: the other tests rank the symbol against
+        // literal priorities, which bounds it from below but never fixes it. The docs
+        // quote `100`, and the "leaves 1–99 for a game's own scale" reasoning they give
+        // holds only at this magnitude.
+        expect(MUSIC_PRIORITY).toBe(100);
+    });
+
+    it('reclaims a fading-out voice ahead of a live one it outranks and post-dates (#123)', async () => {
+        // The load-bearing red for tier 1. Both of the OTHER terms point at the live
+        // voice — it is lower priority AND older — so the phase is the only thing that
+        // can move the pick onto the tail.
+        const created = createManager({ poolSize: 2 });
+        const live = playPooledVoice(created, 'live', { priority: 0 });
+        const tail = playPooledVoice(created, 'tail', { priority: MUSIC_PRIORITY });
+        await flushAudioLoad();
+
+        created.manager.fadeOut(tail, { overMs: 2000 });
+        expect(readVoiceRecord(created.manager, tail).phase).toBe('fading-out');
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+        await flushAudioLoad();
+
+        expect(tail.valid).toBe(false);
+        expect(live.valid).toBe(true);
+        expect(expectSource(created.context, 0).stop).not.toHaveBeenCalled();
+        expect(expectSource(created.context, 2).start).toHaveBeenCalledOnce();
+    });
+
+    it('never treats a LOADING voice as dying, however cheap it would be to reclaim (#123)', async () => {
+        // Term 1 is the phase `'fading-out'`, not "is this voice doomed" and not "has
+        // this voice made a sound yet". A loading voice has no source and no gain, so
+        // reclaiming it truly is cheaper — and it still ranks by priority like any
+        // other, which is what keeps a slow-decoding music bed from being the first
+        // thing a burst takes.
+        //
+        // Red against `phase !== 'playing'`, the widening the tier-1 rationale invites.
+        const created = createManager({ poolSize: 2 });
+        const live = playPooledVoice(created, 'live', { priority: 0 });
+        await flushAudioLoad();
+
+        const decoding = playPooledVoice(created, 'decoding', { priority: MUSIC_PRIORITY });
+        expect(readVoiceRecord(created.manager, decoding).phase).toBe('loading');
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+
+        expect(live.valid).toBe(false);
+        expect(decoding.valid).toBe(true);
+    });
+
+    it('ranks a voice condemned by releaseOnStart as an ordinary one (#123, #121)', async () => {
+        // The case #123 names: a pre-start `fadeOut` parks `releaseOnStart` and leaves
+        // the phase `'loading'`, so the voice is doomed — cheaper still than a tail,
+        // having never made a sound — yet outranks a live SFX voice right up until `t0`
+        // kills it anyway. The invariant names the phase and only the phase, so this
+        // pins the cost of that literalness rather than papering over it.
+        const created = createManager({ poolSize: 2 });
+        const live = playPooledVoice(created, 'live', { priority: 0 });
+        await flushAudioLoad();
+
+        const condemned = playPooledVoice(created, 'condemned', { priority: MUSIC_PRIORITY });
+        created.manager.fadeOut(condemned, { overMs: 2000 });
+        const record = readVoiceRecord(created.manager, condemned);
+        expect(record.releaseOnStart).toBe(true);
+        expect(record.phase).toBe('loading');
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+
+        expect(live.valid).toBe(false);
+        expect(condemned.valid).toBe(true);
+    });
+
+    it('ranks by priority WITHIN the dying set, still ahead of every live voice (#123)', async () => {
+        // Tier 1 partitions; it does not flatten. The lower-priority tail goes even
+        // though a live voice sits below both of them on priority — so a fading-out
+        // voice is not merely "preferred", it is preferred as a GROUP that the
+        // remaining terms then rank inside. The victim is also the NEWEST voice while
+        // the oldest survives, so this isolates tier 1 from tier 4 as well.
+        const created = createManager({ poolSize: 3 });
+        const live = playPooledVoice(created, 'live', { priority: 0 });
+        const loudTail = playPooledVoice(created, 'loud-tail', { priority: MUSIC_PRIORITY });
+        const quietTail = playPooledVoice(created, 'quiet-tail', { priority: 50 });
+        await flushAudioLoad();
+
+        created.manager.fadeOut(loudTail, { overMs: 2000 });
+        created.manager.fadeOut(quietTail, { overMs: 2000 });
+        expect(readVoiceRecord(created.manager, loudTail).phase).toBe('fading-out');
+        expect(readVoiceRecord(created.manager, quietTail).phase).toBe('fading-out');
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+        await flushAudioLoad();
+
+        expect(quietTail.valid).toBe(false);
+        expect(loudTail.valid).toBe(true);
+        expect(live.valid).toBe(true);
+    });
+
+    it('counts a to-BOUNDED loop as looping, though it schedules its own end (#123, #117)', async () => {
+        // The term reads the loop WINDOW, not whether anything will end the voice. A
+        // `to` on a looping voice bounds elapsed play duration (#117), so this one has
+        // both a window and a scheduled stop — and is still demoted ahead of the older
+        // one-shot, which is what makes `voiceLoops` a stand-in for "runs until
+        // something else ends it" rather than a computation of it.
+        const created = createManager({ poolSize: 2 });
+        const blip = playPooledVoice(created, 'blip', { priority: 0 });
+        const bounded = playPooledVoice(created, 'bounded', { loop: true, priority: 0, to: 5 });
+        await flushAudioLoad();
+
+        const record = readVoiceRecord(created.manager, bounded);
+        expect(record.loopWindowSeconds).not.toBeNull();
+        expect(record.scheduledStopAt).not.toBeNull();
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+        await flushAudioLoad();
+
+        expect(bounded.valid).toBe(false);
+        expect(blip.valid).toBe(true);
+    });
+
+    it('reclaims a looping voice ahead of an OLDER one-shot at equal priority (#123)', async () => {
+        // The load-bearing red for tier 3, and it has to fight tier 4 to be one: the
+        // one-shot is older, so age alone reaches the wrong voice. A loop runs until
+        // something else ends it; the blip beside it ends itself.
+        //
+        // The bed is on the MUSIC bus while the blip is not, so this also pins that the
+        // bus is no term of its own: #123 puts music continuity on `MUSIC_PRIORITY`
+        // alone, and a comparator that protected the music bus would spare the bed here.
+        const created = createManager({ poolSize: 2 });
+        const blip = playPooledVoice(created, 'blip', { priority: 0 });
+        const bed = playPooledVoice(created, 'bed', { bus: 'music', loop: true, priority: 0 });
+        await flushAudioLoad();
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+        await flushAudioLoad();
+
+        expect(bed.valid).toBe(false);
+        expect(blip.valid).toBe(true);
+    });
+
+    it('never lets the loop term outrank priority, which is what MUSIC_PRIORITY rests on (#123)', async () => {
+        // The mirror of the test above, and the reason tier 3 sits BELOW tier 2: swap
+        // the bed onto MUSIC_PRIORITY and it stops being reclaimable at all while any
+        // lesser voice is in the pool. A loop term above priority would make the
+        // constant inert — no value could lift a music bed clear of a one-shot.
+        //
+        // A fence on the tier ORDER; the test above drives the term itself.
+        const created = createManager({ poolSize: 2 });
+        const blip = playPooledVoice(created, 'blip', { priority: 0 });
+        const bed = playPooledVoice(created, 'bed', { loop: true, priority: MUSIC_PRIORITY });
+        await flushAudioLoad();
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+        await flushAudioLoad();
+
+        expect(blip.valid).toBe(false);
+        expect(bed.valid).toBe(true);
+    });
+
+    it('demotes on the EFFECTIVE loop window, so a BARE collapsed region is a one-shot (#123, #122)', async () => {
+        // `VoiceRecord.loop` is the REQUESTED intent and stays true forever, including on
+        // this voice — a bare `loopRegion` that collapsed, taking the loop it implied
+        // with it, so it plays once through and frees its slot. (Authoring `loop: true`
+        // as well would survive the same collapse as a whole-buffer loop, and rank as
+        // looping.) Reading the intent would demote this one; reading the window it
+        // actually started with leaves tier 4 to pick the older voice.
+        //
+        // A fence on the tier, a driver on the SIGNAL: age alone reaches the same voice,
+        // so what it pins is the read, not the ranking. The 1s buffer collapses
+        // `{ start: 1 }`; the test below covers the same read's other branch.
+        const created = createCuedManager({ bufferSeconds: 1, poolSize: 2 });
+        const warn = spyOnWarn();
+        const blip = playPooledVoice(created, 'blip', { priority: 0 });
+        const collapsed = created.manager.play(created.ref, {
+            loopRegion: { start: 1, end: 'end' },
+            priority: 0,
+        });
+        await flushAudioLoad();
+
+        expect(expectSource(created.context, 1).loop).toBe(false);
+        expect(readVoiceRecord(created.manager, collapsed).loopWindowSeconds).toBeNull();
+        expect(warn).toHaveBeenCalledTimes(1);
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+        await flushAudioLoad();
+
+        expect(blip.valid).toBe(false);
+        expect(collapsed.valid).toBe(true);
+    });
+
+    it('falls back to the REQUESTED intent while a voice is still loading (#123)', async () => {
+        // The other branch of the same read, and the one with no effective answer to
+        // give: `loopWindowSeconds` is written at `t0`, so a pool can saturate while
+        // every voice in it is still decoding. Reading the window alone there would
+        // file each of them as a one-shot — and the longest decodes are the music beds
+        // the term is named after, so a voice's rank would turn on file size.
+        //
+        // As in the collapsed-region test above, the loop-intent voice goes SECOND so
+        // age cannot reach the same answer: without the fallback both voices read as
+        // non-looping, tie on priority, and age takes the older blip instead.
+        const created = createManager({ poolSize: 2 });
+        const blip = playPooledVoice(created, 'blip', { priority: 0 });
+        const bed = playPooledVoice(created, 'bed', { loop: true, priority: 0 });
+
+        expect(readVoiceRecord(created.manager, blip).phase).toBe('loading');
+        expect(readVoiceRecord(created.manager, bed).phase).toBe('loading');
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+
+        expect(bed.valid).toBe(false);
+        expect(blip.valid).toBe(true);
+
+        await flushAudioLoad();
+
+        // The reclaimed voice had no source yet, so nothing was created for it and the
+        // load continuation finds it gone rather than starting it late.
+        expect(created.context.createdSources).toHaveLength(2);
+    });
+
+    it.each([
+        ['bed, blip, chime', [PREEMPTION_BED, PREEMPTION_BLIP, PREEMPTION_CHIME]],
+        ['blip, chime, bed', [PREEMPTION_BLIP, PREEMPTION_CHIME, PREEMPTION_BED]],
+        ['chime, bed, blip', [PREEMPTION_CHIME, PREEMPTION_BED, PREEMPTION_BLIP]],
+    ])(
+        'reclaims the same voice whichever order — %s — they were played in (#123)',
+        async (_order, plays) => {
+            // `findWorstStandingVoice` is a single-pass min-scan, and `voices` iterates in
+            // ascending `sequence`, so a ranker that leaves any pair incomparable silently
+            // promotes age to the deciding term and the victim follows the play order.
+            //
+            // A loop term that DECIDES every pair whose loop flags differ, on the
+            // "equal-or-higher priority" gate alone, does exactly that to this set:
+            // bed@5 ranks neither way against blip@1 or chime@3, so the scan keeps
+            // whichever it was seeded with and picks bed in one order, blip in another.
+            const created = createManager({ poolSize: 3 });
+            const handles = new Map<string, AudioHandle>();
+            for (const play of plays) {
+                handles.set(play.name, playPooledVoice(created, play.name, play.opts));
+            }
+            await flushAudioLoad();
+
+            playPooledVoice(created, 'burst', { priority: 0 });
+            await flushAudioLoad();
+
+            expect(expectHandle(handles, 'blip').valid).toBe(false);
+            expect(expectHandle(handles, 'bed').valid).toBe(true);
+            expect(expectHandle(handles, 'chime').valid).toBe(true);
+        },
+    );
+
+    it('cuts a music crossfade’s dying tail for an SFX burst, never the incoming track (#123)', async () => {
+        // The documented consequence of tier 1, and the one shape where it is the only
+        // thing standing between a burst and an audible gap: the incoming track here is
+        // at the DEFAULT priority — the crossfade options carry none — so on priority
+        // alone it is the weakest voice in the pool, and only the phase keeps the burst
+        // from cutting the track that just faded in and leaving its tail playing on.
+        // Age agrees with the phase here, so this red isolates tier 1 from priority only.
+        const created = createManager({ poolSize: 2 });
+        const battleRef = audioRef('audio/music/battle.ogg');
+        created.assetManager.resolve(battleRef, createAudioBuffer('battle', 10));
+
+        const outgoing = playPooledVoice(created, 'theme', {
+            bus: 'music',
+            loop: true,
+            priority: MUSIC_PRIORITY,
+        });
+        await flushAudioLoad();
+
+        const incoming = created.manager.crossfade(outgoing, battleRef, {
+            durationMs: 2000,
+            bus: 'music',
+            loop: true,
+        });
+        await flushAudioLoad();
+
+        expect(readVoiceRecord(created.manager, outgoing).phase).toBe('fading-out');
+
+        playPooledVoice(created, 'burst', { priority: 0 });
+        await flushAudioLoad();
+
+        expect(outgoing.valid).toBe(false);
+        expect(incoming.valid).toBe(true);
+        expect(expectSource(created.context, 1).stop).not.toHaveBeenCalled();
+        expect(expectSource(created.context, 2).start).toHaveBeenCalledOnce();
+    });
+
+    it('yields a candidate from a pool that is ENTIRELY looping music (#123)', async () => {
+        // No voice class is hard-exempt, so a saturated default pool cannot deadlock a
+        // higher-priority request even when every slot holds the class most worth
+        // protecting. Operationally that is a claim about the SHAPE of the scan — no
+        // filter, no skip — which no ranking term can express, so this fences rather
+        // than drives: any unfiltered comparator passes it.
+        const created = createManager();
+        const beds: AudioHandle[] = [];
+        for (let index = 0; index < 32; index += 1) {
+            beds.push(
+                playPooledVoice(created, `bed-${index}`, {
+                    bus: 'music',
+                    loop: true,
+                    priority: MUSIC_PRIORITY,
+                }),
+            );
+        }
+        await flushAudioLoad();
+
+        const alarm = playPooledVoice(created, 'alarm', { priority: MUSIC_PRIORITY + 1 });
+        await flushAudioLoad();
+
+        // All 32 tie on phase, priority and loop, leaving the oldest bed — though tier 4
+        // is not what this observes: the scan would reach the same voice without it,
+        // since `voices` iterates in insertion order and a tie keeps the incumbent.
+        expect(beds.map((bed) => bed.valid)).toEqual([false, ...beds.slice(1).map(() => true)]);
+        expect(alarm.valid).toBe(true);
+        expect(expectSource(created.context, 32).start).toHaveBeenCalledOnce();
     });
 });
 
@@ -4326,6 +4679,34 @@ function createManager(options: { readonly poolSize?: number } = {}): {
 
 function audioRef(relativePath: string): AssetRef<AudioClipAsset> {
     return buildAssetRef<AudioClipAsset>('tactics', relativePath);
+}
+
+/**
+ * Play one voice from a ref of its own, pre-resolved to a 10 s buffer. Every voice in a
+ * preemption test needs a DISTINCT ref: the ranking is a property of the pool's
+ * membership, and two plays sharing a ref would be indistinguishable in the source log
+ * that says which one was reclaimed.
+ */
+function playPooledVoice(
+    created: {
+        readonly assetManager: AssetManagerDouble;
+        readonly manager: DefaultAudioManager;
+    },
+    name: string,
+    opts: PlayOptions = {},
+): AudioHandle {
+    const ref = audioRef(`audio/sfx/${name}.ogg`);
+    created.assetManager.resolve(ref, createAudioBuffer(name, 10));
+    return created.manager.play(ref, opts);
+}
+
+/** The handle a permuted play order filed under `name`, or a named failure. */
+function expectHandle(handles: ReadonlyMap<string, AudioHandle>, name: string): AudioHandle {
+    const handle = handles.get(name);
+    if (handle === undefined) {
+        throw new Error(`Expected voice ${name} to have been played.`);
+    }
+    return handle;
 }
 
 function createAudioBuffer(name: string, durationSeconds = 1): AudioBuffer {

@@ -23,6 +23,12 @@ export interface PlayOptions {
     readonly loop?: boolean;
     readonly volume?: number;
     readonly position?: AudioPosition;
+    /**
+     * Rank against the other voices when the pool is saturated: any voice already fading
+     * out is reclaimed first, then the lowest priority among the rest, and no class of
+     * voice is exempt ({@link voiceHasLowerPreemptionRank}, Invariant #123). Unbounded
+     * and defaulted to `0`; music should name {@link MUSIC_PRIORITY}.
+     */
     readonly priority?: number;
     /** Play-from-cue; resolves to `start()`'s offset argument. Defaults to `'start'` (0). */
     readonly from?: Cue;
@@ -82,8 +88,12 @@ export interface AudioManagerOptions {
  * decode, throughout which `source` and `gainNode` are both null and an op has nothing
  * to write to. `'fading-out'` is written by {@link DefaultAudioManager.fadeOut} and
  * spans its ramp: the voice stays in the pool, valid and re-targetable, until the
- * scheduled stop fires (§4.25, Invariant #119). Voice preemption discriminates on the
- * same set (Invariant #123, still to land).
+ * scheduled stop fires (§4.25, Invariant #119). Voice preemption reads this union twice,
+ * splitting it differently each time (Invariant #123): its first term reclaims
+ * `'fading-out'` ahead of the other two, while {@link voiceLoops} sets `'loading'` apart
+ * from the other two, having no effective loop window to read there yet. So all three
+ * phases are distinguished, and the same voice can rank as looping while it loads and as
+ * a one-shot once it starts — a bare `loopRegion` that collapses is exactly that voice.
  *
  * @internal Exported only so tests reading the private `VoiceRecord` bind to this union
  * rather than hand-copying it — a copy would drift silently when a phase is added.
@@ -163,9 +173,11 @@ interface VoiceRecord {
      * `[0, duration]`, since `source.loopStart === loopEnd === 0` is the Web Audio
      * sentinel for it and carries no period. `null` when the voice does not loop.
      *
-     * Neither the requested `loop` nor `loopRegion` can stand in for this: a window
-     * that collapsed after clamping disables looping, and a region resolves against the
-     * decoded duration. Its length is the period {@link nextCueContextTime} wraps by.
+     * Neither the requested `loop` nor `loopRegion` can stand in for this: a window that
+     * collapsed after clamping may disable looping — it does when the region was the
+     * whole intent, and degrades to the whole buffer when `loop: true` was authored in
+     * its own right — and a region resolves against the decoded duration. Its length is
+     * the period {@link nextCueContextTime} wraps by.
      */
     loopWindowSeconds: LoopWindowSeconds | null;
     /**
@@ -248,7 +260,8 @@ interface LoopWindowSeconds {
 
 /** A voice's resolved playback schedule, against a decoded buffer's real duration. */
 interface VoiceSchedule {
-    /** The EFFECTIVE loop flag: `false` when a requested loop window collapsed. */
+    /** The EFFECTIVE loop flag: `false` when a collapsed window took an IMPLIED loop
+     * down with it, still `true` when `loop` was authored in its own right. */
     readonly loop: boolean;
     /** `start()`'s offset argument, after folding into the loop window. */
     readonly entryOffsetSeconds: number;
@@ -273,6 +286,25 @@ interface StartedVoice {
 const DEFAULT_POOL_SIZE = 32;
 const DEFAULT_BUS_ID: AudioBusId = 'sfx';
 const DEFAULT_PRIORITY = 0;
+/**
+ * The RECOMMENDED {@link PlayOptions.priority} for music, and the whole of how music
+ * survives a saturated pool (Invariant #123). Nothing applies it implicitly — not
+ * `bus: 'music'`, not `loop: true` — because preemption reclaims a looping voice AHEAD of
+ * an equal-priority one-shot: a loop typically runs until something else ends it, while
+ * the one-shot beside it ends itself and cannot be re-triggered once its moment has
+ * passed (see {@link voiceLoops} for what "looping" resolves to). Priority is
+ * the tier above that one, so naming this constant is what lifts a music bed out of the
+ * comparison entirely.
+ *
+ * `100` leaves `1`–`99` for a game's own SFX scale below it and room above for a
+ * deliberate "outranks the music" tier (an alarm, a line of dialogue).
+ *
+ * NOT `Infinity`: {@link normalizePriority} maps every non-finite value to
+ * {@link DEFAULT_PRIORITY}, so a voice authored at `Infinity` plays at the DEFAULT
+ * priority rather than the highest — below every voice the game ranked above `0`, the
+ * exact inverse of the intent.
+ */
+export const MUSIC_PRIORITY = 100;
 const DEFAULT_VOLUME = 1;
 const BUS_IDS: readonly AudioBusId[] = ['master', 'music', 'sfx', 'voice'];
 const GAIN_RAMP_EPSILON = 1e-4;
@@ -678,13 +710,22 @@ export class DefaultAudioManager implements AudioManager {
             return;
         }
 
-        const candidate = this.findLowestPriorityVoice();
+        const candidate = this.findWorstStandingVoice();
         if (candidate !== null) {
             this.releaseVoice(candidate, { stopSource: true });
         }
     }
 
-    private findLowestPriorityVoice(): VoiceRecord | null {
+    /**
+     * The voice to reclaim, ranked by {@link voiceHasLowerPreemptionRank}.
+     *
+     * The scan is deliberately UNFILTERED — no `continue`, no skip predicate — because
+     * that shape is what "no voice class is hard-exempt" amounts to in code: a saturated
+     * pool always yields a candidate, so it cannot deadlock a higher-priority request
+     * however uniformly it is filled (Invariant #123). Music survives by ranking, via
+     * {@link MUSIC_PRIORITY}, never by being skipped here.
+     */
+    private findWorstStandingVoice(): VoiceRecord | null {
         let selected: VoiceRecord | null = null;
         for (const record of this.voices.values()) {
             if (selected === null || voiceHasLowerPreemptionRank(record, selected)) {
@@ -1199,9 +1240,75 @@ function resolveLoopWindow(
     return { loop: true, window: resolved };
 }
 
+/**
+ * Whether the voice STARTED with a loop window — the effective stand-in for "runs until
+ * something else ends it", which is the property the preemption loop term is about. It
+ * is a stand-in rather than the property itself: a `to`-bounded loop carries a window and
+ * also schedules its own end, and counts as looping here regardless.
+ *
+ * Reading the effective window rather than {@link VoiceRecord.loop} is what keeps an
+ * IMPLIED loop honest — a bare `loopRegion` that collapsed after clamping leaves the
+ * requested intent `true` on a voice that plays once through and frees its slot, while an
+ * explicit `loop: true` survives the same collapse as a whole-buffer loop and is reported
+ * as looping (the provenance rule in {@link resolveLoopWindow}). Invariant #122 draws the
+ * same effective-versus-requested distinction for fade timing.
+ *
+ * `loopWindowSeconds` is written by {@link DefaultAudioManager.startVoice}, so during
+ * `'loading'` there is no effective answer yet and the requested intent stands in.
+ * Treating that window as non-looping instead would misfile every voice still decoding —
+ * and the longest decodes are exactly the music beds the term is named after, so a
+ * voice's rank would turn on file size.
+ */
+function voiceLoops(record: VoiceRecord): boolean {
+    return record.phase === 'loading' ? record.loop : record.loopWindowSeconds !== null;
+}
+
+/**
+ * Order two voices for reclamation, worst standing first (Invariant #123): true when
+ * `candidate` should be taken ahead of `selected`.
+ *
+ * Four terms, lexicographic:
+ *
+ * 1. `'fading-out'` — already dying, so cutting its tail costs the least. It partitions
+ *    rather than flattens: the remaining terms still rank inside each half.
+ * 2. Lower priority.
+ * 3. Looping per {@link voiceLoops}, at EQUAL priority only. A loop runs until something
+ *    else ends it, while an equally-important one-shot ends itself and cannot be
+ *    re-triggered once its moment passes.
+ * 4. Older sequence.
+ *
+ * Term 3 sits BELOW priority deliberately, and that placement is what makes
+ * {@link MUSIC_PRIORITY} work: above it, no priority a game could name would lift a music
+ * bed clear of a one-shot, and the constant the invariant names as the mechanism for
+ * music continuity would be inert.
+ *
+ * Lexicographic over four per-record keys, so this is a strict total order — load-bearing,
+ * because {@link DefaultAudioManager.findWorstStandingVoice} is a single-pass min-scan
+ * over a `Map` that iterates in ascending `sequence`. Leave any pair incomparable and the
+ * scan quietly promotes age to the deciding term, making the victim follow the play order.
+ *
+ * Term 1 is the PHASE, not "is this voice doomed": a voice carrying `releaseOnStart` is
+ * condemned too — cheaper still, having never made a sound — but it is `'loading'` and
+ * ranks as an ordinary voice. Invariant #123 names the phase and only the phase, so a
+ * `crossfade` that condemned a {@link MUSIC_PRIORITY} bed before it started leaves that
+ * bed outranking a live SFX voice right up until `t0` kills it anyway. Folding
+ * `releaseOnStart` in would be a wider claim than the invariant makes.
+ */
 function voiceHasLowerPreemptionRank(candidate: VoiceRecord, selected: VoiceRecord): boolean {
+    const candidateDying = candidate.phase === 'fading-out';
+    const selectedDying = selected.phase === 'fading-out';
+    if (candidateDying !== selectedDying) {
+        return candidateDying;
+    }
+
     if (candidate.handle.priority !== selected.handle.priority) {
         return candidate.handle.priority < selected.handle.priority;
+    }
+
+    const candidateLoops = voiceLoops(candidate);
+    const selectedLoops = voiceLoops(selected);
+    if (candidateLoops !== selectedLoops) {
+        return candidateLoops;
     }
 
     return candidate.sequence < selected.sequence;
