@@ -10,9 +10,8 @@ import type { PlayOptions } from './AudioManager';
  * These are pure types. The resolver that turns a {@link Cue} into seconds lives
  * in `renderer/audio/audioCueSheet.ts`. `PlayOptions` already consumes
  * `from`/`to`/`loopRegion` and {@link FadeInSpec} via `fadeIn`, while
- * {@link FadeOutSpec} and {@link FadeToSpec} reach a voice through
- * `AudioManager.fadeOut` and `AudioManager.fadeTo`; only {@link CrossfadeOptions}
- * still awaits its verb, which lands in a later F74 task.
+ * {@link FadeOutSpec}, {@link FadeToSpec} and {@link CrossfadeOptions} reach a voice
+ * through `AudioManager.fadeOut`, `AudioManager.fadeTo` and `AudioManager.crossfade`.
  *
  * `AudioCueName` is defined sim-side and flows sim → renderer, never the reverse
  * (Invariant #124); it is imported here as a type only.
@@ -99,7 +98,18 @@ export interface FadeToSpec {
  * and `curve`; passing one here is a type error.
  */
 export interface CrossfadeOptions extends Omit<PlayOptions, 'fadeIn'> {
+    /**
+     * The window BOTH halves author, from the incoming voice's real start. Each still
+     * clamps its own end against its own voice's scheduled stop, so the two coincide only
+     * when neither does. `≤ 0` or non-finite names no window on either half, so the swap is
+     * instant: the incoming voice lands at `volume` and the outgoing one is silenced and
+     * stopped at `t0`.
+     */
     readonly durationMs: number;
-    /** Defaults to `'equalPower'` (constant perceived power, no mid-fade dip). */
+    /**
+     * Defaults to `'equalPower'`. Constant perceived power across the pair — no mid-fade
+     * dip — holds for a MATCHED pair only: see `AudioManager.crossfade` for the two
+     * preconditions (one shared window, equal distances), neither of which is enforced.
+     */
     readonly curve?: FadeCurve;
 }

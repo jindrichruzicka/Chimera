@@ -67,6 +67,12 @@ export interface AudioManager {
     fadeOut(handle: AudioHandle, spec: FadeOutSpec): void;
     /** Ramp stage-1 gain to the absolute `spec.to` and HOLD (dip/swell); rewrites the voice ceiling. */
     fadeTo(handle: AudioHandle, spec: FadeToSpec): void;
+    /** Start `incoming` with a fade-in and link a fade-out of `outgoing`, both anchored to the INCOMING voice's real t0; returns the incoming handle. */
+    crossfade(
+        outgoing: AudioHandle,
+        incoming: AssetRef<AudioClipAsset>,
+        opts: CrossfadeOptions,
+    ): AudioHandle;
     stopAll(bus?: AudioBusId): void;
     /** Duck a bus to duckedVolume for durationMs, then restore. */
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
@@ -75,7 +81,7 @@ export interface AudioManager {
 }
 ```
 
-This block tracks the **shipped** surface and is extended as each part of the cue / fade / crossfade design lands. Members still in design — `crossfade` — appear only in the [design-stage listing](#new--changed-core-types) below until they do.
+This block tracks the **shipped** surface and is extended as each part of the cue / fade / crossfade design lands. Every member of that design has now landed on it; the [design-stage listing](#new--changed-core-types) below remains as the design's own narrative.
 
 ---
 
@@ -199,7 +205,7 @@ export interface FadeToSpec {
 // Crossfade = play(incoming, {fadeIn}) + a LINKED fade-out of `outgoing`, both anchored to one shared t0:
 export interface CrossfadeOptions extends Omit<PlayOptions, 'fadeIn'> {
     readonly durationMs: number;
-    readonly curve?: FadeCurve; // default 'equalPower' (constant perceived power, no mid-fade dip)
+    readonly curve?: FadeCurve; // default 'equalPower' (constant perceived power for a MATCHED pair — see below)
 }
 
 export interface AudioManager {
@@ -293,7 +299,14 @@ audio.fadeOut(music, { toEnd: true });
 audio.fadeTo(ambience, { to: 0.3, durationMs: 800 });
 ```
 
-**Crossfade / two tracks** — `crossfade(outgoing, incoming, opts)` is **stateless sugar** that starts `incoming` and links a fade-out of `outgoing`, **both anchored to the incoming voice's real start `t0`**. When incoming `startVoice` fires it lays the incoming fade-in over `[t0, t0+durationMs]` _and_ the outgoing fade-out over the identical window — so two `equalPower` curves are genuinely complementary (`g_in² + g_out²` constant, no dip) and there is no premature gap. Until incoming starts, outgoing plays at full volume.
+**Crossfade / two tracks** — `crossfade(outgoing, incoming, opts)` is **stateless sugar** that starts `incoming` and links a fade-out of `outgoing`, **both anchored to the incoming voice's real start `t0`**. When incoming `startVoice` fires it lays the incoming fade-in over `[t0, t0+durationMs]` _and_ the outgoing fade-out over the same authored window, so there is no premature gap. Until incoming starts, outgoing plays at full volume. Whether the two `equalPower` curves are also **constant-power** across the pair is a separate question with two preconditions — see immediately below; the shared anchor alone does not supply them.
+
+The shared **anchor** is unconditional. Constant **power** across the pair is narrower, and needs two things the verb supplies neither of by force:
+
+1. **One shared window.** `durationMs` is what each half authors; each then clamps its own end against its own voice's `scheduledStopAt`. The crossfade neither reads across nor equalises the two, because doing so would override a `to`/`toEnd` bound authored on one voice because of the other. When one clamps, the sum dips over the difference: an outgoing voice bounded before `t0+durationMs` reaches silence early, and an incoming one bounded there truncates below `volume` while the fade-out runs on.
+2. **Equal distances.** `equalPower` traces `V·sin θ` against `G·cos θ`, whose squares sum to a constant only when `V === G` — the incoming `volume` equals the gain the outgoing voice is at when the linkage fires. A quieter incoming voice leaves both curves correctly _shaped_ while the pair sums to a slope, ending at `V²`. Scaling either to match would silently rewrite an authored `volume`.
+
+Both hold by default — two full-volume voices that outlive the fade — which is the case the curve is chosen for. Neither is enforced, because enforcing either means overriding something the caller asked for.
 
 ```typescript
 const next = audio.crossfade(currentMusic, battleThemeRef, {
@@ -303,7 +316,9 @@ const next = audio.crossfade(currentMusic, battleThemeRef, {
 });
 ```
 
-Failure behaviour is fail-soft: incoming decode fails → outgoing keeps playing **unfaded** (never silence-with-nothing-incoming); outgoing already invalid → incoming still fades in; outgoing still loading → it never becomes audible; a second crossfade re-targeting the same outgoing cancel-and-reanchors its in-flight ramp click-free.
+Failure behaviour is fail-soft, and every branch keeps something audible: incoming decode fails → outgoing keeps playing **unfaded** (never silence-with-nothing-incoming); outgoing already invalid → incoming still fades in; outgoing still loading when the linkage fires → it parks a release and never becomes audible; a saturated pool that reclaims the outgoing voice to host the incoming one → no linkage is parked at all, so nothing fires onto a record that has left the pool; a second crossfade re-targeting the same outgoing cancel-and-reanchors its in-flight ramp click-free.
+
+None of those is diagnosed a second time by `crossfade` itself. The returned handle's `valid` is the report, and `play` owns the diagnosis of _why_ it declined — a cue rejection already warns, and adding an outcome message beside it would put two warnings on one defect (Invariant #118).
 
 > A higher-level **MusicDirector** (named slots, phase-locked stems, in-flight retarget) is an explicit **future optional layer** built on these primitives — not part of the core `AudioManager` surface.
 
@@ -313,7 +328,7 @@ Failure behaviour is fail-soft: incoming decode fails → outgoing keeps playing
 
 - **Handle validity across ramps.** A scheduled fade-out keeps the voice in the pool with `handle.valid === true` (phase `'fading-out'`, `scheduledStopAt` set, still re-targetable). `valid` flips false exactly once, inside `releaseVoice`, guarded by `voices.delete(id)` (Invariant #119).
 - **One termination path, no timers.** `fadeOut` schedules `source.stop(rampEnd)` **first** and lays the ramp down only once that release exists; the existing `source.onended` handler drives the sole `releaseVoice`. An explicit `stop` mid-fade releases immediately — `releaseVoice` nulls `onended`, calls a bare `source.stop()` inside try/catch, and disconnects — so the fade's own scheduled stop is superseded rather than left to fire, and nothing double-releases. A second `fadeOut` recomputes and reschedules (last `stop()` wins). A platform that **refuses** the scheduled stop would leave a silent, unreleased voice holding a pool slot, so the fade is dropped, the voice stopped at once, and the cut warned about.
-- **Native-duration precedence.** A play-to-cue voice's native end sets `scheduledStopAt`; a later fade clamps `rampEnd` to `min(scheduledStopAt, rampEnd)` — the authored bound is authoritative and never extended. `fadeOut` writes its own ramp end back through the same clamp and then floors it at `now`, so a re-fade can only ever **shorten** a voice's remaining life, even though a bare `source.stop()` would accept a later time. (The floor is why the claim is about what REMAINS: a voice whose stop has elapsed without its `onended` having been delivered records `now`, later than the stop it replaces, extending nothing audible.) **`crossfade` should revisit this** — re-targeting an outgoing voice with a longer fade than the one already in flight will be clamped to the shorter one, cutting its tail early.
+- **Native-duration precedence.** A play-to-cue voice's native end sets `scheduledStopAt`; a later fade clamps `rampEnd` to `min(scheduledStopAt, rampEnd)` — the authored bound is authoritative and never extended. `fadeOut` writes its own ramp end back through the same clamp and then floors it at `now`, so a re-fade can only ever **shorten** a voice's remaining life, even though a bare `source.stop()` would accept a later time. (The floor is why the claim is about what REMAINS: a voice whose stop has elapsed without its `onended` having been delivered records `now`, later than the stop it replaces, extending nothing audible.) `crossfade` **deliberately inherits this**: re-targeting an outgoing voice with a longer fade than the one already in flight is clamped to the shorter one, cutting its tail early rather than promising a tail the scheduled stop would cut anyway. Lifting it would need `VoiceRecord` to tell a fade-SCHEDULED stop (re-issuable — the last `stop()` wins) apart from a natural end (not), which is a separate change; the row for a second crossfade in the table below specifies the clamped behaviour as it stands.
 - **Overlapping-ramp safety.** Every new stage-1 ramp first cancel-and-reanchors (`cancelAndHoldAtTime(now)` in try/catch, else `cancelScheduledValues + setValueAtTime(held)`) — the pattern `AudioBus.duck` already uses. `held` falls back to `param.value`, which reports the **previous render quantum** and so cannot see a gain written this turn (an unrendered `GainNode` reports 1), so a caller that knows better supplies it: the fade-in passes the curve floor it just wrote at `t0`, and the fade-out passes `min(param.value, volume)` — a stale read names a gain the voice cannot be at. This matters because `equalPower` derives every waypoint from `held` JS-side and the fallback path writes it as an explicit anchor; a misread inverts a fade instead of softening it (Invariant #120).
 - **Fade before the source exists (async load).** `play()` returns before `startVoice` runs, so ops arriving during `'loading'` are stored on the `VoiceRecord` and applied atomically at `t0` in fixed precedence: `releaseOnStart` (source never created) → `pendingFadeIn` → `pendingFadeTo` → `linkedFadeOut`. No ramp is ever scheduled against a null source (Invariant #121).
 - **Preemption (rank, not hard-exempt).** `reserveVoiceSlot` prefers `'fading-out'` voices, then ranks looping/music voices worse than any equal-or-higher-priority non-looping voice, then lower priority, then older sequence. No class is exempt (a saturated pool never deadlocks a higher-priority request); music continuity comes from a high recommended `MUSIC_PRIORITY`. Documented consequence: an SFX burst during a long music crossfade can reclaim the dying tail — incoming continuity is preserved, only the tail is cut (Invariant #123).
@@ -343,7 +358,10 @@ Failure behaviour is fail-soft: incoming decode fails → outgoing keeps playing
 | Second fade issued in the SAME quantum as an instant one    | An instant application moves the gain arbitrarily far in zero time, so `param.value` is too LOW to cap and a bound cannot repair it. It records its exact landed value instead, which later departures take outright; otherwise that one stale read would freeze into the bound and outrank every truthful read for the following ramp.                                                           |
 | `fadeIn` plus a pre-start `fadeTo`                          | The `fadeTo` **supersedes** it — both anchor at the same `t0`, so its cancel-and-reanchor wipes the fade-in's curve and the fade-in survives only as the gain it departs from. A 2000 ms `fadeIn` then a 100 ms `fadeTo` is a 100 ms ramp from silence, not an interrupted 2000 ms one.                                                                                                           |
 | Fade requested during async load (`source === null`)        | Stored as pending intent, applied in precedence order at `startVoice`; a pre-start `fadeOut` sets `releaseOnStart`, a pre-start `fadeTo` fills `pendingFadeTo` (one slot, last write wins). A pre-start `stop` reaches the same outcome by a different route — it releases the record out of the pool at once, and the load continuation's own guard is what keeps the source from being created. |
-| Crossfade, incoming decode never resolves / fails           | Outgoing keeps playing **unfaded**; call is a logged no-op. Never silent-then-stuck.                                                                                                                                                                                                                                                                                                              |
+| Crossfade, incoming decode never resolves / fails           | Outgoing keeps playing **unfaded**; no warning is added beside whatever `play` already said. Never silent-then-stuck. A decode that **fails** releases the incoming voice, so its handle goes invalid; one that **never settles** leaves it in the pool at phase `'loading'` with a still-valid handle, and the linkage simply never fires.                                                       |
+| Crossfade, **outgoing** bounded before `t0+durationMs`      | Its fade-out clamps to its own end and reaches silence early. A **dip**, not a gap — the incoming voice is audible and still rising across the difference, and the crossfade still resolves to it.                                                                                                                                                                                                |
+| Crossfade, **incoming** bounded before `t0+durationMs`      | Its fade-in truncates below `volume` **and its source ends there**, so it is released mid-fade while the fade-out runs on: the crossfade finishes on the outgoing tail and then on silence. The one shape where the "never silence-with-nothing-incoming" promise above does not hold — an incoming clip shorter than `durationMs` is the cause to look for.                                      |
+| Crossfade whose two halves travel different distances       | Constant power also needs the incoming `volume` to equal the outgoing voice's gain at `t0`, since `equalPower` is `V·sin` against `G·cos`. Mismatched, both curves keep their shape but the pair sums to a slope ending at `V²`. Not corrected — scaling either would rewrite an authored `volume`.                                                                                               |
 | Second crossfade / `fadeOut` on the same outgoing           | Later op cancel-and-reanchors the in-flight ramp at the held value and reschedules the stop, shortening the voice's remaining life but never extending it; each incoming fades independently.                                                                                                                                                                                                     |
 | `dispose()` mid-fade/crossfade                              | `stopAll` stops and disconnects every voice before `close()`, so a scheduled ramp or pending `source.stop` reaches a node already out of the graph; no timers dangle.                                                                                                                                                                                                                             |
 
@@ -367,14 +385,13 @@ Failure behaviour is fail-soft: incoming decode fails → outgoing keeps playing
 
 ### Landing this design (remaining follow-up)
 
-Landed so far: `Cue.ts`, `audioCueSheet.ts`, `AssetManager.getManifestMetadata`, the stage-1 gain-ramp primitive, the sim-side cue-sheet types and `audioClipEntry` builder, `PlayOptions.from`/`to`/`loopRegion` with two-tier validation, the `useSound` keys for those three, `PlayOptions.fadeIn` with the `VoiceRecord` phase/intent fields and their atomic `t0` application, `AudioManager.fadeOut` with its timer-free single-release scheduling (#119/#122), and `AudioManager.fadeTo` with the mutable voice ceiling its departure bound rests on. Still outstanding:
+Landed so far: `Cue.ts`, `audioCueSheet.ts`, `AssetManager.getManifestMetadata`, the stage-1 gain-ramp primitive, the sim-side cue-sheet types and `audioClipEntry` builder, `PlayOptions.from`/`to`/`loopRegion` with two-tier validation, the `useSound` keys for those three, `PlayOptions.fadeIn` with the `VoiceRecord` phase/intent fields and their atomic `t0` application, `AudioManager.fadeOut` with its timer-free single-release scheduling (#119/#122), `AudioManager.fadeTo` with the mutable voice ceiling its departure bound rests on, and `AudioManager.crossfade`, which writes the last intent slot to have had no production writer — `linkedFadeOut`, a crossfade's linkage held as a thunk so the record owns only _when_ it fires, while the verb owns what it does. All four slots now have one: `releaseOnStart`, `pendingFadeIn`, `pendingFadeTo` and `linkedFadeOut` are written by `fadeOut`, `PlayOptions.fadeIn`, `fadeTo` and `crossfade` respectively. Still outstanding:
 
-1. **`renderer/audio`** — the `crossfade` verb. It writes the one intent slot that still has no production writer: `linkedFadeOut`, a crossfade's linkage held as a thunk so the record owns only _when_ it fires. The other three — `releaseOnStart`, `pendingFadeIn` and `pendingFadeTo` — are written by `fadeOut`, `PlayOptions.fadeIn` and `fadeTo` respectively.
-2. **Voice preemption** — the `'fading-out'`-first ranking and `MUSIC_PRIORITY` (#123).
-3. **`useSound`** memo key list gains `fadeIn`; live-handle verbs (`fadeOut`/`fadeTo`/`crossfade`) get a separate `useMusicTrack`/`useAudioHandle` hook that obtains the manager via `useAudioManager()` only (Invariant #84).
-4. **`docs/architecture-overview.md` §4.25** — extend the summary line (cue/fade/crossfade + the new `getManifestMetadata` channel).
-5. **Invariant roll-call** (`docs/executive-architecture/invariant-roll-call.md`) — graduate #116–#126 from the design-stage section of [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md#design-stage-invariants-pending-implementation) (where their text already lives) into the numbered roll-call, updating the total and per-invariant classification; add `check-invariants` fixture cases where a static check is feasible (e.g. the sim→renderer import-ban backing #124).
-6. **`validate-assets` tooling** — add the cue-sheet build gate (#125) with red-first anti-rot fixtures.
+1. **Voice preemption** — the `'fading-out'`-first ranking and `MUSIC_PRIORITY` (#123).
+2. **`useSound`** memo key list gains `fadeIn`; the live-handle verbs (`fadeOut`/`fadeTo`/`crossfade`, all three now on the manager) get a separate `useMusicTrack`/`useAudioHandle` hook that obtains the manager via `useAudioManager()` only (Invariant #84).
+3. **`docs/architecture-overview.md` §4.25** — extend the summary line (cue/fade/crossfade + the new `getManifestMetadata` channel).
+4. **Invariant roll-call** (`docs/executive-architecture/invariant-roll-call.md`) — graduate #116–#126 from the design-stage section of [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md#design-stage-invariants-pending-implementation) (where their text already lives) into the numbered roll-call, updating the total and per-invariant classification; add `check-invariants` fixture cases where a static check is feasible (e.g. the sim→renderer import-ban backing #124).
+5. **`validate-assets` tooling** — add the cue-sheet build gate (#125) with red-first anti-rot fixtures.
 
 ---
 

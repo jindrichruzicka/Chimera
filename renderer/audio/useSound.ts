@@ -33,10 +33,10 @@ function cueDependency(cue: Cue | undefined): string | number | undefined {
  * even when callers pass a newly created options object.
  *
  * `PlayOptions.fadeIn` is deliberately NOT part of the key yet: it lands with the
- * live-handle verbs' own hook, which is where the whole fade surface gets keyed together
- * — `fadeOut` and `fadeTo` are on the manager already, `crossfade` is not, and the hook
- * waits for all three. Until then a rerender that changes ONLY `fadeIn` hands back the
- * previous callback, and the previous fade is what plays.
+ * live-handle verbs' own hook, which is where the whole fade surface gets keyed together.
+ * All three verbs — `fadeOut`, `fadeTo` and `crossfade` — are on the manager now, so what
+ * remains is the hook itself. Until then a rerender that changes ONLY `fadeIn` hands back
+ * the previous callback, and the previous fade is what plays.
  */
 export function useSound(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): () => AudioHandle {
     const audioManager = useAudioManager();

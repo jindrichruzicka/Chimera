@@ -4,7 +4,15 @@ import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/conten
 import type { AssetManager, ResolvedAsset } from '../assets/AssetManager';
 import { AudioBus, type AudioBusId, type AudioBusOptions } from './AudioBus';
 import { parseAudioCueSheet, resolveCue, resolveCueWindow } from './audioCueSheet';
-import type { Cue, FadeCurve, FadeInSpec, FadeOutSpec, FadeToSpec, LoopRegion } from './Cue';
+import type {
+    CrossfadeOptions,
+    Cue,
+    FadeCurve,
+    FadeInSpec,
+    FadeOutSpec,
+    FadeToSpec,
+    LoopRegion,
+} from './Cue';
 
 export type { AudioBusId } from './AudioBus';
 
@@ -52,6 +60,11 @@ export interface AudioManager {
     stop(handle: AudioHandle): void;
     fadeOut(handle: AudioHandle, spec: FadeOutSpec): void;
     fadeTo(handle: AudioHandle, spec: FadeToSpec): void;
+    crossfade(
+        outgoing: AudioHandle,
+        incoming: AssetRef<AudioClipAsset>,
+        opts: CrossfadeOptions,
+    ): AudioHandle;
     stopAll(bus?: AudioBusId): void;
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
     dispose(): void;
@@ -188,9 +201,12 @@ interface VoiceRecord {
     pendingFadeTo: FadeToSpec | null;
     /**
      * Step 4: a crossfade's linked fade-out of the OUTGOING voice, fired with this
-     * voice's real `t0` so both curves cover the identical window (§4.25). A thunk
+     * voice's real `t0` so both curves are anchored there and authored over the same
+     * window — each still clamps its own end against its own voice's scheduled stop, per
+     * {@link DefaultAudioManager.crossfade} (§4.25). A thunk
      * rather than a descriptor: this record owns only WHEN the linkage fires, while
-     * `crossfade` — a later task — owns what it does.
+     * {@link DefaultAudioManager.crossfade}, which writes it, owns what it does — down
+     * to which voice is faded, resolved by handle id at fire time rather than captured.
      */
     linkedFadeOut: ((startedAt: number) => void) | null;
     source: AudioBufferSourceNode | null;
@@ -262,6 +278,15 @@ const BUS_IDS: readonly AudioBusId[] = ['master', 'music', 'sfx', 'voice'];
 const GAIN_RAMP_EPSILON = 1e-4;
 const EQUAL_POWER_WAYPOINTS = 64;
 const DEFAULT_FADE_CURVE: FadeCurve = 'linear';
+/**
+ * A crossfade's own default, deliberately NOT {@link DEFAULT_FADE_CURVE}. Its two halves
+ * are a matched pair rather than one fade: `equalPower`'s `sin`/`cos` quarter-waves keep
+ * `g_in² + g_out²` constant where two linear ramps would dip through the middle — for a
+ * MATCHED pair, one sharing a window and travelling the same distance. See
+ * {@link DefaultAudioManager.crossfade} for both preconditions and what a pair that misses
+ * one sounds like (§4.25).
+ */
+const DEFAULT_CROSSFADE_CURVE: FadeCurve = 'equalPower';
 /** The fade-out window substituted when `{ toEnd }` finds no end to ramp to (§4.25). */
 const DEFAULT_FADE_OUT_MS = 250;
 
@@ -398,6 +423,28 @@ export class DefaultAudioManager implements AudioManager {
             return;
         }
 
+        this.applyFadeOut(record, spec, this.audioContext.currentTime);
+    }
+
+    /**
+     * The one path every fade-out takes, live verb and crossfade linkage alike, so an
+     * obligation added to one cannot be forgotten by the other.
+     *
+     * `now` is the ANCHOR, passed rather than read here: {@link DefaultAudioManager.fadeOut}
+     * supplies `currentTime`, while a crossfade supplies the incoming voice's real `t0`, so
+     * both halves of the pair START together and author the same window (§4.25). Only the
+     * start is shared by this: the end is resolved below against THIS voice's own scheduled
+     * stop, and the incoming half's against its own.
+     *
+     * Those two are the same instant whenever a linkage fires — `startVoice` reads `t0` from
+     * `currentTime` and is synchronous and non-reentrant, so the clock cannot advance before
+     * the intents are applied, which is also what keeps {@link scheduleGainRamp}'s
+     * not-in-the-future precondition satisfied. Re-reading the clock here would therefore
+     * produce the same number today. Taking it as an argument is what stops "one shared
+     * window" from resting on that: it becomes a fact of the code rather than of the call
+     * stack, and it survives a caller that reaches this from anywhere else.
+     */
+    private applyFadeOut(record: VoiceRecord, spec: FadeOutSpec, now: number): void {
         const started = startedVoice(record);
         if (started === null) {
             // Still loading: there is no gain to ramp and no source to stop, so the
@@ -406,7 +453,6 @@ export class DefaultAudioManager implements AudioManager {
             return;
         }
 
-        const now = this.audioContext.currentTime;
         const { rampEnd, deferredWarning } = resolveFadeOutRampEnd(record, started, spec, now);
 
         try {
@@ -487,6 +533,97 @@ export class DefaultAudioManager implements AudioManager {
         const now = this.audioContext.currentTime;
         const gain = started.gainNode.gain;
         applyFadeToRamp(record, gain, spec, now, rampDeparture(record, gain, now));
+    }
+
+    /**
+     * Start `incoming` with a fade-in and link a fade-out of `outgoing` to it, both
+     * anchored to the incoming voice's REAL start `t0` and both authored over
+     * `[t0, t0 + durationMs]` (§4.25). Returns the incoming handle.
+     *
+     * Stateless sugar over `play` and the fade-out path, holding no crossfade state of its
+     * own: the linkage lives on the incoming {@link VoiceRecord} as step 4 of Invariant
+     * #121's precedence order, and fires once, at `t0`. The shared ANCHOR is unconditional
+     * and is the whole point — until the incoming voice actually starts, the outgoing one
+     * keeps playing at full volume rather than fading into a gap.
+     *
+     * Constant POWER across the pair — `g_in² + g_out²` unchanging, no mid-fade dip — is
+     * narrower than either, and needs two things this verb supplies neither of by force:
+     *
+     * 1. One shared window. `durationMs` is what each half AUTHORS; each then clamps its own
+     *    end against its OWN voice's scheduled stop ({@link clampRampEnd}), which this verb
+     *    neither reads across nor equalises. When one clamps, they cover different windows
+     *    and the sum diverges over the difference. An outgoing voice bounded before
+     *    `t0 + durationMs` reaches silence early — a dip, with the incoming voice still
+     *    rising into it. An incoming one bounded there is worse than a dip: its fade-in
+     *    truncates below `volume` AND its source ends, so it is released mid-fade and the
+     *    crossfade finishes on the outgoing tail and then on silence — the one shape in
+     *    which the fail-soft promise below does not hold. Equalising the two would mean
+     *    overriding a `to`/`toEnd` bound the caller authored on one voice because of the
+     *    other.
+     * 2. Equal distances. `equalPower` traces `V·sin θ` rising against `G·cos θ` falling, and
+     *    those squares sum to a constant only when `V === G` — the incoming `volume` equals
+     *    the gain the outgoing voice is at when the linkage fires. A quieter incoming voice
+     *    leaves both curves correctly SHAPED while the pair sums to a slope, ending at `V²`.
+     *    Scaling either one to match would silently rewrite an authored `volume`.
+     *
+     * Both hold by default — two full-volume voices that outlive the fade — which is the
+     * case the curve is chosen for. Neither is enforced, because enforcing either means
+     * overriding something the caller asked for.
+     *
+     * Fail-soft throughout, and every branch keeps SOMETHING audible:
+     *
+     * - An incoming voice that never starts — a decode failure, or a play `play` rejected —
+     *   leaves the outgoing one playing unfaded, because the linkage dies with the record
+     *   that held it, and returns an invalid handle.
+     * - An outgoing voice already gone takes no linkage at all; the incoming one still fades
+     *   in, and its handle is valid.
+     * - A SATURATED POOL is the reverse case, and the reason the outgoing voice is re-checked
+     *   after the play below: `reserveVoiceSlot` may reclaim it to host the incoming one. The
+     *   incoming voice then starts normally with a valid handle and no linkage, and the
+     *   outgoing one is already stopped rather than faded.
+     * - One still loading when the linkage fires has no gain to ramp, so it parks a release
+     *   instead and never becomes audible.
+     *
+     * None of those adds a warning here. Where a diagnosis exists `play` has already emitted
+     * it — a statically rejected cue warns there, so a second message naming the outcome
+     * would put two on one defect (Invariant #118). A decode failure is silent in `play`
+     * itself, so there the invalid handle is the only signal at all.
+     */
+    public crossfade(
+        outgoing: AudioHandle,
+        incoming: AssetRef<AudioClipAsset>,
+        opts: CrossfadeOptions,
+    ): AudioHandle {
+        // Rest rather than a field-by-field forward, so a `PlayOptions` field added later
+        // reaches `play` without a second edit here — which is what
+        // `CrossfadeOptions extends Omit<PlayOptions, 'fadeIn'>` already promises. Excess
+        // properties are still rejected where `opts` is authored.
+        const { durationMs, curve = DEFAULT_CROSSFADE_CURVE, ...playOptions } = opts;
+        const handle = this.play(incoming, { ...playOptions, fadeIn: { durationMs, curve } });
+
+        const incomingRecord = this.voices.get(handle.id);
+        // The outgoing voice is checked AFTER the play, not before: a saturated pool
+        // reclaims a voice to host the incoming one, and the one it reclaims may well be
+        // this outgoing one. A linkage parked against it would fire onto a record that has
+        // already left the pool.
+        if (incomingRecord === undefined || !this.voices.has(outgoing.id)) {
+            return handle;
+        }
+
+        incomingRecord.linkedFadeOut = (startedAt): void => {
+            // Resolved by handle id when the linkage FIRES, never captured as a record:
+            // the voice may have been stopped, preempted or have reached its own end in
+            // the meantime, and a captured record would still accept the write — silently,
+            // since a released one has no nodes left to ramp.
+            const outgoingRecord = this.voices.get(outgoing.id);
+            if (outgoingRecord === undefined) {
+                return;
+            }
+
+            this.applyFadeOut(outgoingRecord, { overMs: durationMs, curve }, startedAt);
+        };
+
+        return handle;
     }
 
     public stopAll(bus?: AudioBusId): void {
@@ -806,9 +943,13 @@ export class DefaultAudioManager implements AudioManager {
                 linkedFadeOut(startedAt);
             } catch {
                 // A crossfade's outgoing voice is not this voice's problem to die over,
-                // but the containment must still name what survived rather than hide it.
+                // but the containment must still name what survived rather than hide it —
+                // and it cannot promise an unfaded voice outright. `applyFadeOut` schedules
+                // the stop and records it BEFORE laying the ramp, so a failure in the ramp
+                // leaves a voice that is both unfaded and already cut short. The message
+                // covers the outcome from either side of that line.
                 console.warn(
-                    'Audio linked fade-out failed and was skipped; the incoming voice started normally, so the outgoing one keeps playing unfaded.',
+                    'Audio linked fade-out failed and was skipped; the incoming voice started normally, so the outgoing one is left unfaded — cut at any stop the attempt had already rescheduled, otherwise playing on.',
                 );
             }
         }

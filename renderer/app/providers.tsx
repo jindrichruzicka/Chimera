@@ -163,6 +163,15 @@ function createNoopAudioManager(): AudioManager {
         fadeTo(): void {
             return;
         },
+        crossfade(_outgoing, incoming, opts): AudioHandle {
+            return {
+                id: 'noop-audio-handle',
+                ref: incoming,
+                bus: opts.bus ?? 'sfx',
+                priority: opts.priority ?? 0,
+                valid: false,
+            };
+        },
         stopAll(): void {
             return;
         },

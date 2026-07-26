@@ -4,6 +4,8 @@
  * Architecture reference: §4.25 — Audio System → Cue, Fade & Crossfade Extensions.
  *
  * Invariants upheld:
+ *   #116 — every fade, crossfade and cue op writes exclusively to a voice's own
+ *          stage-1 gain; the bus and master gains are never written by one.
  *   #117 — provenance-scoped two-tier cue validation; `loopRegion` implies `loop`;
  *          a looping `to` bounds elapsed play duration, not a buffer wrap.
  *   #118 — cue resolution is fail-soft: it never throws into a caller, an
@@ -32,17 +34,36 @@
  * to drive them. The `AudioHandle` type pin is red at `tsc` rather than in vitest
  * (`expectTypeOf` is erased at runtime), so both gates must run.
  *
- * For #121 the load-bearing red is the precedence order itself. Every slot but one now
- * has a production writer (`PlayOptions.fadeIn`, `fadeOut` and `fadeTo`) and is driven
- * through it; `linkedFadeOut` has none, so it alone is parked through
- * {@link writeVoiceIntents}, the same seam `crossfade` will use, and the ordering is
- * asserted from the voice gain's own call log rather than a global invocation index.
+ * For #121 the load-bearing red is the precedence order itself. Every slot has a
+ * production writer (`PlayOptions.fadeIn`, `fadeOut`, `fadeTo` and `crossfade`); the
+ * ordering test still parks `linkedFadeOut` through {@link writeVoiceIntents}, because a
+ * real linkage ramps ANOTHER voice's gain and so says nothing about where in the order it
+ * fired, and the ordering is asserted from the voice gain's own call log rather than a
+ * global invocation index.
  *
  * For #119 the fade-out tests were written against a `fadeOut` with an empty body, so
  * every red is behavioural rather than "fadeOut is not a function". The load-bearing
  * ones are the timer-free release (a stray `setTimeout` shows in `vi.getTimerCount()`,
  * since fake timers are installed for the whole file), the ramp-end arithmetic, and the
  * refused-stop fallback — the reachability and clamp cases exist to bound them.
+ *
+ * `crossfade` was written against a body that plays the incoming voice with its fade-in but
+ * parks no linkage. Running the block against that baseline puts 18 red and 7 green, and the
+ * seven bound the guards rather than drive them, for four different reasons: the option
+ * forwarding asserts nothing about the outgoing voice at all; an already-invalid outgoing
+ * voice, a saturated pool, a statically rejected incoming play and a disposed manager park
+ * no linkage to begin with; a decode that fails parks one on a live voice that then never
+ * fires, because the incoming voice never starts; and an outgoing voice released before `t0`
+ * fires one that finds its target gone. Each is indistinguishable from the baseline, which is
+ * the point — they fence the guards in rather than prove them.
+ *
+ * The load-bearing reds are the linkage itself: both halves anchored to one `t0`, the
+ * constant-power `equalPower` pair over the window they author, and the two preconditions
+ * that pair rests on — the per-voice clamp that can make the windows diverge, and the equal
+ * distances that `volume` can break. The anchor needs a clock that ADVANCES on every read
+ * ({@link driftAudioClock}) — under the frozen double, "anchored to the `t0` it was handed"
+ * and "re-read the clock and got the same number" are indistinguishable, and every other
+ * test in that block passes under either.
  *
  * `fadeTo` was likewise written against an empty body. Its load-bearing reds are the HOLD
  * (no stop, no phase change, no rewritten end), the ceiling rewrite — pinned through the
@@ -3139,6 +3160,539 @@ describe('DefaultAudioManager — fadeTo', () => {
     });
 });
 
+// ─── crossfade (#121, #116, #120) ───────────────────────────────────────────────
+
+describe('DefaultAudioManager — crossfade', () => {
+    it('lays both curves over one shared t0 window, complementary and dip-free (#121, #120)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+
+        // Both voices depart from the anchor their own curve needs, at the SAME t0.
+        expect(expectGain(context, 5).gain.calls.slice(0, 2)).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+        ]);
+        expect(expectGain(context, 4).gain.calls.slice(0, 2)).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+        ]);
+
+        const rising = expectGain(context, 5).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        const falling = expectGain(context, 4).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        // `equalPower` without being asked — the crossfade default is not the fade default.
+        expect(rising).toHaveLength(64);
+        expect(falling).toHaveLength(64);
+
+        for (const [index, up] of rising.entries()) {
+            const down = falling[index];
+            expect(down).toBeDefined();
+            // Identical waypoint TIMES are what makes the pair complementary rather than
+            // merely similarly shaped; a fade-out anchored at its own `currentTime` would
+            // still pass a sum-of-squares check taken waypoint-by-waypoint.
+            expect(down?.time).toBe(up.time);
+            const gainIn = up.value ?? Number.NaN;
+            const gainOut = down?.value ?? Number.NaN;
+            expect(gainIn ** 2 + gainOut ** 2).toBeCloseTo(1, 12);
+        }
+        expect(rising.at(-1)).toEqual({ method: 'linearRampToValueAtTime', value: 1, time: 12 });
+        expect(falling.at(-1)).toEqual({ method: 'linearRampToValueAtTime', value: 0, time: 12 });
+    });
+
+    it('is equal-power SHAPED but not constant-power when the two halves travel different distances', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000, volume: 0.5 });
+        await startIncoming();
+
+        const rising = expectGain(context, 5).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        const falling = expectGain(context, 4).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        // The OTHER precondition behind "no mid-fade dip", and the one an unclamped window
+        // does not supply: `equalPower` gives `V·sin` against `G·cos`, whose squares sum to a
+        // constant only when `V === G`. A quieter incoming voice leaves each curve correctly
+        // shaped while the pair sums to a slope, dipping to `V²` at the far end. Nothing here
+        // is a defect to fix — it is the precondition the prose must state rather than imply.
+        const power = (index: number): number =>
+            (rising[index]?.value ?? Number.NaN) ** 2 + (falling[index]?.value ?? Number.NaN) ** 2;
+        expect(power(31)).toBeCloseTo(
+            0.25 * Math.sin(Math.PI / 4) ** 2 + Math.cos(Math.PI / 4) ** 2,
+            12,
+        );
+        expect(power(31)).toBeCloseTo(0.625, 12);
+        expect(power(63)).toBeCloseTo(0.25, 12);
+        // Same call with matched distances is constant, so the difference is the volume and
+        // not the curve — see the shared-window test above, which asserts exactly 1.
+        expect(power(0)).toBeGreaterThan(power(31));
+        expect(power(31)).toBeGreaterThan(power(63));
+    });
+
+    it('anchors the linked fade to the t0 it is handed, not to a re-read clock (#121)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+        // The outgoing voice is already started, so this only affects the incoming `t0`
+        // and anything that reads the clock after it.
+        driftAudioClock(context);
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000, curve: 'linear' });
+        await startIncoming();
+
+        // One shared window, both ends. A linkage that called back through the public
+        // fadeOut — which derives its own `now` — would land at 12.5 here and pass every
+        // other test in this block, because a frozen clock makes the two indistinguishable.
+        expect(expectGain(context, 5).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 1,
+            time: 12,
+        });
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 12,
+        });
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12);
+    });
+
+    it('lets each half clamp to its OWN scheduled end, so an outgoing one ending first cuts short', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({ outgoingPlayOptions: { to: 1 } });
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+
+        // `durationMs` names the AUTHORED window; each half's end is clamped against its own
+        // voice's scheduled stop, which the crossfade neither reads across nor equalises.
+        // Here the outgoing voice is bounded at t=11 and the incoming one is not, so the two
+        // curves cover different windows and are NOT complementary over the difference: at
+        // t=11 the outgoing has reached 0 while the incoming is only at sin(pi/4).
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 11,
+        });
+        expect(expectGain(context, 5).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 1,
+            time: 12,
+        });
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(11);
+    });
+
+    it('truncates a fade-in that outlasts the incoming voice, leaving the fade-out to run on', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({ incomingBufferSeconds: 1 });
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+
+        // The mirror image of the case above, and the reason the clamp is per-voice rather
+        // than shared: a fade-in truncates along its own curve (it keeps the rate it
+        // authored), so it lands below `volume` at the incoming voice's own end.
+        expect(expectGain(context, 5).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: Math.sin(Math.PI / 4),
+            time: 11,
+        });
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 12,
+        });
+        // And the truncation is not merely of the RAMP. The incoming voice's own end is
+        // where its source runs out, so it is released at t=11 while the outgoing one is
+        // still descending to t=12 — the crossfade finishes on the outgoing tail and then
+        // on silence. This is the one shape in which the surrounding "never
+        // silence-with-nothing-incoming" promise does not hold, so it is pinned here rather
+        // than left for the doc to assert alone.
+        expect(readVoiceRecord(manager, outgoing).scheduledStopAt).toBe(12);
+        expect(expectSource(context, 1).stop).not.toHaveBeenCalled();
+        expectSource(context, 1).finish();
+        expect(readVoiceRecord(manager, outgoing).phase).toBe('fading-out');
+    });
+
+    it('leaves the outgoing voice at full volume until the incoming one starts', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+
+        const incoming = manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+
+        // The linkage is PARKED, not applied: no second source exists yet, so a fade
+        // applied now would silence the outgoing into a gap with nothing coming in.
+        expect(context.createdSources).toHaveLength(1);
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+        ]);
+        expect(readVoiceRecord(manager, outgoing)).toMatchObject({
+            phase: 'playing',
+            scheduledStopAt: 20,
+        });
+        expect(readVoiceRecord(manager, incoming).linkedFadeOut).toBeInstanceOf(Function);
+
+        await startIncoming();
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12);
+    });
+
+    it('returns the incoming handle and forwards every play option to it', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+
+        const incoming = manager.crossfade(outgoing, incomingRef, {
+            durationMs: 2000,
+            bus: 'music',
+            loop: true,
+            priority: 7,
+            volume: 0.5,
+        });
+
+        expect(incoming.ref).toBe(incomingRef);
+        expect(incoming.bus).toBe('music');
+        expect(incoming.priority).toBe(7);
+        expect(incoming.valid).toBe(true);
+        expect(incoming.id).not.toBe(outgoing.id);
+
+        await startIncoming();
+
+        expect(expectSource(context, 1).loop).toBe(true);
+        // The fade-in climbs to the requested `volume`, not to full gain.
+        expect(expectGain(context, 5).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0.5,
+            time: 12,
+        });
+    });
+
+    it('honours an explicit curve on both halves of the fade', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 500, curve: 'linear' });
+        await startIncoming();
+
+        expect(expectGain(context, 5).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 1, time: 10.5 },
+        ]);
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 10.5 },
+        ]);
+    });
+
+    it('releases the outgoing voice through the native onended path, timer-free (#119)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+
+        const outgoingSource = expectSource(context, 0);
+        expect(outgoingSource.stop).toHaveBeenCalledTimes(1);
+        expect(outgoingSource.stop).toHaveBeenCalledWith(12);
+        expect(vi.getTimerCount()).toBe(0);
+        // Valid and re-targetable for the whole ramp, exactly as a bare fadeOut leaves it.
+        expect(outgoing.valid).toBe(true);
+        expect(readVoiceRecord(manager, outgoing)).toMatchObject({
+            phase: 'fading-out',
+            scheduledStopAt: 12,
+        });
+
+        outgoingSource.finish();
+
+        expect(outgoing.valid).toBe(false);
+    });
+
+    it('writes only the two voice gains, never a bus or master gain (#116)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+        // Snapshots, not ramp counts: #116 says these are never WRITTEN by a crossfade, so
+        // a stray setValueAtTime or cancel has to fail here too, not just a ramp.
+        const busCallsBefore = context.createdGainNodes
+            .slice(0, 4)
+            .map((gain) => [...gain.gain.calls]);
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+
+        expect(context.createdGainNodes.slice(0, 4).map((gain) => gain.gain.calls)).toEqual(
+            busCallsBefore,
+        );
+        expect(countGainRamps(expectGain(context, 4).gain.calls)).toBe(64);
+        expect(countGainRamps(expectGain(context, 5).gain.calls)).toBe(64);
+    });
+
+    it('leaves the outgoing voice playing unfaded when the incoming one never decodes', async () => {
+        const { context, manager, outgoing, incomingRef, incomingLoad } =
+            await createCrossfadePair();
+
+        const incoming = manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        incomingLoad.reject(new Error('decode failed'));
+        await flushAudioLoad();
+
+        expect(incoming.valid).toBe(false);
+        // Never silence-with-nothing-incoming: the linkage died with the voice that owned
+        // it, so the outgoing keeps its own natural life rather than a fade into a gap.
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+        ]);
+        expect(expectSource(context, 0).stop).not.toHaveBeenCalled();
+        expect(readVoiceRecord(manager, outgoing)).toMatchObject({
+            phase: 'playing',
+            scheduledStopAt: 20,
+        });
+    });
+
+    it('names the cut, not an unfaded voice, when the linked ramp throws after its stop landed', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+        const warn = spyOnWarn();
+        // Throw from the RAMP, so the failure lands after `source.stop` was accepted and
+        // after the record already describes a fade that will now not happen. `crossfade`
+        // is the first production writer of `linkedFadeOut`, so this containment path is
+        // reachable outside a test double for the first time.
+        Object.defineProperty(expectGain(context, 4).gain, 'linearRampToValueAtTime', {
+            configurable: true,
+            value: (): never => {
+                throw new Error('ramp unsupported');
+            },
+        });
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+
+        // The voice is NOT "playing unfaded": its stop is already booked at the ramp end it
+        // never travelled, so it plays at full gain and then cuts.
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12);
+        expect(readVoiceRecord(manager, outgoing)).toMatchObject({
+            phase: 'fading-out',
+            scheduledStopAt: 12,
+        });
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain(
+            'cut at any stop the attempt had already rescheduled',
+        );
+        // Containment: the incoming voice's own fade-in is unaffected.
+        expect(countGainRamps(expectGain(context, 5).gain.calls)).toBe(64);
+    });
+
+    it('still fades the incoming voice in when the outgoing handle is already invalid', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+        manager.stop(outgoing);
+
+        const incoming = manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+
+        // No linkage is parked at all — there is nothing left to fade, and an intent that
+        // can only no-op would advertise one.
+        expect(readVoiceRecord(manager, incoming).linkedFadeOut).toBeNull();
+
+        await startIncoming();
+
+        expect(expectGain(context, 5).gain.calls.slice(0, 2)).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+        ]);
+        expect(countGainRamps(expectGain(context, 5).gain.calls)).toBe(64);
+    });
+
+    it('never lets an outgoing voice still loading at t0 become audible (#121)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming, startOutgoing } =
+            await createCrossfadePair({ deferOutgoing: true });
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+
+        // There is no gain to ramp, so the linkage parks the release instead — step 1 of
+        // the precedence order, reached through the crossfade rather than a bare fadeOut.
+        expect(readVoiceRecord(manager, outgoing).releaseOnStart).toBe(true);
+        // The incoming voice started FIRST here, so its gain is index 4.
+        expect(expectGain(context, 4).gain.calls.slice(0, 2)).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+        ]);
+
+        await startOutgoing();
+
+        expect(outgoing.valid).toBe(false);
+        expect(context.createdSources).toHaveLength(1);
+    });
+
+    it('no-ops when the outgoing voice is released between the call and t0', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        // Held across the release, so the assertion below can reach a record that
+        // `readVoiceRecord` no longer finds.
+        const releasedRecord = readVoiceRecord(manager, outgoing);
+        manager.stop(outgoing);
+        await startIncoming();
+
+        // The thunk resolves its target by handle id when it fires. Capturing the record
+        // instead would write onto this stale object: a released voice has no nodes, so the
+        // fade would park a release on it rather than ramp — silent, and invisible in the
+        // gain log below.
+        expect(releasedRecord.releaseOnStart).toBe(false);
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+        ]);
+        expect(countGainRamps(expectGain(context, 5).gain.calls)).toBe(64);
+    });
+
+    it('cancel-and-reanchors an in-flight outgoing ramp on a second crossfade (#120)', async () => {
+        const { assetManager, context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+        const secondRef = audioRef('audio/music/boss.ogg');
+        assetManager.resolve(secondRef, createAudioBuffer('boss', 10));
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+        // A stand-in for a mid-ramp reading this double cannot produce. It reports the last
+        // value SCHEDULED — after a full waypoint set, the ramp's target of 0 — so left
+        // alone the second linkage departs from 0 and lays 64 waypoints of 0, and every
+        // assertion below passes over a flat ramp that proves nothing about re-anchoring.
+        // Not a claim about where the voice is: the clock is frozen at the instant the first
+        // fade STARTS, where the honest gain is still 1. What is being pinned is that the
+        // departure comes from the param at all, rather than from the voice's ceiling.
+        expectGain(context, 4).gain.value = 0.6;
+        manager.crossfade(outgoing, secondRef, { durationMs: 1000 });
+        await flushAudioLoad();
+
+        const outgoingCalls = expectGain(context, 4).gain.calls;
+        // The second linkage re-anchors at the held value rather than stacking a curve on
+        // top of the first, and lays a fresh full waypoint set on its own window departing
+        // from where the voice IS — not from the first fade's target, and not from the
+        // node's default of 1.
+        expect(outgoingCalls[66]).toEqual({ method: 'cancelAndHoldAtTime', time: 10 });
+        expect(outgoingCalls[67]?.value).toBeCloseTo(0.6 * Math.cos(Math.PI / 128), 12);
+        expect(outgoingCalls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 11,
+        });
+        expect(countGainRamps(outgoingCalls)).toBe(128);
+        // The stop is rescheduled with it, shortening the voice's remaining life.
+        expect(expectSource(context, 0).stop).toHaveBeenNthCalledWith(2, 11);
+        expect(readVoiceRecord(manager, outgoing).scheduledStopAt).toBe(11);
+    });
+
+    it('clamps a re-targeting crossfade to the stop already scheduled, never extending it', async () => {
+        const { assetManager, context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+        const secondRef = audioRef('audio/music/boss.ogg');
+        assetManager.resolve(secondRef, createAudioBuffer('boss', 10));
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+        manager.crossfade(outgoing, secondRef, { durationMs: 5000 });
+        await flushAudioLoad();
+
+        // Web Audio cannot un-schedule the stop the first crossfade laid down, so the
+        // longer tail is cut at it rather than promised and then missed.
+        expect(readVoiceRecord(manager, outgoing).scheduledStopAt).toBe(12);
+        expect(expectSource(context, 0).stop).toHaveBeenNthCalledWith(2, 12);
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 12,
+        });
+    });
+
+    // Every degenerate `durationMs` names no window on EITHER half, so all of them are the
+    // same instant swap. The composed claim is what `CrossfadeOptions.durationMs` documents,
+    // and it rests on the non-finite check preceding the clamp in two separate helpers —
+    // `resolveFadeInRamp` and `resolveFadeOutRampEnd`, whose own comments note that the
+    // opposite order splits NaN from +Infinity into opposite outcomes. Pinning only `0`
+    // would leave that composition to those two helpers' current internals.
+    it.each([0, -500, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+        'swaps instantly for a durationMs of %p, on both halves',
+        async (durationMs) => {
+            const { context, manager, outgoing, incomingRef, startIncoming } =
+                await createCrossfadePair();
+
+            manager.crossfade(outgoing, incomingRef, { durationMs });
+            await startIncoming();
+
+            expect(expectGain(context, 5).gain.calls).toEqual([
+                { method: 'setValueAtTime', value: 0, time: 10 },
+                { method: 'cancelAndHoldAtTime', time: 10 },
+                { method: 'setValueAtTime', value: 1, time: 10 },
+            ]);
+            expect(expectGain(context, 4).gain.calls).toEqual([
+                { method: 'setValueAtTime', value: 1, time: 10 },
+                { method: 'cancelAndHoldAtTime', time: 10 },
+                { method: 'setValueAtTime', value: 0, time: 10 },
+            ]);
+            expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10);
+        },
+    );
+
+    it('parks no linkage when its own play preempted the outgoing voice', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({ poolSize: 1 });
+
+        const incoming = manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+
+        // A saturated pool reclaims the outgoing voice to host the incoming one. The
+        // outgoing is checked AFTER play() for exactly this reason: a linkage parked
+        // against the preempted voice would fire onto a record no longer in the pool.
+        expect(outgoing.valid).toBe(false);
+        expect(readVoiceRecord(manager, incoming).linkedFadeOut).toBeNull();
+
+        await startIncoming();
+
+        expect(countGainRamps(expectGain(context, 5).gain.calls)).toBe(64);
+    });
+
+    it('declines silently when its incoming play is rejected, leaving one warning (#118)', async () => {
+        const { context, manager, outgoing, incomingRef } = await createCrossfadePair();
+        const warn = spyOnWarn();
+
+        const incoming = manager.crossfade(outgoing, incomingRef, {
+            durationMs: 2000,
+            from: 5,
+            to: 2,
+        });
+
+        // The invalid handle is the report channel and `play()` owns the diagnosis of WHY;
+        // a second message here would put two warnings on one defect.
+        expect(incoming.valid).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(
+            'Audio play window [5s, 2s] is already out of order; rejecting play().',
+        );
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+        ]);
+        expect(readVoiceRecord(manager, outgoing).phase).toBe('playing');
+    });
+
+    it('is an inert no-op on a disposed manager', async () => {
+        const { context, manager, outgoing, incomingRef } = await createCrossfadePair();
+        const warn = spyOnWarn();
+        manager.dispose();
+        const gainCallsBefore = context.createdGainNodes.map((gain) => [...gain.gain.calls]);
+
+        const incoming = manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+
+        expect(incoming.valid).toBe(false);
+        expect(warn).not.toHaveBeenCalled();
+        expect(context.createdGainNodes.map((gain) => gain.gain.calls)).toEqual(gainCallsBefore);
+    });
+});
+
 // ─── cue-sheet provenance (#124) ────────────────────────────────────────────────
 
 describe('DefaultAudioManager — cue sheet provenance', () => {
@@ -3833,6 +4387,26 @@ function stubMissingCancelAndHold(param: FakeAudioParam): void {
     Object.defineProperty(param, 'cancelAndHoldAtTime', { configurable: true, value: undefined });
 }
 
+/**
+ * Advance the context clock on EVERY read, from `10` in `step`s.
+ *
+ * Models no real platform — a real `currentTime` is stable within a JS turn, which is
+ * exactly why the frozen double cannot tell "anchored to the `t0` it was handed" apart from
+ * "re-read the clock and got the same number". Under this one they diverge, so a shared
+ * window has to be shared by construction rather than by coincidence.
+ */
+function driftAudioClock(context: FakeAudioContext, step = 0.5): void {
+    let reads = 0;
+    Object.defineProperty(context, 'currentTime', {
+        configurable: true,
+        get: (): number => {
+            const now = 10 + step * reads;
+            reads += 1;
+            return now;
+        },
+    });
+}
+
 /** Silences and counts the renderer's fail-soft warning channel. */
 function spyOnWarn(): MockInstance<typeof console.warn> {
     return vi.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -3873,11 +4447,12 @@ function readVoiceRecord(manager: DefaultAudioManager, handle: AudioHandle): Obs
 }
 
 /**
- * Park pre-start intents on a loading voice's record — the seam `crossfade` will write
- * through once it lands. Every other slot now has a production writer
- * (`PlayOptions.fadeIn`, `fadeOut` and `fadeTo`) and is driven through it; only
- * `linkedFadeOut` has none, so without this helper the last step of Invariant #121's
- * precedence order would be write-only state no test could reach.
+ * Park pre-start intents on a loading voice's record — the seam `crossfade` writes
+ * through in production. Every slot now has a production writer (`PlayOptions.fadeIn`,
+ * `fadeOut`, `fadeTo` and `crossfade`), so this no longer exists to REACH one; it exists
+ * to make the precedence order observable. A real crossfade's linkage ramps another
+ * voice's gain, which says nothing about WHERE in the order it fired, whereas a thunk
+ * parked here can record the gain-write count it saw.
  */
 function writeVoiceIntents(
     manager: DefaultAudioManager,
@@ -3926,6 +4501,72 @@ function createLoadingVoice(
             deferred.resolve(createAudioBuffer('theme', options.bufferSeconds ?? 10));
             await flushAudioLoad();
         },
+    };
+}
+
+/**
+ * The two voices a crossfade meets: an OUTGOING one already playing, and an INCOMING ref
+ * whose load is still pending.
+ *
+ * The incoming half is deferred rather than resolved, because the whole linkage exists to
+ * be applied at that voice's real `t0` — resolving it eagerly would collapse the window in
+ * which the outgoing must still be playing at full volume, which is half of what these
+ * tests are for. `deferOutgoing` holds the OTHER one back too, the only state in which the
+ * linkage has no gain to ramp.
+ *
+ * Gain-node indices follow start order, not call order: with a started outgoing it owns
+ * index 4 and the incoming index 5, but under `deferOutgoing` the incoming starts first and
+ * takes index 4.
+ */
+async function createCrossfadePair(
+    options: {
+        readonly deferOutgoing?: boolean;
+        readonly incomingBufferSeconds?: number;
+        readonly outgoingPlayOptions?: PlayOptions;
+        readonly poolSize?: number;
+    } = {},
+): Promise<{
+    readonly assetManager: AssetManagerDouble;
+    readonly context: FakeAudioContext;
+    readonly manager: DefaultAudioManager;
+    readonly outgoing: AudioHandle;
+    readonly incomingRef: AssetRef<AudioClipAsset>;
+    readonly incomingLoad: DeferredValue<ResolvedAsset<AudioClipAsset>>;
+    /** Resolve the incoming load and drain the hops, running its `startVoice`. */
+    readonly startIncoming: () => Promise<void>;
+    /** The same for the outgoing one, which only `deferOutgoing` leaves unstarted. */
+    readonly startOutgoing: () => Promise<void>;
+}> {
+    const { assetManager, context, manager } =
+        options.poolSize === undefined
+            ? createManager()
+            : createManager({ poolSize: options.poolSize });
+    const outgoingRef = audioRef('audio/music/theme.ogg');
+    const incomingRef = audioRef('audio/music/battle.ogg');
+    const outgoingLoad = assetManager.defer(outgoingRef);
+    const incomingLoad = assetManager.defer(incomingRef);
+    const startOutgoing = async (): Promise<void> => {
+        outgoingLoad.resolve(createAudioBuffer('theme', 10));
+        await flushAudioLoad();
+    };
+
+    const outgoing = manager.play(outgoingRef, options.outgoingPlayOptions ?? {});
+    if (options.deferOutgoing !== true) {
+        await startOutgoing();
+    }
+
+    return {
+        assetManager,
+        context,
+        manager,
+        outgoing,
+        incomingRef,
+        incomingLoad,
+        startIncoming: async (): Promise<void> => {
+            incomingLoad.resolve(createAudioBuffer('battle', options.incomingBufferSeconds ?? 10));
+            await flushAudioLoad();
+        },
+        startOutgoing,
     };
 }
 
