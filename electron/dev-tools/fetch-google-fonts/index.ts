@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+
+import { isDirectInvocation } from '../dev-harness/harness.js';
 
 import type {
     GameFontDisplay,
@@ -205,13 +206,6 @@ export async function runFetchGoogleFontsCli(argv: readonly string[]): Promise<v
         console.log(`wrote ${download.sourceAssetPath}`);
     }
     console.log(formatGameFontFacesSnippet(result.fonts));
-}
-
-export function isDirectInvocation(importMetaUrl: string, argv1: string | undefined): boolean {
-    if (argv1 === undefined || !importMetaUrl.startsWith('file://')) {
-        return false;
-    }
-    return fileURLToPath(importMetaUrl) === argv1;
 }
 
 export interface ParsedFetchGoogleFontsArgs {

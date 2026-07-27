@@ -35,6 +35,18 @@ describe('chimera-fetch-fonts bin wiring (Invariant #97 tooling, standalone-reac
         expect(source.startsWith('#!/usr/bin/env node\n')).toBe(true);
     });
 
+    it('guards its CLI entry with the canonical symlink-proof isDirectInvocation', () => {
+        // pnpm bin shims exec node with the path THROUGH the node_modules
+        // symlink, while node realpaths the main module — so a raw
+        // argv1 === import.meta.url comparison never matches and the bin
+        // silently no-ops (exit 0, nothing written). Only the dev-harness
+        // implementation canonicalizes both sides; a local copy is how the
+        // naive comparison slipped back in.
+        const source = readFileSync(resolve(__dirname, 'index.ts'), 'utf8');
+        expect(source).toContain("import { isDirectInvocation } from '../dev-harness/harness.js';");
+        expect(source).not.toContain('function isDirectInvocation');
+    });
+
     it('names the bin and the monorepo form in the usage error', async () => {
         const { parseFetchGoogleFontsArgs } = await import('./index.js');
         expect(() => parseFetchGoogleFontsArgs([])).toThrow(/chimera-fetch-fonts/u);

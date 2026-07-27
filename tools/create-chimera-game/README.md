@@ -96,7 +96,8 @@ apps/<kebab>/
 ├── renderer/              # per-app Next.js app + register.ts registration seam
 ├── electron/              # Electron main composition root + build-main.ts bundler
 ├── e2e/                   # Playwright boot-smoke suite
-├── assets/                # game-owned binary assets (icon)
+├── shell/                 # renderer shell declarations — fonts.ts gameFonts stub (empty until fetched)
+├── assets/                # game-owned binary assets (icon; fonts/ for self-hosted .woff2 — Invariant #97)
 ├── manifest.ts            # GameManifest (registration surface, stays at the root)
 ├── settings-schema.ts     # zod settings schema extending EngineSettings
 └── package.json / tsconfig*.json / electron-builder.yml
@@ -105,6 +106,22 @@ apps/<kebab>/
 Grow a game inside this shape: new deterministic gameplay modules go under `simulation/`
 (subsystem subdirectories are fine), UI under `screens/`/`scene/`/`shell/`, JSON content under
 `data/`.
+
+### Self-hosting Google fonts
+
+Game fonts are committed `.woff2` files under the game's own `assets/fonts/` — never a runtime
+Google fetch (Invariant #97). The scaffold ships the whole convention: the `assets/fonts/`
+directory, an empty `gameFonts` declaration in `shell/fonts.ts` (already forwarded through
+`renderer/loaders.ts`), and an app-level `fetch:fonts` script running the `chimera-fetch-fonts`
+bin published by `@chimera-engine/electron`. To add fonts:
+
+1. Edit the app `package.json` `fetch:fonts` script: replace `<google-css-url>` with a real
+   Google Fonts CSS URL (quote it — it contains `&`).
+2. Run `pnpm fetch:fonts` from the app package. The script's explicit `--out-dir assets/fonts`
+   lands the download in the game's own `assets/fonts` — the tool's README explains why the
+   flag is required here.
+3. Paste the printed `GameFontFace[]` snippet into `shell/fonts.ts` and commit the `.woff2`
+   files alongside it.
 
 ## Token reference
 

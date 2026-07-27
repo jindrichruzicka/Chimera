@@ -77,7 +77,7 @@ chimera/
 │   │       └── dev-fixture-loader.ts     # Seed-profile + scenario loading, atomic announce write
 │   ├── dev-tools/                   # Development-time CLIs published as bins of @chimera-engine/electron so standalone games run them too
 │   │   ├── dev-harness/             # `chimera-dev-mp` bin + harness library (spawn planning, announce handshake); see §4.32
-│   │   └── fetch-google-fonts/      # Dev-time Google Fonts downloader; writes committed self-hosted .woff2 files (Invariant #97)
+│   │   └── fetch-google-fonts/      # `chimera-fetch-fonts` bin — dev-time Google Fonts downloader; writes committed self-hosted .woff2 files (Invariant #97)
 │   ├── preload/
 │   │   ├── api.ts                   # Composes the following namespaces below into window.__chimera
 │   │   ├── api-types.ts             # Type-only module: ChimeraAPI, ChimeraExtensions, all namespace interfaces

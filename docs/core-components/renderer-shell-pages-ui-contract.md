@@ -423,6 +423,15 @@ Use `pnpm fetch:fonts -- --game <gameId> --url "<google-css-url>"` as a developm
 download `.woff2` files from a Google Fonts CSS URL into the game asset folder. The helper prints a
 `GameFontFace[]` snippet but the runtime never fetches Google-hosted CSS or font files.
 
+The same tool ships as the `chimera-fetch-fonts` bin of `@chimera-engine/electron`
+(`electron/dev-tools/fetch-google-fonts/`), so a standalone scaffolded game runs it without the
+monorepo — its app-level `fetch:fonts` script invokes
+`chimera-fetch-fonts --game <kebab> --url "<google-css-url>" --out-dir assets/fonts`. The optional
+`--out-dir` (relative values resolve against the invocation cwd by default) and `--src-prefix`
+(must stay a relative asset path) flags default to the monorepo layout
+(`apps/<gameId>/assets/fonts`, `<gameId>/fonts`); the scaffolded script passes an explicit
+`--out-dir assets/fonts` — the tool's README explains why, and documents the full workflow.
+
 `tools/validate-assets.ts` validates every game font declaration before merge: external URLs,
 absolute paths, and traversal are rejected; the game-owned source file must exist; and committed
 game assets under `renderer/public/assets/` are rejected.

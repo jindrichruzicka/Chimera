@@ -577,6 +577,9 @@ if (process.env['VITEST'] === undefined) {
                 if (values.workspace) {
                     console.log('  pnpm typecheck');
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
+                    console.log(
+                        `  pnpm --filter @chimera-engine/${result.names.kebab} fetch:fonts   # self-host Google fonts — first replace <google-css-url> in apps/${result.names.kebab}/package.json`,
+                    );
                 } else {
                     // Standalone default scaffolds into <cwd>, so the project is already the cwd —
                     // no `cd` step to print. `pnpm start` (the launcher) is the run step; it strips
@@ -588,6 +591,9 @@ if (process.env['VITEST'] === undefined) {
                     console.log('  pnpm start:debug   # windowed + DevTools + F9 Debug Inspector');
                     console.log(
                         '  pnpm dev:mp 2      # instant 2-player multiplayer session (dev/scenarios/default.json: pnpm dev:mp --scenario default)',
+                    );
+                    console.log(
+                        `  pnpm --filter @chimera-engine/${result.names.kebab} fetch:fonts   # self-host Google fonts — first replace <google-css-url> in apps/${result.names.kebab}/package.json`,
                     );
                     console.log(
                         `  # or open this folder in VS Code and run the "Debug ${result.names.title}" launch config for breakpoints`,

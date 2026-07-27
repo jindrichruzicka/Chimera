@@ -29,6 +29,10 @@
  *      main/preload bundles. This is the arm that fails out-of-repo. Then the generated app's own
  *      `verify:packaged-bundle` gate (Invariant #27) — the template's thin driver over the
  *      engine-exported packaged-bundle guard — so a broken template guard fails engine CI here.
+ *      Then the two packaged-bin arms: the dev-harness dry run (§4.32, `chimera-dev-mp --dry-run`
+ *      spawn-plan shape-check) and the fonts arm (§4.37, Invariant #97 — `chimera-fetch-fonts`
+ *      fetches through a localhost fixture and must land the `.woff2` in the app's OWN
+ *      `assets/fonts`, killing the cwd path-doubling regression and any silent-no-op bin entry).
  *   9. `next build` the renderer + an UNSIGNED `electron-builder --dir` — proves the tokenised
  *      packaging config produces a branded local app bundle from the standalone-emitted project.
  *
@@ -69,6 +73,12 @@ export { type FsLike, type RunFn, type RunOptions, type RunResult } from './veri
 
 // ── Deps + result types ──────────────────────────────────────────────────────
 
+/** A running localhost font fixture (the fonts arm's stand-in for Google Fonts). */
+export interface FontFixture {
+    readonly port: number;
+    close(): void;
+}
+
 export interface VerifyScaffoldDeps {
     readonly run: RunFn;
     readonly fs: FsLike;
@@ -79,6 +89,13 @@ export interface VerifyScaffoldDeps {
      * package-relative to its own code, not from this root — see {@link resolveTemplatesRoot}.)
      */
     readonly repoRoot: string;
+    /**
+     * Starts the localhost Google-Fonts-shaped fixture for the fonts arm. The real
+     * implementation spawns an OUT-OF-PROCESS node server: the sync {@link RunFn}
+     * blocks this process's event loop while the bin runs, so an in-process server
+     * could never answer it. Injected so unit tests serve nothing.
+     */
+    readonly startFontFixture: () => Promise<FontFixture>;
 }
 
 export type VerifyScaffoldStep =
@@ -91,6 +108,7 @@ export type VerifyScaffoldStep =
     | 'prod-build'
     | 'packaged-bundle'
     | 'dev-harness'
+    | 'fonts'
     | 'package';
 
 export interface VerifyScaffoldResult {
@@ -109,6 +127,13 @@ export const PROBE_GAME = {
     kebab: 'verify-scaffold-probe',
     pkg: '@chimera-engine/verify-scaffold-probe',
 } as const;
+
+/**
+ * The file the fonts arm expects the bin to land: the fixture serves one
+ * `VerifyProbe` 400/normal face, and the tool's deterministic naming maps that
+ * to `<family>-Regular.woff2` (pinned by the tool's own unit tests).
+ */
+export const PROBE_FONT_FILE = 'VerifyProbe-Regular.woff2';
 
 /** Thrown by a step runner on a non-zero exit so the orchestrator can report which step failed. */
 class VerifyScaffoldStepError extends Error {
@@ -264,6 +289,81 @@ function assertDryRunReport(stdout: string): void {
     }
 }
 
+/**
+ * The fonts arm (§4.37, Invariant #97): prove the published `chimera-fetch-fonts`
+ * bin is reachable from the installed standalone app AND that the scaffolded
+ * `--out-dir assets/fonts` shape lands the download in the app's own asset dir —
+ * never the doubled `apps/<kebab>/apps/<kebab>/…` phantom path (the tool's
+ * README explains the cwd mechanics). The fetch runs against a localhost
+ * fixture; no live Google network is touched.
+ */
+async function runFontsArm(deps: VerifyScaffoldDeps, appDir: string): Promise<void> {
+    const fail = (reason: string): never => {
+        throw new VerifyScaffoldStepError('fonts', `verify:scaffold: step "fonts" ${reason}`);
+    };
+
+    // (a) The scaffolded script names the bare bin and carries the
+    //     anti-path-doubling --out-dir.
+    const appPkg = JSON.parse(await deps.fs.readFile(path.join(appDir, 'package.json'))) as {
+        scripts?: Record<string, string>;
+    };
+    const script = appPkg.scripts?.['fetch:fonts'] ?? '';
+    if (!script.includes('chimera-fetch-fonts')) {
+        fail('found no fetch:fonts script naming the chimera-fetch-fonts bin');
+    }
+    if (!script.includes('--out-dir assets/fonts')) {
+        fail('found a fetch:fonts script without --out-dir assets/fonts');
+    }
+
+    // (b) The bin resolves from the installed app (how pnpm resolves the bare
+    //     name when it runs the script).
+    if (!(await deps.fs.exists(path.join(appDir, 'node_modules', '.bin', 'chimera-fetch-fonts')))) {
+        fail('resolved no chimera-fetch-fonts under the app node_modules/.bin');
+    }
+
+    // (c) A real fetch through the localhost fixture, cwd = the app package —
+    //     the exact cwd pnpm gives the scaffolded script.
+    let fixture: FontFixture;
+    try {
+        fixture = await deps.startFontFixture();
+    } catch (error) {
+        return fail(
+            `could not start the font fixture server (${error instanceof Error ? error.message : String(error)})`,
+        );
+    }
+    try {
+        assertStepOk(
+            'fonts',
+            deps.run(
+                'pnpm',
+                [
+                    'exec',
+                    'chimera-fetch-fonts',
+                    '--game',
+                    PROBE_GAME.kebab,
+                    '--url',
+                    `http://127.0.0.1:${fixture.port}/css`,
+                    '--out-dir',
+                    'assets/fonts',
+                ],
+                { cwd: appDir },
+            ),
+        );
+    } finally {
+        fixture.close();
+    }
+
+    // (d) The landed-font proof: the woff2 sits in the app's own assets/fonts,
+    //     and the doubled phantom path was never created.
+    if (!(await deps.fs.exists(path.join(appDir, 'assets', 'fonts', PROBE_FONT_FILE)))) {
+        fail(`landed no ${PROBE_FONT_FILE} under the app assets/fonts`);
+    }
+    const doubled = path.join(appDir, 'apps', PROBE_GAME.kebab, 'assets', 'fonts', PROBE_FONT_FILE);
+    if (await deps.fs.exists(doubled)) {
+        fail('landed the download under the doubled apps/<kebab>/apps/… path');
+    }
+}
+
 /** Run one of the generated app's smoke scripts (`test` or `test:e2e`) from the standalone root. */
 function runAppScript(
     deps: VerifyScaffoldDeps,
@@ -412,6 +512,12 @@ async function scaffoldPipeline(
     assertStepOk('dev-harness', devHarnessDryRun);
     assertDryRunReport(devHarnessDryRun.stdout);
 
+    // 8c. fonts (§4.37): the packaged `chimera-fetch-fonts` bin + the scaffolded
+    //     `--out-dir assets/fonts` shape, proven end-to-end against a localhost
+    //     fixture — see {@link runFontsArm}.
+    deps.log('fetching a font through the packaged chimera-fetch-fonts bin (localhost fixture)…');
+    await runFontsArm(deps, appDir);
+
     // 9. package. Export the Next renderer (populates `renderer/out`), then build an UNSIGNED
     //    `electron-builder --dir` bundle from the standalone-emitted project. electron-builder
     //    validates + consumes the per-game top-level `icon`, so a missing/invalid icon fails here.
@@ -521,7 +627,7 @@ export async function verifyScaffoldSelfTest(
 
 if (process.env['VITEST'] === undefined) {
     void (async (): Promise<void> => {
-        const { spawnSync } = await import('node:child_process');
+        const { spawn, spawnSync } = await import('node:child_process');
         const fsp = await import('node:fs/promises');
 
         const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -561,11 +667,70 @@ if (process.env['VITEST'] === undefined) {
                 ),
         };
 
+        // The Google-Fonts-shaped fixture: one @font-face whose src points back at
+        // the same server. Runs OUT-OF-PROCESS (node -e): the gate's RunFn is
+        // spawnSync-shaped, so this process's event loop is blocked while the bin
+        // runs — an in-process server could never answer it. The child prints
+        // `PORT <n>` once listening; close() kills it.
+        const fixtureServerScript = [
+            "const http = require('node:http');",
+            'const server = http.createServer((req, res) => {',
+            '    const port = server.address().port;',
+            "    if (req.url === '/css') {",
+            "        res.setHeader('content-type', 'text/css');",
+            '        res.end(',
+            '            "@font-face { font-family: \'VerifyProbe\'; font-style: normal; font-weight: 400; font-display: swap; src: url(http://127.0.0.1:" +',
+            '                port +',
+            '                "/VerifyProbe.woff2) format(\'woff2\'); }",',
+            '        );',
+            '        return;',
+            '    }',
+            "    if (req.url === '/VerifyProbe.woff2') {",
+            "        res.setHeader('content-type', 'font/woff2');",
+            "        res.end(Buffer.from('wOF2-verify-scaffold-fixture'));",
+            '        return;',
+            '    }',
+            '    res.statusCode = 404;',
+            "    res.end('not found');",
+            '});',
+            "server.listen(0, '127.0.0.1', () => { console.log('PORT ' + server.address().port); });",
+        ].join('\n');
+
+        const startFontFixture = (): Promise<FontFixture> =>
+            new Promise((resolveFixture, rejectFixture) => {
+                const child = spawn(process.execPath, ['-e', fixtureServerScript], {
+                    stdio: ['ignore', 'pipe', 'inherit'],
+                });
+                const timer = setTimeout(() => {
+                    child.kill();
+                    rejectFixture(new Error('font fixture server never reported its port'));
+                }, 10_000);
+                let banner = '';
+                child.stdout.on('data', (chunk: Buffer) => {
+                    banner += chunk.toString('utf8');
+                    const match = /PORT (\d+)/u.exec(banner);
+                    if (match !== null) {
+                        clearTimeout(timer);
+                        resolveFixture({
+                            port: Number(match[1]),
+                            close: () => {
+                                child.kill();
+                            },
+                        });
+                    }
+                });
+                child.on('error', (error) => {
+                    clearTimeout(timer);
+                    rejectFixture(error);
+                });
+            });
+
         const deps: VerifyScaffoldDeps = {
             run,
             fs,
             log: (message) => console.log(`[verify:scaffold] ${message}`),
             repoRoot,
+            startFontFixture,
         };
 
         const selfTest = process.argv.includes('--self-test');
