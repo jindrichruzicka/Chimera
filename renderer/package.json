@@ -33,6 +33,10 @@
             "types": "./dist/i18n/index.d.ts",
             "default": "./dist/i18n/index.js"
         },
+        "./audio": {
+            "types": "./dist/audio/index.d.ts",
+            "default": "./dist/audio/index.js"
+        },
         "./game": {
             "types": "./dist/game/rendererGameRegistry.d.ts",
             "default": "./dist/game/rendererGameRegistry.js"

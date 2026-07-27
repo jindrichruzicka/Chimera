@@ -61,6 +61,7 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
     it('exposes the component barrels, the game seam, the engine shell, and the design-token styles, pointing at dist/', () => {
         const exportsMap = manifest.exports ?? {};
         expect(Object.keys(exportsMap).sort()).toEqual([
+            './audio',
             './components/chat',
             './components/r3f',
             './components/ui',
@@ -100,6 +101,16 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
             default: './dist/i18n/index.js',
         });
 
+        // The audio barrel ships the hooks a game needs to start a voice
+        // and to act on one already playing (`useSound`, `useMusicTrack`,
+        // `useAudioManager`) plus the cue/fade option types those calls take. It is
+        // the reachability half of the cue/fade/crossfade design (§4.25) — the verbs
+        // landed on `AudioManager` with no subpath a game could name.
+        expect(exportsMap['./audio']).toEqual({
+            types: './dist/audio/index.d.ts',
+            default: './dist/audio/index.js',
+        });
+
         // F65 Phase 2c: the engine GUI shell (every route under app/) ships from dist
         // so a consumer app's thin per-app Next host re-exports each route from
         // `@chimera-engine/renderer/shell/<route>` (resolving every shared singleton through
@@ -114,7 +125,8 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
 
         // No `.` barrel and no deep internal component subpath leaks internals;
         // the only non-component entry points are the game seam, the i18n runtime
-        // barrel, the shell route wildcard, and the curated styles asset wildcard.
+        // barrel, the audio barrel, the shell route wildcard, and the curated
+        // styles asset wildcard.
         expect(exportsMap['.']).toBeUndefined();
         for (const key of Object.keys(exportsMap)) {
             expect(
@@ -123,6 +135,7 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
                     key === './components/r3f' ||
                     key === './game' ||
                     key === './i18n' ||
+                    key === './audio' ||
                     key === './shell/*' ||
                     key === './styles/*.css',
             ).toBe(true);

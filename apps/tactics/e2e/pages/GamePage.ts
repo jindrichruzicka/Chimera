@@ -110,6 +110,7 @@ export class GamePage {
     readonly replayButton: Locator;
     readonly staminaReadout: Locator;
     readonly turnStatus: Locator;
+    readonly ambience: Locator;
     readonly commitStatus: Locator;
     readonly revealOverlay: Locator;
     readonly saveButton: Locator;
@@ -143,6 +144,10 @@ export class GamePage {
         // player(s)" message shown only while a committed seat awaits the rest.
         this.staminaReadout = page.getByTestId('hud-stamina');
         this.turnStatus = page.getByTestId('tactics-turn-status');
+        // The ambience bed (§4.25). Hidden by design — it has no user-facing
+        // control — so `data-track` is the only thing a spec can read; assert
+        // attributes on it, never visibility.
+        this.ambience = page.getByTestId('tactics-ambience');
         this.commitStatus = page.getByTestId('tactics-commit-status');
         this.revealOverlay = page.getByTestId('tactics-reveal');
         // HUD save flow. The trigger is host-only (client shells receive

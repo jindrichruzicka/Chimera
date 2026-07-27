@@ -290,6 +290,7 @@ describe('GamePage', () => {
             'post-game-replay-btn',
             'hud-stamina',
             'tactics-turn-status',
+            'tactics-ambience',
             'tactics-commit-status',
             'tactics-reveal',
             'hud-save-btn',

@@ -1,0 +1,181 @@
+/**
+ * renderer/audio/__tests__/audio-barrel-side-effects.test.ts
+ *
+ * Holds the two claims `renderer/audio/index.ts` makes about itself, neither of
+ * which any other artifact checks.
+ *
+ * **What it drags in.** The barrel's header says importing it mounts nothing and
+ * starts no voice, and names `settingsStore` as the one store in its graph. Writing
+ * this test is what established that second half: the claim began as "subscribes to
+ * nothing, mirrors `components/ui`", and the bundle showed `AudioBus` reaching the
+ * settings store for its per-bus gain. The sibling barrels each ship a test of this
+ * shape; without one, a later edge into `gameStore` would go unnoticed until a
+ * consumer's Next prerender ran it in Node. What this test measures is the import
+ * GRAPH, not what evaluating it does: a side effect added inside a module already in
+ * the set — a stray `subscribe`, an eagerly constructed `AudioContext` — changes no
+ * edge and would pass here.
+ *
+ * **The exported surface.** `package-exports-contract.test.ts` pins the package's
+ * `exports` MAP, never what the barrel behind it exports. Removing a symbol from the
+ * re-export block is a breaking change to a published package, and typecheck catches
+ * only the ones this repo happens to consume through the barrel — so the runtime
+ * names are pinned as a closed set below, and the types by `BarrelTypeSurface`, which
+ * catches a removal but not an addition.
+ *
+ * Mechanism mirrors `renderer/components/ui/__tests__/ui-barrel-side-effects.test.ts`:
+ * esbuild bundles the barrel with tree-shaking, and the test asserts over the
+ * resolved inputs and external specifiers.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { build, type Plugin } from 'esbuild';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import * as audioBarrel from '../index';
+import type {
+    AudioBusId,
+    AudioHandle,
+    AudioManager,
+    AudioManagerProviderProps,
+    AudioTrackControls,
+    CrossfadeOptions,
+    Cue,
+    FadeCurve,
+    FadeInSpec,
+    FadeOutSpec,
+    FadeToSpec,
+    LoopRegion,
+    PlayOptions,
+} from '../index';
+
+/**
+ * The barrel's TYPE surface, held by naming every member of it.
+ *
+ * Types leave no runtime trace, so the symbol-set assertion below cannot see them, and
+ * most have no consumer through the barrel to red on their removal. Dropping one from
+ * the re-export block is a breaking change to a published package that would otherwise
+ * compile, ship, and fail only in an adopter's build. Naming each here makes
+ * `pnpm typecheck` the gate that catches it.
+ */
+interface BarrelTypeSurface {
+    readonly busId: AudioBusId;
+    readonly handle: AudioHandle;
+    readonly manager: AudioManager;
+    readonly providerProps: AudioManagerProviderProps;
+    readonly trackControls: AudioTrackControls;
+    readonly crossfade: CrossfadeOptions;
+    readonly cue: Cue;
+    readonly curve: FadeCurve;
+    readonly fadeIn: FadeInSpec;
+    readonly fadeOut: FadeOutSpec;
+    readonly fadeTo: FadeToSpec;
+    readonly loopRegion: LoopRegion;
+    readonly play: PlayOptions;
+}
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** Marks every bare specifier external so the bundle holds only in-repo source. */
+const externalizeBareImports: Plugin = {
+    name: 'externalize-bare-imports',
+    setup(b) {
+        // esbuild filters are Go RE2 regexes — the JS `u` flag is rejected.
+        b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, external: true }));
+        b.onResolve({ filter: /\.css$/ }, (args) => ({ path: args.path, external: true }));
+    },
+};
+
+async function analyzeBarrel(
+    entryAbsPath: string,
+): Promise<{ readonly inputs: readonly string[]; readonly externals: ReadonlySet<string> }> {
+    const result = await build({
+        entryPoints: [entryAbsPath],
+        bundle: true,
+        treeShaking: true,
+        write: false,
+        metafile: true,
+        format: 'esm',
+        platform: 'browser',
+        jsx: 'automatic',
+        logLevel: 'silent',
+        plugins: [externalizeBareImports],
+    });
+    const metafile = result.metafile;
+    const externals = new Set<string>();
+    for (const input of Object.values(metafile.inputs)) {
+        for (const imported of input.imports) {
+            if (imported.external) {
+                externals.add(imported.path);
+            }
+        }
+    }
+    return { inputs: Object.keys(metafile.inputs), externals };
+}
+
+/** A forbidden external is the named runtime or any of its subpaths. */
+function importsRuntime(externals: ReadonlySet<string>, name: string): boolean {
+    return [...externals].some((spec) => spec === name || spec.startsWith(`${name}/`));
+}
+
+describe('@chimera-engine/renderer/audio barrel', () => {
+    it('exports exactly the documented public surface', () => {
+        // Referencing the type roll-call keeps it from reading as unused; the assertion
+        // that matters for it is made by tsc, not here.
+        const typeSurface: BarrelTypeSurface | undefined = undefined;
+        expect(typeSurface).toBeUndefined();
+
+        // Sorted and exhaustive on purpose: an ADDITION is as reportable as a removal,
+        // since every name here becomes public API of a published package the moment it
+        // lands. Types do not survive to runtime and are pinned separately, against
+        // removal only.
+        expect(Object.keys(audioBarrel).sort()).toEqual([
+            'AudioManagerProvider',
+            'DEFAULT_FADE_CURVE',
+            'MUSIC_PRIORITY',
+            'useAudioManager',
+            'useMusicTrack',
+            'useSound',
+        ]);
+    });
+
+    it('pulls in exactly nine modules, one of them a store', async () => {
+        const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
+
+        // EXHAUSTIVE, not a denylist. A denylist only rejects the subsystems whoever
+        // wrote it thought of — `assets/`, `hooks/`, `game/` and `logging/` would all
+        // have walked past one — while a closed set makes any new edge, into any
+        // subsystem, a failure that has to be looked at and either justified here or
+        // removed. The one store edge is real rather than an oversight: `AudioBus`
+        // reads `settings.audio.*` for its per-bus gain (§4.25). It is also the reason
+        // this barrel is not import-inert — that singleton is eager, so importing the
+        // barrel constructs it.
+        //
+        // Compared on the last TWO path segments. esbuild reports inputs relative to
+        // the CWD vitest ran from — repo root for a single-file run, the renderer
+        // package dir under `pnpm -r test` — and those two differ only by a leading
+        // `renderer/`, so a two-segment suffix is as CWD-independent as a bare
+        // basename while still naming which directory each module came from. A
+        // basename alone would let `state/settingsStore.ts` be replaced by any other
+        // `settingsStore.ts` without the set changing.
+        const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
+        expect(dirAndFile).toEqual([
+            'audio/AudioBus.ts',
+            'audio/AudioManager.ts',
+            'audio/AudioManagerContext.ts',
+            'audio/AudioManagerProvider.tsx',
+            'audio/audioCueSheet.ts',
+            'audio/index.ts',
+            'audio/useMusicTrack.ts',
+            'audio/useSound.ts',
+            'state/settingsStore.ts',
+        ]);
+
+        // Heavy runtimes are externalized rather than bundled, so they never appear as
+        // inputs — the set above cannot speak for them and they are checked separately.
+        expect(importsRuntime(externals, 'three')).toBe(false);
+        expect(importsRuntime(externals, '@react-three/fiber')).toBe(false);
+        expect(importsRuntime(externals, '@chimera-engine/ai')).toBe(false);
+        expect(importsRuntime(externals, '@chimera-engine/networking')).toBe(false);
+    });
+});

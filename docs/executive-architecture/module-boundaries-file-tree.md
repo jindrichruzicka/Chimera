@@ -24,14 +24,14 @@ Filename case encodes the primary export type:
 
 These boundaries are **hard constraints**. Any violation is a BLOCK finding at review.
 
-| Package                      | May import from                                                                                                                                                                                                                                                                                                                                                                                         | Must NOT import from                                                                            |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `simulation/`                | `shared/`                                                                                                                                                                                                                                                                                                                                                                                               | `renderer/`, `electron/`, `apps/*`, any DOM API                                                 |
-| `ai/`                        | `simulation/`, `shared/`                                                                                                                                                                                                                                                                                                                                                                                | `renderer/`, `electron/`, `apps/*`, any DOM API                                                 |
-| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals; test files may also `import type` from `simulation/settings` for cross-boundary compatibility guards (no runtime coupling)                                                                                                                                                                                                         | `electron/main/`, `ai/engine/` (except IPC types), `apps/*/data`                                |
-| `apps/<game>/`               | `simulation/`, `ai/`, `shared/`, own files; renderer surfaces in `screens/` and React shell contributions in `shell/` may also import the public component-library barrels `@chimera-engine/renderer/components/ui` (primitives), `@chimera-engine/renderer/components/chat` (the shared chat component), and `@chimera-engine/renderer/components/r3f` (engine in-Canvas components, e.g. `PerfProbe`) | Other `apps/` game directories; renderer internals outside the public component-library barrels |
-| `electron/main/`             | All packages                                                                                                                                                                                                                                                                                                                                                                                            | DOM APIs                                                                                        |
-| `networking/provider/local/` | Only within `local/`                                                                                                                                                                                                                                                                                                                                                                                    | Engine or renderer internals                                                                    |
+| Package                      | May import from                                                                                                                                                                                                                                                                                                                                                                      | Must NOT import from                                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `simulation/`                | `shared/`                                                                                                                                                                                                                                                                                                                                                                            | `renderer/`, `electron/`, `apps/*`, any DOM API                                                                                                                    |
+| `ai/`                        | `simulation/`, `shared/`                                                                                                                                                                                                                                                                                                                                                             | `renderer/`, `electron/`, `apps/*`, any DOM API                                                                                                                    |
+| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals; test files may also `import type` from `simulation/settings` for cross-boundary compatibility guards (no runtime coupling)                                                                                                                                                                                      | `electron/main/`, `ai/engine/` (except IPC types), `apps/*/data`                                                                                                   |
+| `apps/<game>/`               | `simulation/`, `ai/`, `shared/`, own files; renderer surfaces in `screens/*.tsx`, React shell contributions in `shell/*.tsx`, and the renderer composition root `renderer/*.{ts,tsx}` may also import the six public renderer barrels (`components/{ui,chat,r3f}` + the top-level `game`, `i18n`, `audio`) — Invariant #96 states the surfaces and the one `shell/*` route carve-out | Other `apps/` game directories; every `@chimera-engine/renderer/*` specifier outside those six barrels and the `shell/*` route carve-out — `styles/*.css` included |
+| `electron/main/`             | All packages                                                                                                                                                                                                                                                                                                                                                                         | DOM APIs                                                                                                                                                           |
+| `networking/provider/local/` | Only within `local/`                                                                                                                                                                                                                                                                                                                                                                 | Engine or renderer internals                                                                                                                                       |
 
 ---
 
@@ -130,8 +130,15 @@ chimera/
 │   ├── content/                      # OPTIONAL — games with no static content omit this
 │   │   ├── DataRef.ts               # DataRef<T> branded type; buildRef() / parseRef() helpers
 │   │   ├── AssetRef.ts              # AssetRef<T> branded type — phantom-typed path string; zero renderer deps
+│   │   ├── AssetManifest.ts         # AssetManifestEntry (kind, priority, opaque `metadata: unknown`)
+│   │   ├── audioManifest.ts         # audioClipEntry() cue-sheet authoring builder — write-only (§4.25, #124)
 │   │   ├── ContentDatabase.ts       # Immutable query interface; createContentDatabase() factory
 │   │   └── ContentLoader.ts         # Loads JSON sources, validates, merges, builds ContentDatabase
+│   ├── foundation/                  # Contract leaf — types + pure helpers; no cross-package imports (Check 13)
+│   │   ├── audio-cue-sheet.ts       # AudioCueName / AudioClipMetadata — DEFINED sim-side, read only by renderer/audio (#124)
+│   │   ├── game-manifest-contract.ts # GameManifest + resolvers; see §4.2.1
+│   │   ├── game-screen-contract.ts  # GameScreenRegistry, GameHudProps, GameEventAudioBinding
+│   │   └── …                        # The remaining shared contracts (messages, chat, lobby, logging, snapshot, …)
 │   ├── persistence/                 # Save/load — pure serialisation logic, zero FS/IPC deps
 │   │   ├── SaveFile.ts              # SaveFile schema: checkpoint snapshot + delta action log + metadata
 │   │   ├── SaveSerializer.ts        # Strategy interface: serialize(SaveFile) / deserialize(string)
@@ -254,14 +261,17 @@ chimera/
 │   │   ├── GameFontLoader.ts        # Loads GameFontFace self-hosted fonts through the renderer protocol
 │   │   ├── GameImageWarmup.ts       # Fetch+decode warm-up for shell.preloadImages (§4.37.13)
 │   │   └── gameCursorStyles.ts      # shell.cursor → --ch-cursor-* hardware-cursor overrides (§4.37.14)
-│   ├── audio/                       # Audio playback layer (§4.25)
-│   │   ├── AudioManager.ts
+│   ├── audio/                       # Audio playback layer (§4.25); public barrel: @chimera-engine/renderer/audio
+│   │   ├── index.ts                 # Public barrel — its header names the surface and what it drags in
+│   │   ├── AudioManager.ts          # play/stop/fadeOut/fadeTo/crossfade, 32-voice pool, MUSIC_PRIORITY
 │   │   ├── AudioBus.ts
-│   │   ├── Cue.ts
-│   │   ├── audioCueSheet.ts
+│   │   ├── Cue.ts                   # Cue, LoopRegion, Fade{In,Out,To}Spec, CrossfadeOptions
+│   │   ├── audioCueSheet.ts         # parseAudioCueSheet + resolvers — the SOLE reader of a sheet (#124)
+│   │   ├── AudioManagerContext.ts   # Context + useAudioManager() (throws outside the provider, #83)
+│   │   ├── AudioManagerProvider.tsx # Publishes the app-level manager; mounted once by app/providers.tsx
 │   │   ├── EventAudioBinding.ts
 │   │   ├── useSound.ts
-│   │   └── useMusicTrack.ts
+│   │   └── useMusicTrack.ts         # Live-handle verbs (fadeOut/fadeTo/crossfade) bound to the manager
 │   ├── input/                       # Keyboard / gamepad input layer (§4.26)
 │   │   ├── InputManager.ts
 │   │   ├── KeyBindingRepository.ts

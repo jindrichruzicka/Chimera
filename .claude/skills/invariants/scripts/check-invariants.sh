@@ -503,22 +503,26 @@ done
 # A game's React surfaces — apps/<name>/screens/*.tsx and apps/<name>/shell/*.tsx —
 # may reach the shared library ONLY through the public barrels
 # @chimera-engine/renderer/components/{ui,chat,r3f} and the top-level
-# @chimera-engine/renderer/{i18n,game} (the i18n runtime and the game-registration
-# seam) — the five public surfaces chimera/no-game-renderer-internals sanctions.
+# @chimera-engine/renderer/{i18n,game,audio} (the i18n runtime, the
+# game-registration seam, and the audio hooks) — the six public surfaces
+# chimera/no-game-renderer-internals sanctions.
 # Every other @chimera-engine/renderer/* specifier
 # (stores, IPC bridges, shell/, hooks, asset managers, stylesheets, or a deep
 # component-file path behind any barrel) is a renderer internal and is forbidden.
 # Mirrors the ESLint rule chimera/no-game-renderer-internals, which remains the
 # comprehensive authority (it also guards non-surface game files and relative
-# renderer paths); this review-gate check guards the two surface dirs the invariant
-# names, matched through the package specifier across the cut (issue #774). The
+# renderer paths); this review-gate check guards the two REACT surface dirs of the
+# three the invariant names — the composition root apps/<name>/renderer/* is covered
+# by the ESLint rule alone — matched through the package specifier across the cut
+# (issue #774). The
 # barrel allow-list is tail-anchored to the closing quote so `.../ui` and
-# `.../ui/index.js` pass while `.../ui/Button.js` is flagged; note i18n and game
-# are TOP-LEVEL subpaths (@chimera-engine/renderer/{i18n,game}), NOT under
-# components/. Bare
+# `.../ui/index.js` pass while `.../ui/Button.js` is flagged; note i18n, game and
+# audio are TOP-LEVEL subpaths (@chimera-engine/renderer/{i18n,game,audio}), NOT under
+# components/ — and the tail anchor is what keeps `audio/AudioManager.js` flagged
+# while `audio` and `audio/index.js` pass. Bare
 # `renderer/` paths are intentionally NOT matched: a game's own renderer/ helper
 # (apps/<name>/renderer/*) is not a boundary crossing.
-RENDERER_BARREL_RE="@chimera-engine/renderer/(components/(ui|chat|r3f)|i18n|game)(/index(\.(ts|js))?)?['\"]"
+RENDERER_BARREL_RE="@chimera-engine/renderer/(components/(ui|chat|r3f)|i18n|game|audio)(/index(\.(ts|js))?)?['\"]"
 GAME_SURFACE_DIRS=()
 for surface_dir in apps/*/screens apps/*/shell; do
     [[ -d "${surface_dir}" ]] && GAME_SURFACE_DIRS+=("${surface_dir}")

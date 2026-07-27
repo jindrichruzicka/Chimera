@@ -1754,7 +1754,7 @@ test_games_import_in_globbed_shell_page_detected() {
 
 # Test: game surface importing the r3f, i18n, and game public barrels → NOT flagged
 # ui/chat/r3f (under components/) plus the TOP-LEVEL i18n runtime and the game-
-# registration seam @chimera-engine/renderer/game are the five public surfaces that
+# registration seam @chimera-engine/renderer/game are five of the six public surfaces that
 # chimera/no-game-renderer-internals sanctions; Check 17's allowlist mirrors them.
 # The game-seam fixture sits in a scanned surface dir on purpose, so it exercises
 # the RENDERER_BARREL_RE allowlist rather than an unscanned dir.
@@ -1778,6 +1778,116 @@ test_r3f_i18n_game_barrels_in_game_surface_pass() {
     else
         fail "r3f/i18n/game public barrels in a game surface wrongly flagged:"
         echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test: the public audio barrel in a game surface → clean.
+# The sixth public barrel — the subpath that makes useSound / useMusicTrack and
+# the cue/fade/crossfade verbs reachable by a game at all.
+test_audio_barrel_in_game_surface_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/screens/TacticsMusic.tsx" \
+        "import { useMusicTrack } from '@chimera-engine/renderer/audio';"
+    plant_file "${tmp}" "apps/tactics/shell/TacticsShellMusic.tsx" \
+        "import { useSound } from '@chimera-engine/renderer/audio/index.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "public audio barrel in a game surface not flagged"
+    else
+        fail "public audio barrel in a game surface wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test: a deep import BEHIND the audio barrel in a game surface → violation
+# [invariant-96]. The negative control on the barrel above: opening the subpath
+# must not open the subtree, exactly as r3f's GameCanvas stays closed.
+test_audio_internal_in_game_surface_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/screens/TacticsMusic.tsx" \
+        "import { DefaultAudioManager } from '@chimera-engine/renderer/audio/AudioManager.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-96\]'; then
+            pass "deep import behind the audio barrel detected as [invariant-96]"
+        else
+            fail "audio deep import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "deep import behind the audio barrel not detected (exit 0)"
+    fi
+}
+
+# Test: renderer/audio import inside simulation/foundation/ → violation [invariant-1].
+# Invariant #124: cue sheets are DEFINED sim-side and read only by renderer/audio,
+# never the reverse. The sim→renderer import ban (Check 2) is the mechanical half
+# of that rule, and this fixture pins the cue-sheet module as one of the files it
+# actually covers. #124 says more than the direction, and no Check sees the rest.
+test_renderer_audio_import_in_cue_sheet_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/foundation/audio-cue-sheet.ts" \
+        "import type { Cue } from '../../renderer/audio/Cue.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-1\]'; then
+            pass "renderer/audio import in simulation/foundation/ detected as [invariant-1]"
+        else
+            fail "cue-sheet renderer back-edge detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "renderer/audio import in simulation/foundation/ not detected (exit 0)"
+    fi
+}
+
+# Test: the same cue-sheet module reaching the audio barrel by PACKAGE specifier
+# → violation [invariant-1]. This is the shape an adopter's editor autocompletes
+# now that the barrel is public, and it is held REDUNDANTLY: Check 2 (the
+# sim↛renderer path ban) and Check 13 (simulation/ is the zero-dependency leaf, so
+# no `@chimera-engine/renderer` specifier at all) each catch it alone, and both
+# report [invariant-1]. Narrowing either one on its own leaves this case still
+# detected — only a composition mutant that falsifies both turns it green, which
+# is how the redundancy was established rather than assumed. The relative-path
+# sibling above rests on Check 2 alone.
+test_renderer_audio_barrel_in_cue_sheet_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/foundation/audio-cue-sheet.ts" \
+        "import type { Cue } from '@chimera-engine/renderer/audio';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-1\]'; then
+            pass "audio-barrel specifier in simulation/foundation/ detected as [invariant-1]"
+        else
+            fail "cue-sheet audio-barrel back-edge detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "audio-barrel specifier in simulation/foundation/ not detected (exit 0)"
     fi
 }
 
@@ -2159,6 +2269,10 @@ test_bare_electron_specifier_in_simulation_detected
 test_game_snapshot_in_app_screen_detected
 test_games_import_in_globbed_shell_page_detected
 test_r3f_i18n_game_barrels_in_game_surface_pass
+test_audio_barrel_in_game_surface_passes
+test_audio_internal_in_game_surface_detected
+test_renderer_audio_import_in_cue_sheet_detected
+test_renderer_audio_barrel_in_cue_sheet_detected
 test_build_output_dir_not_scanned
 test_i18n_runtime_in_simulation_detected
 test_i18n_runtime_in_app_simulation_detected

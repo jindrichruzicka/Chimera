@@ -280,7 +280,7 @@ pictures that appear after initial navigation, and keep sources near display siz
 
 Game-owned renderer surfaces may use the shared component library for HUDs,
 in-match menus, result banners, post-game summaries, and similar UI. The library
-exposes **three** public barrels, and those are the only renderer import surfaces a
+exposes **six** public barrels, and those are the only renderer import surfaces a
 game may use:
 
 ```typescript
@@ -292,15 +292,26 @@ import { ChatPanel } from '@chimera-engine/renderer/components/chat';
 
 // Tier 3 — engine components a game mounts inside its own <Canvas> (§4.16):
 import { PerfProbe } from '@chimera-engine/renderer/components/r3f';
+
+// Tier 4 — the game-registration seam, called by the renderer composition root:
+import { registerRendererGame } from '@chimera-engine/renderer/game';
+
+// Tier 5 — the i18n runtime (§4.39):
+import { useTranslate } from '@chimera-engine/renderer/i18n';
+
+// Tier 6 — the audio hooks and their option types (§4.25):
+import { useSound, useMusicTrack } from '@chimera-engine/renderer/audio';
 ```
 
-This allowance applies only to React components under `games/<name>/screens/*.tsx`
-and React shell contributions under `games/<name>/shell/*.tsx`. Game actions,
+This allowance applies only to React components under `apps/<name>/screens/*.tsx`,
+React shell contributions under `apps/<name>/shell/*.tsx`, and the renderer
+composition root `apps/<name>/renderer/*.{ts,tsx}`. Game actions,
 state, projection, AI, content, and non-React shell definition files must not
 import renderer code. Game renderer surfaces also must not import renderer stores,
-IPC bridges, `shell/` components, R3F components outside the r3f barrel, asset
-managers, hooks, stylesheets, or individual component files behind any barrel —
-only the three barrels above. Token overrides remain the mechanism for game
+IPC bridges, `renderer/hooks/`, asset managers, stylesheets, `components/shell/`, or an
+individual component file behind a barrel — only the six barrels above. The rule is on
+the import specifier, not on the kind of symbol: whatever a barrel re-exports is legal
+through it (`components/ui` re-exports `EscapeStackProvider` from `components/shell/`). Token overrides remain the mechanism for game
 visual customization.
 
 ### 4.35.1 Chat Component (`renderer/components/chat/`)
@@ -766,7 +777,7 @@ renderer/
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | #85  | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                                                                                                                                                                                                                                                   |
 | #86  | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                                                                                                                                                                                                                                        |
-| #96  | Game renderer surfaces may import the shared component library only through its three public barrels — `@chimera-engine/renderer/components/ui` (primitives), `@chimera-engine/renderer/components/chat` (the shared chat component), and `@chimera-engine/renderer/components/r3f` (engine components a game mounts inside its own `<Canvas>`); all other renderer internals stay off-limits.                                                                                          |
+| #96  | Game renderer surfaces may import the shared renderer library only through its six public barrels — `@chimera-engine/renderer/components/{ui,chat,r3f}` plus the top-level `@chimera-engine/renderer/{game,i18n,audio}`; all other renderer internals stay off-limits, and each barrel is a curated re-export rather than a directory opening.                                                                                                                                          |
 | #109 | Engine UI motion is declared as global `ch-*` keyframes in `renderer/styles/animations.css`, parameterised exclusively by `--ch-*` motion tokens; games customise motion only by overriding those tokens (retiming, `0ms`-disabling, or retargeting `*-name` tokens at game-namespaced keyframes), and all engine motion collapses to instant under `prefers-reduced-motion`.                                                                                                           |
 | #113 | Game-contributed UI icons reach `<Icon>` only through the `LoadedRendererGameShell.icons` (`GameIconSet`) registry payload → `useActiveGameIcons` → `ActiveGameIconProvider`/`IconContext`; the engine icon module never imports `apps/*`, the public barrel withholds `ICON_REGISTRY`, resolution is game-first/engine-fallback, unknown names render nothing (dev-warn), and game glyphs carry no `fill` so they render like a built-in inside an `<IconButton>` (§4.35.2, §4.37.16). |
 

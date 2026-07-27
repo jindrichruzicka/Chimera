@@ -56,7 +56,12 @@ describe('validateAssetWorkspace', () => {
         });
 
         expect(report.ok).toBe(true);
-        expect(report.checkedRefs).toBe(3);
+        // Counts REFERENCES resolved, not distinct files: each of the three refs is
+        // declared twice — once in the manifest, once in a scanned source (two in the
+        // content JSON, one in a scene's `requiredAssets`) — and each declaration is
+        // checked on its own. Manifest refs joined this total so it can fall when a
+        // manifest stops being read.
+        expect(report.checkedRefs).toBe(6);
         expect(toAssetValidationExitCode(report)).toBe(0);
     });
 
@@ -117,7 +122,7 @@ describe('validateAssetWorkspace', () => {
         const output = formatAssetValidationReport(report, workspaceRoot);
 
         expect(report.ok).toBe(false);
-        expect(report.checkedRefs).toBe(2);
+        expect(report.checkedRefs).toBe(4);
         expect(output).toContain('tactics/models/missing-arena.glb');
         expect(output).not.toContain('tactics/textures/existing-floor.webp');
     });
@@ -1147,6 +1152,241 @@ describe('audio cue sheet validation', () => {
             ]);
         });
 
+        // A ref named through the game's own `AssetRef` const is the shape the
+        // `audioClipEntry` builder invites — the const already exists so screens can
+        // name the clip, and repeating the path string on the entry is the duplication
+        // it removes. Read as unreadable, the entry contributes NO ref at all, so the
+        // file-existence check of Invariant #22 and the declared-ref membership set of
+        // Invariant #52 both silently lose it. Same-file only: the const has to be
+        // declared in the manifest being walked.
+        it('resolves a ref named through a const declared in the same manifest file', async () => {
+            const report = await validateAssetWorkspace({
+                workspaceRoot,
+                host: createHost({
+                    assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                    files: {
+                        'apps/tactics/asset-manifest.ts': `
+                            export const tacticsAudioRefs = {
+                                theme: 'tactics/audio/theme.ogg',
+                                absent: 'tactics/audio/absent.ogg',
+                            };
+                            export const tacticsAssetManifest = {
+                                gameId: 'tactics',
+                                entries: [
+                                    audioClipEntry({ ref: tacticsAudioRefs.theme, priority: 'critical' }),
+                                    audioClipEntry({ ref: tacticsAudioRefs.absent, priority: 'critical' }),
+                                ],
+                            };
+                        `,
+                        'apps/tactics/assets/audio/theme.ogg': '',
+                    },
+                }),
+            });
+
+            // Both resolved: the present one silently, the absent one by failing. A
+            // reader that resolved neither would also report an empty `missing` list,
+            // so the pair is what distinguishes "checked and fine" from "not checked".
+            expect(report.missing.map((entry) => entry.ref)).toEqual(['tactics/audio/absent.ogg']);
+            expect(report.ok).toBe(false);
+        });
+
+        // The const members are themselves written `'…' as AssetRef<AudioClipAsset>`,
+        // so the same annotation migrating onto the entry is one refactor away — and
+        // an unwrap that stopped happening would return every such entry to
+        // contributing no ref at all rather than to failing loudly.
+        it('resolves a const-named ref wrapped in `as` or `satisfies`', async () => {
+            const report = await validateAssetWorkspace({
+                workspaceRoot,
+                host: createHost({
+                    assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                    files: {
+                        'apps/tactics/asset-manifest.ts': `
+                            export const tacticsAudioRefs = {
+                                viaAs: 'tactics/audio/absent-as.ogg',
+                                viaSatisfies: 'tactics/audio/absent-satisfies.ogg',
+                            };
+                            export const tacticsAssetManifest = {
+                                gameId: 'tactics',
+                                entries: [
+                                    { ref: tacticsAudioRefs.viaAs as AssetRef<AudioClipAsset>, kind: 'audio-clip', priority: 'critical' },
+                                    { ref: tacticsAudioRefs.viaSatisfies satisfies AssetRef<AudioClipAsset>, kind: 'audio-clip', priority: 'critical' },
+                                ],
+                            };
+                        `,
+                    },
+                }),
+            });
+
+            expect(report.missing.map((entry) => entry.ref).sort()).toEqual([
+                'tactics/audio/absent-as.ogg',
+                'tactics/audio/absent-satisfies.ogg',
+            ]);
+        });
+
+        // Both halves of the key matter. A reader that matched on the member name
+        // alone would cross-resolve as soon as a game splits its refs by asset family,
+        // existence-checking one const's file against another const's entry.
+        it('keys resolution on the const name, not the member name alone', async () => {
+            const report = await validateAssetWorkspace({
+                workspaceRoot,
+                host: createHost({
+                    assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                    files: {
+                        'apps/tactics/asset-manifest.ts': `
+                            export const tacticsAudioRefs = { theme: 'tactics/audio/theme.ogg' };
+                            export const tacticsTextureRefs = { theme: 'tactics/textures/absent.png' };
+                            export const tacticsAssetManifest = {
+                                gameId: 'tactics',
+                                entries: [
+                                    { ref: tacticsAudioRefs.theme, kind: 'audio-clip', priority: 'critical' },
+                                    { ref: tacticsTextureRefs.theme, kind: 'texture', priority: 'critical' },
+                                ],
+                            };
+                        `,
+                        'apps/tactics/assets/audio/theme.ogg': '',
+                    },
+                }),
+            });
+
+            // Only the texture is absent. Resolving on the shared member name would
+            // report the audio path (both entries reading the first const) or the
+            // texture path twice (both reading the last) — never exactly this.
+            expect(report.missing.map((entry) => entry.ref)).toEqual([
+                'tactics/textures/absent.png',
+            ]);
+        });
+
+        // The rejection side of the same rule. `readOwnConstMember` resolves
+        // `<Const>.<member>` and refuses to guess at anything else — guessing at a
+        // nested access is exactly the cross-resolution the const half of the key
+        // exists to prevent. Each of these must contribute NO ref: unreadable is not
+        // an error, so the only observable is that nothing lands in `missing`, and the
+        // readable control in the same fixture is what makes that non-vacuous.
+        it.each([
+            { shape: 'a nested access', ref: 'wrapper.tacticsAudioRefs.absent' },
+            { shape: 'a computed access', ref: "tacticsAudioRefs['absent']" },
+            { shape: 'a bare identifier', ref: 'tacticsAudioRefs' },
+        ])('leaves $shape unresolved rather than guessing at it', async ({ ref }) => {
+            const report = await validateAssetWorkspace({
+                workspaceRoot,
+                host: createHost({
+                    assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                    files: {
+                        'apps/tactics/asset-manifest.ts': `
+                            export const tacticsAudioRefs = { absent: 'tactics/audio/absent.ogg' };
+                            export const wrapper = { tacticsAudioRefs };
+                            export const controlRefs = { plain: 'tactics/audio/control-absent.ogg' };
+                            export const tacticsAssetManifest = {
+                                gameId: 'tactics',
+                                entries: [
+                                    { ref: ${ref}, kind: 'audio-clip', priority: 'critical' },
+                                    { ref: controlRefs.plain, kind: 'audio-clip', priority: 'critical' },
+                                ],
+                            };
+                        `,
+                    },
+                }),
+            });
+
+            // Only the control resolves. Were the unreadable shape guessed at, its
+            // path would appear here too.
+            expect(report.missing.map((entry) => entry.ref)).toEqual([
+                'tactics/audio/control-absent.ogg',
+            ]);
+        });
+
+        // The collector is scope-blind — it walks function bodies too — so two consts
+        // of one name have to resolve by SOME rule, and Invariant #52 states which:
+        // last in source order, not innermost. Both candidates name a missing file, so
+        // whichever the reader picked shows up in `missing`; a reader that resolved
+        // neither would report an empty list and fail here too.
+        it('resolves the LAST same-named const in source order, not the innermost', async () => {
+            const report = await validateAssetWorkspace({
+                workspaceRoot,
+                host: createHost({
+                    assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                    files: {
+                        'apps/tactics/asset-manifest.ts': `
+                            export const tacticsAudioRefs = { theme: 'tactics/audio/outer.ogg' };
+                            function unused() {
+                                const tacticsAudioRefs = { theme: 'tactics/audio/inner.ogg' };
+                                return tacticsAudioRefs;
+                            }
+                            export const tacticsAssetManifest = {
+                                gameId: 'tactics',
+                                entries: [
+                                    { ref: tacticsAudioRefs.theme, kind: 'audio-clip', priority: 'critical' },
+                                ],
+                            };
+                        `,
+                    },
+                }),
+            });
+
+            // The function-local declaration is LAST in the file and in scope nowhere
+            // near the entry — so the two candidate rules disagree here, and the one
+            // that wins is source order. Ordered the other way round the two agree and
+            // a scope-aware collector would pass unnoticed.
+            expect(report.missing.map((entry) => entry.ref)).toEqual(['tactics/audio/inner.ogg']);
+        });
+
+        it('resolves a const-named ref on a plain object-literal entry too', async () => {
+            const report = await validateAssetWorkspace({
+                workspaceRoot,
+                host: createHost({
+                    assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                    files: {
+                        'apps/tactics/asset-manifest.ts': `
+                            export const tacticsAudioRefs = { absent: 'tactics/audio/absent.ogg' };
+                            export const tacticsAssetManifest = {
+                                gameId: 'tactics',
+                                entries: [
+                                    { ref: tacticsAudioRefs.absent, kind: 'audio-clip', priority: 'critical' },
+                                ],
+                            };
+                        `,
+                    },
+                }),
+            });
+
+            expect(report.missing.map((entry) => entry.ref)).toEqual(['tactics/audio/absent.ogg']);
+        });
+
+        // The resolution must not reach across files: a const of the same name in
+        // ANOTHER game's manifest must not supply this one's refs. Both consts name a
+        // path with no file behind it, so a resolved ref shows up in `missing` and an
+        // unresolved one does not — and the same-file control in the same fixture is
+        // what keeps the expectation from passing on a reader that resolves nothing.
+        it('resolves a const from its own file but not one from another manifest', async () => {
+            const report = await validateAssetWorkspace({
+                workspaceRoot,
+                host: createHost({
+                    assetManifestFiles: [
+                        'apps/tactics/asset-manifest.ts',
+                        'apps/chess/asset-manifest.ts',
+                    ],
+                    files: {
+                        'apps/chess/asset-manifest.ts': `
+                            export const foreignRefs = { theme: 'chess/audio/absent.ogg' };
+                            export const chessAssetManifest = { gameId: 'chess', entries: [] };
+                        `,
+                        'apps/tactics/asset-manifest.ts': `
+                            export const tacticsAudioRefs = { own: 'tactics/audio/absent.ogg' };
+                            export const tacticsAssetManifest = {
+                                gameId: 'tactics',
+                                entries: [
+                                    { ref: tacticsAudioRefs.own, kind: 'audio-clip', priority: 'critical' },
+                                    { ref: foreignRefs.theme, kind: 'audio-clip', priority: 'critical' },
+                                ],
+                            };
+                        `,
+                    },
+                }),
+            });
+
+            expect(report.missing.map((entry) => entry.ref)).toEqual(['tactics/audio/absent.ogg']);
+        });
+
         it('existence-checks the ref of a builder-authored entry', async () => {
             const report = await validateManifestEntries(
                 `audioClipEntry({ ref: 'tactics/audio/absent.ogg', priority: 'critical' })`,
@@ -1353,6 +1593,11 @@ describe('on-demand asset load detection', () => {
         expect(report.ok).toBe(true);
         expect(report.undeclaredOnDemandLoads).toHaveLength(0);
         expect(report.unresolvedOnDemandLoads).toHaveLength(0);
+        // ONE declared ref, counted once. An on-demand load resolves against the
+        // declared set rather than joining it, so adding it to the total would inflate
+        // the one number the tool prints by however many times a game loads what it
+        // already declared.
+        expect(report.checkedRefs).toBe(1);
     });
 
     it('warns without failing when an on-demand load ref is dynamic', async () => {
@@ -1739,7 +1984,7 @@ describe('data JSON collection edge cases', () => {
         });
 
         expect(report.ok).toBe(true);
-        expect(report.checkedRefs).toBe(2);
+        expect(report.checkedRefs).toBe(4);
     });
 
     it('formats special-character JSON keys in bracket notation in the missing-ref report', async () => {
@@ -1791,7 +2036,7 @@ describe('scene source file collection edge cases', () => {
         });
 
         expect(report.ok).toBe(true);
-        expect(report.checkedRefs).toBe(1);
+        expect(report.checkedRefs).toBe(2);
     });
 
     it('handles requiredAssets wrapped in `satisfies` in a .tsx scene file', async () => {
@@ -1820,7 +2065,7 @@ describe('scene source file collection edge cases', () => {
         });
 
         expect(report.ok).toBe(true);
-        expect(report.checkedRefs).toBe(1);
+        expect(report.checkedRefs).toBe(2);
     });
 
     it('handles requiredAssets declared with a string-literal property key', async () => {
@@ -1849,7 +2094,7 @@ describe('scene source file collection edge cases', () => {
         });
 
         expect(report.ok).toBe(true);
-        expect(report.checkedRefs).toBe(1);
+        expect(report.checkedRefs).toBe(2);
     });
 });
 

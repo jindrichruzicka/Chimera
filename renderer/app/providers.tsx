@@ -8,7 +8,7 @@ import { AssetManagerContext } from '../assets/AssetManagerContext.js';
 import { createDelegatingAssetManager } from '../assets/DelegatingAssetManager';
 import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
 import { createAudioManager, type AudioHandle, type AudioManager } from '../audio/AudioManager';
-import { AudioManagerContext } from '../audio/AudioManagerContext.js';
+import { AudioManagerProvider } from '../audio/AudioManagerProvider.js';
 import type { InputAction } from '../input/InputAction.js';
 import { createInputManager } from '../input/InputManager.js';
 import { createInputActionRegistry } from '../input/InputActionRegistry.js';
@@ -113,13 +113,13 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
         <DeviceInfoProvider systemApi={systemApi}>
             <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
                 <AssetManagerContext.Provider value={delegatingAssetManager}>
-                    <AudioManagerContext.Provider value={audioManager}>
+                    <AudioManagerProvider audioManager={audioManager}>
                         <InputActionRegistryContext.Provider value={inputRegistry}>
                             <InputManagerContext.Provider value={inputManager}>
                                 <EscapeStackProvider>{children}</EscapeStackProvider>
                             </InputManagerContext.Provider>
                         </InputActionRegistryContext.Provider>
-                    </AudioManagerContext.Provider>
+                    </AudioManagerProvider>
                 </AssetManagerContext.Provider>
             </SetGameAssetManagerContext.Provider>
         </DeviceInfoProvider>

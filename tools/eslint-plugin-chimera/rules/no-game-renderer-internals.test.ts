@@ -133,6 +133,28 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             filename: 'apps/tactics/screens/translations/keys.ts',
             code: `import { translationKey } from '@chimera-engine/renderer/i18n/index.js';`,
         },
+        {
+            // The public audio barrel (useSound / useMusicTrack /
+            // useAudioManager + the cue and fade option types) is allowed from a
+            // game surface — the subpath that makes the cue/fade/crossfade verbs
+            // reachable by an adopter at all.
+            filename: 'apps/tactics/screens/TacticsGameHud.tsx',
+            code: `import { useMusicTrack, MUSIC_PRIORITY } from '@chimera-engine/renderer/audio';`,
+        },
+        {
+            filename: 'apps/tactics/screens/TacticsDemoBoard.tsx',
+            code: `import { useSound } from '@chimera-engine/renderer/audio/index.js';`,
+        },
+        {
+            // Extensionless and .ts forms of the same barrel, matching the five
+            // sibling predicates — a game surface may name any of the four spellings.
+            filename: 'apps/tactics/renderer/register.ts',
+            code: `import { useAudioManager } from '@chimera-engine/renderer/audio/index';`,
+        },
+        {
+            filename: 'apps/tactics/screens/TacticsGameHud.tsx',
+            code: `import { MUSIC_PRIORITY } from '@chimera-engine/renderer/audio/index.ts';`,
+        },
     ],
     invalid: [
         {
@@ -209,6 +231,27 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         {
             filename: 'apps/tactics/screens/TacticsMenu.tsx',
             code: `import { useInputAction } from '@chimera-engine/renderer/input/useInputAction.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // The audio barrel exposes only its index; the modules behind it —
+            // the manager class, the ramp primitive, the cue-sheet parser — stay
+            // forbidden as deep imports, exactly as r3f's do.
+            filename: 'apps/tactics/screens/TacticsGameHud.tsx',
+            code: `import { DefaultAudioManager } from '@chimera-engine/renderer/audio/AudioManager.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            filename: 'apps/tactics/screens/TacticsGameHud.tsx',
+            code: `import { parseAudioCueSheet } from '@chimera-engine/renderer/audio/audioCueSheet.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // A game i18n token-catalogue's permission is the i18n barrel and
+            // nothing else — widening the surface list must not widen the
+            // catalogue carve-out with it.
+            filename: 'apps/tactics/screens/translations/keys.ts',
+            code: `import { useSound } from '@chimera-engine/renderer/audio';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {

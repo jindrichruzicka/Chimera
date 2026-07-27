@@ -63,6 +63,13 @@ export interface AudioHandle {
 
 export interface AudioManager {
     play(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): AudioHandle;
+    /**
+     * Stop a voice at once.
+     *
+     * Like {@link AudioManager.fadeOut} and {@link AudioManager.fadeTo}, a no-op on an
+     * invalid or already-released handle: voice ids are minted monotonically, so a
+     * stale handle can never name a live record.
+     */
     stop(handle: AudioHandle): void;
     /** Ramp to silence, then stop — `{ overMs }`, `{ toCue }` or `{ toEnd: true }`. */
     fadeOut(handle: AudioHandle, spec: FadeOutSpec): void;

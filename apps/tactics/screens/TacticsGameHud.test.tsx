@@ -18,6 +18,12 @@ import type { GameHudProps } from '@chimera-engine/simulation/foundation/game-sc
 import { entityId } from '@chimera-engine/electron/preload/api-types.js';
 import { EscapeStackProvider, IconProvider } from '@chimera-engine/renderer/components/ui';
 import { I18nProvider } from '@chimera-engine/renderer/i18n';
+import {
+    AudioManagerProvider,
+    type AudioHandle,
+    type AudioManager,
+} from '@chimera-engine/renderer/audio';
+import { tacticsAudioRefs } from '../asset-manifest.js';
 import { tacticsGridCoordinate } from '../simulation/actions.js';
 import type { BufferedTacticsAction } from '../simulation/commitment/contract.js';
 import { tacticsIcons } from '../shell/icons.js';
@@ -38,14 +44,47 @@ const TACTICS_LANGUAGES = [
 // provider), inside the shared Drawer (Escape-to-close routes through the overlay
 // stack). Wrap every render in both providers with the English Tactics bundle so
 // `game.tactics.*` resolve to English (an inert provider would render raw keys).
+const HUD_TEST_AUDIO_MANAGER = createSilentAudioManager();
+
 function HudProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
     return (
         <I18nProvider gameOverride={tacticsBundleEn}>
             <IconProvider gameIcons={tacticsIcons}>
-                <EscapeStackProvider>{children}</EscapeStackProvider>
+                <AudioManagerProvider audioManager={HUD_TEST_AUDIO_MANAGER}>
+                    <EscapeStackProvider>{children}</EscapeStackProvider>
+                </AudioManagerProvider>
             </IconProvider>
         </I18nProvider>
     );
+}
+
+/**
+ * A do-nothing `AudioManager` for the HUD's own suites.
+ *
+ * The HUD mounts `<TacticsAmbience>`, whose `useAudioManager()` THROWS outside a
+ * provider (Invariant #83) — so every HUD render needs one, and none of these tests
+ * are about audio. `play`/`crossfade` must still return a well-formed handle rather
+ * than throw: the ambience effect stores what they return and the next swap fades it.
+ * `TacticsAmbience.test.tsx` owns the assertions on what actually gets called.
+ */
+function createSilentAudioManager(): AudioManager {
+    const handle: AudioHandle = {
+        id: 'hud-test-voice',
+        ref: tacticsAudioRefs.ambienceCalm,
+        bus: 'music',
+        priority: 0,
+        valid: true,
+    };
+    return {
+        play: () => handle,
+        stop: vi.fn(),
+        fadeOut: vi.fn(),
+        fadeTo: vi.fn(),
+        crossfade: () => handle,
+        stopAll: vi.fn(),
+        duck: vi.fn(),
+        dispose: vi.fn(),
+    };
 }
 
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
@@ -159,6 +198,26 @@ function makeHudProps(overrides: Partial<GameHudProps> = {}): GameHudProps {
 }
 
 describe('TacticsGameHud', () => {
+    it('mounts the ambience bed and feeds it the turn signal', () => {
+        // The HUD is what mounts <TacticsAmbience>, and nothing else at unit level
+        // saw that: deleting the element, or hard-coding its prop, left every other
+        // assertion in this file green. Only `audio-smoke.spec.ts` caught it, and an
+        // e2e is not re-run on a small refactor of this component.
+        const { rerender } = render(
+            <TacticsGameHud {...makeHudProps({ snapshot: makeSnapshot({ isMyTurn: true }) })} />,
+        );
+        expect(screen.getByTestId('tactics-ambience')).toHaveAttribute('data-track', 'calm');
+
+        rerender(
+            <HudProviders>
+                <TacticsGameHud
+                    {...makeHudProps({ snapshot: makeSnapshot({ isMyTurn: false }) })}
+                />
+            </HudProviders>,
+        );
+        expect(screen.getByTestId('tactics-ambience')).toHaveAttribute('data-track', 'tense');
+    });
+
     it('renders the stable game HUD locator surface', () => {
         render(<TacticsGameHud {...makeHudProps({ tick: 12 })} />);
 
@@ -195,9 +254,11 @@ describe('TacticsGameHud', () => {
                 locale="cs-CZ"
             >
                 <IconProvider gameIcons={tacticsIcons}>
-                    <EscapeStackProvider>
-                        <TacticsGameHud {...makeHudProps()} />
-                    </EscapeStackProvider>
+                    <AudioManagerProvider audioManager={HUD_TEST_AUDIO_MANAGER}>
+                        <EscapeStackProvider>
+                            <TacticsGameHud {...makeHudProps()} />
+                        </EscapeStackProvider>
+                    </AudioManagerProvider>
                 </IconProvider>
             </I18nProvider>,
         );
@@ -317,9 +378,11 @@ describe('TacticsGameHud', () => {
                     languages={TACTICS_LANGUAGES}
                     locale="cs-CZ"
                 >
-                    <EscapeStackProvider>
-                        <TacticsGameHud {...makeHudProps()} />
-                    </EscapeStackProvider>
+                    <AudioManagerProvider audioManager={HUD_TEST_AUDIO_MANAGER}>
+                        <EscapeStackProvider>
+                            <TacticsGameHud {...makeHudProps()} />
+                        </EscapeStackProvider>
+                    </AudioManagerProvider>
                 </I18nProvider>,
             );
 

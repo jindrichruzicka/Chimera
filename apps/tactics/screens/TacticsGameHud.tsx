@@ -24,6 +24,7 @@ import {
     parseTacticsViewerStamina,
 } from '../scene/tacticsSceneModel.js';
 import { applyBuffer } from '../simulation/commitment/buffer.js';
+import { TacticsAmbience } from './TacticsAmbience.js';
 import { readStamina } from '../simulation/stamina.js';
 import {
     selectBuffer,
@@ -115,6 +116,12 @@ export function TacticsGameHud({
 
     return (
         <>
+            {/* The ambience bed (§4.25 — the reference adoption of cue sheets and
+                crossfade). It lives on the HUD because the HUD is mounted for exactly
+                the span the bed should play — the whole of an in-progress match — and
+                already holds the turn signal the bed swaps on. It renders nothing
+                visible and so sits outside the footer's layout entirely. */}
+            <TacticsAmbience isMyTurn={snapshot.isMyTurn} />
             <footer aria-label={t(HUD_KEYS.hudAriaLabel)} className={styles['hud']}>
                 {/* A compact, centered command bar rather than a full-width footer:
                     three tight clusters (identity · readouts · actions) divided by

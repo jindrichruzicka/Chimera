@@ -146,6 +146,13 @@ interface CollectedAssetReferences {
 interface CollectedAssetManifestReferences extends CollectedAssetReferences {
     readonly kinds: readonly UnknownAssetManifestKind[];
     readonly invalidCueSheets: readonly InvalidAudioCueSheet[];
+    /**
+     * `<Const>.<member>` → ref, from this file's own object-literal consts. Returned
+     * rather than re-derived by the caller: it is collected here to resolve entry
+     * refs, and the on-demand scanner's tier B wants the same map — deriving it twice
+     * means parsing the file twice.
+     */
+    readonly constMembers: readonly (readonly [string, string])[];
 }
 
 interface CollectedOnDemandLoads {
@@ -238,7 +245,7 @@ export async function validateAssetWorkspace(
         // (a manifest lives at apps/<gameId>/asset-manifest.ts).
         const manifestGameId = gameIdFromPath(workspaceRoot, filePath);
         if (manifestGameId !== undefined) {
-            for (const [member, ref] of collectManifestConstMembers(sourceText, filePath)) {
+            for (const [member, ref] of collected.constMembers) {
                 manifestConstMembers.set(`${manifestGameId} ${member}`, ref);
             }
         }
@@ -339,7 +346,11 @@ export async function validateAssetWorkspace(
             unknownKinds.length === 0 &&
             invalidCueSheets.length === 0 &&
             undeclaredOnDemandLoads.length === 0,
-        checkedRefs: refs.length + fontRefs.length,
+        // Manifest refs count too. They were excluded, which meant the one number the
+        // tool prints could not fall when a whole manifest stopped being read — the
+        // reason a walker that silently dropped every Tactics ref reported the same
+        // "all files exist" as a working one. It counts declared refs.
+        checkedRefs: refs.length + manifestRefs.length + fontRefs.length,
         missing,
         missingFontSources,
         forbiddenRendererPublicAssets,
@@ -687,10 +698,20 @@ function collectAssetManifestRefs(
     const malformed: MalformedAssetReference[] = [];
     const kinds: UnknownAssetManifestKind[] = [];
     const invalidCueSheets: InvalidAudioCueSheet[] = [];
+    // Refs named through one of THIS file's own `AssetRef` consts, e.g.
+    // `{ ref: tacticsAudioRefs.step }`. That shape is what the `audioClipEntry`
+    // builder invites — the const already exists so screens can name the clip — and a
+    // reader without it drops the entry's ref entirely rather than reporting it as
+    // unreadable, taking the file-existence check (#22) and the declared-ref
+    // membership set (#52) down with it. Deliberately scoped to the file being walked:
+    // the same map keyed per game already backs the on-demand scanner's tier B, and a
+    // const reached across files could resolve one game's ref onto another's asset.
+    const constMembers = collectManifestConstMembers(sourceFile);
+    const ownConstMembers = new Map(constMembers);
 
     visit(sourceFile);
 
-    return { refs, malformed, kinds, invalidCueSheets };
+    return { refs, malformed, kinds, invalidCueSheets, constMembers };
 
     function visit(node: Node): void {
         if (isPropertyAssignment(node) && isPropertyName(node.name, 'entries')) {
@@ -703,6 +724,42 @@ function collectAssetManifestRefs(
         forEachChild(node, visit);
     }
 
+    /**
+     * An entry's `ref`, read as a literal or resolved through one of this file's own
+     * consts.
+     *
+     * The const fallback runs only when the direct read fails, so a literal keeps
+     * reading exactly as before. It resolves `<Const>.<member>` and nothing else — a
+     * bare identifier names no member, and a computed or nested access is left
+     * unresolved rather than guessed at.
+     */
+    function readManifestRefProperty(objectLiteral: ObjectLiteralExpression): string | undefined {
+        const property = findProperty(objectLiteral, 'ref');
+        if (property === undefined) {
+            return undefined;
+        }
+        const direct = readStringExpression(property.initializer);
+        if (direct !== undefined) {
+            return direct;
+        }
+        return readOwnConstMember(property.initializer);
+    }
+
+    function readOwnConstMember(expression: Expression): string | undefined {
+        const unwrapped =
+            isAsExpression(expression) || isSatisfiesExpression(expression)
+                ? expression.expression
+                : expression;
+        if (
+            !isPropertyAccessExpression(unwrapped) ||
+            !isIdentifier(unwrapped.expression) ||
+            !isIdentifier(unwrapped.name)
+        ) {
+            return undefined;
+        }
+        return ownConstMembers.get(`${unwrapped.expression.text}.${unwrapped.name.text}`);
+    }
+
     function collectManifestEntries(arrayLiteral: ArrayLiteralExpression): void {
         arrayLiteral.elements.forEach((element, index) => {
             const entry = unwrapManifestEntry(element);
@@ -710,7 +767,7 @@ function collectAssetManifestRefs(
                 return;
             }
 
-            const ref = readStringProperty(entry.objectLiteral, 'ref');
+            const ref = readManifestRefProperty(entry.objectLiteral);
             const kind = readStringProperty(entry.objectLiteral, 'kind') ?? entry.impliedKind;
             const source = {
                 kind: 'asset-manifest' as const,
@@ -1057,16 +1114,8 @@ function collectAssetLoaderKinds(sourceText: string, filePath: string): readonly
  * scopes these by game so same-named consts in two games never cross-resolve.
  */
 function collectManifestConstMembers(
-    sourceText: string,
-    filePath: string,
+    sourceFile: SourceFile,
 ): readonly (readonly [string, string])[] {
-    const sourceFile = createSourceFile(
-        filePath,
-        sourceText,
-        ScriptTarget.Latest,
-        true,
-        getScriptKind(filePath),
-    );
     const members: [string, string][] = [];
 
     visit(sourceFile);

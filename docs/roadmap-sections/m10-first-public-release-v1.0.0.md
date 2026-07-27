@@ -169,8 +169,20 @@ abandons that play with a warning rather than throwing. Live-handle verbs
 (`fadeOut`/`fadeTo`/`crossfade`) reach the manager through a new
 `useMusicTrack` hook (via `useAudioManager()` only, Invariant #84),
 while the public `AudioHandle` gains no fields. This feature graduates design-stage
-invariants **#116–#126** into the enforced/roll-called set. **Tactics**
+invariants **#116–#126** into the enforced/roll-called set (total 115 → 126). **Tactics**
 (`apps/tactics`) is the reference adopter.
+
+Reaching an adopter took one decision the design had left open (#923): the hooks were
+renderer **internals**, so Invariant #96 kept every game out of them and the feature had no
+caller outside its own tests. F74 closes that with a sixth public barrel,
+**`@chimera-engine/renderer/audio`** — `useSound`, `useMusicTrack`, `useAudioManager`, an
+`AudioManagerProvider` a game's tests can mount, and the cue/fade option types — which moves
+Invariant #96, mechanical check 17, the `no-game-renderer-internals` rule, and the package
+exports contract in step. Tactics then adopts the surface for real —
+two loop-cued ambience beds authored through `audioClipEntry`, crossfaded as the turn
+passes — which also gives Invariant #125's build gate its first production input (before
+this, no in-repo manifest carried `metadata`, so `pnpm validate:assets` exercised it
+vacuously).
 
 | Task                                                                      | Issue                                                         |
 | ------------------------------------------------------------------------- | ------------------------------------------------------------- |

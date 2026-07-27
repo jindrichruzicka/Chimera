@@ -17,10 +17,9 @@
  *      `overrides` so EVERY `@chimera-engine/*` edge resolves through a tarball's `exports`
  *      (no `workspace:*` reach-through; the gate's whole point)
  *   4. `npm install`                 — install the tarballs into the throwaway
- *   5. renderer-barrel resolution probe — assert the renderer's two public barrels
- *      (`./components/ui`, `./components/chat`), the `./game` seam, the `./styles/*.css`
- *      surface, and electron's `./main` + `./preload/api` resolve from the tarball
- *      (Invariant #96) — a missing `exports`/`files` entry makes `require.resolve` throw
+ *   5. subpath resolution probe      — assert every entry of `PROBE_SUBPATHS` below
+ *      resolves from the installed tarball (Invariant #96) — a missing
+ *      `exports`/`files` entry makes `require.resolve` throw
  *   6. scoped Playwright E2E         — run the tactics suite with the four library
  *      packages + the electron host/preload bundled FROM the throwaway tarballs (the
  *      `CHIMERA_VERIFY_PACK_NODE_MODULES` flag flips global-setup's esbuild resolution)
@@ -40,8 +39,7 @@
  *   #2  — lives in `tools/`; imports only node builtins — never a package or app module.
  *   #47 — orchestration resolves ONLY through each package's public `exports`, never an
  *         internal subpath (no `workspace:*` symlink fallback inside the throwaway).
- *   #96 — the probe catches a missing `exports`/`files` entry for the renderer's two
- *         public component barrels.
+ *   #96 — the probe catches a missing `exports`/`files` entry for a public subpath.
  *
  * Usage (run via `pnpm verify:pack` / `pnpm verify:pack:selftest`, not in unit tests):
  *   tsx tools/verify-pack.ts            # positive gate
@@ -97,6 +95,10 @@ const PROBE_SUBPATHS = [
     '@chimera-engine/renderer/components/ui',
     '@chimera-engine/renderer/components/chat',
     '@chimera-engine/renderer/game',
+    // The audio hooks (§4.25). A game surface may reach `useSound`/`useMusicTrack`
+    // only through this barrel (Invariant #96), so a dropped export leaves an
+    // adopting game with no route to the cue/fade/crossfade verbs at all.
+    '@chimera-engine/renderer/audio',
     // A consumer app's per-app Next host re-exports the engine shell from
     // `@chimera-engine/renderer/shell/*`; probe a representative route + the root layout
     // so a missing `dist/app/*` entry in the packed artifact fails the gate.
