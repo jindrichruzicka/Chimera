@@ -55,5 +55,5 @@ useEffect(() => {
 ## 5.6 `useEffect` usage
 
 - `useEffect` is for **side effects** (subscriptions, focus management, analytics events) — not state derivation.
-- Every `useEffect` must have a complete dependency array. Exhaustiveness is enforced by `eslint-plugin-react-hooks`.
+- Every `useEffect` must have a complete dependency array. **Nothing checks this mechanically** — `eslint-plugin-react-hooks` is not part of the toolchain — so it is a review obligation, and it applies equally to `useMemo` and `useCallback`. A hook that deliberately depends on less than its body reads — a provider-lifetime singleton, or a scalar projection of an options object — states why at the dependency list.
 - Cleanup functions must be provided for every subscription or timer registered in `useEffect`.
