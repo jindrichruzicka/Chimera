@@ -167,7 +167,7 @@ parsed **only** by `renderer/audio`; `validate-assets` range-checks every cue at
 build time. Cue resolution is **fail-soft** — an unresolvable load-bearing cue
 abandons that play with a warning rather than throwing. Live-handle verbs
 (`fadeOut`/`fadeTo`/`crossfade`) reach the manager through a new
-`useMusicTrack`/`useAudioHandle` hook (via `useAudioManager()` only, Invariant #84),
+`useMusicTrack` hook (via `useAudioManager()` only, Invariant #84),
 while the public `AudioHandle` gains no fields. This feature graduates design-stage
 invariants **#116–#126** into the enforced/roll-called set. **Tactics**
 (`apps/tactics`) is the reference adopter.
@@ -185,7 +185,7 @@ invariants **#116–#126** into the enforced/roll-called set. **Tactics**
 | `AudioManager.fadeTo` (ramp-to-absolute-and-hold)                         | [#918](https://github.com/jindrichruzicka/Chimera/issues/918) |
 | `AudioManager.crossfade` (linked fade on a shared `t0`)                   | [#919](https://github.com/jindrichruzicka/Chimera/issues/919) |
 | Voice-preemption rework + `MUSIC_PRIORITY`                                | [#920](https://github.com/jindrichruzicka/Chimera/issues/920) |
-| `useSound` keys + `useMusicTrack`/`useAudioHandle` hook                   | [#921](https://github.com/jindrichruzicka/Chimera/issues/921) |
+| `useSound` keys + the `useMusicTrack` live-handle hook                    | [#921](https://github.com/jindrichruzicka/Chimera/issues/921) |
 | `validate-assets` cue-sheet build gate                                    | [#922](https://github.com/jindrichruzicka/Chimera/issues/922) |
 | E2E, docs, and invariants #116–#126 (feature-review gate)                 | [#923](https://github.com/jindrichruzicka/Chimera/issues/923) |
 

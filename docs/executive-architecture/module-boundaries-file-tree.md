@@ -257,8 +257,11 @@ chimera/
 │   ├── audio/                       # Audio playback layer (§4.25)
 │   │   ├── AudioManager.ts
 │   │   ├── AudioBus.ts
+│   │   ├── Cue.ts
+│   │   ├── audioCueSheet.ts
 │   │   ├── EventAudioBinding.ts
-│   │   └── useSound.ts
+│   │   ├── useSound.ts
+│   │   └── useMusicTrack.ts
 │   ├── input/                       # Keyboard / gamepad input layer (§4.26)
 │   │   ├── InputManager.ts
 │   │   ├── KeyBindingRepository.ts

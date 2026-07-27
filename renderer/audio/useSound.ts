@@ -4,7 +4,7 @@ import { useCallback, useMemo } from 'react';
 
 import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
-import type { AudioHandle, PlayOptions } from './AudioManager';
+import { DEFAULT_FADE_CURVE, type AudioHandle, type PlayOptions } from './AudioManager';
 import { useAudioManager } from './AudioManagerContext.js';
 import type { Cue } from './Cue';
 
@@ -29,14 +29,9 @@ function cueDependency(cue: Cue | undefined): string | number | undefined {
 /**
  * Returns a memoized callback that plays the provided sound reference.
  *
- * Equivalent option values keep the same callback identity across rerenders,
- * even when callers pass a newly created options object.
- *
- * `PlayOptions.fadeIn` is deliberately NOT part of the key yet: it lands with the
- * live-handle verbs' own hook, which is where the whole fade surface gets keyed together.
- * All three verbs — `fadeOut`, `fadeTo` and `crossfade` — are on the manager now, so what
- * remains is the hook itself. Until then a rerender that changes ONLY `fadeIn` hands back
- * the previous callback, and the previous fade is what plays.
+ * Every field of {@link PlayOptions} is part of the key, so a rerender that changes any
+ * one of them hands back a callback that plays the new value. Equivalent option values
+ * keep the same callback identity, even when callers pass a newly created options object.
  */
 export function useSound(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): () => AudioHandle {
     const audioManager = useAudioManager();
@@ -54,6 +49,11 @@ export function useSound(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): () 
             cueDependency(opts?.to),
             cueDependency(opts?.loopRegion?.start),
             cueDependency(opts?.loopRegion?.end),
+            // A fade-in is two authored values, keyed as two. `durationMs` is required on
+            // FadeInSpec, so an absent fade cannot collide with an authored one on the pair
+            // even though both read the same defaulted curve.
+            opts?.fadeIn?.durationMs,
+            opts?.fadeIn?.curve ?? DEFAULT_FADE_CURVE,
         ],
     );
 

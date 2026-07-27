@@ -79,10 +79,23 @@ export interface AudioManager {
     stopAll(bus?: AudioBusId): void;
     /** Duck a bus to duckedVolume for durationMs, then restore. */
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
-    /** Dispose all active sources and clear the pool. Called on game session end by GameShell. */
+    /** Dispose all active sources and clear the pool. Called by `Providers` at app shutdown (Invariant #64). */
     dispose(): void;
 }
 ```
+
+A component gets the manager from `useAudioManager()` and never from a module-level import (Invariant #84); `GameShell` and `<EventAudioPlayer>` use it directly. `renderer/audio` builds two hooks on it:
+
+```typescript
+// renderer/audio/useSound.ts — start a sound
+export function useSound(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): () => AudioHandle;
+
+// renderer/audio/useMusicTrack.ts — act on a voice already playing
+export type AudioTrackControls = Pick<AudioManager, 'fadeOut' | 'fadeTo' | 'crossfade'>;
+export function useMusicTrack(): AudioTrackControls;
+```
+
+`useSound` memoizes its callback on **every** `PlayOptions` field, so a rerender that changes only `fadeIn` still plays the new fade. `AudioTrackControls` carries the three live-handle verbs and nothing else, taken from `AudioManager` by `Pick` rather than restated — the handle names the voice, so one control object serves however many voices a component holds.
 
 This block tracks the **shipped** surface and is extended as each part of the cue / fade / crossfade design lands. Every member of that design has now landed on it; the [design-stage listing](#new--changed-core-types) below remains as the design's own narrative.
 
@@ -397,12 +410,12 @@ None of those is diagnosed a second time by `crossfade` itself. The returned han
 
 ### Landing this design (remaining follow-up)
 
-Landed so far: `Cue.ts`, `audioCueSheet.ts`, `AssetManager.getManifestMetadata`, the stage-1 gain-ramp primitive, the sim-side cue-sheet types and `audioClipEntry` builder, `PlayOptions.from`/`to`/`loopRegion` with two-tier validation, the `useSound` keys for those three, `PlayOptions.fadeIn` with the `VoiceRecord` phase/intent fields and their atomic `t0` application, `AudioManager.fadeOut` with its timer-free single-release scheduling (#119/#122), `AudioManager.fadeTo` with the mutable voice ceiling its departure bound rests on, and `AudioManager.crossfade`, which writes the last intent slot to have had no production writer — `linkedFadeOut`, a crossfade's linkage held as a thunk so the record owns only _when_ it fires, while the verb owns what it does. All four slots now have one: `releaseOnStart`, `pendingFadeIn`, `pendingFadeTo` and `linkedFadeOut` are written by `fadeOut`, `PlayOptions.fadeIn`, `fadeTo` and `crossfade` respectively. Last of `AudioManager`'s own runtime behaviour, the **voice-preemption ranking** and `MUSIC_PRIORITY` (#123), which also disambiguated the design's one under-specified claim: #123's original term _listing_ admitted two non-equivalent readings of its "equal-or-higher-priority" qualifier, and the invariant now states the tier order and its direction outright (see the [Preemption bullet](#lifecycle)). Still outstanding:
+Landed so far: `Cue.ts`, `audioCueSheet.ts`, `AssetManager.getManifestMetadata`, the stage-1 gain-ramp primitive, the sim-side cue-sheet types and `audioClipEntry` builder, `PlayOptions.from`/`to`/`loopRegion` with two-tier validation, the `useSound` keys for those three, `PlayOptions.fadeIn` with the `VoiceRecord` phase/intent fields and their atomic `t0` application, `AudioManager.fadeOut` with its timer-free single-release scheduling (#119/#122), `AudioManager.fadeTo` with the mutable voice ceiling its departure bound rests on, and `AudioManager.crossfade`, which writes the last intent slot to have had no production writer — `linkedFadeOut`, a crossfade's linkage held as a thunk so the record owns only _when_ it fires, while the verb owns what it does. All four slots now have one: `releaseOnStart`, `pendingFadeIn`, `pendingFadeTo` and `linkedFadeOut` are written by `fadeOut`, `PlayOptions.fadeIn`, `fadeTo` and `crossfade` respectively. Last of `AudioManager`'s own runtime behaviour, the **voice-preemption ranking** and `MUSIC_PRIORITY` (#123), which also disambiguated the design's one under-specified claim: #123's original term _listing_ admitted two non-equivalent readings of its "equal-or-higher-priority" qualifier, and the invariant now states the tier order and its direction outright (see the [Preemption bullet](#lifecycle)). Last of the renderer surface, the **hooks**: `useSound` now keys the whole of `PlayOptions`, `fadeIn` included — two scalar keys rather than one, since a fade is a duration and a curve and keying only their presence hands back a callback that plays the previous fade. A typed table in the hook's tests names every field, so a tenth one cannot be added without a case that reds until it is keyed. The live-handle verbs got `useMusicTrack`, whose control object carries `fadeOut`/`fadeTo`/`crossfade` and nothing else; it takes no argument and needs no null-handle semantics, since each verb's own handle names the voice. Still outstanding:
 
-1. **`useSound`** memo key list gains `fadeIn`; the live-handle verbs (`fadeOut`/`fadeTo`/`crossfade`, all three now on the manager) get a separate `useMusicTrack`/`useAudioHandle` hook that obtains the manager via `useAudioManager()` only (Invariant #84).
-2. **`docs/architecture-overview.md` §4.25** — extend the summary line (cue/fade/crossfade + the new `getManifestMetadata` channel).
-3. **Invariant roll-call** (`docs/executive-architecture/invariant-roll-call.md`) — graduate #116–#126 from the design-stage section of [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md#design-stage-invariants-pending-implementation) (where their text already lives) into the numbered roll-call, updating the total and per-invariant classification; add `check-invariants` fixture cases where a static check is feasible (e.g. the sim→renderer import-ban backing #124).
-4. **`validate-assets` tooling** — add the cue-sheet build gate (#125) with red-first anti-rot fixtures.
+1. **`docs/architecture-overview.md` §4.25** — extend the summary line (cue/fade/crossfade + the new `getManifestMetadata` channel).
+2. **Invariant roll-call** (`docs/executive-architecture/invariant-roll-call.md`) — graduate #116–#126 from the design-stage section of [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md#design-stage-invariants-pending-implementation) (where their text already lives) into the numbered roll-call, updating the total and per-invariant classification; add `check-invariants` fixture cases where a static check is feasible (e.g. the sim→renderer import-ban backing #124).
+3. **`validate-assets` tooling** — add the cue-sheet build gate (#125) with red-first anti-rot fixtures.
+4. **Hook reachability** — neither `useSound` nor `useMusicTrack` is in `renderer/package.json`'s `exports` map, and Invariant #96 lists hooks among the renderer internals game code must not import, so no game can reach either. Nothing outside their own tests calls them yet, so internal is where the hooks task stops; but the roadmap names a reference adopter, and adopting takes a decision this design has not recorded — a public subpath for the audio hooks, which moves Invariant #96 and the exhaustive key set in `renderer/__tests__/package-exports-contract.test.ts`, or an engine-owned component like `<EventAudioPlayer>` standing in for one.
 
 ---
 
@@ -420,4 +433,4 @@ Landed so far: `Cue.ts`, `audioCueSheet.ts`, `AssetManager.getManifestMetadata`,
 - [Settings System](settings-system.md) — `EngineSettings.audio.*` bus volumes
 - [Asset Reference System](asset-reference-system.md) — `AssetRef<AudioClipAsset>` resolution
 - [Renderer State Stores](renderer-state-stores.md) — `gameStore.events` observed by `<EventAudioPlayer>`
-- [Renderer Contexts](gameshell-ui-design-system.md#renderer-contexts) — `AudioManagerContext` / `useAudioManager()`
+- [Renderer Contexts](gameshell-ui-design-system.md#434-renderer-contexts--core-service-injection) — `AudioManagerContext` / `useAudioManager()`, the sole source for `useSound` and `useMusicTrack`

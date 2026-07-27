@@ -64,8 +64,16 @@ export interface AudioHandle {
 export interface AudioManager {
     play(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): AudioHandle;
     stop(handle: AudioHandle): void;
+    /** Ramp to silence, then stop — `{ overMs }`, `{ toCue }` or `{ toEnd: true }`. */
     fadeOut(handle: AudioHandle, spec: FadeOutSpec): void;
+    /** Ramp to an absolute gain and hold there — a dip or a swell, never a release. */
     fadeTo(handle: AudioHandle, spec: FadeToSpec): void;
+    /**
+     * Start `incoming` and link a fade-out of `outgoing` to the incoming voice's real
+     * start; returns the incoming handle. That handle names a voice still LOADING, and one
+     * that never plays at all if the play is rejected or the decode fails — see
+     * {@link DefaultAudioManager.crossfade} for what each of those leaves audible.
+     */
     crossfade(
         outgoing: AudioHandle,
         incoming: AssetRef<AudioClipAsset>,
@@ -309,7 +317,17 @@ const DEFAULT_VOLUME = 1;
 const BUS_IDS: readonly AudioBusId[] = ['master', 'music', 'sfx', 'voice'];
 const GAIN_RAMP_EPSILON = 1e-4;
 const EQUAL_POWER_WAYPOINTS = 64;
-const DEFAULT_FADE_CURVE: FadeCurve = 'linear';
+/**
+ * The default `curve` for `FadeInSpec`, `FadeOutSpec` and `FadeToSpec` (§4.25).
+ *
+ * Exported because `useSound` keys an omitted curve through this same value, and the two
+ * must move together: were they to disagree, `{ durationMs }` and
+ * `{ durationMs, curve: 'linear' }` would share one memo key while naming two different
+ * fades, and whichever rendered first would keep playing. The same coupling holds for the
+ * other four defaults that hook copies (`bus`, `loop`, `volume`, `priority`); they are
+ * still copies, and single-homing them is its own change.
+ */
+export const DEFAULT_FADE_CURVE: FadeCurve = 'linear';
 /**
  * A crossfade's own default, deliberately NOT {@link DEFAULT_FADE_CURVE}. Its two halves
  * are a matched pair rather than one fade: `equalPower`'s `sin`/`cos` quarter-waves keep
