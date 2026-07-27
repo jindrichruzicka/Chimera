@@ -17,7 +17,8 @@
     },
     "type": "module",
     "bin": {
-        "chimera-dev-mp": "dist/dev-tools/dev-harness/cli.js"
+        "chimera-dev-mp": "dist/dev-tools/dev-harness/cli.js",
+        "chimera-fetch-fonts": "dist/dev-tools/fetch-google-fonts/index.js"
     },
     "exports": {
         "./main": {

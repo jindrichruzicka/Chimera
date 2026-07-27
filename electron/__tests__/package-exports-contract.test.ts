@@ -120,8 +120,11 @@ describe('@chimera-engine/electron package surface (issue #777)', () => {
         }
     });
 
-    it('ships the chimera-dev-mp bin from dist (§4.32 — the packaged dev multiplayer harness)', () => {
-        expect(manifest.bin).toEqual({ 'chimera-dev-mp': 'dist/dev-tools/dev-harness/cli.js' });
+    it('ships the chimera-dev-mp and chimera-fetch-fonts bins from dist (§4.32 dev-tools)', () => {
+        expect(manifest.bin).toEqual({
+            'chimera-dev-mp': 'dist/dev-tools/dev-harness/cli.js',
+            'chimera-fetch-fonts': 'dist/dev-tools/fetch-google-fonts/index.js',
+        });
     });
 
     // Every assertion above compares the manifest against a literal, so the two

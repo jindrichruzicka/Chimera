@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -245,7 +246,8 @@ export function parseFetchGoogleFontsArgs(argv: readonly string[]): ParsedFetchG
     const srcPrefix = readFlagValue(argv, '--src-prefix');
     if (gameId === undefined || cssUrl === undefined) {
         throw new Error(
-            'Usage: tsx electron/dev-tools/fetch-google-fonts/index.ts --game <gameId> --url <google-css-url> [--out-dir <dir>] [--src-prefix <prefix>]',
+            'Usage: chimera-fetch-fonts --game <gameId> --url <google-css-url> [--out-dir <dir>] [--src-prefix <prefix>]' +
+                ' (monorepo: pnpm fetch:fonts -- --game <gameId> --url <google-css-url>)',
         );
     }
     return { gameId, cssUrl, workspaceRoot, outDir, srcPrefix };

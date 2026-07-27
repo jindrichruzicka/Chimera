@@ -9,7 +9,7 @@
  *
  *   - the root `fetch:fonts` script must run the tool at its new home;
  *   - neither the root manifest, the module-boundaries file-tree doc, nor the
- *     tool's own usage string may still name the retired
+ *     tool's own source may still name the retired
  *     `tools/fetch-google-fonts` location. The new path contains
  *     `dev-tools/fetch-google-fonts`, so the stale-reference scan matches the
  *     old path only when it is NOT the `dev-` prefixed one.
@@ -52,7 +52,7 @@ describe('fetch-google-fonts relocation (Invariant #97 tooling home)', () => {
         expect(readFileSync(rootManifestPath, 'utf8')).not.toMatch(stalePathPattern);
     });
 
-    it('names its new home in its own usage string, not the retired path', () => {
+    it('carries no retired-path reference in its own source', () => {
         expect(readFileSync(resolve(__dirname, 'index.ts'), 'utf8')).not.toMatch(stalePathPattern);
     });
 
