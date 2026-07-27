@@ -301,6 +301,42 @@ describe('blank template smoke harness', () => {
         expect(mp4.subarray(4, 8).toString('latin1')).toBe('ftyp');
     });
 
+    // Day-one font self-hosting (Invariant #97): the committed asset dir, an
+    // empty `gameFonts` declaration site forwarded through the shell loader,
+    // and an app-level fetch script naming the published bin. The explicit
+    // `--out-dir assets/fonts` is load-bearing: pnpm runs package scripts with
+    // cwd = apps/<kebab>, where the tool's default outDir would derive the
+    // doubled `apps/<kebab>/apps/<kebab>/assets/fonts`; a relative --out-dir
+    // resolves against that cwd and lands the download in the game's own
+    // asset dir.
+    it('establishes the committed assets/fonts/ convention', async () => {
+        await expect(readdir(path.join(blankTemplateDir, 'assets', 'fonts'))).resolves.toContain(
+            '.gitkeep',
+        );
+    });
+
+    it('ships an empty gameFonts stub on the type-only shell contract', async () => {
+        const fonts = await read('shell/fonts.ts');
+        expect(fonts).toContain(
+            "import type { GameFontFace } from '@chimera-engine/simulation/foundation/game-shell-contract.js';",
+        );
+        expect(fonts).toContain('export const gameFonts: readonly GameFontFace[] = [];');
+    });
+
+    it('forwards the gameFonts stub through the shell loader', async () => {
+        const loaders = await read('renderer/loaders.ts');
+        expect(loaders).toContain("import { gameFonts } from '../shell/fonts.js';");
+        expect(loaders).toContain('fonts: gameFonts');
+    });
+
+    it('wires an app-level fetch:fonts script naming the bin with an explicit --out-dir', async () => {
+        const pkg = JSON.parse(await read('package.json')) as { scripts: Record<string, string> };
+        const script = pkg.scripts['fetch:fonts'];
+        expect(script).toContain('chimera-fetch-fonts');
+        expect(script).toContain('--game __game_kebab__');
+        expect(script).toContain('--out-dir assets/fonts');
+    });
+
     it('names no model game in any smoke file (tokens only)', async () => {
         const files = [
             'manifest.test.ts',
@@ -313,6 +349,9 @@ describe('blank template smoke harness', () => {
             'e2e/tsconfig.json',
             'electron-builder.yml',
             'electron/verify-packaged-bundle.ts',
+            'shell/fonts.ts',
+            'renderer/loaders.ts',
+            'package.json',
         ];
         for (const rel of files) {
             expect((await read(rel)).toLowerCase()).not.toContain('tactics');

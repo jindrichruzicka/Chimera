@@ -1,11 +1,13 @@
-// __Game Title__'s renderer bundle loaders. Kept as dynamic `import()`s so the
-// heavy screen/shell modules stay code-split while registration (register.ts)
-// remains a cheap, eager side effect. The renderer seam calls these to load the
-// game's screens and shell on demand.
+// __Game Title__'s renderer bundle loaders. Heavy screen/shell modules stay
+// dynamic `import()`s so they remain code-split while registration
+// (register.ts) stays a cheap, eager side effect; light data-only shell
+// declarations (the font list) may load statically. The renderer seam calls
+// these to load the game's screens and shell on demand.
 
 import type { LoadedRendererGame, LoadedRendererGameShell } from '@chimera-engine/renderer/game';
 
 import { __gameCamel__Manifest } from '../manifest.js';
+import { gameFonts } from '../shell/fonts.js';
 
 export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGame> {
     const screenModule = await import('../screens/index.js');
@@ -14,16 +16,19 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
     };
 }
 
-// No game-specific shell yet — the engine renders its default main menu,
-// settings, lobby, and background. To customise them, add a `shell/` directory
-// and return its definitions here (`mainMenu`, `menuCommands`, `settings`,
-// `shellBackground`, `LobbyScreen`, `fonts`, `icons`); every field is optional.
+// The engine renders its default main menu, settings, lobby, and background.
+// Only the `shell/fonts.ts` declaration site is wired so far; every other
+// `LoadedRendererGameShell` field (`mainMenu`, `settings`, `icons`, …) is an
+// optional customisation returned here.
 export function load__GamePascal__RendererGameShell(): Promise<LoadedRendererGameShell> {
     return Promise.resolve({
         // The manifest's cursor declaration, forwarded verbatim: the renderer
         // seam turns it into `--ch-cursor-*` token overrides. Undeclared (the
         // manifest example commented out) ⇒ undefined ⇒ strict no-op.
         cursor: __gameCamel__Manifest.cursor,
+        // Self-hosted font faces (Invariant #97), empty until the app's
+        // `fetch:fonts` script populates shell/fonts.ts.
+        fonts: gameFonts,
         // Game-contributed UI icon glyphs, keyed `game.<gameId>.<name>`. Author
         // them on the engine `IconGlyph` contract (a `viewBox` + fill-based
         // `content` with no `fill`) and the engine `<Icon name="game.…">` renders

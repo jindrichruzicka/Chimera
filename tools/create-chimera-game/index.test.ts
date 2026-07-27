@@ -67,12 +67,19 @@ describe('scaffoldGame', () => {
                 {
                     name: '@chimera-engine/__game_kebab__',
                     private: true,
+                    scripts: {
+                        'fetch:fonts':
+                            'chimera-fetch-fonts --game __game_kebab__ --url <google-css-url> --out-dir assets/fonts',
+                    },
                     dependencies: { '@chimera-engine/simulation': 'workspace:*' },
                 },
                 null,
                 4,
             ),
         );
+        // Committed-asset-dir convention: an EMPTY dotfile, the shape most at
+        // risk of being dropped by a copy-pipeline filter.
+        await write('templates/blank/assets/fonts/.gitkeep', '');
         await write(
             'templates/blank/content/__gameCamel__Content.ts',
             [
@@ -201,6 +208,15 @@ describe('scaffoldGame', () => {
 
         const pkg = JSON.parse(await readFile(path.join(result.appDir, 'package.json'), 'utf8'));
         expect(pkg.name).toBe('@chimera-engine/my-game');
+        // The kebab token substitutes inside the fetch:fonts script, so the
+        // scaffolded app fetches under its own game id.
+        expect(pkg.scripts['fetch:fonts']).toContain('--game my-game');
+
+        // Dotfiles must survive the copy: the committed asset-dir convention
+        // ships as an empty .gitkeep (Invariant #97).
+        await expect(
+            readFile(path.join(result.appDir, 'assets', 'fonts', '.gitkeep'), 'utf8'),
+        ).resolves.toBe('');
     });
 
     it('does not copy the template node_modules and leaves no token markers behind', async () => {

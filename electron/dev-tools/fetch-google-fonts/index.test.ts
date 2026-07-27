@@ -292,6 +292,20 @@ describe('parseFetchGoogleFontsArgs', () => {
         expect(args.srcPrefix).toBe('fonts');
     });
 
+    it('defaults workspaceRoot to the invocation cwd when --workspace-root is omitted', () => {
+        // Load-bearing for the scaffolded fetch:fonts script: pnpm runs it
+        // with cwd = the app package, and the relative --out-dir resolves
+        // against this default.
+        const args = parseFetchGoogleFontsArgs([
+            '--game',
+            'my-game',
+            '--url',
+            'https://fonts.googleapis.com/css2?family=Cinzel',
+        ]);
+
+        expect(args.workspaceRoot).toBe(process.cwd());
+    });
+
     it('leaves outDir and srcPrefix undefined when the flags are omitted', () => {
         const args = parseFetchGoogleFontsArgs([
             '--game',
