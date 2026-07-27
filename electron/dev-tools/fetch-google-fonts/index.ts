@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type {
@@ -38,6 +38,18 @@ export interface FetchGoogleFontsForGameOptions {
     readonly gameId: string;
     readonly cssUrl: string;
     readonly workspaceRoot: string;
+    /**
+     * Download directory; a relative value resolves against `workspaceRoot`.
+     * Defaults to the monorepo layout `apps/<gameId>/assets/fonts`.
+     */
+    readonly outDir?: string;
+    /**
+     * Prefix of every emitted `GameFontFace.src`. Rejected when absolute,
+     * backslash-rooted, or scheme-prefixed (`https:`, `file:`, drive letters),
+     * so the emitted src stays a relative committed-asset reference
+     * (Invariant #97). Defaults to `<gameId>/fonts`.
+     */
+    readonly srcPrefix?: string;
     readonly fetchFont?: FontFetch;
     readonly host?: FontFileHost;
 }
@@ -94,6 +106,20 @@ export function parseGoogleFontsCss(css: string): readonly ParsedGoogleFontFace[
 export async function fetchGoogleFontsForGame(
     options: FetchGoogleFontsForGameOptions,
 ): Promise<FetchGoogleFontsForGameResult> {
+    // Guard the defaulted value, not just an explicit option: a hostile gameId
+    // would otherwise derive a non-relative default prefix. The scheme pattern
+    // mirrors the renderer's unsafe-shell-asset-source policy.
+    const srcPrefix = options.srcPrefix ?? `${options.gameId}/fonts`;
+    if (
+        isAbsolute(srcPrefix) ||
+        srcPrefix.startsWith('\\') ||
+        /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(srcPrefix)
+    ) {
+        throw new Error(
+            `srcPrefix must be a relative asset path, never absolute or scheme-prefixed (Invariant #97): ${srcPrefix}`,
+        );
+    }
+
     const fetchFont = options.fetchFont ?? defaultFontFetch;
     const host = options.host ?? createNodeFontFileHost();
     const cssResponse = await fetchFont(options.cssUrl, {
@@ -113,14 +139,11 @@ export async function fetchGoogleFontsForGame(
         throw new Error('No woff2 font faces were found in the Google Fonts CSS response.');
     }
 
-    const sourceFontDir = resolve(
-        options.workspaceRoot,
-        // Game apps live under apps/<gameId>/.
-        'apps',
-        options.gameId,
-        'assets',
-        'fonts',
-    );
+    const sourceFontDir =
+        options.outDir === undefined
+            ? // Game apps live under apps/<gameId>/.
+              resolve(options.workspaceRoot, 'apps', options.gameId, 'assets', 'fonts')
+            : resolve(options.workspaceRoot, options.outDir);
     await host.ensureDirectory(sourceFontDir);
 
     const downloads: DownloadedGameFontFile[] = [];
@@ -139,7 +162,7 @@ export async function fetchGoogleFontsForGame(
 
         const font: GameFontFace = {
             family: face.family,
-            src: `${options.gameId}/fonts/${fileName}`,
+            src: `${srcPrefix}/${fileName}`,
             weight: face.weight,
             style: face.style,
             display: face.display,
@@ -173,12 +196,9 @@ export function formatGameFontFacesSnippet(fonts: readonly GameFontFace[]): stri
 }
 
 export async function runFetchGoogleFontsCli(argv: readonly string[]): Promise<void> {
-    const args = parseFetchGoogleFontsArgs(argv);
-    const result = await fetchGoogleFontsForGame({
-        gameId: args.gameId,
-        cssUrl: args.cssUrl,
-        workspaceRoot: args.workspaceRoot,
-    });
+    const result = await fetchGoogleFontsForGame(
+        buildFetchGoogleFontsOptions(parseFetchGoogleFontsArgs(argv)),
+    );
 
     for (const download of result.downloads) {
         console.log(`wrote ${download.sourceAssetPath}`);
@@ -193,20 +213,42 @@ export function isDirectInvocation(importMetaUrl: string, argv1: string | undefi
     return fileURLToPath(importMetaUrl) === argv1;
 }
 
-function parseFetchGoogleFontsArgs(argv: readonly string[]): {
+export interface ParsedFetchGoogleFontsArgs {
     readonly gameId: string;
     readonly cssUrl: string;
     readonly workspaceRoot: string;
-} {
+    readonly outDir: string | undefined;
+    readonly srcPrefix: string | undefined;
+}
+
+/**
+ * Maps parsed CLI args onto fetch options, omitting absent optionals entirely
+ * (`exactOptionalPropertyTypes` — an explicit `undefined` is not assignable).
+ */
+export function buildFetchGoogleFontsOptions(
+    args: ParsedFetchGoogleFontsArgs,
+): FetchGoogleFontsForGameOptions {
+    return {
+        gameId: args.gameId,
+        cssUrl: args.cssUrl,
+        workspaceRoot: args.workspaceRoot,
+        ...(args.outDir === undefined ? {} : { outDir: args.outDir }),
+        ...(args.srcPrefix === undefined ? {} : { srcPrefix: args.srcPrefix }),
+    };
+}
+
+export function parseFetchGoogleFontsArgs(argv: readonly string[]): ParsedFetchGoogleFontsArgs {
     const gameId = readFlagValue(argv, '--game');
     const cssUrl = readFlagValue(argv, '--url');
     const workspaceRoot = readFlagValue(argv, '--workspace-root') ?? process.cwd();
+    const outDir = readFlagValue(argv, '--out-dir');
+    const srcPrefix = readFlagValue(argv, '--src-prefix');
     if (gameId === undefined || cssUrl === undefined) {
         throw new Error(
-            'Usage: tsx electron/dev-tools/fetch-google-fonts/index.ts --game <gameId> --url <google-css-url>',
+            'Usage: tsx electron/dev-tools/fetch-google-fonts/index.ts --game <gameId> --url <google-css-url> [--out-dir <dir>] [--src-prefix <prefix>]',
         );
     }
-    return { gameId, cssUrl, workspaceRoot };
+    return { gameId, cssUrl, workspaceRoot, outDir, srcPrefix };
 }
 
 function readFlagValue(argv: readonly string[], flag: string): string | undefined {

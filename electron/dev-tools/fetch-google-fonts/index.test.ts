@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+    buildFetchGoogleFontsOptions,
     fetchGoogleFontsForGame,
     formatGameFontFacesSnippet,
+    parseFetchGoogleFontsArgs,
     parseGoogleFontsCss,
     type FontFetch,
     type FontFileHost,
@@ -31,6 +33,15 @@ const cinzelCss = `
   src: url(https://fonts.gstatic.com/s/cinzel/v25/8vIJ7ww63mVu7gt79mT9.woff2) format('woff2');
 }
 `;
+
+const cinzelCssUrl = 'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900';
+
+const cinzelResponses: Readonly<Record<string, string>> = {
+    [cinzelCssUrl]: cinzelCss,
+    'https://fonts.gstatic.com/s/cinzel/v25/8vIJ7ww63mVu7gt79mT7.woff2': 'regular',
+    'https://fonts.gstatic.com/s/cinzel/v25/8vIJ7ww63mVu7gt79mT_.woff2': 'bold',
+    'https://fonts.gstatic.com/s/cinzel/v25/8vIJ7ww63mVu7gt79mT9.woff2': 'black',
+};
 
 describe('parseGoogleFontsCss', () => {
     it('extracts woff2 font-face declarations from Google Fonts CSS', () => {
@@ -85,16 +96,11 @@ describe('parseGoogleFontsCss', () => {
 describe('fetchGoogleFontsForGame', () => {
     it('downloads Google font files into source and renderer public asset locations', async () => {
         const host = createFontFileHost();
-        const fetchFont = createFontFetch({
-            'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900': cinzelCss,
-            'https://fonts.gstatic.com/s/cinzel/v25/8vIJ7ww63mVu7gt79mT7.woff2': 'regular',
-            'https://fonts.gstatic.com/s/cinzel/v25/8vIJ7ww63mVu7gt79mT_.woff2': 'bold',
-            'https://fonts.gstatic.com/s/cinzel/v25/8vIJ7ww63mVu7gt79mT9.woff2': 'black',
-        });
+        const fetchFont = createFontFetch(cinzelResponses);
 
         const result = await fetchGoogleFontsForGame({
             gameId: 'tactics',
-            cssUrl: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900',
+            cssUrl: cinzelCssUrl,
             workspaceRoot: '/repo',
             fetchFont,
             host,
@@ -148,6 +154,192 @@ describe('fetchGoogleFontsForGame', () => {
                 host,
             }),
         ).rejects.toThrow('No woff2 font faces were found');
+    });
+
+    it('writes downloads under a workspaceRoot-relative outDir when supplied', async () => {
+        const host = createFontFileHost();
+        const fetchFont = createFontFetch(cinzelResponses);
+
+        // The standalone scaffold's exact shape: cwd (= workspaceRoot) is the
+        // app package apps/<kebab>, and the scaffolded script will pass
+        // --out-dir assets/fonts.
+        const result = await fetchGoogleFontsForGame({
+            gameId: 'my-game',
+            cssUrl: cinzelCssUrl,
+            workspaceRoot: '/w/apps/my-game',
+            outDir: 'assets/fonts',
+            fetchFont,
+            host,
+        });
+
+        expect([...host.writes.keys()]).toEqual([
+            '/w/apps/my-game/assets/fonts/Cinzel-Regular.woff2',
+            '/w/apps/my-game/assets/fonts/Cinzel-Bold.woff2',
+            '/w/apps/my-game/assets/fonts/Cinzel-Black.woff2',
+        ]);
+        // Only the download location moves; the emitted src keeps its
+        // `${gameId}/fonts` default.
+        expect(result.fonts.map((font) => font.src)).toEqual([
+            'my-game/fonts/Cinzel-Regular.woff2',
+            'my-game/fonts/Cinzel-Bold.woff2',
+            'my-game/fonts/Cinzel-Black.woff2',
+        ]);
+    });
+
+    it('takes an absolute outDir as-is', async () => {
+        const host = createFontFileHost();
+        const fetchFont = createFontFetch(cinzelResponses);
+
+        await fetchGoogleFontsForGame({
+            gameId: 'tactics',
+            cssUrl: cinzelCssUrl,
+            workspaceRoot: '/repo',
+            outDir: '/srv/fonts',
+            fetchFont,
+            host,
+        });
+
+        expect([...host.writes.keys()]).toEqual([
+            '/srv/fonts/Cinzel-Regular.woff2',
+            '/srv/fonts/Cinzel-Bold.woff2',
+            '/srv/fonts/Cinzel-Black.woff2',
+        ]);
+    });
+
+    it('emits src under a custom srcPrefix while downloads stay at the default location', async () => {
+        const host = createFontFileHost();
+        const fetchFont = createFontFetch(cinzelResponses);
+
+        const result = await fetchGoogleFontsForGame({
+            gameId: 'tactics',
+            cssUrl: cinzelCssUrl,
+            workspaceRoot: '/repo',
+            srcPrefix: 'fonts',
+            fetchFont,
+            host,
+        });
+
+        expect(result.fonts.map((font) => font.src)).toEqual([
+            'fonts/Cinzel-Regular.woff2',
+            'fonts/Cinzel-Bold.woff2',
+            'fonts/Cinzel-Black.woff2',
+        ]);
+        expect([...host.writes.keys()]).toEqual([
+            '/repo/apps/tactics/assets/fonts/Cinzel-Regular.woff2',
+            '/repo/apps/tactics/assets/fonts/Cinzel-Bold.woff2',
+            '/repo/apps/tactics/assets/fonts/Cinzel-Black.woff2',
+        ]);
+    });
+
+    it.each([
+        '/etc/fonts',
+        'https://fonts.gstatic.com/hosted',
+        'http://evil.example/fonts',
+        'HTTPS://evil.example/fonts',
+        'file:///etc/fonts',
+        'C:\\fonts',
+        '\\\\server\\fonts',
+    ])('rejects the non-relative srcPrefix %s before any fetch', async (srcPrefix) => {
+        const host = createFontFileHost();
+        const fetchFont = vi.fn(createFontFetch(cinzelResponses));
+
+        await expect(
+            fetchGoogleFontsForGame({
+                gameId: 'tactics',
+                cssUrl: cinzelCssUrl,
+                workspaceRoot: '/repo',
+                srcPrefix,
+                fetchFont,
+                host,
+            }),
+        ).rejects.toThrow(/srcPrefix/u);
+        expect(fetchFont).not.toHaveBeenCalled();
+        expect(host.writes.size).toBe(0);
+    });
+
+    it('runs the derived default srcPrefix through the same guard', async () => {
+        const host = createFontFileHost();
+        const fetchFont = vi.fn(createFontFetch(cinzelResponses));
+
+        await expect(
+            fetchGoogleFontsForGame({
+                gameId: '/pwn',
+                cssUrl: cinzelCssUrl,
+                workspaceRoot: '/repo',
+                fetchFont,
+                host,
+            }),
+        ).rejects.toThrow(/srcPrefix/u);
+        expect(fetchFont).not.toHaveBeenCalled();
+        expect(host.writes.size).toBe(0);
+    });
+});
+
+describe('parseFetchGoogleFontsArgs', () => {
+    it('reads --out-dir and --src-prefix into the parsed options', () => {
+        const args = parseFetchGoogleFontsArgs([
+            '--game',
+            'my-game',
+            '--url',
+            'https://fonts.googleapis.com/css2?family=Cinzel',
+            '--out-dir',
+            'assets/fonts',
+            '--src-prefix',
+            'fonts',
+        ]);
+
+        expect(args.outDir).toBe('assets/fonts');
+        expect(args.srcPrefix).toBe('fonts');
+    });
+
+    it('leaves outDir and srcPrefix undefined when the flags are omitted', () => {
+        const args = parseFetchGoogleFontsArgs([
+            '--game',
+            'my-game',
+            '--url',
+            'https://fonts.googleapis.com/css2?family=Cinzel',
+        ]);
+
+        expect(args.outDir).toBeUndefined();
+        expect(args.srcPrefix).toBeUndefined();
+    });
+
+    it('documents the optional flags in the usage error', () => {
+        expect(() => parseFetchGoogleFontsArgs([])).toThrow(/--out-dir/u);
+        expect(() => parseFetchGoogleFontsArgs([])).toThrow(/--src-prefix/u);
+    });
+});
+
+describe('buildFetchGoogleFontsOptions', () => {
+    it('threads supplied flags into the fetch options', () => {
+        const options = buildFetchGoogleFontsOptions({
+            gameId: 'my-game',
+            cssUrl: cinzelCssUrl,
+            workspaceRoot: '/w/apps/my-game',
+            outDir: 'assets/fonts',
+            srcPrefix: 'fonts',
+        });
+
+        expect(options).toEqual({
+            gameId: 'my-game',
+            cssUrl: cinzelCssUrl,
+            workspaceRoot: '/w/apps/my-game',
+            outDir: 'assets/fonts',
+            srcPrefix: 'fonts',
+        });
+    });
+
+    it('omits absent flags entirely instead of passing undefined', () => {
+        const options = buildFetchGoogleFontsOptions({
+            gameId: 'my-game',
+            cssUrl: cinzelCssUrl,
+            workspaceRoot: '/w/apps/my-game',
+            outDir: undefined,
+            srcPrefix: undefined,
+        });
+
+        expect('outDir' in options).toBe(false);
+        expect('srcPrefix' in options).toBe(false);
     });
 });
 
