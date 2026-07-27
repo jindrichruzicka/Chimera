@@ -203,7 +203,7 @@ function parseFetchGoogleFontsArgs(argv: readonly string[]): {
     const workspaceRoot = readFlagValue(argv, '--workspace-root') ?? process.cwd();
     if (gameId === undefined || cssUrl === undefined) {
         throw new Error(
-            'Usage: tsx tools/fetch-google-fonts.ts --game <gameId> --url <google-css-url>',
+            'Usage: tsx electron/dev-tools/fetch-google-fonts/index.ts --game <gameId> --url <google-css-url>',
         );
     }
     return { gameId, cssUrl, workspaceRoot };

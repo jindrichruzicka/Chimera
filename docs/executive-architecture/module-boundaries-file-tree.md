@@ -76,7 +76,8 @@ chimera/
 │   │       ├── DevHarnessCoordinator.ts  # Auto host/join/seed/ready/start flow over the LobbyManager port
 │   │       └── dev-fixture-loader.ts     # Seed-profile + scenario loading, atomic announce write
 │   ├── dev-tools/                   # Development-time CLIs published as bins of @chimera-engine/electron so standalone games run them too
-│   │   └── dev-harness/             # `chimera-dev-mp` bin + harness library (spawn planning, announce handshake); see §4.32
+│   │   ├── dev-harness/             # `chimera-dev-mp` bin + harness library (spawn planning, announce handshake); see §4.32
+│   │   └── fetch-google-fonts/      # Dev-time Google Fonts downloader; writes committed self-hosted .woff2 files (Invariant #97)
 │   ├── preload/
 │   │   ├── api.ts                   # Composes the following namespaces below into window.__chimera
 │   │   ├── api-types.ts             # Type-only module: ChimeraAPI, ChimeraExtensions, all namespace interfaces
@@ -312,7 +313,6 @@ chimera/
 │
 ├── tools/
 │   ├── dev-server.ts                # Hot-reload dev harness
-│   ├── fetch-google-fonts.ts        # Dev-time Google Fonts downloader; writes committed self-hosted .woff2 files
 │   ├── desync-logger.ts             # Snapshot diff log for debugging
 │   ├── validate-assets.ts           # CI: verify AssetRef strings and GameFontFace files resolve to disk
 │   └── migrate-save.ts              # CLI: run SaveMigrator against a save file

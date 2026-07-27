@@ -6,7 +6,7 @@ import {
     parseGoogleFontsCss,
     type FontFetch,
     type FontFileHost,
-} from './fetch-google-fonts.js';
+} from './index.js';
 
 const cinzelCss = `
 @font-face {

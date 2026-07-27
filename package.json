@@ -56,7 +56,7 @@
         "lint:fix": "eslint . --fix",
         "coverage": "pnpm build:packages && vitest run --coverage",
         "build:renderer": "pnpm build:packages && next build renderer",
-        "fetch:fonts": "pnpm build:packages && tsx tools/fetch-google-fonts.ts",
+        "fetch:fonts": "pnpm build:packages && tsx electron/dev-tools/fetch-google-fonts/index.ts",
         "dev:mp": "pnpm build:packages && pnpm exec next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app && pnpm --filter @chimera-engine/tactics dev:mp",
         "create:game": "tsx tools/create-chimera-game/index.ts --workspace",
         "practice:packaged-build": "tsx tools/practice-packaged-build.ts"
