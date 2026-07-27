@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import type { AudioClipMetadata } from '@chimera-engine/simulation/foundation/audio-cue-sheet.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -11,6 +12,7 @@ import {
     runValidateAssetsCli,
     toAssetValidationExitCode,
     validateAssetWorkspace,
+    type AssetValidationReport,
     type WorkspaceFileHost,
 } from './validate-assets.js';
 
@@ -285,6 +287,938 @@ describe('validateAssetWorkspace', () => {
         );
     });
 });
+
+// ── audio cue sheets (Invariant #125) ────────────────────────────────────────
+
+/**
+ * The build-time half of Invariant #125.
+ *
+ * Reject cases assert the exact reason ARRAY rather than `[0].reason`, so a mutant that
+ * appends a spurious extra finding is caught alongside one that changes the first.
+ */
+describe('audio cue sheet validation', () => {
+    it('accepts a well-formed sheet', async () => {
+        const sheet: AudioClipMetadata = {
+            cues: { intro: 0, loopStart: 4, loopEnd: 86, outro: 86 },
+            defaultLoopRegion: ['loopStart', 'loopEnd'],
+            durationSeconds: 90,
+        };
+
+        const report = await validateManifestEntries(audioClipEntrySource(JSON.stringify(sheet)));
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidCueSheets).toHaveLength(0);
+    });
+
+    it('accepts an audio-clip entry that declares no metadata at all', async () => {
+        const report = await validateManifestEntries(
+            `{ ref: 'tactics/audio/theme.ogg', kind: 'audio-clip', priority: 'critical' }`,
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidCueSheets).toHaveLength(0);
+    });
+
+    it('accepts durationSeconds on its own, with neither cues nor a loop region', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ durationSeconds: 90 }`),
+        );
+
+        expect(report.ok).toBe(true);
+    });
+
+    it('leaves a non-audio-clip entry carrying cue-shaped metadata untouched', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: 'tactics/audio/theme.ogg',
+                kind: 'texture',
+                priority: 'critical',
+                metadata: { cues: { intro: -1 } },
+            }`,
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidCueSheets).toHaveLength(0);
+    });
+
+    it('rejects a cue second beyond durationSeconds, naming the cue and both values', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: 91 }, durationSeconds: 90 }`),
+        );
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(toAssetValidationExitCode(report)).toBe(1);
+        expect(cueSheetReasons(report)).toEqual(['cue "intro" (91) exceeds durationSeconds (90)']);
+        expect(report.invalidCueSheets[0]?.ref).toBe('tactics/audio/theme.ogg');
+        expect(report.invalidCueSheets[0]?.source.location).toBe('entries[0].metadata');
+        expect(output).toContain('Invalid audio cue sheets:');
+        expect(output).toContain('tactics/audio/theme.ogg');
+        expect(output).toContain('cue "intro" (91) exceeds durationSeconds (90)');
+        // The only line naming the file and entry, and so the difference between a build
+        // failure an author can act on and one they cannot.
+        expect(output).toContain('apps/tactics/asset-manifest.ts entries[0].metadata');
+    });
+
+    it('names the entry as unreadable when its ref is not a literal', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: refs.theme,
+                kind: 'audio-clip',
+                priority: 'critical',
+                metadata: { cues: { intro: 91 }, durationSeconds: 90 },
+            }`,
+        );
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(cueSheetReasons(report)).toEqual(['cue "intro" (91) exceeds durationSeconds (90)']);
+        expect(report.invalidCueSheets[0]?.ref).toBeUndefined();
+        expect(output).toContain('- (unreadable ref)');
+    });
+
+    it('rejects an entry that declares metadata under a kind it cannot read', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: 'tactics/audio/theme.ogg',
+                kind: AUDIO_CLIP,
+                priority: 'critical',
+                metadata: { cues: { intro: 91 }, durationSeconds: 90 },
+            }`,
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'entry declares metadata but its kind is not a statically-readable literal, so the entry cannot be classified',
+        ]);
+        expect(report.invalidCueSheets[0]?.ref).toBe('tactics/audio/theme.ogg');
+        expect(report.invalidCueSheets[0]?.source.location).toBe('entries[0].metadata');
+    });
+
+    // The readability rule reaches the ENTRY too, not just the sheet and its cues: a
+    // spread or computed key here means an absent `metadata` property proves nothing.
+    it('rejects an audio-clip entry assembled by spreading another object', async () => {
+        const report = await validateManifestEntries(
+            `{ ref: 'tactics/audio/theme.ogg', kind: 'audio-clip', ...withMetadata }`,
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'entry contains a member that is not a "name: value" property, so a cue sheet on it cannot be ruled out',
+        ]);
+    });
+
+    it('rejects an audio-clip entry whose metadata key is computed', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: 'tactics/audio/theme.ogg',
+                kind: 'audio-clip',
+                priority: 'critical',
+                ['metadata']: { cues: { intro: 91 }, durationSeconds: 90 },
+            }`,
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'entry contains a member whose key is not a statically-readable name, so a cue sheet on it cannot be ruled out',
+        ]);
+    });
+
+    it('rejects a builder-authored entry assembled by spreading another object', async () => {
+        const report = await validateManifestEntries(
+            `audioClipEntry({ ref: 'tactics/audio/theme.ogg', ...withMetadata })`,
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'entry contains a member that is not a "name: value" property, so a cue sheet on it cannot be ruled out',
+        ]);
+    });
+
+    it('leaves a non-audio-clip entry assembled by spreading alone', async () => {
+        const report = await validateManifestEntries(
+            `{ ref: 'tactics/audio/theme.ogg', kind: 'texture', ...rest }`,
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidCueSheets).toHaveLength(0);
+    });
+
+    // Each of these composes two defects that are individually caught, and each pair
+    // used to CANCEL: the entry gate needs a readable `'audio-clip'` kind, and the
+    // unreadable-kind guard needs a visible `metadata` — hiding one satisfies neither.
+    // Only a readable non-audio kind rules a cue sheet out.
+    it('rejects an entry hiding both its kind and its metadata behind a spread', async () => {
+        const report = await validateManifestEntries(
+            `{ ref: 'tactics/audio/theme.ogg', ...withKindAndMetadata }`,
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'entry contains a member that is not a "name: value" property, so a cue sheet on it cannot be ruled out',
+        ]);
+    });
+
+    it('rejects an unreadable kind beside a spread-in metadata', async () => {
+        const report = await validateManifestEntries(
+            `{ ref: 'tactics/audio/theme.ogg', kind: AUDIO_CLIP, ...withMetadata }`,
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'entry contains a member that is not a "name: value" property, so a cue sheet on it cannot be ruled out',
+        ]);
+    });
+
+    it('rejects an unreadable kind beside a computed metadata key', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: 'tactics/audio/theme.ogg',
+                kind: AUDIO_CLIP,
+                ['metadata']: { cues: { intro: 91 }, durationSeconds: 90 },
+            }`,
+        );
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(cueSheetReasons(report)).toEqual([
+            'entry contains a member whose key is not a statically-readable name, so a cue sheet on it cannot be ruled out',
+        ]);
+        // The finding names the entry, not a `.metadata` slot the reader never saw.
+        expect(report.invalidCueSheets[0]?.source.location).toBe('entries[0]');
+        expect(report.invalidCueSheets[0]?.ref).toBe('tactics/audio/theme.ogg');
+        expect(output).toContain('apps/tactics/asset-manifest.ts entries[0]');
+    });
+
+    // The one shape the gate deliberately does not reach: an element the walker cannot
+    // unwrap to an object literal at all. Pinned so the documented boundary cannot move
+    // in either direction unnoticed.
+    it('skips an entries element extracted to a constant', async () => {
+        const report = await validateManifestEntries(`THEME_ENTRY`);
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidCueSheets).toHaveLength(0);
+    });
+
+    it('leaves an entry with an unreadable kind alone when it declares no metadata', async () => {
+        const report = await validateManifestEntries(
+            `{ ref: 'tactics/audio/theme.ogg', kind: AUDIO_CLIP, priority: 'critical' }`,
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidCueSheets).toHaveLength(0);
+    });
+
+    it('accepts a cue second exactly equal to durationSeconds', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { outro: 90 }, durationSeconds: 90 }`),
+        );
+
+        expect(report.ok).toBe(true);
+    });
+
+    it('accepts a cue second of exactly zero', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: 0 }, durationSeconds: 90 }`),
+        );
+
+        expect(report.ok).toBe(true);
+    });
+
+    it('accepts a durationSeconds of exactly zero', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: 0 }, durationSeconds: 0 }`),
+        );
+
+        expect(report.ok).toBe(true);
+    });
+
+    // Real cue sheets are fractional, and a reader that rounds still passes every
+    // whole-second fixture. This is the only case that separates the two.
+    it('compares fractional cue seconds without rounding', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { outro: 90.5 }, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'cue "outro" (90.5) exceeds durationSeconds (90)',
+        ]);
+    });
+
+    it('reads numbers through an as-annotation, the way a manifest annotates them', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: 4 as number }, durationSeconds: 90 as number }`),
+        );
+
+        expect(report.ok).toBe(true);
+    });
+
+    // `satisfies` is the idiomatic way to type an inline sheet, and it is a different
+    // AST node from `as` — a reader peeling only `as` rejects this as unreadable, which
+    // is exactly the wrong answer for a literal written out in full.
+    it('reads a sheet and its numbers through a satisfies-annotation', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{ cues: { intro: 4 satisfies number }, durationSeconds: 90 } satisfies AudioClipMetadata`,
+            ),
+        );
+
+        expect(report.ok).toBe(true);
+    });
+
+    it('gates a sheet reached through a satisfies-annotation', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{ cues: { intro: 91 }, durationSeconds: 90 } satisfies AudioClipMetadata`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual(['cue "intro" (91) exceeds durationSeconds (90)']);
+    });
+
+    // `-1` parses as a minus token wrapping a numeric literal, never as a numeric
+    // literal. A reader that does not unwrap it reports the cue as unreadable —
+    // still a failure, but the wrong one, telling the author to inline a value they
+    // already inlined. Pin the reason, not just the failure.
+    it('rejects a negative cue second as negative, not as unreadable', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: -1 }, durationSeconds: 90 }`),
+        );
+
+        expect(report.ok).toBe(false);
+        expect(cueSheetReasons(report)).toEqual(['cue "intro" (-1) is negative']);
+    });
+
+    it('rejects a cue second that is not a statically-readable number literal', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: NaN }, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'cue "intro" is not a statically-readable number literal',
+        ]);
+    });
+
+    it('rejects a cue second that reads as a non-finite number', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: 1e999 }, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual(['cue "intro" is not finite']);
+    });
+
+    it('reports every out-of-range cue in a sheet, not just the first', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{ cues: { intro: -1, outro: 91, loopStart: 4 }, durationSeconds: 90 }`,
+            ),
+        );
+
+        expect(report.ok).toBe(false);
+        expect(cueSheetReasons(report)).toEqual([
+            'cue "intro" (-1) is negative',
+            'cue "outro" (91) exceeds durationSeconds (90)',
+        ]);
+    });
+
+    // `zz` is authored first but sorts second. Drop `reason` from the sort key and this
+    // fixture reports in authoring order instead.
+    it('orders findings by reason rather than by where the cue was authored', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { zz: -1, aa: 91 }, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'cue "aa" (91) exceeds durationSeconds (90)',
+            'cue "zz" (-1) is negative',
+        ]);
+    });
+
+    // A structurally unreadable table takes a different exit than an out-of-range cue,
+    // and both must suppress the region check: reporting a region against a table that
+    // was never read yields two findings for one mistake. The spread also pins the
+    // fail-fast — the out-of-range `bad` beside it is deliberately not reported.
+    it('stops before the region check when the cue table cannot be read', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{
+                    cues: { ...sharedCues, bad: 999 },
+                    defaultLoopRegion: ['a', 'b'],
+                    durationSeconds: 90,
+                }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'cues contains an entry that is not a "name: seconds" property',
+        ]);
+    });
+
+    it('stops before the region check when a cue failed, reporting only the cue', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{
+                    cues: { a: 1, b: 999 },
+                    defaultLoopRegion: ['x', 'y'],
+                    durationSeconds: 90,
+                }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual(['cue "b" (999) exceeds durationSeconds (90)']);
+    });
+
+    // Two entries, and the later one's reason sorts first. Every other fixture here has a
+    // single entry, so only the `reason` half of the sort key is exercised — drop the
+    // file/location half and findings interleave across entries instead of grouping.
+    it('groups findings by entry before ordering them by reason', async () => {
+        const report = await validateManifestEntries(
+            `${audioClipEntrySource(`{ cues: { zz: 91 }, durationSeconds: 90 }`)},
+             ${audioClipEntrySource(`{ cues: { aa: -1 }, durationSeconds: 90 }`)}`,
+        );
+
+        expect(
+            report.invalidCueSheets.map((sheet) => `${sheet.source.location} ${sheet.reason}`),
+        ).toEqual([
+            'entries[0].metadata cue "zz" (91) exceeds durationSeconds (90)',
+            'entries[1].metadata cue "aa" (-1) is negative',
+        ]);
+    });
+
+    it('rejects a defaultLoopRegion whose end cue is before its start cue', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{
+                    cues: { loopStart: 8, loopEnd: 4 },
+                    defaultLoopRegion: ['loopStart', 'loopEnd'],
+                    durationSeconds: 90,
+                }`,
+            ),
+        );
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion end "loopEnd" (4) must be greater than start "loopStart" (8)',
+        ]);
+        expect(output).toContain('Invalid audio cue sheets:');
+    });
+
+    // The other half of the rounding argument made for cue-vs-duration above: every
+    // region fixture uses whole seconds, so a comparator that floors both bounds passes
+    // them all while rejecting a loop that is under a second long.
+    it('compares fractional defaultLoopRegion bounds without rounding', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{
+                    cues: { loopStart: 4.2, loopEnd: 4.8 },
+                    defaultLoopRegion: ['loopStart', 'loopEnd'],
+                    durationSeconds: 90,
+                }`,
+            ),
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidCueSheets).toHaveLength(0);
+    });
+
+    it('rejects a defaultLoopRegion whose bounds are equal', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{
+                    cues: { loopStart: 4, loopEnd: 4 },
+                    defaultLoopRegion: ['loopStart', 'loopEnd'],
+                    durationSeconds: 90,
+                }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion end "loopEnd" (4) must be greater than start "loopStart" (4)',
+        ]);
+    });
+
+    it('rejects a defaultLoopRegion whose end names a cue the sheet does not define', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{
+                    cues: { loopStart: 4 },
+                    defaultLoopRegion: ['loopStart', 'loopEnd'],
+                    durationSeconds: 90,
+                }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion names cue "loopEnd", which is not present in cues',
+        ]);
+    });
+
+    // Both bounds carry the same obligation, and every other region fixture puts the
+    // defect on the end side — so the start side needs its own cases or a guard that
+    // only ever checks `end` passes them all.
+    it('rejects a defaultLoopRegion whose start names a cue the sheet does not define', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{
+                    cues: { loopEnd: 4 },
+                    defaultLoopRegion: ['loopStart', 'loopEnd'],
+                    durationSeconds: 90,
+                }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion names cue "loopStart", which is not present in cues',
+        ]);
+    });
+
+    it('rejects a defaultLoopRegion whose start is not a string literal', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{ cues: { a: 1 }, defaultLoopRegion: [3, 'a'], durationSeconds: 90 }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion must be a statically-readable two-element array of cue names',
+        ]);
+    });
+
+    it('reports a defaultLoopRegion naming one absent cue twice as a single mistake', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{ cues: { a: 1 }, defaultLoopRegion: ['x', 'x'], durationSeconds: 90 }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion names cue "x", which is not present in cues',
+        ]);
+    });
+
+    // The only input that produces two region findings, and so the only one that tells
+    // the dedupe above apart from a guard that drops the end report whenever the start
+    // is also missing.
+    it('reports both bounds of a defaultLoopRegion naming two different absent cues', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{ cues: { a: 1 }, defaultLoopRegion: ['x', 'y'], durationSeconds: 90 }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion names cue "x", which is not present in cues',
+            'defaultLoopRegion names cue "y", which is not present in cues',
+        ]);
+    });
+
+    // An empty table read cleanly is not the same as a table that failed to read: the
+    // region check still runs against it, and both names are still missing.
+    it('checks a defaultLoopRegion against an empty but readable cue table', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{ cues: {}, defaultLoopRegion: ['a', 'b'], durationSeconds: 90 }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion names cue "a", which is not present in cues',
+            'defaultLoopRegion names cue "b", which is not present in cues',
+        ]);
+    });
+
+    it('rejects a defaultLoopRegion on a sheet that declares no cues', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{ defaultLoopRegion: ['loopStart', 'loopEnd'], durationSeconds: 90 }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion requires cues, which the sheet does not declare',
+        ]);
+    });
+
+    it('rejects a defaultLoopRegion that is not a two-element array of cue names', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{
+                    cues: { a: 1, b: 2, c: 3 },
+                    defaultLoopRegion: ['a', 'b', 'c'],
+                    durationSeconds: 90,
+                }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion must be a statically-readable two-element array of cue names',
+        ]);
+    });
+
+    it('rejects a defaultLoopRegion whose end is not a string literal', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(
+                `{ cues: { a: 1 }, defaultLoopRegion: ['a', 3], durationSeconds: 90 }`,
+            ),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'defaultLoopRegion must be a statically-readable two-element array of cue names',
+        ]);
+    });
+
+    it('rejects cues declared without durationSeconds', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: 4 } }`),
+        );
+
+        expect(report.ok).toBe(false);
+        expect(cueSheetReasons(report)).toEqual([
+            'durationSeconds is required when cues or defaultLoopRegion is declared',
+        ]);
+    });
+
+    // Invariant #125 names BOTH triggers. A guard written against `cues` alone
+    // passes this sheet, so the two conjuncts need separate cases.
+    it('rejects a defaultLoopRegion declared without durationSeconds', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ defaultLoopRegion: ['loopStart', 'loopEnd'] }`),
+        );
+
+        expect(report.ok).toBe(false);
+        expect(cueSheetReasons(report)).toEqual([
+            'durationSeconds is required when cues or defaultLoopRegion is declared',
+        ]);
+    });
+
+    it('rejects a negative durationSeconds', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ durationSeconds: -5 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'durationSeconds must be a statically-readable finite number >= 0',
+        ]);
+    });
+
+    it('rejects a non-finite durationSeconds', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: 4 }, durationSeconds: 1e999 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'durationSeconds must be a statically-readable finite number >= 0',
+        ]);
+    });
+
+    // Without this, an unreadable durationSeconds falls through to the cues branch and
+    // is reported as MISSING rather than unreadable — a reason that sends the author
+    // to add a field they already wrote.
+    it('rejects a durationSeconds that is not a statically-readable literal', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { intro: 4 }, durationSeconds: DURATION }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'durationSeconds must be a statically-readable finite number >= 0',
+        ]);
+    });
+
+    it('rejects metadata that is not an object literal', async () => {
+        const report = await validateManifestEntries(audioClipEntrySource(`42`));
+
+        expect(cueSheetReasons(report)).toEqual([
+            'metadata is not a statically-readable object literal; author the cue sheet inline',
+        ]);
+    });
+
+    it('rejects cues that are not an object literal', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: [4], durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'cues must be a statically-readable object literal',
+        ]);
+    });
+
+    it('rejects metadata referencing a constant instead of an inline literal', async () => {
+        const report = await validateManifestEntries(audioClipEntrySource(`SHARED_SHEET`));
+
+        expect(cueSheetReasons(report)).toEqual([
+            'metadata is not a statically-readable object literal; author the cue sheet inline',
+        ]);
+    });
+
+    it('rejects a sheet assembled by spreading another object', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ ...SHARED_SHEET, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'metadata contains an entry that is not a "name: value" property',
+        ]);
+    });
+
+    it('rejects a cue name that is not a statically-readable key', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { [dynamicName]: 4 }, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'cues contains an entry whose cue name is not a statically-readable key',
+        ]);
+    });
+
+    it('rejects a sheet whose cues key is computed', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ [CUES]: { intro: 91 }, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'metadata contains an entry whose key is not a statically-readable name',
+        ]);
+    });
+
+    it('rejects a sheet whose cues key is a computed string literal', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ ['cues']: { intro: 91 }, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'metadata contains an entry whose key is not a statically-readable name',
+        ]);
+    });
+
+    // Minus is the only prefix operator the reader folds. `c` is the case that matters:
+    // a reader folding `!` as a negation reads `!0` as -0, which clears every range
+    // check and passes silently — where `~`/`+` would at least fail with a wrong reason.
+    // The sheet would then pass a gate meant to be stricter than the runtime parser,
+    // which rejects the `true` that `!0` actually evaluates to.
+    it('rejects a cue second behind a prefix operator other than minus', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { a: ~4, b: +4, c: !0 }, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'cue "a" is not a statically-readable number literal',
+            'cue "b" is not a statically-readable number literal',
+            'cue "c" is not a statically-readable number literal',
+        ]);
+    });
+
+    it('rejects cues assembled by spreading another object', async () => {
+        const report = await validateManifestEntries(
+            audioClipEntrySource(`{ cues: { ...sharedCues, outro: 4 }, durationSeconds: 90 }`),
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'cues contains an entry that is not a "name: seconds" property',
+        ]);
+    });
+
+    describe('entries authored through the audioClipEntry builder', () => {
+        // The builder is the sanctioned way to author a cue sheet, and it produces a
+        // call expression the walker skipped entirely before this branch.
+        it('gates a bad sheet passed through audioClipEntry', async () => {
+            const report = await validateManifestEntries(
+                `audioClipEntry({
+                    ref: 'tactics/audio/theme.ogg',
+                    priority: 'critical',
+                    metadata: { cues: { intro: 91 }, durationSeconds: 90 },
+                })`,
+            );
+
+            expect(cueSheetReasons(report)).toEqual([
+                'cue "intro" (91) exceeds durationSeconds (90)',
+            ]);
+        });
+
+        it('accepts a well-formed sheet passed through audioClipEntry', async () => {
+            const report = await validateManifestEntries(
+                `audioClipEntry({
+                    ref: 'tactics/audio/theme.ogg',
+                    priority: 'critical',
+                    metadata: { cues: { intro: 4 }, durationSeconds: 90 },
+                })`,
+            );
+
+            expect(report.ok).toBe(true);
+        });
+
+        it('peels the builder reached through a namespace import', async () => {
+            const report = await validateManifestEntries(
+                `content.audioClipEntry({
+                    ref: 'tactics/audio/theme.ogg',
+                    priority: 'critical',
+                    metadata: { cues: { intro: 91 }, durationSeconds: 90 },
+                })`,
+            );
+
+            expect(cueSheetReasons(report)).toEqual([
+                'cue "intro" (91) exceeds durationSeconds (90)',
+            ]);
+        });
+
+        // The annotation is on the ARGUMENT, not the call. A peel that only handles a
+        // bare object literal there drops the element entirely — no cue-sheet check, no
+        // ref existence check, no manifest coverage.
+        it('gates a builder whose argument is wrapped in an as-annotation', async () => {
+            const report = await validateManifestEntries(
+                `audioClipEntry({
+                    ref: 'tactics/audio/theme.ogg',
+                    priority: 'critical',
+                    metadata: { cues: { intro: 91 }, durationSeconds: 90 },
+                } as const)`,
+            );
+
+            expect(cueSheetReasons(report)).toEqual([
+                'cue "intro" (91) exceeds durationSeconds (90)',
+            ]);
+        });
+
+        it('gates a builder call wrapped in a satisfies-annotation', async () => {
+            const report = await validateManifestEntries(
+                `audioClipEntry({
+                    ref: 'tactics/audio/theme.ogg',
+                    priority: 'critical',
+                    metadata: { cues: { intro: 91 }, durationSeconds: 90 },
+                }) satisfies AssetManifestEntry`,
+            );
+
+            expect(cueSheetReasons(report)).toEqual([
+                'cue "intro" (91) exceeds durationSeconds (90)',
+            ]);
+        });
+
+        it('gates a builder call wrapped in an as-annotation', async () => {
+            const report = await validateManifestEntries(
+                `audioClipEntry({
+                    ref: 'tactics/audio/theme.ogg',
+                    priority: 'critical',
+                    metadata: { cues: { intro: 91 }, durationSeconds: 90 },
+                }) as AssetManifestEntry`,
+            );
+
+            expect(cueSheetReasons(report)).toEqual([
+                'cue "intro" (91) exceeds durationSeconds (90)',
+            ]);
+        });
+
+        // Only the sanctioned builder is peeled. Drop the callee-name guard and every
+        // single-argument call in `entries` starts getting range-checked, which is a
+        // blast radius no fixture here would otherwise notice.
+        it('does not peel a call to some other single-argument builder', async () => {
+            const report = await validateManifestEntries(
+                `someOtherBuilder({
+                    ref: 'tactics/audio/theme.ogg',
+                    kind: 'audio-clip',
+                    priority: 'critical',
+                    metadata: { cues: { intro: 91 }, durationSeconds: 90 },
+                })`,
+            );
+
+            expect(report.ok).toBe(true);
+            expect(report.invalidCueSheets).toHaveLength(0);
+        });
+
+        it('does not peel an audioClipEntry call that takes more than one argument', async () => {
+            const report = await validateManifestEntries(
+                `audioClipEntry({
+                    ref: 'tactics/audio/theme.ogg',
+                    priority: 'critical',
+                    metadata: { cues: { intro: 91 }, durationSeconds: 90 },
+                }, extra)`,
+            );
+
+            expect(report.ok).toBe(true);
+            expect(report.invalidCueSheets).toHaveLength(0);
+        });
+
+        // Without the inferred kind, this sheet is never checked at all.
+        it('infers the audio-clip kind that the builder omits from its argument', async () => {
+            const report = await validateManifestEntries(
+                `audioClipEntry({
+                    ref: 'tactics/audio/theme.ogg',
+                    priority: 'critical',
+                    metadata: { cues: { intro: 4 } },
+                })`,
+            );
+
+            expect(cueSheetReasons(report)).toEqual([
+                'durationSeconds is required when cues or defaultLoopRegion is declared',
+            ]);
+        });
+
+        it('existence-checks the ref of a builder-authored entry', async () => {
+            const report = await validateManifestEntries(
+                `audioClipEntry({ ref: 'tactics/audio/absent.ogg', priority: 'critical' })`,
+            );
+
+            const output = formatAssetValidationReport(report, workspaceRoot);
+
+            expect(report.ok).toBe(false);
+            expect(report.missing.map((entry) => entry.ref)).toEqual(['tactics/audio/absent.ogg']);
+            expect(output).toContain('Missing asset files:');
+        });
+
+        it('counts a builder-authored entry as manifest coverage for a data JSON ref', async () => {
+            const report = await validateAssetWorkspace({
+                workspaceRoot,
+                host: createHost({
+                    dataJsonFiles: ['apps/tactics/data/tracks/theme.json'],
+                    assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                    files: {
+                        'apps/tactics/data/tracks/theme.json': JSON.stringify({
+                            track: 'tactics/audio/theme.ogg',
+                        }),
+                        'apps/tactics/asset-manifest.ts': `
+                            export const tacticsAssetManifest = {
+                                gameId: 'tactics',
+                                entries: [
+                                    audioClipEntry({ ref: 'tactics/audio/theme.ogg', priority: 'critical' }),
+                                ],
+                            };
+                        `,
+                        'apps/tactics/assets/audio/theme.ogg': '',
+                    },
+                }),
+            });
+
+            expect(report.ok).toBe(true);
+            expect(report.unmanifested).toHaveLength(0);
+        });
+    });
+});
+
+function cueSheetReasons(report: AssetValidationReport): readonly string[] {
+    return report.invalidCueSheets.map((sheet) => sheet.reason);
+}
+
+/** An `'audio-clip'` manifest entry carrying `metadata` verbatim as authored. */
+function audioClipEntrySource(metadataSource: string): string {
+    return `{
+        ref: 'tactics/audio/theme.ogg',
+        kind: 'audio-clip',
+        priority: 'critical',
+        metadata: ${metadataSource},
+    }`;
+}
+
+async function validateManifestEntries(entriesSource: string): Promise<AssetValidationReport> {
+    return validateAssetWorkspace({
+        workspaceRoot,
+        host: createHost({
+            assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+            files: {
+                'apps/tactics/asset-manifest.ts': `
+                    export const tacticsAssetManifest = {
+                        gameId: 'tactics',
+                        entries: [${entriesSource}],
+                    };
+                `,
+                'apps/tactics/assets/audio/theme.ogg': '',
+            },
+        }),
+    });
+}
 
 interface HostFixture {
     readonly dataJsonFiles?: readonly string[];

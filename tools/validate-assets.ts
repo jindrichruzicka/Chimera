@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
     ScriptKind,
     ScriptTarget,
+    SyntaxKind,
     createSourceFile,
     forEachChild,
     isArrayLiteralExpression,
@@ -12,7 +13,9 @@ import {
     isCallExpression,
     isIdentifier,
     isNoSubstitutionTemplateLiteral,
+    isNumericLiteral,
     isObjectLiteralExpression,
+    isPrefixUnaryExpression,
     isPropertyAccessExpression,
     isPropertyAssignment,
     isPropertyDeclaration,
@@ -26,6 +29,7 @@ import type {
     Expression,
     Node,
     ObjectLiteralExpression,
+    PropertyAssignment,
     PropertyName,
     SourceFile,
 } from 'typescript';
@@ -98,6 +102,18 @@ export interface UnknownAssetManifestKind {
     readonly ref?: string;
 }
 
+/**
+ * One violated cue-sheet rule on one `'audio-clip'` manifest entry (Invariant #125).
+ * A readable `cues` table reports every out-of-range cue together, so fixing them is one
+ * pass rather than one build each.
+ */
+export interface InvalidAudioCueSheet {
+    readonly source: AssetReferenceSource;
+    readonly reason: string;
+    /** The entry's `ref`, omitted when it is not itself statically readable. */
+    readonly ref?: string;
+}
+
 /** A statically-resolved on-demand load whose ref is declared in no asset surface (hard error). */
 export type UndeclaredOnDemandLoad = AssetReference;
 
@@ -117,6 +133,7 @@ export interface AssetValidationReport {
     readonly malformed: readonly MalformedAssetReference[];
     readonly unmanifested: readonly UnmanifestedAssetReference[];
     readonly unknownKinds: readonly UnknownAssetManifestKind[];
+    readonly invalidCueSheets: readonly InvalidAudioCueSheet[];
     readonly undeclaredOnDemandLoads: readonly UndeclaredOnDemandLoad[];
     readonly unresolvedOnDemandLoads: readonly UnresolvedOnDemandLoad[];
 }
@@ -128,6 +145,7 @@ interface CollectedAssetReferences {
 
 interface CollectedAssetManifestReferences extends CollectedAssetReferences {
     readonly kinds: readonly UnknownAssetManifestKind[];
+    readonly invalidCueSheets: readonly InvalidAudioCueSheet[];
 }
 
 interface CollectedOnDemandLoads {
@@ -137,6 +155,20 @@ interface CollectedOnDemandLoads {
 }
 
 export type AssetValidationExitCode = 0 | 1;
+
+const unreadableKindReason =
+    'entry declares metadata but its kind is not a statically-readable literal, so the entry cannot be classified';
+
+/**
+ * Worded for an entry that may or may not be an audio clip: it fires whenever a readable
+ * `kind` has not ruled a cue sheet out, which includes the case where the `kind` is
+ * hidden in the very member that cannot be read.
+ */
+function unreadableEntryReason(kind: 'not-a-property' | 'unreadable-key'): string {
+    return kind === 'not-a-property'
+        ? 'entry contains a member that is not a "name: value" property, so a cue sheet on it cannot be ruled out'
+        : 'entry contains a member whose key is not a statically-readable name, so a cue sheet on it cannot be ruled out';
+}
 
 const assetRefCandidatePattern = /^[^\0/]+\/[^\0]*$/u;
 const externalOrAbsoluteAssetPattern = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u;
@@ -175,6 +207,7 @@ export async function validateAssetWorkspace(
     const manifestRefs: AssetReference[] = [];
     const fontRefs: AssetReference[] = [];
     const manifestKinds: UnknownAssetManifestKind[] = [];
+    const invalidCueSheets: InvalidAudioCueSheet[] = [];
     const malformed: MalformedAssetReference[] = [];
     const manifestConstMembers = new Map<string, string>();
 
@@ -198,6 +231,7 @@ export async function validateAssetWorkspace(
         const collected = collectAssetManifestRefs(sourceText, filePath);
         manifestRefs.push(...collected.refs);
         manifestKinds.push(...collected.kinds);
+        invalidCueSheets.push(...collected.invalidCueSheets);
         malformed.push(...collected.malformed);
         // Key the tier-B const map by the manifest's own game so an identically-named
         // const in another game's manifest cannot cross-resolve an on-demand load
@@ -291,6 +325,7 @@ export async function validateAssetWorkspace(
     malformed.sort(compareMalformedFailures);
     unmanifested.sort(compareAssetReferenceFailures);
     unknownKinds.sort(compareUnknownKindFailures);
+    invalidCueSheets.sort(compareInvalidCueSheets);
     undeclaredOnDemandLoads.sort(compareAssetReferenceFailures);
     unresolvedOnDemandLoads.sort(compareUnresolvedOnDemandLoads);
 
@@ -302,6 +337,7 @@ export async function validateAssetWorkspace(
             malformed.length === 0 &&
             unmanifested.length === 0 &&
             unknownKinds.length === 0 &&
+            invalidCueSheets.length === 0 &&
             undeclaredOnDemandLoads.length === 0,
         checkedRefs: refs.length + fontRefs.length,
         missing,
@@ -310,6 +346,7 @@ export async function validateAssetWorkspace(
         malformed,
         unmanifested,
         unknownKinds,
+        invalidCueSheets,
         undeclaredOnDemandLoads,
         unresolvedOnDemandLoads,
     };
@@ -391,6 +428,17 @@ export function formatAssetValidationReport(
                 `- ${unknownKind.kind}`,
                 `  source: ${formatSource(unknownKind.source, root)}`,
                 ...(unknownKind.ref === undefined ? [] : [`  ref: ${unknownKind.ref}`]),
+            );
+        }
+    }
+
+    if (report.invalidCueSheets.length > 0) {
+        lines.push('', 'Invalid audio cue sheets:');
+        for (const sheet of report.invalidCueSheets) {
+            lines.push(
+                `- ${sheet.ref ?? '(unreadable ref)'}`,
+                `  source: ${formatSource(sheet.source, root)}`,
+                `  reason: ${sheet.reason}`,
             );
         }
     }
@@ -638,10 +686,11 @@ function collectAssetManifestRefs(
     const refs: AssetReference[] = [];
     const malformed: MalformedAssetReference[] = [];
     const kinds: UnknownAssetManifestKind[] = [];
+    const invalidCueSheets: InvalidAudioCueSheet[] = [];
 
     visit(sourceFile);
 
-    return { refs, malformed, kinds };
+    return { refs, malformed, kinds, invalidCueSheets };
 
     function visit(node: Node): void {
         if (isPropertyAssignment(node) && isPropertyName(node.name, 'entries')) {
@@ -656,13 +705,13 @@ function collectAssetManifestRefs(
 
     function collectManifestEntries(arrayLiteral: ArrayLiteralExpression): void {
         arrayLiteral.elements.forEach((element, index) => {
-            const entry = unwrapObjectLiteral(element);
+            const entry = unwrapManifestEntry(element);
             if (entry === undefined) {
                 return;
             }
 
-            const ref = readStringProperty(entry, 'ref');
-            const kind = readStringProperty(entry, 'kind');
+            const ref = readStringProperty(entry.objectLiteral, 'ref');
+            const kind = readStringProperty(entry.objectLiteral, 'kind') ?? entry.impliedKind;
             const source = {
                 kind: 'asset-manifest' as const,
                 filePath,
@@ -682,8 +731,291 @@ function collectAssetManifestRefs(
                 const kindReference: UnknownAssetManifestKind = { kind, source };
                 kinds.push(ref === undefined ? kindReference : { ...kindReference, ref });
             }
+
+            const metadata = findProperty(entry.objectLiteral, 'metadata');
+            const metadataSource = { ...source, location: `${source.location}.metadata` };
+            const entryMembers = readObjectMembers(entry.objectLiteral);
+            // Only a readable, non-audio `kind` rules a cue sheet out. An unreadable one
+            // does not — so an entry that hides BOTH its kind and its metadata behind a
+            // spread or a computed key is unclassifiable, and each of the two guards
+            // below would otherwise wave it through on the strength of the other.
+            const rulesOutACueSheet = kind !== undefined && kind !== 'audio-clip';
+            if (entryMembers.kind !== 'readable' && !rulesOutACueSheet) {
+                invalidCueSheets.push(
+                    cueSheetFinding(source, unreadableEntryReason(entryMembers.kind), ref),
+                );
+            } else if (metadata !== undefined && kind === undefined) {
+                // An entry that declares metadata but hides its kind behind a constant
+                // cannot be classified, and an unclassifiable entry is the whole gate's
+                // escape hatch: `kind: AUDIO` would carry any sheet past it.
+                invalidCueSheets.push(cueSheetFinding(metadataSource, unreadableKindReason, ref));
+            } else if (metadata !== undefined && kind === 'audio-clip') {
+                collectCueSheetViolations(
+                    metadata.initializer,
+                    metadataSource,
+                    ref,
+                    invalidCueSheets,
+                );
+            }
         });
     }
+}
+
+/**
+ * A manifest entry as authored: a plain object literal, or the object literal inside a
+ * sanctioned entry builder.
+ *
+ * `audioClipEntry` (`simulation/content/audioManifest.ts`) bakes `kind: 'audio-clip'`
+ * into its own body rather than taking it from the call site, so peeling the call is
+ * only half the job — the kind it implies has to come back out alongside the literal.
+ * Without that, every builder-authored entry reads as kindless, and the cue-sheet gate
+ * skips exactly the entries the builder exists to carry.
+ */
+interface ManifestEntryLiteral {
+    readonly objectLiteral: ObjectLiteralExpression;
+    readonly impliedKind?: string;
+}
+
+function unwrapManifestEntry(expression: Expression): ManifestEntryLiteral | undefined {
+    const objectLiteral = unwrapObjectLiteral(expression);
+    if (objectLiteral !== undefined) {
+        return { objectLiteral };
+    }
+    // `unwrapObjectLiteral` peels `as`/`satisfies` around a literal but not around a
+    // builder call, so `audioClipEntry({...}) as AssetManifestEntry` lands here.
+    if (isAsExpression(expression) || isSatisfiesExpression(expression)) {
+        return unwrapManifestEntry(expression.expression);
+    }
+    if (
+        !isCallExpression(expression) ||
+        !isCalleeNamed(expression.expression, 'audioClipEntry') ||
+        expression.arguments.length !== 1
+    ) {
+        return undefined;
+    }
+    const [argument] = expression.arguments;
+    const builderArgument = argument === undefined ? undefined : unwrapObjectLiteral(argument);
+    return builderArgument === undefined
+        ? undefined
+        : { objectLiteral: builderArgument, impliedKind: 'audio-clip' };
+}
+
+/**
+ * Validate one `'audio-clip'` entry's `metadata` cue sheet (Invariant #125).
+ *
+ * This is the build-time half of a deliberate pair. `parseAudioCueSheet`
+ * (`renderer/audio/audioCueSheet.ts`) applies the same predicates to runtime VALUES and
+ * degrades fail-soft to `null`; this applies them to SYNTAX NODES and fails the build.
+ * The two read different things, so there is no implementation to share — the rule list
+ * is mirrored by hand and the two must be kept in step.
+ *
+ * A sheet that cannot be read statically FAILS rather than being skipped: a sheet the
+ * gate cannot read is a sheet the gate cannot prove, and silently skipping one is how a
+ * build gate rots. Cue sheets are therefore authored as inline literals in the manifest:
+ * `unwrapObjectLiteral` requires the sheet and its `cues` to be literals at all, and
+ * {@link readObjectMembers} then requires every member of each to be readable.
+ */
+function collectCueSheetViolations(
+    metadata: Expression,
+    source: AssetReferenceSource,
+    ref: string | undefined,
+    violations: InvalidAudioCueSheet[],
+): void {
+    const report = (reason: string): void => {
+        violations.push(cueSheetFinding(source, reason, ref));
+    };
+
+    const sheet = unwrapObjectLiteral(metadata);
+    if (sheet === undefined) {
+        report('metadata is not a statically-readable object literal; author the cue sheet inline');
+        return;
+    }
+    const members = readObjectMembers(sheet);
+    if (members.kind !== 'readable') {
+        report(
+            members.kind === 'not-a-property'
+                ? 'metadata contains an entry that is not a "name: value" property'
+                : 'metadata contains an entry whose key is not a statically-readable name',
+        );
+        return;
+    }
+
+    // Read the sheet from the members already proved readable, rather than scanning it a
+    // second time — a second reader is a second definition of "readable" to keep in step.
+    // A repeated key resolves last-wins here where `findProperty` is first-wins; TS1117
+    // makes that unreachable, and last-wins is what the authored object would evaluate to.
+    const byName = new Map(members.entries);
+    const durationValue = byName.get('durationSeconds');
+    const cuesValue = byName.get('cues');
+    const regionValue = byName.get('defaultLoopRegion');
+
+    let declaredDuration: number | undefined;
+    if (durationValue !== undefined) {
+        const value = readNumberExpression(durationValue);
+        if (value === undefined || !Number.isFinite(value) || value < 0) {
+            report('durationSeconds must be a statically-readable finite number >= 0');
+            return;
+        }
+        declaredDuration = value;
+    }
+
+    if (cuesValue === undefined && regionValue === undefined) {
+        return;
+    }
+    if (declaredDuration === undefined) {
+        report('durationSeconds is required when cues or defaultLoopRegion is declared');
+        return;
+    }
+    const durationSeconds = declaredDuration;
+
+    let cues: Map<string, number> | undefined;
+    if (cuesValue !== undefined) {
+        const cuesLiteral = unwrapObjectLiteral(cuesValue);
+        if (cuesLiteral === undefined) {
+            report('cues must be a statically-readable object literal');
+            return;
+        }
+        cues = readCues(cuesLiteral, durationSeconds, report);
+        if (cues === undefined) {
+            // The cue table is incomplete, so a region check against it could only
+            // invent a second, misleading failure for the same root cause.
+            return;
+        }
+    }
+
+    if (regionValue !== undefined) {
+        checkLoopRegion(regionValue, cues, report);
+    }
+}
+
+/**
+ * Check `defaultLoopRegion` against the cue table: two readable names, both present in
+ * `cues`, with `end` strictly after `start`.
+ */
+function checkLoopRegion(
+    regionValue: Expression,
+    cues: Map<string, number> | undefined,
+    report: (reason: string) => void,
+): void {
+    const regionLiteral = unwrapArrayLiteral(regionValue);
+    const elements = regionLiteral?.elements.length === 2 ? regionLiteral.elements : undefined;
+    const startElement = elements?.[0];
+    const endElement = elements?.[1];
+    const start = startElement === undefined ? undefined : readStringExpression(startElement);
+    const end = endElement === undefined ? undefined : readStringExpression(endElement);
+    if (start === undefined || end === undefined) {
+        report('defaultLoopRegion must be a statically-readable two-element array of cue names');
+        return;
+    }
+    if (cues === undefined) {
+        report('defaultLoopRegion requires cues, which the sheet does not declare');
+        return;
+    }
+
+    const startSeconds = cues.get(start);
+    const endSeconds = cues.get(end);
+    if (startSeconds === undefined) {
+        report(`defaultLoopRegion names cue "${start}", which is not present in cues`);
+    }
+    // `['x', 'x']` against an absent `x` is one missing cue, not two.
+    if (endSeconds === undefined && end !== start) {
+        report(`defaultLoopRegion names cue "${end}", which is not present in cues`);
+    }
+    if (startSeconds === undefined || endSeconds === undefined) {
+        return;
+    }
+    if (endSeconds <= startSeconds) {
+        report(
+            `defaultLoopRegion end "${end}" (${endSeconds}) must be greater than start "${start}" (${startSeconds})`,
+        );
+    }
+}
+
+/**
+ * The sole constructor for a cue-sheet finding. `ref` is omitted rather than set to
+ * undefined (`exactOptionalPropertyTypes`), and having one site do that keeps the two
+ * callers from drifting into two differently-tested spellings of the same object.
+ */
+function cueSheetFinding(
+    source: AssetReferenceSource,
+    reason: string,
+    ref: string | undefined,
+): InvalidAudioCueSheet {
+    return ref === undefined ? { source, reason } : { source, reason, ref };
+}
+
+/**
+ * An object literal read as a fixed set of named properties, or why it cannot be.
+ *
+ * BOTH failure kinds matter, and both apply at every level of a cue sheet. A computed
+ * key is as invisible to `findProperty` as a spread is — `{ ['cues']: … }` reads as a
+ * sheet that declared no cues at all — so a level checking only one of the two lets
+ * exactly the shape it was written to stop walk straight past it.
+ */
+type ObjectMembers =
+    | { readonly kind: 'readable'; readonly entries: readonly (readonly [string, Expression])[] }
+    | { readonly kind: 'not-a-property' }
+    | { readonly kind: 'unreadable-key' };
+
+function readObjectMembers(objectLiteral: ObjectLiteralExpression): ObjectMembers {
+    const entries: (readonly [string, Expression])[] = [];
+    for (const property of objectLiteral.properties) {
+        if (!isPropertyAssignment(property)) {
+            return { kind: 'not-a-property' };
+        }
+        const name = propertyKeyText(property.name);
+        if (name === undefined) {
+            return { kind: 'unreadable-key' };
+        }
+        entries.push([name, property.initializer]);
+    }
+    return { kind: 'readable', entries };
+}
+
+/**
+ * Read a `cues` literal into a name → seconds table, reporting every cue whose seconds
+ * are unreadable or out of `[0, durationSeconds]`. Returns undefined whenever the table
+ * did not read completely — a structurally unreadable member, or any failing cue — so
+ * the caller can tell an incomplete table from a legitimately empty one.
+ */
+function readCues(
+    cuesLiteral: ObjectLiteralExpression,
+    durationSeconds: number,
+    report: (reason: string) => void,
+): Map<string, number> | undefined {
+    const members = readObjectMembers(cuesLiteral);
+    if (members.kind !== 'readable') {
+        report(
+            members.kind === 'not-a-property'
+                ? 'cues contains an entry that is not a "name: seconds" property'
+                : 'cues contains an entry whose cue name is not a statically-readable key',
+        );
+        return undefined;
+    }
+
+    const cues = new Map<string, number>();
+    let complete = true;
+
+    for (const [name, initializer] of members.entries) {
+        const seconds = readNumberExpression(initializer);
+        if (seconds === undefined) {
+            report(`cue "${name}" is not a statically-readable number literal`);
+            complete = false;
+        } else if (!Number.isFinite(seconds)) {
+            report(`cue "${name}" is not finite`);
+            complete = false;
+        } else if (seconds < 0) {
+            report(`cue "${name}" (${seconds}) is negative`);
+            complete = false;
+        } else if (seconds > durationSeconds) {
+            report(`cue "${name}" (${seconds}) exceeds durationSeconds (${durationSeconds})`);
+            complete = false;
+        } else {
+            cues.set(name, seconds);
+        }
+    }
+
+    return complete ? cues : undefined;
 }
 
 function collectAssetLoaderKinds(sourceText: string, filePath: string): readonly string[] {
@@ -920,17 +1252,29 @@ function unwrapObjectLiteral(expression: Expression): ObjectLiteralExpression | 
     return undefined;
 }
 
+/**
+ * The named property assignment, or undefined. Distinguishes a property that is absent
+ * from one whose value simply cannot be read — `metadata: SHARED_SHEET` is present and
+ * unreadable, and the cue-sheet gate has to tell those two apart.
+ */
+function findProperty(
+    objectLiteral: ObjectLiteralExpression,
+    propertyName: string,
+): PropertyAssignment | undefined {
+    for (const property of objectLiteral.properties) {
+        if (isPropertyAssignment(property) && isPropertyName(property.name, propertyName)) {
+            return property;
+        }
+    }
+    return undefined;
+}
+
 function readStringProperty(
     objectLiteral: ObjectLiteralExpression,
     propertyName: string,
 ): string | undefined {
-    for (const property of objectLiteral.properties) {
-        if (!isPropertyAssignment(property) || !isPropertyName(property.name, propertyName)) {
-            continue;
-        }
-        return readStringExpression(property.initializer);
-    }
-    return undefined;
+    const property = findProperty(objectLiteral, propertyName);
+    return property === undefined ? undefined : readStringExpression(property.initializer);
 }
 
 function readStringExpression(expression: Expression): string | undefined {
@@ -952,12 +1296,41 @@ function readStringExpression(expression: Expression): string | undefined {
     return undefined;
 }
 
+/**
+ * A number authored as a literal, or undefined when it cannot be read statically.
+ *
+ * The unary-minus branch is load-bearing: `-1` parses as a minus token wrapping a
+ * numeric literal, never as a numeric literal, so a reader without it calls every
+ * negative cue unreadable rather than negative. Minus is the ONLY prefix operator read
+ * — `~4`, `!4` and `+4` are all unreadable, since a reader that folded them would have
+ * to fold every operator to stay honest. Overflowing literals like `1e999` read as
+ * `Infinity` here and are rejected as non-finite by the caller.
+ */
+function readNumberExpression(expression: Expression): number | undefined {
+    if (isNumericLiteral(expression)) {
+        return Number(expression.text);
+    }
+    if (isAsExpression(expression) || isSatisfiesExpression(expression)) {
+        return readNumberExpression(expression.expression);
+    }
+    if (isPrefixUnaryExpression(expression) && expression.operator === SyntaxKind.MinusToken) {
+        const operand = readNumberExpression(expression.operand);
+        return operand === undefined ? undefined : -operand;
+    }
+    return undefined;
+}
+
 function isBuildAssetRefCall(expression: Expression): boolean {
+    return isCalleeNamed(expression, 'buildAssetRef');
+}
+
+/** Whether a call target is `<name>(...)` or `<receiver>.<name>(...)`. */
+function isCalleeNamed(expression: Expression, name: string): boolean {
     if (isIdentifier(expression)) {
-        return expression.text === 'buildAssetRef';
+        return expression.text === name;
     }
     if (isPropertyAccessExpression(expression)) {
-        return expression.name.text === 'buildAssetRef';
+        return expression.name.text === name;
     }
     return false;
 }
@@ -1250,6 +1623,19 @@ function compareUnknownKindFailures(
     );
 }
 
+/**
+ * One sheet can raise several findings, so `reason` is part of the key: report order is
+ * then a function of what the findings say, not of where in the sheet their cues sit.
+ * Without it findings on one entry share a key and keep insertion order, so moving a cue
+ * within the sheet silently reorders the build output.
+ */
+function compareInvalidCueSheets(left: InvalidAudioCueSheet, right: InvalidAudioCueSheet): number {
+    return compareStrings(
+        `${referenceSortKey(left)}\u0000${left.reason}`,
+        `${referenceSortKey(right)}\u0000${right.reason}`,
+    );
+}
+
 function compareForbiddenRendererPublicAssets(
     left: ForbiddenRendererPublicAsset,
     right: ForbiddenRendererPublicAsset,
@@ -1268,7 +1654,11 @@ function compareUnresolvedOnDemandLoads(
 }
 
 function referenceSortKey(
-    reference: AssetReference | MalformedAssetReference | UnknownAssetManifestKind,
+    reference:
+        | AssetReference
+        | MalformedAssetReference
+        | UnknownAssetManifestKind
+        | InvalidAudioCueSheet,
 ): string {
     return `${reference.source.filePath}\u0000${reference.source.location}\u0000${'ref' in reference ? (reference.ref ?? '') : ''}`;
 }
