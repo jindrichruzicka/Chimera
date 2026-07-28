@@ -159,7 +159,7 @@ function makeFakeRun(
                 JSON.stringify({
                     name: PROBE_GAME.pkg,
                     scripts: {
-                        'fetch:fonts': `chimera-fetch-fonts --game ${PROBE_GAME.kebab} --url <google-css-url> --out-dir assets/fonts`,
+                        'fetch:fonts': `chimera-fetch-fonts --game ${PROBE_GAME.kebab} --out-dir assets/fonts`,
                         'validate:assets': PROBE_VALIDATE_ASSETS_SCRIPT,
                         'icons:generate': PROBE_ICONS_GENERATE_SCRIPT,
                     },
@@ -251,7 +251,7 @@ function makeFakeRun(
         }
         // A successful chimera-fetch-fonts run lands the fixture-served woff2
         // under the app's own assets/fonts (what the real bin writes).
-        if (args.includes('chimera-fetch-fonts')) {
+        if (args.includes('fetch:fonts')) {
             files.set(path.join(appDir, 'assets', 'fonts', PROBE_FONT_FILE), 'wOF2');
         }
         // The package step (electron-builder --dir) writes the unsigned bundle under <app>/release;
@@ -670,22 +670,20 @@ describe('verifyScaffold', () => {
         const result = await verifyScaffold(makeDeps(run, fs, { startFontFixture: fixture.start }));
 
         expect(result.ok).toBe(true);
-        // The real fetch runs the bare bin via pnpm exec with cwd = the app
-        // package — the exact cwd pnpm gives the scaffolded fetch:fonts script —
-        // pointing --url at the localhost fixture, never live Google.
-        const fetch = calls.find((c) => c.args.includes('chimera-fetch-fonts'));
+        // The real fetch is driven the way the docs tell a developer to drive it:
+        // `pnpm fetch:fonts --url …` from the PROJECT ROOT. That routes through the
+        // root forward, the shipped app script, and pnpm's trailing-arg append
+        // before reaching the bin — so a script that dies in `sh`, a missing root
+        // forward, or a swallowed `--url` all fail here. Invoking the bin with a
+        // hand-built argv (what this arm used to do) proved none of that. The URL
+        // points at the localhost fixture, never live Google.
+        const fetch = calls.find((c) => c.args.includes('fetch:fonts'));
         expect(fetch?.cmd).toBe('pnpm');
-        expect(fetch?.args).toEqual([
-            'exec',
-            'chimera-fetch-fonts',
-            '--game',
-            PROBE_GAME.kebab,
-            '--url',
-            'http://127.0.0.1:45678/css',
-            '--out-dir',
-            'assets/fonts',
-        ]);
-        expect(fetch?.cwd).toBe(appDir);
+        expect(fetch?.args).toEqual(['run', 'fetch:fonts', '--url', 'http://127.0.0.1:45678/css']);
+        // cwd is the project ROOT, not the app dir: the root script is the entry
+        // point, and pnpm re-enters the app dir itself for the delegated script
+        // (which is what keeps `--out-dir assets/fonts` app-relative below).
+        expect(fetch?.cwd).toBe(TMP_ROOT);
         // Fixture lifecycle: started once, closed once.
         expect(fixture.state).toEqual({ started: 1, closed: 1 });
         // The woff2 landed in the app's own assets/fonts.
@@ -759,7 +757,7 @@ describe('verifyScaffold', () => {
         expect(result.ok).toBe(false);
         expect(result.failedStep).toBe('fonts');
         // The fetch never ran — the arm failed before it, not around it.
-        expect(calls.some((c) => c.args.includes('chimera-fetch-fonts'))).toBe(false);
+        expect(calls.some((c) => c.args.includes('fetch:fonts'))).toBe(false);
     });
 
     it('reports fonts when the scaffolded fetch:fonts script lost its --out-dir (path-doubling regression)', async () => {
@@ -785,6 +783,40 @@ describe('verifyScaffold', () => {
         expect(result.failedStep).toBe('fonts');
     });
 
+    // The regression that shipped: a script documenting its argument inline as
+    // `--url <google-css-url>`. Every other check in this arm passed it — the bin
+    // is named, `--out-dir assets/fonts` is present, the shim is linked — because
+    // the defect is not in the script's CONTENT but in what `sh` does with it:
+    // `<google-css-url>` is a redirection, so sh tries to open that file, fails,
+    // and the bin is never looked up. The fixture below is otherwise perfect, so
+    // only the redirection check can fail it.
+    it('reports fonts when the fetch:fonts script carries a shell redirection (< placeholder)', async () => {
+        const { fs, files } = makeFakeFs();
+        const appPkgPath = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab, 'package.json');
+        const { run, calls } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
+            if (args[0] === 'install') {
+                files.set(
+                    appPkgPath,
+                    JSON.stringify({
+                        name: PROBE_GAME.pkg,
+                        scripts: {
+                            'fetch:fonts': `chimera-fetch-fonts --game ${PROBE_GAME.kebab} --url <google-css-url> --out-dir assets/fonts`,
+                        },
+                    }),
+                );
+            }
+            return undefined;
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('fonts');
+        // Refused BEFORE running anything: the arm names the cause rather than
+        // letting step (c) surface it as an opaque non-zero exit from sh.
+        expect(calls.some((c) => c.args.includes('fetch:fonts'))).toBe(false);
+    });
+
     it('reports fonts when the bin is not linked under the app node_modules/.bin', async () => {
         const { fs, files } = makeFakeFs();
         // Bypass the default install seeding so no .bin shim exists.
@@ -801,7 +833,7 @@ describe('verifyScaffold', () => {
     it('reports fonts (and still closes the fixture) when the fetch run fails', async () => {
         const { fs, files } = makeFakeFs();
         const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) =>
-            args.includes('chimera-fetch-fonts')
+            args.includes('fetch:fonts')
                 ? { status: 1, stdout: '', stderr: 'fetch failed' }
                 : undefined,
         );
@@ -818,9 +850,7 @@ describe('verifyScaffold', () => {
         const { fs, files } = makeFakeFs();
         // Success without the default woff2 seeding: the bin "ran" but wrote nowhere.
         const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) =>
-            args.includes('chimera-fetch-fonts')
-                ? { status: 0, stdout: '', stderr: '' }
-                : undefined,
+            args.includes('fetch:fonts') ? { status: 0, stdout: '', stderr: '' } : undefined,
         );
 
         const result = await verifyScaffold(makeDeps(run, fs));
@@ -833,7 +863,7 @@ describe('verifyScaffold', () => {
         const { fs, files } = makeFakeFs();
         const appDir = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
         const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
-            if (args.includes('chimera-fetch-fonts')) {
+            if (args.includes('fetch:fonts')) {
                 files.set(path.join(appDir, 'assets', 'fonts', PROBE_FONT_FILE), 'wOF2');
                 files.set(
                     path.join(appDir, 'apps', PROBE_GAME.kebab, 'assets', 'fonts', PROBE_FONT_FILE),

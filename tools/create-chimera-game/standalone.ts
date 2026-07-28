@@ -224,6 +224,22 @@ export function buildStandaloneRootManifest(
                 `next build apps/${name}/renderer && ` +
                 `pnpm --filter @chimera-engine/${name} build:app && ` +
                 `pnpm --filter @chimera-engine/${name} dev:mp`,
+            // The remaining three `@chimera-engine/electron` dev tools, forwarded so all four
+            // are reachable from the project ROOT — the directory VS Code opens and every other
+            // script (`start`, `package`, `dev:mp`) already runs from. Their bins link only into
+            // `apps/<kebab>/node_modules/.bin` (the root manifest declares no engine dep), so
+            // without these a developer had to know the `pnpm --filter @chimera-engine/<game> …`
+            // form; nothing in the scaffold's own output taught it, which made the tools look
+            // absent. This mirrors the monorepo root, where all four are plain root scripts.
+            //
+            // Bare delegations, unlike `dev:mp`: these read source + assets and never touch
+            // build output, so prefixing a renderer/app-bundle build would only make them slow.
+            // Ending on the delegated script also keeps pnpm's trailing-arg append working —
+            // `pnpm fetch:fonts --url '<css-url>'` lands on the bin, which is how the CSS URL
+            // is supplied (the app script deliberately bakes in no placeholder).
+            'fetch:fonts': `pnpm --filter @chimera-engine/${name} fetch:fonts`,
+            'icons:generate': `pnpm --filter @chimera-engine/${name} icons:generate`,
+            'validate:assets': `pnpm --filter @chimera-engine/${name} validate:assets`,
         },
         pnpm: {
             ...(overrides !== undefined ? { overrides: { ...overrides } } : {}),

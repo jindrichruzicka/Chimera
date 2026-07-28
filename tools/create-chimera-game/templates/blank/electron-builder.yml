@@ -23,9 +23,10 @@ productName: __GamePascal__
 #
 # That single replacement is the WHOLE rebrand for both icons a player sees.
 #
-# `pnpm --filter @chimera-engine/__game_kebab__ icons:generate` is a separate, optional
-# step (run it from this package — a bare `pnpm icons:generate` at the project root is
-# not this script). It derives the engine-shaped multi-size set (chimera-16..1024.png,
+# `pnpm icons:generate` is a separate, optional step. The project root forwards it to
+# this package (as it does `fetch:fonts` and `validate:assets`), so the root form and
+# `pnpm --filter @chimera-engine/__game_kebab__ icons:generate` are the same script.
+# It derives the engine-shaped multi-size set (chimera-16..1024.png,
 # chimera.icns, chimera.ico) plus the chimera.png runtime FALLBACK from the same master.
 # Only one thing reads any of it — see the `from:` block in `files:` below — but the
 # whole ~4.5 MB set does get PACKAGED, swept in by the `from: assets` block, so a game

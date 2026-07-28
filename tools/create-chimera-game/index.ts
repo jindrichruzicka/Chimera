@@ -578,7 +578,10 @@ if (process.env['VITEST'] === undefined) {
                     console.log('  pnpm typecheck');
                     console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
                     console.log(
-                        `  pnpm --filter @chimera-engine/${result.names.kebab} fetch:fonts   # self-host Google fonts — first replace <google-css-url> in apps/${result.names.kebab}/package.json`,
+                        `  pnpm --filter @chimera-engine/${result.names.kebab} fetch:fonts --url "<google fonts css url>"   # self-host Google fonts`,
+                    );
+                    console.log(
+                        `  pnpm --filter @chimera-engine/${result.names.kebab} validate:assets   # check every asset reference resolves`,
                     );
                     console.log(
                         `  # app icon: replace apps/${result.names.kebab}/assets/icons/icon.png — that one file is the installer AND the window icon`,
@@ -595,8 +598,15 @@ if (process.env['VITEST'] === undefined) {
                     console.log(
                         '  pnpm dev:mp 2      # instant 2-player multiplayer session (dev/scenarios/default.json: pnpm dev:mp --scenario default)',
                     );
+                    // All four `@chimera-engine/electron` dev tools are root scripts here (the
+                    // emitted root forwards each to the app), so every line below runs from the
+                    // directory the scaffold just created — no `--filter` incantation to learn.
                     console.log(
-                        `  pnpm --filter @chimera-engine/${result.names.kebab} fetch:fonts   # self-host Google fonts — first replace <google-css-url> in apps/${result.names.kebab}/package.json`,
+                        '  pnpm fetch:fonts --url "<google fonts css url>"   # self-host Google fonts (quote it — it contains &)',
+                    );
+                    console.log('  pnpm validate:assets   # check every asset reference resolves');
+                    console.log(
+                        '  pnpm icons:generate    # opt-in multi-size icon set (needs: pnpm add -D sharp png2icons)',
                     );
                     console.log(
                         `  # app icon: replace apps/${result.names.kebab}/assets/icons/icon.png — that one file is the installer AND the window icon`,

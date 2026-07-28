@@ -69,7 +69,7 @@ describe('scaffoldGame', () => {
                     private: true,
                     scripts: {
                         'fetch:fonts':
-                            'chimera-fetch-fonts --game __game_kebab__ --url <google-css-url> --out-dir assets/fonts',
+                            'chimera-fetch-fonts --game __game_kebab__ --out-dir assets/fonts',
                     },
                     dependencies: { '@chimera-engine/simulation': 'workspace:*' },
                 },

@@ -73,6 +73,25 @@ host-authored match settings (e.g. an arena id); they ride the same lobby channe
 uses and land in `snapshot.setup`. `pnpm dev:mp 2 --dry-run` prints the validated spawn plan
 without launching anything.
 
+**Dev tools.** `@chimera-engine/electron` publishes four development bins, and the standalone
+root forwards each one, so all four run from the project directory the scaffold created — the
+same commands the monorepo itself uses:
+
+| Command                              | Bin                       | What it does                                                     |
+| ------------------------------------ | ------------------------- | ---------------------------------------------------------------- |
+| `pnpm dev:mp <N>`                    | `chimera-dev-mp`          | N-player local multiplayer session (above)                       |
+| `pnpm fetch:fonts --url "<css url>"` | `chimera-fetch-fonts`     | Download + self-host Google fonts (Invariant #97)                |
+| `pnpm validate:assets`               | `chimera-validate-assets` | Check every asset reference resolves (Invariants #22/#52)        |
+| `pnpm icons:generate`                | `chimera-generate-icons`  | Opt-in multi-size icon set (needs `pnpm add -D sharp png2icons`) |
+
+Each forwards to the app package, which is where the bins are linked (the root manifest declares
+no `@chimera-engine/*` dependency, so pnpm links them into `apps/<kebab>/node_modules/.bin`
+alone). pnpm appends trailing arguments to the delegated script, which is how `--url` reaches
+`fetch:fonts`. The equivalent `pnpm --filter @chimera-engine/<kebab> <script>` form also works.
+
+These bins require an engine version that declares them; a project pinned to an older
+`@chimera-engine/electron` fails with `spawn ENOENT`.
+
 **In-monorepo (`--workspace`).** Writes the app under this repo's `apps/<kebab>/` and registers it
 (mirroring `apps/tactics`): adds `@chimera-engine/<kebab>: "workspace:*"` to the root `package.json`,
 appends a `tsconfig.build.json` reference and a `typecheck` line, then `pnpm install`. Next:
@@ -113,14 +132,22 @@ Game fonts are committed `.woff2` files under the game's own `assets/fonts/` —
 Google fetch (Invariant #97). The scaffold ships the whole convention: the `assets/fonts/`
 directory, an empty `gameFonts` declaration in `shell/fonts.ts` (already forwarded through
 `renderer/loaders.ts`), and an app-level `fetch:fonts` script running the `chimera-fetch-fonts`
-bin published by `@chimera-engine/electron`. To add fonts:
+bin published by `@chimera-engine/electron` — forwarded from the project root, so you run it
+from the directory the scaffold created. To add fonts:
 
-1. Edit the app `package.json` `fetch:fonts` script: replace `<google-css-url>` with a real
-   Google Fonts CSS URL (quote it — it contains `&`).
-2. Run `pnpm fetch:fonts` from the app package. The script's explicit `--out-dir assets/fonts`
-   lands the download in the game's own `assets/fonts` — the tool's README explains why the
-   flag is required here.
-3. Paste the printed `GameFontFace[]` snippet into `shell/fonts.ts` and commit the `.woff2`
+1. From the project root, run it with the Google Fonts CSS URL as a trailing argument —
+   **quoted**, because the URL contains `&` and `?`:
+
+    ```sh
+    pnpm fetch:fonts --url "https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"
+    ```
+
+    Nothing to edit first: pnpm appends trailing arguments to the delegated script, so the
+    URL reaches the bin. The script supplies `--game` and `--out-dir assets/fonts` itself,
+    and that explicit `--out-dir` is what lands the download in the game's own
+    `assets/fonts` — the tool's README explains why the flag is required here.
+
+2. Paste the printed `GameFontFace[]` snippet into `shell/fonts.ts` and commit the `.woff2`
    files alongside it.
 
 ### Giving the app its own icon
@@ -139,9 +166,9 @@ project must install:
    dependencies of `@chimera-engine/electron`, so nothing the engine declares asks your
    project to install either — `sharp` alone is a multi-megabyte platform-specific native
    binary. Until you install them, the script runs and tells you exactly this.
-2. `pnpm --filter @chimera-engine/<your-game> icons:generate`. Both `--source` and `--out`
-   are already in the script and both matter — the tool's README explains why omitting
-   `--out` writes into your `electron/` source tree instead of failing.
+2. `pnpm icons:generate` from the project root. Both `--source` and `--out` are already in
+   the script and both matter — the tool's README explains why omitting `--out` writes into
+   your `electron/` source tree instead of failing.
 3. To have the generated set actually used, repoint the `from:` file-set entry in
    `electron-builder.yml` from the engine's icon directory to your own `assets/icons`. That
    swaps the shipped `chimera.png` **fallback** — the icon used only if the manifest `icon`

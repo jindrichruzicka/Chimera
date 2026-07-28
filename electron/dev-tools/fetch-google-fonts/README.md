@@ -24,11 +24,24 @@ ESM at `dist/dev-tools/fetch-google-fonts/index.js`), so a game scaffolded by
 `create-chimera-game` runs it with no monorepo. The blank template wires an app-level script:
 
 ```jsonc
-"fetch:fonts": "chimera-fetch-fonts --game <kebab> --url <google-css-url> --out-dir assets/fonts"
+"fetch:fonts": "chimera-fetch-fonts --game <kebab> --out-dir assets/fonts"
 ```
 
-Replace `<google-css-url>` with a real Google Fonts CSS URL (quote it — it contains `&`), run
-`pnpm fetch:fonts` from the app package, and paste the printed snippet into `shell/fonts.ts`.
+and forwards it from the project root, so a game runs it without editing anything:
+
+```sh
+pnpm fetch:fonts --url "https://fonts.googleapis.com/css2?family=Inter&display=swap"
+```
+
+pnpm appends trailing arguments to the delegated script, so the URL reaches the bin. Paste
+the printed snippet into `shell/fonts.ts`.
+
+**Why no `--url` placeholder in the script:** it used to read `--url <google-css-url>` as
+inline documentation. A package script is handed to `sh`, which reads the angle brackets as a
+REDIRECTION — so `pnpm fetch:fonts` opened a file named `google-css-url`, failed, and reported
+`sh: google-css-url: No such file or directory` before this bin was ever looked up. The error
+named neither the script nor the tool, so it read as the tool being missing from the scaffold.
+Required arguments belong on the command line, not baked into the script as prose.
 
 **Why the explicit `--out-dir assets/fonts`:** pnpm runs a package script with cwd = the app
 package (`apps/<kebab>`). The tool's default output dir is `apps/<gameId>/assets/fonts`

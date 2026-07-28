@@ -354,6 +354,35 @@ describe('blank template smoke harness', () => {
         expect(script).toContain('chimera-fetch-fonts');
         expect(script).toContain('--game __game_kebab__');
         expect(script).toContain('--out-dir assets/fonts');
+        // No `--url` placeholder: the CSS URL arrives as a TRAILING ARGUMENT
+        // (`pnpm fetch:fonts --url '<css-url>'`), which pnpm appends to the last
+        // command in the script. Baking a placeholder in made the script
+        // unrunnable until hand-edited — see the redirection sweep below for why
+        // it did not merely fail, it failed while blaming the wrong thing.
+        expect(script).not.toContain('--url');
+    });
+
+    // A package script runs through `sh`, so an angle-bracket placeholder is a
+    // REDIRECTION, not prose. `--url <google-css-url>` never reached the bin at
+    // all: sh tried to open a file named `google-css-url`, and the resulting
+    // `sh: google-css-url: No such file or directory` names neither the script
+    // nor the tool — it reads as "chimera-fetch-fonts is missing from the
+    // scaffold". Sweeping EVERY script (not just the one that carried it) is the
+    // point: the failure mode belongs to the placeholder convention, not to
+    // fonts, and the next tool to document an argument inline would repeat it.
+    //
+    // Only `<` and `>` are swept. They have no legitimate use in these scripts,
+    // whereas `&&` sequencing is normal and appears in the standalone ROOT
+    // manifest's scripts.
+    it('leaves no shell redirection in any template script', async () => {
+        const pkg = JSON.parse(await read('package.json')) as { scripts: Record<string, string> };
+        for (const [name, command] of Object.entries(pkg.scripts)) {
+            expect(
+                /[<>]/u.test(command),
+                `script "${name}" contains a shell redirection character; sh consumes it as ` +
+                    `a redirect and the command dies before the tool runs: ${command}`,
+            ).toBe(false);
+        }
     });
 
     // Day-one asset-reference validation (Invariants #22/#52): the same cwd
@@ -392,6 +421,55 @@ describe('blank template smoke harness', () => {
         expect(pkg.scripts['icons:generate']).toBe(
             'chimera-generate-icons --source assets/icons/icon.png --out assets/icons',
         );
+    });
+
+    // Every `chimera-*` command a template script invokes is a BIN of
+    // `@chimera-engine/electron` — the only engine package the scaffold installs
+    // that declares any. pnpm links a dependency's declared bins into
+    // `apps/<kebab>/node_modules/.bin`, so a script naming a command the engine
+    // does not declare resolves to nothing and dies with `command not found` —
+    // at scaffold time, in the user's project, with no earlier signal.
+    //
+    // `verify:scaffold` runs all four bins, but it installs the engine from
+    // LOCALLY PACKED TARBALLS, so it proves the template agrees with the engine
+    // SOURCE. It cannot see this drift either, because the drift is between the
+    // template and what `electron/package.json` DECLARES. That declaration is
+    // what the published tarball's `bin` map is built from, so checking it here
+    // is the earliest place the mismatch can surface.
+    it('names only chimera-* commands that @chimera-engine/electron declares as bins', async () => {
+        const enginePkg = JSON.parse(
+            await readFile(
+                path.resolve(import.meta.dirname, '../../electron/package.json'),
+                'utf8',
+            ),
+        ) as { bin: Record<string, string> };
+        const declared = new Set(Object.keys(enginePkg.bin));
+        // Positive control: the guard is only meaningful if the engine declares
+        // bins at all. An empty/renamed `bin` map would otherwise make every
+        // lookup below vacuously... fail — but a missing `bin` key entirely would
+        // throw on Object.keys, so pin that the map is populated.
+        expect(declared.size).toBeGreaterThan(0);
+
+        const pkg = JSON.parse(await read('package.json')) as { scripts: Record<string, string> };
+        const invoked = new Set<string>();
+        for (const command of Object.values(pkg.scripts)) {
+            for (const token of command.split(/\s+/u)) {
+                if (token.startsWith('chimera-')) invoked.add(token);
+            }
+        }
+        // The template must actually exercise this guard — if a refactor stops
+        // naming bins directly (routing through `pnpm exec`, say), the loop below
+        // would pass while checking nothing.
+        expect(invoked.size).toBeGreaterThan(0);
+
+        for (const bin of invoked) {
+            expect(
+                declared.has(bin),
+                `template script invokes "${bin}", which electron/package.json does not declare ` +
+                    `as a bin (declared: ${[...declared].join(', ')}). A scaffolded game would ` +
+                    'fail with "command not found".',
+            ).toBe(true);
+        }
     });
 
     it('declares no image codec anywhere — sharp and png2icons stay opt-in', async () => {

@@ -343,8 +343,25 @@ function assertDryRunReport(stdout: string): void {
  * never the doubled `apps/<kebab>/apps/<kebab>/…` phantom path (the tool's
  * README explains the cwd mechanics). The fetch runs against a localhost
  * fixture; no live Google network is touched.
+ *
+ * The fetch is driven the way a DEVELOPER drives it — `pnpm fetch:fonts --url …`
+ * from the project ROOT — rather than by invoking the bin with a hand-built
+ * argv. An arm that builds its own argv proves only that the bin works; it says
+ * nothing about the script that ships, and that gap is not hypothetical. The
+ * shipped script once read `--url <google-css-url>`, whose unquoted angle
+ * brackets `sh` consumes as a REDIRECTION: the command died with
+ * `sh: google-css-url: No such file or directory` before `chimera-fetch-fonts`
+ * was ever looked up, and the error named neither the script nor the tool. This
+ * arm was fully green throughout. Driving the real script from the real
+ * directory now covers the whole chain at once — the root forward exists, the
+ * app script survives `sh`, pnpm's trailing-arg append carries `--url` through
+ * both hops, and the bare bin name resolves.
  */
-async function runFontsArm(deps: VerifyScaffoldDeps, appDir: string): Promise<void> {
+async function runFontsArm(
+    deps: VerifyScaffoldDeps,
+    projectRoot: string,
+    appDir: string,
+): Promise<void> {
     const fail = (reason: string): never => {
         throw new VerifyScaffoldStepError('fonts', `verify:scaffold: step "fonts" ${reason}`);
     };
@@ -361,6 +378,19 @@ async function runFontsArm(deps: VerifyScaffoldDeps, appDir: string): Promise<vo
     if (!script.includes('--out-dir assets/fonts')) {
         fail('found a fetch:fonts script without --out-dir assets/fonts');
     }
+    // A package script is handed to `sh`, which reads `<` and `>` as REDIRECTIONS.
+    // The script once documented its argument inline as `--url <google-css-url>`;
+    // sh opened a file named `google-css-url`, failed, and reported
+    // `sh: google-css-url: No such file or directory` — a message naming neither
+    // the script nor the bin, which reads as the tool being absent from the
+    // scaffold. Step (c) below would now catch this by running the real script,
+    // but only as an opaque non-zero exit; refusing here names the actual cause.
+    if (/[<>]/u.test(script)) {
+        fail(
+            'found a fetch:fonts script containing a shell redirection character (< or >) — ' +
+                `sh consumes it before the bin is looked up: ${script}`,
+        );
+    }
 
     // (b) The bin resolves from the installed app (how pnpm resolves the bare
     //     name when it runs the script).
@@ -368,8 +398,13 @@ async function runFontsArm(deps: VerifyScaffoldDeps, appDir: string): Promise<vo
         fail('resolved no chimera-fetch-fonts under the app node_modules/.bin');
     }
 
-    // (c) A real fetch through the localhost fixture, cwd = the app package —
-    //     the exact cwd pnpm gives the scaffolded script.
+    // (c) A real fetch through the localhost fixture, driven as `pnpm fetch:fonts
+    //     --url …` from the PROJECT ROOT — the documented invocation, exercising
+    //     the root forward, the shipped app script, and pnpm's trailing-arg
+    //     append in one command. The script supplies `--game` and `--out-dir`
+    //     itself; only the URL is a caller argument. pnpm runs the delegated
+    //     script with cwd = the app package, so `--out-dir assets/fonts` still
+    //     resolves app-relative and check (d) below stays exact.
     let fixture: FontFixture;
     try {
         fixture = await deps.startFontFixture();
@@ -383,17 +418,8 @@ async function runFontsArm(deps: VerifyScaffoldDeps, appDir: string): Promise<vo
             'fonts',
             deps.run(
                 'pnpm',
-                [
-                    'exec',
-                    'chimera-fetch-fonts',
-                    '--game',
-                    PROBE_GAME.kebab,
-                    '--url',
-                    `http://127.0.0.1:${fixture.port}/css`,
-                    '--out-dir',
-                    'assets/fonts',
-                ],
-                { cwd: appDir },
+                ['run', 'fetch:fonts', '--url', `http://127.0.0.1:${fixture.port}/css`],
+                { cwd: projectRoot },
             ),
         );
     } finally {
@@ -876,7 +902,7 @@ async function scaffoldPipeline(
     //     `--out-dir assets/fonts` shape, proven end-to-end against a localhost
     //     fixture — see {@link runFontsArm}.
     deps.log('fetching a font through the packaged chimera-fetch-fonts bin (localhost fixture)…');
-    await runFontsArm(deps, appDir);
+    await runFontsArm(deps, tmp, appDir);
 
     // 8d. validate-assets (§4.10, Invariants #22/#52): the packaged
     //     `chimera-validate-assets` bin + the scaffolded `../..` invocation,

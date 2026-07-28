@@ -133,6 +133,53 @@ describe('buildStandaloneRootManifest', () => {
         }
     });
 
+    // The three dev tools whose bins ship in `@chimera-engine/electron` alongside
+    // `chimera-dev-mp`. In the MONOREPO all four are root scripts (`pnpm fetch:fonts`,
+    // `pnpm icons:generate`, `pnpm validate:assets`, `pnpm dev:mp`); a standalone scaffold
+    // forwarded only `dev:mp`, so the other three were reachable solely as
+    // `pnpm --filter @chimera-engine/<game> <script>` — a form nothing in the scaffold's own
+    // output taught, leaving them looking absent from the project root a developer works in.
+    it('forwards every app-level dev tool from the project root, matching the monorepo surface', () => {
+        const manifest = buildStandaloneRootManifest({
+            name: 'my-game',
+            toolchainDeps: {},
+            packageManager: 'pnpm@10.33.0',
+            engines: { node: '>=20.0.0' },
+        });
+        // Exact strings: a bare `--filter` delegation is the whole mechanism. These tools need
+        // no build chain (unlike `dev:mp`, which must rebuild the renderer + app bundle before
+        // the harness launches them) — they read source and assets, never build output. Adding
+        // one would make every font fetch pay for a `next build`.
+        expect(manifest.scripts['fetch:fonts']).toBe(
+            'pnpm --filter @chimera-engine/my-game fetch:fonts',
+        );
+        expect(manifest.scripts['icons:generate']).toBe(
+            'pnpm --filter @chimera-engine/my-game icons:generate',
+        );
+        expect(manifest.scripts['validate:assets']).toBe(
+            'pnpm --filter @chimera-engine/my-game validate:assets',
+        );
+    });
+
+    // `fetch:fonts` is the only one of the three that REQUIRES an argument (the Google CSS
+    // URL). pnpm appends trailing args to the last command in a script, so a bare `--filter`
+    // forward passes `pnpm fetch:fonts --url '<css-url>'` through the root, into the app
+    // script, and on to the bin. A trailing `&& something-else` — or any redirection — would
+    // silently strand the URL on the wrong command, so pin the ENDING, not just the content.
+    it('ends each dev-tool forward on the delegated script so trailing args reach the bin', () => {
+        const manifest = buildStandaloneRootManifest({
+            name: 'my-game',
+            toolchainDeps: {},
+            packageManager: 'pnpm@10.33.0',
+            engines: { node: '>=20.0.0' },
+        });
+        for (const script of ['fetch:fonts', 'icons:generate', 'validate:assets']) {
+            const command = manifest.scripts[script];
+            expect(command, `${script} must exist`).toBeDefined();
+            expect(command?.endsWith(`@chimera-engine/my-game ${script}`)).toBe(true);
+        }
+    });
+
     it('carries the supplied pnpm.overrides for the gate tarball-resolved form', () => {
         const overrides = { '@chimera-engine/renderer': 'file:/tmp/chimera-renderer-0.9.0.tgz' };
         const manifest = buildStandaloneRootManifest({

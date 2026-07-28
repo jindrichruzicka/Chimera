@@ -426,7 +426,11 @@ download `.woff2` files from a Google Fonts CSS URL into the game asset folder. 
 The same tool ships as the `chimera-fetch-fonts` bin of `@chimera-engine/electron`
 (`electron/dev-tools/fetch-google-fonts/`), so a standalone scaffolded game runs it without the
 monorepo — its app-level `fetch:fonts` script invokes
-`chimera-fetch-fonts --game <kebab> --url "<google-css-url>" --out-dir assets/fonts`. The optional
+`chimera-fetch-fonts --game <kebab> --out-dir assets/fonts`, forwarded from the project root so
+`pnpm fetch:fonts --url "<google-css-url>"` reaches the bin (pnpm appends trailing arguments to the
+delegated script). The script bakes in no `--url` placeholder: a package script runs through `sh`,
+which reads `<…>` as a redirection, so an inline placeholder made the script die before the bin was
+looked up. The optional
 `--out-dir` (relative values resolve against the invocation cwd by default) and `--src-prefix`
 (must stay a relative asset path) flags default to the monorepo layout
 (`apps/<gameId>/assets/fonts`, `<gameId>/fonts`); the scaffolded script passes an explicit
