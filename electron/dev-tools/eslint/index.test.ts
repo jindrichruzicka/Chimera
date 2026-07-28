@@ -275,6 +275,34 @@ describe('compiled plugin', () => {
         expect(output).toBe([...EXPECTED_RULE_NAMES].sort().join(','));
     });
 
+    it('exposes the preset from the same subpath, and its lazy peers resolve', () => {
+        // The preset and the plugin import each other — `index` re-exports
+        // `standaloneLintConfig`, `preset` reads `chimeraPlugin` — so this is
+        // also the check that the cycle survives compilation. It does because
+        // the plugin is read inside the factory rather than at module scope; a
+        // module-scope read would be a TDZ error, and only loading the built
+        // artifact shows it.
+        //
+        // It also exercises the on-demand `@eslint/css` / `@eslint/js` require
+        // in the same hostile environment as its sibling above: outside the
+        // workspace, with the runner's `NODE_PATH` gone.
+        const output = runInFreshNode(`
+            import { standaloneLintConfig } from ${JSON.stringify(builtIndex)};
+            const config = standaloneLintConfig();
+            console.log(JSON.stringify({
+                blocks: config.length,
+                css: config.filter((block) => block.language === 'css/css').length,
+                registered: config.every((block) => {
+                    const on = Object.entries(block.rules ?? {})
+                        .some(([id, severity]) => id.startsWith('chimera/') && severity !== 'off');
+                    return !on || block.plugins?.chimera !== undefined;
+                }),
+            }));
+        `);
+
+        expect(JSON.parse(output)).toEqual({ blocks: 6, css: 2, registered: true });
+    });
+
     it('resolves its base token set through the renderer package, with no option passed', () => {
         // The production path, end to end: no injected fixture, so the rule has
         // to resolve `@chimera-engine/renderer/styles/tokens.css` from inside

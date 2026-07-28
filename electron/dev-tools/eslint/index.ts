@@ -43,3 +43,7 @@ export const chimeraPlugin = {
         'no-main-provider-internals': noMainProviderInternals,
     },
 } as const;
+
+// The games-facing preset lives beside the plugin and ships from the same
+// subpath, so a game needs one import to get both.
+export { standaloneLintConfig, type StandaloneLintConfigOptions } from './preset.js';
