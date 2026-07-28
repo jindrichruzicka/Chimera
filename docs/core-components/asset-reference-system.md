@@ -151,7 +151,7 @@ export interface AssetManifest {
 The manifest value is **injected via `AssetManagerContext`** at game session start — the renderer never imports from any `games/*` path. `kind` is the runtime bridge from the phantom type to the renderer loader registry. `metadata` is loader-owned structured data for cases such as atlas descriptors, compression options, or game-specific decode hints.
 
 > **Invariant #47** — `AssetManager` never imports from `games/*`.
-> **Invariant #22** — All `AssetRef` strings in content JSON must pass `tools/validate-assets.ts` before merge.
+> **Invariant #22** — All `AssetRef` strings in content JSON must pass `electron/dev-tools/validate-assets/index.ts` before merge.
 
 ---
 
@@ -299,7 +299,7 @@ function EntityMesh({ portraitRef }: EntityMeshProps) {
 
 ## CI Validation
 
-`tools/validate-assets.ts` crawls all content JSON files, collects every field whose value matches the `AssetRef` format (`<gameId>/<path>`), and asserts that the file exists on disk.
+`electron/dev-tools/validate-assets/index.ts` crawls all content JSON files, collects every field whose value matches the `AssetRef` format (`<gameId>/<path>`), and asserts that the file exists on disk.
 
 > **Invariant #22** — All `AssetRef` strings must pass this validation before merge. A data object referencing a non-existent file is a CI-blocking error.
 
@@ -310,6 +310,26 @@ Renderer runtime loading uses the `chimera://renderer/game-assets/<game>/<path>`
 which Electron resolves to the game-owned asset directory. External font URLs are rejected, and
 committed game assets under `renderer/public/assets/` are forbidden so the renderer does not become
 a second owner of game audio, fonts, textures, or models.
+
+### Standalone games run the same check
+
+The validator ships as the `chimera-validate-assets` bin of `@chimera-engine/electron`
+(§4.32), so a game scaffolded by `create-chimera-game` enforces Invariant #22 from day one
+rather than losing it on the way out of the monorepo. There is no separate standalone mode:
+a scaffolded project places its game at `apps/<kebab>` under an `apps/*` workspace, which is
+the shape the crawl already expects.
+
+What differs is only how the tool is pointed at the project root. pnpm runs a package script
+with cwd = that package's directory, so the scaffolded **app-level** script is
+`chimera-validate-assets ../..` — from `apps/<kebab>`, `../..` is the project root, whose
+`apps/*` scan then finds the game. Run from the project root instead, the same `../..` would
+resolve to the root's parent; and a standalone root has no `@chimera-engine/electron` for pnpm
+to link the bin from, so app-level is the only place it exists. Pointed at a directory with no
+`apps/` the tool **refuses** rather than reporting `Checked 0 asset refs` — for a validator,
+success about a tree that was never read is the worst available answer.
+
+See the [tool README](../../electron/dev-tools/validate-assets/README.md) for the full cwd
+mechanics and the `typescript` runtime dependency the AST crawl needs.
 
 ---
 

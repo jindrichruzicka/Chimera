@@ -432,7 +432,7 @@ monorepo — its app-level `fetch:fonts` script invokes
 (`apps/<gameId>/assets/fonts`, `<gameId>/fonts`); the scaffolded script passes an explicit
 `--out-dir assets/fonts` — the tool's README explains why, and documents the full workflow.
 
-`tools/validate-assets.ts` validates every game font declaration before merge: external URLs,
+`electron/dev-tools/validate-assets/index.ts` validates every game font declaration before merge: external URLs,
 absolute paths, and traversal are rejected; the game-owned source file must exist; and committed
 game assets under `renderer/public/assets/` are rejected.
 

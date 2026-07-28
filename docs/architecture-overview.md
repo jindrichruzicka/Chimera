@@ -241,7 +241,7 @@ A damage action flows like this:
 ### B.5 Why the Indirection Is Worth It
 
 - **Simulation has zero Three.js / DOM dependency** — same code runs headless in tests, in the AI layer (§4.9), and in save/load replay (§4.11).
-- **Designers change sprites by editing JSON.** No TypeScript rebuild. `tools/validate-assets.ts` (§4.10) catches typos at CI time.
+- **Designers change sprites by editing JSON.** No TypeScript rebuild. `electron/dev-tools/validate-assets/index.ts` (§4.10) catches typos at CI time — as `pnpm validate:assets` in the monorepo, and as the published `chimera-validate-assets` bin in a standalone game.
 - **Fog of war is automatic.** The renderer literally cannot render an entity it never received in its `PlayerSnapshot` — `VisibilityRules` decided upstream (§4.6).
 - **Bit-identical determinism.** Stats live in integer fields per §4.2.1 Rule 3; the sprite bucket is derived deterministically from `(hp, maxHp)`, so every client shows the same sprite for the same state.
 - **Stat-driven visuals are a pure renderer concern.** Adding a `"legendary"` sprite variant for `hp > 150%` is a `pickSpriteRef` change and one JSON edit — no engine, no network, no save-migration changes.

@@ -16,17 +16,15 @@
  *     `dev-tools/validate-assets`, so the stale-reference scan matches the old
  *     path only when it is NOT the `dev-` prefixed one.
  *
- * The lock is deliberately PARTIAL, in two directions:
+ * Prose is WALKED, not listed: every `.md` under `docs/` and `electron/
+ * dev-tools/` is scanned, with the shipped-milestone roadmap sections as the
+ * stated exception (append-only records, correct about the path the tool had
+ * then). The migration that was deferred while the tool moved has landed, so
+ * the exception it was held under is gone — and a walk, unlike the allowlist
+ * that would have replaced it, also covers the next doc to name the gate.
  *
- *   - `CHANGELOG.md` and the M7 roadmap section are append-only historical
- *     records of a shipped milestone — they describe what was built then, at
- *     the path it had then, so they are never scanned;
- *   - the prose surfaces under `docs/core-components/`, `docs/testing/`,
- *     `docs/architecture-overview.md` and the invariant roll-call still name
- *     the retired path on this branch. They migrate in the feature's docs
- *     sweep, together with the tool README and the §4.10/§4.32 additions, and
- *     are outside this scan until then — so a green run here does NOT mean the
- *     repo is free of the old path.
+ * `CHANGELOG.md` sits outside both trees and is therefore never reached; it is
+ * the same kind of record and would be excluded anyway.
  *
  * Relocation also makes electron's `typescript` dependency load-bearing rather
  * than incidental: the package's build config emits every non-test `.ts` under
@@ -36,8 +34,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -55,6 +53,27 @@ const invariantsDocPath = resolve(
 
 /** Matches the retired repo-root location but never `dev-tools/validate-assets`. */
 const stalePathPattern = /(?<!dev-)tools\/validate-assets/u;
+
+/**
+ * Append-only records of shipped milestones, matched repo-relative. They
+ * describe what was built then, at the path it had then, and are correct as
+ * written — so they are the only prose the stale-path scan skips.
+ *
+ * Single-digit by construction: M1–M9 have shipped and M10 is the live one,
+ * which must stay SCANNED. When M10 ships, its section stops matching and the
+ * scan reds on an append-only record — a loud, fixable failure, which is the
+ * safe direction for a boundary to drift in.
+ */
+const HISTORICAL_RECORDS = /^docs\/roadmap-sections\/m[1-9]-/u;
+
+/** Every `.md` file under `directory`, recursively. */
+function markdownFilesUnder(directory: string): readonly string[] {
+    return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+        const entryPath = resolve(directory, entry.name);
+        if (entry.isDirectory()) return markdownFilesUnder(entryPath);
+        return entry.isFile() && entry.name.endsWith('.md') ? [entryPath] : [];
+    });
+}
 
 /** One nesting level in the annotated file tree is four columns wide. */
 const LEVEL_WIDTH = 4;
@@ -162,9 +181,9 @@ describe('validate-assets relocation (Invariant #22/#52 tooling home)', () => {
 
         // Exactly one home doc-wide: a second TREE ENTRY anywhere else is the
         // duplicate-home rot that block membership alone would allow. Counted
-        // over parsed ENTRIES, so prose naming the gate — which the pending
-        // docs sweep will add — is not a false failure, while an entry written
-        // without its directory slash is still counted. Deliberately doc-wide:
+        // over parsed ENTRIES, so prose naming the gate is not a false failure,
+        // while an entry written without its directory slash is still counted.
+        // Deliberately doc-wide:
         // the duplicate-home rot lands OUTSIDE electron's subtree (under
         // repo-root `tools/`), so a scoped count would miss it; the cost is
         // that a second, legitimate tree elsewhere in this doc would read as a
@@ -189,6 +208,42 @@ describe('validate-assets relocation (Invariant #22/#52 tooling home)', () => {
         ) as ElectronManifest;
         expect(manifest.dependencies?.['typescript']).toBeDefined();
         expect(manifest.devDependencies?.['typescript']).toBeUndefined();
+    });
+
+    it('exempts only SHIPPED milestone records, never the live one', () => {
+        // The boundary is load-bearing and invisible from the walk itself:
+        // widening it to the whole directory would silently exempt the M10
+        // section, which this feature edits and which carried two claims the
+        // relocation falsified.
+        expect(
+            HISTORICAL_RECORDS.test('docs/roadmap-sections/m7-3d-render-integration-v0.7.0.md'),
+        ).toBe(true);
+        expect(
+            HISTORICAL_RECORDS.test('docs/roadmap-sections/m10-first-public-release-v1.0.0.md'),
+        ).toBe(false);
+    });
+
+    it('leaves no stale reference on any LIVE prose surface', () => {
+        // Walked, not listed. The exception these surfaces were held under
+        // while the tool moved has expired, and an allowlist would only ever
+        // cover the files this migration happened to touch — the next doc to
+        // name the gate would be free to name it at the retired path.
+        const prose = [
+            ...markdownFilesUnder(resolve(repoRoot, 'docs')),
+            ...markdownFilesUnder(resolve(repoRoot, 'electron/dev-tools')),
+        ].filter((filePath) => !HISTORICAL_RECORDS.test(relative(repoRoot, filePath)));
+
+        // Floor: a walk that found nothing would satisfy every assertion below.
+        expect(prose.length).toBeGreaterThan(50);
+
+        for (const filePath of prose) {
+            const label = relative(repoRoot, filePath);
+            const doc = readFileSync(filePath, 'utf8');
+            expect(doc, label).not.toMatch(stalePathPattern);
+            // The suite files moved too, and their old bare name is the shape a
+            // roll-call evidence column reaches for.
+            expect(doc, label).not.toContain('validate-assets.test.ts');
+        }
     });
 
     it('is named at its new path by the Invariant #22 rule text', () => {

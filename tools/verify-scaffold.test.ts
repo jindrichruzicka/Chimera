@@ -15,8 +15,10 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect } from 'vitest';
 import {
+    PROBE_BROKEN_REF_FILE,
     PROBE_FONT_FILE,
     PROBE_GAME,
+    PROBE_VALIDATE_ASSETS_SCRIPT,
     applyTarballOverrides,
     buildPnpmOverrides,
     rewriteAppChimeraDeps,
@@ -89,6 +91,7 @@ function makeFakeRun(
 ): { run: RunFn; calls: RecordedCall[] } {
     const calls: RecordedCall[] = [];
     const appDir = path.join(tmpRoot, 'apps', PROBE_GAME.kebab);
+    const electronRealDir = ELECTRON_REAL_DIR;
     const run: RunFn = (cmd, args, opts) => {
         calls.push({ cmd, args, cwd: opts?.cwd });
         const override = overrides(cmd, args);
@@ -128,6 +131,7 @@ function makeFakeRun(
                     name: PROBE_GAME.pkg,
                     scripts: {
                         'fetch:fonts': `chimera-fetch-fonts --game ${PROBE_GAME.kebab} --url <google-css-url> --out-dir assets/fonts`,
+                        'validate:assets': PROBE_VALIDATE_ASSETS_SCRIPT,
                     },
                     dependencies: {
                         '@chimera-engine/simulation': '^0.9.0',
@@ -145,6 +149,43 @@ function makeFakeRun(
         // (how the bare `chimera-fetch-fonts` in the app script resolves).
         if (args[0] === 'install') {
             files.set(path.join(appDir, 'node_modules', '.bin', 'chimera-fetch-fonts'), '#!node');
+            files.set(
+                path.join(appDir, 'node_modules', '.bin', 'chimera-validate-assets'),
+                '#!node',
+            );
+            // The installed manifest the arm reads the typescript declaration
+            // off — what `npm install @chimera-engine/electron` consults.
+            files.set(
+                path.join(electronRealDir, 'package.json'),
+                JSON.stringify({
+                    name: '@chimera-engine/electron',
+                    dependencies: { typescript: '^5.7.2' },
+                }),
+            );
+        }
+        // The validate-assets arm runs the SAME command twice and requires
+        // different answers: clean first, then non-zero once a broken ref sits
+        // under the app's data/. The fake reads the planted file rather than
+        // counting calls, so a gate that forgot to plant it cannot pass.
+        if (args.includes('validate:assets')) {
+            const planted = files.has(path.join(appDir, 'data', PROBE_BROKEN_REF_FILE));
+            return planted
+                ? {
+                      status: 1,
+                      stdout: '',
+                      stderr: `[validate-assets] Missing asset files:\n- ${PROBE_GAME.kebab}/textures/__missing__.png\n`,
+                  }
+                : {
+                      status: 0,
+                      stdout: '[validate-assets] Checked 3 asset refs; all files exist.\n',
+                      stderr: '',
+                  };
+        }
+        // The arm realpaths the installed electron package before reading its
+        // manifest — pnpm installs it as a symlink, and the closure link only
+        // exists on the far side.
+        if (cmd === 'node' && args[0] === '-e' && args[1]?.includes('realpathSync') === true) {
+            return { status: 0, stdout: electronRealDir, stderr: '' };
         }
         // A successful chimera-fetch-fonts run lands the fixture-served woff2
         // under the app's own assets/fonts (what the real bin writes).
@@ -182,6 +223,17 @@ function makeFakeRun(
 // The tmp root the gate gets back from fs.mkdtemp — the fake returns `${prefix}${counter}`
 // and the gate seeds the prefix below; a fresh fake (counter 1) per test makes this stable.
 const TMP_ROOT = `${path.join(tmpdir(), 'chimera-verify-scaffold-')}1`;
+const APP_DIR = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
+/** Where pnpm's store materialises the installed engine package (see makeFakeRun). */
+const ELECTRON_REAL_DIR = path.join(
+    TMP_ROOT,
+    'node_modules',
+    '.pnpm',
+    '@chimera-engine+electron@1.0.0',
+    'node_modules',
+    '@chimera-engine',
+    'electron',
+);
 
 const TARBALLS = {
     '@chimera-engine/simulation': '/tmp/t/chimera-simulation-0.9.0.tgz',
@@ -315,6 +367,57 @@ describe('rewriteAppChimeraDeps', () => {
         expect(JSON.stringify(rewritten)).not.toContain('workspace:*');
     });
 });
+
+/**
+ * An override for the validate-assets arm's CLEAN-RUN cases: answers the clean
+ * run with `cleanResult` and the PLANTED run the way a correct bin would —
+ * non-zero, naming the missing ref.
+ *
+ * The distinction is load-bearing. The arm runs the same command twice, and an
+ * override that answered both identically would let the PLANTED guard throw
+ * first with the same `failedStep`, so the test would pass green while the
+ * clean-run assertion it names was never reached.
+ */
+function cleanRunOverride(
+    files: Map<string, string>,
+    cleanResult: RunResult,
+): (cmd: string, args: readonly string[]) => RunResult | undefined {
+    const brokenRef = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab, 'data', PROBE_BROKEN_REF_FILE);
+    return (_cmd, args) => {
+        if (!args.includes('validate:assets')) return undefined;
+        if (files.has(brokenRef)) {
+            return {
+                status: 1,
+                stdout: '',
+                stderr: `[validate-assets] Missing asset files:\n- ${PROBE_GAME.kebab}/textures/__missing__.png\n`,
+            };
+        }
+        return cleanResult;
+    };
+}
+
+/**
+ * The mirror of {@link cleanRunOverride}: answers the CLEAN run the way a
+ * correct bin would and the PLANTED run with `plantedResult`. Without it a
+ * malformed planted answer trips the clean run's own guards first, and the
+ * planted assertion under test is never reached.
+ */
+function plantedRunOverride(
+    files: Map<string, string>,
+    plantedResult: RunResult,
+): (cmd: string, args: readonly string[]) => RunResult | undefined {
+    const brokenRef = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab, 'data', PROBE_BROKEN_REF_FILE);
+    return (_cmd, args) => {
+        if (!args.includes('validate:assets')) return undefined;
+        return files.has(brokenRef)
+            ? plantedResult
+            : {
+                  status: 0,
+                  stdout: '[validate-assets] Checked 3 asset refs; all files exist.\n',
+                  stderr: '',
+              };
+    };
+}
 
 // ── Orchestration ───────────────────────────────────────────────────────────────
 
@@ -683,6 +786,230 @@ describe('verifyScaffold', () => {
 
         expect(result.ok).toBe(false);
         expect(result.failedStep).toBe('fonts');
+    });
+
+    // ── validate-assets arm (§4.10, Invariants #22/#52) ───────────────────────
+
+    it('runs the validate-assets arm: bin resolution, a clean pass, and a planted broken ref that FAILS', async () => {
+        const { fs, files, removed } = makeFakeFs();
+        const appDir = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
+        const { run, calls } = makeFakeRun(files, TMP_ROOT);
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(true);
+        // TWO runs of the same script — the second is the whole point. One run
+        // proves only that the bin exits 0, which a bin that scanned nothing
+        // also does.
+        const validateRuns = calls.filter((c) => c.args.includes('validate:assets'));
+        expect(validateRuns).toHaveLength(2);
+        // Run from the PROJECT ROOT via --filter, which is what puts the
+        // script's cwd at the app package and makes its `../..` the root.
+        for (const call of validateRuns) {
+            expect(call.cwd).toBe(TMP_ROOT);
+            expect(call.args).toEqual(['--filter', PROBE_GAME.pkg, 'validate:assets']);
+        }
+        // The probe file is planted under the app's own data/ — the only place
+        // content-JSON discovery reads — and names an asset that is not there.
+        const brokenRef = path.join(appDir, 'data', PROBE_BROKEN_REF_FILE);
+        expect(files.has(brokenRef)).toBe(true);
+        expect(JSON.parse(files.get(brokenRef) ?? '{}')).toEqual({
+            portrait: `${PROBE_GAME.kebab}/textures/__missing__.png`,
+        });
+        // ...and is removed again. The fake `rm` records rather than deletes,
+        // so this is the only way to see the cleanup happened at all; without
+        // it the arm could leave the probe behind and nothing would notice.
+        expect(removed).toContain(brokenRef);
+    });
+
+    it('reports validate-assets when the app script is not the exact ../.. invocation', async () => {
+        const { fs, files } = makeFakeFs();
+        const appDir = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {
+            // Rewrite the script AFTER the scaffold seeds it: one segment too
+            // deep resolves above the project, which is the mistake the
+            // whole-string check exists to catch.
+            if (args[0] === 'install') {
+                const pkg = JSON.parse(files.get(path.join(appDir, 'package.json')) ?? '{}') as {
+                    scripts: Record<string, string>;
+                };
+                pkg.scripts['validate:assets'] = 'chimera-validate-assets ../../..';
+                files.set(path.join(appDir, 'package.json'), JSON.stringify(pkg));
+            }
+            return undefined;
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+    });
+
+    it('reports validate-assets when the bin is not linked under the app node_modules/.bin', async () => {
+        const { fs, files } = makeFakeFs();
+        const appDir = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {
+            if (args[0] === 'install') {
+                // Seed the fonts bin only, so the fonts arm still passes and
+                // this arm is the one that fails.
+                files.set(
+                    path.join(appDir, 'node_modules', '.bin', 'chimera-fetch-fonts'),
+                    '#!node',
+                );
+                return { status: 0, stdout: '', stderr: '' };
+            }
+            return undefined;
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+    });
+
+    it('reports validate-assets when the clean run exits 0 but reports no checked-ref count', async () => {
+        // The vacuity case that an exit-code-only assertion cannot see: a bin
+        // that refuses, crashes, or no-ops still exits 0 in this fake, but it
+        // never prints the count line a real scan produces.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            cleanRunOverride(files, { status: 0, stdout: '', stderr: '' }),
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+    });
+
+    it('reports validate-assets when the planted broken ref STILL exits 0 (the check is vacuous)', async () => {
+        // The arm's reason for existing. The planted run here NAMES the ref, so
+        // the exit-code guard is the only thing that can catch it — a run that
+        // reports the problem and exits 0 is exactly the broken-plumbing case,
+        // and it must not be reachable through the ref-name guard instead.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedRunOverride(files, {
+                status: 0,
+                stdout: `[validate-assets] Missing asset files:\n- ${PROBE_GAME.kebab}/textures/__missing__.png\n`,
+                stderr: '',
+            }),
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+    });
+
+    it('reports validate-assets when the CLEAN run fails, even though it printed a count', async () => {
+        // Isolates the clean run's exit-code assertion: the count guard is
+        // satisfied and the planted run behaves correctly, so nothing else
+        // could catch this.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            cleanRunOverride(files, {
+                status: 1,
+                stdout: '[validate-assets] Checked 3 asset refs; all files exist.\n',
+                stderr: '',
+            }),
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+    });
+
+    it('reports validate-assets when the clean run flags renderer-public assets (should be a no-op)', async () => {
+        // A standalone project root has no renderer/public/assets, so that
+        // check scans an empty set. Anything it reports there is spurious.
+        //
+        // The fixture is the shape the REAL tool emits — exit 1 WITH the
+        // heading, since it only prints that heading inside a failing report.
+        // That makes the arm's guard ordering observable: checked before
+        // `assertStepOk` the failure names the renderer-public finding, checked
+        // after it the exit code wins and the message is a generic one. Asserted
+        // on the logged message, because `failedStep` is identical either way.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            cleanRunOverride(files, {
+                status: 1,
+                stdout:
+                    '[validate-assets] Asset validation failed.\n' +
+                    'Renderer-public game assets are forbidden:\n',
+                stderr: '',
+            }),
+        );
+        const logged: string[] = [];
+
+        const result = await verifyScaffold(
+            makeDeps(run, fs, { log: (message) => logged.push(message) }),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+        expect(logged.join('\n')).toContain('flagged renderer-public game assets');
+    });
+
+    it('reports validate-assets when the installed electron manifest omits the typescript dependency', async () => {
+        // The under-declaration proof, read off the manifest a consumer
+        // installs rather than off a resolution — see the arm's own comment at
+        // that step for why no resolution could stand in for it.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
+            if (args[0] === 'install') {
+                // Install everything the arm needs EXCEPT the declaration.
+                files.set(
+                    path.join(APP_DIR, 'node_modules', '.bin', 'chimera-fetch-fonts'),
+                    '#!node',
+                );
+                files.set(
+                    path.join(APP_DIR, 'node_modules', '.bin', 'chimera-validate-assets'),
+                    '#!node',
+                );
+                files.set(
+                    path.join(ELECTRON_REAL_DIR, 'package.json'),
+                    JSON.stringify({ name: '@chimera-engine/electron', dependencies: {} }),
+                );
+                files.set(path.join(ELECTRON_REAL_DIR, 'node_modules', 'typescript'), 'link');
+                return { status: 0, stdout: '', stderr: '' };
+            }
+            return undefined;
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+    });
+
+    it('reports validate-assets when the planted run fails without naming the broken ref', async () => {
+        // A non-zero exit alone would also be produced by the planted JSON
+        // crashing the tool. The failure has to be ABOUT the ref.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedRunOverride(files, {
+                status: 1,
+                stdout: '',
+                stderr: 'SyntaxError: Unexpected token\n',
+            }),
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
     });
 
     it('reports package when the electron-builder --dir step fails', async () => {

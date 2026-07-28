@@ -1,6 +1,6 @@
 ---
 title: 'Dev Tooling & Multiplayer Harness'
-description: 'chimera-dev-mp CLI (dev:mp), game-owned dev fixtures (dev/profiles + dev/scenarios), harness CLI flags, announce-file handshake, auto host/join/start flow, CHIMERA_DEV_HARNESS guard, standalone-scaffold usage.'
+description: 'chimera-dev-mp CLI (dev:mp), game-owned dev fixtures (dev/profiles + dev/scenarios), harness CLI flags, announce-file handshake, auto host/join/start flow, CHIMERA_DEV_HARNESS guard, standalone-scaffold usage; the sibling chimera-validate-assets bin.'
 tags: [dev-tools, multiplayer, harness, electron, testing, tooling]
 ---
 
@@ -112,6 +112,53 @@ The CLI requires `CHIMERA_DEV_HARNESS=1` (the app's `dev:mp` script sets it) and
 - **App-level** (`apps/<game>/package.json` and the scaffold template): `"dev:mp": "cross-env CHIMERA_DEV_HARNESS=1 chimera-dev-mp"` — the bin resolves from the app's `@chimera-engine/electron` devDependency.
 - **Monorepo root**: `pnpm dev:mp` rebuilds the packages + the reference app's bundle, then delegates to the app's `dev:mp` (dogfooding the published bin path). Trailing args (`pnpm dev:mp 3 --scenario skirmish`) reach the harness.
 - **Standalone root** (emitted by create-chimera-game): `pnpm dev:mp` builds the renderer + app bundle and delegates the same way.
+
+---
+
+## Sibling bin (`chimera-validate-assets`)
+
+`@chimera-engine/electron` publishes the asset-reference validator as a sibling bin, for the
+same reason it publishes this harness: a standalone game should not lose a build-time
+guarantee simply by leaving the monorepo. The rules it enforces (Invariants #22/#52/#97/#125)
+and its crawl semantics live in [§4.10 Asset Reference System](asset-reference-system.md); only
+the distribution belongs here.
+
+```
+chimera-validate-assets [workspaceRoot]
+```
+
+The positional argument defaults to the cwd and is resolved against it. That single fact
+determines the script wiring, which mirrors `dev:mp`'s app-level shape for a different reason:
+
+- **App-level** (`apps/<kebab>/package.json` and the scaffold template):
+  `"validate:assets": "chimera-validate-assets ../.."`. pnpm runs the script with cwd =
+  `apps/<kebab>`, so `../..` is the project root — the layout the crawl expects, with the game
+  at `apps/<kebab>` underneath it.
+- **Monorepo root**: `pnpm validate:assets` runs the tool from source with no argument, so the
+  root is the cwd. Unchanged by the bin's existence.
+
+Unlike `dev:mp` there is **no standalone-root convenience script**. Not because the root
+could not delegate — `pnpm --filter <app> validate:assets` works from there, and is exactly
+what `verify:scaffold` runs — but because it would buy nothing: `dev:mp`'s root script exists
+to build the renderer and app bundle first, and this tool needs no build. A root script that
+invoked the bin _directly_ would be the broken form: the bin is linked only into
+`apps/<kebab>/node_modules/.bin`, and a root-cwd `../..` resolves above the project entirely.
+
+Two properties are worth naming because neither is visible from a passing exit code:
+
+- **It refuses a root with no `apps/`** instead of reporting `Checked 0 asset refs`. Running the
+  bin bare from a game package is the reachable way to land there, and a validator that reports
+  success about a tree it never read is worse than one that crashes.
+- **`typescript` is a declared runtime dependency** of `@chimera-engine/electron`, not a
+  devDependency, because the on-demand-load scan imports it as values. A resolution cannot prove
+  this — under pnpm every route to it realpaths to the same store directory, and the scaffold probe's
+  own root declares it regardless — so `verify:scaffold` reads the declaration off the **installed
+  manifest**, the file `npm install` actually consults, and takes resolvability from the bin having
+  run at all.
+
+`verify:scaffold` runs this bin against the installed standalone probe, asserts the clean run
+reports a count, then plants a broken ref under the app's `data/` and requires the next run to
+fail. The clean pass alone would be satisfied by a bin that scanned nothing.
 
 ---
 

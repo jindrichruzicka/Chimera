@@ -29,10 +29,12 @@
  *      main/preload bundles. This is the arm that fails out-of-repo. Then the generated app's own
  *      `verify:packaged-bundle` gate (Invariant #27) — the template's thin driver over the
  *      engine-exported packaged-bundle guard — so a broken template guard fails engine CI here.
- *      Then the two packaged-bin arms: the dev-harness dry run (§4.32, `chimera-dev-mp --dry-run`
- *      spawn-plan shape-check) and the fonts arm (§4.37, Invariant #97 — `chimera-fetch-fonts`
+ *      Then the three packaged-bin arms: the dev-harness dry run (§4.32, `chimera-dev-mp --dry-run`
+ *      spawn-plan shape-check); the fonts arm (§4.37, Invariant #97 — `chimera-fetch-fonts`
  *      fetches through a localhost fixture and must land the `.woff2` in the app's OWN
- *      `assets/fonts`, killing the cwd path-doubling regression and any silent-no-op bin entry).
+ *      `assets/fonts`, killing the cwd path-doubling regression and any silent-no-op bin entry);
+ *      and the validate-assets arm (§4.10, Invariants #22/#52 — `chimera-validate-assets ../..`
+ *      passes clean AND fails once a broken ref is planted, the non-vacuity proof).
  *   9. `next build` the renderer + an UNSIGNED `electron-builder --dir` — proves the tokenised
  *      packaging config produces a branded local app bundle from the standalone-emitted project.
  *
@@ -109,6 +111,7 @@ export type VerifyScaffoldStep =
     | 'packaged-bundle'
     | 'dev-harness'
     | 'fonts'
+    | 'validate-assets'
     | 'package';
 
 export interface VerifyScaffoldResult {
@@ -134,6 +137,16 @@ export const PROBE_GAME = {
  * to `<family>-Regular.woff2` (pinned by the tool's own unit tests).
  */
 export const PROBE_FONT_FILE = 'VerifyProbe-Regular.woff2';
+
+/**
+ * The content file the validate-assets arm plants to prove the check bites.
+ * Written into the temp scaffold only, and removed again in a `finally` — the
+ * template must never carry it.
+ */
+export const PROBE_BROKEN_REF_FILE = 'verify-scaffold-broken-ref.json';
+
+/** The exact app-level script the blank template must ship. */
+export const PROBE_VALIDATE_ASSETS_SCRIPT = 'chimera-validate-assets ../..';
 
 /** Thrown by a step runner on a non-zero exit so the orchestrator can report which step failed. */
 class VerifyScaffoldStepError extends Error {
@@ -364,6 +377,146 @@ async function runFontsArm(deps: VerifyScaffoldDeps, appDir: string): Promise<vo
     }
 }
 
+/**
+ * The validate-assets arm (§4.10, Invariants #22/#52): prove the published
+ * `chimera-validate-assets` bin is reachable from the installed standalone app,
+ * that the scaffolded `../..` points discovery at the PROJECT ROOT, and — the
+ * part no exit code can show on its own — that the check actually BITES there.
+ *
+ * A run that discovered nothing would pass a clean-scaffold assertion exactly
+ * as happily as a correct one, so the arm plants a broken ref and requires the
+ * next run to fail. It also reads the INSTALLED package's `typescript`
+ * declaration, which is what a consumer gets and what no resolution can
+ * establish (see the comment at that step).
+ */
+async function runValidateAssetsArm(
+    deps: VerifyScaffoldDeps,
+    tmp: string,
+    appDir: string,
+): Promise<void> {
+    const fail = (reason: string): never => {
+        throw new VerifyScaffoldStepError(
+            'validate-assets',
+            `verify:scaffold: step "validate-assets" ${reason}`,
+        );
+    };
+    const validate = (): RunResult =>
+        deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'validate:assets'], {
+            cwd: tmp,
+            capture: true,
+        });
+
+    // (a) The scaffolded script, whole-string: the DEPTH is the mechanism. Run
+    //     app-level, `../..` is the project root; one segment more resolves
+    //     above the project entirely.
+    const appPkg = JSON.parse(await deps.fs.readFile(path.join(appDir, 'package.json'))) as {
+        scripts?: Record<string, string>;
+    };
+    const script = appPkg.scripts?.['validate:assets'];
+    if (script !== PROBE_VALIDATE_ASSETS_SCRIPT) {
+        fail(
+            `found no app validate:assets script equal to "${PROBE_VALIDATE_ASSETS_SCRIPT}" (got ${JSON.stringify(script)})`,
+        );
+    }
+
+    // (b) The bin resolves from the installed app — how pnpm resolves the bare
+    //     name when it runs that script.
+    if (
+        !(await deps.fs.exists(
+            path.join(appDir, 'node_modules', '.bin', 'chimera-validate-assets'),
+        ))
+    ) {
+        fail('resolved no chimera-validate-assets under the app node_modules/.bin');
+    }
+
+    // (c) The clean scaffold passes, and reports a count.
+    const clean = validate();
+    const cleanOutput = `${clean.stdout}${clean.stderr}`;
+    // Checked BEFORE the exit code: a standalone root has no
+    // `renderer/public/assets`, so that check scans an empty set — an empty set
+    // is a no-op, not a finding. The tool only prints this heading inside a
+    // failing report, so asserting it after `assertStepOk` could never fire.
+    if (cleanOutput.includes('Renderer-public game assets are forbidden')) {
+        fail('flagged renderer-public game assets on a root that has no renderer/public/assets');
+    }
+    assertStepOk('validate-assets', clean);
+    // `Checked N` is what separates "read the workspace and found nothing
+    // wrong" from "never reached it at all" — a bin that printed nothing and
+    // happened to exit 0 clears the assertion above but not this one. Zero is
+    // accepted deliberately: a blank template declares no assets yet, so the
+    // clean scaffold genuinely reports 0.
+    if (!/Checked \d+ asset refs/u.test(cleanOutput)) {
+        fail('ran on the clean scaffold without reporting a checked-ref count');
+    }
+
+    // (d) Non-vacuity. Plant a content ref to an asset that does not exist and
+    //     require the very next run to fail. Temp dir only — removed in the
+    //     `finally` so a failure here cannot leave the probe dirty.
+    deps.log(
+        'planting a broken asset ref — the validation failure printed next is the EXPECTED one…',
+    );
+    const brokenRefPath = path.join(appDir, 'data', PROBE_BROKEN_REF_FILE);
+    await deps.fs.mkdir(path.join(appDir, 'data'));
+    await deps.fs.writeFile(
+        brokenRefPath,
+        `${JSON.stringify({ portrait: `${PROBE_GAME.kebab}/textures/__missing__.png` }, null, 4)}\n`,
+    );
+    let planted: RunResult;
+    try {
+        planted = validate();
+    } finally {
+        await deps.fs.rm(brokenRefPath);
+    }
+    if (planted.status === 0) {
+        fail('passed with a broken asset ref planted under the app data/ — the check is vacuous');
+    }
+    // Non-zero alone would also be satisfied by the planted JSON crashing the
+    // tool. The failure has to be ABOUT the ref.
+    if (
+        !`${planted.stdout}${planted.stderr}`.includes(
+            `${PROBE_GAME.kebab}/textures/__missing__.png`,
+        )
+    ) {
+        fail('failed on the planted ref without naming it — the non-zero exit may be unrelated');
+    }
+
+    // (e) The under-declaration half. The bin imports `typescript` as runtime
+    //     VALUES for its AST crawl, and two separate things have to be true of
+    //     that: it must RESOLVE here, and it must be DECLARED so it resolves
+    //     for everyone else too.
+    //
+    //     Resolution is already proven above — the bin loaded and produced two
+    //     reports, which it could not have done with an unresolvable top-level
+    //     import. What that does NOT establish is *why* it resolved: this probe
+    //     is a pnpm workspace whose own root declares `typescript`, so a
+    //     hoisted copy would satisfy the import here and fail the consumer who
+    //     has no such root. Nor can a resolution tell the two apart —
+    //     `require.resolve` returns a realpath, and every route lands on the
+    //     same store directory.
+    //
+    //     So the declaration is read off the INSTALLED manifest, which is what
+    //     `npm install @chimera-engine/electron` actually consults. Followed
+    //     through the symlink pnpm installs the package as.
+    const electronDir = path.join(appDir, 'node_modules', '@chimera-engine', 'electron');
+    const realElectronDir = deps.run(
+        'node',
+        ['-e', `process.stdout.write(require('fs').realpathSync(${JSON.stringify(electronDir)}))`],
+        { cwd: tmp, capture: true },
+    );
+    if (realElectronDir.status !== 0 || realElectronDir.stdout.trim() === '') {
+        fail('could not resolve the installed @chimera-engine/electron directory');
+    }
+
+    const installedPkg = JSON.parse(
+        await deps.fs.readFile(path.join(realElectronDir.stdout.trim(), 'package.json')),
+    ) as { dependencies?: Record<string, string> };
+    if (installedPkg.dependencies?.['typescript'] === undefined) {
+        fail(
+            "installed @chimera-engine/electron without typescript in its dependencies — the bin's AST crawl imports it as values, so a consumer without a hoisted copy would get 'Cannot find module'",
+        );
+    }
+}
+
 /** Run one of the generated app's smoke scripts (`test` or `test:e2e`) from the standalone root. */
 function runAppScript(
     deps: VerifyScaffoldDeps,
@@ -517,6 +670,13 @@ async function scaffoldPipeline(
     //     fixture — see {@link runFontsArm}.
     deps.log('fetching a font through the packaged chimera-fetch-fonts bin (localhost fixture)…');
     await runFontsArm(deps, appDir);
+
+    // 8d. validate-assets (§4.10, Invariants #22/#52): the packaged
+    //     `chimera-validate-assets` bin + the scaffolded `../..` invocation,
+    //     proven to pass clean AND to fail on a planted broken ref — see
+    //     {@link runValidateAssetsArm}.
+    deps.log('validating the scaffolded assets through the packaged chimera-validate-assets bin…');
+    await runValidateAssetsArm(deps, tmp, appDir);
 
     // 9. package. Export the Next renderer (populates `renderer/out`), then build an UNSIGNED
     //    `electron-builder --dir` bundle from the standalone-emitted project. electron-builder
