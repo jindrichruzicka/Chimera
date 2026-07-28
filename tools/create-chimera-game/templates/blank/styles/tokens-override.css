@@ -1,0 +1,31 @@
+/*
+ * __Game Title__ — design token overrides.
+ *
+ * Redefine any `--ch-*` token the engine declares and the whole UI follows: the
+ * shell, the built-in screens and your own components all read the same
+ * variables. This is the sanctioned way a game themes Chimera — the alternative,
+ * hardcoding colours and sizes in your components, is what the lint rules on
+ * `screens/` exist to stop.
+ *
+ * Only tokens the engine ALREADY declares may be redefined here
+ * (`chimera/no-unknown-token-overrides`, Invariant #85). Inventing a new
+ * `--ch-*` name in this file is an error: nothing in the engine would read it,
+ * so it would look like theming and do nothing. Define game-local variables in
+ * your own `*.module.css` instead.
+ *
+ * The engine's full token set is the canonical list — see
+ * `@chimera-engine/renderer/styles/tokens.css` in your `node_modules`.
+ */
+
+:root {
+    /*
+     * The accent family. `--ch-color-accent` is what primary buttons and the
+     * pressed toggle read; the hover and strong variants are separate tokens,
+     * so moving one alone leaves a themed button with an unthemed border. Set
+     * as a group for that reason — the engine's own defaults are three shades
+     * of the same neutral, and so are these.
+     */
+    --ch-color-accent: #4f46e5;
+    --ch-color-accent-hover: #6366f1;
+    --ch-color-accent-strong: #a5b4fc;
+}

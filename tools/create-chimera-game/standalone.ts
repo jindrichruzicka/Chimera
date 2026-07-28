@@ -240,6 +240,16 @@ export function buildStandaloneRootManifest(
             'fetch:fonts': `pnpm --filter @chimera-engine/${name} fetch:fonts`,
             'icons:generate': `pnpm --filter @chimera-engine/${name} icons:generate`,
             'validate:assets': `pnpm --filter @chimera-engine/${name} validate:assets`,
+            // The architecture-lint gate, forwarded in the same shape but for a
+            // different reason (§4.32): `eslint`'s bin is at the ROOT, not in
+            // the app — what lives in the app is the flat CONFIG, so eslint has
+            // to run from there. Without this a developer at the project root —
+            // the directory VS Code opens, and the one every doc's `pnpm …`
+            // example assumes — gets "Missing script: lint" and concludes the
+            // scaffold ships no linting. It lints the APP; the project root's
+            // own few files (`scripts/launch.mjs`, `vitest.config.mts`) have no
+            // config and are not covered.
+            lint: `pnpm --filter @chimera-engine/${name} lint`,
         },
         pnpm: {
             ...(overrides !== undefined ? { overrides: { ...overrides } } : {}),
@@ -257,14 +267,28 @@ export function buildStandaloneWorkspaceYaml(): string {
 /**
  * The standalone root's `.gitignore`. Synthesized (not shipped as a template
  * file) because npm strips `.gitignore` from published tarballs — a template
- * copy would silently vanish from the packed CLI. Covers install/build output
- * plus the dev multiplayer harness's per-instance `.dev-userdata/` dirs
- * (§4.32, Invariant #78), which are wiped and recreated on every run.
+ * copy would silently vanish from the packed CLI. Covers install/build output,
+ * the dev multiplayer harness's per-instance `.dev-userdata/` dirs (§4.32,
+ * Invariant #78) which are wiped and recreated on every run, and Playwright's
+ * report/results output — the same write paths the app's `eslint.config.mjs`
+ * ignores, in the other syntax.
  */
 export function buildStandaloneGitignore(): string {
-    return ['node_modules/', 'dist/', 'out/', '.next/', '.e2e-build/', '.dev-userdata/', ''].join(
-        '\n',
-    );
+    return [
+        'node_modules/',
+        'dist/',
+        'out/',
+        '.next/',
+        '.e2e-build/',
+        '.dev-userdata/',
+        // Playwright's own output: an HTML report is a ~400 KB bundled file, and
+        // its trace assets are bigger. gitignore patterns match at any depth, so
+        // the bare directory names cover the e2e dir without naming it.
+        'playwright-report/',
+        'test-results/',
+        'results/',
+        '',
+    ].join('\n');
 }
 
 /**
@@ -356,8 +380,9 @@ child.on('exit', (code, signal) => {
  *   - Package <Game> — <platform>: the per-platform root scripts (buildStandaloneRootManifest).
  *
  * Dropdown order is fixed with `presentation.order` (VS Code otherwise lists all configurations
- * first then compounds at the bottom, burying the compound). NO ESLint configs: a standalone
- * scaffold ships no eslint flat config, so an `eslint .` launch would be broken out of the box.
+ * first then compounds at the bottom, burying the compound). No ESLint launch configuration: the
+ * scaffold DOES ship an `eslint.config.mjs` (§4.32), but linting is served by the recommended
+ * ESLint extension inline and by `pnpm lint` — neither wants a debug target.
  *
  * Pure string over kebab + title, mirroring the other synthesizers.
  */
@@ -577,21 +602,24 @@ export function buildStandaloneVscodeTasksJson(kebab: string, title: string): st
  * The standalone project's `.vscode/extensions.json` — the workspace-recommended extensions VS Code
  * prompts to install on first open.
  *
- * Recommends ONLY the two test-provider extensions whose frameworks the scaffold actually ships:
- *   - `vitest.explorer`         — surfaces the app's Vitest unit suite (`vitest.config.mts`) in the
- *                                 Test Explorer.
+ * Recommends ONLY extensions whose tooling the scaffold actually ships:
+ *   - `vitest.explorer`          — surfaces the app's Vitest unit suite (`vitest.config.mts`) in
+ *                                  the Test Explorer.
  *   - `ms-playwright.playwright` — surfaces the app's Playwright e2e suite.
+ *   - `dbaeumer.vscode-eslint`   — runs the emitted `eslint.config.mjs`, which composes the
+ *                                  engine's architecture-lint preset (§4.32). Without it the
+ *                                  guardrails only appear on `pnpm lint`, after the code is
+ *                                  written.
  *
  * The VS Code Test Explorer only shows a framework's tests when THAT framework's extension is
  * installed, so without this a fresh clone shows only whichever provider the developer already had
- * (the "I see only Playwright, no Vitest" report). eslint / prettier / editorconfig extensions are
- * deliberately NOT recommended: the standalone scaffold ships no config for them (no eslint flat
- * config — see `buildStandaloneVscodeLaunchJson` — no prettier config, no `.editorconfig`), so
- * recommending them would prompt installs for tooling that is not set up. Pure literal.
+ * (the "I see only Playwright, no Vitest" report). Prettier and EditorConfig stay off the list:
+ * the scaffold still emits no config for either, and recommending them would prompt installs for
+ * tooling that is not set up. Pure literal.
  */
 export function buildStandaloneVscodeExtensionsJson(): string {
     const config = {
-        recommendations: ['vitest.explorer', 'ms-playwright.playwright'],
+        recommendations: ['vitest.explorer', 'ms-playwright.playwright', 'dbaeumer.vscode-eslint'],
     };
     return `${JSON.stringify(config, null, 4)}\n`;
 }

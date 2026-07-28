@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { GAME_TOKENS } from './tokens.js';
 
 /**
  * Guards that the blank template ships the minimal smoke harness (#800): a co-located
@@ -524,3 +525,211 @@ describe('blank template smoke harness', () => {
         }
     });
 });
+
+/**
+ * The architecture-lint guardrails a scaffolded game gets on day one (§4.32).
+ *
+ * A game leaving the monorepo used to lose every `chimera/*` rule — a
+ * `fromFloat()` in a reducer or a hardcoded hex in a screen went unflagged, and
+ * the app's own `lint` script was a hard error because no config existed. These
+ * assert the two files that change that, on the REAL template tree.
+ *
+ * Neither is linted in this repo (`tools/create-chimera-game/templates/**` is
+ * globally ignored), so nothing else here would notice them being dropped,
+ * malformed, or emptied. These assertions read the template TEXT; that they are
+ * emitted into a scaffolded app is asserted in `index.test.ts`, and that the
+ * emitted config actually runs clean and fires is not yet asserted anywhere —
+ * that belongs to the scaffold gate, which does not lint today.
+ */
+describe('blank template lint guardrails', () => {
+    it('ships a flat config composing the engine preset onto the game', async () => {
+        const content = await read('eslint.config.mjs');
+
+        expect(content).toContain("from '@chimera-engine/electron/eslint'");
+        expect(content).toContain('standaloneLintConfig');
+    });
+
+    it('hands its whole base to silenceOnCss', async () => {
+        // Two of the curated rules lint CSS through `@eslint/css`, and a flat
+        // config applies every matching block — so an unscoped base has its JS
+        // rules run against the stylesheet, which ABORTS the run rather than
+        // false-firing. The preset silences those only for the configs it is
+        // given, so the base has to be a named value passed in, not spread
+        // inline where it cannot be referenced twice.
+        const content = await read('eslint.config.mjs');
+
+        expect(content).toMatch(/silenceOnCss:\s*base/u);
+        expect(content).toMatch(/\.\.\.base/u);
+        // …and `base` is a real rule set, not an empty array that would satisfy
+        // both patterns above while linting nothing.
+        expect(content).toMatch(/const base = \[[^\]]*js\.configs\.recommended/u);
+        expect(content).toContain('tseslint.configs.recommended');
+    });
+
+    it('ships a token-override stylesheet under the guarded path', async () => {
+        // `no-unknown-token-overrides` matches `apps/<name>/styles/tokens-override.css`
+        // by name. Without the file the rule is configured, resolvable and
+        // guards nothing — the guardrail would be dormant until the day a game
+        // author happened to create it.
+        // Matched inside a `:root` block, not anywhere in the file: the
+        // doc-comment above it names `--ch-*` twice, so a bare substring check
+        // stays green against a stub whose declarations were all deleted.
+        const content = await read('styles/tokens-override.css');
+
+        expect(content).toMatch(/:root\s*\{[\s\S]*--ch-[\w-]+\s*:/u);
+    });
+
+    it('overrides only tokens the engine declares, so a fresh scaffold lints clean', async () => {
+        // The stub is the one file in the template the token rule reads, so an
+        // undeclared name here reds `pnpm lint` on a game nobody has touched.
+        //
+        // Read from the renderer SOURCE while the rule resolves the published
+        // `dist` copy. `copy-renderer-css.ts` copies that file verbatim, so the
+        // two agree here — but a scaffolded game installs a released renderer,
+        // a tree this test cannot see. The proof for that direction is the
+        // scaffold gate running against an installed probe.
+        const declared = new Set(
+            Array.from(
+                await readFile(
+                    path.resolve(import.meta.dirname, '../../renderer/styles/tokens.css'),
+                    'utf8',
+                ).then((css) => css.matchAll(/(?:^|[\s{;])(--ch-[\w-]+)\s*:/gmu)),
+                (match) => match[1],
+            ),
+        );
+        const overridden = Array.from(
+            (await read('styles/tokens-override.css')).matchAll(/(?:^|[\s{;])(--ch-[\w-]+)\s*:/gmu),
+            (match) => match[1],
+        );
+
+        expect(overridden.length).toBeGreaterThan(0);
+        expect(overridden.filter((token) => !declared.has(token))).toEqual([]);
+
+        // The accent family moves as a unit or not at all: overriding the base
+        // while leaving the hover and strong variants on the engine's neutral
+        // ships a themed button with an unthemed border that greys on hover.
+        // The comment in the stub says so; this is what holds it.
+        expect(overridden).toContain('--ch-color-accent');
+        expect(overridden).toContain('--ch-color-accent-hover');
+        expect(overridden).toContain('--ch-color-accent-strong');
+    });
+});
+
+/**
+ * The template tree as a whole, rather than any one file in it.
+ *
+ * Both checks exist because of a hole the same shape: `index.test.ts` scaffolds
+ * from a SYNTHETIC fixture it writes itself, so anything it asserts grades that
+ * fixture and never the tree that ships. These read the real one.
+ */
+describe('blank template, whole-tree properties', () => {
+    it('leaves no placeholder of any spelling in any template file', async () => {
+        // `findLeftoverTokens` knows only the CANONICAL literals, by design — so
+        // a near-miss like `__GameTitle__` (the real token is `__Game Title__`,
+        // with a space) is substituted by nothing, flagged by nothing, and ships
+        // into every generated game. This is the only check that would see it.
+        const files = await collectTemplateFiles(blankTemplateDir);
+        const offenders: string[] = [];
+
+        for (const rel of files) {
+            const raw = await readFile(path.join(blankTemplateDir, rel));
+            if (raw.includes(0)) continue; // binary asset
+
+            // Canonical tokens are REMOVED first; whatever dunder shape is left
+            // is the offender. Removing them is what lets the pattern admit
+            // underscores — and it has to, because every canonical token
+            // contains one, so space→underscore is the likeliest mistyping of
+            // `__Game Title__`.
+            let text = raw.toString('utf8');
+            for (const token of Object.keys(GAME_TOKENS)) text = text.split(token).join('');
+
+            for (const match of text.matchAll(/__[A-Za-z][A-Za-z0-9 _]*__/gu)) {
+                if (match[0] === '__tests__') continue; // a real directory name
+                offenders.push(`${rel}: ${match[0]}`);
+            }
+        }
+
+        // A floor: an enumeration that found no files would pass vacuously.
+        expect(files.length).toBeGreaterThan(40);
+        expect(offenders.sort()).toEqual([]);
+    });
+
+    it('states its ignores as a GLOBAL ignore, with no sibling key', async () => {
+        // The most-documented flat-config foot-gun, in a file whose own comment
+        // invites edits: an `ignores` key is a global ignore only while it is
+        // the ONLY key in its object. Add a `files` beside it and it silently
+        // becomes a per-config exclusion — the tree lints clean until someone
+        // runs a build, and then a single 400 KB Playwright report reports over
+        // a thousand errors.
+        //
+        // Read from the LOADED config, not the file text: the entry list is
+        // checked as text above, but shape is not a property text can carry.
+        const loaded = (await import(path.join(blankTemplateDir, 'eslint.config.mjs')))
+            .default as Record<string, unknown>[];
+
+        const ignoreBlocks = loaded.filter((block) => block['ignores'] !== undefined);
+
+        expect(ignoreBlocks).toHaveLength(1);
+        expect(Object.keys(ignoreBlocks[0] ?? {})).toEqual(['ignores']);
+    });
+
+    it('ignores every path this app is configured to write', async () => {
+        // The list has broken twice, both times because it was hand-written
+        // against a guess at the layout. Each entry is paired here with the
+        // config that produces the artefact, so changing one without the other
+        // reds — rather than surfacing as a lint run over a 400 KB bundled
+        // Playwright report.
+        const lintConfig = await read('eslint.config.mjs');
+        const nextConfig = await read('renderer/next.config.ts');
+        const playwrightConfig = await read('e2e/playwright.config.ts');
+        const builderConfig = await read('electron-builder.yml');
+        const buildTsconfig = await read('tsconfig.build.json');
+
+        const distDir = /distDir:\s*'([^']+)'/u.exec(nextConfig)?.[1];
+        const reportDir = /outputFolder:\s*'([^']+)'/u.exec(playwrightConfig)?.[1];
+        const junitFile = /outputFile:\s*'([^']+)'/u.exec(playwrightConfig)?.[1];
+        const releaseDir = /^\s*output:\s*(\S+)\s*$/mu.exec(builderConfig)?.[1];
+        const outDir = /"outDir":\s*"\.\/([^"]+)"/u.exec(buildTsconfig)?.[1];
+
+        for (const [label, value] of Object.entries({
+            distDir,
+            reportDir,
+            junitFile,
+            releaseDir,
+            outDir,
+        })) {
+            expect(value, `no ${label} found in the config that declares it`).toBeDefined();
+        }
+
+        for (const ignored of [
+            `${outDir}/**`,
+            `${releaseDir}/**`,
+            `renderer/${distDir}/**`,
+            `e2e/${reportDir}/**`,
+            `e2e/${junitFile?.split('/')[0]}/**`,
+            // Playwright's default outputDir, and the dev harness's per-instance
+            // data dirs — neither is declared in a config, so both are named.
+            'e2e/test-results/**',
+            '.dev-userdata/**',
+        ]) {
+            expect(lintConfig, `eslint.config.mjs does not ignore ${ignored}`).toContain(
+                `'${ignored}'`,
+            );
+        }
+    });
+});
+
+/** Every file under `dir`, as paths relative to it, skipping nothing. */
+async function collectTemplateFiles(dir: string, prefix = ''): Promise<string[]> {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const files: string[] = [];
+    for (const entry of entries) {
+        const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+        if (entry.isDirectory()) {
+            files.push(...(await collectTemplateFiles(path.join(dir, entry.name), rel)));
+        } else if (entry.isFile()) {
+            files.push(rel);
+        }
+    }
+    return files;
+}

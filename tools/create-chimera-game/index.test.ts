@@ -92,6 +92,27 @@ describe('scaffoldGame', () => {
             'templates/blank/screens/__GamePascal__Board.tsx',
             'export function __GamePascal__Board() { return null; }',
         );
+        // The architecture-lint guardrails (§4.32). Both are here because both
+        // sit in a shape a copy pipeline can silently drop: a ROOT-level
+        // `.mjs` (no other template file has that extension) and the only file
+        // under `styles/`. The token in the CSS is what proves the emitted copy
+        // is substituted, not merely present.
+        await write(
+            'templates/blank/eslint.config.mjs',
+            [
+                "import { standaloneLintConfig } from '@chimera-engine/electron/eslint';",
+                'export default [...standaloneLintConfig()];',
+            ].join('\n'),
+        );
+        await write(
+            'templates/blank/styles/tokens-override.css',
+            [
+                '/* __Game Title__ token overrides. */',
+                ':root {',
+                '    --ch-color-accent: #4f46e5;',
+                '}',
+            ].join('\n'),
+        );
         // The build + e2e tsconfigs carry monorepo-relative refs/paths (workspace-correct); the
         // standalone emit must neutralise them (#816). JSONC with comments — emitted verbatim then
         // rewritten by string-splice.
@@ -205,6 +226,26 @@ describe('scaffoldGame', () => {
 
         const boardPath = path.join(result.appDir, 'screens', 'MyGameBoard.tsx');
         expect(await readFile(boardPath, 'utf8')).toContain('MyGameBoard');
+
+        // The architecture-lint guardrails (§4.32). Asserted on the EMITTED app,
+        // not the template tree: the template shipping them proves nothing if
+        // the copy skips a root `.mjs` or a `styles/` directory, and both are
+        // silent — a scaffolded game would simply have no lint config and no
+        // token file, which reads as "the feature was never wired".
+        const lintConfig = await readFile(path.join(result.appDir, 'eslint.config.mjs'), 'utf8');
+        expect(lintConfig).toContain("from '@chimera-engine/electron/eslint'");
+        expect(lintConfig).toContain('standaloneLintConfig');
+
+        // The token stub carries a substituted name, so a non-canonical
+        // placeholder spelling (which the leftover check cannot see — it knows
+        // only the canonical literals) reds here.
+        const tokenOverrides = await readFile(
+            path.join(result.appDir, 'styles', 'tokens-override.css'),
+            'utf8',
+        );
+        expect(tokenOverrides).toContain('--ch-');
+        expect(tokenOverrides).toContain('My Game');
+        expect(tokenOverrides).not.toMatch(/__[A-Za-z][A-Za-z0-9 _]*__/u);
 
         const pkg = JSON.parse(await readFile(path.join(result.appDir, 'package.json'), 'utf8'));
         expect(pkg.name).toBe('@chimera-engine/my-game');
@@ -375,6 +416,16 @@ describe('scaffoldGame', () => {
             // App lands under outputRoot, not repoRoot.
             expect(result.appDir).toBe(path.join(outputRoot, 'apps', 'my-game'));
             expect(await readdir(path.join(repoRoot, 'apps'))).not.toContain('my-game');
+
+            // The lint guardrails travel in THIS mode too — the one a published
+            // `npm create` uses, and the only one whose output a game author
+            // ever sees.
+            expect(await readFile(path.join(result.appDir, 'eslint.config.mjs'), 'utf8')).toContain(
+                'standaloneLintConfig',
+            );
+            expect(
+                await readFile(path.join(result.appDir, 'styles', 'tokens-override.css'), 'utf8'),
+            ).toContain('--ch-');
 
             // The standalone project root is emitted.
             for (const file of [

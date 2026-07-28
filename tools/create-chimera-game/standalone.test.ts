@@ -159,6 +159,10 @@ describe('buildStandaloneRootManifest', () => {
         expect(manifest.scripts['validate:assets']).toBe(
             'pnpm --filter @chimera-engine/my-game validate:assets',
         );
+        // The architecture-lint gate is the fifth. Its config lives in the app, so
+        // eslint must run from there — which is exactly why the root needs a
+        // forward, or the project root reports "Missing script: lint".
+        expect(manifest.scripts['lint']).toBe('pnpm --filter @chimera-engine/my-game lint');
     });
 
     // `fetch:fonts` is the only one of the three that REQUIRES an argument (the Google CSS
@@ -205,8 +209,17 @@ describe('buildStandaloneGitignore', () => {
             '.next/',
             '.e2e-build/',
             '.dev-userdata/',
+            // Playwright's output. A single HTML report is a ~400 KB bundled
+            // file and the trace assets are larger, so an unignored e2e run
+            // offers all of it up for commit. These mirror the app's own
+            // eslint ignores, in the syntax that matches at any depth.
+            'playwright-report/',
+            'test-results/',
+            'results/',
         ]) {
-            expect(gitignore).toContain(entry);
+            // Line-exact: a substring check reads `results/` as present
+            // inside `test-results/`, so dropping the junit entry would pass.
+            expect(gitignore.split('\n'), entry).toContain(entry);
         }
         expect(gitignore.endsWith('\n')).toBe(true);
     });
@@ -565,13 +578,22 @@ describe('buildStandaloneVscodeExtensionsJson', () => {
         expect(recommendations).toContain('ms-playwright.playwright');
     });
 
-    it('recommends ONLY extensions whose tooling the scaffold actually ships', () => {
-        // No eslint flat config / prettier config / .editorconfig is emitted, so recommending those
-        // extensions would prompt installs for tooling that is not set up. Keep the list honest.
+    it('recommends the ESLint extension, now that the scaffold ships a flat config', () => {
+        // The scaffold emits an `eslint.config.mjs` composing the engine's
+        // architecture-lint preset, so the extension has something to run and a
+        // game author sees the guardrails inline rather than only on `pnpm lint`.
         const { recommendations } = parse();
-        expect(recommendations).not.toContain('dbaeumer.vscode-eslint');
+        expect(recommendations).toContain('dbaeumer.vscode-eslint');
+    });
+
+    it('recommends ONLY extensions whose tooling the scaffold actually ships', () => {
+        // Prettier and EditorConfig still have no config emitted, so recommending
+        // those would prompt installs for tooling that is not set up. Keep the
+        // list honest.
+        const { recommendations } = parse();
         expect(recommendations).not.toContain('esbenp.prettier-vscode');
-        expect(recommendations).toHaveLength(2);
+        expect(recommendations).not.toContain('editorconfig.editorconfig');
+        expect(recommendations).toHaveLength(3);
     });
 
     it('emits valid JSON ending in a trailing newline', () => {
