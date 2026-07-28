@@ -212,6 +212,25 @@ describe('blank template smoke harness', () => {
         expect(yml).toContain('to: apps/__game_kebab__/assets');
     });
 
+    it('ships the ENGINE icon set to the exact path the runtime fallback resolves', async () => {
+        // `resolveAppIcon` reads the FIXED filename `<app>/assets/icons/
+        // chimera.png`, so both halves of this block are load-bearing and each
+        // fails silently on its own: a wrong `from:` ships the game's asset dir,
+        // which on a fresh scaffold holds only icon.png; a wrong `to:` ships the
+        // right files where nothing looks. Either way the fallback resolves to a
+        // missing file the day an author drops the manifest `icon`.
+        //
+        // Matched as an anchored PAIR rather than two substrings: the two lines
+        // have to be these two lines, adjacent, at their real indentation.
+        // `toContain` would accept them apart or in a comment — and this file's
+        // own prose discusses `from: assets/icons`, so a bare negative would red
+        // on a documentation edit.
+        const yml = await read('electron-builder.yml');
+        expect(yml).toMatch(
+            /^ {2}- from: node_modules\/@chimera-engine\/electron\/assets\/icons\n {4}to: assets\/icons$/mu,
+        );
+    });
+
     // The `files:` allowlist must name the two shipped bundles individually. A
     // `dist/**` glob would sweep in whatever else dist/ holds — including a
     // debug preload left by an earlier dev build, since `build:app` overwrites
@@ -356,6 +375,54 @@ describe('blank template smoke harness', () => {
         // refuses or silently validates a stranger's tree depends on what
         // happens to be there. Only the exact value is safe.
         expect(pkg.scripts['validate:assets']).toBe('chimera-validate-assets ../..');
+    });
+
+    // Opt-in icon regeneration. Unlike fetch:fonts and validate:assets this
+    // script needs no path arithmetic — pnpm runs it with cwd = apps/<kebab>,
+    // which is already where both the master and the generated set belong.
+    // `electron-builder.yml` carries why each flag is spelled out; the short of
+    // it is that omitting `--out` does not fail, it writes into the game's
+    // `electron/` source tree and exits 0.
+    it('wires an app-level icons:generate script naming the bin with both paths', async () => {
+        const pkg = JSON.parse(await read('package.json')) as { scripts: Record<string, string> };
+        // Whole-string: the SOURCE is the same committed `icon.png` the manifest
+        // and electron-builder already read, which is what makes replacing that
+        // one file rebrand everything. Pointed anywhere else, the generated set
+        // would drift from the installer and window icons on the next edit.
+        expect(pkg.scripts['icons:generate']).toBe(
+            'chimera-generate-icons --source assets/icons/icon.png --out assets/icons',
+        );
+    });
+
+    it('declares no image codec anywhere — sharp and png2icons stay opt-in', async () => {
+        // The lean-install half of the contract: a scaffolded game that never
+        // regenerates its icons must not carry the native binary. Every
+        // dependency-bearing section is checked, not just the two obvious ones —
+        // pnpm installs `optionalDependencies` by default, so a codec parked
+        // there would land in every scaffold while a two-map check stayed green.
+        const pkg = JSON.parse(await read('package.json')) as Record<
+            string,
+            Record<string, string> | readonly string[] | undefined
+        >;
+        const sections = [
+            'dependencies',
+            'devDependencies',
+            'optionalDependencies',
+            'peerDependencies',
+            // npm defines these two as ARRAYS of names, not maps. Indexing an
+            // array by a package name always yields undefined, so a map-shaped
+            // check over them cannot fire whatever they contain.
+            'bundledDependencies',
+            'bundleDependencies',
+        ];
+        for (const section of sections) {
+            const declared = pkg[section];
+            // Normalised to the NAMES declared, so one assertion covers both shapes.
+            const names = Array.isArray(declared) ? [...declared] : Object.keys(declared ?? {});
+            for (const codec of ['sharp', 'png2icons']) {
+                expect(names, `${section}.${codec}`).not.toContain(codec);
+            }
+        }
     });
 
     it('names no model game in any smoke file (tokens only)', async () => {

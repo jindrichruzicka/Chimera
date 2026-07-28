@@ -8,6 +8,7 @@
         "build:app": "tsx electron/build-main.ts",
         "dev:mp": "cross-env CHIMERA_DEV_HARNESS=1 chimera-dev-mp",
         "fetch:fonts": "chimera-fetch-fonts --game __game_kebab__ --url <google-css-url> --out-dir assets/fonts",
+        "icons:generate": "chimera-generate-icons --source assets/icons/icon.png --out assets/icons",
         "package": "electron-builder",
         "test": "vitest run --config ../../vitest.config.mts --dir .",
         "test:e2e": "playwright test --config=e2e/playwright.config.ts --project=electron-e2e",

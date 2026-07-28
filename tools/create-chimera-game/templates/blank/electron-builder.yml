@@ -20,6 +20,22 @@ productName: __GamePascal__
 # so one file drives the whole installer set. The SAME PNG is the runtime window/dock icon
 # (manifest `icon`, resolved to apps/__game_kebab__/assets/icons/icon.png), so replacing
 # assets/icons/icon.png rebrands the bundle AND the running window in one step.
+#
+# That single replacement is the WHOLE rebrand for both icons a player sees.
+#
+# `pnpm --filter @chimera-engine/__game_kebab__ icons:generate` is a separate, optional
+# step (run it from this package — a bare `pnpm icons:generate` at the project root is
+# not this script). It derives the engine-shaped multi-size set (chimera-16..1024.png,
+# chimera.icns, chimera.ico) plus the chimera.png runtime FALLBACK from the same master.
+# Only one thing reads any of it — see the `from:` block in `files:` below — but the
+# whole ~4.5 MB set does get PACKAGED, swept in by the `from: assets` block, so a game
+# that generates it and never repoints the fallback ships it for nothing.
+#
+# The script passes both `--source` and `--out` explicitly, and both matter. Omit
+# `--source` and the run refuses: its default is an engine path (`docs/assets/…`) no game
+# has. Omit `--out` and it does NOT refuse — the default is `electron/assets/icons`
+# relative to the cwd, and a game HAS an `electron/` directory, so once the codecs are
+# installed eleven files land in your main-process source tree and the run exits 0.
 icon: assets/icons/icon.png
 
 directories:
@@ -65,11 +81,21 @@ files:
   #   - from: data
   #     to: apps/__game_kebab__/data
   # Default RUNTIME window icon fallback: the bundled host's createMainWindow (resolveAppIcon,
-  # @chimera-engine/electron) falls back to the default Chimera PNG at <app>/assets/icons/
-  # chimera.png when a game declares no manifest `icon`. The blank template DOES declare one
-  # (see manifest.ts), so this is only a safety net; ship the engine's icon set there so a
-  # later manifest change that drops the override never logs an unhandled rejection. `from`
-  # is a DIRECTORY (a file set); sourced from the installed @chimera-engine/electron package.
+  # @chimera-engine/electron) resolves the fixed filename <app>/assets/icons/chimera.png when
+  # a game declares no manifest `icon` — or declares one that escapes its own asset root. The
+  # blank template DOES declare one (see manifest.ts), so this is only a safety net; ship the
+  # engine's icon set there so a later manifest change that drops the override still finds an
+  # icon rather than a missing file. `from` is a DIRECTORY (a file set); sourced from the
+  # installed @chimera-engine/electron package.
+  #
+  # This is the ONE line the generated set is for. Left as-is the shipped fallback is the
+  # ENGINE's Chimera icon — correct for a game that never regenerates, and the reason this
+  # cannot already point at `assets/icons`: a fresh scaffold's asset dir holds only icon.png,
+  # so the fixed chimera.png filename would resolve to nothing. Once you have generated your
+  # own set (after `pnpm add -D sharp png2icons` — the codecs are optional peers and are not
+  # installed by default), repoint this to `from: assets/icons` and even the fallback is
+  # game-branded. It changes nothing a player normally sees; the manifest `icon` wins on
+  # every ordinary boot.
   - from: node_modules/@chimera-engine/electron/assets/icons
     to: assets/icons
 
