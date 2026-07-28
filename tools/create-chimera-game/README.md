@@ -123,6 +123,34 @@ bin published by `@chimera-engine/electron`. To add fonts:
 3. Paste the printed `GameFontFace[]` snippet into `shell/fonts.ts` and commit the `.woff2`
    files alongside it.
 
+### Giving the app its own icon
+
+Replace the single committed `assets/icons/icon.png`. That one file is both icons a player
+sees: electron-builder derives the installer `.icns`/`.ico`/PNG set from the top-level `icon:`
+field in `electron-builder.yml`, and the game manifest's `icon` makes the same PNG the runtime
+window and dock icon. Nothing else is required to rebrand.
+
+The scaffold also ships an **opt-in** `icons:generate` script for the engine-shaped multi-size
+set (`chimera-16..1024.png`, `chimera.icns`, `chimera.ico`, and the `chimera.png` runtime
+fallback). It is opt-in because the engine declares neither codec as something your
+project must install:
+
+1. `pnpm add -D sharp png2icons` in the app package — one time. They are optional peer
+   dependencies of `@chimera-engine/electron`, so nothing the engine declares asks your
+   project to install either — `sharp` alone is a multi-megabyte platform-specific native
+   binary. Until you install them, the script runs and tells you exactly this.
+2. `pnpm --filter @chimera-engine/<your-game> icons:generate`. Both `--source` and `--out`
+   are already in the script and both matter — the tool's README explains why omitting
+   `--out` writes into your `electron/` source tree instead of failing.
+3. To have the generated set actually used, repoint the `from:` file-set entry in
+   `electron-builder.yml` from the engine's icon directory to your own `assets/icons`. That
+   swaps the shipped `chimera.png` **fallback** — the icon used only if the manifest `icon`
+   is ever dropped — for a game-branded one. Left alone, a game ships the engine's fallback,
+   which is the right default for one that never regenerates.
+
+For a full-quality set, bring a square master of at least 1024×1024; the committed placeholder
+is 512×512, so the 1024 outputs are upscales until you replace it.
+
 ## Token reference
 
 Templates embed these placeholders in file contents and in file/directory names; the scaffolder

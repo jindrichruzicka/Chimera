@@ -580,6 +580,9 @@ if (process.env['VITEST'] === undefined) {
                     console.log(
                         `  pnpm --filter @chimera-engine/${result.names.kebab} fetch:fonts   # self-host Google fonts — first replace <google-css-url> in apps/${result.names.kebab}/package.json`,
                     );
+                    console.log(
+                        `  # app icon: replace apps/${result.names.kebab}/assets/icons/icon.png — that one file is the installer AND the window icon`,
+                    );
                 } else {
                     // Standalone default scaffolds into <cwd>, so the project is already the cwd —
                     // no `cd` step to print. `pnpm start` (the launcher) is the run step; it strips
@@ -594,6 +597,9 @@ if (process.env['VITEST'] === undefined) {
                     );
                     console.log(
                         `  pnpm --filter @chimera-engine/${result.names.kebab} fetch:fonts   # self-host Google fonts — first replace <google-css-url> in apps/${result.names.kebab}/package.json`,
+                    );
+                    console.log(
+                        `  # app icon: replace apps/${result.names.kebab}/assets/icons/icon.png — that one file is the installer AND the window icon`,
                     );
                     console.log(
                         `  # or open this folder in VS Code and run the "Debug ${result.names.title}" launch config for breakpoints`,

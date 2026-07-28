@@ -112,6 +112,7 @@ export type VerifyScaffoldStep =
     | 'dev-harness'
     | 'fonts'
     | 'validate-assets'
+    | 'generate-icons'
     | 'package';
 
 export interface VerifyScaffoldResult {
@@ -147,6 +148,39 @@ export const PROBE_BROKEN_REF_FILE = 'verify-scaffold-broken-ref.json';
 
 /** The exact app-level script the blank template must ship. */
 export const PROBE_VALIDATE_ASSETS_SCRIPT = 'chimera-validate-assets ../..';
+
+/**
+ * The exact app-level icon-regeneration script the blank template must ship.
+ * Both flags are the mechanism — see the arm's step (a).
+ */
+export const PROBE_ICONS_GENERATE_SCRIPT =
+    'chimera-generate-icons --source assets/icons/icon.png --out assets/icons';
+
+/** The image codecs that must stay ABSENT from a base scaffold install. */
+export const PROBE_ICON_CODECS = ['sharp', 'png2icons'] as const;
+
+/**
+ * The pnpm config the probe installs under, written beside its manifest so the
+ * tree the gate grades is a property of the SCAFFOLD rather than of whoever runs
+ * it. Every line is a measured no-op on a default machine; each was checked
+ * against a real install with the opposing setting in an ambient `~/.npmrc`:
+ *
+ *   - `shamefully-hoist=false` — the one that bites hardest. pnpm merges config
+ *     and THEN applies `if (shamefullyHoist) publicHoistPattern = ['*']`, so an
+ *     ambient truthy value overwrites whatever pattern the project set; writing
+ *     the pattern alone does not neutralise it (measured).
+ *   - `public-hoist-pattern=` — belt-and-braces. `shamefully-hoist=false`
+ *     already forces the pattern empty today, so this covers no lever of its
+ *     own; stating it directly means the pin does not rest on that coupling.
+ *   - `node-linker=isolated` — the only line covering an ambient
+ *     `node-linker=hoisted`, which flattens the tree by itself and would also
+ *     remove the `.pnpm` layer the arm's reasoning describes.
+ *
+ * Without them, a contributor or CI runner with hoisting enabled globally gets
+ * Next's `sharp` linked into the project root, and the generate-icons arm reads
+ * it as a declaration the scaffold never made.
+ */
+export const PROBE_NPMRC = 'shamefully-hoist=false\npublic-hoist-pattern=\nnode-linker=isolated\n';
 
 /** Thrown by a step runner on a non-zero exit so the orchestrator can report which step failed. */
 class VerifyScaffoldStepError extends Error {
@@ -378,6 +412,181 @@ async function runFontsArm(deps: VerifyScaffoldDeps, appDir: string): Promise<vo
 }
 
 /**
+ * The generate-icons arm (§4.32): prove the published `chimera-generate-icons`
+ * bin is reachable and RUNS from the installed standalone app, and that nothing
+ * in the scaffold hands it the codecs it is designed to do without.
+ *
+ * What "does without" means precisely, because the loose version is wrong: a
+ * Next-based scaffold installs `sharp` regardless — Next declares it as an
+ * `optionalDependency`, and pnpm's `.pnpm/node_modules` hoisted layer is on the
+ * resolution path for a package living in the store, so the tool can load it
+ * (at Next's version, not the declared peer range). What this design saves is
+ * the SECOND copy and `png2icons`, and what this arm checks is that no direct
+ * declaration puts either codec in a project that never asked for one. The run
+ * below fails on `png2icons` alone.
+ *
+ * That makes the actionable message the assertion, not a full generate. A
+ * generate would need the native binary installed into the tarball-override
+ * probe, which is heavy and offline-fragile, and it would prove the opposite of
+ * what this arm is for.
+ *
+ * Load-bearing detail: the bin runs THROUGH `node_modules/.bin`, never a
+ * resolved real path. pnpm's shim execs node with the symlinked path while
+ * node's loader reports the real one, so an entry guard comparing them raw is
+ * false and the bin exits 0 having done nothing. Against a bare path compare
+ * this arm sees an exit 0 with no message and fails — which is the whole reason
+ * it invokes the script rather than the file.
+ */
+async function runGenerateIconsArm(
+    deps: VerifyScaffoldDeps,
+    tmp: string,
+    appDir: string,
+): Promise<void> {
+    const fail = (reason: string): never => {
+        throw new VerifyScaffoldStepError(
+            'generate-icons',
+            `verify:scaffold: step "generate-icons" ${reason}`,
+        );
+    };
+
+    // (a) The scaffolded script, whole-string. Both flags are the mechanism, and
+    //     only one of the two omissions is loud — §4.32 has the reasoning.
+    const appPkg = JSON.parse(await deps.fs.readFile(path.join(appDir, 'package.json'))) as {
+        scripts?: Record<string, string>;
+    };
+    const script = appPkg.scripts?.['icons:generate'];
+    if (script !== PROBE_ICONS_GENERATE_SCRIPT) {
+        fail(
+            `found no app icons:generate script equal to "${PROBE_ICONS_GENERATE_SCRIPT}" (got ${JSON.stringify(script)})`,
+        );
+    }
+
+    // (b) The bin resolves from the installed app — how pnpm resolves the bare
+    //     name when it runs that script.
+    if (
+        !(await deps.fs.exists(path.join(appDir, 'node_modules', '.bin', 'chimera-generate-icons')))
+    ) {
+        fail('resolved no chimera-generate-icons under the app node_modules/.bin');
+    }
+
+    // (c) Neither codec is a DIRECT dependency of the scaffold. What keeps a
+    //     project's own `node_modules` to exactly what it declared is
+    //     `public-hoist-pattern` being empty, not the isolated linker — pinned
+    //     for this probe in the `.npmrc` written beside its manifest, since a
+    //     developer or runner with `shamefully-hoist=true` set globally would
+    //     otherwise get Next's `sharp` linked here and red this check against a
+    //     declaration that does not exist.
+    //
+    //     A codec in either tree therefore means something in the emitted
+    //     project asked for it — the defect this arm found on its first run: the
+    //     frozen toolchain snapshot inherited both from the monorepo's root
+    //     devDeps, so every scaffold declared them.
+    //
+    //     What this does NOT prove is that the codecs are unresolvable. They can
+    //     still reach the tool from pnpm's `.pnpm/node_modules` hoisted layer —
+    //     Next brings `sharp` that way — and proving otherwise would mean
+    //     asserting against another package's dependency graph. The claim here
+    //     is the one the scaffold controls.
+    for (const codec of PROBE_ICON_CODECS) {
+        for (const [label, root] of [
+            ['app', appDir],
+            ['project root', tmp],
+        ] as const) {
+            if (await deps.fs.exists(path.join(root, 'node_modules', codec))) {
+                fail(
+                    `declared ${codec} into the ${label} node_modules — the codecs are OPTIONAL peers precisely so a project that never regenerates its icons does not ask for them`,
+                );
+            }
+        }
+    }
+
+    // (d) The run, through the `.bin` shim, with `png2icons` absent. Exits
+    //     non-zero and says what to install.
+    const run = deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'icons:generate'], {
+        cwd: tmp,
+        capture: true,
+    });
+    const output = `${run.stdout}${run.stderr}`;
+    if (run.status === 0) {
+        fail(
+            'exited 0 without png2icons — the likeliest cause is the entry guard no-opping through the .bin symlink, but anything that made the codec reachable would do it too',
+        );
+    }
+    // Non-zero alone is also what a bin that failed to load at all produces, so
+    // the failure has to be the ACTIONABLE one. Asserted as the install command
+    // rather than as a per-codec sweep: the command names both codecs, so a
+    // separate `includes(codec)` pass could only ever be satisfied by an output
+    // this check already accepted — two guards where one carries the claim.
+    const installCommand = `pnpm add -D ${PROBE_ICON_CODECS.join(' ')}`;
+    if (!output.includes(installCommand)) {
+        fail(
+            `failed without naming "${installCommand}" — a non-zero exit is also what a bin that could not load at all produces, so the message is what separates them`,
+        );
+    }
+
+    // (e) The declaration, read off the INSTALLED manifest rather than inferred
+    //     from (c). An absence proves only that nothing declared them HERE; a
+    //     consumer on npm reads this manifest, and `optional` is what keeps the
+    //     peer from being auto-installed for them too — the one guard on this
+    //     branch that observes that flag at all.
+    const installedPkg = JSON.parse(
+        await deps.fs.readFile(
+            path.join(readInstalledElectronDir(deps, tmp, appDir, fail), 'package.json'),
+        ),
+    ) as {
+        dependencies?: Record<string, string>;
+        peerDependencies?: Record<string, string>;
+        peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+    };
+    for (const codec of PROBE_ICON_CODECS) {
+        if (installedPkg.dependencies?.[codec] !== undefined) {
+            fail(`installed @chimera-engine/electron declares ${codec} as a runtime dependency`);
+        }
+        if (installedPkg.peerDependencies?.[codec] === undefined) {
+            fail(
+                `installed @chimera-engine/electron declares no ${codec} peer — the bin would fail with an unexplained module-not-found`,
+            );
+        }
+        if (installedPkg.peerDependenciesMeta?.[codec]?.optional !== true) {
+            fail(
+                `installed @chimera-engine/electron declares ${codec} as a NON-optional peer — package managers auto-install those, so every game would carry it`,
+            );
+        }
+    }
+}
+
+/**
+ * The real directory the installed `@chimera-engine/electron` lives in.
+ *
+ * Followed through the symlink pnpm installs the package as, because the two
+ * arms that read its manifest need the file a consumer's `npm install` would
+ * actually consult, and the closure only exists on the far side of the link.
+ * `fail` is the caller's, so the failure is reported as that caller's step.
+ */
+function readInstalledElectronDir(
+    deps: VerifyScaffoldDeps,
+    tmp: string,
+    appDir: string,
+    fail: (reason: string) => never,
+): string {
+    const electronDir = path.join(appDir, 'node_modules', '@chimera-engine', 'electron');
+    const resolved = deps.run(
+        'node',
+        ['-e', `process.stdout.write(require('fs').realpathSync(${JSON.stringify(electronDir)}))`],
+        { cwd: tmp, capture: true },
+    );
+    // Both halves matter and neither is loud on its own: a non-zero status is a
+    // resolution that failed, while an empty stdout is one that "succeeded" and
+    // returned nothing — which would make the manifest path `package.json`,
+    // relative to the gate's own cwd, and the read either throws an unnamed
+    // error or silently grades the WRONG manifest.
+    if (resolved.status !== 0 || resolved.stdout.trim() === '') {
+        fail('could not resolve the installed @chimera-engine/electron directory');
+    }
+    return resolved.stdout.trim();
+}
+
+/**
  * The validate-assets arm (§4.10, Invariants #22/#52): prove the published
  * `chimera-validate-assets` bin is reachable from the installed standalone app,
  * that the scaffolded `../..` points discovery at the PROJECT ROOT, and — the
@@ -495,20 +704,12 @@ async function runValidateAssetsArm(
     //     same store directory.
     //
     //     So the declaration is read off the INSTALLED manifest, which is what
-    //     `npm install @chimera-engine/electron` actually consults. Followed
-    //     through the symlink pnpm installs the package as.
-    const electronDir = path.join(appDir, 'node_modules', '@chimera-engine', 'electron');
-    const realElectronDir = deps.run(
-        'node',
-        ['-e', `process.stdout.write(require('fs').realpathSync(${JSON.stringify(electronDir)}))`],
-        { cwd: tmp, capture: true },
-    );
-    if (realElectronDir.status !== 0 || realElectronDir.stdout.trim() === '') {
-        fail('could not resolve the installed @chimera-engine/electron directory');
-    }
-
+    //     `npm install @chimera-engine/electron` actually consults — see
+    //     {@link readInstalledElectronDir}.
     const installedPkg = JSON.parse(
-        await deps.fs.readFile(path.join(realElectronDir.stdout.trim(), 'package.json')),
+        await deps.fs.readFile(
+            path.join(readInstalledElectronDir(deps, tmp, appDir, fail), 'package.json'),
+        ),
     ) as { dependencies?: Record<string, string> };
     if (installedPkg.dependencies?.['typescript'] === undefined) {
         fail(
@@ -603,6 +804,12 @@ async function scaffoldPipeline(
         rewriteAppChimeraDeps(await deps.fs.readFile(appPkgPath), tarballs),
     );
 
+    // 4b. Pin the probe's hoisting BEFORE the install — see {@link PROBE_NPMRC}
+    //     for what each line covers and why all three are needed. Written after
+    //     the manifest rewrites and before step 5, because an `.npmrc` that
+    //     lands after `pnpm install` has no effect at all.
+    await deps.fs.writeFile(path.join(tmp, '.npmrc'), PROBE_NPMRC);
+
     if (hooks.mutate !== undefined) await hooks.mutate(deps, appDir);
 
     // 5. install
@@ -677,6 +884,17 @@ async function scaffoldPipeline(
     //     {@link runValidateAssetsArm}.
     deps.log('validating the scaffolded assets through the packaged chimera-validate-assets bin…');
     await runValidateAssetsArm(deps, tmp, appDir);
+
+    // 8e. generate-icons (§4.32): the packaged `chimera-generate-icons` bin,
+    //     reachable and RUNNING through the app's `.bin` shim while neither
+    //     optional codec is installed — reachability without install weight, and
+    //     the actionable message that makes the absent codecs explainable. See
+    //     {@link runGenerateIconsArm}.
+    deps.log(
+        'running the packaged chimera-generate-icons bin with no codecs installed — the ' +
+            'missing-codec message printed next is the EXPECTED one…',
+    );
+    await runGenerateIconsArm(deps, tmp, appDir);
 
     // 9. package. Export the Next renderer (populates `renderer/out`), then build an UNSIGNED
     //    `electron-builder --dir` bundle from the standalone-emitted project. electron-builder

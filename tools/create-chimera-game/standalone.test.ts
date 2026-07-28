@@ -37,6 +37,19 @@ describe('buildStandaloneToolchainDeps', () => {
         expect(deps).toEqual({ three: '^0.184', vitest: '^3', next: '^15' });
         expect(Object.keys(deps).some((k) => k.startsWith('@chimera-engine/'))).toBe(false);
     });
+
+    it('strips the engine-only image codecs a game is meant to opt into', () => {
+        // `sharp` and `png2icons` are the monorepo's own icon-generation
+        // tooling. They are ALSO optional peers of @chimera-engine/electron,
+        // declared that way so a game which never regenerates its icons carries
+        // neither — and handing them to every scaffold at the root defeats that
+        // before the peer declaration is ever consulted. A game opts in with
+        // `pnpm add -D sharp png2icons`.
+        const deps = buildStandaloneToolchainDeps({
+            devDependencies: { vitest: '^3', sharp: '^0.35.2', png2icons: '^2.0.1' },
+        });
+        expect(deps).toEqual({ vitest: '^3' });
+    });
 });
 
 describe('buildStandaloneRootManifest', () => {

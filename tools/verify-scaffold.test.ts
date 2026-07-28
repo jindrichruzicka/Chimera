@@ -18,6 +18,8 @@ import {
     PROBE_BROKEN_REF_FILE,
     PROBE_FONT_FILE,
     PROBE_GAME,
+    PROBE_ICONS_GENERATE_SCRIPT,
+    PROBE_NPMRC,
     PROBE_VALIDATE_ASSETS_SCRIPT,
     applyTarballOverrides,
     buildPnpmOverrides,
@@ -79,6 +81,31 @@ interface RecordedCall {
 }
 
 /**
+ * Seed what a correct `pnpm install` leaves behind, minus the named bins. Lets a
+ * failure test drop exactly one thing and leave every earlier arm passing, so
+ * the reported step is the one under test rather than the first to notice.
+ */
+function seedInstallExcept(files: Map<string, string>, omittedBins: readonly string[]): void {
+    for (const bin of [
+        'chimera-fetch-fonts',
+        'chimera-validate-assets',
+        'chimera-generate-icons',
+    ]) {
+        if (omittedBins.includes(bin)) continue;
+        files.set(path.join(APP_DIR, 'node_modules', '.bin', bin), '#!node');
+    }
+    files.set(
+        path.join(ELECTRON_REAL_DIR, 'package.json'),
+        JSON.stringify({
+            name: '@chimera-engine/electron',
+            dependencies: { typescript: '^5.7.2' },
+            peerDependencies: { sharp: '^0.35.2', png2icons: '^2.0.1' },
+            peerDependenciesMeta: { sharp: { optional: true }, png2icons: { optional: true } },
+        }),
+    );
+}
+
+/**
  * A programmable RunFn. By default every command succeeds; `pnpm pack` echoes a
  * deterministic tarball path so the parser has something to read, and the scaffold
  * CLI run seeds the generated app's package.json + register.ts into the fake fs
@@ -88,8 +115,10 @@ function makeFakeRun(
     files: Map<string, string>,
     tmpRoot: string,
     overrides: (cmd: string, args: readonly string[]) => RunResult | undefined = () => undefined,
-): { run: RunFn; calls: RecordedCall[] } {
+): { run: RunFn; calls: RecordedCall[]; installNpmrc: () => string | undefined } {
     const calls: RecordedCall[] = [];
+    /** The `.npmrc` as it stood when `pnpm install` ran — undefined if absent. */
+    let installNpmrc: string | undefined;
     const appDir = path.join(tmpRoot, 'apps', PROBE_GAME.kebab);
     const electronRealDir = ELECTRON_REAL_DIR;
     const run: RunFn = (cmd, args, opts) => {
@@ -132,6 +161,7 @@ function makeFakeRun(
                     scripts: {
                         'fetch:fonts': `chimera-fetch-fonts --game ${PROBE_GAME.kebab} --url <google-css-url> --out-dir assets/fonts`,
                         'validate:assets': PROBE_VALIDATE_ASSETS_SCRIPT,
+                        'icons:generate': PROBE_ICONS_GENERATE_SCRIPT,
                     },
                     dependencies: {
                         '@chimera-engine/simulation': '^0.9.0',
@@ -148,20 +178,52 @@ function makeFakeRun(
         // Install links the published bins into the app's own node_modules/.bin
         // (how the bare `chimera-fetch-fonts` in the app script resolves).
         if (args[0] === 'install') {
+            // The hoist pin has to be on disk BEFORE this runs — an `.npmrc`
+            // written afterwards has no effect on the tree that was installed.
+            // Read here, at the moment the real pnpm would read it, so moving
+            // the write later cannot pass; an end-of-run assertion on the file
+            // could not tell the two apart.
+            installNpmrc = files.get(path.join(tmpRoot, '.npmrc'));
             files.set(path.join(appDir, 'node_modules', '.bin', 'chimera-fetch-fonts'), '#!node');
             files.set(
                 path.join(appDir, 'node_modules', '.bin', 'chimera-validate-assets'),
                 '#!node',
             );
-            // The installed manifest the arm reads the typescript declaration
-            // off — what `npm install @chimera-engine/electron` consults.
+            files.set(
+                path.join(appDir, 'node_modules', '.bin', 'chimera-generate-icons'),
+                '#!node',
+            );
+            // The installed manifest the arms read declarations off — what
+            // `npm install @chimera-engine/electron` consults. The codecs are
+            // OPTIONAL peers and deliberately absent from `dependencies`; the
+            // fake never writes them into any node_modules, which is what a
+            // correct install looks like.
             files.set(
                 path.join(electronRealDir, 'package.json'),
                 JSON.stringify({
                     name: '@chimera-engine/electron',
                     dependencies: { typescript: '^5.7.2' },
+                    peerDependencies: { sharp: '^0.35.2', png2icons: '^2.0.1' },
+                    peerDependenciesMeta: {
+                        sharp: { optional: true },
+                        png2icons: { optional: true },
+                    },
                 }),
             );
+        }
+        // A codec-absent `icons:generate` run: the bin resolves and RUNS, and
+        // fails with the actionable message. This is the shape a real adopter
+        // hits before opting into the codecs — and the shape a no-opping entry
+        // guard could not produce, since that exits 0 saying nothing.
+        if (args.includes('icons:generate')) {
+            return {
+                status: 1,
+                stdout: '',
+                stderr:
+                    '[generate-icons] generate-icons: sharp + png2icons are required to generate ' +
+                    'icons and are optional peer dependencies. Install them as devDependencies: ' +
+                    'pnpm add -D sharp png2icons\n',
+            };
         }
         // The validate-assets arm runs the SAME command twice and requires
         // different answers: clean first, then non-zero once a broken ref sits
@@ -217,7 +279,7 @@ function makeFakeRun(
         }
         return { status: 0, stdout: '', stderr: '' };
     };
-    return { run, calls };
+    return { run, calls, installNpmrc: () => installNpmrc };
 }
 
 // The tmp root the gate gets back from fs.mkdtemp — the fake returns `${prefix}${counter}`
@@ -1011,6 +1073,333 @@ describe('verifyScaffold', () => {
         expect(result.ok).toBe(false);
         expect(result.failedStep).toBe('validate-assets');
     });
+
+    it('runs the generate-icons arm: bin reachable, no codec installed, actionable failure', async () => {
+        // The happy path for this arm is a FAILING run — a codec-absent
+        // invocation that reports what to install. That is the shape a real
+        // adopter hits first, and the shape that proves reachability cost the
+        // game no install weight.
+        const { fs, files } = makeFakeFs();
+        const { run, calls } = makeFakeRun(files, TMP_ROOT);
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(true);
+        // Invoked through the app SCRIPT, so pnpm resolves the bare bin name
+        // through `node_modules/.bin` — the symlink an entry guard comparing
+        // raw paths silently no-ops on.
+        expect(
+            calls.some((call) => call.cmd === 'pnpm' && call.args.includes('icons:generate')),
+        ).toBe(true);
+    });
+
+    it('pins the probe’s hoisting before installing, so the tree is the scaffold’s not the runner’s', async () => {
+        // Without this the generate-icons arm's absence checks depend on the
+        // machine: hoisting enabled in a developer's or CI runner's `~/.npmrc`
+        // links every transitive into the project root, and the arm reads Next's
+        // `sharp` there as a declaration the scaffold never made.
+        //
+        // Read as `pnpm install` SAW it, not at the end of the run: an `.npmrc`
+        // written afterwards is inert, and a file-at-the-end assertion cannot
+        // tell that apart from a correct one.
+        const { fs, files } = makeFakeFs();
+        const { run, installNpmrc } = makeFakeRun(files, TMP_ROOT);
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(true);
+        // Two assertions, because either alone is blind to half the property.
+        // This one pins WHEN: comparing against the constant cannot see a
+        // content change, but it does see a write that happened too late.
+        expect(installNpmrc()).toBe(PROBE_NPMRC);
+
+        // And this one pins WHAT, as a literal. Only `shamefully-hoist=false`
+        // neutralises an ambient `shamefully-hoist=true` — measured against real
+        // installs, which is how the first version of this pin was found inert.
+        // Asserted against the constant instead, any line could be dropped
+        // silently; see `PROBE_NPMRC` for what each one is for.
+        expect(PROBE_NPMRC).toBe(
+            'shamefully-hoist=false\npublic-hoist-pattern=\nnode-linker=isolated\n',
+        );
+    });
+
+    it('pins BOTH flags of the expected app script, not just the one a test happens to drop', () => {
+        // The constant is what every other assertion here compares against, so
+        // a half of it that no test reads can drift silently. `--out`'s half is
+        // covered by the mutation below; this covers `--source`'s.
+        expect(PROBE_ICONS_GENERATE_SCRIPT).toBe(
+            'chimera-generate-icons --source assets/icons/icon.png --out assets/icons',
+        );
+    });
+
+    it('reports generate-icons when the app script drops --out (silent wrong-path write)', async () => {
+        // The omission that does NOT refuse at runtime: the bin's `--out`
+        // default is `electron/assets/icons` relative to cwd, a game HAS an
+        // electron/ directory, so eleven files land in its main-process source
+        // tree and the run exits 0. Only the script-shape check can catch it.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(files, TMP_ROOT);
+        // Applied AFTER the scaffold CLI seeds the app manifest, which is the
+        // only point at which there is a script to weaken.
+        const patched: RunFn = (cmd, args, opts) => {
+            const result = run(cmd, args, opts);
+            if (cmd === 'tsx' && args.some((arg) => arg.includes('create-chimera-game'))) {
+                const appPkgPath = path.join(APP_DIR, 'package.json');
+                const pkg = JSON.parse(files.get(appPkgPath) ?? '{}') as {
+                    scripts: Record<string, string>;
+                };
+                pkg.scripts['icons:generate'] =
+                    'chimera-generate-icons --source assets/icons/icon.png';
+                files.set(appPkgPath, JSON.stringify(pkg));
+            }
+            return result;
+        };
+
+        const result = await verifyScaffold(makeDeps(patched, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('generate-icons');
+    });
+
+    it('reports generate-icons when the bin is not linked under the app node_modules/.bin', async () => {
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
+            if (args[0] === 'install') {
+                // Everything the earlier arms need, minus this one's bin.
+                seedInstallExcept(files, ['chimera-generate-icons']);
+                return { status: 0, stdout: '', stderr: '' };
+            }
+            return undefined;
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('generate-icons');
+    });
+
+    it.each([
+        ['sharp', 'app', () => path.join(APP_DIR, 'node_modules', 'sharp')],
+        ['sharp', 'project root', () => path.join(TMP_ROOT, 'node_modules', 'sharp')],
+        ['png2icons', 'app', () => path.join(APP_DIR, 'node_modules', 'png2icons')],
+        ['png2icons', 'project root', () => path.join(TMP_ROOT, 'node_modules', 'png2icons')],
+    ] as const)(
+        'reports generate-icons when %s was declared into the %s node_modules',
+        async (_codec, _where, location) => {
+            // The install-weight regression, and the one a passing bin run would
+            // HIDE: with the codec present the tool SUCCEEDS, so only an explicit
+            // absence check can see that a project now asks for it.
+            //
+            // Both codecs in both trees. Under pnpm's isolated linker a
+            // project's own node_modules holds exactly what it declared, so
+            // either location is a direct declaration — which is the defect this
+            // arm found on its first run, in the project root.
+            const { fs, files } = makeFakeFs();
+            const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
+                if (args[0] === 'install') {
+                    seedInstallExcept(files, []);
+                    files.set(location(), 'declared');
+                    return { status: 0, stdout: '', stderr: '' };
+                }
+                return undefined;
+            });
+
+            const result = await verifyScaffold(makeDeps(run, fs));
+
+            expect(result.ok).toBe(false);
+            expect(result.failedStep).toBe('generate-icons');
+        },
+    );
+
+    it.each([
+        // Non-empty stdout on the failing case, so each conjunct is the only
+        // thing that can catch its own fixture. A failing run that also printed
+        // nothing would trip both, and either check could then be deleted.
+        ['fails', { status: 1, stdout: '/partial/path', stderr: 'ENOENT' }],
+        ['succeeds with empty output', { status: 0, stdout: '   \n', stderr: '' }],
+    ] as const)(
+        'fails the reading arm when resolving the installed electron dir %s',
+        async (_label, resolution) => {
+            // Empty stdout is the quieter half: `path.join('', 'package.json')`
+            // is a path relative to the GATE's cwd, so the read either throws an
+            // unnamed error — which escapes the step-error contract entirely —
+            // or grades a manifest belonging to something else.
+            const { fs, files } = makeFakeFs();
+            const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) =>
+                cmd === 'node' && args[1]?.includes('realpathSync') === true
+                    ? resolution
+                    : undefined,
+            );
+
+            const result = await verifyScaffold(makeDeps(run, fs));
+
+            expect(result.ok).toBe(false);
+            // validate-assets reads the same manifest through the same helper and
+            // runs first, so it is the step that reports — which is the point:
+            // the helper fails as its CALLER's step rather than escaping.
+            expect(result.failedStep).toBe('validate-assets');
+        },
+    );
+
+    it('reports generate-icons when the codec-absent run exits 0 (the no-op entry guard)', async () => {
+        // Exactly what a bare `path.resolve` entry gate produces through a pnpm
+        // bin shim: exit 0, nothing written, nothing said. Without this the arm
+        // would read that silence as success.
+        //
+        // Asserted on the LOGGED message, not just the step: silence also trips
+        // the actionable-message check further down, so `failedStep` alone
+        // cannot tell "the guard no-opped" from "the message was wrong" — and
+        // this test would then pass with the exit-code check deleted.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) =>
+            args.includes('icons:generate') ? { status: 0, stdout: '', stderr: '' } : undefined,
+        );
+        const logged: string[] = [];
+
+        const result = await verifyScaffold(
+            makeDeps(run, fs, { log: (message) => logged.push(message) }),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('generate-icons');
+        expect(logged.join('\n')).toContain('exited 0 without png2icons');
+    });
+
+    it('reports generate-icons when the run fails without the actionable message', async () => {
+        // A non-zero exit alone is also what a bin that failed to LOAD produces.
+        // The failure has to be the one that tells an author what to install.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) =>
+            args.includes('icons:generate')
+                ? {
+                      status: 1,
+                      stdout: '',
+                      stderr: "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'sharp'\n",
+                  }
+                : undefined,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('generate-icons');
+    });
+
+    it.each([
+        ['declares a codec as a runtime dependency', { sharp: '^0.35.2' }, true],
+        ['declares no codec peer at all', undefined, false],
+    ] as const)(
+        'reports generate-icons when the installed electron manifest %s',
+        async (_label, dependencies, keepPeers) => {
+            const { fs, files } = makeFakeFs();
+            const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
+                if (args[0] === 'install') {
+                    seedInstallExcept(files, []);
+                    files.set(
+                        path.join(ELECTRON_REAL_DIR, 'package.json'),
+                        JSON.stringify({
+                            name: '@chimera-engine/electron',
+                            dependencies: { typescript: '^5.7.2', ...dependencies },
+                            ...(keepPeers
+                                ? {
+                                      peerDependencies: {
+                                          sharp: '^0.35.2',
+                                          png2icons: '^2.0.1',
+                                      },
+                                      peerDependenciesMeta: {
+                                          sharp: { optional: true },
+                                          png2icons: { optional: true },
+                                      },
+                                  }
+                                : {}),
+                        }),
+                    );
+                    return { status: 0, stdout: '', stderr: '' };
+                }
+                return undefined;
+            });
+
+            const result = await verifyScaffold(makeDeps(run, fs));
+
+            expect(result.ok).toBe(false);
+            expect(result.failedStep).toBe('generate-icons');
+        },
+    );
+
+    it('reports generate-icons when the optional flag is there but the peer entry is not', async () => {
+        // The other conjunct of "declared as an OPTIONAL peer". Absent the peer
+        // entry an author gets no version range for a package the tool needs,
+        // and nothing validates a copy they do install. Fixture keeps the
+        // `optional` meta so the sibling check below cannot stand in for this
+        // one — a manifest with neither is caught by that check alone.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
+            if (args[0] === 'install') {
+                seedInstallExcept(files, []);
+                files.set(
+                    path.join(ELECTRON_REAL_DIR, 'package.json'),
+                    JSON.stringify({
+                        name: '@chimera-engine/electron',
+                        dependencies: { typescript: '^5.7.2' },
+                        peerDependencies: { png2icons: '^2.0.1' },
+                        peerDependenciesMeta: {
+                            sharp: { optional: true },
+                            png2icons: { optional: true },
+                        },
+                    }),
+                );
+                return { status: 0, stdout: '', stderr: '' };
+            }
+            return undefined;
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('generate-icons');
+    });
+
+    it.each([
+        ['meta entry absent', undefined],
+        ['optional explicitly false', { optional: false }],
+    ] as const)(
+        'reports generate-icons when a codec peer is not optional (%s)',
+        async (_label, sharpMeta) => {
+            // The single flag the whole lean-install claim rests on, and the ONLY
+            // guard on this branch that observes it — nothing at install time
+            // does, since pnpm places an auto-installed peer under `.pnpm`
+            // rather than in the app's own node_modules.
+            //
+            // Both shapes, because a check comparing against `undefined` rather
+            // than `!== true` passes the explicit-false manifest, which is the
+            // one a hand-edit produces.
+            const { fs, files } = makeFakeFs();
+            const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
+                if (args[0] === 'install') {
+                    seedInstallExcept(files, []);
+                    files.set(
+                        path.join(ELECTRON_REAL_DIR, 'package.json'),
+                        JSON.stringify({
+                            name: '@chimera-engine/electron',
+                            dependencies: { typescript: '^5.7.2' },
+                            peerDependencies: { sharp: '^0.35.2', png2icons: '^2.0.1' },
+                            peerDependenciesMeta: {
+                                ...(sharpMeta === undefined ? {} : { sharp: sharpMeta }),
+                                png2icons: { optional: true },
+                            },
+                        }),
+                    );
+                    return { status: 0, stdout: '', stderr: '' };
+                }
+                return undefined;
+            });
+
+            const result = await verifyScaffold(makeDeps(run, fs));
+
+            expect(result.ok).toBe(false);
+            expect(result.failedStep).toBe('generate-icons');
+        },
+    );
 
     it('reports package when the electron-builder --dir step fails', async () => {
         const { fs, files, removed } = makeFakeFs();
