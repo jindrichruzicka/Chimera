@@ -1,6 +1,8 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+#!/usr/bin/env node
+import { constants } from 'node:fs';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { isDirectInvocation } from '../dev-harness/harness.js';
 // TYPE-only, and load-bearing that they stay that way: type imports are erased, so
 // these describe the codecs without putting either in this module's runtime graph.
 import type SharpFactory from 'sharp';
@@ -25,11 +27,12 @@ import type * as Png2Icons from 'png2icons';
  *
  * Regenerate (one-liner): `pnpm icons:generate`
  *
- * CLI:
+ * CLI, in the monorepo and as the published bin:
  *   tsx electron/dev-tools/generate-icons/index.ts [--source <master.png>] [--out <dir>]
+ *   chimera-generate-icons [--source <master.png>] [--out <dir>]
  *
- * Defaults: source `docs/assets/chimera-logo-compact.png`, out `electron/assets/icons`,
- * both resolved against the repo root (see `resolveRepoRoot`).
+ * Defaults: source `docs/assets/chimera-logo-compact.png`, out `electron/assets/icons`
+ * — see `runGenerateIconsCli` for what they resolve against.
  */
 
 /** Loose square PNG sizes emitted alongside the `.icns`/`.ico` containers. */
@@ -268,49 +271,96 @@ export async function generateIcons(options: GenerateIconsOptions): Promise<Gene
 interface CliArgs {
     readonly source: string;
     readonly out: string;
+    /** False when `source` came from the default rather than from `--source`. */
+    readonly sourceFromFlag: boolean;
 }
 
-/** Parse `--source <path>` / `--out <dir>`, resolving defaults against `repoRoot`. */
-export function parseCliArgs(argv: readonly string[], repoRoot: string): CliArgs {
-    let source = path.join(repoRoot, DEFAULT_SOURCE_REL);
-    let out = path.join(repoRoot, DEFAULT_OUT_REL);
+/** Parse `--source <path>` / `--out <dir>`, resolving defaults against `root`. */
+export function parseCliArgs(argv: readonly string[], root: string): CliArgs {
+    let source = path.join(root, DEFAULT_SOURCE_REL);
+    let out = path.join(root, DEFAULT_OUT_REL);
+    let sourceFromFlag = false;
     for (let i = 0; i < argv.length; i += 1) {
         const arg = argv[i];
         const next = argv[i + 1];
         if (arg === '--source' && next !== undefined) {
             source = path.resolve(next);
+            sourceFromFlag = true;
             i += 1;
         } else if (arg === '--out' && next !== undefined) {
             out = path.resolve(next);
             i += 1;
         }
     }
-    return { source, out };
+    return { source, out, sourceFromFlag };
 }
 
 /**
- * The root `DEFAULT_SOURCE_REL` and `DEFAULT_OUT_REL` are relative to, derived from the
- * calling module's own URL: generate-icons → dev-tools → electron → repo root.
+ * Run the CLI. Returns the process exit code rather than exiting, so the entry below
+ * owns every exit and a test can drive the whole thing in-process.
  *
- * Valid ONLY for this module's SOURCE location. The tsc-emitted copy sits one level
- * deeper, under `electron/dist/`, so the same three-level walk from there lands on the
- * package root and both defaults resolve to paths that do not exist. Callers outside the
- * repo have no repo root at all and must pass `--source`/`--out` explicitly.
+ * `root` is the base the DEFAULT source and out paths resolve against — the current
+ * working directory, never this module's location. That is the same choice
+ * `validate-assets`, `fetch-google-fonts` and the dev-harness make, and here it is
+ * load-bearing rather than stylistic: the engine-relative defaults land correctly from
+ * the repo root, which is where `pnpm icons:generate` runs, whereas derived from the
+ * module they would resolve relative to `dist/dev-tools/generate-icons/` in a published
+ * install and point at paths no consumer has. Explicit `--source`/`--out` values are
+ * resolved by `parseCliArgs` against the real process cwd, not against `root`.
  */
-export function resolveRepoRoot(moduleUrl: string): string {
-    return path.resolve(path.dirname(fileURLToPath(moduleUrl)), '..', '..', '..');
+export async function runGenerateIconsCli(
+    argv: readonly string[] = process.argv.slice(2),
+    root: string = process.cwd(),
+): Promise<number> {
+    const { source, out, sourceFromFlag } = parseCliArgs(argv, root);
+
+    if (!(await fileExists(source))) {
+        process.stderr.write(`[generate-icons] No master logo at ${source}.\n`);
+        // Only when the caller did NOT choose that path. Running the bin bare
+        // from a game lands on an engine-relative default the game has never
+        // had, and naming the flags is the fix; telling someone who passed
+        // `--source` to pass `--source` is noise on top of their typo.
+        if (!sourceFromFlag) {
+            process.stderr.write(
+                `[generate-icons] Pass the square master PNG and the output directory: ` +
+                    `chimera-generate-icons --source <master.png> --out <dir>\n`,
+            );
+        }
+        return 1;
+    }
+
+    const { written } = await generateIcons({ sourcePng: source, outDir: out });
+    const relativeOut = path.relative(root, out) || out;
+    const relativeSource = path.relative(root, source) || source;
+    console.log(
+        `[generate-icons] Wrote ${written.length} files to ${relativeOut}/ from ${relativeSource}.`,
+    );
+    return 0;
 }
 
-// CLI entry: `tsx electron/dev-tools/generate-icons/index.ts [--source <png>] [--out <dir>]`.
-const invokedPath = process.argv[1];
-if (invokedPath !== undefined && path.resolve(invokedPath) === fileURLToPath(import.meta.url)) {
-    void (async (): Promise<void> => {
-        const repoRoot = resolveRepoRoot(import.meta.url);
-        const { source, out } = parseCliArgs(process.argv.slice(2), repoRoot);
-        const { written } = await generateIcons({ sourcePng: source, outDir: out });
-        const rel = path.relative(repoRoot, out) || out;
-        console.log(
-            `[icons:generate] Wrote ${written.length} files to ${rel}/ from ${path.relative(repoRoot, source) || source}.`,
-        );
-    })();
+/**
+ * Existence only. A master that is present but unreadable falls through to the read,
+ * where the EACCES names the same path — a different fix from "there is nothing here",
+ * and one this guard has no better answer for than the error already gives.
+ */
+async function fileExists(filePath: string): Promise<boolean> {
+    try {
+        await access(filePath, constants.F_OK);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// CLI entry, in the monorepo (`pnpm icons:generate`) and as the published
+// `chimera-generate-icons` bin alike.
+const invokedDirectly = isDirectInvocation(import.meta.url, process.argv[1]);
+if (invokedDirectly) {
+    runGenerateIconsCli()
+        .then((exitCode) => process.exit(exitCode))
+        .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            process.stderr.write(`[generate-icons] ${message}\n`);
+            process.exit(1);
+        });
 }

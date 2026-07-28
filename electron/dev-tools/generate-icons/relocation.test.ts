@@ -27,25 +27,22 @@
  * permanently open hole guarding nothing. If a future append-only record does
  * name the retired path, this reds — the loud, fixable direction.
  *
- * The depth check is load-bearing and cannot be reached through `parseCliArgs`,
- * which already takes `repoRoot` as a parameter: the only untested part of the
- * move is how many levels the tool walks up to FIND that root. From `tools/` it
- * was one; from here it is three, and a wrong count silently re-roots both
- * engine-relative defaults. So the derivation is exported and asserted BY VALUE,
- * and the entry is separately pinned to call it — a correct derivation handed to
- * the wrong argument is the mutant a source-text-only probe cannot see.
+ * What the move could silently break, beyond the paths above, is where the
+ * engine-relative defaults resolve FROM. The tool takes that root from cwd, so
+ * the check here is that both defaults exist at the repo root — the cwd
+ * `pnpm icons:generate` runs with.
  */
 
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { DEFAULT_OUT_REL, DEFAULT_SOURCE_REL, resolveRepoRoot } from './index.js';
+import { fileURLToPath } from 'node:url';
+import { DEFAULT_OUT_REL, DEFAULT_SOURCE_REL } from './index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** The same three-level walk the tool's CLI entry performs. */
+/** generate-icons → dev-tools → electron → repo root. */
 const repoRoot = resolve(__dirname, '..', '..', '..');
 
 const toolPath = resolve(__dirname, 'index.ts');
@@ -195,36 +192,19 @@ describe('generate-icons relocation (§4.32 dev-tooling home)', () => {
         expect(source).not.toMatch(stalePathPattern);
     });
 
-    it('derives the repo root from its own module URL, at this directory’s depth', () => {
-        // By VALUE, and anchored on a marker rather than on the arithmetic under
-        // test: comparing `resolveRepoRoot` against a constant derived the same
-        // way would hold at any depth. Driven with the SOURCE module's URL so the
-        // assertion is about the tool's own location, not this test file's.
-        const derived = resolveRepoRoot(pathToFileURL(toolPath).href);
-        expect(derived).toBe(locateWorkspaceRoot(__dirname));
-
-        // Both engine-relative defaults must land on real paths — the observable
-        // consequence of getting the level count right.
-        expect(existsSync(resolve(derived, DEFAULT_SOURCE_REL))).toBe(true);
-        expect(existsSync(resolve(derived, DEFAULT_OUT_REL))).toBe(true);
-    });
-
-    it('hands that derived root, and nothing else, to the CLI argument parser', () => {
-        // The value assertion above cannot see the mutant that keeps a correct
-        // `resolveRepoRoot` and passes the module's own DIRECTORY to
-        // `parseCliArgs` instead: the defaults would resolve under
-        // `electron/dev-tools/generate-icons/…` and every test still greens.
-        // Only the call site carries that claim, so the call site is asserted.
+    it('resolves its engine-relative defaults against the repo root, from the repo root', () => {
+        // The monorepo entry point is `pnpm icons:generate`, which pnpm runs with
+        // cwd = the package that declares the script, i.e. the repo root. Both
+        // defaults must land on real paths from there, which is the property the
+        // relocation could have broken and the only one that keeps the default
+        // run writing the committed set.
         //
-        // These two strings are FORMAT-SENSITIVE — renaming the local `repoRoot`
-        // or wrapping either call reds them. That is the cost of pinning a call
-        // site that no value can observe; keep them in sync with the entry.
-        expect(readFileSync(toolPath, 'utf8')).toContain(
-            'parseCliArgs(process.argv.slice(2), repoRoot)',
-        );
-        expect(readFileSync(toolPath, 'utf8')).toContain(
-            'const repoRoot = resolveRepoRoot(import.meta.url);',
-        );
+        // The tool derives this root from cwd, never from its own module URL —
+        // see `runGenerateIconsCli`. A module-relative derivation would be
+        // correct here and wrong from `dist/`, where the published bin lives.
+        const root = locateWorkspaceRoot(__dirname);
+        expect(existsSync(resolve(root, DEFAULT_SOURCE_REL))).toBe(true);
+        expect(existsSync(resolve(root, DEFAULT_OUT_REL))).toBe(true);
     });
 
     it('declares its image codecs as OPTIONAL peers of the package it now ships inside', () => {

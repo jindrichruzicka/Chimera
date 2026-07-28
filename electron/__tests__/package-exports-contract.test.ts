@@ -124,6 +124,7 @@ describe('@chimera-engine/electron package surface (issue #777)', () => {
         expect(manifest.bin).toEqual({
             'chimera-dev-mp': 'dist/dev-tools/dev-harness/cli.js',
             'chimera-fetch-fonts': 'dist/dev-tools/fetch-google-fonts/index.js',
+            'chimera-generate-icons': 'dist/dev-tools/generate-icons/index.js',
             'chimera-validate-assets': 'dist/dev-tools/validate-assets/index.js',
         });
     });

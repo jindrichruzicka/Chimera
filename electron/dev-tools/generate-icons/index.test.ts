@@ -25,13 +25,17 @@ import type {
     Node,
     SourceFile,
 } from 'typescript';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     DEFAULT_ICON_BASENAME,
+    DEFAULT_OUT_REL,
+    DEFAULT_SOURCE_REL,
     MISSING_CODECS_MESSAGE,
     PNG_SIZES,
     generateIcons,
     loadIconCodecs,
+    parseCliArgs,
+    runGenerateIconsCli,
 } from './index.js';
 
 /**
@@ -161,10 +165,12 @@ describe('generateIcons', () => {
     });
 
     it('creates no output directory when the master cannot be read', async () => {
-        // The OTHER way this run ends early, and the one a user hits far more
-        // often than an absent codec — a typo in `--source`. Asserted separately
-        // because it is a different statement's ordering: the codec case only
-        // constrains the load, this one constrains the master read.
+        // The OTHER way this run ends early. Asserted separately because it is a
+        // different statement's ordering: the codec case only constrains the
+        // load, this one constrains the master read. Reachable through the CLI
+        // only for a master that exists but cannot be opened — a plain missing
+        // path is intercepted by `runGenerateIconsCli`'s own check — and always
+        // reachable for a direct caller of `generateIcons`.
         const nested = path.join(outDir, 'nested', 'icons');
 
         await expect(
@@ -172,6 +178,150 @@ describe('generateIcons', () => {
         ).rejects.toMatchObject({ code: 'ENOENT' });
 
         await expect(stat(nested)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+});
+
+/** Collects everything written to stderr until `restore()`. */
+function captureStderr(): { text: () => string; restore: () => void } {
+    const chunks: string[] = [];
+    const spy = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation((chunk: string | Uint8Array) => {
+            chunks.push(String(chunk));
+            return true;
+        });
+    return { text: () => chunks.join(''), restore: () => spy.mockRestore() };
+}
+
+describe('runGenerateIconsCli', () => {
+    let cwd: string;
+
+    beforeEach(async () => {
+        cwd = await mkdtemp(path.join(tmpdir(), 'chimera-icons-cwd-'));
+    });
+
+    afterEach(async () => {
+        await rm(cwd, { recursive: true, force: true });
+    });
+
+    it('resolves both engine-relative defaults against the root it is given', async () => {
+        // Only the RULE, driven with a synthetic root so the assertion says
+        // nothing about this checkout. That the CLI feeds it cwd rather than its
+        // own location is a different claim, and only a run of the built bin can
+        // carry it — see `bin.test.ts`.
+        const { source, out } = parseCliArgs([], cwd);
+        expect(source).toBe(path.join(cwd, DEFAULT_SOURCE_REL));
+        expect(out).toBe(path.join(cwd, DEFAULT_OUT_REL));
+    });
+
+    it('refuses, naming both flags, when no master exists at the default path', async () => {
+        // Running the bin bare from a game lands on an engine-relative default
+        // the game has never had. An unexplained ENOENT on a path the caller did
+        // not choose is the failure this replaces.
+        const stderr = captureStderr();
+        try {
+            await expect(runGenerateIconsCli([], cwd)).resolves.toBe(1);
+        } finally {
+            stderr.restore();
+        }
+
+        expect(stderr.text()).toContain(path.join(cwd, DEFAULT_SOURCE_REL));
+        expect(stderr.text()).toContain('--source');
+        expect(stderr.text()).toContain('--out');
+    });
+
+    it('does NOT repeat the flags back at a caller who passed them', async () => {
+        // Same guard, different caller: the refusal fires for any unresolvable
+        // source, including one named explicitly. Telling someone who wrote
+        // `--source` to write `--source` is noise on top of their typo, and it
+        // buries the one thing they need — the path that did not resolve.
+        const stderr = captureStderr();
+        try {
+            await expect(
+                runGenerateIconsCli(['--source', path.join(cwd, 'typo.png')], cwd),
+            ).resolves.toBe(1);
+        } finally {
+            stderr.restore();
+        }
+
+        expect(stderr.text()).toContain(path.join(cwd, 'typo.png'));
+        expect(stderr.text()).not.toContain('--source');
+        expect(stderr.text()).not.toContain('--out');
+    });
+
+    it('still advises the flags when some OTHER flag was passed but not --source', async () => {
+        // `--out`-only is a natural invocation — an author who knows where the
+        // set should land but has not supplied a master yet — and it is squarely
+        // the case the advice exists for, since they did not choose the source
+        // path. Covered explicitly because the two cases above are the extremes:
+        // between them, `sourceFromFlag` set by the wrong branch is invisible.
+        const stderr = captureStderr();
+        try {
+            await expect(
+                runGenerateIconsCli(['--out', path.join(cwd, 'icons')], cwd),
+            ).resolves.toBe(1);
+        } finally {
+            stderr.restore();
+        }
+
+        expect(stderr.text()).toContain(path.join(cwd, DEFAULT_SOURCE_REL));
+        expect(stderr.text()).toContain('--source');
+    });
+
+    it('reports the source as flag-supplied only for --source', () => {
+        // The field the branch above reads, asserted directly: the CLI test can
+        // only see it through the advice line, which conflates "not set" with
+        // "set by the wrong flag" whenever both produce the same output.
+        expect(parseCliArgs([], cwd).sourceFromFlag).toBe(false);
+        expect(parseCliArgs(['--out', 'x'], cwd).sourceFromFlag).toBe(false);
+        expect(parseCliArgs(['--source', 'x'], cwd).sourceFromFlag).toBe(true);
+    });
+
+    it('writes the set and reports success when the master resolves', async () => {
+        const master = path.join(cwd, 'master.png');
+        await sharp({
+            create: { width: 512, height: 512, channels: 4, background: { r: 9, g: 9, b: 9 } },
+        })
+            .png()
+            .toFile(master);
+        const outDir = path.join(cwd, 'icons');
+
+        await expect(runGenerateIconsCli(['--source', master, '--out', outDir], cwd)).resolves.toBe(
+            0,
+        );
+        await expect(
+            stat(path.join(outDir, `${DEFAULT_ICON_BASENAME}.png`)),
+        ).resolves.toBeDefined();
+    });
+
+    it('reports what it wrote, and where, relative to the root it was given', async () => {
+        // The only user-visible output of a successful run. Unasserted, the
+        // count, either path and the `[generate-icons]` prefix are all free to
+        // drift — and the count is the one number a reader uses to tell a real
+        // run from a guard that no-opped.
+        const master = path.join(cwd, 'master.png');
+        await sharp({
+            create: { width: 256, height: 256, channels: 4, background: { r: 4, g: 5, b: 6 } },
+        })
+            .png()
+            .toFile(master);
+        const outDir = path.join(cwd, 'icons');
+
+        const logged: string[] = [];
+        const log = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+            logged.push(args.map(String).join(' '));
+        });
+        try {
+            await expect(
+                runGenerateIconsCli(['--source', master, '--out', outDir], cwd),
+            ).resolves.toBe(0);
+        } finally {
+            log.mockRestore();
+        }
+
+        expect(logged.join('\n')).toBe(
+            '[generate-icons] Wrote 11 files to icons/ from master.png.',
+        );
     });
 });
 
