@@ -1,7 +1,7 @@
+#!/usr/bin/env node
 import { constants, type Dirent } from 'node:fs';
 import { access, readdir, readFile } from 'node:fs/promises';
 import { basename, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
     ScriptKind,
     ScriptTarget,
@@ -38,6 +38,8 @@ import {
     MalformedAssetRefError,
     parseAssetRef,
 } from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
+
+import { isDirectInvocation } from '../dev-harness/harness.js';
 
 export interface WorkspaceFileHost {
     findDataJsonFiles(workspaceRoot: string): Promise<readonly string[]>;
@@ -1747,14 +1749,4 @@ if (invokedDirectly) {
             process.stderr.write(`[validate-assets] ${message}\n`);
             process.exit(1);
         });
-}
-
-export function isDirectInvocation(importMetaUrl: string, argv1: string | undefined): boolean {
-    if (argv1 === undefined) return false;
-    if (!importMetaUrl.startsWith('file://')) return false;
-    try {
-        return fileURLToPath(importMetaUrl) === resolve(argv1);
-    } catch {
-        return false;
-    }
 }

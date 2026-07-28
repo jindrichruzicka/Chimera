@@ -4,12 +4,18 @@
  * Unit tests for the dev multiplayer harness library (§4.32), ported from
  * tools/dev-multiplayer.test.ts when the harness moved into
  * `@chimera-engine/electron` and extended for the fixture-driven plan
- * resolution, announce-file handshake, and dry-run report. All filesystem
- * access goes through the injected {@link HarnessIo} double — no real FS.
+ * resolution, announce-file handshake, and dry-run report. Filesystem access
+ * goes through the injected {@link HarnessIo} double, with one exception noted
+ * at its case: `isDirectInvocation`'s symlink canonicalisation is a claim about
+ * `realpath`, which no double can stand in for.
  */
 
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { describe, it, expect } from 'vitest';
 
@@ -582,6 +588,43 @@ describe('isDirectInvocation()', () => {
 
     it('returns false when the URL is not a file:// URL', () => {
         expect(isDirectInvocation('data:text/plain,foo', '/repo/cli.ts')).toBe(false);
+    });
+
+    // Real FS, deliberately: the property below is that both sides are passed
+    // through `realpath`, and every fixture above names a path that does not
+    // exist — so `realpath` throws, the canonicalisation falls through to the
+    // raw string, and dropping it entirely would leave all four green. This is
+    // the one case that separates this implementation from the naive
+    // comparison, and it cannot be written without a real symlink.
+    //
+    // Windows contributors: creating a directory symlink needs Developer Mode
+    // or an elevated shell; without either this case fails EPERM. CI is Linux.
+    it('canonicalises BOTH sides, so a symlinked argv[1] still matches the real module URL', async () => {
+        const scratch = await mkdtemp(join(tmpdir(), 'chimera-direct-invocation-'));
+        const realDir = join(scratch, 'real');
+        await mkdir(realDir);
+        const modulePath = join(realDir, 'cli.js');
+        await writeFile(modulePath, '');
+
+        // How a pnpm bin shim invokes: argv[1] runs THROUGH a symlink, while
+        // node reports the realpathed module as `import.meta.url`. Both live
+        // inside `scratch`, so the whole fixture is one removable tree.
+        const linkDir = join(scratch, 'link');
+        await symlink(realDir, linkDir, 'dir');
+        const symlinkedArgv1 = join(linkDir, 'cli.js');
+
+        const moduleUrl = pathToFileURL(await realpath(modulePath)).href;
+
+        try {
+            // Guards the case against passing vacuously: on a platform where
+            // the two paths already coincide there is nothing to canonicalise,
+            // and this fails loudly instead of green. (On macOS `tmpdir()` is
+            // itself a symlink, so they diverge even before `linkDir`.)
+            expect(symlinkedArgv1).not.toBe(fileURLToPath(moduleUrl));
+            expect(isDirectInvocation(moduleUrl, symlinkedArgv1)).toBe(true);
+        } finally {
+            await rm(scratch, { recursive: true, force: true });
+        }
     });
 });
 

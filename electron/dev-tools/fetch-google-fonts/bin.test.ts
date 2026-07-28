@@ -5,8 +5,9 @@
  * precedent, §4.32): the published bin must point at the tsc-emitted dist
  * artifact of this directory's index.ts, and the source must open with the
  * `#!/usr/bin/env node` shebang so the emitted JS runs under plain node in a
- * standalone consumer (tsc preserves shebangs; tsx strips them for the
- * monorepo `fetch:fonts` script).
+ * standalone consumer. A leading hashbang is legal module syntax, so tsc emits
+ * it unchanged, tsx and esbuild pass it through, and node ignores it under
+ * every loader — the monorepo `fetch:fonts` script keeps working.
  */
 
 import { describe, expect, it } from 'vitest';

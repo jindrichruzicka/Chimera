@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import type { AudioClipMetadata } from '@chimera-engine/simulation/foundation/audio-cue-sheet.js';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,7 +8,6 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     createNodeWorkspaceFileHost,
     formatAssetValidationReport,
-    isDirectInvocation,
     runValidateAssetsCli,
     toAssetValidationExitCode,
     validateAssetWorkspace,
@@ -2095,27 +2094,6 @@ describe('scene source file collection edge cases', () => {
 
         expect(report.ok).toBe(true);
         expect(report.checkedRefs).toBe(2);
-    });
-});
-
-// ── isDirectInvocation ────────────────────────────────────────────────────────
-
-describe('isDirectInvocation', () => {
-    it('returns false when argv1 is undefined', () => {
-        expect(isDirectInvocation('file:///path/to/file.ts', undefined)).toBe(false);
-    });
-
-    it('returns false when importMetaUrl does not start with file://', () => {
-        expect(isDirectInvocation('https://example.com/file.ts', '/path/to/file.ts')).toBe(false);
-    });
-
-    it('returns true when importMetaUrl resolves to the same absolute path as argv1', () => {
-        const filePath = resolve('/tmp/index.ts');
-        expect(isDirectInvocation(`file://${filePath}`, filePath)).toBe(true);
-    });
-
-    it('returns false when importMetaUrl resolves to a different path', () => {
-        expect(isDirectInvocation('file:///tmp/a.ts', '/tmp/b.ts')).toBe(false);
     });
 });
 

@@ -120,10 +120,11 @@ describe('@chimera-engine/electron package surface (issue #777)', () => {
         }
     });
 
-    it('ships the chimera-dev-mp and chimera-fetch-fonts bins from dist (§4.32 dev-tools)', () => {
+    it('ships the dev-tools bins from dist (§4.32 dev-tools)', () => {
         expect(manifest.bin).toEqual({
             'chimera-dev-mp': 'dist/dev-tools/dev-harness/cli.js',
             'chimera-fetch-fonts': 'dist/dev-tools/fetch-google-fonts/index.js',
+            'chimera-validate-assets': 'dist/dev-tools/validate-assets/index.js',
         });
     });
 
