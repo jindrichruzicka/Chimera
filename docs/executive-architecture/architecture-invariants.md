@@ -77,7 +77,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **21.** `AssetManager.dispose()` is called unconditionally on every game session end. Components must never hold direct references to loaded Three.js assets — all access goes through `useAsset()` or `AssetManager.get()`.
 
-**22.** All `AssetRef` strings in content JSON files must pass `tools/validate-assets.ts` before merge. A data object referencing a non-existent file is a CI-blocking error, not a warning.
+**22.** All `AssetRef` strings in content JSON files must pass `electron/dev-tools/validate-assets/index.ts` before merge. A data object referencing a non-existent file is a CI-blocking error, not a warning.
 
 **23.** `FileSaveRepository.save()` always writes to a `.tmp` file and renames atomically. A save must never partially overwrite a previous valid save file.
 

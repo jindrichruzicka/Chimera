@@ -81,6 +81,7 @@
         "@chimera-engine/networking": "workspace:*",
         "@chimera-engine/renderer": "workspace:*",
         "pino": "^10.3.1",
+        "typescript": "^5.7.2",
         "zod": "^4.3.6"
     }
 }

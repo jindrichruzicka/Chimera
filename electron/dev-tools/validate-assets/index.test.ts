@@ -14,7 +14,7 @@ import {
     validateAssetWorkspace,
     type AssetValidationReport,
     type WorkspaceFileHost,
-} from './validate-assets.js';
+} from './index.js';
 
 const workspaceRoot = '/repo';
 
@@ -2110,7 +2110,7 @@ describe('isDirectInvocation', () => {
     });
 
     it('returns true when importMetaUrl resolves to the same absolute path as argv1', () => {
-        const filePath = resolve('/tmp/validate-assets.ts');
+        const filePath = resolve('/tmp/index.ts');
         expect(isDirectInvocation(`file://${filePath}`, filePath)).toBe(true);
     });
 

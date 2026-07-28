@@ -49,7 +49,7 @@
         "version-packages": "changeset version && pnpm install --lockfile-only",
         "release": "pnpm build:packages && changeset publish",
         "test:perf": "pnpm build:packages && cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts",
-        "validate:assets": "pnpm build:packages && tsx tools/validate-assets.ts",
+        "validate:assets": "pnpm build:packages && tsx electron/dev-tools/validate-assets/index.ts",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "lint": "pnpm build:packages && pnpm -r lint && eslint tools eslint.config.mjs vitest.config.mts",
