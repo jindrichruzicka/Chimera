@@ -77,17 +77,17 @@ The code-reviewer subagent does **not** run e2e; it was run explicitly here.
 
 Re-run in full when #116–#126 graduated, base `main` @ `ce59bf95`, 2026-07-27. All green:
 
-| Step              | Command                                                    | Result                         |
-| ----------------- | ---------------------------------------------------------- | ------------------------------ |
-| Invariant checker | `.claude/skills/invariants/scripts/check-invariants.sh`    | **exit 0**                     |
-| Checker self-test | `.claude/skills/invariants/tests/check-invariants.test.sh` | **105 / 105 pass**             |
-| `.github` mirror  | same two scripts under `.github/skills/invariants/`        | **exit 0 · 105 / 105 pass**    |
-| Build             | `pnpm build`                                               | **exit 0**                     |
-| Typecheck         | `pnpm typecheck`                                           | **exit 0**                     |
-| Lint              | `pnpm lint`                                                | **exit 0**                     |
-| Unit tests        | `pnpm test`                                                | **exit 0 — 8686 passed**       |
-| Asset validation  | `pnpm validate:assets`                                     | **exit 0**                     |
-| E2E               | `pnpm test:e2e`                                            | **exit 0 — 140 passed (2.7m)** |
+| Step              | Command                                                                    | Result                         |
+| ----------------- | -------------------------------------------------------------------------- | ------------------------------ |
+| Invariant checker | `.claude/skills/invariants/scripts/check-invariants.sh`                    | **exit 0**                     |
+| Checker self-test | `.claude/skills/invariants/tests/check-invariants.test.sh`                 | **105 / 105 pass**             |
+| `.github` mirror  | same two scripts under `.github/skills/invariants/` (mirror since removed) | **exit 0 · 105 / 105 pass**    |
+| Build             | `pnpm build`                                                               | **exit 0**                     |
+| Typecheck         | `pnpm typecheck`                                                           | **exit 0**                     |
+| Lint              | `pnpm lint`                                                                | **exit 0**                     |
+| Unit tests        | `pnpm test`                                                                | **exit 0 — 8686 passed**       |
+| Asset validation  | `pnpm validate:assets`                                                     | **exit 0**                     |
+| E2E               | `pnpm test:e2e`                                                            | **exit 0 — 140 passed (2.7m)** |
 
 The 3 new e2e are `audio-smoke.spec.ts` (137 → 140), and the checker self-test gained 4 cases
 (101 → 105). E2E was again run explicitly, for the same reason.

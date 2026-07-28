@@ -8,9 +8,9 @@
 
 ## Working With This Repo Via Claude Code
 
-This repo provides a complete Claude Code surface mirrored from the existing
-GitHub Copilot configuration under `.github/`. Both surfaces are kept in sync;
-edit either one and reflect the change in the other.
+The agent surface for this repo lives under `.claude/` — it is the single
+source of truth for subagents, slash commands, skills, and hooks. (`.github/`
+holds only the CI, e2e, and release workflows.)
 
 - **Subagents**: `.claude/agents/chimera-*.md` — architect, code-reviewer, engine-developer, engine-planner, git-operations, product-manager, qa-engineer, release-manager. Claude routes by `description`; explicit invocation works too.
 - **Slash commands**: `.claude/commands/*.md` — `/bootstrap-feature`, `/bootstrap-milestone`, `/create-issues-feature-review`, `/create-release`, `/implement-issue`, `/implement-issue-merge`, `/merge-to-main`, `/publish-packages`, `/review-branch`, `/review-feature`, `/review-milestone`.

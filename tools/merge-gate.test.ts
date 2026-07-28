@@ -11,11 +11,6 @@
  * substring: a commented-out or `echo`-stubbed step would leave the literal
  * `pnpm verify:packaged-bundle` in the file (it appears in the banner and the
  * `info` line) while running nothing.
- *
- * The `.github` copy is a mirror surface, kept in sync as a pure
- * `sed 's|\.claude|.github|g'` image. Asserting that here means pinning the
- * canonical `.claude` copy also pins the mirror — neither the gate step nor the
- * surrounding script can drift on one side only.
  */
 
 import { readFileSync } from 'node:fs';
@@ -26,10 +21,6 @@ const workspaceRoot = path.resolve(import.meta.dirname, '..');
 const claudeScript = path.join(
     workspaceRoot,
     '.claude/skills/git/merge/scripts/check-and-merge.sh',
-);
-const githubScript = path.join(
-    workspaceRoot,
-    '.github/skills/git/merge/scripts/check-and-merge.sh',
 );
 
 /** A real `run_gate_step "pnpm <name>" pnpm <name>` invocation, not a comment. */
@@ -65,12 +56,5 @@ describe('merge skill pre-merge gate (check-and-merge.sh)', () => {
         const gateIndex = content.indexOf('run_gate_step "pnpm verify:packaged-bundle"');
         expect(testIndex).toBeGreaterThan(-1);
         expect(gateIndex).toBeGreaterThan(testIndex);
-    });
-
-    it('keeps the .github mirror a pure sed image of the .claude copy', () => {
-        // Pinning the canonical copy only enforces the property on both surfaces
-        // if the mirror cannot drift independently.
-        const githubContent = readFileSync(githubScript, 'utf-8');
-        expect(content.replace(/\.claude/g, '.github')).toBe(githubContent);
     });
 });

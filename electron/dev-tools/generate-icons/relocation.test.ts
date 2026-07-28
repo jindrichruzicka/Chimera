@@ -280,7 +280,7 @@ describe('generate-icons relocation (§4.32 dev-tooling home)', () => {
 
         // Floor: an enumeration that found nothing would satisfy every
         // assertion below.
-        expect(prose.length).toBeGreaterThan(180);
+        expect(prose.length).toBeGreaterThan(150);
 
         // Named anchors, each one a surface some narrower walk would have
         // dropped. They are not decoration: every one of these was outside a
@@ -296,7 +296,6 @@ describe('generate-icons relocation (§4.32 dev-tooling home)', () => {
             'apps/tactics/CHANGELOG.md',
             'tools/create-chimera-game/README.md',
             'docs/roadmap-sections/m9-package-extraction-v0.9.0.md',
-            '.github/copilot-instructions.md',
             'README.md',
             'CLAUDE.md',
         ]) {

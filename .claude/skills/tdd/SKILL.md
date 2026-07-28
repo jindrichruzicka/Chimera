@@ -55,3 +55,34 @@ Need a mock inside `simulation/`? The code has a hidden dependency. Remove the d
 - [ ] `pnpm test:watch` shows new tests **FAIL** with meaningful message
 - [ ] No accidental green
 - [ ] Test names describe behaviour in plain language
+- [ ] Type-only module: red is `tsc -p` failing on the new test's imports, not a vitest assertion
+
+## Green Confirmation — before handing to review
+
+Sweep every changed guard yourself first:
+
+- [ ] Every guard conjunct has a **dedicated killer**: state the edit that turns
+      the guard true while the property is false, and a named test fails on it.
+      A fixture that trips two conjuncts at once leaves the drop-either-one
+      mutant alive.
+- [ ] The commit's own change is **pinned**: reverting the exact behavior this
+      branch changes fails a named test. When a test or guard is deleted or
+      replaced, list what the old one caught and confirm each entry still fails
+      against the replacement.
+- [ ] Every validation branch **fires** in some test (positive control). A check
+      no fixture can trip is dead code — e.g. indexing an npm array field
+      (`bundledDependencies`) by package name is always `undefined`.
+- [ ] Generated output is asserted against an **inline literal**, never the
+      constant that produced it — `expect(written).toBe(TEMPLATE)` is blind to
+      every content change.
+- [ ] Options sharing one parser get **per-option cases**, not only all-defaults
+      and all-set — a field written by the wrong branch stays green at the
+      extremes.
+- [ ] A source-scanning guard written in TS **parses** (AST walk) rather than
+      regexing — a regex scan here missed `import 'x';` and stripped across
+      newlines — and ships a negative control proving a miss is caught.
+- [ ] Tests that run a **built artifact rebuild it first** — green against a
+      stale `dist` says nothing about the source you just edited.
+- [ ] Every test **title is a claim its body asserts** — a title promising
+      "returns non-zero rather than throwing" over a body that asserts a
+      rejection survives its own violation.

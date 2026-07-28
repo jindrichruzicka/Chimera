@@ -591,9 +591,7 @@ test_missing_constants_file_without_repo_marker_inert() {
 # unreachable as the rule it protects, which was the original defect.
 #
 # The skills directory is planted because the probe only arms in a root shaped
-# like this repo: `package.json` plus `.claude/skills/invariants`. Each mirror
-# names only its OWN surface, so this file stays a pure `.claude`→`.github`
-# substitution of its twin.
+# like this repo: `package.json` plus `.claude/skills/invariants`.
 plant_repo_shaped_root() {
     local root="$1"
     plant_file "${root}" "package.json" '{ "scripts": { "dev": "electron ." } }'
