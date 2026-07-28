@@ -1,11 +1,11 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-main-games-import.test.ts
+ * electron/dev-tools/eslint/rules/no-main-games-import.test.ts
  *
  * Unit tests for the `chimera/no-main-games-import` ESLint rule using
  * Vitest + ESLint RuleTester.
  *
- * The host (electron/main) must stay agnostic of which games exist; since
- * #788/#789 there are NO in-package composition points — content schemas and
+ * The host (electron/main) must stay agnostic of which games exist: there are
+ * NO in-package composition points — content schemas and
  * lobby setup arrive by runtime injection — so every non-test `electron/main`
  * module is guarded (the former gameContentRegistry.ts/lobbySetupRegistry.ts
  * exemptions are gone). Test files stay exempt (they import game fixtures). The
@@ -73,8 +73,7 @@ ruleTester.run('chimera/no-main-games-import', rule, {
             filename: 'renderer/game/rendererGameRegistry.ts',
             code: `import { TacticsGameScreenRegistry } from '@chimera-engine/tactics/screens/index.js';`,
         },
-        // The consumer app composition root (#778; relocated to apps/tactics in
-        // F63/#783) lives outside electron/main — a flat file under electron/, not
+        // The consumer app composition root lives outside electron/main — a flat file under electron/, not
         // electron/main/ — so it may import a game to build the injected
         // MainGameContribution.
         {
@@ -106,14 +105,14 @@ ruleTester.run('chimera/no-main-games-import', rule, {
             code: `import { registerTacticsActions } from '@chimera-engine/tactics/actions.js';`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
-        // mainGameRegistry.ts is no longer exempt (F62/#778): it is a game-agnostic
+        // mainGameRegistry.ts is not exempt: it is a game-agnostic
         // factory and must not import a game — statically or dynamically.
         {
             filename: 'electron/main/game/mainGameRegistry.ts',
             code: `import { registerTacticsActions } from '@chimera-engine/tactics/actions.js';`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
-        // The content + lobby registries lost their exemptions in #788/#789: their
+        // The content + lobby registries carry no exemption: their
         // game coupling moved into the injected MainGameContribution, so they must
         // no longer import a game — statically or dynamically.
         {

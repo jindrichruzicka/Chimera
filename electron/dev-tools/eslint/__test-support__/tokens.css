@@ -1,0 +1,31 @@
+/*
+ * electron/dev-tools/eslint/__test-support__/tokens.css
+ *
+ * Stand-in base token set for `no-unknown-token-overrides`' own unit tests.
+ *
+ * The rule resolves its real token set through
+ * `@chimera-engine/renderer/styles/tokens.css`, which lands on renderer's BUILT
+ * `dist/`. `pnpm --filter @chimera-engine/electron test` does not build the
+ * packages first, so a test that depended on that resolution would red on a
+ * clean tree — and would additionally couple the rule's unit tests to whatever
+ * the engine's live design system happens to declare this week.
+ *
+ * The set is deliberately NOT a subset of the engine's, in both directions:
+ *
+ *   - `--ch-fixture-only-token` is declared HERE and nowhere in
+ *     `renderer/styles/tokens.css`. A suite that had silently fallen back to
+ *     the engine set would report it;
+ *   - `--ch-color-surface-raised` is a real engine token deliberately LEFT OUT.
+ *     A suite reading the engine set would fall silent on it.
+ *
+ * Those two are the only reason the injection seam is observable at all. A
+ * fixture that mirrored the engine would pass identically whether the injected
+ * path was honoured or ignored.
+ */
+
+:root {
+    --ch-color-surface: #111113;
+    --ch-color-accent: #6366f1;
+    --ch-radius-md: 8px;
+    --ch-fixture-only-token: 1px;
+}

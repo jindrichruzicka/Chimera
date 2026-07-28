@@ -1,5 +1,5 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-hardcoded-design-values.test.ts
+ * electron/dev-tools/eslint/rules/no-hardcoded-design-values.test.ts
  *
  * Unit tests for the `chimera/no-hardcoded-design-values` ESLint rule using
  * Vitest + ESLint RuleTester.
@@ -8,7 +8,6 @@
  * Invariants #86 and #91: renderer UI and shell surfaces must use `--ch-*`
  * design tokens instead of hardcoded colour, spacing, or radius literals.
  *
- * Issue: #560
  */
 
 import css from '@eslint/css';

@@ -1,5 +1,5 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-hardcoded-design-values.ts
+ * electron/dev-tools/eslint/rules/no-hardcoded-design-values.ts
  *
  * ESLint rule: `chimera/no-hardcoded-design-values`
  *

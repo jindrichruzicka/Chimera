@@ -570,7 +570,7 @@ export default tseslint.config(
     // (apps/*/simulation/**, apps/*/ai/**); overridden to 'off' for the loaders
     // exemption path and test files. The rule's own path guard mirrors this zone
     // (fires on /simulation/ and apps/<game>/ai/), so both must stay in sync.
-    // Rule implementation: tools/eslint-plugin-chimera/rules/no-fromfloat-in-simulation.ts
+    // Rule implementation: electron/dev-tools/eslint/rules/no-fromfloat-in-simulation.ts
     {
         files: [
             'simulation/**/*.{ts,tsx}',
@@ -607,7 +607,7 @@ export default tseslint.config(
 
     // Invariants #86 and #91 — renderer UI and game screens must use
     // `var(--ch-*)` tokens for design values instead of hardcoded literals.
-    // Rule implementation: tools/eslint-plugin-chimera/rules/no-hardcoded-design-values.ts
+    // Rule implementation: electron/dev-tools/eslint/rules/no-hardcoded-design-values.ts
     // Issue: #560
     {
         files: ['renderer/**/*.{ts,tsx,js,jsx,mjs}', 'apps/*/screens/**/*.{ts,tsx,js,jsx,mjs}'],
@@ -668,7 +668,7 @@ export default tseslint.config(
     // sole coupling point.
     // The same rule guards both surface sets; #774 locks #80 across the
     // @chimera-engine/renderer package cut alongside the bash invariants Check 7.
-    // Rule implementation: tools/eslint-plugin-chimera/rules/no-shell-games-import.ts
+    // Rule implementation: electron/dev-tools/eslint/rules/no-shell-games-import.ts
     // Issue: #561, #774
     {
         files: [
@@ -702,7 +702,7 @@ export default tseslint.config(
     // Both rules exempt test fixtures (no-main-provider-internals also exempts its
     // sole composition point, index.ts). Mirrors
     // `no-shell-games-import` + rendererGameRegistry on the renderer side.
-    // Rule implementations: tools/eslint-plugin-chimera/rules/no-main-*.ts
+    // Rule implementations: electron/dev-tools/eslint/rules/no-main-*.ts
     {
         files: ['electron/main/**/*.{ts,tsx}'],
         plugins: { chimera: chimeraPlugin },

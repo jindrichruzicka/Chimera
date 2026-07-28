@@ -1,5 +1,5 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-main-provider-internals.test.ts
+ * electron/dev-tools/eslint/rules/no-main-provider-internals.test.ts
  *
  * Unit tests for the `chimera/no-main-provider-internals` ESLint rule using
  * Vitest + ESLint RuleTester.

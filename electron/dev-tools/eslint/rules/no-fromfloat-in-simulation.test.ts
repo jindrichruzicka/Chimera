@@ -1,5 +1,5 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-fromfloat-in-simulation.test.ts
+ * electron/dev-tools/eslint/rules/no-fromfloat-in-simulation.test.ts
  *
  * Unit tests for the `chimera/no-fromfloat-in-simulation` ESLint rule using
  * Vitest + ESLint RuleTester.
@@ -8,7 +8,6 @@
  * Invariant #76: fromFloat() is permitted only at content-load time; must not
  *   be called inside validate(), reduce(), or any hot simulation path.
  *
- * Issue: #400
  */
 
 import { describe, it } from 'vitest';

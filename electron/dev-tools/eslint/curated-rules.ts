@@ -108,15 +108,6 @@ export const STANDALONE_LINT_RULES: readonly CuratedLintRule[] = [
         // Invariant #85 — a game override may only redefine a declared token.
         // CSS-only: the rule's own guard matches the override file by name, so
         // it has no JS/TS zone at all.
-        //
-        // NOT YET SHIPPABLE, and nothing here enforces that — it is a
-        // sequencing fact, not a gate. The rule still resolves its base token
-        // set three directory levels up from its OWN module URL, so relocating
-        // the rule re-aims that reach at whatever happens to sit three levels
-        // above the new home; the target must be repointed at the published
-        // `@chimera-engine/renderer/styles/tokens.css` subpath in the same
-        // change that moves it. Curated here so the preset is built against the
-        // final set.
         ruleId: 'chimera/no-unknown-token-overrides',
         severity: 'error',
         cssZones: ['styles/tokens-override.css'],

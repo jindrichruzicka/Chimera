@@ -1,5 +1,5 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-shell-games-import.test.ts
+ * electron/dev-tools/eslint/rules/no-shell-games-import.test.ts
  *
  * Unit tests for the `chimera/no-shell-games-import` ESLint rule using
  * Vitest + ESLint RuleTester.
@@ -9,7 +9,6 @@
  *   #93 — Game token override CSS must not be imported directly by any shell page component.
  *   #94 — Engine shell pages must not import from any `games/*` path.
  *
- * Issue: #561
  */
 
 import { RuleTester } from 'eslint';

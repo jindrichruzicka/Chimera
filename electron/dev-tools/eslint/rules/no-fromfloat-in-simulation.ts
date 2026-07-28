@@ -1,5 +1,5 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-fromfloat-in-simulation.ts
+ * electron/dev-tools/eslint/rules/no-fromfloat-in-simulation.ts
  *
  * ESLint rule: `chimera/no-fromfloat-in-simulation`
  *

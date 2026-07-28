@@ -71,11 +71,15 @@
     },
     "peerDependencies": {
         "electron": "^33.2.0",
+        "eslint": "^9.39.4",
         "png2icons": "^2.0.1",
         "sharp": "^0.35.2"
     },
     "peerDependenciesMeta": {
         "electron": {
+            "optional": true
+        },
+        "eslint": {
             "optional": true
         },
         "png2icons": {

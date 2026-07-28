@@ -1,5 +1,5 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-game-renderer-internals.test.ts
+ * electron/dev-tools/eslint/rules/no-game-renderer-internals.test.ts
  *
  * Unit tests for the `chimera/no-game-renderer-internals` ESLint rule using
  * Vitest + ESLint RuleTester.
@@ -79,7 +79,7 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
         },
         {
-            // #784: the renderer composition root may import the public game seam.
+            // The renderer composition root may import the public game seam.
             filename: 'apps/tactics/renderer/register.ts',
             code: `import { registerRendererGame } from '@chimera-engine/renderer/game';`,
         },

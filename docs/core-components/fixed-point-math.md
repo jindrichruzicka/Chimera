@@ -112,7 +112,7 @@ export function eq(a: FixedPoint, b: FixedPoint): boolean;
 
 ## ESLint Enforcement
 
-Custom rule **`chimera/no-fromfloat-in-simulation`** (in `tools/eslint-plugin-chimera/`):
+Custom rule **`chimera/no-fromfloat-in-simulation`** (in `electron/dev-tools/eslint/`):
 
 - **Scope**: `simulation/**/*.ts` EXCEPT `simulation/content/loaders/**`
 - **Check**: any call to `fromFloat` imported from `simulation/engine/FixedPoint` is an error

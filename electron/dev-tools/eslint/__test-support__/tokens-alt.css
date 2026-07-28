@@ -1,0 +1,19 @@
+/*
+ * electron/dev-tools/eslint/__test-support__/tokens-alt.css
+ *
+ * A SECOND base token set for `no-unknown-token-overrides`' own unit tests,
+ * whose only purpose is to disagree with `tokens.css`.
+ *
+ * The rule memoizes the token set it parsed. While the source path was a
+ * compile-time constant, one memo slot was correct; once the path became an
+ * injectable option, an unkeyed memo would let whichever fixture was read first
+ * answer for every later one — and a suite whose cases all share one fixture
+ * cannot see that. So the two sets are disjoint: `--ch-alt-only-token` exists
+ * here and not in `tokens.css`, `--ch-fixture-only-token` the other way round,
+ * and the same override source linted through both paths must give opposite
+ * answers.
+ */
+
+:root {
+    --ch-alt-only-token: 2px;
+}

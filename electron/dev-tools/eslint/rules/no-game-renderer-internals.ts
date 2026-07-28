@@ -1,5 +1,5 @@
 /**
- * tools/eslint-plugin-chimera/rules/no-game-renderer-internals.ts
+ * electron/dev-tools/eslint/rules/no-game-renderer-internals.ts
  *
  * ESLint rule: `chimera/no-game-renderer-internals`
  *
