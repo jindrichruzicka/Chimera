@@ -240,6 +240,56 @@ manifest read, not by any install observation. The run in a fresh scaffold there
 
 ---
 
+## Standalone lint preset — which rules a game gets
+
+The seven `chimera/*` ESLint rules are the executable half of the architecture invariants:
+without them, §3's module boundaries and §4.35's design-token discipline are prose. A
+standalone game inherits none of them today, so the same `fromFloat()` in a reducer that
+CI rejects here sails through there. Making them reachable is a distribution question,
+answered like the bins above — the rules ride the already-published
+`@chimera-engine/electron` rather than a new package.
+
+What is _not_ a distribution question, and is settled here, is **which** rules travel. The
+answer is not "all seven": three of them guard boundaries internal to the engine, and the
+reason each is withheld differs — two would guard nothing, one would guard the wrong thing.
+
+| Rule                         | Invariant     | Verdict      | Zones (relative to the game app root)                                             | Why                                                                                                                                                                                                                                                                            |
+| ---------------------------- | ------------- | ------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `no-fromfloat-in-simulation` | #76           | **applies**  | `simulation/**`, `ai/**` — `error`; OFF on `*.{test,spec}.{ts,tsx}` under both    | A game's reducers are the hot path the invariant exists for. The OFF arm reproduces the monorepo's third fromFloat block: author fixtures legitimately build fixed-point values with `fromFloat()`.                                                                            |
+| `no-hardcoded-design-values` | #86, #91      | **applies**  | `screens/**` (TS/TSX) — `error`; plus `screens/**/*.module.css` via `@eslint/css` | Game screens are design-value-bearing UI; this is the exact relative form of the monorepo's games-side glob. The game's `renderer/` is out not because it would be noisy but because there is nothing there to guard — loaders, `register.ts` and Next route re-exports.       |
+| `no-unknown-token-overrides` | #85           | **applies**  | `styles/tokens-override.css` via `@eslint/css` — `error`                          | The one rule with a path coupling: its base token set is read three directory levels up from the rule module’s own URL, so moving the rule re-aims it. The target must become the published `@chimera-engine/renderer/styles/tokens.css` in the same change that relocates it. |
+| `no-game-renderer-internals` | #96           | **applies**  | the whole app — `error`                                                           | The games-**side** enforcement of the renderer public-barrel boundary; the single most on-point rule for a game.                                                                                                                                                               |
+| `no-shell-games-import`      | #80, #93, #94 | **does not** | —                                                                                 | The one withheld rule that would be **live**: its predicate is directory-shaped (`/app/<shell-dir>/`) and a scaffold ships all six of those directories in its own Next host route tree. Withheld because there the forbidden import is legitimate — see below.                |
+| `no-main-games-import`       | —             | **does not** | —                                                                                 | Its predicate needs an `electron/main/` **directory** segment, which a game's flat `electron/main.ts` never has, so it would guard nothing. And were the zone widened to reach it, that file is the sanctioned composition root which names exactly one game — by design.      |
+| `no-main-provider-internals` | #47           | **does not** | —                                                                                 | Same two reasons as its sibling: no `electron/main/` directory to match, and a game's `electron/main.ts` is the composition root where wiring a concrete provider is the point rather than the violation.                                                                      |
+
+`no-shell-games-import` is the interesting one, because the naive reading — "a game has no
+engine shell pages" — is false. A scaffolded game's `renderer/app/{main-menu,lobby,game,settings,saves,component-gallery}/`
+all match the rule's predicate, and an untouched scaffold stays green only because those
+routes re-export `@chimera-engine/renderer/shell/*`, which the rule allowlists. Enable it and
+the first game route that imports the game's own package reports — but that import is the app
+composing itself, not the engine acquiring a game dependency. The invariants it enforces bind
+the engine's shell, which ships inside `@chimera-engine/renderer` and is linted there.
+
+The verdicts are data, not prose: `electron/dev-tools/eslint/curated-rules.ts` exports the
+four curated entries **and** the three exclusions with their reasons, so a rule dropped by
+accident is distinguishable from one withheld on purpose.
+
+One property of that manifest is load-bearing and invisible from a rule id: **a rule fires
+only where the flat-config glob and the rule's own internal predicate agree**, and those
+predicates read the absolute filename. `no-fromfloat-in-simulation` wants a `/simulation/`
+segment **or** an `apps/<name>/ai/` one — so its `ai/**` zone is live only under `apps/`;
+`no-unknown-token-overrides` wants `apps/<name>/styles/tokens-override.css`;
+`no-game-renderer-internals` wants an `apps/<name>/` segment. A scaffolded game satisfies all
+of them because it lives at `apps/<kebab>`, which makes that layout part of the contract.
+
+One known gap, inherited rather than introduced: a game's `shell/` contributions are renderer
+surfaces under Invariant #96, but `no-hardcoded-design-values` reaches only `screens/` — on
+both sides of the boundary. Widening it is a change to the engine's own semantics, not to this
+relocation.
+
+---
+
 ## Instance Flags (`--dev-*`, equals-separator form)
 
 Parsed by `parseHarnessFlags` (`electron/main/index.ts`); every flag is ignored (with one warning) unless `CHIMERA_DEV_HARNESS=1` (Invariant #77).
