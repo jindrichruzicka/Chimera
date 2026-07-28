@@ -567,6 +567,37 @@ describe('rewriteAppPackageForStandalone', () => {
         expect(JSON.stringify(out)).not.toContain('workspace:*');
     });
 
+    it('carries bin-invoking app scripts through untouched', () => {
+        // The rewriter prefixes exactly two scripts and passes the rest
+        // through. Widening the prefix list would push a
+        // `CHIMERA_VERIFY_PACK_NODE_MODULES` the bins do not read into their
+        // environment; narrowing the passthrough to a whitelist would delete
+        // them outright. Pinned because the scaffolded game's day-one asset
+        // validation is one of them, and nothing else reads that script.
+        const withBinScripts = JSON.stringify({
+            name: '@chimera-engine/my-game',
+            scripts: {
+                'validate:assets': 'chimera-validate-assets ../..',
+                'fetch:fonts': 'chimera-fetch-fonts --game my-game --out-dir assets/fonts',
+                'dev:mp': 'cross-env CHIMERA_DEV_HARNESS=1 chimera-dev-mp',
+            },
+        });
+
+        const out = JSON.parse(
+            rewriteAppPackageForStandalone(withBinScripts, {
+                engineRanges: {},
+                toolchainDeps: {},
+                nodeModulesEnv: 'node_modules',
+            }),
+        ) as { scripts: Record<string, string> };
+
+        expect(out.scripts['validate:assets']).toBe('chimera-validate-assets ../..');
+        expect(out.scripts['fetch:fonts']).toBe(
+            'chimera-fetch-fonts --game my-game --out-dir assets/fonts',
+        );
+        expect(out.scripts['dev:mp']).toBe('cross-env CHIMERA_DEV_HARNESS=1 chimera-dev-mp');
+    });
+
     it('rewrites @chimera-engine/* workspace deps declared in devDependencies (#817 template shape)', () => {
         // The blank template declares the engine packages under devDependencies (they are
         // esbuild-inlined at build time and must stay out of electron-builder's prod tree).

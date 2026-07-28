@@ -337,6 +337,27 @@ describe('blank template smoke harness', () => {
         expect(script).toContain('--out-dir assets/fonts');
     });
 
+    // Day-one asset-reference validation (Invariants #22/#52): the same cwd
+    // rationale as fetch:fonts, in the opposite direction. pnpm runs package
+    // scripts with cwd = apps/<kebab>, and the validator resolves its
+    // positional argument against that cwd — so `../..` lands on the project
+    // root, whose `apps/*` discovery then finds this one game and resolves
+    // `apps/<kebab>/assets/...` exactly as it does in the monorepo. The script
+    // is app-level because the depth depends on it: a root-cwd run would
+    // resolve `../..` ABOVE the project entirely. In a standalone project the
+    // bin is also reachable only from here — the emitted root manifest carries
+    // no `@chimera-engine/electron`, so pnpm links it into
+    // apps/<kebab>/node_modules/.bin alone.
+    it('wires an app-level validate:assets script pointing discovery at the project root', async () => {
+        const pkg = JSON.parse(await read('package.json')) as { scripts: Record<string, string> };
+        // Whole-string, because the DEPTH is the entire mechanism. A missing
+        // or too-shallow argument now refuses loudly, but `../../..` resolves
+        // ABOVE the project onto some unrelated ancestor, and whether that
+        // refuses or silently validates a stranger's tree depends on what
+        // happens to be there. Only the exact value is safe.
+        expect(pkg.scripts['validate:assets']).toBe('chimera-validate-assets ../..');
+    });
+
     it('names no model game in any smoke file (tokens only)', async () => {
         const files = [
             'manifest.test.ts',

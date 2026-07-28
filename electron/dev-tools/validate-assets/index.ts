@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { constants, type Dirent } from 'node:fs';
-import { access, readdir, readFile } from 'node:fs/promises';
+import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { basename, relative, resolve } from 'node:path';
 import {
     ScriptKind,
@@ -40,6 +40,21 @@ import {
 } from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
 
 import { isDirectInvocation } from '../dev-harness/harness.js';
+
+/**
+ * Games live at `<workspaceRoot>/apps/<gameId>/`. This is both where most of
+ * the crawl starts and how every `AssetRef` is resolved, so the two uses share
+ * one constant — a rename that moved one and not the other would resolve refs
+ * against a directory nothing was discovered in.
+ */
+const GAMES_DIR = 'apps';
+const GAMES_ROOT = [GAMES_DIR] as const;
+/** Engine-side scene descriptors, scanned alongside each game's own. */
+const SCENE_ROOT = ['simulation', 'scene'] as const;
+/** Engine-side asset loaders, scanned to widen the known asset-kind set. */
+const RENDERER_ASSETS_ROOT = ['renderer', 'assets'] as const;
+/** Checked for game assets, which are forbidden here rather than resolved. */
+const RENDERER_PUBLIC_ASSETS_ROOT = ['renderer', 'public', 'assets'] as const;
 
 export interface WorkspaceFileHost {
     findDataJsonFiles(workspaceRoot: string): Promise<readonly string[]>;
@@ -288,7 +303,13 @@ export async function validateAssetWorkspace(
 
     const missing: MissingAssetReference[] = [];
     for (const ref of [...refs, ...manifestRefs]) {
-        const expectedPath = resolve(workspaceRoot, 'apps', ref.gameId, 'assets', ref.relativePath);
+        const expectedPath = resolve(
+            workspaceRoot,
+            ...GAMES_ROOT,
+            ref.gameId,
+            'assets',
+            ref.relativePath,
+        );
         if (!(await host.fileExists(expectedPath))) {
             missing.push({ ...ref, expectedPath });
         }
@@ -298,7 +319,7 @@ export async function validateAssetWorkspace(
     for (const ref of fontRefs) {
         const sourceExpectedPath = resolve(
             workspaceRoot,
-            'apps',
+            ...GAMES_ROOT,
             ref.gameId,
             'assets',
             ref.relativePath,
@@ -526,7 +547,7 @@ function collectForbiddenRendererPublicAssets(
     rendererPublicAssetFiles: readonly string[],
     workspaceRoot: string,
 ): ForbiddenRendererPublicAsset[] {
-    const rendererAssetsRoot = resolve(workspaceRoot, 'renderer', 'public', 'assets');
+    const rendererAssetsRoot = resolve(workspaceRoot, ...RENDERER_PUBLIC_ASSETS_ROOT);
     const forbidden: ForbiddenRendererPublicAsset[] = [];
 
     for (const filePath of rendererPublicAssetFiles) {
@@ -548,7 +569,13 @@ function collectForbiddenRendererPublicAssets(
             filePath,
             gameId,
             relativePath,
-            expectedSourcePath: resolve(workspaceRoot, 'apps', gameId, 'assets', relativePath),
+            expectedSourcePath: resolve(
+                workspaceRoot,
+                ...GAMES_ROOT,
+                gameId,
+                'assets',
+                relativePath,
+            ),
         });
     }
 
@@ -1479,7 +1506,7 @@ function propertyKeyText(name: PropertyName): string | undefined {
  */
 function gameIdFromPath(workspaceRoot: string, filePath: string): string | undefined {
     const segments = relative(workspaceRoot, filePath).split(/[\\/]/u);
-    if (segments[0] !== 'apps') {
+    if (segments[0] !== GAMES_DIR) {
         return undefined;
     }
     return segments[1];
@@ -1502,7 +1529,7 @@ function getScriptKind(filePath: string): ScriptKind {
 
 async function findDataJsonFiles(workspaceRoot: string): Promise<readonly string[]> {
     // Game apps live under apps/<name>/.
-    const appsRoot = resolve(workspaceRoot, 'apps');
+    const appsRoot = resolve(workspaceRoot, ...GAMES_ROOT);
     const gameEntries = await readDirectoryOrEmpty(appsRoot);
     const files: string[] = [];
 
@@ -1517,7 +1544,7 @@ async function findDataJsonFiles(workspaceRoot: string): Promise<readonly string
 }
 
 async function findSceneSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const roots = [resolve(workspaceRoot, 'apps'), resolve(workspaceRoot, 'simulation', 'scene')];
+    const roots = [resolve(workspaceRoot, ...GAMES_ROOT), resolve(workspaceRoot, ...SCENE_ROOT)];
     const files: string[] = [];
 
     for (const root of roots) {
@@ -1528,7 +1555,7 @@ async function findSceneSourceFiles(workspaceRoot: string): Promise<readonly str
 }
 
 async function findOnDemandLoadSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const roots = [resolve(workspaceRoot, 'apps'), resolve(workspaceRoot, 'simulation', 'scene')];
+    const roots = [resolve(workspaceRoot, ...GAMES_ROOT), resolve(workspaceRoot, ...SCENE_ROOT)];
     const files: string[] = [];
 
     for (const root of roots) {
@@ -1539,12 +1566,15 @@ async function findOnDemandLoadSourceFiles(workspaceRoot: string): Promise<reado
 }
 
 async function findAssetManifestFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const appsRoot = resolve(workspaceRoot, 'apps');
+    const appsRoot = resolve(workspaceRoot, ...GAMES_ROOT);
     return collectFiles(appsRoot, (filePath) => basename(filePath) === 'asset-manifest.ts');
 }
 
 async function findAssetLoaderSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const roots = [resolve(workspaceRoot, 'apps'), resolve(workspaceRoot, 'renderer', 'assets')];
+    const roots = [
+        resolve(workspaceRoot, ...GAMES_ROOT),
+        resolve(workspaceRoot, ...RENDERER_ASSETS_ROOT),
+    ];
     const files: string[] = [];
 
     for (const root of roots) {
@@ -1555,12 +1585,12 @@ async function findAssetLoaderSourceFiles(workspaceRoot: string): Promise<readon
 }
 
 async function findGameFontSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const appsRoot = resolve(workspaceRoot, 'apps');
+    const appsRoot = resolve(workspaceRoot, ...GAMES_ROOT);
     return collectFiles(appsRoot, isGameFontSourceFile);
 }
 
 async function findRendererPublicAssetFiles(workspaceRoot: string): Promise<readonly string[]> {
-    return collectFiles(resolve(workspaceRoot, 'renderer', 'public', 'assets'), () => true);
+    return collectFiles(resolve(workspaceRoot, ...RENDERER_PUBLIC_ASSETS_ROOT), () => true);
 }
 
 function isGameFontSourceFile(filePath: string): boolean {
@@ -1724,10 +1754,57 @@ function hasErrorCode(error: unknown, code: string): boolean {
     return error instanceof Error && 'code' in error && error.code === code;
 }
 
+/** Follows symlinks: a symlinked discovery root is a real one, a dangling one is not. */
+async function isDirectory(path: string): Promise<boolean> {
+    try {
+        return (await stat(path)).isDirectory();
+    } catch (error: unknown) {
+        // Only absence answers "not a directory here". Anything else — EACCES
+        // above all — is a fault to report as itself, not to translate into a
+        // refusal that would blame the caller's argument for a permission bug.
+        if (hasErrorCode(error, 'ENOENT') || hasErrorCode(error, 'ENOTDIR')) return false;
+        throw error;
+    }
+}
+
+/**
+ * Whether `workspaceRoot` is a workspace root at all, rather than something
+ * inside one.
+ *
+ * `apps/` is the discriminator, and deliberately the ONLY one: both supported
+ * layouts have it at their root — the monorepo, and a `create-chimera-game`
+ * project whose single game is `apps/<kebab>` — while no game package does.
+ * The engine-side roots cannot serve here even though the crawl reads them:
+ * a game package is invited to hold `simulation/` and `renderer/` of its own,
+ * so accepting those would let the tool scan a game package as if it were the
+ * workspace, find nothing, and report success.
+ *
+ * Note what this does NOT claim. A root that HAS `apps/` may still hold no refs
+ * at all — a freshly scaffolded game does — and reports `Checked 0` for that
+ * reason, which is an answer about a tree that was actually read.
+ */
+async function isWorkspaceRoot(workspaceRoot: string): Promise<boolean> {
+    return isDirectory(resolve(workspaceRoot, ...GAMES_ROOT));
+}
+
 export async function runValidateAssetsCli(
     argv: readonly string[] = process.argv.slice(2),
 ): Promise<AssetValidationExitCode> {
     const workspaceRoot = resolve(argv[0] ?? process.cwd());
+
+    if (!(await isWorkspaceRoot(workspaceRoot))) {
+        // Names the cause AND the fix: the reachable way to land here is
+        // running the bin without the positional root from inside a game
+        // package, where the root defaults to that package.
+        process.stderr.write(
+            `[validate-assets] ${workspaceRoot} is not a workspace root — it has no ${GAMES_DIR}/ ` +
+                `directory, so no game could be discovered there. Refusing rather than reporting success.\n` +
+                `[validate-assets] Pass the project root as the first argument; from a game package that is ` +
+                `\`chimera-validate-assets ../..\`.\n`,
+        );
+        return 1;
+    }
+
     const report = await validateAssetWorkspace({ workspaceRoot });
     const output = formatAssetValidationReport(report, workspaceRoot);
 

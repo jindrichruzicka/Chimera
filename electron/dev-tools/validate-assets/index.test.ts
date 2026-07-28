@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -2178,13 +2178,152 @@ describe('createNodeWorkspaceFileHost', () => {
 // ── runValidateAssetsCli (real FS integration) ────────────────────────────────
 
 describe('runValidateAssetsCli', () => {
-    it('returns exit code 0 for a workspace that contains no game data files', async () => {
+    it('returns exit code 0 for a workspace whose apps/ holds no games', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        await mkdir(join(dir, 'apps'), { recursive: true });
         vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
         const exitCode = await runValidateAssetsCli([dir]);
 
+        // 0 refs is the honest answer here, not a vacuous one: the crawl root
+        // exists and was read. A freshly scaffolded game reports the same,
+        // because a blank game genuinely declares no assets yet.
         expect(exitCode).toBe(0);
+    });
+
+    // Without `apps/` no game can be discovered, so the run would report
+    // "Checked 0 asset refs; all files exist." and exit 0 — success, about a
+    // tree it never read. That is the failure mode the bin exists to prevent,
+    // arriving through the argument instead of the entry guard, and it is
+    // reachable by hand: run bare from a game package and the root defaults to
+    // that package.
+    it('refuses a root with no apps/ directory instead of passing vacuously', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        const exitCode = await runValidateAssetsCli([dir]);
+
+        expect(exitCode).toBe(1);
+        const written = stderr.mock.calls.map(([chunk]) => String(chunk)).join('');
+        // Both halves of the message are asserted, because each is separately
+        // deletable. The CAUSE has to name the directory that is missing — a
+        // bare "not a workspace root" does not say what would make it one...
+        expect(written).toContain(dir);
+        expect(written).toMatch(/no apps\/ directory/u);
+        // ...and the FIX has to carry the invocation, since the reachable way
+        // to land here is a wrong cwd and the reader would otherwise guess the
+        // depth. Delimited, because a plain substring match for `../..` is
+        // also satisfied by the `../../..` that names the wrong depth — the one
+        // mistake the hint exists to prevent.
+        expect(written).toMatch(/`chimera-validate-assets \.\.\/\.\.`/u);
+    });
+
+    it('refuses a GAME PACKAGE, whose own simulation/ and renderer/ must not stand in for apps/', async () => {
+        // The exact shape the hazard produces: `chimera-validate-assets` run
+        // bare from a game package. A game is invited to hold `simulation/`
+        // and `renderer/` of its own — the blank template ships both — so a
+        // guard that accepted any directory the crawl reads would scan this
+        // package as if it were the workspace, discover no games, and report
+        // success. Only `apps/` distinguishes a workspace root from a package
+        // inside one.
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        await mkdir(join(dir, 'simulation', 'scene'), { recursive: true });
+        await mkdir(join(dir, 'renderer', 'assets'), { recursive: true });
+        await mkdir(join(dir, 'renderer', 'public', 'assets'), { recursive: true });
+        vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+        vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        expect(await runValidateAssetsCli([dir])).toBe(1);
+    });
+
+    it('reports a permission fault as itself rather than as a missing root', async ({ skip }) => {
+        // Root defeats the mode bits and Windows ignores them, so the fault
+        // cannot be provoked there. Skip — a bare early return would report
+        // this as passing coverage it did not have.
+        skip(process.platform === 'win32' || process.getuid?.() === 0, 'needs POSIX mode bits');
+
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        await mkdir(join(dir, 'apps'), { recursive: true });
+        await chmod(dir, 0o000);
+        const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        try {
+            // `apps/` IS there and the fix is a permission repair, so the
+            // refusal's advice would send the reader after the wrong thing.
+            // The CLI entry turns the throw into a non-zero exit; what matters
+            // here is that the cause is not rewritten.
+            await expect(runValidateAssetsCli([dir])).rejects.toThrow(/EACCES/u);
+            expect(stderr.mock.calls.map(([chunk]) => String(chunk)).join('')).not.toContain(
+                'not a workspace root',
+            );
+        } finally {
+            await chmod(dir, 0o755);
+        }
+    });
+
+    // The guard keys on `apps/` alone, so the checks fed by the ENGINE-side
+    // roots have to be shown still firing — a guard that grew to accept those
+    // roots would let a game package (which is invited to hold `simulation/`
+    // and `renderer/` of its own) be scanned as a workspace and pass on
+    // nothing, while a finder that dropped one of those roots would swallow
+    // real findings. These two plant a finding each and assert it is reported.
+    it('still reports a forbidden renderer-public game asset', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        await mkdir(join(dir, 'apps'), { recursive: true });
+        await mkdir(join(dir, 'renderer', 'public', 'assets', 'tactics'), { recursive: true });
+        await writeFile(join(dir, 'renderer', 'public', 'assets', 'tactics', 'foo.png'), '');
+        const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        expect(await runValidateAssetsCli([dir])).toBe(1);
+        expect(stderr.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain(
+            'renderer/public/assets/tactics/foo.png',
+        );
+    });
+
+    it('still reports a missing ref declared by an engine-side scene descriptor', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        await mkdir(join(dir, 'apps'), { recursive: true });
+        await mkdir(join(dir, 'simulation', 'scene'), { recursive: true });
+        await writeFile(
+            join(dir, 'simulation', 'scene', 'menu.scene.ts'),
+            "export const scene = { requiredAssets: ['tactics/missing.webp'] };\n",
+        );
+        const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        expect(await runValidateAssetsCli([dir])).toBe(1);
+        expect(stderr.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain(
+            'tactics/missing.webp',
+        );
+    });
+
+    it('refuses a workspace root whose apps/ is a file rather than a directory', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        await writeFile(join(dir, 'apps'), '');
+        vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        expect(await runValidateAssetsCli([dir])).toBe(1);
+    });
+
+    it('accepts a SYMLINKED apps/ and still refuses a dangling one', async () => {
+        // The ACCEPT half is what discriminates `stat` from `lstat`: `lstat`
+        // reports a symlink as not-a-directory and would refuse this root.
+        // pnpm workspaces are built out of symlinks, so following them is the
+        // behaviour that has to hold. The dangling half is not a second
+        // discriminator — both calls reject it — it pins that following a
+        // symlink does not become following it blindly.
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const realApps = join(dir, 'elsewhere');
+        await mkdir(realApps, { recursive: true });
+        await symlink(realApps, join(dir, 'apps'), 'dir');
+        vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+        vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        expect(await runValidateAssetsCli([dir])).toBe(0);
+
+        const dangling = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        await symlink(join(dangling, 'nowhere'), join(dangling, 'apps'), 'dir');
+
+        expect(await runValidateAssetsCli([dangling])).toBe(1);
     });
 
     it('returns exit code 1 for a workspace with a missing asset reference', async () => {
