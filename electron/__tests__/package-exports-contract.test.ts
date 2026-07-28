@@ -93,6 +93,12 @@ const EXPECTED_EXPORTS = {
         types: './preload/debug-api-types.ts',
         default: './dist/preload/debug-api-types.js',
     },
+    // The `chimera` ESLint plugin object (§4.32). A subpath rather than a bin:
+    // a flat config imports the plugin, nothing spawns it.
+    './eslint': {
+        types: './dist/dev-tools/eslint/index.d.ts',
+        default: './dist/dev-tools/eslint/index.js',
+    },
     // The Invariant #27 packaged-bundle guard (§4.12, #902): the single home of
     // the debug-bundle marker set and the self-validating verification, consumed
     // by the monorepo's verify:packaged-bundle driver and by every scaffolded

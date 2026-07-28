@@ -11,10 +11,8 @@
  * locked here:
  *
  *   - the plugin is reachable at its new home as a NAMED `chimeraPlugin`, and
- *     carries all seven rules. The root config and the games-facing preset both
- *     compose against `{ chimeraPlugin }`, so a default export would leave two
- *     consumers importing `undefined` and registering an empty plugin — which
- *     ESLint accepts, and which silently disables every `chimera/*` rule;
+ *     carries all seven rules. Its consumers compose against
+ *     `{ chimeraPlugin }`, so the export shape is API;
  *   - the plugin's rule set and the curated manifest cover EXACTLY each other.
  *     The manifest's own test can only assert a hardcoded count; here the
  *     plugin is a sibling module, so an eighth rule added to one and not the
@@ -26,6 +24,7 @@
  *     absence.
  */
 
+import { Linter } from 'eslint';
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -49,9 +48,6 @@ import { STANDALONE_LINT_EXCLUSIONS, STANDALONE_LINT_RULES } from './curated-rul
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** eslint → dev-tools → electron → repo root. */
-const repoRoot = resolve(__dirname, '..', '..', '..');
-
 const EXPECTED_RULE_NAMES = [
     'no-fromfloat-in-simulation',
     'no-game-renderer-internals',
@@ -74,6 +70,33 @@ describe('chimeraPlugin', () => {
         }
     });
 
+    it('is what ESLint needs — a wrong export shape fails loudly, not silently', () => {
+        // `index.ts` justifies its named-only export by quoting the two errors
+        // ESLint raises when a config registers the wrong thing. Those quotes
+        // are upstream strings: accurate today, and free to reword under us.
+        // Pinning them here means the docblock's argument is checked rather
+        // than remembered.
+        const configure = (plugin: unknown): void => {
+            new Linter().verify(
+                'const x = 1;',
+                [
+                    {
+                        files: ['**/*.js'],
+                        plugins: { chimera: plugin as never },
+                        rules: { 'chimera/no-fromfloat-in-simulation': 'error' },
+                    },
+                ],
+                'a.js',
+            );
+        };
+
+        expect(() => configure(undefined)).toThrow(/Key "chimera": Expected an object/u);
+        expect(() => configure({ rules: {} })).toThrow(
+            /Could not find "no-fromfloat-in-simulation" in plugin "chimera"/u,
+        );
+        expect(() => configure(chimeraPlugin)).not.toThrow();
+    });
+
     it('is covered exactly by the curated manifest and its exclusions', () => {
         const governed = new Set([
             ...STANDALONE_LINT_RULES.map((rule) => rule.ruleId),
@@ -84,22 +107,6 @@ describe('chimeraPlugin', () => {
         expect(governed).toEqual(shipped);
     });
 });
-
-/**
- * The retired home, assembled rather than written. The sweep below reads EVERY
- * source in this directory including this file, so spelling the path literally
- * here would make the test fail on itself — and the usual fix, excluding the
- * scanner from its own scan, reintroduces exactly the allowlist the sweep was
- * widened to remove.
- */
-const RETIRED_PLUGIN_HOME = ['tools', 'eslint-plugin-chimera'].join('/');
-
-/** Every TypeScript source under this directory, at any depth. */
-function sourcesUnderEslintDir(): readonly { name: string; text: string }[] {
-    return readdirSync(__dirname, { recursive: true, encoding: 'utf8' })
-        .filter((name) => name.endsWith('.ts'))
-        .map((name) => ({ name, text: readFileSync(resolve(__dirname, name), 'utf8') }));
-}
 
 /** The rule modules, excluding their suites. */
 function ruleSourceNames(): readonly string[] {
@@ -161,29 +168,14 @@ describe('relocated rule modules', () => {
         expect(modules).toEqual([...EXPECTED_RULE_NAMES].sort());
     });
 
-    it('name their own new home, and no retired path, anywhere in the moved tree', () => {
-        // Nothing in this directory may still name the retired home — a header comment that does
-        // is the cheapest kind of lie and the one a reader trusts most.
-        //
-        // Scanned over the WHOLE directory, not just `rules/` plus the index:
-        // a hand-listed set of files is an allowlist, and its omissions are
-        // silent. `curated-rules.ts` is the proof — it sits here, describes
-        // these rules, and a rules-only sweep never looked at it.
-        // Floor is EXACT: the seven rules, their seven suites, the plugin
-        // index, this file, the curated manifest and its suite. Slack would let
-        // a file drop out of the scan unnoticed, which is the one failure a
-        // sweep cannot report on itself.
-        expect(
-            sourcesUnderEslintDir()
-                .map((source) => source.name)
-                .sort(),
-        ).toHaveLength(EXPECTED_RULE_NAMES.length * 2 + 4);
-
-        for (const { name, text } of sourcesUnderEslintDir()) {
-            expect(text, name).not.toContain(RETIRED_PLUGIN_HOME);
-        }
-
+    it('are indexed by a plugin module that names its own new home', () => {
+        // The positive anchor only. The negative half — that nothing still
+        // names the retired location — is asserted repo-wide over every tracked
+        // file in `tools/root-eslint-config.test.ts`, which strictly contains
+        // this directory. Keeping a second, narrower copy here would give one
+        // rule two homes.
         const index = readFileSync(resolve(__dirname, 'index.ts'), 'utf8');
+
         expect(index).toContain('electron/dev-tools/eslint/index.ts');
     });
 
@@ -221,13 +213,6 @@ describe('relocated rule modules', () => {
         expect(source).toContain(
             "const TOKENS_CSS_SPECIFIER = '@chimera-engine/renderer/styles/tokens.css'",
         );
-    });
-
-    it('leaves no rule source behind at the retired repo-root location', () => {
-        // Scoped to the rule sources, which is what this move relocates. The
-        // retired directory itself still holds the CJS shim the root config
-        // loads until that config is repointed at the compiled subpath.
-        expect(() => readdirSync(resolve(repoRoot, RETIRED_PLUGIN_HOME, 'rules'))).toThrow();
     });
 });
 

@@ -2,7 +2,18 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
-import chimeraPlugin from './tools/eslint-plugin-chimera/plugin.cjs';
+// The COMPILED plugin from the published package — the same artifact a
+// standalone game gets, so the monorepo's own enforcement and a consumer's are
+// the same code.
+//
+// This resolves onto `electron/dist`, so the package must be BUILT. The root
+// `lint` script and both CI lint steps run `build:packages` first; the entry
+// points that do not (`lint:fix`, `pnpm --filter <pkg> lint`, an editor's
+// ESLint server) fail loudly on a missing dist — but a STALE one is silent, and
+// since the rules themselves now come from dist, that means linting against
+// yesterday's rule logic. Rebuild after editing anything under
+// `electron/dev-tools/eslint/`.
+import { chimeraPlugin } from '@chimera-engine/electron/eslint';
 import nextPlugin from '@next/eslint-plugin-next';
 import css from '@eslint/css';
 
@@ -59,8 +70,6 @@ export default tseslint.config(
             // Per-game determinism/fromFloat zone fixtures.
             'apps/*/simulation/__tests__/fixtures/**',
             'apps/*/ai/__tests__/fixtures/**',
-            // CJS bridge shim for eslint.config.mjs — uses require() / module.exports by design.
-            'tools/eslint-plugin-chimera/plugin.cjs',
             // Playwright output directories — generated artefacts, not source.
             '.e2e-build/**',
             'apps/tactics/e2e/playwright-report/**',

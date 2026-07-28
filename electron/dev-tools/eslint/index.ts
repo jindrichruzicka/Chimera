@@ -12,11 +12,11 @@
  *   - `chimera/no-main-games-import` (main-process game boundary)
  *   - `chimera/no-main-provider-internals` (main-process networking provider boundary, Invariant #47)
  *
- * Exported NAMED, with no default. Both consumers — the monorepo's own root
- * config and the games-facing preset — compose against `{ chimeraPlugin }`, and
- * a default export is the failure that hides: `plugins: { chimera: undefined }`
- * is not an error ESLint raises, it is a plugin with no rules, and every
- * `chimera/*` rule quietly stops firing.
+ * Exported NAMED, with no default: consumers compose against
+ * `{ chimeraPlugin }`, so the export shape is API. Getting it wrong is loud
+ * rather than silent — ESLint 9 refuses a config whose plugin is `undefined`
+ * ('Key "chimera": Expected an object') and refuses one whose plugin lacks a
+ * configured rule ('Could not find "…" in plugin "chimera"').
  *
  * Usage:
  *   import { chimeraPlugin } from '@chimera-engine/electron/eslint';

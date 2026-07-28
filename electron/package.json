@@ -31,6 +31,10 @@
             "types": "./dist/dev-tools/dev-harness/harness.d.ts",
             "default": "./dist/dev-tools/dev-harness/harness.js"
         },
+        "./eslint": {
+            "types": "./dist/dev-tools/eslint/index.d.ts",
+            "default": "./dist/dev-tools/eslint/index.js"
+        },
         "./preload/api": {
             "types": "./dist/preload/api.d.ts",
             "default": "./dist/preload/api.js"
