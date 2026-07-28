@@ -3,15 +3,17 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { DEFAULT_ICON_BASENAME, PNG_SIZES, generateIcons } from './generate-icons';
+import { DEFAULT_ICON_BASENAME, PNG_SIZES, generateIcons } from './index.js';
 
 /**
- * F67 T1 (#811) — the icon generator derives the platform set (`.icns`/`.ico` +
- * loose PNGs) from a single master logo PNG. These tests drive a synthetic in-memory
- * master (no repo asset) into a temp dir so they stay fast and deterministic, and
- * assert the contract F67 T2 (dev-runtime default) and F67 T4 (packaging) depend on:
- * the canonical filenames exist, each loose PNG decodes to its exact square size, and
- * the container files carry valid `.icns`/`.ico` magic headers.
+ * electron/dev-tools/generate-icons/index.test.ts
+ *
+ * The icon generator derives the platform set (`.icns`/`.ico` + loose PNGs) from a
+ * single square master logo PNG. These tests drive a synthetic in-memory master (no
+ * repo asset) into a temp dir so they stay fast and deterministic, and assert the
+ * contract the generator's two consumers depend on — the dev-runtime window icon and
+ * the packaging set: the canonical filenames exist, each loose PNG decodes to its
+ * exact square size, and the container files carry valid `.icns`/`.ico` magic headers.
  */
 describe('generateIcons', () => {
     let outDir: string;
@@ -51,7 +53,7 @@ describe('generateIcons', () => {
         }
     });
 
-    it('writes the dev-runtime default `chimera.png` at 512×512 (the F67 T2 stable filename)', async () => {
+    it('writes the dev-runtime default `chimera.png` at 512×512, the stable size-less filename', async () => {
         await generateIcons({ sourcePng, outDir });
 
         const meta = await sharp(path.join(outDir, `${DEFAULT_ICON_BASENAME}.png`)).metadata();
@@ -86,7 +88,11 @@ describe('generateIcons', () => {
             `${DEFAULT_ICON_BASENAME}.png`,
             ...PNG_SIZES.map((size) => `${DEFAULT_ICON_BASENAME}-${size}.png`),
         ].sort();
-        expect([...result.written].sort()).toEqual(expected);
+        // Compared as returned, not re-sorted: `expected` is already in sorted
+        // order, so this is the only assertion that can observe the documented
+        // ordering. Sorting the actual first would green over its removal —
+        // files are pushed in generation order, which is not sorted order.
+        expect(result.written).toEqual(expected);
 
         // Every reported file must actually exist on disk.
         for (const name of result.written) {

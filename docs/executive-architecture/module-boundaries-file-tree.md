@@ -78,6 +78,7 @@ chimera/
 │   ├── dev-tools/                   # Development-time CLIs published as bins of @chimera-engine/electron so standalone games run them too
 │   │   ├── dev-harness/             # `chimera-dev-mp` bin + harness library (spawn planning, announce handshake); see §4.32
 │   │   ├── fetch-google-fonts/      # `chimera-fetch-fonts` bin — dev-time Google Fonts downloader; writes committed self-hosted .woff2 files (satisfies Invariant #97; `validate-assets` enforces it)
+│   │   ├── generate-icons/          # Deterministic platform icon-set generator — derives the .icns/.ico + loose PNG set, and the `chimera.png` window-icon default, from one square master logo
 │   │   └── validate-assets/         # CI: the AssetRef/GameFontFace/cue-sheet build gate — enforces Invariants #22/#52/#97/#125; see §4.10
 │   ├── preload/
 │   │   ├── api.ts                   # Composes the following namespaces below into window.__chimera

@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-// png2icons ships `__esModule: true` with named exports but no `default`, so a
-// default import resolves to `undefined` under tsx's CJS transform — use a namespace.
+// png2icons publishes named exports only, and its `__esModule: true` marker makes a
+// default import resolve to `undefined` under a CJS transform.
 import * as png2icons from 'png2icons';
 import sharp from 'sharp';
 
@@ -17,16 +17,18 @@ import sharp from 'sharp';
  *     wired into the packaging config.
  *
  * Loose PNGs are downscaled with `sharp` (libvips) for crisp small sizes; the
- * `.icns`/`.ico` containers are assembled with the pure-JS `png2icons`. Both are
- * dev-only tooling dependencies — nothing here ships at runtime.
+ * `.icns`/`.ico` containers are assembled with the pure-JS `png2icons`. This module
+ * is emitted into the package's `dist/` and therefore travels inside the published
+ * tarball, but nothing in a game's runtime graph reaches it, and both codecs are
+ * OPTIONAL peer dependencies — a base game install pulls neither.
  *
  * Regenerate (one-liner): `pnpm icons:generate`
  *
- * CLI (run via tsx — `tools/*.ts` transforms as CommonJS, so the entry is an async
- * IIFE with no top-level await):
- *   tsx tools/generate-icons.ts [--source <master.png>] [--out <dir>]
+ * CLI:
+ *   tsx electron/dev-tools/generate-icons/index.ts [--source <master.png>] [--out <dir>]
  *
- * Defaults: source `docs/assets/chimera-logo-compact.png`, out `electron/assets/icons`.
+ * Defaults: source `docs/assets/chimera-logo-compact.png`, out `electron/assets/icons`,
+ * both resolved against the repo root (see `resolveRepoRoot`).
  */
 
 /** Loose square PNG sizes emitted alongside the `.icns`/`.ico` containers. */
@@ -128,11 +130,24 @@ export function parseCliArgs(argv: readonly string[], repoRoot: string): CliArgs
     return { source, out };
 }
 
-// CLI entry: `tsx tools/generate-icons.ts [--source <png>] [--out <dir>]`.
+/**
+ * The root `DEFAULT_SOURCE_REL` and `DEFAULT_OUT_REL` are relative to, derived from the
+ * calling module's own URL: generate-icons → dev-tools → electron → repo root.
+ *
+ * Valid ONLY for this module's SOURCE location. The tsc-emitted copy sits one level
+ * deeper, under `electron/dist/`, so the same three-level walk from there lands on the
+ * package root and both defaults resolve to paths that do not exist. Callers outside the
+ * repo have no repo root at all and must pass `--source`/`--out` explicitly.
+ */
+export function resolveRepoRoot(moduleUrl: string): string {
+    return path.resolve(path.dirname(fileURLToPath(moduleUrl)), '..', '..', '..');
+}
+
+// CLI entry: `tsx electron/dev-tools/generate-icons/index.ts [--source <png>] [--out <dir>]`.
 const invokedPath = process.argv[1];
 if (invokedPath !== undefined && path.resolve(invokedPath) === fileURLToPath(import.meta.url)) {
     void (async (): Promise<void> => {
-        const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+        const repoRoot = resolveRepoRoot(import.meta.url);
         const { source, out } = parseCliArgs(process.argv.slice(2), repoRoot);
         const { written } = await generateIcons({ sourcePng: source, outDir: out });
         const rel = path.relative(repoRoot, out) || out;

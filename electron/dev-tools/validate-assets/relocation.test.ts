@@ -59,10 +59,11 @@ const stalePathPattern = /(?<!dev-)tools\/validate-assets/u;
  * describe what was built then, at the path it had then, and are correct as
  * written — so they are the only prose the stale-path scan skips.
  *
- * Single-digit by construction: M1–M9 have shipped and M10 is the live one,
- * which must stay SCANNED. When M10 ships, its section stops matching and the
- * scan reds on an append-only record — a loud, fixable failure, which is the
- * safe direction for a boundary to drift in.
+ * Single-digit by construction, and deliberately so: `m10-` does not match and
+ * never will, so the live section stays SCANNED — and keeps being scanned after
+ * M10 ships. If it then names a retired path, this reds on what has become an
+ * append-only record: a loud, fixable failure, which is the safe direction for
+ * a boundary to drift in.
  */
 const HISTORICAL_RECORDS = /^docs\/roadmap-sections\/m[1-9]-/u;
 
