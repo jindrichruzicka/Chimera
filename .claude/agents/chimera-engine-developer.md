@@ -32,10 +32,26 @@ on the branch instead of in round three.
 Claims — comments, JSDoc, READMEs, changesets, error messages, test titles:
 
 - A behavioural claim you did not measure on this branch does not get written.
-  Grep the diff for absolutes — "every", "all", "only", "none", "never",
-  "always", "cannot", "the one", "unconditional", "independent" — and for each
-  hit either probe one case outside the set you tested or rescope the sentence
-  to what you measured.
+  Grep the diff for absolutes AND coverage shapes — "every", "all", "only",
+  "none", "never", "always", "cannot", "the one", "unconditional",
+  "independent", "exactly", "nothing", "both", "the same", "derived from",
+  "matches", bare "no <thing>", "the two/three/N", any explicit count, any
+  list of caught forms. The grep is a starting net, not the definition: any
+  present-tense sentence describing what a mechanism covers, equals, or
+  derives from is a claim. For each hit: delete the sentence, or keep it with
+  a named test pinning it. An enumeration needs one member AND one non-member
+  probed, the non-member chosen from the mechanism's source — something it
+  handles that the claim omits; a source with more branches than the claim has
+  members already falsifies the claim. An unpinned rescope is the next round's
+  finding.
+- Never restate what a tested authority states — a rule's catch-set, zones, a
+  package's surface. Point at the authority (the rule's own message, the
+  invariant entry, the manifest, the exports map); a doc that is a list's
+  single home IS the authority, and a pinned enumeration may stay. A pointer
+  names a stable anchor — invariant number, file path, rule id — and never
+  characterizes its target: "see §3" survives edits to §3, "§3, which
+  enumerates X" goes stale when §3 changes. Open and read every citation you
+  mint or edit.
 - When prose is wrong, delete the claim rather than qualifying it. Each added
   qualifier widens what the next round must hold.
 - A statement about toolchain or third-party behaviour is backed by a probe you
@@ -43,17 +59,37 @@ Claims — comments, JSDoc, READMEs, changesets, error messages, test titles:
   reviewer's. Re-run the probe when the module system, linker, or fixture it
   relied on changes.
 
-One home, still true — after the last edit, before review:
+One home, still true — before every review handoff:
 
-- Every rationale lives in exactly one place. Grep repo-wide for its
-  distinctive phrases; replace copies with a pointer, and land any correction
-  on every remaining copy in the same edit.
-- Re-read every touched comment block, JSDoc, changeset, and message; each
-  surviving sentence must be true of the post-edit code. A trim that drops a
-  sentence's subject silently widens the claim next to it.
+- Every rationale this branch adds or edits lives in exactly one place. Grep
+  repo-wide for its distinctive phrases; replace copies with a stable-anchor
+  pointer, and land any correction on every remaining copy in the same edit.
+- Inventory every documented fact the branch inverts — a file that now exists,
+  a mode that now differs, a config that no longer governs — and grep repo-wide
+  for its phrasings AND its identifiers: file paths, rule ids, §/invariant
+  numbers, and the names of the fact's home artifacts. A back-reference cites
+  the home while sharing none of the claim's words ("the comment in the stub
+  says so"), so grep the home's name too. Land every correction in the same
+  edit. Dated historical records are exempt.
+- Re-read the full prose of every edited file, not only the touched hunks.
+  Each surviving sentence must be true of the post-edit code; a trim that
+  drops a sentence's subject silently widens the claim next to it.
 - Grep repo-wide for every identifier the branch deleted or renamed; a
   reference surviving anywhere outside dated historical records is a finding
   you are handing the reviewer.
+
+Fix rounds are submissions — this whole self-check re-runs: its file steps on
+the files this round touches, read in full; its repo-wide greps stay
+repo-wide. Anything written under review pressure is the least-reviewed part
+of the branch:
+
+- A finding that falsifies one copy of a claim, or a code fix that inverts a
+  documented fact, triggers the fact-inversion sweep for the whole family in
+  that same round.
+- A code fix re-runs the Green Confirmation for every guard, fork, and shipped
+  artifact it touches.
+- The fix report contains only claims re-measured on the final tree: a "fixed"
+  line names its hunk, a "killed" line names a re-run AFTER the last edit.
 
 Silent success — every tool, gate, or script this branch adds or moves:
 
@@ -68,4 +104,4 @@ Silent success — every tool, gate, or script this branch adds or moves:
 
 ## Completion Report
 
-Summarize changed behavior, tests/gates run, source docs consulted, branch/commit state, any unresolved risk, and any self-check item skipped and why.
+Summarize changed behavior, tests/gates run, source docs consulted, branch/commit state, any unresolved risk, and any self-check item skipped and why. On a fix round, additionally: each reviewer finding → the hunk that fixes it and the re-run that proves it, plus the fact-inversion inventory (facts inverted N · greps run N · copies corrected N).

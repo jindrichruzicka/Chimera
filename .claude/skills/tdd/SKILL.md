@@ -57,7 +57,7 @@ Need a mock inside `simulation/`? The code has a hidden dependency. Remove the d
 - [ ] Test names describe behaviour in plain language
 - [ ] Type-only module: red is `tsc -p` failing on the new test's imports, not a vitest assertion
 
-## Green Confirmation — before handing to review
+## Green Confirmation — before every review handoff, including each fix round
 
 Sweep every changed guard yourself first:
 
@@ -66,7 +66,11 @@ Sweep every changed guard yourself first:
       A fixture that trips two conjuncts at once leaves the drop-either-one
       mutant alive.
 - [ ] The commit's own change is **pinned**: reverting the exact behavior this
-      branch changes fails a named test. When a test or guard is deleted or
+      branch changes fails a named test. A new shipped artifact — template
+      file, generated file, exported entry — counts: its **emission** and its
+      **claimed content** are pinned at introduction; presence in the source
+      tree is not emission, and a generated family may pin one emitted count or
+      manifest instead of every file. When a test or guard is deleted or
       replaced, list what the old one caught and confirm each entry still fails
       against the replacement.
 - [ ] Every validation branch **fires** in some test (positive control). A check
@@ -75,12 +79,18 @@ Sweep every changed guard yourself first:
 - [ ] Generated output is asserted against an **inline literal**, never the
       constant that produced it — `expect(written).toBe(TEMPLATE)` is blind to
       every content change.
-- [ ] Options sharing one parser get **per-option cases**, not only all-defaults
-      and all-set — a field written by the wrong branch stays green at the
-      extremes.
-- [ ] A source-scanning guard written in TS **parses** (AST walk) rather than
-      regexing — a regex scan here missed `import 'x';` and stripped across
-      newlines — and ships a negative control proving a miss is caught.
+- [ ] Options sharing one parser get **per-option cases**, and a new or changed
+      mode/flag fork gets **per-fork assertions**: each property claimed of
+      output downstream of the fork is asserted per branch (a parameterized
+      test looping the modes counts), and the fork-scoping mutant
+      (`mode === X && …`) dies for each mode.
+- [ ] A guard that consumes structured text — source, lint or tool output,
+      config — **parses** by the text's own structure (AST, per-file block,
+      per-line record) rather than regexing across block boundaries, is fed
+      exactly the stream its contract names (never stdout+stderr merged), and
+      ships a negative control with two blocks proving a cross-block leak is
+      caught — regexes here have missed `import 'x';`, stripped across
+      newlines, and paired a file with a later block's rule id.
 - [ ] Tests that run a **built artifact rebuild it first** — green against a
       stale `dist` says nothing about the source you just edited.
 - [ ] Every test **title is a claim its body asserts** — a title promising
