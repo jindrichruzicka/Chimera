@@ -3,10 +3,9 @@ import { constants } from 'node:fs';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isDirectInvocation } from '../dev-harness/harness.js';
-// TYPE-only, and load-bearing that they stay that way: type imports are erased, so
-// these describe the codecs without putting either in this module's runtime graph.
+// TYPE-only, and load-bearing that it stays that way: type imports are erased, so
+// this describes the codec without putting it in this module's runtime graph.
 import type SharpFactory from 'sharp';
-import type * as Png2Icons from 'png2icons';
 
 /**
  * Deterministic platform icon-set generator for the Chimera engine.
@@ -18,9 +17,29 @@ import type * as Png2Icons from 'png2icons';
  *   - the build icon set (`chimera.icns` / `chimera.ico` + loose Linux PNG sizes)
  *     wired into the packaging config.
  *
- * Loose PNGs are downscaled with `sharp` (libvips) for crisp small sizes; the
- * `.icns`/`.ico` containers are assembled with the pure-JS `png2icons`. Both are
- * optional peer dependencies loaded on demand — see `loadIconCodecs`.
+ * EVERY image in the set — the loose PNGs and every image inside the two containers
+ * alike — is an exact-size square render produced by `sharp` (libvips) directly from
+ * the master. The containers are then assembled here, byte by byte, around those
+ * renders; nothing downstream resizes anything.
+ *
+ * That is a correctness requirement, not a preference. The previous implementation
+ * handed the whole master to a container library and let it resize internally, which
+ * cost the set twice over:
+ *   - it derived each output height as `floor(srcHeight * (target / srcWidth))`. For
+ *     some master widths that double round-trip lands a hair BELOW the integer and
+ *     the floor drops a pixel; for most it does not, and which target sizes are hit
+ *     is a property of the individual width. Measured over the widths 256–2048 and
+ *     this tool's ten target sizes, 292 of 1793 widths lose at least one — and the
+ *     engine's master, at 1825, is one of them: `32 / 1825 * 1825` is
+ *     `31.999999999999996`, and every power-of-two target from 16 to 1024 came out
+ *     one pixel short in height. The shell stretches those back to square, and
+ *     `.ico`'s largest entry (256×255) fell under electron-builder's 256×256
+ *     minimum and failed the Windows build outright;
+ *   - it decimated a 1825px master to 16–64px in a single bicubic step with no
+ *     low-pass prefilter, which aliases hard and blows isolated pixels out at
+ *     high-contrast edges. libvips shrink-then-Lanczos does not.
+ *
+ * `sharp` is an optional peer dependency loaded on demand — see `loadImageCodec`.
  *
  * This module is emitted into the package's `dist/` and therefore travels inside the
  * published tarball, but nothing in a game's runtime graph reaches it.
@@ -54,26 +73,60 @@ export const DEFAULT_SOURCE_REL = 'docs/assets/chimera-logo-compact.png';
 /** Repo-relative directory the CLI writes the canonical set into by default. */
 export const DEFAULT_OUT_REL = 'electron/assets/icons';
 
+/**
+ * The `.icns` chunk table: OSType slot → pixel size, every payload a PNG.
+ *
+ * This is exactly the set electron-builder's own `app-builder` generator emits, and
+ * it is a deliberately narrow slice of what the format allows. Two neighbouring
+ * slots are wrong in ways that are invisible until a user looks at the Dock:
+ *   - `ic04`/`ic05` (16/32) are raw `ARGB`, NOT PNG. macOS has two decoders and they
+ *     disagree — `NSImage` reads a PNG there happily, while IconServices, the path
+ *     Finder and the Dock actually use, rejects it and falls back to the generic
+ *     application icon. Omitting them costs nothing on a Retina display, where 16pt
+ *     and 32pt render from `ic11`/`ic12` anyway; getting their format wrong costs
+ *     the whole icon.
+ *   - `icp4`/`icp5` with PNG payloads are decoded as raw bytes and render as noise.
+ *
+ * The 256/512 sizes appear twice on purpose: `ic08`/`ic09` are the @1x slots and
+ * `ic13`/`ic14` the @2x slots of the size below them. The bytes are identical, so
+ * both reference the same render.
+ */
+export const ICNS_SLOTS = [
+    ['ic10', 1024],
+    ['ic14', 512],
+    ['ic09', 512],
+    ['ic13', 256],
+    ['ic08', 256],
+    ['ic07', 128],
+    ['ic12', 64],
+    ['ic11', 32],
+] as const satisfies readonly (readonly [string, number])[];
+
+/**
+ * Sizes carried by the `.ico`, largest first — the conventional Windows shell ladder
+ * (16 list view, 24 legacy, 32 small, 48 medium, 96 extra-large, 256 jumbo) plus 64
+ * and 128 as intermediate rungs.
+ *
+ * 256 is not optional: electron-builder validates `win.icon` through its `app-builder`
+ * binary and rejects anything whose largest entry is under 256×256 with
+ * `ERR_ICON_TOO_SMALL`, which is a hard build failure rather than a warning.
+ */
+export const ICO_SIZES = [256, 128, 96, 64, 48, 32, 24, 16] as const;
+
 /** Resolves a bare module specifier — the seam the codec load is driven through. */
 export type ModuleImporter = (specifier: string) => Promise<unknown>;
 
-/** The two image codecs, unwrapped from the interop shape they arrived in. */
-export interface IconCodecs {
-    readonly sharp: typeof SharpFactory;
-    readonly png2icons: typeof Png2Icons;
-}
-
 /**
- * What a run says when a codec is not installed — the deliverable of the optional-peer
+ * What a run says when the codec is not installed — the deliverable of the optional-peer
  * contract. Absent it, a game author regenerating icons for the first time gets a bare
  * `ERR_MODULE_NOT_FOUND` naming a package they never asked for.
  *
- * Reserved for genuinely-absent codecs. An installed-but-broken one gets a different
+ * Reserved for a genuinely-absent codec. An installed-but-broken one gets a different
  * message: telling someone to install what they already have is worse than useless.
  */
-export const MISSING_CODECS_MESSAGE =
-    'generate-icons: sharp + png2icons are required to generate icons and are optional peer ' +
-    'dependencies. Install them as devDependencies: pnpm add -D sharp png2icons';
+export const MISSING_CODEC_MESSAGE =
+    'generate-icons: sharp is required to generate icons and is an optional peer ' +
+    'dependency. Install it as a devDependency: pnpm add -D sharp';
 
 /** Node's two codes for "no such module", across the ESM and CJS resolvers. */
 const MODULE_NOT_FOUND_CODES: ReadonlySet<string> = new Set([
@@ -81,42 +134,28 @@ const MODULE_NOT_FOUND_CODES: ReadonlySet<string> = new Set([
     'MODULE_NOT_FOUND',
 ]);
 
-/** Every png2icons builder `generateIcons` calls — not a representative one. */
-const PNG2ICONS_BUILDERS = ['createICNS', 'createICO'] as const;
-
-/** The resampling constant `generateIcons` passes to both builders. */
-const PNG2ICONS_CONSTANT = 'BICUBIC2';
-
 /**
- * Load the codecs on demand.
+ * Load the codec on demand.
  *
- * They are deliberately NOT module-top imports. `sharp` is a multi-megabyte
- * platform-specific native binary, and both are optional peers precisely so a game
- * that never regenerates its icons installs neither — but a static import would throw
- * at MODULE LOAD in exactly that install, before any message could be printed. Loading
- * here, inside the one path that needs them, is what makes the failure explainable.
+ * It is deliberately NOT a module-top import. `sharp` is a multi-megabyte
+ * platform-specific native binary, and an optional peer precisely so a game that never
+ * regenerates its icons never installs it — but a static import would throw at MODULE
+ * LOAD in exactly that install, before any message could be printed. Loading here,
+ * inside the one path that needs it, is what makes the failure explainable.
  *
- * The two packages arrive in different interop shapes, and each has a form that
- * silently yields `undefined` rather than failing:
- *   - `sharp` is CJS `module.exports = fn`, so ESM presents the function as `default`
- *     while a CJS transform hands back the function itself;
- *   - `png2icons` marks itself `__esModule` and publishes named exports, so its
- *     namespace carries the API directly while a default import can resolve to
- *     nothing. It is accepted under a `default` slot too, since which one a loader
- *     produces is a property of the loader, not of this tool.
+ * `sharp` is CJS `module.exports = fn`, so ESM presents the function under `default`
+ * while a CJS transform hands back the function itself. Both are accepted, since which
+ * one a loader produces is a property of the loader, not of this tool — and the
+ * `default` read silently yields `undefined` rather than failing under the other shape.
  */
-export async function loadIconCodecs(
+export async function loadImageCodec(
     importer: ModuleImporter = (specifier) => import(specifier),
-): Promise<IconCodecs> {
-    // Sequential, and sharp fully resolved first: when BOTH codecs are unusable the
-    // report names sharp, rather than whichever promise happened to settle first.
-    const sharp = unwrapSharp(await importCodec(importer, 'sharp'));
-    const png2icons = unwrapPng2Icons(await importCodec(importer, 'png2icons'));
-    return { sharp, png2icons };
+): Promise<typeof SharpFactory> {
+    return unwrapSharp(await importCodec(importer, 'sharp'));
 }
 
 /**
- * Import one codec, separating "not installed" from "installed but will not load".
+ * Import the codec, separating "not installed" from "installed but will not load".
  *
  * The split matters: `sharp` ships prebuilt native bindings, and a platform or Node-ABI
  * mismatch fails the import of a package that IS present. Answering that with "install
@@ -129,7 +168,7 @@ async function importCodec(importer: ModuleImporter, specifier: string): Promise
     } catch (error: unknown) {
         const code = (error as { code?: unknown } | null | undefined)?.code;
         if (typeof code === 'string' && MODULE_NOT_FOUND_CODES.has(code)) {
-            throw new Error(MISSING_CODECS_MESSAGE, { cause: error });
+            throw new Error(MISSING_CODEC_MESSAGE, { cause: error });
         }
         // Deliberately says nothing about whether the package is on disk: a
         // rejection carrying no `code` — a non-Error rejection through the public
@@ -143,60 +182,22 @@ async function importCodec(importer: ModuleImporter, specifier: string): Promise
     }
 }
 
-/**
- * A codec resolved, but not to something this tool can drive. Names which codec and
- * what it lacked, because the alternative is a `TypeError` thrown from inside the
- * generate loop with a half-written icon set already on disk.
- */
-function unusableCodec(specifier: string, lacking: string): Error {
-    return new Error(
-        `generate-icons: '${specifier}' resolved but ${lacking}. An incompatible version is ` +
-            `the likely cause.`,
-    );
-}
-
-function unwrapSharp(module: unknown): IconCodecs['sharp'] {
+function unwrapSharp(module: unknown): typeof SharpFactory {
     // Optional chaining, not a plain property read: `importer` is part of the public
     // options, so a loader handing back `null` reaches here, and a raw
     // "cannot read properties of null" is the opaque failure this path exists to
     // prevent.
     const candidate = (module as { default?: unknown } | null | undefined)?.default ?? module;
     if (typeof candidate !== 'function') {
-        throw unusableCodec('sharp', 'is not callable');
-    }
-    return candidate as IconCodecs['sharp'];
-}
-
-function unwrapPng2Icons(module: unknown): IconCodecs['png2icons'] {
-    const candidate = providesIconBuilders(module)
-        ? module
-        : (module as { default?: unknown } | null | undefined)?.default;
-    if (!providesIconBuilders(candidate)) {
-        throw unusableCodec(
-            'png2icons',
-            `does not provide ${PNG2ICONS_BUILDERS.join('/')} and the ${PNG2ICONS_CONSTANT} constant`,
+        // Names the codec and what it lacked, because the alternative is a
+        // `TypeError` thrown from inside the render loop with a half-written icon
+        // set already on disk.
+        throw new Error(
+            `generate-icons: 'sharp' resolved but is not callable. An incompatible version is ` +
+                `the likely cause.`,
         );
     }
-    return candidate as IconCodecs['png2icons'];
-}
-
-/**
- * Whether `value` carries every png2icons member the generate path uses. Checking all
- * of them rather than the first is what makes the guard's promise true: a codec with
- * `createICNS` but no `createICO` passes a one-member check and then throws mid-run,
- * after the loose PNGs and the `.icns` have already been written.
- *
- * This is also how namespace-vs-default is decided — on the API, not on `__esModule`.
- */
-function providesIconBuilders(value: unknown): boolean {
-    const codec = value as Record<string, unknown> | null | undefined;
-    return (
-        PNG2ICONS_BUILDERS.every((name) => typeof codec?.[name] === 'function') &&
-        // The TYPE, not mere presence: the constant is declared a number, and a
-        // namespace whose `BICUBIC2` is something else is not the namespace this
-        // module was written against.
-        typeof codec?.[PNG2ICONS_CONSTANT] === 'number'
-    );
+    return candidate as typeof SharpFactory;
 }
 
 export interface GenerateIconsOptions {
@@ -205,9 +206,9 @@ export interface GenerateIconsOptions {
     /** Absolute output directory; created if missing. */
     readonly outDir: string;
     /**
-     * Overrides how the image codecs are resolved. Defaults to a real dynamic import;
+     * Overrides how the image codec is resolved. Defaults to a real dynamic import;
      * supplying one substitutes the module resolution itself, which is the only way to
-     * reach the codec-absent path from an environment that has both installed.
+     * reach the codec-absent path from an environment that has it installed.
      */
     readonly importer?: ModuleImporter;
 }
@@ -216,6 +217,11 @@ export interface GenerateIconsResult {
     /** Filenames written into `outDir`, sorted. */
     readonly written: readonly string[];
 }
+
+/** Every distinct pixel size some part of the set needs, largest first. */
+const RENDER_SIZES: readonly number[] = [
+    ...new Set<number>([...PNG_SIZES, ...ICO_SIZES, ...ICNS_SLOTS.map(([, size]) => size)]),
+].sort((left, right) => right - left);
 
 /**
  * Generate the platform icon set from `sourcePng` into `outDir`. Returns the written
@@ -226,24 +232,33 @@ export interface GenerateIconsResult {
 export async function generateIcons(options: GenerateIconsOptions): Promise<GenerateIconsResult> {
     const { sourcePng, outDir, importer } = options;
 
-    // An absent codec and an unreadable master both resolve before the mkdir, so
-    // neither leaves an empty directory behind as evidence that it tried. A master
-    // that reads but does not DECODE still does — the decode lives inside the write
-    // loop, which is past the point of no output.
-    const { sharp, png2icons } = await loadIconCodecs(importer);
+    // An absent codec, an unreadable master and an undecodable one all resolve
+    // before the mkdir, so none leaves an empty directory behind as evidence that it
+    // tried. The decode used to sit inside the write loop, past the point of no
+    // output; rendering every size up front moved it in front of the mkdir, so the
+    // undecodable case now fails as cleanly as the other two.
+    const sharp = await loadImageCodec(importer);
     const master = await readFile(sourcePng);
+
+    // Every size rendered once, up front, and reused by whichever outputs need it:
+    // the two containers overlap the loose sizes and each other, and re-rendering
+    // per consumer would make "the 256 in the .ico" and "the 256 in the .icns"
+    // separately capable of being wrong.
+    const renders = new Map<number, Buffer>();
+    for (const size of RENDER_SIZES) {
+        renders.set(size, await renderSquare(sharp, master, size));
+    }
 
     await mkdir(outDir, { recursive: true });
     const written: string[] = [];
 
-    const write = async (name: string, data: Buffer | Uint8Array): Promise<void> => {
+    const write = async (name: string, data: Buffer): Promise<void> => {
         await writeFile(path.join(outDir, name), data);
         written.push(name);
     };
 
-    // Loose square PNGs, one per declared size, downscaled from the master with libvips.
     for (const size of PNG_SIZES) {
-        const png = await sharp(master).resize(size, size, { fit: 'contain' }).png().toBuffer();
+        const png = renderOf(renders, size);
         await write(`${DEFAULT_ICON_BASENAME}-${size}.png`, png);
         // The dev-runtime default reuses the 512px render under a stable, size-less name.
         if (size === DEFAULT_RUNTIME_ICON_SIZE) {
@@ -251,21 +266,142 @@ export async function generateIcons(options: GenerateIconsOptions): Promise<Gene
         }
     }
 
-    // Platform containers — png2icons resizes the master internally to every size each
-    // format requires (returns null only on a malformed/undecodable input buffer).
-    const icns = png2icons.createICNS(master, png2icons.BICUBIC2, 0);
-    if (icns === null) {
-        throw new Error(`Failed to build .icns from ${sourcePng} (undecodable PNG?)`);
-    }
-    await write(`${DEFAULT_ICON_BASENAME}.icns`, icns);
-
-    const ico = png2icons.createICO(master, png2icons.BICUBIC2, 0, /* usePNG */ true);
-    if (ico === null) {
-        throw new Error(`Failed to build .ico from ${sourcePng} (undecodable PNG?)`);
-    }
-    await write(`${DEFAULT_ICON_BASENAME}.ico`, ico);
+    await write(`${DEFAULT_ICON_BASENAME}.icns`, buildIcns(renders));
+    await write(`${DEFAULT_ICON_BASENAME}.ico`, buildIco(renders));
 
     return { written: [...written].sort() };
+}
+
+/**
+ * One exact-size square PNG, verified against its own header before it is used.
+ *
+ * The verification is not defensive padding — it is the guard for the defect class
+ * this module exists to have fixed. An off-by-one in a resize is invisible in every
+ * downstream byte: the container assembles happily around a 256×255 payload, writes a
+ * well-formed file, and the shell stretches the result back to square at display time.
+ * Reading the dimensions back out of the emitted PNG is the only step that can tell a
+ * correct render from a plausible one, and it costs 24 bytes.
+ *
+ * `fit: 'contain'` pads a non-square master rather than cropping it, and the pad is
+ * explicitly transparent: sharp's default background is OPAQUE BLACK, which would put
+ * black letterbox bars into every icon of any game whose logo is not square.
+ */
+async function renderSquare(
+    sharp: typeof SharpFactory,
+    master: Buffer,
+    size: number,
+): Promise<Buffer> {
+    const png = await sharp(master)
+        .resize(size, size, {
+            fit: 'contain',
+            background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .png()
+        .toBuffer();
+
+    const rendered = pngDimensionsOf(png);
+    if (rendered === null) {
+        throw new Error(`generate-icons: the ${size}px render is not a PNG.`);
+    }
+    if (rendered.width !== size || rendered.height !== size) {
+        throw new Error(
+            `generate-icons: the ${size}px render came out ${rendered.width}×${rendered.height}. ` +
+                `Every image in the set must be an exact square — a non-square one is stretched ` +
+                `by the shell at display time, and an under-256 '.ico' entry fails the Windows build.`,
+        );
+    }
+    return png;
+}
+
+/** The render for `size`, which `RENDER_SIZES` guarantees exists. */
+function renderOf(renders: ReadonlyMap<number, Buffer>, size: number): Buffer {
+    const png = renders.get(size);
+    if (png === undefined) {
+        throw new Error(`generate-icons: no ${size}px render — RENDER_SIZES is out of sync.`);
+    }
+    return png;
+}
+
+/** PNG magic, as the big-endian uint32 the first four bytes spell. */
+const PNG_MAGIC = 0x8950_4e47;
+
+/** A PNG's IHDR dimensions — big-endian uint32s at byte 16 and 20 — or `null`. */
+function pngDimensionsOf(png: Buffer): { readonly width: number; readonly height: number } | null {
+    if (png.byteLength < 24 || png.readUInt32BE(0) !== PNG_MAGIC) return null;
+    return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+}
+
+/**
+ * Assemble the macOS `.icns`.
+ *
+ * Layout, all big-endian: the ASCII magic `icns`, a uint32 total file length that
+ * INCLUDES its own 8-byte header, then chunks to EOF. Each chunk is a 4-byte ASCII
+ * OSType, a uint32 length that likewise includes the chunk's own 8-byte header, and
+ * the payload. No padding, no alignment, and no table of contents — `iconutil`
+ * accepts a file without one, and chunk order carries no meaning.
+ */
+function buildIcns(renders: ReadonlyMap<number, Buffer>): Buffer {
+    const chunks = ICNS_SLOTS.map(([slot, size]) => {
+        const payload = renderOf(renders, size);
+        const header = Buffer.alloc(8);
+        header.write(slot, 0, 'ascii');
+        header.writeUInt32BE(header.byteLength + payload.byteLength, 4);
+        return Buffer.concat([header, payload]);
+    });
+
+    const fileHeader = Buffer.alloc(8);
+    fileHeader.write('icns', 0, 'ascii');
+    fileHeader.writeUInt32BE(
+        chunks.reduce((total, chunk) => total + chunk.byteLength, fileHeader.byteLength),
+        4,
+    );
+    return Buffer.concat([fileHeader, ...chunks]);
+}
+
+/** Bytes of the `ICONDIR` header, and of each `ICONDIRENTRY` that follows it. */
+const ICO_HEADER_BYTES = 6;
+const ICO_ENTRY_BYTES = 16;
+
+/**
+ * Assemble the Windows `.ico`.
+ *
+ * Layout, all little-endian: an `ICONDIR` of `idReserved` (0), `idType` (1 = icon) and
+ * `idCount`, then one 16-byte `ICONDIRENTRY` per image, then the payloads. An entry
+ * carries `bWidth`/`bHeight` as single bytes — which is why 256 is spelled `0`, the
+ * one size the field cannot hold — followed by `bColorCount` (0, meaning ≥8bpp),
+ * `bReserved` (0), `wPlanes` (1), `wBitCount` (32), and the payload's length and
+ * absolute offset.
+ *
+ * Every payload is a PNG. Windows has read PNG-compressed entries since Vista; only
+ * XP and earlier need BMP, and an Electron app does not run there.
+ */
+function buildIco(renders: ReadonlyMap<number, Buffer>): Buffer {
+    const images = ICO_SIZES.map((size) => ({ size, payload: renderOf(renders, size) }));
+
+    const header = Buffer.alloc(ICO_HEADER_BYTES);
+    header.writeUInt16LE(0, 0); // idReserved
+    header.writeUInt16LE(1, 2); // idType: 1 = icon
+    header.writeUInt16LE(images.length, 4);
+
+    let imageOffset = ICO_HEADER_BYTES + ICO_ENTRY_BYTES * images.length;
+
+    const entries = images.map(({ size, payload }) => {
+        const entry = Buffer.alloc(ICO_ENTRY_BYTES);
+        // 256 does not fit a byte and is spelled 0; nothing else in the ladder is
+        // affected, since every other size is under 256.
+        entry.writeUInt8(size % 256, 0); // bWidth
+        entry.writeUInt8(size % 256, 1); // bHeight
+        entry.writeUInt8(0, 2); // bColorCount — 0 for ≥8bpp
+        entry.writeUInt8(0, 3); // bReserved — must be 0
+        entry.writeUInt16LE(1, 4); // wPlanes
+        entry.writeUInt16LE(32, 6); // wBitCount
+        entry.writeUInt32LE(payload.byteLength, 8); // dwBytesInRes
+        entry.writeUInt32LE(imageOffset, 12); // dwImageOffset
+        imageOffset += payload.byteLength;
+        return entry;
+    });
+
+    return Buffer.concat([header, ...entries, ...images.map(({ payload }) => payload)]);
 }
 
 interface CliArgs {

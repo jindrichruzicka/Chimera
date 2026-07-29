@@ -89,7 +89,6 @@
         "fast-check": "^4.7.0",
         "jsdom": "^29.0.2",
         "next": "^15.5.15",
-        "png2icons": "^2.0.1",
         "pngjs": "^7.0.0",
         "prettier": "^3.3.3",
         "publint": "^0.3.21",

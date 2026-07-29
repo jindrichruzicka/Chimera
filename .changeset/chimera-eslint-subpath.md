@@ -38,7 +38,7 @@ install read the same token set by the same route, and the base-token path is in
 so the rule's own tests need no renderer build.
 
 `eslint` is declared as an **optional** peer dependency, matching the posture of
-`electron`, `sharp` and `png2icons`: the edge is type-only and lint-only, and nothing in
+`electron` and `sharp`: the edge is type-only and lint-only, and nothing in
 the runtime surface (`./main`, `./preload/*`, `./packaged-bundle`) touches it.
 
 The games-facing preset that composes these rules onto a game's own flat zones is not

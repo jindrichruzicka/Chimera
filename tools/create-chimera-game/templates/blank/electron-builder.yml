@@ -35,7 +35,7 @@ productName: __GamePascal__
 # The script passes both `--source` and `--out` explicitly, and both matter. Omit
 # `--source` and the run refuses: its default is an engine path (`docs/assets/…`) no game
 # has. Omit `--out` and it does NOT refuse — the default is `electron/assets/icons`
-# relative to the cwd, and a game HAS an `electron/` directory, so once the codecs are
+# relative to the cwd, and a game HAS an `electron/` directory, so once the codec is
 # installed eleven files land in your main-process source tree and the run exits 0.
 icon: assets/icons/icon.png
 
@@ -93,7 +93,7 @@ files:
   # ENGINE's Chimera icon — correct for a game that never regenerates, and the reason this
   # cannot already point at `assets/icons`: a fresh scaffold's asset dir holds only icon.png,
   # so the fixed chimera.png filename would resolve to nothing. Once you have generated your
-  # own set (after `pnpm add -D sharp png2icons` — the codecs are optional peers and are not
+  # own set (after `pnpm add -D sharp` — the codec is an optional peer and is not
   # installed by default), repoint this to `from: assets/icons` and even the fallback is
   # game-branded. It changes nothing a player normally sees; the manifest `icon` wins on
   # every ordinary boot.

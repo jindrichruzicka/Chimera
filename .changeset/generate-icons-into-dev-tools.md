@@ -15,12 +15,12 @@ tool's logic is untouched apart from re-deriving its repo root for the deeper di
 so a default run writes a byte-identical set into `electron/assets/icons`.
 
 The move does change what the package declares. `sharp` (a multi-megabyte
-platform-specific native binary) and `png2icons` are the generator's codecs; inside
-repo-root `tools/` those imports were never published and resolved through root-devDep
-hoisting, while inside this package the module is emitted to `dist/` and shipped by
-`files: ["dist"]`, so `verify:publish`'s depcheck reads them as undeclared runtime deps.
-They are now declared as **optional peer dependencies** rather than `dependencies`: pnpm
-and npm do not install a missing optional peer, so a game install pulls neither codec and
-carries no native binary it never runs. Nothing consumes them yet — the generator is not
+platform-specific native binary) is the generator's codec; inside repo-root `tools/` that
+import was never published and resolved through root-devDep hoisting, while inside this
+package the module is emitted to `dist/` and shipped by `files: ["dist"]`, so
+`verify:publish`'s depcheck reads it as an undeclared runtime dep. It is now declared as
+an **optional peer dependency** rather than a `dependencies` entry: pnpm
+and npm do not install a missing optional peer, so a game install declares no codec and
+carries no native binary it never runs. Nothing consumes it yet — the generator is not
 exposed as a bin in this release, and the monorepo's own `pnpm icons:generate` resolves
-them from root devDependencies exactly as before.
+it from root devDependencies exactly as before.

@@ -116,8 +116,8 @@ interface ElectronManifest {
     peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 }
 
-/** The image codecs the generator needs, and no consumer of the engine does. */
-const CODECS = ['sharp', 'png2icons'] as const;
+/** The image codec the generator needs, and no consumer of the engine does. */
+const CODECS = ['sharp'] as const;
 
 interface TreeEntry {
     /** Line index in the document. */
@@ -207,13 +207,13 @@ describe('generate-icons relocation (§4.32 dev-tooling home)', () => {
         expect(existsSync(resolve(root, DEFAULT_OUT_REL))).toBe(true);
     });
 
-    it('declares its image codecs as OPTIONAL peers of the package it now ships inside', () => {
+    it('declares its image codec as an OPTIONAL peer of the package it now ships inside', () => {
         // Relocation is a distribution change, not just a move: electron's
         // build emits every non-test `.ts` under the package and
         // `files: ["dist"]` publishes the result, so the generator's `sharp`
-        // and `png2icons` imports now ship inside @chimera-engine/electron —
-        // and verify:publish's depcheck reads them as undeclared runtime deps
-        // unless the package declares them.
+        // import now ships inside @chimera-engine/electron — and
+        // verify:publish's depcheck reads it as an undeclared runtime dep
+        // unless the package declares it.
         //
         // Peers, never `dependencies`: `sharp` is a multi-megabyte
         // platform-specific native binary, and a game that never regenerates

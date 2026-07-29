@@ -628,7 +628,7 @@ if (process.env['VITEST'] === undefined) {
                     );
                     console.log('  pnpm validate:assets   # check every asset reference resolves');
                     console.log(
-                        '  pnpm icons:generate    # opt-in multi-size icon set (needs: pnpm add -D sharp png2icons)',
+                        '  pnpm icons:generate    # opt-in multi-size icon set (needs: pnpm add -D sharp)',
                     );
                     console.log(
                         `  # app icon: replace apps/${result.names.kebab}/assets/icons/icon.png — that one file is the installer AND the window icon`,

@@ -191,52 +191,58 @@ no consumer has. That shapes the script wiring:
 Both flags are spelled out in the scaffolded script, for different reasons. A missing
 `--source` **refuses** — the default names an engine path a game does not have. A missing
 `--out` does **not**: the default is `electron/assets/icons` relative to the cwd, and a game
-has an `electron/` directory, so once the codecs are installed eleven files land in its
+has an `electron/` directory, so once the codec is installed eleven files land in its
 main-process source tree and the run exits 0. The silent one is why the script never relies
 on a default.
 
-### Optional peers, and why the tool loads them lazily
+### An optional peer, and why the tool loads it lazily
 
 This is the bin whose distribution question is not "can a game reach it" but "what does
-reaching it cost". `sharp` is a multi-megabyte platform-specific native binary and `png2icons`
-is only ever wanted by this tool, so neither may enter `@chimera-engine/electron`'s runtime
-dependency closure (Invariant #5). They are declared as **optional peer dependencies** —
-package managers do not install a missing optional peer — and the tool `await import()`s them
-inside the generate path.
+reaching it cost". `sharp` is a multi-megabyte platform-specific native binary, so it may not
+enter `@chimera-engine/electron`'s runtime dependency closure (Invariant #5). It is declared
+as an **optional peer dependency** — package managers do not install a missing optional peer —
+and the tool `await import()`s it inside the generate path.
 
 The lazy import is not a style choice. A module-top `import` throws while the module is
 loading, before any message can be printed, in exactly the install this design exists to
 support. Loading on demand is what turns an opaque `ERR_MODULE_NOT_FOUND` into
-`pnpm add -D sharp png2icons`.
+`pnpm add -D sharp`.
+
+It is the only codec. The `.icns` and `.ico` containers are assembled by the tool itself
+around exact-size renders rather than handed to a library that resizes internally — the
+container library that used to do it emitted every power-of-two entry one pixel short in
+height from the repo's own 1825px master, which stretched the macOS icon and failed the
+Windows build on electron-builder's 256×256 minimum.
 
 Three things have to hold together, and each fails silently on its own:
 
 - **`optional: true`** — a peer declared without it is auto-installed, putting the native
   binary in a consumer's tree just as surely as a `dependencies` entry would.
-- **Nothing else hands the codecs to a game.** The scaffold's frozen toolchain snapshot is
-  derived from the monorepo's root devDeps, which include both codecs for the engine's own
-  `icons:generate`; they are excluded from that snapshot explicitly, or every scaffolded
-  project would declare them at its root before the peer declaration was ever consulted. That
+- **Nothing else hands the codec to a game.** The scaffold's frozen toolchain snapshot is
+  derived from the monorepo's root devDeps, which include `sharp` for the engine's own
+  `icons:generate`; it is excluded from that snapshot explicitly, or every scaffolded
+  project would declare it at its root before the peer declaration was ever consulted. That
   was the live state until F77's gate found it.
 - **The entry gate must fire through a `.bin` symlink** — see the harness's
   `isDirectInvocation` above. A bare path compare exits 0 having written nothing, which for a
   generator reads exactly like success.
 
 `verify:scaffold` asserts what a scaffold controls: the bin resolves under the app's
-`node_modules/.bin`, neither codec appears in the app's or the project's own `node_modules`
-(under pnpm's isolated linker those hold exactly what was declared), the installed manifest
-declares both as optional peers and not as dependencies, and a run **through the script**
-exits non-zero with the actionable message. A codec-present generate is deliberately not part
-of that gate — installing a native binary into the probe is heavy and offline-fragile, and it
-would prove the opposite of what the arm is for.
+`node_modules/.bin`, the codec appears in neither the app's nor the project's own
+`node_modules` (under pnpm's isolated linker those hold exactly what was declared), the
+installed manifest declares it as an optional peer and not as a dependency, and a run
+**through the script** either writes the set or refuses with the actionable message.
 
-Two limits of that, both worth knowing before trusting the word "absent". `sharp` is an
-`optionalDependency` of **Next**, so a Next-based scaffold installs it regardless, and pnpm's
-`.pnpm/node_modules` hoisted layer puts it on the tool's resolution path — at Next's version,
-outside the peer range electron declares. And an auto-installed non-optional peer lands under
-`.pnpm` rather than in the app's own `node_modules`, so the `optional` flag is enforced by the
-manifest read, not by any install observation. The run in a fresh scaffold therefore fails on
-`png2icons`.
+That last one is graded on work done rather than on exit status, because both outcomes are
+legitimate and which one occurs is a property of another package's dependency graph. `sharp`
+is an `optionalDependency` of **Next**, so a Next-based scaffold installs it regardless, and
+pnpm's `.pnpm/node_modules` hoisted layer puts it on the tool's resolution path — at Next's
+version, outside the peer range electron declares — so the run there generates for real. The
+defect the arm exists for is neither outcome: it is an exit 0 that wrote **nothing**, which is
+what a bare-path entry guard produces through a pnpm shim. One further limit worth knowing
+before trusting the word "absent": an auto-installed non-optional peer lands under `.pnpm`
+rather than in the app's own `node_modules`, so the `optional` flag is enforced by the
+manifest read, not by any install observation.
 
 ---
 

@@ -30,13 +30,14 @@ import {
     DEFAULT_ICON_BASENAME,
     DEFAULT_OUT_REL,
     DEFAULT_SOURCE_REL,
-    MISSING_CODECS_MESSAGE,
+    MISSING_CODEC_MESSAGE,
     PNG_SIZES,
     generateIcons,
-    loadIconCodecs,
+    loadImageCodec,
     parseCliArgs,
     runGenerateIconsCli,
 } from './index.js';
+import type { ModuleImporter } from './index.js';
 
 /**
  * electron/dev-tools/generate-icons/index.test.ts
@@ -46,7 +47,13 @@ import {
  * repo asset) into a temp dir so they stay fast and deterministic, and assert the
  * contract the generator's two consumers depend on — the dev-runtime window icon and
  * the packaging set: the canonical filenames exist, each loose PNG decodes to its
- * exact square size, and the container files carry valid `.icns`/`.ico` magic headers.
+ * exact square size, and the container files carry valid `.icns`/`.ico` headers.
+ *
+ * The container CONTENTS are graded separately, in `generated container entries`
+ * below, and across several master widths. Everything here drives a 1024px master,
+ * which is exactly the fixture under which the non-square-entry defect shipped: a
+ * power-of-two master divides every target size evenly, so the bug was invisible to
+ * a suite that only ever used one.
  */
 describe('generateIcons', () => {
     let outDir: string;
@@ -135,7 +142,7 @@ describe('generateIcons', () => {
     });
 
     it('reports the actionable codec error rather than failing somewhere downstream', async () => {
-        // Injected rather than observed: the monorepo always has both codecs
+        // Injected rather than observed: the monorepo always has the codec
         // installed, so the uninstalled case is unreachable from a test that
         // cannot uninstall a native binary.
         await expect(
@@ -144,10 +151,10 @@ describe('generateIcons', () => {
                 outDir,
                 importer: () => Promise.reject(missingModule('sharp')),
             }),
-        ).rejects.toThrow(MISSING_CODECS_MESSAGE);
+        ).rejects.toThrow(MISSING_CODEC_MESSAGE);
     });
 
-    it('creates no output directory when the codecs are absent', async () => {
+    it('creates no output directory when the codec is absent', async () => {
         // Only a directory that does not already exist can show the ordering:
         // `outDir` is created by the fixture, so a nested path is what makes it
         // observable.
@@ -159,7 +166,7 @@ describe('generateIcons', () => {
                 outDir: nested,
                 importer: () => Promise.reject(missingModule('sharp')),
             }),
-        ).rejects.toThrow(MISSING_CODECS_MESSAGE);
+        ).rejects.toThrow(MISSING_CODEC_MESSAGE);
 
         await expect(stat(nested)).rejects.toMatchObject({ code: 'ENOENT' });
     });
@@ -180,6 +187,366 @@ describe('generateIcons', () => {
         await expect(stat(nested)).rejects.toMatchObject({ code: 'ENOENT' });
     });
 });
+
+/**
+ * Master widths chosen to make the squareness assertion bite rather than to be
+ * representative. A power-of-two master divides every target size evenly, so a
+ * generator that derives its output height by scaling the source — `floor(srcHeight *
+ * (target / srcWidth))` — lands on the exact integer and looks correct at every size.
+ * 1825 is the real repo master's width, and the double round-trip through that ratio
+ * lands JUST below the integer for exactly the power-of-two targets:
+ * `32 / 1825 * 1825 === 31.999999999999996`. The set that shipped had every
+ * power-of-two entry one pixel short in height and every other entry square, and a
+ * 1024-only fixture is what let it ship.
+ */
+const MASTER_WIDTHS = [1825, 1024, 999] as const;
+
+/** One image inside a container: where it sits, what the container claims, what it is. */
+interface ContainerEntry {
+    /** ICNS chunk type, or the ICO directory index — whatever names the slot. */
+    readonly slot: string;
+    /** The size the CONTAINER claims, for formats that declare one; `null` for ICNS. */
+    readonly declared: { readonly width: number; readonly height: number } | null;
+    /** The size the payload's own PNG header carries. */
+    readonly width: number;
+    readonly height: number;
+}
+
+describe('generated container entries', () => {
+    let outDir: string;
+    let srcDir: string;
+
+    beforeEach(async () => {
+        outDir = await mkdtemp(path.join(tmpdir(), 'chimera-icons-out-'));
+        srcDir = await mkdtemp(path.join(tmpdir(), 'chimera-icons-src-'));
+    });
+
+    afterEach(async () => {
+        await rm(outDir, { recursive: true, force: true });
+        await rm(srcDir, { recursive: true, force: true });
+    });
+
+    /** Writes a master of `width`×`height` px into the scratch dir; returns its path. */
+    async function writeMaster(width: number, height: number): Promise<string> {
+        const master = path.join(srcDir, `master-${width}x${height}.png`);
+        await sharp({
+            create: {
+                width,
+                height,
+                channels: 4,
+                background: { r: 255, g: 80, b: 0, alpha: 1 },
+            },
+        })
+            .png()
+            .toFile(master);
+        return master;
+    }
+
+    /** A square master of `width` px. */
+    const squareMaster = (width: number): Promise<string> => writeMaster(width, width);
+
+    /** Writes a master of `width`×`height` px (square by default) and generates from it. */
+    async function generateFromMaster(width: number, height: number = width): Promise<void> {
+        await generateIcons({ sourcePng: await writeMaster(width, height), outDir });
+    }
+
+    it.each(MASTER_WIDTHS)(
+        'writes only exactly-square .icns entries from a %ipx master',
+        async (width) => {
+            await generateFromMaster(width);
+
+            const entries = icnsPngEntries(
+                await readFile(path.join(outDir, `${DEFAULT_ICON_BASENAME}.icns`)),
+            );
+
+            // Negative control, asserted before the property: a parser that found
+            // nothing satisfies "every entry is square" vacuously, and would green
+            // this test over a container with no images in it at all.
+            expect(entries.length).toBeGreaterThan(0);
+
+            expect(entries.filter((entry) => entry.width !== entry.height)).toEqual([]);
+        },
+    );
+
+    it.each(MASTER_WIDTHS)(
+        'writes only exactly-square .ico entries, matching their directory, from a %ipx master',
+        async (width) => {
+            await generateFromMaster(width);
+
+            const entries = icoEntries(
+                await readFile(path.join(outDir, `${DEFAULT_ICON_BASENAME}.ico`)),
+            );
+
+            expect(entries.length).toBeGreaterThan(0);
+
+            expect(entries.filter((entry) => entry.width !== entry.height)).toEqual([]);
+            // The directory is what a shell reads to pick an entry; a payload that
+            // disagrees with it is displayed at the declared size and resampled.
+            expect(
+                entries.filter(
+                    (entry) =>
+                        entry.declared?.width !== entry.width ||
+                        entry.declared.height !== entry.height,
+                ),
+            ).toEqual([]);
+        },
+    );
+
+    it('fills exactly the .icns slots macOS reads, each at the size its slot means', async () => {
+        // Written out rather than derived from `ICNS_SLOTS`: comparing the output
+        // against the constant that produced it asserts only that the loop ran.
+        // The sizes are not free either — `ic13`/`ic14` are the @2x slots of the
+        // size below them, so they are the same pixel count as `ic08`/`ic09`, and
+        // a map that "simplified" that away would halve the Retina ladder.
+        await generateFromMaster(1825);
+
+        const bySlot = Object.fromEntries(
+            icnsPngEntries(await readFile(path.join(outDir, `${DEFAULT_ICON_BASENAME}.icns`))).map(
+                (entry) => [entry.slot, entry.width],
+            ),
+        );
+
+        expect(bySlot).toEqual({
+            ic07: 128,
+            ic08: 256,
+            ic09: 512,
+            ic10: 1024,
+            ic11: 32,
+            ic12: 64,
+            ic13: 256,
+            ic14: 512,
+        });
+    });
+
+    it('carries no chunk beyond those eight — none duplicated, none non-PNG', async () => {
+        // `Object.fromEntries` above collapses a duplicate slot onto one key, and
+        // `icnsPngEntries` SKIPS a payload that is not a PNG. So a file with `ic07`
+        // twice, or with a truncated/garbage payload alongside the eight, satisfies
+        // the slot map exactly. Counting the RAW chunks against the PNG entries is
+        // what closes both: it is the only assertion here that can observe a chunk
+        // the slot map cannot see.
+        await generateFromMaster(1825);
+
+        const icns = await readFile(path.join(outDir, `${DEFAULT_ICON_BASENAME}.icns`));
+        const chunks = icnsChunkSlots(icns);
+        const pngEntries = icnsPngEntries(icns);
+
+        expect(chunks).toHaveLength(8);
+        expect(pngEntries).toHaveLength(chunks.length);
+        expect([...new Set(chunks)]).toHaveLength(chunks.length);
+    });
+
+    it('fills the .ico ladder, largest first, with a 256 entry the Windows build requires', async () => {
+        // The 256 is a build gate, not a nicety: electron-builder validates
+        // `win.icon` through its `app-builder` binary and fails the whole Windows
+        // build with ERR_ICON_TOO_SMALL when the largest entry is under 256×256.
+        // The set that shipped topped out at 256×255 and did exactly that.
+        await generateFromMaster(1825);
+
+        const entries = icoEntries(
+            await readFile(path.join(outDir, `${DEFAULT_ICON_BASENAME}.ico`)),
+        );
+
+        expect(entries.map((entry) => entry.width)).toEqual([256, 128, 96, 64, 48, 32, 24, 16]);
+        // Asserted on the DECLARED byte too, because 256 is the one size the
+        // format's single-byte width field cannot spell — it is stored as 0, and
+        // an encoder that wrote 256 there would truncate to 0 by accident and look
+        // correct right up until it did not.
+        expect(entries[0]?.declared).toEqual({ width: 256, height: 256 });
+    });
+
+    /**
+     * A codec stand-in whose renders are whatever `render` says, driven through the
+     * public `importer` seam. The real `sharp` cannot be made to return a wrong-sized
+     * PNG, so this is the only way to reach the render self-check — and without
+     * reaching it, that check can be deleted with the whole suite still green.
+     */
+    function codecReturning(render: (size: number) => Buffer): ModuleImporter {
+        const factory = () => ({
+            resize: (width: number) => ({
+                png: () => ({ toBuffer: () => Promise.resolve(render(width)) }),
+            }),
+        });
+        return () => Promise.resolve({ default: factory });
+    }
+
+    /** A real, valid PNG of the given dimensions. */
+    async function pngOf(width: number, height: number): Promise<Buffer> {
+        return sharp({
+            create: { width, height, channels: 4, background: { r: 1, g: 2, b: 3, alpha: 1 } },
+        })
+            .png()
+            .toBuffer();
+    }
+
+    /**
+     * A codec that is CORRECT at every size except `badSize`, where it hands back
+     * `bad`. Correct-everywhere-but-one rather than wrong-everywhere on purpose: a
+     * codec that is wrong at every size is caught by whichever render happens to run
+     * first, which would pass even if the check only ever ran once.
+     */
+    async function codecBadAt(badSize: number, bad: Buffer): Promise<ModuleImporter> {
+        const good = new Map<number, Buffer>();
+        for (const size of [1024, 512, 256, 128, 96, 64, 48, 32, 24, 16]) {
+            good.set(size, await pngOf(size, size));
+        }
+        return codecReturning((size) => (size === badSize ? bad : good.get(size)!));
+    }
+
+    it('refuses a render that came back the wrong size, naming the size that failed', async () => {
+        // The defect class this module exists to have fixed, injected directly: a
+        // resize that returns 256×255 produces a perfectly valid PNG, and the
+        // container assembles around it without complaint. Nothing downstream of
+        // this check can tell that render from a correct one.
+        await expect(
+            generateIcons({
+                sourcePng: await squareMaster(1024),
+                outDir,
+                importer: await codecBadAt(256, await pngOf(256, 255)),
+            }),
+        ).rejects.toThrow(/the 256px render came out 256×255/u);
+    });
+
+    it('refuses a render that is not a PNG at all', async () => {
+        // The other arm of the same check. Separate because it is a different
+        // statement: a codec handing back something undecodable would otherwise be
+        // written into the container as an opaque payload, which `icnsPngEntries`
+        // SKIPS — so the squareness tests above would pass over it.
+        await expect(
+            generateIcons({
+                sourcePng: await squareMaster(1024),
+                outDir,
+                importer: await codecBadAt(64, Buffer.from('not a png at all, but bytes')),
+            }),
+        ).rejects.toThrow(/the 64px render is not a PNG/u);
+    });
+
+    it('writes nothing when a render fails its self-check', async () => {
+        // The refusal has to happen before any output exists. Every size is
+        // rendered up front precisely so a bad one cannot leave a half-written set
+        // on disk — asserted on a directory that does not already exist, since
+        // `outDir` is created by the fixture.
+        const nested = path.join(outDir, 'nested', 'icons');
+
+        await expect(
+            generateIcons({
+                sourcePng: await squareMaster(1024),
+                outDir: nested,
+                importer: await codecBadAt(16, await pngOf(16, 15)),
+            }),
+        ).rejects.toThrow(/the 16px render came out 16×15/u);
+
+        await expect(stat(nested)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('pads a non-square master with transparency, not with opaque black', async () => {
+        // `fit: 'contain'` letterboxes rather than crops, and sharp's DEFAULT pad
+        // is opaque black — so dropping the explicit background silently puts
+        // black bars down two edges of every icon of any game whose logo is not
+        // square. Nothing else in the suite can see it: the bars are square, the
+        // right size, and a perfectly valid PNG.
+        await generateFromMaster(1024, 512);
+
+        const { data, info } = await sharp(path.join(outDir, `${DEFAULT_ICON_BASENAME}-256.png`))
+            .ensureAlpha()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+        // Top-left is pad for a wide master: the image is centred vertically, so
+        // the first row is above the content.
+        expect(info.channels).toBe(4);
+        expect([...data.subarray(0, 4)]).toEqual([0, 0, 0, 0]);
+        // The centre still carries the master's colour — the negative control that
+        // separates "padded transparent" from "wrote an empty image".
+        const centre = (128 * info.width + 128) * info.channels;
+        expect([...data.subarray(centre, centre + 4)]).toEqual([255, 80, 0, 255]);
+    });
+});
+
+/** Big-endian `width`/`height` out of a PNG's IHDR — bytes 16 and 20 of the file. */
+function pngDimensions(png: Buffer): { width: number; height: number } {
+    if (png.byteLength < 24 || png.readUInt32BE(0) !== 0x8950_4e47) {
+        throw new Error('not a PNG payload');
+    }
+    return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+}
+
+/**
+ * Every chunk type in an `.icns`, in file order, whatever its payload — the raw
+ * walk `icnsPngEntries` filters. Separate because the filter is what makes an
+ * unexpected chunk invisible, so the count has to come from before it.
+ */
+function icnsChunkSlots(icns: Buffer): readonly string[] {
+    if (icns.subarray(0, 4).toString('ascii') !== 'icns') throw new Error('not an .icns');
+    const slots: string[] = [];
+    for (let offset = 8; offset + 8 <= icns.byteLength; ) {
+        const length = icns.readUInt32BE(offset + 4);
+        if (length < 8 || offset + length > icns.byteLength) {
+            throw new Error(`.icns chunk at ${offset} has an out-of-range length ${length}`);
+        }
+        slots.push(icns.subarray(offset, offset + 4).toString('ascii'));
+        offset += length;
+    }
+    return slots;
+}
+
+/**
+ * Every PNG-carrying chunk of an `.icns`. Chunks with raw (non-PNG) payloads are
+ * skipped rather than rejected — the legacy `is32`/`s8mk` forms are uncompressed
+ * masks, and they carry no header to disagree with. That skip is why
+ * `icnsChunkSlots` exists: this function alone cannot see a chunk it dropped.
+ */
+function icnsPngEntries(icns: Buffer): readonly ContainerEntry[] {
+    if (icns.subarray(0, 4).toString('ascii') !== 'icns') throw new Error('not an .icns');
+    const declaredLength = icns.readUInt32BE(4);
+    if (declaredLength !== icns.byteLength) {
+        throw new Error(`.icns length field ${declaredLength} != file ${icns.byteLength}`);
+    }
+
+    const entries: ContainerEntry[] = [];
+    for (let offset = 8; offset + 8 <= icns.byteLength; ) {
+        const slot = icns.subarray(offset, offset + 4).toString('ascii');
+        const length = icns.readUInt32BE(offset + 4);
+        if (length < 8 || offset + length > icns.byteLength) {
+            throw new Error(`.icns chunk '${slot}' has an out-of-range length ${length}`);
+        }
+        const payload = icns.subarray(offset + 8, offset + length);
+        if (payload.byteLength >= 24 && payload.readUInt32BE(0) === 0x8950_4e47) {
+            entries.push({ slot, declared: null, ...pngDimensions(payload) });
+        }
+        offset += length;
+    }
+    return entries;
+}
+
+/**
+ * One `bWidth`/`bHeight` byte of an ICO directory entry. 256 is the one size the
+ * single-byte field cannot hold and is stored as 0 — so this is deliberately not a
+ * `??` fallback, which would leave a real 0 meaning 0 and silently read every
+ * 256×256 entry as absent.
+ */
+function icoDimension(byte: number | undefined): number {
+    if (byte === undefined) throw new Error('.ico directory entry is truncated');
+    return byte === 0 ? 256 : byte;
+}
+
+/** Every directory entry of an `.ico`, paired with its payload's own dimensions. */
+function icoEntries(ico: Buffer): readonly ContainerEntry[] {
+    if (ico.readUInt16LE(0) !== 0 || ico.readUInt16LE(2) !== 1) throw new Error('not an .ico');
+    const count = ico.readUInt16LE(4);
+
+    return Array.from({ length: count }, (_unused, index) => {
+        const at = 6 + index * 16;
+        const declared = { width: icoDimension(ico[at]), height: icoDimension(ico[at + 1]) };
+        const byteLength = ico.readUInt32LE(at + 8);
+        const imageOffset = ico.readUInt32LE(at + 12);
+        if (imageOffset + byteLength > ico.byteLength) {
+            throw new Error(`.ico entry ${index} points past the end of the file`);
+        }
+        const payload = ico.subarray(imageOffset, imageOffset + byteLength);
+        return { slot: String(index), declared, ...pngDimensions(payload) };
+    });
+}
 
 /** Collects everything written to stderr until `restore()`. */
 function captureStderr(): { text: () => string; restore: () => void } {
@@ -338,19 +705,12 @@ function missingModule(
 
 /**
  * Covers the on-demand codec load: that it stays on demand, that both interop
- * shapes resolve, and that every way it can fail says which codec and what to
- * do. The rationale for loading on demand at all lives on `loadIconCodecs`.
+ * shapes resolve, and that every way it can fail says what to do. The rationale
+ * for loading on demand at all lives on `loadImageCodec`.
  */
-describe('loadIconCodecs', () => {
+describe('loadImageCodec', () => {
     /** A resolved sharp: CJS `module.exports = fn`, so ESM sees it as `default`. */
     const sharpModule = { default: () => undefined };
-    /** A resolved png2icons: the `__esModule` named-export namespace. */
-    const png2iconsModule = {
-        __esModule: true,
-        createICNS: () => null,
-        createICO: () => null,
-        BICUBIC2: 3,
-    };
 
     function importerFor(modules: Readonly<Record<string, unknown>>) {
         return (specifier: string): Promise<unknown> => {
@@ -361,13 +721,17 @@ describe('loadIconCodecs', () => {
         };
     }
 
-    it('names both codecs and the one-time install command', () => {
+    it('names the codec and the one-time install command', () => {
         // Asserted on the constant itself, not on a thrown message: the text IS
         // the deliverable — it is what a game author sees, and the only thing
         // standing between them and a bare ERR_MODULE_NOT_FOUND.
-        expect(MISSING_CODECS_MESSAGE).toContain('sharp');
-        expect(MISSING_CODECS_MESSAGE).toContain('png2icons');
-        expect(MISSING_CODECS_MESSAGE).toContain('pnpm add -D sharp png2icons');
+        expect(MISSING_CODEC_MESSAGE).toContain('sharp');
+        expect(MISSING_CODEC_MESSAGE).toContain('pnpm add -D sharp');
+        // The containers are assembled here now, so nothing is left to advise a
+        // second install for. Pinned because the reverse — advice naming a package
+        // this tool no longer uses — sends a reader to install something that
+        // changes nothing, which is the failure the whole message exists to avoid.
+        expect(MISSING_CODEC_MESSAGE).not.toContain('png2icons');
     });
 
     it.each(MODULE_NOT_FOUND_CODES)(
@@ -379,23 +743,12 @@ describe('loadIconCodecs', () => {
             // because it is all that survives the translation into the install
             // message.
             const importer = (specifier: string): Promise<unknown> =>
-                specifier === 'sharp'
-                    ? Promise.reject(missingModule(specifier, code))
-                    : Promise.resolve(png2iconsModule);
+                Promise.reject(missingModule(specifier, code));
 
-            await expect(loadIconCodecs(importer)).rejects.toThrow(MISSING_CODECS_MESSAGE);
-            await expect(loadIconCodecs(importer)).rejects.toMatchObject({ cause: { code } });
+            await expect(loadImageCodec(importer)).rejects.toThrow(MISSING_CODEC_MESSAGE);
+            await expect(loadImageCodec(importer)).rejects.toMatchObject({ cause: { code } });
         },
     );
-
-    it('rejects with the actionable message when png2icons is missing', async () => {
-        // Asserted separately from the sharp case: a loader that awaited only
-        // the first import would pass the test above and still fail opaquely
-        // here, which is the asymmetry a single combined case cannot see.
-        await expect(loadIconCodecs(importerFor({ sharp: sharpModule }))).rejects.toThrow(
-            MISSING_CODECS_MESSAGE,
-        );
-    });
 
     it('does NOT advise installing a codec whose import failed for another reason', async () => {
         // sharp ships prebuilt native bindings, and a platform or Node-ABI
@@ -406,11 +759,7 @@ describe('loadIconCodecs', () => {
         const nativeFailure = new Error(
             'Could not load the sharp module using the darwin-arm64 runtime',
         );
-        const rejects = loadIconCodecs((specifier) =>
-            specifier === 'sharp'
-                ? Promise.reject(nativeFailure)
-                : Promise.resolve(png2iconsModule),
-        );
+        const rejects = loadImageCodec(() => Promise.reject(nativeFailure));
 
         await expect(rejects).rejects.toThrow(/'sharp' could not be loaded/u);
         await expect(rejects).rejects.not.toThrow(/pnpm add -D/u);
@@ -422,7 +771,7 @@ describe('loadIconCodecs', () => {
         // reports absence codelessly. Whatever happened, the headline must not
         // assert a filesystem fact it did not check — `cause` carries the truth.
         const codeless = new Error('something failed, and said nothing about what');
-        const rejects = loadIconCodecs(() => Promise.reject(codeless));
+        const rejects = loadImageCodec(() => Promise.reject(codeless));
 
         await expect(rejects).rejects.toThrow(/'sharp' could not be loaded/u);
         await expect(rejects).rejects.not.toThrow(/installed/u);
@@ -436,118 +785,55 @@ describe('loadIconCodecs', () => {
         // hardened against.
         // @chimera-review: rejecting with a non-Error IS the case under test.
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
-        const rejects = loadIconCodecs(() => Promise.reject('not even an Error'));
+        const rejects = loadImageCodec(() => Promise.reject('not even an Error'));
 
         await expect(rejects).rejects.toThrow(/'sharp' could not be loaded/u);
         await expect(rejects).rejects.toMatchObject({ cause: 'not even an Error' });
     });
 
-    it('unwraps sharp from the CJS default slot, and png2icons from its namespace', async () => {
-        const codecs = await loadIconCodecs(
-            importerFor({ sharp: sharpModule, png2icons: png2iconsModule }),
-        );
-        expect(codecs.sharp).toBe(sharpModule.default);
-        expect(codecs.png2icons.createICNS).toBe(png2iconsModule.createICNS);
+    it('unwraps sharp from the CJS default slot', async () => {
+        const codec = await loadImageCodec(importerFor({ sharp: sharpModule }));
+        expect(codec).toBe(sharpModule.default);
     });
 
     it('accepts sharp delivered as the bare function, without a default slot', async () => {
         // tsx's CJS transform hands back `module.exports` itself rather than an
         // interop namespace, so the same source must survive both shapes.
         const bareSharp = () => undefined;
-        const codecs = await loadIconCodecs(
-            importerFor({ sharp: bareSharp, png2icons: png2iconsModule }),
-        );
-        expect(codecs.sharp).toBe(bareSharp);
+        const codec = await loadImageCodec(importerFor({ sharp: bareSharp }));
+        expect(codec).toBe(bareSharp);
     });
 
-    it('accepts png2icons delivered under a default slot', async () => {
-        const codecs = await loadIconCodecs(
-            importerFor({ sharp: sharpModule, png2icons: { default: png2iconsModule } }),
-        );
-        expect(codecs.png2icons.createICNS).toBe(png2iconsModule.createICNS);
-    });
-
-    it('names the offending codec when one resolves to something it cannot drive', async () => {
-        // Naming it is the whole reason the check exists — a shared message
-        // would make the two codecs, and the missing-install case, all
-        // indistinguishable to a reader and to this assertion.
+    it('names the codec when it resolves to something it cannot drive', async () => {
+        // Naming it is the whole reason the check exists — a message that said
+        // only "a codec is unusable" would be indistinguishable from the
+        // missing-install case both to a reader and to this assertion.
         await expect(
-            loadIconCodecs(
-                importerFor({ sharp: { default: 'not a function' }, png2icons: png2iconsModule }),
-            ),
+            loadImageCodec(importerFor({ sharp: { default: 'not a function' } })),
         ).rejects.toThrow(/'sharp' resolved but is not callable/u);
-
-        await expect(
-            loadIconCodecs(importerFor({ sharp: sharpModule, png2icons: { __esModule: true } })),
-        ).rejects.toThrow(/'png2icons' resolved but does not provide/u);
     });
 
-    it('rejects a png2icons missing ANY member the generate path calls', async () => {
-        // Each fixture is a codec a one-member check would accept.
-        const partial = { createICNS: () => null, BICUBIC2: 3 };
-        await expect(
-            loadIconCodecs(importerFor({ sharp: sharpModule, png2icons: partial })),
-        ).rejects.toThrow(/'png2icons' resolved but does not provide/u);
-
-        const noConstant = { createICNS: () => null, createICO: () => null };
-        await expect(
-            loadIconCodecs(importerFor({ sharp: sharpModule, png2icons: noConstant })),
-        ).rejects.toThrow(/'png2icons' resolved but does not provide/u);
-
-        // Truthy but not callable: distinguishes a `typeof === 'function'` check
-        // from a bare truthiness check, which the fixtures above cannot.
-        const notCallable = { createICNS: 3, createICO: 3, BICUBIC2: 3 };
-        await expect(
-            loadIconCodecs(importerFor({ sharp: sharpModule, png2icons: notCallable })),
-        ).rejects.toThrow(/'png2icons' resolved but does not provide/u);
-
-        // Present but the wrong TYPE, which only a `typeof === 'number'` check
-        // catches — a namespace whose `BICUBIC2` is a string is not the one this
-        // module was written against.
-        const stringConstant = {
-            createICNS: () => null,
-            createICO: () => null,
-            BICUBIC2: 'BICUBIC2',
-        };
-        await expect(
-            loadIconCodecs(importerFor({ sharp: sharpModule, png2icons: stringConstant })),
-        ).rejects.toThrow(/'png2icons' resolved but does not provide/u);
-    });
-
-    it('reports rather than throws a TypeError when a codec resolves to nothing', async () => {
+    it('reports rather than throws a TypeError when the codec resolves to nothing', async () => {
         // `importer` is public, so a loader handing back null reaches the
-        // unwrappers. Reading `.default` off it unguarded yields "cannot read
+        // unwrapper. Reading `.default` off it unguarded yields "cannot read
         // properties of null" — the opaque failure this whole path exists to
         // prevent, produced by the code meant to prevent it.
         for (const empty of [null, undefined]) {
-            await expect(loadIconCodecs(() => Promise.resolve(empty))).rejects.toThrow(
+            await expect(loadImageCodec(() => Promise.resolve(empty))).rejects.toThrow(
                 /'sharp' resolved but is not callable/u,
             );
         }
     });
 
-    it('names sharp first when BOTH codecs are unusable', () => {
-        // Pins the load ORDER, which is otherwise invisible: every other case
-        // breaks exactly one codec, so swapping the two statements passes them
-        // all while changing which failure a user is told about.
-        return expect(
-            loadIconCodecs(importerFor({ sharp: 'not a function', png2icons: 'not a codec' })),
-        ).rejects.toThrow(/'sharp'/u);
-    });
-
-    it('resolves the real codecs through a real dynamic import', async () => {
+    it('resolves the real codec through a real dynamic import', async () => {
         // The fakes above pin the unwrap logic; only this pins that the unwrap
-        // matches what the REAL packages actually deliver under this loader.
-        const codecs = await loadIconCodecs();
-        expect(typeof codecs.sharp).toBe('function');
-        expect(typeof codecs.png2icons.createICNS).toBe('function');
-        expect(typeof codecs.png2icons.createICO).toBe('function');
-        expect(typeof codecs.png2icons.BICUBIC2).toBe('number');
+        // matches what the REAL package actually delivers under this loader.
+        expect(typeof (await loadImageCodec())).toBe('function');
     });
 
-    it('is the only route to the codecs — neither is loaded eagerly', async () => {
+    it('is the only route to the codec — it is never loaded eagerly', async () => {
         // A property of the module GRAPH, which no value a test can read
-        // exposes: with a codec statically imported every assertion above still
+        // exposes: with the codec statically imported every assertion above still
         // passes, in a checkout that has it installed.
         const source = await readFile(
             fileURLToPath(new URL('./index.ts', import.meta.url)),
@@ -557,12 +843,11 @@ describe('loadIconCodecs', () => {
 
         // Positive first, and against the REAL file: `createSourceFile` recovers
         // from a syntax error by dropping statements, so an empty result is
-        // indistinguishable from a clean one — the two negatives below would
-        // both pass over a source that was never parsed at all.
+        // indistinguishable from a clean one — the negative below would pass over
+        // a source that was never parsed at all.
         expect(eager).toContain('node:fs/promises');
 
         expect(eager).not.toContain('sharp');
-        expect(eager).not.toContain('png2icons');
     });
 
     it('detects every eager-load form, and no deferred or erased one', () => {

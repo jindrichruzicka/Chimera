@@ -9,10 +9,10 @@ the app package (`pnpm --filter @chimera-engine/<game> icons:generate`); the mas
 `assets/icons/icon.png` the template already commits, and the generator writes the
 `chimera-*` set alongside it without touching it.
 
-No codec is added to the scaffold. `sharp` and `png2icons` are optional peers of
-`@chimera-engine/electron` and are not installed — `sharp` is a multi-megabyte native
-binary, and most games never regenerate their icons — so the script is wired and correct
-but reports `pnpm add -D sharp png2icons` until an author opts in.
+No codec is added to the scaffold. `sharp` is an optional peer of
+`@chimera-engine/electron` and is not installed directly — it is a multi-megabyte native
+binary, and most games never regenerate their icons — so the script is wired and correct,
+and reports `pnpm add -D sharp` if it cannot resolve one.
 
 The template's `electron-builder.yml` now documents what actually consumes what, rather
 than implying the generated set is what brands the app. Replacing the single committed

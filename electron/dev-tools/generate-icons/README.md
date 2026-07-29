@@ -34,7 +34,7 @@ the tool's own location. Each flag is explicit for a different reason:
   no `docs/assets/`, so a bare run refuses, names that path, and names the
   flags. That failure is loud.
 - **`--out`** defaults to `electron/assets/icons`. A game **does** have an
-  `electron/` directory — its main-process source — so once the codecs are
+  `electron/` directory — its main-process source — so once the codec is
   installed, omitting `--out` writes eleven files into it and exits **0**. That
   failure is silent, which is why the scaffolded script never relies on the
   default.
@@ -45,31 +45,60 @@ published bin lives at `dist/dev-tools/generate-icons/`, so a module-relative
 derivation would resolve both defaults inside the installed package, at paths no
 consumer has.
 
-## The codecs are OPTIONAL peer dependencies
+## The codec is an OPTIONAL peer dependency
 
-`sharp` (a multi-megabyte platform-specific native binary) and `png2icons` are
-declared as **optional peers** of `@chimera-engine/electron`, so nothing in the
-engine's dependency closure asks a game to install either. Opt in once:
+`sharp` — a multi-megabyte platform-specific native binary — is declared as an
+**optional peer** of `@chimera-engine/electron`, so nothing in the engine's
+dependency closure asks a game to install it. Opt in once:
 
 ```bash
-pnpm add -D sharp png2icons
+pnpm add -D sharp
 ```
 
 Until then the bin is reachable and runs, and fails with exactly that
 instruction:
 
 ```
-generate-icons: sharp + png2icons are required to generate icons and are
-optional peer dependencies. Install them as devDependencies: pnpm add -D sharp png2icons
+generate-icons: sharp is required to generate icons and is an optional peer
+dependency. Install it as a devDependency: pnpm add -D sharp
 ```
 
 Stated precisely, because the loose version is wrong: a Next-based scaffold
 installs `sharp` anyway — Next declares it as an `optionalDependency`, and pnpm's
 `.pnpm/node_modules` hoisted layer is on the resolution path — so the tool there
-can load it, at Next's version rather than the declared peer range. What this
-design saves such a project is the **second** copy and `png2icons`, and it is
-what keeps both out of the closure for anyone installing `@chimera-engine/electron`
-outside a Next app. In a fresh scaffold the run above fails on `png2icons`.
+can load it, at Next's version rather than the declared peer range, and a run
+in such a scaffold generates the set rather than refusing. What this design saves
+such a project is the **second** copy, and it is what keeps the binary out of the
+closure entirely for anyone installing `@chimera-engine/electron` outside a Next
+app.
+
+`sharp` is the only codec. The `.icns` and `.ico` containers are assembled here,
+byte by byte, around exact-size renders — see below.
+
+## Why the containers are assembled here
+
+Every image in the set, inside the containers as well as loose on disk, is an
+exact-size square render produced directly from the master. Nothing downstream
+resizes anything, and that is a correctness requirement rather than a preference.
+
+The generator used to hand the whole master to `png2icons` and let it resize
+internally, which cost the set twice:
+
+- it derived each output height as `floor(srcHeight × (target ÷ srcWidth))`, and
+  on a master whose width is not a power of two the double round-trip lands just
+  below the integer — `32 ÷ 1825 × 1825 = 31.999999999999996`. Every
+  power-of-two entry came out **one pixel short in height**. The shell stretches
+  those back to square at display time, and `.ico`'s largest entry (256×255)
+  fell under electron-builder's 256×256 minimum, failing the Windows build with
+  `ERR_ICON_TOO_SMALL`;
+- it decimated a 1825px master to 16–64px in a single bicubic step with no
+  low-pass prefilter, which aliases hard and blows isolated pixels out at
+  high-contrast edges. libvips' shrink-then-Lanczos does not.
+
+The `.icns` carries `ic07`–`ic14`, all PNG — exactly the set electron-builder's
+own generator emits. `ic04`/`ic05` are deliberately absent: those slots are raw
+`ARGB`, and macOS' IconServices (the path Finder and the Dock use, unlike
+`NSImage`) rejects a PNG there and falls back to the generic application icon.
 
 §4.32 carries the rationale for the arrangement and what enforces it; this file
 does not restate it.

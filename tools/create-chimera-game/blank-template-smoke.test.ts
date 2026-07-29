@@ -473,7 +473,7 @@ describe('blank template smoke harness', () => {
         }
     });
 
-    it('declares no image codec anywhere — sharp and png2icons stay opt-in', async () => {
+    it('declares no image codec anywhere — sharp stays opt-in', async () => {
         // The lean-install half of the contract: a scaffolded game that never
         // regenerates its icons must not carry the native binary. Every
         // dependency-bearing section is checked, not just the two obvious ones —
@@ -498,7 +498,7 @@ describe('blank template smoke harness', () => {
             const declared = pkg[section];
             // Normalised to the NAMES declared, so one assertion covers both shapes.
             const names = Array.isArray(declared) ? [...declared] : Object.keys(declared ?? {});
-            for (const codec of ['sharp', 'png2icons']) {
+            for (const codec of ['sharp']) {
                 expect(names, `${section}.${codec}`).not.toContain(codec);
             }
         }

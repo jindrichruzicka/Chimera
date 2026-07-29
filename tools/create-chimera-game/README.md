@@ -77,13 +77,13 @@ without launching anything.
 standalone root forwards each entry, so every one runs from the project directory the scaffold
 created — the same commands the monorepo itself uses:
 
-| Command                              | From                      | What it does                                                     |
-| ------------------------------------ | ------------------------- | ---------------------------------------------------------------- |
-| `pnpm dev:mp <N>`                    | `chimera-dev-mp`          | N-player local multiplayer session (above)                       |
-| `pnpm fetch:fonts --url "<css url>"` | `chimera-fetch-fonts`     | Download + self-host Google fonts (Invariant #97)                |
-| `pnpm validate:assets`               | `chimera-validate-assets` | Check every asset reference resolves (Invariants #22/#52)        |
-| `pnpm icons:generate`                | `chimera-generate-icons`  | Opt-in multi-size icon set (needs `pnpm add -D sharp png2icons`) |
-| `pnpm lint`                          | `.../eslint` subpath      | The architecture guardrails (below)                              |
+| Command                              | From                      | What it does                                              |
+| ------------------------------------ | ------------------------- | --------------------------------------------------------- |
+| `pnpm dev:mp <N>`                    | `chimera-dev-mp`          | N-player local multiplayer session (above)                |
+| `pnpm fetch:fonts --url "<css url>"` | `chimera-fetch-fonts`     | Download + self-host Google fonts (Invariant #97)         |
+| `pnpm validate:assets`               | `chimera-validate-assets` | Check every asset reference resolves (Invariants #22/#52) |
+| `pnpm icons:generate`                | `chimera-generate-icons`  | Opt-in multi-size icon set (needs `pnpm add -D sharp`)    |
+| `pnpm lint`                          | `.../eslint` subpath      | The architecture guardrails (below)                       |
 
 Each forwards to the app package. For the four bins that is where they are linked (the root
 manifest declares no `@chimera-engine/*` dependency, so pnpm links them into
@@ -191,13 +191,15 @@ window and dock icon. Nothing else is required to rebrand.
 
 The scaffold also ships an **opt-in** `icons:generate` script for the engine-shaped multi-size
 set (`chimera-16..1024.png`, `chimera.icns`, `chimera.ico`, and the `chimera.png` runtime
-fallback). It is opt-in because the engine declares neither codec as something your
-project must install:
+fallback). It is opt-in because the engine does not declare its image codec as something
+your project must install:
 
-1. `pnpm add -D sharp png2icons` in the app package — one time. They are optional peer
-   dependencies of `@chimera-engine/electron`, so nothing the engine declares asks your
-   project to install either — `sharp` alone is a multi-megabyte platform-specific native
-   binary. Until you install them, the script runs and tells you exactly this.
+1. `pnpm add -D sharp` in the app package — one time. It is an optional peer dependency
+   of `@chimera-engine/electron`, so nothing the engine declares asks your project to
+   install a multi-megabyte platform-specific native binary. If the tool cannot resolve
+   `sharp` at all it runs and tells you exactly this. (A Next-based scaffold usually can:
+   Next declares `sharp` as an optional dependency of its own, and pnpm keeps it on the
+   resolution path — so the script may simply work before you install anything.)
 2. `pnpm icons:generate` from the project root. Both `--source` and `--out` are already in
    the script and both matter — the tool's README explains why omitting `--out` writes into
    your `electron/` source tree instead of failing.

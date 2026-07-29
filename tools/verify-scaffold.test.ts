@@ -114,8 +114,8 @@ function seedInstallExcept(files: Map<string, string>, omittedBins: readonly str
         JSON.stringify({
             name: '@chimera-engine/electron',
             dependencies: { typescript: '^5.7.2' },
-            peerDependencies: { sharp: '^0.35.2', png2icons: '^2.0.1' },
-            peerDependenciesMeta: { sharp: { optional: true }, png2icons: { optional: true } },
+            peerDependencies: { sharp: '^0.35.2' },
+            peerDependenciesMeta: { sharp: { optional: true } },
         }),
     );
 }
@@ -305,35 +305,34 @@ function makeFakeRun(
                 'export const chimeraPlugin = {};',
             );
             // The installed manifest the arms read declarations off — what
-            // `npm install @chimera-engine/electron` consults. The codecs are
-            // OPTIONAL peers and deliberately absent from `dependencies`; the
-            // fake never writes them into any node_modules, which is what a
+            // `npm install @chimera-engine/electron` consults. The codec is an
+            // OPTIONAL peer and deliberately absent from `dependencies`; the
+            // fake never writes it into any node_modules, which is what a
             // correct install looks like.
             files.set(
                 path.join(electronRealDir, 'package.json'),
                 JSON.stringify({
                     name: '@chimera-engine/electron',
                     dependencies: { typescript: '^5.7.2' },
-                    peerDependencies: { sharp: '^0.35.2', png2icons: '^2.0.1' },
+                    peerDependencies: { sharp: '^0.35.2' },
                     peerDependenciesMeta: {
                         sharp: { optional: true },
-                        png2icons: { optional: true },
                     },
                 }),
             );
         }
         // A codec-absent `icons:generate` run: the bin resolves and RUNS, and
         // fails with the actionable message. This is the shape a real adopter
-        // hits before opting into the codecs — and the shape a no-opping entry
+        // hits before opting into the codec — and the shape a no-opping entry
         // guard could not produce, since that exits 0 saying nothing.
         if (args.includes('icons:generate')) {
             return {
                 status: 1,
                 stdout: '',
                 stderr:
-                    '[generate-icons] generate-icons: sharp + png2icons are required to generate ' +
-                    'icons and are optional peer dependencies. Install them as devDependencies: ' +
-                    'pnpm add -D sharp png2icons\n',
+                    '[generate-icons] generate-icons: sharp is required to generate icons and ' +
+                    'is an optional peer dependency. Install it as a devDependency: ' +
+                    'pnpm add -D sharp\n',
             };
         }
         // The validate-assets arm runs the SAME command twice and requires
@@ -1711,8 +1710,6 @@ describe('verifyScaffold', () => {
     it.each([
         ['sharp', 'app', () => path.join(APP_DIR, 'node_modules', 'sharp')],
         ['sharp', 'project root', () => path.join(TMP_ROOT, 'node_modules', 'sharp')],
-        ['png2icons', 'app', () => path.join(APP_DIR, 'node_modules', 'png2icons')],
-        ['png2icons', 'project root', () => path.join(TMP_ROOT, 'node_modules', 'png2icons')],
     ] as const)(
         'reports generate-icons when %s was declared into the %s node_modules',
         async (_codec, _where, location) => {
@@ -1720,10 +1717,10 @@ describe('verifyScaffold', () => {
             // HIDE: with the codec present the tool SUCCEEDS, so only an explicit
             // absence check can see that a project now asks for it.
             //
-            // Both codecs in both trees. Under pnpm's isolated linker a
-            // project's own node_modules holds exactly what it declared, so
-            // either location is a direct declaration — which is the defect this
-            // arm found on its first run, in the project root.
+            // Both trees. Under pnpm's isolated linker a project's own
+            // node_modules holds exactly what it declared, so either location is
+            // a direct declaration — which is the defect this arm found on its
+            // first run, in the project root.
             const { fs, files } = makeFakeFs();
             const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
                 if (args[0] === 'install') {
@@ -1771,15 +1768,15 @@ describe('verifyScaffold', () => {
         },
     );
 
-    it('reports generate-icons when the codec-absent run exits 0 (the no-op entry guard)', async () => {
+    it('reports generate-icons when the run exits 0 having written nothing (the no-op entry guard)', async () => {
         // Exactly what a bare `path.resolve` entry gate produces through a pnpm
         // bin shim: exit 0, nothing written, nothing said. Without this the arm
         // would read that silence as success.
         //
         // Asserted on the LOGGED message, not just the step: silence also trips
-        // the actionable-message check further down, so `failedStep` alone
-        // cannot tell "the guard no-opped" from "the message was wrong" — and
-        // this test would then pass with the exit-code check deleted.
+        // the actionable-message check on the other branch, so `failedStep`
+        // alone cannot tell "the guard no-opped" from "the message was wrong" —
+        // and this test would then pass with the written-set check deleted.
         const { fs, files } = makeFakeFs();
         const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) =>
             args.includes('icons:generate') ? { status: 0, stdout: '', stderr: '' } : undefined,
@@ -1792,7 +1789,26 @@ describe('verifyScaffold', () => {
 
         expect(result.ok).toBe(false);
         expect(result.failedStep).toBe('generate-icons');
-        expect(logged.join('\n')).toContain('exited 0 without png2icons');
+        expect(logged.join('\n')).toContain('exited 0 without writing assets/icons/chimera.png');
+    });
+
+    it('accepts a run that exits 0 HAVING written the set', async () => {
+        // The other legitimate outcome, and the reason the arm cannot simply
+        // require a non-zero exit: a scaffold where `sharp` is reachable from
+        // pnpm's hoisted layer — which a Next-based one is, since Next declares
+        // it as an optionalDependency — generates the set for real. Proving that
+        // requires asserting against another package's dependency graph, so both
+        // outcomes are graded and only "exited 0 and wrote nothing" fails.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
+            if (!args.includes('icons:generate')) return undefined;
+            files.set(path.join(APP_DIR, 'assets', 'icons', 'chimera.png'), 'PNG');
+            return { status: 0, stdout: '[generate-icons] Wrote 11 files\n', stderr: '' };
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(true);
     });
 
     it('reports generate-icons when the run fails without the actionable message', async () => {
@@ -1834,11 +1850,9 @@ describe('verifyScaffold', () => {
                                 ? {
                                       peerDependencies: {
                                           sharp: '^0.35.2',
-                                          png2icons: '^2.0.1',
                                       },
                                       peerDependenciesMeta: {
                                           sharp: { optional: true },
-                                          png2icons: { optional: true },
                                       },
                                   }
                                 : {}),
@@ -1871,10 +1885,9 @@ describe('verifyScaffold', () => {
                     JSON.stringify({
                         name: '@chimera-engine/electron',
                         dependencies: { typescript: '^5.7.2' },
-                        peerDependencies: { png2icons: '^2.0.1' },
+                        peerDependencies: {},
                         peerDependenciesMeta: {
                             sharp: { optional: true },
-                            png2icons: { optional: true },
                         },
                     }),
                 );
@@ -1912,10 +1925,9 @@ describe('verifyScaffold', () => {
                         JSON.stringify({
                             name: '@chimera-engine/electron',
                             dependencies: { typescript: '^5.7.2' },
-                            peerDependencies: { sharp: '^0.35.2', png2icons: '^2.0.1' },
+                            peerDependencies: { sharp: '^0.35.2' },
                             peerDependenciesMeta: {
                                 ...(sharpMeta === undefined ? {} : { sharp: sharpMeta }),
-                                png2icons: { optional: true },
                             },
                         }),
                     );

@@ -228,8 +228,8 @@ export const PROBE_UNKNOWN_TOKEN = '--ch-verify-scaffold-not-a-token';
 /** The rule that undeclared token must trip. */
 export const PROBE_UNKNOWN_TOKEN_RULE = 'chimera/no-unknown-token-overrides';
 
-/** The image codecs that must stay ABSENT from a base scaffold install. */
-export const PROBE_ICON_CODECS = ['sharp', 'png2icons'] as const;
+/** The image codec that must stay ABSENT from a base scaffold install. */
+export const PROBE_ICON_CODECS = ['sharp'] as const;
 
 /**
  * The pnpm config the probe installs under, written beside its manifest so the
@@ -512,21 +512,24 @@ async function runFontsArm(
 /**
  * The generate-icons arm (§4.32): prove the published `chimera-generate-icons`
  * bin is reachable and RUNS from the installed standalone app, and that nothing
- * in the scaffold hands it the codecs it is designed to do without.
+ * in the scaffold hands it the codec it is designed to do without.
  *
  * What "does without" means precisely, because the loose version is wrong: a
  * Next-based scaffold installs `sharp` regardless — Next declares it as an
  * `optionalDependency`, and pnpm's `.pnpm/node_modules` hoisted layer is on the
  * resolution path for a package living in the store, so the tool can load it
  * (at Next's version, not the declared peer range). What this design saves is
- * the SECOND copy and `png2icons`, and what this arm checks is that no direct
- * declaration puts either codec in a project that never asked for one. The run
- * below fails on `png2icons` alone.
+ * the SECOND copy, and what this arm checks is that no direct declaration puts
+ * the codec in a project that never asked for one.
  *
- * That makes the actionable message the assertion, not a full generate. A
- * generate would need the native binary installed into the tarball-override
- * probe, which is heavy and offline-fragile, and it would prove the opposite of
- * what this arm is for.
+ * The run below therefore has TWO legitimate outcomes, and asserting either one
+ * alone would be asserting against another package's dependency graph: with the
+ * hoisted `sharp` reachable it generates the set, and without it it refuses with
+ * the actionable install message. Both are graded, because the defect this arm
+ * exists for is neither — it is an exit 0 that wrote NOTHING, which is what a
+ * bare-path entry guard produces through a pnpm shim. "Exited 0" and "exited 0
+ * having actually written the set" are the same observation to a status check
+ * and opposite observations to this one.
  *
  * Load-bearing detail: the bin runs THROUGH `node_modules/.bin`, never a
  * resolved real path. pnpm's shim execs node with the symlinked path while
@@ -580,7 +583,7 @@ async function runGenerateIconsArm(
     //     frozen toolchain snapshot inherited both from the monorepo's root
     //     devDeps, so every scaffold declared them.
     //
-    //     What this does NOT prove is that the codecs are unresolvable. They can
+    //     What this does NOT prove is that the codec is unresolvable. It can
     //     still reach the tool from pnpm's `.pnpm/node_modules` hoisted layer —
     //     Next brings `sharp` that way — and proving otherwise would mean
     //     asserting against another package's dependency graph. The claim here
@@ -592,34 +595,39 @@ async function runGenerateIconsArm(
         ] as const) {
             if (await deps.fs.exists(path.join(root, 'node_modules', codec))) {
                 fail(
-                    `declared ${codec} into the ${label} node_modules — the codecs are OPTIONAL peers precisely so a project that never regenerates its icons does not ask for them`,
+                    `declared ${codec} into the ${label} node_modules — the codec is an OPTIONAL peer precisely so a project that never regenerates its icons does not ask for it`,
                 );
             }
         }
     }
 
-    // (d) The run, through the `.bin` shim, with `png2icons` absent. Exits
-    //     non-zero and says what to install.
+    // (d) The run, through the `.bin` shim. Graded on WORK DONE, not on status —
+    //     see the header for why both outcomes are legitimate here.
     const run = deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'icons:generate'], {
         cwd: tmp,
         capture: true,
     });
     const output = `${run.stdout}${run.stderr}`;
     if (run.status === 0) {
-        fail(
-            'exited 0 without png2icons — the likeliest cause is the entry guard no-opping through the .bin symlink, but anything that made the codec reachable would do it too',
-        );
-    }
-    // Non-zero alone is also what a bin that failed to load at all produces, so
-    // the failure has to be the ACTIONABLE one. Asserted as the install command
-    // rather than as a per-codec sweep: the command names both codecs, so a
-    // separate `includes(codec)` pass could only ever be satisfied by an output
-    // this check already accepted — two guards where one carries the claim.
-    const installCommand = `pnpm add -D ${PROBE_ICON_CODECS.join(' ')}`;
-    if (!output.includes(installCommand)) {
-        fail(
-            `failed without naming "${installCommand}" — a non-zero exit is also what a bin that could not load at all produces, so the message is what separates them`,
-        );
+        // The set, on disk, not the "Wrote N files" line — a bin that printed
+        // its own success message would satisfy a log check while having written
+        // nothing, which is precisely the failure being ruled out.
+        const generated = path.join(appDir, 'assets', 'icons', 'chimera.png');
+        if (!(await deps.fs.exists(generated))) {
+            fail(
+                'exited 0 without writing assets/icons/chimera.png — the likeliest cause is the entry guard no-opping through the .bin symlink, which exits 0 having done nothing at all',
+            );
+        }
+    } else {
+        // Non-zero alone is also what a bin that failed to load at all produces,
+        // so the failure has to be the ACTIONABLE one — the refusal a game author
+        // hits before they have opted into the codec.
+        const installCommand = `pnpm add -D ${PROBE_ICON_CODECS.join(' ')}`;
+        if (!output.includes(installCommand)) {
+            fail(
+                `failed without naming "${installCommand}" — a non-zero exit is also what a bin that could not load at all produces, so the message is what separates them`,
+            );
+        }
     }
 
     // (e) The declaration, read off the INSTALLED manifest rather than inferred
@@ -986,11 +994,12 @@ async function scaffoldPipeline(
     // 8e. generate-icons (§4.32): the packaged `chimera-generate-icons` bin,
     //     reachable and RUNNING through the app's `.bin` shim while neither
     //     optional codec is installed — reachability without install weight, and
-    //     the actionable message that makes the absent codecs explainable. See
+    //     the actionable message that makes an absent codec explainable. See
     //     {@link runGenerateIconsArm}.
     deps.log(
-        'running the packaged chimera-generate-icons bin with no codecs installed — the ' +
-            'missing-codec message printed next is the EXPECTED one…',
+        'running the packaged chimera-generate-icons bin from the scaffold — it either ' +
+            'writes the set or refuses with the missing-codec message, and a refusal ' +
+            'printed next is EXPECTED…',
     );
     await runGenerateIconsArm(deps, tmp, appDir);
 

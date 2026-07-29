@@ -50,21 +50,21 @@ export function buildStandaloneToolchainDeps(rootPkg: {
  * Root devDeps a standalone project must NOT inherit, beyond the
  * `@chimera-engine/*` workspace edges.
  *
- * The image codecs are the monorepo's own icon-generation tooling, needed only
- * to regenerate the ENGINE's committed icon set. They are also OPTIONAL peer
- * dependencies of `@chimera-engine/electron`, declared that way so nothing the
- * engine ships asks a consumer to install either — `sharp` alone is a
- * multi-megabyte platform-specific native binary. Inheriting them here would
- * defeat that at the root, before the peer declaration is ever consulted: every
- * scaffold would declare both no matter what electron says. A game opts in once,
- * with `pnpm add -D sharp png2icons`.
+ * The image codec is the monorepo's own icon-generation tooling, needed only
+ * to regenerate the ENGINE's committed icon set. It is also an OPTIONAL peer
+ * dependency of `@chimera-engine/electron`, declared that way so nothing the
+ * engine ships asks a consumer to install it — `sharp` is a multi-megabyte
+ * platform-specific native binary. Inheriting it here would defeat that at the
+ * root, before the peer declaration is ever consulted: every scaffold would
+ * declare it no matter what electron says. A game opts in once, with
+ * `pnpm add -D sharp`.
  *
  * Note this does not remove `sharp` from a scaffold's tree — Next declares it as
  * an optionalDependency, which is why the emitted root still names it under
  * `ignoredBuiltDependencies`. It removes it as a DIRECT devDependency the
  * project asked for.
  */
-const ENGINE_ONLY_TOOLCHAIN_DEPS: ReadonlySet<string> = new Set(['sharp', 'png2icons']);
+const ENGINE_ONLY_TOOLCHAIN_DEPS: ReadonlySet<string> = new Set(['sharp']);
 
 export interface StandaloneRootManifest {
     readonly name: string;
