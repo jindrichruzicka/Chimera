@@ -62,7 +62,7 @@ interface GameShellBaseProps {
     /**
      * When true, the local session is a read-only spectator (Invariant #114):
      * the action controls (undo / redo / end-turn) are locked exactly like a
-     * game-over, so the board is observable but inert. Absent means "player".
+     * game-over, so the playfield is observable but inert. Absent means "player".
      */
     readonly isSpectator?: boolean;
     readonly onUndo?: () => void | Promise<void>;
@@ -100,11 +100,11 @@ interface GameShellRegistryProps {
     readonly inputActions?: readonly InputAction[];
     readonly contentDatabase?: ContentDatabase | null;
     /**
-     * This game's content collections (§4.8), delivered to the board/screens as
+     * This game's content collections (§4.8), delivered to the playfield/screens as
      * the generic `GameScreenProps.content`. Game-agnostic plain data.
      */
     readonly content?: GameContent;
-    /** Latest verified commitment-mode reveal, passed through to the board. */
+    /** Latest verified commitment-mode reveal, passed through to the playfield. */
     readonly reveal?: CommitmentReveal | null;
     /**
      * Whether the local player hosted the match; passed through to screens as
@@ -346,15 +346,15 @@ function GameShellFrame(
         onSaveGame,
     } = props;
     const t = useTranslate();
-    // The result banner is an overlay on the live board. Once the player advances
+    // The result banner is an overlay on the live playfield. Once the player advances
     // to another screen (e.g. the post-game summary), suppress it so it does not
     // float on top of that screen. Control-lock semantics are unaffected.
     const activeScreenKey = useActiveScreen();
-    const onBoardScreen = activeScreenKey === 'board';
+    const onPlayfieldScreen = activeScreenKey === 'playfield';
     const hasResolvedResult = gameResult !== undefined && gameResult !== null;
-    const shouldShowResolvedResult = hasResolvedResult && onBoardScreen;
-    const shouldShowFallbackResult = !hasResolvedResult && isGameOver && onBoardScreen;
-    // A spectator locks the action controls exactly like game-over — the board
+    const shouldShowResolvedResult = hasResolvedResult && onPlayfieldScreen;
+    const shouldShowFallbackResult = !hasResolvedResult && isGameOver && onPlayfieldScreen;
+    // A spectator locks the action controls exactly like game-over — the playfield
     // is observable but inert (Invariant #114); dispatch is separately gated at
     // the route's sendAction wrapper (defense in depth).
     const controlsLocked = isGameOver || hasResolvedResult || isSpectator;

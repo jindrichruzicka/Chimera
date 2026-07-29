@@ -87,7 +87,7 @@ export interface PredictionStore {
  * Verified reveal stream for commitment battle mode. The main process
  * already gated each reveal through `CommitmentScheme.verify()` (Invariant #9)
  * before pushing it here; the store holds the most recent reveal so the active
- * game's board can play back each revealed turn as it lands (reveals arrive
+ * game's playfield can play back each revealed turn as it lands (reveals arrive
  * one-per-player in the host's deterministic order). Game-agnostic — only the
  * authoring game interprets the opaque `reveal.value`.
  */

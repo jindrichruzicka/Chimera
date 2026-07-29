@@ -115,7 +115,7 @@ beforeEach(() => {
     useSettingsStore.setState({ settings: {}, activeGameId: null });
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({
-        registry: { board: () => null },
+        registry: { playfield: () => null },
         inputActions: [END_TURN_ACTION],
     });
 });

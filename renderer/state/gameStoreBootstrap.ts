@@ -79,7 +79,7 @@ export async function bootstrapGameStore(
     const client = clientFactory(api, trackedStore, (type: string) => predictableTypes.has(type));
     const unsubscribeClient = client.bootstrap();
     // Commitment battle mode: main pushes only reveals that already passed
-    // `CommitmentScheme.verify()` (Invariant #9). The board plays each revealed
+    // `CommitmentScheme.verify()` (Invariant #9). The playfield plays each revealed
     // turn back from the store.
     const unsubscribeReveal = api.onReveal((reveal) => resolvedStore.applyReveal(reveal));
     const unsubscribe: Unsubscribe = () => {

@@ -101,7 +101,7 @@ export type GameEventAudioBinding = Readonly<
 >;
 
 export interface GameScreenRegistry {
-    readonly board: GameScreenComponent<GameScreenProps>;
+    readonly playfield: GameScreenComponent<GameScreenProps>;
     readonly hud?: GameScreenComponent<GameHudProps>;
     readonly screens?: Readonly<Record<string, GameScreenComponent<GameScreenProps>>>;
     readonly sceneDefaultScreens?: Readonly<Record<string, string>>;
@@ -112,7 +112,7 @@ export interface GameScreenRegistry {
      * a component (game override), the string `'none'` (opt out → Escape is a
      * no-op), or omitted (engine default Resume/Leave menu). Like every other
      * slot, it is supplied only through this registry (Invariant #80) and is
-     * optional (Invariant #81 — `board` is the sole required slot).
+     * optional (Invariant #81 — `playfield` is the sole required slot).
      */
     readonly inGameMenu?: GameScreenComponent<InGameMenuProps> | 'none';
     readonly eventAudioBinding?: GameEventAudioBinding;

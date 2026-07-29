@@ -9,7 +9,7 @@ error and every `chimera/*` rule was lost the moment the game left the monorepo 
 `fromFloat()` in a reducer or a hardcoded hex in a screen went unflagged. The template now
 emits an `eslint.config.mjs` composing `standaloneLintConfig()` from
 `@chimera-engine/electron/eslint`, a `styles/tokens-override.css` stub under the path the
-token rule guards, a screen `*.module.css` the board actually uses, and a project-root `lint` script forwarding to the app — joining the four
+token rule guards, a screen `*.module.css` the playfield actually uses, and a project-root `lint` script forwarding to the app — joining the four
 dev-tool forwards, for a different reason: `eslint`'s bin is already at the root, but the
 config that drives it lives in the app.
 

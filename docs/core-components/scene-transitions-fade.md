@@ -21,11 +21,11 @@ Transitions are expressed as normal engine actions — deterministic, logged in 
 
 ### Layering
 
-| Layer                      | Scope                                                          | Owner                   | Example                                 |
-| -------------------------- | -------------------------------------------------------------- | ----------------------- | --------------------------------------- |
-| `phase`                    | Intra-match state machine (`deployment → combat → resolution`) | Game reducer            | A game's combat round phase             |
-| `sceneId`                  | Cross-match / level structure                                  | Engine + scene registry | `'lobby'`, `'level-1'`, `'post-game'`   |
-| `GameScreenRegistry` entry | Active UI panel within the current scene                       | Renderer (local)        | `'tech-tree'` vs `'board'` during match |
+| Layer                      | Scope                                                          | Owner                   | Example                                     |
+| -------------------------- | -------------------------------------------------------------- | ----------------------- | ------------------------------------------- |
+| `phase`                    | Intra-match state machine (`deployment → combat → resolution`) | Game reducer            | A game's combat round phase                 |
+| `sceneId`                  | Cross-match / level structure                                  | Engine + scene registry | `'lobby'`, `'level-1'`, `'post-game'`       |
+| `GameScreenRegistry` entry | Active UI panel within the current scene                       | Renderer (local)        | `'tech-tree'` vs `'playfield'` during match |
 
 A scene change is a simulation event broadcast to all clients. A screen change is a purely local UI navigation.
 

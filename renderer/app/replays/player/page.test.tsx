@@ -20,7 +20,7 @@ vi.mock('../../../game/rendererGameRegistry', () => ({
 }));
 
 // Stub GameShell — we assert which snapshot AND content it receives, not how it
-// draws. The game-specific board derives its colour palette from `content`, so a
+// draws. The game-specific playfield derives its colour palette from `content`, so a
 // replay that omits it renders every unit in the default colour.
 vi.mock('../../../components/shell/GameShell', () => ({
     GameShell: ({
@@ -148,7 +148,7 @@ describe('ReplayPlayerPage', () => {
         expect(bridge.snapshotRange).toHaveBeenCalledWith(0, expect.any(Number));
     });
 
-    it('hands the replay game content to GameShell so the board can resolve colours', async () => {
+    it('hands the replay game content to GameShell so the playfield can resolve colours', async () => {
         // Without content the tactics board palette is empty and every unit falls
         // back to the default colour (all-blue). The player must fetch the replay
         // game's content (keyed by `info.gameId`) and pass it through, exactly as
@@ -254,17 +254,17 @@ describe('ReplayPlayerPage', () => {
         expect(bridge.snapshotRange).toHaveBeenCalledWith(80, expect.any(Number));
     });
 
-    it('renders the playback controls above the board', async () => {
+    it('renders the playback controls above the playfield', async () => {
         installReplayBridge(makeBridge());
 
         render(<ReplayPlayerPage />);
-        const board = await screen.findByTestId('game-shell');
+        const playfield = await screen.findByTestId('game-shell');
         const controls = screen.getByRole('group', { name: /replay playback controls/i });
 
-        // Controls sit at the top of the player, so they precede the board in the
+        // Controls sit at the top of the player, so they precede the playfield in the
         // DOM (keeping focus/reading order aligned with the visual order).
         expect(
-            controls.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING,
+            controls.compareDocumentPosition(playfield) & Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
     });
 
@@ -359,11 +359,11 @@ describe('ReplayPlayerPage', () => {
         expect(bridge.closePlayback).toHaveBeenCalled();
     });
 
-    it('resets a stale post-game summary screen to the board on entry', async () => {
+    it('resets a stale post-game summary screen to the playfield on entry', async () => {
         // Opening a replay from the in-game post-game summary carries the
         // module-level uiStore's stale 'summary' screen into the player, which
         // would render the summary (and its invalid Replay button) over the first
-        // recorded frame. The player must reset to the board on entry.
+        // recorded frame. The player must reset to the playfield on entry.
         useUiStore.getState().navigateToScreen('summary');
         expect(useUiStore.getState().activeScreenKey).toBe('summary');
 
@@ -371,7 +371,7 @@ describe('ReplayPlayerPage', () => {
         render(<ReplayPlayerPage />);
         await screen.findByTestId('game-shell');
 
-        expect(useUiStore.getState().activeScreenKey).toBe('board');
+        expect(useUiStore.getState().activeScreenKey).toBe('playfield');
     });
 
     describe('leaving a library-opened replay', () => {

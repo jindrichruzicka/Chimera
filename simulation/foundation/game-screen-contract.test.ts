@@ -11,8 +11,8 @@
  * Invariants upheld:
  *   #80 — the in-game menu is supplied only via `GameScreenRegistry`; the slot is
  *     just a `GameScreenComponent`, so `GameShell` never imports `games/*`.
- *   #81 — `board` remains the only required slot; `inGameMenu` is optional (a
- *     registry providing only `board` type-checks).
+ *   #81 — `playfield` remains the only required slot; `inGameMenu` is optional (a
+ *     registry providing only `playfield` type-checks).
  *   §3 Module Boundary — `shared/` must not import from `renderer/`, `games/*`,
  *     or `electron/main`. This test imports React types and the contract module
  *     only; the contract reuses the canonical `PlayerId` already imported from
@@ -39,7 +39,7 @@ import type {
 // would be a runtime import crossing the `shared/` module boundary (§3).
 const localPlayerId = 'p1' as unknown as PlayerId;
 
-const board: GameScreenComponent<GameScreenProps> = () => null;
+const playfield: GameScreenComponent<GameScreenProps> = () => null;
 
 function InGameMenu(props: InGameMenuProps): React.ReactElement | null {
     void props;
@@ -92,29 +92,29 @@ describe('InGameMenuProps', () => {
 // ─── GameScreenRegistry.inGameMenu slot ───────────────────────────────────────
 
 describe('GameScreenRegistry.inGameMenu', () => {
-    it('is optional — a registry providing only board is valid (Invariant #81)', () => {
-        const registry: GameScreenRegistry = { board };
+    it('is optional — a registry providing only playfield is valid (Invariant #81)', () => {
+        const registry: GameScreenRegistry = { playfield };
         expect(registry.inGameMenu).toBeUndefined();
     });
 
     it('accepts a plain React component override (GameScreenComponent)', () => {
-        const registry: GameScreenRegistry = { board, inGameMenu: InGameMenu };
+        const registry: GameScreenRegistry = { playfield, inGameMenu: InGameMenu };
         expect(registry.inGameMenu).toBe(InGameMenu);
     });
 
     it('accepts a React.lazy component override (LazyExoticComponent)', () => {
-        const registry: GameScreenRegistry = { board, inGameMenu: LazyInGameMenu };
+        const registry: GameScreenRegistry = { playfield, inGameMenu: LazyInGameMenu };
         expect(registry.inGameMenu).toBe(LazyInGameMenu);
     });
 
     it("accepts the 'none' opt-out sentinel", () => {
-        const registry: GameScreenRegistry = { board, inGameMenu: 'none' };
+        const registry: GameScreenRegistry = { playfield, inGameMenu: 'none' };
         expect(registry.inGameMenu).toBe('none');
     });
 
     it('rejects an unknown string sentinel at compile time', () => {
         const registry: GameScreenRegistry = {
-            board,
+            playfield,
             // @ts-expect-error: 'off' is not a valid inGameMenu sentinel (only 'none')
             inGameMenu: 'off',
         };
@@ -123,7 +123,7 @@ describe('GameScreenRegistry.inGameMenu', () => {
 
     it('rejects a component whose props are incompatible with InGameMenuProps', () => {
         const registry: GameScreenRegistry = {
-            board,
+            playfield,
             // @ts-expect-error: a component requiring an unrelated prop is not assignable
             inGameMenu: (props: { gameResult: string }) => {
                 void props;

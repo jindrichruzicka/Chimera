@@ -11,7 +11,7 @@ export function registerDefaultScenes(registry: SceneRegistry<BaseGameSnapshot>)
     });
     registry.register({
         sceneId: sceneId('engine:game'),
-        defaultScreen: 'board',
+        defaultScreen: 'playfield',
         requiredAssets: [],
         initialize: (state) => state,
     });

@@ -1,6 +1,6 @@
 ---
 title: 'GameShell, GameScreenRegistry, Renderer Contexts & UI Design System'
-description: 'GameScreenRegistry interface (board required; hud/screens/transitionOverlay optional), GameShell.tsx rendering contract, within-scene screen navigation (useActiveScreen/useNavigateToScreen), Renderer Context Map (AssetManagerContext/ContentDatabaseContext/AudioManagerContext/DeviceInfoContext/FadeContext), null-bang prohibition, UI design token system (--ch-* tokens), component categories, game token overrides, and code splitting (registry-level dynamic import + screen-level React.lazy).'
+description: 'GameScreenRegistry interface (playfield required; hud/screens/transitionOverlay optional), GameShell.tsx rendering contract, within-scene screen navigation (useActiveScreen/useNavigateToScreen), Renderer Context Map (AssetManagerContext/ContentDatabaseContext/AudioManagerContext/DeviceInfoContext/FadeContext), null-bang prohibition, UI design token system (--ch-* tokens), component categories, game token overrides, and code splitting (registry-level dynamic import + screen-level React.lazy).'
 tags: [renderer, react, game-screen-registry, contexts, design-tokens, code-splitting, gameshell]
 ---
 
@@ -23,7 +23,7 @@ tags: [renderer, react, game-screen-registry, contexts, design-tokens, code-spli
 // renderer/components/shell/GameShell.tsx (exported for game packages to satisfy)
 
 export interface GameScreenRegistry {
-    readonly board: React.ComponentType; // Required — primary gameplay view
+    readonly playfield: React.ComponentType; // Required — primary gameplay view
     readonly hud?: React.ComponentType<GameHudProps>; // Optional game-defined game HUD
     readonly screens?: Readonly<Record<string, React.ComponentType>>; // Named full-screen panels
     readonly transitionOverlay?: React.ComponentType; // Optional; engine default used when absent
@@ -54,7 +54,7 @@ export interface GameResultBannerProps {
 
 ```typescript
 // games/<game>/screens/index.ts
-const BoardScreen = React.lazy(() => import('./BoardScreen'));
+const PlayfieldScreen = React.lazy(() => import('./PlayfieldScreen'));
 const GameHud = React.lazy(() => import('./GameHud'));
 const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
 const DetailScreen = React.lazy(() => import('./DetailScreen'));
@@ -62,7 +62,7 @@ const SecondaryScreen = React.lazy(() => import('./SecondaryScreen'));
 const GameResultBanner = React.lazy(() => import('./GameResultBanner'));
 
 export const gameScreenRegistry: GameScreenRegistry = {
-    board: BoardScreen,
+    playfield: PlayfieldScreen,
     hud: GameHud,
     gameResultBanner: GameResultBanner,
     screens: {
@@ -92,14 +92,14 @@ async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
 ```typescript
 // renderer/hooks/useScreenNav.ts
 
-/** Active screen key for the current scene. Defaults to 'board' on scene entry. */
+/** Active screen key for the current scene. Defaults to 'playfield' on scene entry. */
 export function useActiveScreen(): string;
 
-/** Navigate to a named screen. 'board' always returns to the primary view. */
+/** Navigate to a named screen. 'playfield' always returns to the primary view. */
 export function useNavigateToScreen(): (screenKey: string) => void;
 ```
 
-These hooks read/write `uiStore.activeScreenKey`. No IPC involved. `SceneRouter` resets the key to `'board'` on every `sceneId` change in `PlayerSnapshot`.
+These hooks read/write `uiStore.activeScreenKey`. No IPC involved. `SceneRouter` resets the key to `'playfield'` on every `sceneId` change in `PlayerSnapshot`.
 
 ### GameShell Rendering Contract
 
@@ -143,7 +143,7 @@ stable across games.
 | #   | Rule                                                                                                                                                             |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | #80 | `GameShell.tsx` must never import from any `games/*` path. `GameScreenRegistry` is the sole coupling point.                                                      |
-| #81 | `GameScreenRegistry.board` is the only required slot. A game providing only `board` is fully valid.                                                              |
+| #81 | `GameScreenRegistry.playfield` is the only required slot. A game providing only `playfield` is fully valid.                                                      |
 | #82 | Within-scene panel navigation (`useNavigateToScreen`) is renderer-local state. It must never trigger an IPC call, advance `tick`, or dispatch an `EngineAction`. |
 
 ---
@@ -809,7 +809,7 @@ async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
 ### Screen-Level Split (inside `games/<name>/screens/index.ts`)
 
 ```typescript
-const BoardScreen = React.lazy(() => import('./BoardScreen'));
+const PlayfieldScreen = React.lazy(() => import('./PlayfieldScreen'));
 const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
 ```
 

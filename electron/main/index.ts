@@ -2219,7 +2219,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             };
             // Push a host-verified commitment reveal to the host's own renderer.
             // The host never receives its own 'broadcast' over the
-            // transport, so the board's reveal playback needs this direct path —
+            // transport, so the playfield's reveal playback needs this direct path —
             // symmetric with the joined-client `sendRevealToRenderer` wiring.
             const sendRevealToHostRenderer = (reveal: CommitmentReveal): void => {
                 const win = mainWindow;

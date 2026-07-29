@@ -28,11 +28,11 @@ import {
 } from './rendererGameRegistry';
 import * as registryModule from './rendererGameRegistry';
 
-const FAKE_BOARD: LoadedRendererGame['registry']['board'] = () => null;
+const FAKE_PLAYFIELD: LoadedRendererGame['registry']['playfield'] = () => null;
 
 function fakeGame(overrides?: Partial<LoadedRendererGame>): LoadedRendererGame {
     return {
-        registry: { board: FAKE_BOARD },
+        registry: { playfield: FAKE_PLAYFIELD },
         assetManifest: { gameId: 'fake', entries: [] },
         inputActions: [
             { id: 'game:fake-action', description: 'Fake', category: 'Test', oneShot: true },
@@ -74,7 +74,7 @@ describe('rendererGameRegistry', () => {
 
         const game = await loadRendererGame('fake');
 
-        expect(game.registry.board).toBeDefined();
+        expect(game.registry.playfield).toBeDefined();
         expect(game.assetManifest?.gameId).toBe('fake');
         expect(game.inputActions?.map((action) => action.id)).toContain('game:fake-action');
     });
@@ -579,7 +579,7 @@ describe('rendererGameRegistry', () => {
 
     describe('getRendererGameMenuCommand', () => {
         it('returns undefined when shell is absent', () => {
-            const game: LoadedRendererGame = { registry: { board: FAKE_BOARD } };
+            const game: LoadedRendererGame = { registry: { playfield: FAKE_PLAYFIELD } };
             const commandId = 'tactics:missing' as GameMenuCommandId;
 
             expect(getRendererGameMenuCommand(game, commandId)).toBeUndefined();
@@ -587,7 +587,7 @@ describe('rendererGameRegistry', () => {
 
         it('returns undefined when command id is not registered', () => {
             const game: LoadedRendererGame = {
-                registry: { board: FAKE_BOARD },
+                registry: { playfield: FAKE_PLAYFIELD },
                 shell: {
                     menuCommands: {
                         ['tactics:play' as GameMenuCommandId]: () => undefined,
@@ -603,7 +603,7 @@ describe('rendererGameRegistry', () => {
             const execute = (): void => undefined;
             const commandId = 'tactics:play' as GameMenuCommandId;
             const game: LoadedRendererGame = {
-                registry: { board: FAKE_BOARD },
+                registry: { playfield: FAKE_PLAYFIELD },
                 shell: {
                     menuCommands: {
                         [commandId]: execute,

@@ -18,7 +18,7 @@ import {
 function makeDescriptor(rawSceneId: string): SceneDescriptor<BaseGameSnapshot> {
     return {
         sceneId: sceneId(rawSceneId),
-        defaultScreen: 'board',
+        defaultScreen: 'playfield',
         requiredAssets: [],
         initialize(state) {
             return state;
@@ -56,7 +56,7 @@ describe('SceneRegistry', () => {
         const texture = buildAssetRef('texture', 'tactics/scene/loading.webp');
         const descriptor: SceneDescriptor<BaseGameSnapshot> = {
             sceneId: sceneId('engine:loading'),
-            defaultScreen: 'board',
+            defaultScreen: 'playfield',
             requiredAssets: [texture],
             initialize(state) {
                 return state;

@@ -1011,7 +1011,7 @@ export interface LobbyAPI {
      * The authoritative role of the local session: `'player'` for a host or a
      * seated joiner, `'spectator'` for a read-only session viewer admitted into
      * a running match (Invariant #114). Fixed for the session lifetime. The
-     * renderer reads this to render the board read-only and show the spectator
+     * renderer reads this to render the playfield read-only and show the spectator
      * HUD. Defaults to `'player'` when no session is active.
      */
     getLocalRole(): Promise<'player' | 'spectator'>;

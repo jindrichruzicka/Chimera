@@ -105,7 +105,7 @@ export interface GameSetupConfig {
  * `playerId` must be the local player. `main` rejects a write to any other seat
  * and, for a joined client, forwards the own-seat intent to the authoritative
  * host (`chimera:lobby:set-player-attribute`), which applies it and rebroadcasts
- * (owner-authored). Board/match settings remain host-authored via
+ * (owner-authored). Match settings remain host-authored via
  * `setMatchSetting`.
  */
 export type LobbyPendingAction =

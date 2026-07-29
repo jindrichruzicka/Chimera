@@ -65,7 +65,11 @@ const pageStyle: React.CSSProperties = {
     fontFamily: 'var(--ch-font-ui)',
 };
 
-const boardStyle: React.CSSProperties = { flex: '1 1 auto', minHeight: 0, position: 'relative' };
+const playfieldStyle: React.CSSProperties = {
+    flex: '1 1 auto',
+    minHeight: 0,
+    position: 'relative',
+};
 
 const errorStyle: React.CSSProperties = {
     padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
@@ -141,12 +145,12 @@ function ReplayPlayerView(): React.ReactElement {
         [kind, replayApi],
     );
 
-    // A replay plays back recorded board frames and is never "in" the post-game
+    // A replay plays back recorded playfield frames and is never "in" the post-game
     // summary. The uiStore screen is a module-level singleton that persists across
     // route navigations, so opening a replay from the in-game post-game summary
     // would otherwise inherit its stale 'summary' screen — rendering the summary
     // (and its invalid Replay button) over the first recorded frame. Reset to the
-    // board on entry, before the board mounts, so there is no flash.
+    // playfield on entry, before the playfield mounts, so there is no flash.
     React.useEffect(() => {
         useUiStore.getState().resetScreenNavigation();
         // A new replay starts unsaved, so the save icon resets with it.
@@ -442,7 +446,7 @@ function ReplayPlayerView(): React.ReactElement {
                       }
                     : {})}
             />
-            <div style={boardStyle}>
+            <div style={playfieldStyle}>
                 <GameShell
                     registry={loadedGame.registry}
                     assetManager={assetManager}

@@ -96,7 +96,7 @@ describe('validateAssetWorkspace', () => {
                     'apps/tactics/scenes/tactics-scenes.ts': `
                         export const scene = {
                             sceneId: 'tactics:arena',
-                            defaultScreen: 'board',
+                            defaultScreen: 'playfield',
                             requiredAssets: [
                                 'tactics/models/missing-arena.glb',
                                 'tactics/textures/existing-floor.webp',

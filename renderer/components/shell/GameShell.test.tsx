@@ -83,7 +83,7 @@ afterEach(() => {
     vi.restoreAllMocks();
     eventAudioPlayerSpy.mockReset();
     inGameMenuHostSpy.mockReset();
-    // uiStore is a module singleton; restore the default 'board' screen so the
+    // uiStore is a module singleton; restore the default 'playfield' screen so the
     // banner-visibility tests are independent of execution order.
     useUiStore.getState().resetScreenNavigation();
 });
@@ -95,7 +95,7 @@ describe('GameShell page object locators', () => {
         renderWithAudio(
             <GameShell
                 registry={{
-                    board: () => <div data-testid="registry-board">Registry board</div>,
+                    playfield: () => <div data-testid="registry-playfield">Registry playfield</div>,
                     eventAudioBinding: {
                         'combat:hit': { ref: TEST_AUDIO_REF, bus: 'sfx', volume: 0.5 },
                     },
@@ -117,11 +117,11 @@ describe('GameShell page object locators', () => {
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
         const audioManager = createAudioManagerSpy();
 
-        function Board(_props: GameScreenProps): React.ReactElement {
+        function Playfield(_props: GameScreenProps): React.ReactElement {
             const injectedAudioManager = useAudioManager();
             return (
                 <div
-                    data-testid="audio-context-board"
+                    data-testid="audio-context-playfield"
                     data-audio-manager={
                         injectedAudioManager === audioManager ? 'provided' : 'wrong'
                     }
@@ -132,7 +132,7 @@ describe('GameShell page object locators', () => {
         renderWithAudio(
             <GameShell
                 registry={{
-                    board: Board,
+                    playfield: Playfield,
                     eventAudioBinding: {
                         'combat:hit': { ref: TEST_AUDIO_REF, bus: 'sfx', volume: 0.5 },
                     },
@@ -145,7 +145,9 @@ describe('GameShell page object locators', () => {
         );
 
         expect(
-            (await screen.findByTestId('audio-context-board')).getAttribute('data-audio-manager'),
+            (await screen.findByTestId('audio-context-playfield')).getAttribute(
+                'data-audio-manager',
+            ),
         ).toBe('provided');
     });
 
@@ -156,7 +158,7 @@ describe('GameShell page object locators', () => {
         renderWithAudio(
             <GameShell
                 registry={{
-                    board: () => <div data-testid="registry-board">Registry board</div>,
+                    playfield: () => <div data-testid="registry-playfield">Registry playfield</div>,
                     inGameMenu: InGameMenu,
                 }}
                 snapshot={snapshot}
@@ -178,7 +180,7 @@ describe('GameShell page object locators', () => {
 
         renderWithAudio(
             <GameShell
-                registry={{ board: () => <div data-testid="registry-board" /> }}
+                registry={{ playfield: () => <div data-testid="registry-playfield" /> }}
                 snapshot={snapshot}
                 sendAction={vi.fn()}
                 localPlayerId={playerId('p1')}
@@ -194,7 +196,9 @@ describe('GameShell page object locators', () => {
 
     it('stops all audio when the registry match phase ends', () => {
         const audioManager = createAudioManagerSpy();
-        const registry = { board: () => <div data-testid="registry-board">Registry board</div> };
+        const registry = {
+            playfield: () => <div data-testid="registry-playfield">Registry playfield</div>,
+        };
         const sendAction = vi.fn();
         const localPlayerId = playerId('p1');
         const playingSnapshot = makePlayerSnapshot({
@@ -241,7 +245,7 @@ describe('GameShell page object locators', () => {
         renderWithAudio(
             <GameShell
                 registry={{
-                    board: () => <div data-testid="registry-board">Registry board</div>,
+                    playfield: () => <div data-testid="registry-playfield">Registry playfield</div>,
                 }}
                 inputActions={[
                     {
@@ -273,7 +277,9 @@ describe('GameShell page object locators', () => {
 
         const { unmount } = renderWithAudio(
             <GameShell
-                registry={{ board: () => <div data-testid="registry-board">Registry board</div> }}
+                registry={{
+                    playfield: () => <div data-testid="registry-playfield">Registry playfield</div>,
+                }}
                 snapshot={snapshot}
                 sendAction={vi.fn()}
                 localPlayerId={playerId('p1')}
@@ -289,7 +295,9 @@ describe('GameShell page object locators', () => {
     it('does not dispose the context AudioManager when GameShell remounts under the same Providers instance', () => {
         const audioManager = createAudioManagerSpy();
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
-        const registry = { board: () => <div data-testid="registry-board">Registry board</div> };
+        const registry = {
+            playfield: () => <div data-testid="registry-playfield">Registry playfield</div>,
+        };
 
         const { unmount } = renderWithAudio(
             <GameShell
@@ -321,11 +329,11 @@ describe('GameShell page object locators', () => {
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
         const assetManager = createAssetManagerStub();
 
-        function Board(_props: GameScreenProps): React.ReactElement {
+        function Playfield(_props: GameScreenProps): React.ReactElement {
             const injectedAssetManager = useAssetManager();
             return (
                 <div
-                    data-testid="asset-context-board"
+                    data-testid="asset-context-playfield"
                     data-asset-manager={
                         injectedAssetManager === assetManager ? 'provided' : 'wrong'
                     }
@@ -335,7 +343,7 @@ describe('GameShell page object locators', () => {
 
         const { unmount } = renderWithAudio(
             <GameShell
-                registry={{ board: Board }}
+                registry={{ playfield: Playfield }}
                 snapshot={snapshot}
                 sendAction={vi.fn()}
                 localPlayerId={playerId('p1')}
@@ -344,42 +352,44 @@ describe('GameShell page object locators', () => {
         );
 
         expect(
-            (await screen.findByTestId('asset-context-board')).getAttribute('data-asset-manager'),
+            (await screen.findByTestId('asset-context-playfield')).getAttribute(
+                'data-asset-manager',
+            ),
         ).toBe('provided');
 
         unmount();
         expect(assetManager.dispose).toHaveBeenCalledOnce();
     });
 
-    it('renders a GameScreenRegistry board through registry mode', async () => {
+    it('renders a GameScreenRegistry playfield through registry mode', async () => {
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
-        const Board = React.lazy(() =>
+        const Playfield = React.lazy(() =>
             Promise.resolve({
-                default: () => <div data-testid="registry-board">Registry board</div>,
+                default: () => <div data-testid="registry-playfield">Registry playfield</div>,
             }),
         );
 
         renderWithAudio(
             <GameShell
-                registry={{ board: Board }}
+                registry={{ playfield: Playfield }}
                 snapshot={snapshot}
                 sendAction={vi.fn()}
                 localPlayerId={playerId('p1')}
             />,
         );
 
-        expect(await screen.findByTestId('registry-board')).toBeTruthy();
-        expect(screen.getByTestId('game-canvas').textContent).toContain('Registry board');
+        expect(await screen.findByTestId('registry-playfield')).toBeTruthy();
+        expect(screen.getByTestId('game-canvas').textContent).toContain('Registry playfield');
     });
 
     it('renders the §13.6 game HUD locator surface', () => {
         render(
             <GameShell tick={42} canUndo={true} canRedo={false} isGameOver={true}>
-                <div>Board slot</div>
+                <div>Playfield slot</div>
             </GameShell>,
         );
 
-        expect(screen.getByTestId('game-canvas').textContent).toContain('Board slot');
+        expect(screen.getByTestId('game-canvas').textContent).toContain('Playfield slot');
         // The engine default HUD ships only End Turn; undo/redo are opt-in per game.
         expect(screen.queryByTestId('undo')).toBeNull();
         expect(screen.queryByTestId('redo')).toBeNull();
@@ -396,7 +406,7 @@ describe('GameShell page object locators', () => {
             <I18nProvider
                 gameOverride={{
                     'engine.gameShell.mainAriaLabel': 'Play area',
-                    'engine.gameShell.canvasAriaLabel': 'Board',
+                    'engine.gameShell.canvasAriaLabel': 'Playfield',
                     'engine.gameShell.hudAriaLabel': 'Controls',
                 }}
             >
@@ -405,7 +415,7 @@ describe('GameShell page object locators', () => {
         );
 
         expect(screen.getByLabelText('Play area')).toBeTruthy();
-        expect(screen.getByLabelText('Board')).toBeTruthy();
+        expect(screen.getByLabelText('Playfield')).toBeTruthy();
         expect(screen.getByLabelText('Controls')).toBeTruthy();
     });
 
@@ -796,7 +806,7 @@ describe('GameShell page object locators', () => {
         expect(screen.getByTestId('spectator-hud-mock')).toBeTruthy();
     });
 
-    it('shows the resolved result banner while the active screen is the board', () => {
+    it('shows the resolved result banner while the active screen is the playfield', () => {
         useUiStore.getState().resetScreenNavigation();
         const localPlayerId = playerId('p1');
 
@@ -814,7 +824,7 @@ describe('GameShell page object locators', () => {
         expect(screen.getByTestId('game-result-banner')).toBeTruthy();
     });
 
-    it('hides the resolved result banner once the active screen is no longer the board', () => {
+    it('hides the resolved result banner once the active screen is no longer the playfield', () => {
         useUiStore.getState().navigateToScreen('summary');
         const localPlayerId = playerId('p1');
 
@@ -832,7 +842,7 @@ describe('GameShell page object locators', () => {
         expect(screen.queryByTestId('game-result-banner')).toBeNull();
     });
 
-    it('hides the fallback game-over banner once the active screen is no longer the board', () => {
+    it('hides the fallback game-over banner once the active screen is no longer the playfield', () => {
         useUiStore.getState().navigateToScreen('summary');
 
         render(
@@ -913,7 +923,7 @@ describe('SetGameAssetManagerContext delegation wiring', () => {
 
         const { unmount } = renderWithAudio(
             <GameShell
-                registry={{ board: () => <div /> }}
+                registry={{ playfield: () => <div /> }}
                 snapshot={snapshot}
                 sendAction={vi.fn()}
                 localPlayerId={playerId('p1')}
@@ -967,7 +977,7 @@ describe('GameShell saveGame capability threading (#825)', () => {
         renderWithAudio(
             <GameShell
                 registry={{
-                    board: () => <div data-testid="registry-board" />,
+                    playfield: () => <div data-testid="registry-playfield" />,
                     hud: HudSpy,
                 }}
                 snapshot={

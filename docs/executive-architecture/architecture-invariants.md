@@ -151,7 +151,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **56.** `curves.ts`, `useTween`, and `useTweenCallback` are renderer-only modules. They must never be imported by anything under `simulation/`. Visual smoothing is a client-local concern; the authoritative state does not move smoothly.
 
-**57.** Camera state is renderer-only. `GameSnapshot` must never contain camera position, look-at, zoom, or any other camera parameter. Camera configuration is driven by game board components in response to snapshot data — it is never driven by authoritative simulation actions.
+**57.** Camera state is renderer-only. `GameSnapshot` must never contain camera position, look-at, zoom, or any other camera parameter. Camera configuration is driven by game playfield components in response to snapshot data — it is never driven by authoritative simulation actions.
 
 **58.** `isHovered` in `useGameInteraction` is local component state. It must never be written to any Zustand store, IPC message, or simulation state. Hover is a transient renderer-local concern.
 
@@ -207,7 +207,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ## Invariants 81–88
 
-**81.** `GameScreenRegistry.board` is the only required slot. All other slots are optional. A game that provides only `board` is a fully valid Chimera game.
+**81.** `GameScreenRegistry.playfield` is the only required slot. All other slots are optional. A game that provides only `playfield` is a fully valid Chimera game.
 
 **82.** Within-scene panel navigation (`useNavigateToScreen`) is a renderer-local state change. It must never trigger an IPC call, advance `tick`, or dispatch an `EngineAction`.
 

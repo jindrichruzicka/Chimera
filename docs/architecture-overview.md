@@ -136,7 +136,7 @@ games/<game>/data/entities/entity.json           ← static definition
    ┌───────────────── RENDERER ──────────────────────────────┐
    │  gameStore.snapshot  (Zustand — §4.4)                   │
    │                                                         │
-   │  <BoardScreen>                                          │
+   │  <PlayfieldScreen>                                      │
    │    snapshot.entities.map(e => <Entity key={e.id} …/>)     │
    │                                                         │
    │  <Entity entity={e}>                                      │
@@ -211,10 +211,10 @@ export function Entity({ entity }: { entity: ObservedEntityState }) {
 }
 ```
 
-#### BoardScreen (game-declared, in `games/<game>/screens/`)
+#### PlayfieldScreen (game-declared, in `games/<game>/screens/`)
 
 ```typescript
-function BoardScreen() {
+function PlayfieldScreen() {
   const snapshot = useGameStore(s => s.snapshot);   // §4.4 PlayerSnapshot
   if (!snapshot) return null;
   return (

@@ -12,13 +12,13 @@ export interface UiStoreState {
 export function createUiStore(): StoreApi<UiStoreState> {
     return createStore<UiStoreState>()((set) => ({
         activeSceneId: null,
-        activeScreenKey: 'board',
+        activeScreenKey: 'playfield',
 
         navigateToScreen(screenKey: string): void {
             set(() => ({ activeScreenKey: screenKey }));
         },
 
-        setActiveSceneId(sceneId: string, defaultScreenKey = 'board'): void {
+        setActiveSceneId(sceneId: string, defaultScreenKey = 'playfield'): void {
             set((state) => {
                 if (state.activeSceneId === sceneId) {
                     return {};
@@ -31,7 +31,7 @@ export function createUiStore(): StoreApi<UiStoreState> {
         },
 
         resetScreenNavigation(): void {
-            set(() => ({ activeSceneId: null, activeScreenKey: 'board' }));
+            set(() => ({ activeSceneId: null, activeScreenKey: 'playfield' }));
         },
     }));
 }

@@ -104,10 +104,10 @@ describe('blank template smoke harness', () => {
     });
 
     it('ships a co-located screen render smoke through the renderer public barrels', async () => {
-        const content = await read('screens/__GamePascal__Board.test.tsx');
+        const content = await read('screens/__GamePascal__Playfield.test.tsx');
         expect(content.startsWith('// @vitest-environment jsdom')).toBe(true);
         expect(content).toContain("from '@testing-library/react'");
-        expect(content).toContain("from './__GamePascal__Board.js'");
+        expect(content).toContain("from './__GamePascal__Playfield.js'");
     });
 
     it('ships exactly one e2e boot-smoke spec that launches Electron via the fixture', async () => {
@@ -507,7 +507,7 @@ describe('blank template smoke harness', () => {
     it('names no model game in any smoke file (tokens only)', async () => {
         const files = [
             'manifest.test.ts',
-            'screens/__GamePascal__Board.test.tsx',
+            'screens/__GamePascal__Playfield.test.tsx',
             'e2e/tests/boot-smoke.spec.ts',
             'e2e/fixtures/electron.fixture.ts',
             'e2e/fixtures/inherit-env.ts',
@@ -621,7 +621,7 @@ describe('blank template lint guardrails', () => {
         // exercises — the override stub above sits under `styles/`, and a rule
         // whose only zone matches nothing is indistinguishable from a rule that
         // was never wired.
-        const content = await read('screens/__GamePascal__Board.module.css');
+        const content = await read('screens/__GamePascal__Playfield.module.css');
 
         // This is a property of the STUB, not a restatement of the rule. It is
         // deliberately the stricter of the two, and no attempt is made to track
@@ -649,7 +649,7 @@ describe('blank template lint guardrails', () => {
 
     it('references only tokens the engine declares from the screen stylesheet', async () => {
         // Same direction as the override stub, different rule: an undeclared
-        // `--ch-*` here resolves to nothing at runtime, so the board renders
+        // `--ch-*` here resolves to nothing at runtime, so the playfield renders
         // unstyled rather than erroring. Read from the renderer SOURCE for the
         // reason given above.
         const declared = new Set(
@@ -662,7 +662,7 @@ describe('blank template lint guardrails', () => {
             ),
         );
         const referenced = Array.from(
-            (await read('screens/__GamePascal__Board.module.css')).matchAll(
+            (await read('screens/__GamePascal__Playfield.module.css')).matchAll(
                 /var\((--ch-[\w-]+)\)/gu,
             ),
             (match) => match[1],
@@ -672,18 +672,18 @@ describe('blank template lint guardrails', () => {
         expect(referenced.filter((token) => !declared.has(token))).toEqual([]);
     });
 
-    it('has the board consume that stylesheet', async () => {
+    it('has the playfield consume that stylesheet', async () => {
         // A CSS module nothing imports is dead weight the first author deletes,
         // and it takes the rule's only zone with it. Bracket access, not
-        // `styles.board`: the app's tsconfig sets
+        // `styles.playfield`: the app's tsconfig sets
         // `noPropertyAccessFromIndexSignature`, so the dotted form fails the
         // scaffold's own build.
-        const board = await read('screens/__GamePascal__Board.tsx');
-        const stylesheet = await read('screens/__GamePascal__Board.module.css');
+        const playfield = await read('screens/__GamePascal__Playfield.tsx');
+        const stylesheet = await read('screens/__GamePascal__Playfield.module.css');
 
-        expect(board).toContain("import styles from './__GamePascal__Board.module.css'");
-        expect(board).toContain("className={styles['board']}");
-        expect(stylesheet).toMatch(/^\.board\s*\{/mu);
+        expect(playfield).toContain("import styles from './__GamePascal__Playfield.module.css'");
+        expect(playfield).toContain("className={styles['playfield']}");
+        expect(stylesheet).toMatch(/^\.playfield\s*\{/mu);
     });
 });
 

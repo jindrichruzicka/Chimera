@@ -7,7 +7,7 @@ describe('tactics renderer loaders', () => {
     it('loadTacticsRendererGame exposes the screen registry, asset manifest, and input actions', async () => {
         const game = await loadTacticsRendererGame();
 
-        expect(game.registry.board).toBeDefined();
+        expect(game.registry.playfield).toBeDefined();
         expect(game.assetManifest?.gameId).toBe('tactics');
         expect(game.inputActions?.map((action) => action.id)).toContain('game:end-turn');
     });

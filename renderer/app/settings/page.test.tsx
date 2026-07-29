@@ -150,7 +150,7 @@ const TWO_LANGUAGES: readonly GameLanguage[] = [
 
 function makeRendererGame(settings?: GameSettingsPageDefinition): LoadedRendererGame {
     return {
-        registry: { board: () => null },
+        registry: { playfield: () => null },
         shell: settings === undefined ? {} : { settings },
     };
 }

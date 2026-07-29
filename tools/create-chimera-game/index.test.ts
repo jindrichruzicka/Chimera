@@ -89,15 +89,15 @@ describe('scaffoldGame', () => {
             ].join('\n'),
         );
         await write(
-            'templates/blank/screens/__GamePascal__Board.tsx',
-            "import styles from './__GamePascal__Board.module.css';\nexport function __GamePascal__Board() { return styles; }",
+            'templates/blank/screens/__GamePascal__Playfield.tsx',
+            "import styles from './__GamePascal__Playfield.module.css';\nexport function __GamePascal__Playfield() { return styles; }",
         );
         // Present in the FIXTURE because a copy pipeline that skipped
         // `*.module.css` would be invisible otherwise — nothing else in this
         // suite reads a stylesheet under `screens/`.
         await write(
-            'templates/blank/screens/__GamePascal__Board.module.css',
-            '/* __Game Title__ board. */\n.board {\n    gap: var(--ch-space-md);\n}\n',
+            'templates/blank/screens/__GamePascal__Playfield.module.css',
+            '/* __Game Title__ playfield. */\n.playfield {\n    gap: var(--ch-space-md);\n}\n',
         );
         // The architecture-lint guardrails (§4.32). Both are here because both
         // sit in a shape a copy pipeline can silently drop: a ROOT-level
@@ -231,15 +231,15 @@ describe('scaffoldGame', () => {
         expect(content).toContain("My Game's content module");
         expect(content).toContain("MY_GAME_GAME_ID = 'my-game'");
 
-        const boardPath = path.join(result.appDir, 'screens', 'MyGameBoard.tsx');
-        expect(await readFile(boardPath, 'utf8')).toContain('MyGameBoard');
+        const playfieldPath = path.join(result.appDir, 'screens', 'MyGamePlayfield.tsx');
+        expect(await readFile(playfieldPath, 'utf8')).toContain('MyGamePlayfield');
         // …and the stylesheet it imports, under its substituted name.
-        const boardCss = await readFile(
-            path.join(result.appDir, 'screens', 'MyGameBoard.module.css'),
+        const playfieldCss = await readFile(
+            path.join(result.appDir, 'screens', 'MyGamePlayfield.module.css'),
             'utf8',
         );
-        expect(boardCss).toContain('.board');
-        expect(boardCss).toContain('My Game');
+        expect(playfieldCss).toContain('.playfield');
+        expect(playfieldCss).toContain('My Game');
 
         // The architecture-lint guardrails (§4.32). Asserted on the EMITTED app,
         // not the template tree: the template shipping them proves nothing if
@@ -451,7 +451,7 @@ describe('scaffoldGame', () => {
             // an assertion in one mode proves nothing about the other.
             expect(
                 await readFile(
-                    path.join(result.appDir, 'screens', 'MyGameBoard.module.css'),
+                    path.join(result.appDir, 'screens', 'MyGamePlayfield.module.css'),
                     'utf8',
                 ),
             ).toContain('My Game');

@@ -113,7 +113,7 @@ apps/<kebab>/
 ├── simulation/            # deterministic gameplay — actions.ts, constants.ts, visibility-rules.ts;
 │                          #   pure (no DOM/IPC), covered by the apps/*/simulation ESLint zones
 ├── content/               # content-collection definitions for the Content DB
-├── screens/               # game React UI (board screen + registry)
+├── screens/               # game React UI (playfield screen + registry)
 ├── renderer/              # per-app Next.js app + register.ts registration seam
 ├── electron/              # Electron main composition root + build-main.ts bundler
 ├── e2e/                   # Playwright boot-smoke suite

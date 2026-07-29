@@ -15,11 +15,11 @@ describe('registerDefaultScenes', () => {
         expect(registry.has(sceneId('engine:post-game'))).toBe(true);
     });
 
-    it('uses board as the game scene default screen', () => {
+    it('uses playfield as the game scene default screen', () => {
         const registry = new SceneRegistry<BaseGameSnapshot>();
 
         registerDefaultScenes(registry);
 
-        expect(registry.resolve(sceneId('engine:game')).defaultScreen).toBe('board');
+        expect(registry.resolve(sceneId('engine:game')).defaultScreen).toBe('playfield');
     });
 });

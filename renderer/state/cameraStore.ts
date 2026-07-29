@@ -81,7 +81,7 @@ export function useCameraStore<T>(selector: (state: CameraStoreState) => T): T {
     return useStore(cameraStoreInstance, selector);
 }
 
-// Expose static accessors for direct store access (game board components, tests)
+// Expose static accessors for direct store access (game playfield components, tests)
 useCameraStore.getState = cameraStoreInstance.getState.bind(cameraStoreInstance);
 useCameraStore.setState = cameraStoreInstance.setState.bind(cameraStoreInstance);
 useCameraStore.subscribe = cameraStoreInstance.subscribe.bind(cameraStoreInstance);

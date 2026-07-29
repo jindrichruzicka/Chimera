@@ -12,7 +12,7 @@
 //   #1  — Only PlayerSnapshot (never GameSnapshot) enters the store mock.
 //   #48 — GameShell is game-agnostic; game/page receives renderer game
 //          modules from renderer/game/rendererGameRegistry.
-//   #80 — Verified by the board being injected via registry prop.
+//   #80 — Verified by the playfield being injected via registry prop.
 
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -139,8 +139,8 @@ vi.mock('../../input/useInputAction.js', () => ({
 }));
 
 const testRegistry: GameScreenRegistry = {
-    board: ({ snapshot }: GameScreenProps) => (
-        <div data-testid="test-board" data-tick={snapshot.tick} />
+    playfield: ({ snapshot }: GameScreenProps) => (
+        <div data-testid="test-playfield" data-tick={snapshot.tick} />
     ),
     hud: (props: GameHudProps) => {
         const {
@@ -516,10 +516,10 @@ describe('GamePage — rendering', () => {
         expect(await screen.findByTestId('game-canvas')).toBeTruthy();
     });
 
-    it('renders the game board inside GameShell', async () => {
+    it('renders the game playfield inside GameShell', async () => {
         mockSnapshot = makeSnapshot();
         renderGamePage();
-        expect(await screen.findByTestId('test-board')).toBeTruthy();
+        expect(await screen.findByTestId('test-playfield')).toBeTruthy();
     });
 
     it('displays the current tick in hud-tick', async () => {
@@ -595,7 +595,7 @@ describe('GamePage — action dispatch', () => {
         });
     });
 
-    it('suppresses all action dispatch for a spectator (read-only board, Invariant #114)', async () => {
+    it('suppresses all action dispatch for a spectator (read-only playfield, Invariant #114)', async () => {
         mockRole = 'spectator';
         mockLocalPlayerId = 'watcher-1';
         mockSnapshot = makeSnapshot({ isMyTurn: true, undoMeta: { canUndo: true, canRedo: true } });
@@ -865,7 +865,7 @@ describe('GamePage — post-game summary navigation', () => {
     const summaryRegistry: GameScreenRegistry = {
         ...testRegistry,
         screens: { summary: () => <div data-testid="test-summary" /> },
-        sceneDefaultScreens: { 'engine:game': 'board', 'engine:post-game': 'summary' },
+        sceneDefaultScreens: { 'engine:game': 'playfield', 'engine:post-game': 'summary' },
     };
 
     it('navigates to the post-game summary when game:end-turn (Enter) fires after the match resolves', async () => {
@@ -905,7 +905,7 @@ describe('GamePage — post-game summary navigation', () => {
             inputActionCallbacks.get('game:end-turn')?.({ pressed: true });
         });
 
-        expect(useUiStore.getState().activeScreenKey).toBe('board');
+        expect(useUiStore.getState().activeScreenKey).toBe('playfield');
         expect(mockSendAction).not.toHaveBeenCalled();
     });
 });
@@ -960,7 +960,7 @@ describe('GamePage — in-game save (#825)', () => {
         mockSnapshot = makeSnapshot();
         renderGamePage();
 
-        // GameShell forwards the derived role verbatim to the board/HUD, where
+        // GameShell forwards the derived role verbatim to the playfield/HUD, where
         // the post-game summary reads it — assert it directly (controlsLocked
         // masks the save affordance regardless, so that alone would not catch it).
         expect(await screen.findByTestId('hud-is-host')).toHaveTextContent('false');

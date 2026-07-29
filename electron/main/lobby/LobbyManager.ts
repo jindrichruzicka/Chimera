@@ -169,7 +169,7 @@ export class LobbyManager {
      * seated joiner, `'spectator'` for a read-only session viewer admitted into
      * a running match (Invariant #114). Captured from {@link JoinedSession.role}
      * at join (host sessions are always `'player'`) and reset on close. Surfaced
-     * to the renderer via {@link getLocalRole} so it can render the board
+     * to the renderer via {@link getLocalRole} so it can render the playfield
      * read-only and show the spectator HUD.
      */
     private localRole: 'player' | 'spectator' = 'player';

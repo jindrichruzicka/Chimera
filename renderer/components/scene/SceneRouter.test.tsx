@@ -28,10 +28,10 @@ afterEach(() => {
 });
 
 describe('SceneRouter', () => {
-    it('renders the board slot for the active scene by default', async () => {
+    it('renders the playfield slot for the active scene by default', async () => {
         renderRouter(makeSnapshot(), makeRegistry());
 
-        expect(await screen.findByTestId('board-screen')).toBeTruthy();
+        expect(await screen.findByTestId('playfield-screen')).toBeTruthy();
     });
 
     it('renders a named screen selected through uiStore without IPC', async () => {
@@ -41,10 +41,10 @@ describe('SceneRouter', () => {
         renderRouter(makeSnapshot(), makeRegistry());
 
         expect(await screen.findByTestId('tech-tree-screen')).toBeTruthy();
-        expect(screen.queryByTestId('board-screen')).toBeNull();
+        expect(screen.queryByTestId('playfield-screen')).toBeNull();
     });
 
-    it('resets named screen navigation to board when sceneId changes', async () => {
+    it('resets named screen navigation to playfield when sceneId changes', async () => {
         useUiStore.getState().setActiveSceneId('engine:game');
         useUiStore.getState().navigateToScreen('tech-tree');
         const registry = makeRegistry();
@@ -57,8 +57,8 @@ describe('SceneRouter', () => {
 
         rerender(wrapRouter(makeSnapshot({ sceneId: makeSceneId('engine:post-game') }), registry));
 
-        await waitFor(() => expect(screen.getByTestId('board-screen')).toBeTruthy());
-        expect(useUiStore.getState().activeScreenKey).toBe('board');
+        await waitFor(() => expect(screen.getByTestId('playfield-screen')).toBeTruthy());
+        expect(useUiStore.getState().activeScreenKey).toBe('playfield');
     });
 
     it('uses registry sceneDefaultScreens when a scene changes', async () => {
@@ -88,7 +88,7 @@ describe('SceneRouter', () => {
                 summary: makeScreen('summary-screen'),
             },
             sceneDefaultScreens: {
-                'engine:post-game': 'board',
+                'engine:post-game': 'playfield',
             },
         } satisfies GameScreenRegistry;
 
@@ -163,11 +163,11 @@ function makeScreen(
 }
 
 function makeRegistry(): GameScreenRegistry {
-    const Board = makeScreen('board-screen');
+    const Playfield = makeScreen('playfield-screen');
     const TechTree = makeScreen('tech-tree-screen');
 
     return {
-        board: Board,
+        playfield: Playfield,
         screens: {
             'tech-tree': TechTree,
         },

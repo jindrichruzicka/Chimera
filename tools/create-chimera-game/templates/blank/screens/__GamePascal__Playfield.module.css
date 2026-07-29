@@ -1,7 +1,7 @@
 /*
- * __Game Title__'s board styles.
+ * __Game Title__'s playfield styles.
  *
- * Colours and sizes come from `var(--ch-*)` tokens, so the board follows
+ * Colours and sizes come from `var(--ch-*)` tokens, so the playfield follows
  * whatever `styles/tokens-override.css` sets. Writing them literally instead
  * would look right until someone themed the game, and then quietly stop
  * matching.
@@ -16,7 +16,7 @@
  * engine-declared names.
  */
 
-.board {
+.playfield {
     display: grid;
     gap: var(--ch-space-md);
     padding: var(--ch-space-md);

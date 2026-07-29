@@ -49,7 +49,7 @@ export const TACTICS_INPUT_ACTIONS = [
 ] as const;
 
 export const TacticsGameScreenRegistry: GameScreenRegistry = {
-    board: TacticsDemoBoard,
+    playfield: TacticsDemoBoard,
     hud: TacticsGameHud,
     inGameMenu: TacticsInGameMenu,
     eventAudioBinding: TACTICS_EVENT_AUDIO_BINDING,
@@ -57,7 +57,7 @@ export const TacticsGameScreenRegistry: GameScreenRegistry = {
         summary: TacticsPostGameSummary,
     },
     sceneDefaultScreens: {
-        'engine:game': 'board',
+        'engine:game': 'playfield',
         'engine:post-game': 'summary',
     },
     gameResultBanner: TacticsGameResultBanner,

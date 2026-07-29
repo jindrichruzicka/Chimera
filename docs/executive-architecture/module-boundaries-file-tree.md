@@ -176,8 +176,8 @@ chimera/
 │       ├── simulation/              # Deterministic gameplay — pure, no DOM/IPC/renderer imports; covered by the
 │       │   │                        #   apps/*/simulation ESLint purity + boundary zones (Invariants #1, #43)
 │       │   ├── actions.ts           # ActionDefinitions (validators + reducers) registered on the ActionRegistry
-│       │   ├── constants.ts         # Game tokens: gameId, '<gameId>:*' action namespace, board extents, setting keys
-│       │   ├── entities.ts          # Deterministic initial entity/board setup (optional for stateless games)
+│       │   ├── constants.ts         # Game tokens: gameId, '<gameId>:*' action namespace, playfield extents, setting keys
+│       │   ├── entities.ts          # Deterministic initial entity/playfield setup (optional for stateless games)
 │       │   ├── visibility-rules.ts  # Implements the VisibilityRules interface for host-side state projection
 │       │   └── <subsystem>/         # Gameplay subsystems as the game grows (turn gating, resource ledgers, ...)
 │       ├── ai/                      # Game-specific AI policy (imports @chimera-engine/ai + own simulation/ only)
@@ -186,8 +186,8 @@ chimera/
 │       │   ├── <collection-type>/   # One directory per collection (preferred for large sets)
 │       │   └── <collection-type>.json # Flat array format (valid for small collections)
 │       ├── assets/                  # Binary assets (audio, fonts, icons, textures) — referenced by AssetRef strings
-│       ├── scene/                   # R3F scene contributions (board meshes, selection markers, camera model)
-│       ├── screens/                 # Game-declared React UI (board + HUD); exported via screens/index.tsx registry
+│       ├── scene/                   # R3F scene contributions (playfield meshes, selection markers, camera model)
+│       ├── screens/                 # Game-declared React UI (playfield + HUD); exported via screens/index.tsx registry
 │       ├── shell/                   # Declarative shell contributions (main menu, settings page, fonts, backgrounds)
 │       ├── styles/                  # Design-token overrides (tokens-override.css + registration)
 │       ├── lobby/                   # Lobby-setup contribution (agent slots, match settings)

@@ -97,7 +97,7 @@ beforeEach(() => {
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({
         registry: {
-            board: () => null,
+            playfield: () => null,
             eventAudioBinding: {
                 'tactics:move_unit': { ref: audioRefs.step, bus: 'sfx', volume: 0.45 },
                 'tactics:attack': { ref: audioRefs.hit, bus: 'sfx', volume: 0.65 },

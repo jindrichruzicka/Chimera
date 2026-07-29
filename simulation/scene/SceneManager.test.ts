@@ -73,7 +73,7 @@ describe('SceneManager action definitions', () => {
         const calls: string[] = [];
         const current: SceneDescriptor<BaseGameSnapshot> = {
             sceneId: sceneId('engine:game'),
-            defaultScreen: 'board',
+            defaultScreen: 'playfield',
             requiredAssets: [],
             initialize(state) {
                 return state;
@@ -85,7 +85,7 @@ describe('SceneManager action definitions', () => {
         };
         const next: SceneDescriptor<BaseGameSnapshot> = {
             sceneId: sceneId('engine:post-game'),
-            defaultScreen: 'board',
+            defaultScreen: 'playfield',
             requiredAssets: [],
             initialize(state, params, ctx) {
                 calls.push(`initialize:${String(params['reason'])}:${ctx.dispatchDepth}`);
@@ -290,7 +290,7 @@ describe('SceneManager action definitions', () => {
         const mutationAttempts = vi.fn();
         const current: SceneDescriptor<BaseGameSnapshot> = {
             sceneId: sceneId('engine:game'),
-            defaultScreen: 'board',
+            defaultScreen: 'playfield',
             requiredAssets: [],
             initialize(state) {
                 return state;
@@ -302,7 +302,7 @@ describe('SceneManager action definitions', () => {
         };
         const next: SceneDescriptor<BaseGameSnapshot> = {
             sceneId: sceneId('engine:next'),
-            defaultScreen: 'board',
+            defaultScreen: 'playfield',
             requiredAssets: [],
             initialize(state, _params, ctx) {
                 assertFrozenContext(ctx, mutationAttempts);
@@ -335,7 +335,7 @@ describe('SceneManager action definitions', () => {
 function makeDescriptor(rawSceneId: string): SceneDescriptor<BaseGameSnapshot> {
     return {
         sceneId: sceneId(rawSceneId),
-        defaultScreen: 'board',
+        defaultScreen: 'playfield',
         requiredAssets: [],
         initialize(state) {
             return state;

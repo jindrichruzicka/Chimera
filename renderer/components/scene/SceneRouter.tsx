@@ -44,7 +44,7 @@ export function SceneRouter({
     const sceneId = snapshot.sceneId ?? 'engine:game';
     const sceneDefaultScreen = readSceneDefaultScreen(snapshot);
     const defaultScreenKey =
-        sceneDefaultScreen ?? registry.sceneDefaultScreens?.[String(sceneId)] ?? 'board';
+        sceneDefaultScreen ?? registry.sceneDefaultScreens?.[String(sceneId)] ?? 'playfield';
     useFadeTransition({
         snapshot,
         sendAction,
@@ -100,8 +100,8 @@ function resolveScreen(
     registry: GameScreenRegistry,
     activeScreenKey: string,
 ): GameScreenComponent<GameScreenProps> {
-    if (activeScreenKey === 'board') {
-        return registry.board;
+    if (activeScreenKey === 'playfield') {
+        return registry.playfield;
     }
-    return registry.screens?.[activeScreenKey] ?? registry.board;
+    return registry.screens?.[activeScreenKey] ?? registry.playfield;
 }

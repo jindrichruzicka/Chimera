@@ -16,7 +16,7 @@ describe('substituteTokens', () => {
         const template = [
             'id: __game_kebab__',
             'const __gameCamel__Contribution = {};',
-            'export class __GamePascal__Board {}',
+            'export class __GamePascal__Playfield {}',
             'title: "__Game Title__"',
             'const __GAME_CONSTANT__ = 1;',
             'package: __gamelower__',
@@ -28,7 +28,7 @@ describe('substituteTokens', () => {
             [
                 'id: my-game',
                 'const myGameContribution = {};',
-                'export class MyGameBoard {}',
+                'export class MyGamePlayfield {}',
                 'title: "My Game"',
                 'const MY_GAME = 1;',
                 'package: mygame',
@@ -50,8 +50,8 @@ describe('renameTokensInPath', () => {
 
     it('substitutes tokens within each path segment', () => {
         expect(
-            renameTokensInPath('apps/__game_kebab__/renderer/__GamePascal__Board.tsx', names),
-        ).toBe('apps/my-game/renderer/MyGameBoard.tsx');
+            renameTokensInPath('apps/__game_kebab__/renderer/__GamePascal__Playfield.tsx', names),
+        ).toBe('apps/my-game/renderer/MyGamePlayfield.tsx');
     });
 
     it('leaves a path without tokens untouched', () => {

@@ -11,7 +11,7 @@ describe('tactics renderer composition root', () => {
     it('wires the registry so the tactics bundle resolves through the seam', async () => {
         const game = await loadRendererGame('tactics');
 
-        expect(game.registry.board).toBeDefined();
+        expect(game.registry.playfield).toBeDefined();
         expect(game.assetManifest?.gameId).toBe('tactics');
     });
 

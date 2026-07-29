@@ -149,7 +149,7 @@ peer.
   `chimera:lobby:get-local-role` (`window.__chimera.lobby.getLocalRole()`) into
   `lobbyUiStore.role`; `useIsSpectator()` selects it. (The WELCOME role is not
   inferred from the viewer id — that is unsafe under pass-and-play.)
-- **Read-only board** — `GameShell` sets `controlsLocked` when `isSpectator`,
+- **Read-only playfield** — `GameShell` sets `controlsLocked` when `isSpectator`,
   disabling undo/redo/end-turn and withholding the host-only save affordance;
   `renderer/app/game/page.tsx` additionally no-ops `sendAction` for a spectator
   (defense in depth) and derives `isHost = false` for a spectator (a spectator

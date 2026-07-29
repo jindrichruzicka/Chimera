@@ -164,7 +164,7 @@ export function useCamera(): CameraController;
 ## Usage Example
 
 ```typescript
-// In a game's BoardScreen.tsx:
+// In a game's PlayfieldScreen.tsx:
 const camera = useCamera();
 
 function onUnitSelected(unit: Entity) {
@@ -189,7 +189,7 @@ Camera state is **never** part of `GameSnapshot`, never sent over the network, a
 
 ## Invariant
 
-**#57** — Camera state is renderer-only. `GameSnapshot` must never contain camera position, look-at, zoom, or any other camera parameter. Camera configuration is driven by game board components in response to snapshot data — it is never driven by authoritative simulation actions.
+**#57** — Camera state is renderer-only. `GameSnapshot` must never contain camera position, look-at, zoom, or any other camera parameter. Camera configuration is driven by game playfield components in response to snapshot data — it is never driven by authoritative simulation actions.
 
 ---
 
