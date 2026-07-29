@@ -2,10 +2,7 @@
     // Per-package build for @chimera-engine/renderer (issue #773; mirrors the split-tsconfig
     // pattern of @chimera-engine/simulation #759 / @chimera-engine/ai #764 / @chimera-engine/networking #768).
     //
-    // Emits dist/ (JS + .d.ts + maps) for the two public component barrels
-    // (./components/ui, ./components/chat) plus the game-registration seam
-    // (./game — the runtime injection point a consumer app populates, #784),
-    // consumed via the package `exports` map.
+    // Emits dist/ (JS + .d.ts + maps), consumed via the package `exports` map.
     // JSX compiles to runnable JS via the React 19 automatic runtime ("react-jsx"),
     // UNLIKE renderer/tsconfig.json which keeps jsx:"preserve" for the Next pipeline.
     // tsc emits no CSS, so the build script copies *.module.css + styles/tokens.css

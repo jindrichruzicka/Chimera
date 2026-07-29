@@ -73,20 +73,22 @@ host-authored match settings (e.g. an arena id); they ride the same lobby channe
 uses and land in `snapshot.setup`. `pnpm dev:mp 2 --dry-run` prints the validated spawn plan
 without launching anything.
 
-**Dev tools.** `@chimera-engine/electron` publishes four development bins, and the standalone
-root forwards each one, so all four run from the project directory the scaffold created — the
-same commands the monorepo itself uses:
+**Dev tools.** `@chimera-engine/electron` publishes the engine's development tooling, and the
+standalone root forwards each entry, so every one runs from the project directory the scaffold
+created — the same commands the monorepo itself uses:
 
-| Command                              | Bin                       | What it does                                                     |
+| Command                              | From                      | What it does                                                     |
 | ------------------------------------ | ------------------------- | ---------------------------------------------------------------- |
 | `pnpm dev:mp <N>`                    | `chimera-dev-mp`          | N-player local multiplayer session (above)                       |
 | `pnpm fetch:fonts --url "<css url>"` | `chimera-fetch-fonts`     | Download + self-host Google fonts (Invariant #97)                |
 | `pnpm validate:assets`               | `chimera-validate-assets` | Check every asset reference resolves (Invariants #22/#52)        |
 | `pnpm icons:generate`                | `chimera-generate-icons`  | Opt-in multi-size icon set (needs `pnpm add -D sharp png2icons`) |
+| `pnpm lint`                          | `.../eslint` subpath      | The architecture guardrails (below)                              |
 
-Each forwards to the app package, which is where the bins are linked (the root manifest declares
-no `@chimera-engine/*` dependency, so pnpm links them into `apps/<kebab>/node_modules/.bin`
-alone). pnpm appends trailing arguments to the delegated script, which is how `--url` reaches
+Each forwards to the app package. For the four bins that is where they are linked (the root
+manifest declares no `@chimera-engine/*` dependency, so pnpm links them into
+`apps/<kebab>/node_modules/.bin` alone); for `lint` it is where the flat config lives. pnpm
+appends trailing arguments to the delegated script, which is how `--url` reaches
 `fetch:fonts`. The equivalent `pnpm --filter @chimera-engine/<kebab> <script>` form also works.
 
 These bins require an engine version that declares them; a project pinned to an older
@@ -117,6 +119,8 @@ apps/<kebab>/
 ├── e2e/                   # Playwright boot-smoke suite
 ├── shell/                 # renderer shell declarations — fonts.ts gameFonts stub (empty until fetched)
 ├── assets/                # game-owned binary assets (icon; fonts/ for self-hosted .woff2 — Invariant #97)
+├── styles/                # tokens-override.css — redefine any `--ch-*` the engine declares
+├── eslint.config.mjs      # STANDALONE ONLY — this game's flat config, composing the engine's architecture rules
 ├── manifest.ts            # GameManifest (registration surface, stays at the root)
 ├── settings-schema.ts     # zod settings schema extending EngineSettings
 └── package.json / tsconfig*.json / electron-builder.yml
@@ -125,6 +129,34 @@ apps/<kebab>/
 Grow a game inside this shape: new deterministic gameplay modules go under `simulation/`
 (subsystem subdirectories are fine), UI under `screens/`/`scene/`/`shell/`, JSON content under
 `data/`.
+
+### The architecture guardrails
+
+A standalone project gets its own `eslint.config.mjs`, composing the engine's rules onto
+your directories, and `pnpm lint` runs it. (A `--workspace` game does not get that file: it
+inherits the monorepo's root config, which carries the same rules and more.) They are the
+executable form of Chimera's architecture invariants, and a fresh scaffold is green under
+them:
+
+| Rule                         | What it stops                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `no-fromfloat-in-simulation` | `fromFloat()` in `simulation/` or `ai/` — it breaks cross-machine determinism   |
+| `no-hardcoded-design-values` | colour and size literals in `screens/` — use `var(--ch-*)` so themes reach them |
+| `no-unknown-token-overrides` | redefining a `--ch-*` the engine does not declare — it would theme nothing      |
+| `no-game-renderer-internals` | reaching past the renderer's public barrels into its internals                  |
+
+Test files under `simulation/` and `ai/` are exempt from the first: building fixed-point
+values with `fromFloat()` in a fixture is fine, since the invariant is about hot paths.
+
+`styles/tokens-override.css` is where you theme the game. Redefine any token the engine
+declares and the whole UI follows — the shell, the built-in screens, and your own components
+read the same variables. The file ships with the accent family already overridden, so you can
+see it working; keep it, because the token rule matches that path by name, and deleting the
+file takes the guardrail with it.
+
+The config is yours. It ships without type-aware linting (no Chimera rule needs it, and
+turning it on reds a fresh scaffold on files outside the app's TypeScript program) — the
+comments in the file say what to add if you want it, and what to keep passing when you do.
 
 ### Self-hosting Google fonts
 

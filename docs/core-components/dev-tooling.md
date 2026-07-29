@@ -1,6 +1,6 @@
 ---
 title: 'Dev Tooling & Multiplayer Harness'
-description: 'chimera-dev-mp CLI (dev:mp), game-owned dev fixtures (dev/profiles + dev/scenarios), harness CLI flags, announce-file handshake, auto host/join/start flow, CHIMERA_DEV_HARNESS guard, standalone-scaffold usage; the sibling chimera-validate-assets and chimera-generate-icons bins.'
+description: 'chimera-dev-mp CLI (dev:mp), game-owned dev fixtures (dev/profiles + dev/scenarios), harness CLI flags, announce-file handshake, auto host/join/start flow, CHIMERA_DEV_HARNESS guard, standalone-scaffold usage; the sibling chimera-validate-assets and chimera-generate-icons bins; the @chimera-engine/electron/eslint subpath shipping the chimera/* architecture-lint rules and the games-facing standaloneLintConfig preset.'
 tags: [dev-tools, multiplayer, harness, electron, testing, tooling]
 ---
 
@@ -240,14 +240,68 @@ manifest read, not by any install observation. The run in a fresh scaffold there
 
 ---
 
+## Sibling subpath (`@chimera-engine/electron/eslint`)
+
+The one dev surface in this section that `@chimera-engine/electron` publishes as something
+other than a bin — shipped for the same reason as the three above it: a standalone game should not lose a guarantee by leaving the monorepo. Here the
+guarantee is the architecture invariants themselves — the `chimera/*` rules are their
+executable half, and a game without them is one where §3's boundaries and §4.35's token
+discipline are prose. What the rules mean lives in those sections and in
+[the tool's own README](../../electron/dev-tools/eslint/README.md); only the distribution
+belongs here.
+
+```js
+import { chimeraPlugin, standaloneLintConfig } from '@chimera-engine/electron/eslint';
+```
+
+A **subpath export, not a bin** — the one dev surface here that is not spawned. A flat
+config imports the plugin object and ESLint calls it; there is no argv, so a bin would be a
+second way to reach the same object and a second thing to keep working.
+
+That choice removes the wiring question the three bins each had to answer, and replaces it
+with a different one: the config that composes the preset lives in the APP, so `eslint` has
+to run from there. The scripts follow:
+
+- **App-level** (`apps/<kebab>/package.json`): `"lint": "eslint ."`. In a STANDALONE project
+  the app's own `eslint.config.mjs` drives it; for an app inside the monorepo there is no
+  app-level config and the root one does, which is why `create-chimera-game` emits that file
+  in standalone mode only.
+- **Standalone root** (emitted by create-chimera-game): `pnpm lint` forwards to the app, the
+  same bare `--filter` delegation `fetch:fonts`, `validate:assets` and `icons:generate` use. The reason differs — `eslint`'s
+  bin is at the root already; it is the CONFIG that is not — but the symptom without it was
+  identical: `Missing script: lint` in the directory VS Code opens, which reads as the
+  scaffold shipping no linting.
+- **Monorepo root**: `pnpm lint` builds the packages, then runs `eslint .` per workspace
+  package, then `eslint tools eslint.config.mjs vitest.config.mts` for the tree no package
+  owns. It loads the same compiled plugin from the same subpath, so the engine and every
+  standalone game run one implementation rather than two.
+
+Three properties are worth naming because none is visible from a passing exit code:
+
+- **The rules ship COMPILED.** Loading them used to mean registering `tsx` and `require`ing
+  TypeScript at lint time through a CJS shim that only the monorepo had. Nothing transpiles
+  during a lint run now — which buys a build-order dependency in exchange: the config
+  resolves `electron/dist`, so a missing build fails loudly, and a STALE one is silent and
+  means linting against yesterday's rule logic.
+- **The token rule resolves its base set through a package specifier**, which is what lets
+  it leave the monorepo at all — see the
+  [tool README](../../electron/dev-tools/eslint/README.md).
+- **The CSS arm widens what `eslint .` covers**, and an unhandled stylesheet aborts the run
+  rather than misreporting — the README covers the `silenceOnCss` contract a composing game
+  has to satisfy.
+
+`verify:scaffold` is where all of this is held, against an installed probe rather than a
+config dump — see [How this is proven](../../electron/dev-tools/eslint/README.md).
+The clean pass alone would be satisfied by a config whose zone globs matched nothing, which
+is a state this feature reached more than once while being built.
+
+---
+
 ## Standalone lint preset — which rules a game gets
 
-The seven `chimera/*` ESLint rules are the executable half of the architecture invariants:
-without them, §3's module boundaries and §4.35's design-token discipline are prose. A
-standalone game inherits none of them today, so the same `fromFloat()` in a reducer that
-CI rejects here sails through there. Making them reachable is a distribution question,
-answered like the bins above — the rules ride the already-published
-`@chimera-engine/electron` rather than a new package.
+Reaching a standalone game at all was the distribution question, answered like the bins
+above and recorded in the section above this one: the rules ride the already-published
+`@chimera-engine/electron`.
 
 What is _not_ a distribution question, and is settled here, is **which** rules travel. The
 answer is not "all seven": three of them guard boundaries internal to the engine, and the

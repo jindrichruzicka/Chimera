@@ -90,7 +90,14 @@ describe('scaffoldGame', () => {
         );
         await write(
             'templates/blank/screens/__GamePascal__Board.tsx',
-            'export function __GamePascal__Board() { return null; }',
+            "import styles from './__GamePascal__Board.module.css';\nexport function __GamePascal__Board() { return styles; }",
+        );
+        // Present in the FIXTURE because a copy pipeline that skipped
+        // `*.module.css` would be invisible otherwise — nothing else in this
+        // suite reads a stylesheet under `screens/`.
+        await write(
+            'templates/blank/screens/__GamePascal__Board.module.css',
+            '/* __Game Title__ board. */\n.board {\n    gap: var(--ch-space-md);\n}\n',
         );
         // The architecture-lint guardrails (§4.32). Both are here because both
         // sit in a shape a copy pipeline can silently drop: a ROOT-level
@@ -226,15 +233,26 @@ describe('scaffoldGame', () => {
 
         const boardPath = path.join(result.appDir, 'screens', 'MyGameBoard.tsx');
         expect(await readFile(boardPath, 'utf8')).toContain('MyGameBoard');
+        // …and the stylesheet it imports, under its substituted name.
+        const boardCss = await readFile(
+            path.join(result.appDir, 'screens', 'MyGameBoard.module.css'),
+            'utf8',
+        );
+        expect(boardCss).toContain('.board');
+        expect(boardCss).toContain('My Game');
 
         // The architecture-lint guardrails (§4.32). Asserted on the EMITTED app,
         // not the template tree: the template shipping them proves nothing if
-        // the copy skips a root `.mjs` or a `styles/` directory, and both are
-        // silent — a scaffolded game would simply have no lint config and no
-        // token file, which reads as "the feature was never wired".
-        const lintConfig = await readFile(path.join(result.appDir, 'eslint.config.mjs'), 'utf8');
-        expect(lintConfig).toContain("from '@chimera-engine/electron/eslint'");
-        expect(lintConfig).toContain('standaloneLintConfig');
+        // the copy skips a `styles/` directory, and that is silent — a
+        // scaffolded game would simply have no token file, which reads as "the
+        // feature was never wired".
+        //
+        // The lint CONFIG is deliberately absent in this mode — see
+        // `STANDALONE_ONLY_TEMPLATE_FILES` for what shipping it here would cost.
+        expect(result.filesWritten).not.toContain('eslint.config.mjs');
+        await expect(
+            readFile(path.join(result.appDir, 'eslint.config.mjs'), 'utf8'),
+        ).rejects.toThrow(/ENOENT/u);
 
         // The token stub carries a substituted name, so a non-canonical
         // placeholder spelling (which the leftover check cannot see — it knows
@@ -417,15 +435,26 @@ describe('scaffoldGame', () => {
             expect(result.appDir).toBe(path.join(outputRoot, 'apps', 'my-game'));
             expect(await readdir(path.join(repoRoot, 'apps'))).not.toContain('my-game');
 
-            // The lint guardrails travel in THIS mode too — the one a published
+            // The lint guardrails travel in THIS mode — the one a published
             // `npm create` uses, and the only one whose output a game author
-            // ever sees.
+            // ever sees. It is also the ONLY mode that gets this file; the
+            // workspace assertion below is the other half.
             expect(await readFile(path.join(result.appDir, 'eslint.config.mjs'), 'utf8')).toContain(
                 'standaloneLintConfig',
             );
+            expect(result.filesWritten).toContain('eslint.config.mjs');
             expect(
                 await readFile(path.join(result.appDir, 'styles', 'tokens-override.css'), 'utf8'),
             ).toContain('--ch-');
+            // The design-value rule's CSS arm, and its only zone. Asserted per
+            // mode like its two siblings: the copy plan is filtered by mode, so
+            // an assertion in one mode proves nothing about the other.
+            expect(
+                await readFile(
+                    path.join(result.appDir, 'screens', 'MyGameBoard.module.css'),
+                    'utf8',
+                ),
+            ).toContain('My Game');
 
             // The standalone project root is emitted.
             for (const file of [

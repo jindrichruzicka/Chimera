@@ -21,9 +21,10 @@
     /*
      * The accent family. `--ch-color-accent` is what primary buttons and the
      * pressed toggle read; the hover and strong variants are separate tokens,
-     * so moving one alone leaves a themed button with an unthemed border. Set
-     * as a group for that reason — the engine's own defaults are three shades
-     * of the same neutral, and so are these.
+     * and different components read different members of the family, so moving
+     * one alone themes some of the UI and not the rest. Set as a group for that
+     * reason — the engine's own defaults are three shades of one neutral, and
+     * these are three shades of one indigo.
      */
     --ch-color-accent: #4f46e5;
     --ch-color-accent-hover: #6366f1;

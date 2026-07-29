@@ -41,12 +41,10 @@ import { standaloneLintConfig } from '@chimera-engine/electron/eslint';
  * under `projectService.allowDefaultProject` — the engine's own root config
  * does exactly that.
  *
- * In a game scaffolded INTO the Chimera monorepo (`--workspace`), this file
- * shadows the repo's root config for anyone running eslint from inside the app
- * directory: flat config resolves the nearest config and does not merge. The
- * root config still governs these files under `pnpm lint` and in CI, and it is
- * the stricter of the two — but they are separate configs, and a rule added
- * here is not a rule CI enforces.
+ * This file is emitted for a STANDALONE project only. A game scaffolded into
+ * the Chimera monorepo (`--workspace`) inherits the repo's root config, which
+ * is the stricter of the two — see `STANDALONE_ONLY_TEMPLATE_FILES` in
+ * `create-chimera-game` for why shipping this one there would take rules away.
  */
 const base = [js.configs.recommended, ...tseslint.configs.recommended];
 
@@ -60,13 +58,23 @@ export default [
         //   e2e/playwright-*  `reporter` in e2e/playwright.config.ts
         //   e2e/test-results  Playwright's default outputDir
         //   .dev-userdata    per-instance dirs from `dev:mp` (Invariant #78)
-        // A companion test pairs these against those configs, because the cost
-        // of missing one is not subtle: a single Playwright HTML report is a
-        // 400 KB bundled file, and linting it reports over a thousand errors.
+        // A companion test pairs the config-declared entries against those
+        // configs and names the rest as literals, because the cost of missing one
+        // is not subtle: a single Playwright HTML report is a 400 KB bundled
+        // file, and linting it reports over a thousand errors.
         ignores: [
             'dist/**',
             'release/**',
             'renderer/out/**',
+            // Next writes `out` (the export, per distDir) AND `.next` (its own
+            // type + server scratch) on every build. `distDir` moves the first
+            // and not the second, so both are named.
+            'renderer/.next/**',
+            // Next OWNS this file and stamps it "should not be edited"; its own
+            // triple-slash reference trips a rule the game did not write. The
+            // monorepo needs no such entry — a blanket `**/*.d.ts` ignore sweeps
+            // it up there, and this config has none.
+            'renderer/next-env.d.ts',
             'e2e/playwright-report/**',
             'e2e/test-results/**',
             'e2e/results/**',

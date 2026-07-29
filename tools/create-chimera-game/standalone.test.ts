@@ -294,8 +294,11 @@ describe('buildStandaloneVscodeLaunchJson', () => {
         expect(names).toContain('Package: My Game — Windows (.exe / nsis)');
         expect(names).toContain('Package: My Game — Linux (AppImage)');
         expect(names).toContain('Package: My Game — Linux (folder)');
-        // No ESLint configs: a standalone scaffold ships no eslint flat config, so an
-        // `eslint .` launch would be broken out of the box.
+        // No ESLint LAUNCH configs. The scaffold does ship an `eslint.config.mjs`
+        // (§4.32), but linting is served inline by the recommended ESLint
+        // extension and on demand by `pnpm lint` — neither wants a debug target,
+        // and a launch entry that starts a linter under the debugger is noise in
+        // a list a game author reads to pick how to RUN the game.
         expect(names.some((n) => String(n).startsWith('ESLint'))).toBe(false);
     });
 

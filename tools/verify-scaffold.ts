@@ -29,12 +29,16 @@
  *      main/preload bundles. This is the arm that fails out-of-repo. Then the generated app's own
  *      `verify:packaged-bundle` gate (Invariant #27) — the template's thin driver over the
  *      engine-exported packaged-bundle guard — so a broken template guard fails engine CI here.
- *      Then the three packaged-bin arms: the dev-harness dry run (§4.32, `chimera-dev-mp --dry-run`
+ *      Then the five dev-surface arms: the dev-harness dry run (§4.32, `chimera-dev-mp --dry-run`
  *      spawn-plan shape-check); the fonts arm (§4.37, Invariant #97 — `chimera-fetch-fonts`
  *      fetches through a localhost fixture and must land the `.woff2` in the app's OWN
  *      `assets/fonts`, killing the cwd path-doubling regression and any silent-no-op bin entry);
- *      and the validate-assets arm (§4.10, Invariants #22/#52 — `chimera-validate-assets ../..`
- *      passes clean AND fails once a broken ref is planted, the non-vacuity proof).
+ *      the validate-assets arm (§4.10, Invariants #22/#52 — `chimera-validate-assets ../..`
+ *      passes clean AND fails once a broken ref is planted, the non-vacuity proof); the
+ *      generate-icons arm (§4.32 — the bin reachable through the app's `.bin` shim with
+ *      neither optional codec installed, failing with the actionable message); and the lint
+ *      arm (§4.32 — `pnpm lint` from the project root, green on the untouched scaffold and
+ *      reporting every curated rule by id once violations are planted).
  *   9. `next build` the renderer + an UNSIGNED `electron-builder --dir` — proves the tokenised
  *      packaging config produces a branded local app bundle from the standalone-emitted project.
  *
@@ -81,9 +85,21 @@ export interface FontFixture {
     close(): void;
 }
 
+/**
+ * {@link FsLike} plus symlink resolution, which only this gate needs.
+ *
+ * The lint arm compares a path it CONSTRUCTED from the temp root against one a
+ * child process REPORTED. On macOS a temp dir is `/var/folders/…` and its
+ * resolved form is `/private/var/folders/…` — the same file under two names
+ * that never compare equal.
+ */
+export interface VerifyScaffoldFs extends FsLike {
+    realpath(p: string): Promise<string>;
+}
+
 export interface VerifyScaffoldDeps {
     readonly run: RunFn;
-    readonly fs: FsLike;
+    readonly fs: VerifyScaffoldFs;
     readonly log: (message: string) => void;
     /**
      * Absolute repo root — build/pack run from each package dir under it, and the
@@ -113,6 +129,7 @@ export type VerifyScaffoldStep =
     | 'fonts'
     | 'validate-assets'
     | 'generate-icons'
+    | 'lint'
     | 'package';
 
 export interface VerifyScaffoldResult {
@@ -155,6 +172,61 @@ export const PROBE_VALIDATE_ASSETS_SCRIPT = 'chimera-validate-assets ../..';
  */
 export const PROBE_ICONS_GENERATE_SCRIPT =
     'chimera-generate-icons --source assets/icons/icon.png --out assets/icons';
+
+/**
+ * The violations the lint arm plants, one per curated rule and one per arm of
+ * the rule that has two. Each names the file it goes in, the source that trips
+ * the rule, and the rule id that must come back — so a rule that is configured,
+ * resolvable and guards nothing fails here rather than looking green.
+ *
+ * Every path is a throwaway removed in a `finally`, except the token override,
+ * which is a real scaffolded file appended to and restored.
+ */
+export const PROBE_LINT_PLANTS = [
+    {
+        rel: 'simulation/verify-scaffold-probe-rule.ts',
+        ruleId: 'chimera/no-fromfloat-in-simulation',
+        source: [
+            "import { fromFloat } from '@chimera-engine/simulation/engine/FixedPoint.js';",
+            'export const probe = fromFloat(1.5);',
+            '',
+        ].join('\n'),
+    },
+    {
+        rel: 'screens/VerifyScaffoldProbe.tsx',
+        ruleId: 'chimera/no-hardcoded-design-values',
+        source: [
+            'export function VerifyScaffoldProbe() {',
+            "    return <div style={{ padding: '12px' }} />;",
+            '}',
+            '',
+        ].join('\n'),
+    },
+    {
+        // The SECOND arm of the same rule. It fires through the @eslint/css
+        // language rather than the TS parser, and every way that arm fails —
+        // an unhandled CSS block aborting the run, a language that never
+        // resolved — leaves the .tsx plant above still reporting.
+        rel: 'screens/VerifyScaffoldProbe.module.css',
+        ruleId: 'chimera/no-hardcoded-design-values',
+        source: ['.probe {', '    padding: 12px;', '}', ''].join('\n'),
+    },
+    {
+        rel: 'screens/VerifyScaffoldProbeDeep.tsx',
+        ruleId: 'chimera/no-game-renderer-internals',
+        source: [
+            "import { Button } from '@chimera-engine/renderer/components/ui/Button';",
+            'export const probe = Button;',
+            '',
+        ].join('\n'),
+    },
+] as const;
+
+/** The undeclared token appended to the scaffolded override stylesheet. */
+export const PROBE_UNKNOWN_TOKEN = '--ch-verify-scaffold-not-a-token';
+
+/** The rule that undeclared token must trip. */
+export const PROBE_UNKNOWN_TOKEN_RULE = 'chimera/no-unknown-token-overrides';
 
 /** The image codecs that must stay ABSENT from a base scaffold install. */
 export const PROBE_ICON_CODECS = ['sharp', 'png2icons'] as const;
@@ -922,6 +994,15 @@ async function scaffoldPipeline(
     );
     await runGenerateIconsArm(deps, tmp, appDir);
 
+    // 8f. lint (§4.32): the architecture guardrails, run from the project root
+    //     on the untouched scaffold and then against one planted violation per
+    //     curated rule — see {@link runLintArm}. Positioned before `package`
+    //     deliberately: the tree here already holds `renderer/.next`,
+    //     `renderer/out` and `dist` from the earlier build steps, which is the
+    //     state a game author lints in.
+    deps.log("running the generated app's lint gate through the project-root forward…");
+    await runLintArm(deps, tmp, appDir);
+
     // 9. package. Export the Next renderer (populates `renderer/out`), then build an UNSIGNED
     //    `electron-builder --dir` bundle from the standalone-emitted project. electron-builder
     //    validates + consumes the per-game top-level `icon`, so a missing/invalid icon fails here.
@@ -951,6 +1032,158 @@ async function scaffoldPipeline(
             'verify:scaffold: step "package" produced no <app>/release bundle',
         );
     }
+}
+
+/**
+ * The architecture-lint arm (§4.32): the guardrails a game keeps after leaving
+ * the monorepo, proven where they have to hold — an INSTALLED project, from the
+ * command a game author runs.
+ *
+ * What it proves and why that shape, in
+ * `electron/dev-tools/eslint/README.md` ("How this is proven").
+ */
+async function runLintArm(deps: VerifyScaffoldDeps, tmp: string, appDir: string): Promise<void> {
+    const fail = (reason: string): never => {
+        throw new VerifyScaffoldStepError('lint', `verify:scaffold: step "lint" ${reason}`);
+    };
+    // From the PROJECT ROOT, which is what a game author has open and what the
+    // forwarded script exists for — not `--filter`, which would prove the app
+    // script while leaving the forward untested.
+    const lint = (): RunResult => deps.run('pnpm', ['lint'], { cwd: tmp, capture: true });
+
+    // (a) The published subpath resolves in the installed project — through the
+    //     package's `exports` map, which is the thing that makes it public.
+    //     Statting the dist file behind it would stay green with `"./eslint"`
+    //     deleted from the map, and a subpath has no `.bin` symlink to check
+    //     the way the sibling bins do. Everything below depends on this, so its
+    //     absence is named here rather than surfacing as an opaque config-load
+    //     failure three lines later.
+    const resolved = deps.run(
+        'node',
+        ['-e', "require.resolve('@chimera-engine/electron/eslint')"],
+        { cwd: appDir, capture: true },
+    );
+    if (resolved.status !== 0) {
+        fail(
+            `could not resolve @chimera-engine/electron/eslint from the installed app: ${`${resolved.stdout}${resolved.stderr}`.slice(0, 400)}`,
+        );
+    }
+
+    // (b) The clean scaffold. A game nobody has touched must lint green, or the
+    //     guardrails are noise the first author turns off.
+    const clean = lint();
+    if (clean.status !== 0) {
+        fail(
+            `reported on an untouched scaffold: ${`${clean.stdout}${clean.stderr}`.slice(0, 1500)}`,
+        );
+    }
+
+    // (c) Non-vacuity, one plant per curated rule — plus the second arm of the
+    //     rule that has two. A clean pass is equally produced by a config that
+    //     matched no files at all.
+    deps.log('planting lint violations — the rule reports printed next are the EXPECTED ones…');
+    const tokenOverridePath = path.join(appDir, 'styles', 'tokens-override.css');
+    const tokenOverrideBefore = await deps.fs.readFile(tokenOverridePath);
+    const plantedPaths = PROBE_LINT_PLANTS.map((plant) => path.join(appDir, plant.rel));
+
+    let planted: RunResult;
+    try {
+        for (const [index, plant] of PROBE_LINT_PLANTS.entries()) {
+            await deps.fs.writeFile(plantedPaths[index] ?? '', plant.source);
+        }
+        await deps.fs.writeFile(
+            tokenOverridePath,
+            `${tokenOverrideBefore}\n:root {\n    ${PROBE_UNKNOWN_TOKEN}: 1px;\n}\n`,
+        );
+        // `-f json`, not the default stylish output — the report is read
+        // structurally below. pnpm appends trailing args to the delegated
+        // script, so the flag reaches `eslint .` through both forwards.
+        planted = deps.run('pnpm', ['lint', '-f', 'json'], { cwd: tmp, capture: true });
+    } finally {
+        for (const plantedPath of plantedPaths) await deps.fs.rm(plantedPath);
+        await deps.fs.writeFile(tokenOverridePath, tokenOverrideBefore);
+    }
+
+    const report = `${planted.stdout}${planted.stderr}`;
+    // The run is captured, and `run` echoes only stderr — ESLint writes its
+    // findings to stdout, so without this the operator is promised a report and
+    // shown pnpm's exit banner.
+    deps.log(report.trim());
+    if (planted.status === 0) {
+        fail(
+            `passed with a planted violation of every curated rule — the gate is vacuous. Report: ${report.slice(0, 800)}`,
+        );
+    }
+
+    // Findings BY FILE. `ruleId` and `filePath` come off the same message
+    // object, so a rule that fired somewhere else cannot stand in for one that
+    // never fired here — and this is the only check on the report's content,
+    // because a rule id missing from its own file's findings is the same
+    // failure as a rule id missing from the report entirely.
+    // STDOUT alone, not the combined capture above. Node writes deprecation
+    // warnings to stderr, and a bracketed one landing after the JSON moves
+    // `lastIndexOf(']')` past the array — which would fail this step on a
+    // correct scaffold, on some runners and not others.
+    const rulesByFile = parseEslintJsonReport(planted.stdout, () => report.slice(0, 800), fail);
+    // ESLint reports the RESOLVED path. `appDir` is built from the temp root
+    // this process created, which on macOS is the `/var/folders/…` symlink to
+    // the `/private/var/folders/…` ESLint prints — the same file under two names
+    // that never compare equal, so every lookup below missed and the arm failed
+    // claiming no rule fired while the report named all five.
+    const realAppDir = await deps.fs.realpath(appDir);
+    for (const [file, ruleId] of [
+        ...PROBE_LINT_PLANTS.map((plant) => [plant.rel, plant.ruleId] as const),
+        ['styles/tokens-override.css', PROBE_UNKNOWN_TOKEN_RULE] as const,
+    ]) {
+        const reported = rulesByFile.get(path.join(realAppDir, file)) ?? new Set<string>();
+        if (!reported.has(ruleId)) {
+            fail(
+                `planted ${ruleId} in ${file} and got ${reported.size === 0 ? 'no finding there at all' : `only ${[...reported].join(', ')}`}`,
+            );
+        }
+    }
+}
+
+/**
+ * ESLint's `-f json` output, as `filePath -> {ruleId}`.
+ *
+ * The array is sliced out from under pnpm's script banner — pnpm prints its `>`
+ * lines to the same stream before the delegated command's own output.
+ *
+ * `output` is stdout; `excerpt` is what a failure quotes. They differ on
+ * purpose: a crash writes its explanation to STDERR, so the excerpt has to carry
+ * both streams, while the slice must not — a bracketed stderr line landing after
+ * the JSON moves the closing bracket past the array.
+ */
+function parseEslintJsonReport(
+    output: string,
+    excerpt: () => string,
+    fail: (reason: string) => never,
+): Map<string, Set<string>> {
+    const start = output.indexOf('[');
+    const end = output.lastIndexOf(']');
+    if (start === -1 || end <= start) {
+        fail(`printed no JSON report: ${excerpt()}`);
+    }
+
+    let results: { filePath?: unknown; messages?: { ruleId?: unknown }[] }[];
+    try {
+        results = JSON.parse(output.slice(start, end + 1)) as typeof results;
+    } catch {
+        return fail(`printed an unparseable JSON report: ${excerpt()}`);
+    }
+
+    const byFile = new Map<string, Set<string>>();
+    for (const result of results) {
+        if (typeof result.filePath !== 'string') continue;
+        const rules = new Set<string>();
+        for (const message of result.messages ?? []) {
+            // ESLint's fatal-parse marker, not a rule.
+            if (typeof message.ruleId === 'string') rules.add(message.ruleId);
+        }
+        if (rules.size > 0) byFile.set(result.filePath, rules);
+    }
+    return byFile;
 }
 
 // ── Orchestration ──────────────────────────────────────────────────────────────
@@ -1058,7 +1291,7 @@ if (process.env['VITEST'] === undefined) {
             };
         };
 
-        const fs: FsLike = {
+        const fs: VerifyScaffoldFs = {
             mkdtemp: (prefix) => fsp.mkdtemp(prefix),
             mkdir: (dir) => fsp.mkdir(dir, { recursive: true }).then(() => undefined),
             rm: (dir) => fsp.rm(dir, { recursive: true, force: true }),
@@ -1069,6 +1302,7 @@ if (process.env['VITEST'] === undefined) {
                     () => true,
                     () => false,
                 ),
+            realpath: (p) => fsp.realpath(p),
         };
 
         // The Google-Fonts-shaped fixture: one @font-face whose src points back at

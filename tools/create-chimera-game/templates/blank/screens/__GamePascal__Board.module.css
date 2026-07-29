@@ -1,0 +1,26 @@
+/*
+ * __Game Title__'s board styles.
+ *
+ * Colours and sizes come from `var(--ch-*)` tokens, so the board follows
+ * whatever `styles/tokens-override.css` sets. Writing them literally instead
+ * would look right until someone themed the game, and then quietly stop
+ * matching.
+ *
+ * `chimera/no-hardcoded-design-values` (Invariants #86/#91) catches some of that
+ * in this file — see the rule for exactly what. It is a backstop, not the
+ * contract: plenty of ways to write a literal here lint clean and are still the
+ * wrong thing to write.
+ *
+ * Local variables are fine — the rule is about hardcoded VALUES, not about
+ * custom properties. Only `styles/tokens-override.css` is restricted to
+ * engine-declared names.
+ */
+
+.board {
+    display: grid;
+    gap: var(--ch-space-md);
+    padding: var(--ch-space-md);
+    border-radius: var(--ch-radius-md);
+    background: var(--ch-color-surface);
+    color: var(--ch-color-text-primary);
+}

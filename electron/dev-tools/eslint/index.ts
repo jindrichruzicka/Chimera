@@ -1,7 +1,10 @@
 /**
  * electron/dev-tools/eslint/index.ts
  *
- * ESLint plugin `eslint-plugin-chimera` — Chimera-specific lint rules.
+ * The `chimera` ESLint plugin — Chimera-specific lint rules. Published as
+ * `chimeraPlugin` at the `@chimera-engine/electron/eslint` subpath; there is no
+ * `eslint-plugin-chimera` package, and the repo-root tsx-shim tree that used to
+ * load these is retired (`tools/root-eslint-config.test.ts` keeps it retired).
  *
  * Registered rules:
  *   - `chimera/no-fromfloat-in-simulation` (Invariant #76)

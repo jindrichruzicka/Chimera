@@ -11,9 +11,11 @@
 import React from 'react';
 import { Caption, Panel } from '@chimera-engine/renderer/components/ui';
 
+import styles from './__GamePascal__Board.module.css';
+
 export default function __GamePascal__Board(): React.ReactElement {
     return (
-        <Panel title="__Game Title__">
+        <Panel title="__Game Title__" className={styles['board']}>
             <Caption>
                 Your new Chimera game is running. Edit screens/ to build your board, and dispatch
                 actions through the `sendAction` prop.

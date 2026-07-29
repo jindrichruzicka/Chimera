@@ -532,14 +532,17 @@ describe('blank template smoke harness', () => {
  * A game leaving the monorepo used to lose every `chimera/*` rule — a
  * `fromFloat()` in a reducer or a hardcoded hex in a screen went unflagged, and
  * the app's own `lint` script was a hard error because no config existed. These
- * assert the two files that change that, on the REAL template tree.
+ * assert the template files that change that, on the REAL template tree.
  *
- * Neither is linted in this repo (`tools/create-chimera-game/templates/**` is
- * globally ignored), so nothing else here would notice them being dropped,
- * malformed, or emptied. These assertions read the template TEXT; that they are
- * emitted into a scaffolded app is asserted in `index.test.ts`, and that the
- * emitted config actually runs clean and fires is not yet asserted anywhere —
- * that belongs to the scaffold gate, which does not lint today.
+ * None of them is linted in this repo (`tools/create-chimera-game/templates/**`
+ * is globally ignored), so nothing else here would notice one being dropped,
+ * malformed, or emptied.
+ *
+ * These assertions read the template TEXT. What happens to it afterwards is
+ * proven elsewhere: `index.test.ts` asserts which files reach a scaffolded app
+ * in which mode (the flat config is emitted for a STANDALONE project only), and
+ * `verify:scaffold` asserts the emitted config runs clean and actually fires,
+ * against an installed project.
  */
 describe('blank template lint guardrails', () => {
     it('ships a flat config composing the engine preset onto the game', async () => {
@@ -605,13 +608,82 @@ describe('blank template lint guardrails', () => {
         expect(overridden.length).toBeGreaterThan(0);
         expect(overridden.filter((token) => !declared.has(token))).toEqual([]);
 
-        // The accent family moves as a unit or not at all: overriding the base
-        // while leaving the hover and strong variants on the engine's neutral
-        // ships a themed button with an unthemed border that greys on hover.
-        // The comment in the stub says so; this is what holds it.
+        // The stub tells its reader to move the accent family as a unit. This
+        // is what holds the stub to its own advice.
         expect(overridden).toContain('--ch-color-accent');
         expect(overridden).toContain('--ch-color-accent-hover');
         expect(overridden).toContain('--ch-color-accent-strong');
+    });
+
+    it('ships a screen stylesheet under the guarded path whose values are tokens or keywords', async () => {
+        // The CSS arm of `no-hardcoded-design-values` matches
+        // `screens/**/*.module.css`. It is the arm no other file in the template
+        // exercises — the override stub above sits under `styles/`, and a rule
+        // whose only zone matches nothing is indistinguishable from a rule that
+        // was never wired.
+        const content = await read('screens/__GamePascal__Board.module.css');
+
+        // This is a property of the STUB, not a restatement of the rule. It is
+        // deliberately the stricter of the two, and no attempt is made to track
+        // where the two diverge: what matters is that a scaffold nobody has
+        // touched lints green, and every literal excluded here is one the stub
+        // has no reason to carry.
+        const withoutComments = content.replace(/\/\*[\s\S]*?\*\//gu, '');
+        const values = Array.from(
+            withoutComments.matchAll(/^[ \t]+[\w-]+:\s*([^;{]+);/gmu),
+            (match) => match[1]?.trim() ?? '',
+        );
+
+        // Every declaration in the file was scanned. Indentation depth is not
+        // the property under test, so a nested block — which a fixed-indent
+        // pattern skips ENTIRELY, taking its literals with it — has to red here
+        // rather than shrink the sample in silence.
+        expect(values).toHaveLength((withoutComments.match(/;/gu) ?? []).length);
+        expect(values.some((value) => /^var\(--ch-[\w-]+\)$/u.test(value))).toBe(true);
+        expect(
+            values.filter((value) =>
+                /#[^\s;)]+|\d*\.?\d+(?:px|rem)\b|\b(?:rgb|rgba|hsl|hsla)\(/iu.test(value),
+            ),
+        ).toEqual([]);
+    });
+
+    it('references only tokens the engine declares from the screen stylesheet', async () => {
+        // Same direction as the override stub, different rule: an undeclared
+        // `--ch-*` here resolves to nothing at runtime, so the board renders
+        // unstyled rather than erroring. Read from the renderer SOURCE for the
+        // reason given above.
+        const declared = new Set(
+            Array.from(
+                await readFile(
+                    path.resolve(import.meta.dirname, '../../renderer/styles/tokens.css'),
+                    'utf8',
+                ).then((css) => css.matchAll(/(?:^|[\s{;])(--ch-[\w-]+)\s*:/gmu)),
+                (match) => match[1],
+            ),
+        );
+        const referenced = Array.from(
+            (await read('screens/__GamePascal__Board.module.css')).matchAll(
+                /var\((--ch-[\w-]+)\)/gu,
+            ),
+            (match) => match[1],
+        );
+
+        expect(referenced.length).toBeGreaterThan(0);
+        expect(referenced.filter((token) => !declared.has(token))).toEqual([]);
+    });
+
+    it('has the board consume that stylesheet', async () => {
+        // A CSS module nothing imports is dead weight the first author deletes,
+        // and it takes the rule's only zone with it. Bracket access, not
+        // `styles.board`: the app's tsconfig sets
+        // `noPropertyAccessFromIndexSignature`, so the dotted form fails the
+        // scaffold's own build.
+        const board = await read('screens/__GamePascal__Board.tsx');
+        const stylesheet = await read('screens/__GamePascal__Board.module.css');
+
+        expect(board).toContain("import styles from './__GamePascal__Board.module.css'");
+        expect(board).toContain("className={styles['board']}");
+        expect(stylesheet).toMatch(/^\.board\s*\{/mu);
     });
 });
 
@@ -705,6 +777,10 @@ describe('blank template, whole-tree properties', () => {
             `${outDir}/**`,
             `${releaseDir}/**`,
             `renderer/${distDir}/**`,
+            // Next's own scratch dir, which `distDir` does not move, and the
+            // declaration file it owns beside it.
+            'renderer/.next/**',
+            'renderer/next-env.d.ts',
             `e2e/${reportDir}/**`,
             `e2e/${junitFile?.split('/')[0]}/**`,
             // Playwright's default outputDir, and the dev harness's per-instance

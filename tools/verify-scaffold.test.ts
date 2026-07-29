@@ -11,6 +11,7 @@
 // The standalone-root SYNTHESIZERS themselves (toolchain deps, root manifest, workspace yaml,
 // unit-arm vitest config) are owned by create-chimera-game and unit-tested in standalone.test.ts.
 
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect } from 'vitest';
@@ -19,6 +20,9 @@ import {
     PROBE_FONT_FILE,
     PROBE_GAME,
     PROBE_ICONS_GENERATE_SCRIPT,
+    PROBE_LINT_PLANTS,
+    PROBE_UNKNOWN_TOKEN,
+    PROBE_UNKNOWN_TOKEN_RULE,
     PROBE_NPMRC,
     PROBE_VALIDATE_ASSETS_SCRIPT,
     applyTarballOverrides,
@@ -29,7 +33,7 @@ import {
     type FontFixture,
     type RunFn,
     type RunResult,
-    type FsLike,
+    type VerifyScaffoldFs,
     type VerifyScaffoldDeps,
 } from './verify-scaffold.js';
 // The pure standalone-root synthesizers moved to create-chimera-game (their own unit tests live
@@ -39,13 +43,19 @@ import { buildStandaloneRootManifest } from './create-chimera-game/standalone.js
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
 
+/**
+ * What the fake fs prepends when resolving a path. macOS resolves a temp dir
+ * to '/private' + the constructed path, and the two forms never compare equal.
+ */
+const REAL_PREFIX = '/private';
+
 /** An in-memory FsLike backed by a Map; records rm() targets for cleanup asserts. */
-function makeFakeFs(): { fs: FsLike; files: Map<string, string>; removed: string[] } {
+function makeFakeFs(): { fs: VerifyScaffoldFs; files: Map<string, string>; removed: string[] } {
     const files = new Map<string, string>();
     const dirs = new Set<string>();
     const removed: string[] = [];
     let counter = 0;
-    const fs: FsLike = {
+    const fs: VerifyScaffoldFs = {
         mkdtemp: (prefix) => {
             counter += 1;
             const dir = `${prefix}${counter}`;
@@ -70,6 +80,11 @@ function makeFakeFs(): { fs: FsLike; files: Map<string, string>; removed: string
             return Promise.resolve(data);
         },
         exists: (p) => Promise.resolve(files.has(p) || dirs.has(p)),
+        // Models macOS: a temp path is a symlink, and the resolved form is the
+        // one a child process reports. An identity fake here would let a
+        // comparison that skips resolution pass in the suite and fail on every
+        // real run.
+        realpath: (p) => Promise.resolve(p.startsWith(REAL_PREFIX) ? p : `${REAL_PREFIX}${p}`),
     };
     return { fs, files, removed };
 }
@@ -106,6 +121,31 @@ function seedInstallExcept(files: Map<string, string>, omittedBins: readonly str
 }
 
 /**
+ * ESLint's `-f json` output for `findings`, under pnpm's script banner.
+ *
+ * The banner is not decoration: pnpm prints it to the same stream, so a reader
+ * that fed the whole capture to `JSON.parse` would throw on every real run.
+ */
+function eslintJsonReport(
+    appDir: string,
+    findings: readonly { rel: string; ruleId: string }[],
+): string {
+    const byFile = new Map<string, { ruleId: string }[]>();
+    for (const finding of findings) {
+        // RESOLVED paths, the way ESLint prints them — the arm builds its lookup
+        // keys from the constructed temp path, so a comparison that does not
+        // resolve first misses every finding.
+        const key = path.join(`${REAL_PREFIX}${appDir}`, finding.rel);
+        byFile.set(key, [...(byFile.get(key) ?? []), { ruleId: finding.ruleId }]);
+    }
+    const results = [...byFile].map(([filePath, messages]) => ({
+        filePath,
+        messages: messages.map((message) => ({ ...message, severity: 2, message: 'x' })),
+    }));
+    return `\n> probe@0.0.0 lint ${appDir}\n> eslint . "-f" "json"\n\n${JSON.stringify(results)}\n`;
+}
+
+/**
  * A programmable RunFn. By default every command succeeds; `pnpm pack` echoes a
  * deterministic tarball path so the parser has something to read, and the scaffold
  * CLI run seeds the generated app's package.json + register.ts into the fake fs
@@ -125,6 +165,58 @@ function makeFakeRun(
         calls.push({ cmd, args, cwd: opts?.cwd });
         const override = overrides(cmd, args);
         if (override !== undefined) return override;
+        // `pnpm lint` answers from the fake tree by file presence, and for the
+        // token plant by its content, so the arm's clean and planted halves are
+        // told apart by state rather than by call order. It never reads a plant's `source`: that the sources really do
+        // violate their rules is proven only by `verify:scaffold`.
+        // The subpath-resolution probe. Answers from the same fake tree the
+        // install seeded, so deleting the entry reds the arm exactly as a
+        // missing export would.
+        if (cmd === 'node' && String(args[1] ?? '').includes('@chimera-engine/electron/eslint')) {
+            const present = files.has(
+                path.join(
+                    appDir,
+                    'node_modules/@chimera-engine/electron/dist/dev-tools/eslint/index.js',
+                ),
+            );
+            return present
+                ? { status: 0, stdout: '', stderr: '' }
+                : {
+                      status: 1,
+                      stdout: '',
+                      stderr: "Cannot find module '@chimera-engine/electron/eslint'",
+                  };
+        }
+        if (args[0] === 'lint') {
+            const findings: { rel: string; ruleId: string }[] = PROBE_LINT_PLANTS.filter((plant) =>
+                files.has(path.join(appDir, plant.rel)),
+            ).map((plant) => ({ rel: plant.rel, ruleId: plant.ruleId }));
+            if (
+                (files.get(path.join(appDir, 'styles', 'tokens-override.css')) ?? '').includes(
+                    PROBE_UNKNOWN_TOKEN,
+                )
+            ) {
+                findings.push({
+                    rel: 'styles/tokens-override.css',
+                    ruleId: PROBE_UNKNOWN_TOKEN_RULE,
+                });
+            }
+            // The format the arm asked for. `-f json` reaches ESLint through the
+            // root forward, so a fake that answered stylish either way would let
+            // a dropped flag pass here and fail only against a real scaffold.
+            return {
+                status: findings.length > 0 ? 1 : 0,
+                stdout: args.includes('json')
+                    ? eslintJsonReport(appDir, findings)
+                    : findings
+                          .map(
+                              (finding) =>
+                                  `${path.join(appDir, finding.rel)}\n  1:1  error  x  ${finding.ruleId}`,
+                          )
+                          .join('\n'),
+                stderr: '',
+            };
+        }
         if (args[0] === 'pack') {
             const destIdx = args.indexOf('--pack-destination');
             const dest = destIdx >= 0 ? args[destIdx + 1] : '.';
@@ -170,6 +262,16 @@ function makeFakeRun(
                     },
                 }),
             );
+            // The lint guardrails the template ships (§4.32): the token stub the
+            // rule matches by name, and the flat config the app's own script runs.
+            files.set(
+                path.join(appDir, 'styles', 'tokens-override.css'),
+                ':root {\n    --ch-color-accent: #4f46e5;\n}\n',
+            );
+            files.set(
+                path.join(appDir, 'eslint.config.mjs'),
+                'export default [...standaloneLintConfig()];\n',
+            );
             files.set(
                 path.join(appDir, 'renderer', 'register.ts'),
                 'registerRendererGame(contribution);\n',
@@ -192,6 +294,15 @@ function makeFakeRun(
             files.set(
                 path.join(appDir, 'node_modules', '.bin', 'chimera-generate-icons'),
                 '#!node',
+            );
+            // The published `./eslint` subpath. Not a bin — the lint arm resolves
+            // the module the app's flat config imports.
+            files.set(
+                path.join(
+                    appDir,
+                    'node_modules/@chimera-engine/electron/dist/dev-tools/eslint/index.js',
+                ),
+                'export const chimeraPlugin = {};',
             );
             // The installed manifest the arms read declarations off — what
             // `npm install @chimera-engine/electron` consults. The codecs are
@@ -327,7 +438,7 @@ function makeFakeFontFixture(port = 41234): {
 
 function makeDeps(
     run: RunFn,
-    fs: FsLike,
+    fs: VerifyScaffoldFs,
     extra: Partial<VerifyScaffoldDeps> = {},
 ): VerifyScaffoldDeps {
     return {
@@ -996,6 +1107,395 @@ describe('verifyScaffold', () => {
 
         expect(result.ok).toBe(false);
         expect(result.failedStep).toBe('validate-assets');
+    });
+
+    it('plants a violation of every rule the preset curates, and of nothing else', async () => {
+        // The inventory otherwise grades itself: the fake `pnpm lint` answers
+        // from PROBE_LINT_PLANTS and every assertion reads the same constant, so
+        // dropping an entry removes both the plant and its check. The authority
+        // is the curated manifest, read as TEXT rather than imported — `tools/`
+        // does not take a dependency on the engine's source tree.
+        const manifest = await readFile(
+            path.join(import.meta.dirname, '../electron/dev-tools/eslint/curated-rules.ts'),
+            'utf8',
+        );
+        // Sliced to the CURATED array: the exclusions below it carry the same
+        // `ruleId:` shape, and planting a violation of a rule the preset
+        // deliberately withholds would be the opposite of the property here.
+        // Anchored on the DECLARATIONS — both names appear in prose above the
+        // code, so a bare name search can start the slice in a doc comment or
+        // end it inside the array it is meant to cover.
+        const curatedBlock = manifest.slice(
+            manifest.indexOf('export const STANDALONE_LINT_RULES'),
+            manifest.indexOf('export const STANDALONE_LINT_EXCLUSIONS'),
+        );
+        // Per ENTRY, not per rule id: the entry says which zone kinds the rule
+        // covers, and a rule with two arms needs a plant in each. Splitting on
+        // `ruleId:` gives one chunk per entry, running to the next entry.
+        const entries = curatedBlock
+            .split('ruleId: ')
+            .slice(1)
+            .map((chunk) => ({
+                ruleId: /^'(chimera\/[a-z-]+)'/u.exec(chunk)?.[1] ?? '',
+                lintsCss: chunk.includes('cssZones:'),
+                lintsCode: chunk.includes('zones: '),
+            }));
+        const curated = entries.map((entry) => entry.ruleId);
+        const plants = [
+            ...PROBE_LINT_PLANTS.map((plant) => ({ rel: plant.rel, ruleId: plant.ruleId })),
+            { rel: 'styles/tokens-override.css', ruleId: PROBE_UNKNOWN_TOKEN_RULE },
+        ];
+        const planted = new Set(plants.map((plant) => plant.ruleId));
+
+        // Floor: a manifest that parsed to nothing would satisfy the subset
+        // check below vacuously.
+        expect(curated.length).toBeGreaterThan(3);
+        expect([...planted].filter((ruleId) => !curated.includes(ruleId))).toEqual([]);
+        expect(curated.filter((ruleId) => !planted.has(ruleId))).toEqual([]);
+
+        // Every ARM, not just every rule. `no-hardcoded-design-values` is one id
+        // over two zone kinds, so a rule-id set alone stays green after the CSS
+        // plant is dropped — and that arm is the one a JS-only base silently
+        // aborts.
+        const plantedCss = new Set(
+            plants.filter((plant) => plant.rel.endsWith('.css')).map((plant) => plant.ruleId),
+        );
+        const plantedCode = new Set(
+            plants.filter((plant) => !plant.rel.endsWith('.css')).map((plant) => plant.ruleId),
+        );
+        expect(entries.filter((entry) => entry.lintsCss && !plantedCss.has(entry.ruleId))).toEqual(
+            [],
+        );
+        expect(
+            entries.filter((entry) => entry.lintsCode && !plantedCode.has(entry.ruleId)),
+        ).toEqual([]);
+        // …and the two kinds are both really present, so neither filter above is
+        // vacuous.
+        expect(entries.filter((entry) => entry.lintsCss).length).toBeGreaterThan(0);
+        expect(entries.filter((entry) => entry.lintsCode).length).toBeGreaterThan(0);
+    });
+
+    it('runs the lint arm: subpath resolution, a clean pass, and planted violations that FAIL', async () => {
+        const { fs, files, removed } = makeFakeFs();
+        const { run, calls } = makeFakeRun(files, TMP_ROOT);
+        const logged: string[] = [];
+
+        const result = await verifyScaffold(makeDeps(run, fs, { log: (m) => logged.push(m) }));
+
+        expect(result.ok).toBe(true);
+        // Driven from the PROJECT ROOT, not `--filter`: the root forward is
+        // half of what the arm proves, and a `--filter` call would exercise the
+        // app script while leaving the forward untested.
+        const lintCalls = calls.filter((call) => call.args[0] === 'lint');
+        expect(lintCalls).toHaveLength(2);
+        for (const call of lintCalls) expect(call.cwd).toBe(TMP_ROOT);
+        // The planted run asks for the machine format. Without it the arm reads
+        // a human blob, where a rule id from one file's block satisfies another
+        // file's match.
+        expect(lintCalls[1]?.args).toEqual(['lint', '-f', 'json']);
+        // Resolved from the APP, not the project root. The root is where the
+        // engine tarballs were installed, so a probe anchored there answers yes
+        // for a subpath the app itself cannot reach.
+        const probeCall = calls.find(
+            (call) => call.cmd === 'node' && call.args.join(' ').includes('/eslint'),
+        );
+        expect(probeCall?.cwd).toBe(APP_DIR);
+        // The report reaches the operator. `run` is captured here and echoes
+        // only stderr, so without an explicit log a failing gate prints pnpm's
+        // exit banner and none of the findings that explain it.
+        expect(logged.some((message) => message.includes(PROBE_UNKNOWN_TOKEN_RULE))).toBe(true);
+        // Every plant is removed again, and the real scaffolded stylesheet is
+        // restored — a gate that leaves its probes behind poisons every later
+        // step.
+        for (const plant of PROBE_LINT_PLANTS) {
+            expect(removed).toContain(path.join(APP_DIR, plant.rel));
+        }
+        expect(files.get(path.join(APP_DIR, 'styles', 'tokens-override.css'))).not.toContain(
+            PROBE_UNKNOWN_TOKEN,
+        );
+    });
+
+    it('reports lint when the @chimera-engine/electron/eslint subpath is not installed', async () => {
+        const { fs, files } = makeFakeFs();
+        // Bypass the default install seeding, then put back everything a correct
+        // install leaves EXCEPT the preset entry — so every earlier arm still
+        // passes and the step reported is the one under test.
+        const { run } = makeFakeRun(files, TMP_ROOT, (_cmd, args) => {
+            if (args[0] !== 'install') return undefined;
+            seedInstallExcept(files, []);
+            files.set(
+                path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab, 'package.json'),
+                JSON.stringify({
+                    name: PROBE_GAME.pkg,
+                    scripts: {
+                        'fetch:fonts': `chimera-fetch-fonts --game ${PROBE_GAME.kebab} --out-dir assets/fonts`,
+                        'validate:assets': PROBE_VALIDATE_ASSETS_SCRIPT,
+                        'icons:generate': PROBE_ICONS_GENERATE_SCRIPT,
+                    },
+                }),
+            );
+            return { status: 0, stdout: '', stderr: '' };
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
+    });
+
+    it('reports lint when the untouched scaffold already reports', async () => {
+        // The half a game author feels first: guardrails that red on code
+        // nobody wrote are guardrails the first author switches off.
+        const { fs, files } = makeFakeFs();
+        let seen = 0;
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {
+            if (args[0] !== 'lint') return undefined;
+            seen += 1;
+            return seen === 1
+                ? { status: 1, stdout: 'renderer/next-env.d.ts\n  3:1  error  x  y', stderr: '' }
+                : undefined;
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
+    });
+
+    /**
+     * A full, correct planted report — every rule id, every plant's path. The
+     * three tests below each break exactly ONE thing in it, so the assertion
+     * that reds names the property under test rather than whichever guard
+     * happened to fire first.
+     */
+    const plantedFindings = (): { rel: string; ruleId: string }[] => [
+        ...PROBE_LINT_PLANTS.map((plant) => ({ rel: plant.rel, ruleId: plant.ruleId })),
+        { rel: 'styles/tokens-override.css', ruleId: PROBE_UNKNOWN_TOKEN_RULE },
+    ];
+
+    const fullPlantedReport = (): string => eslintJsonReport(APP_DIR, plantedFindings());
+
+    /** Replaces the SECOND `pnpm lint` — the planted one — with `result`. */
+    const plantedLintOverride =
+        (result: RunResult) =>
+        (): { override: (cmd: string, args: readonly string[]) => RunResult | undefined } => {
+            let seen = 0;
+            return {
+                override: (_cmd, args) => {
+                    if (args[0] !== 'lint') return undefined;
+                    seen += 1;
+                    return seen === 2 ? result : undefined;
+                },
+            };
+        };
+
+    it('reports lint when the planted run exits 0 while reporting everything', async () => {
+        // Isolates the exit-code guard: the report is complete, so neither the
+        // rule-id nor the per-file check can fire in its place.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedLintOverride({ status: 0, stdout: fullPlantedReport(), stderr: '' })().override,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
+    });
+
+    it('reports lint when one rule id is missing but every plant file is named', async () => {
+        // Isolates the rule-id check. A rule that stopped firing while another
+        // still reported in its file is exactly the silent half of the failure.
+        const { fs, files } = makeFakeFs();
+        const silenced = PROBE_LINT_PLANTS[0]?.ruleId ?? '';
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedLintOverride({
+                status: 1,
+                stdout: fullPlantedReport().split(silenced).join('some-other-rule'),
+                stderr: '',
+            })().override,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
+    });
+
+    it('reports lint when the TOKEN rule stays silent (Invariant #85)', async () => {
+        // The token plant is the only one not in PROBE_LINT_PLANTS, so it is the
+        // one a per-plant loop would miss.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedLintOverride({
+                status: 1,
+                stdout: fullPlantedReport().split(PROBE_UNKNOWN_TOKEN_RULE).join('some-other-rule'),
+                stderr: '',
+            })().override,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
+    });
+
+    it('reports lint when a rule id appears but its plant file does not', async () => {
+        // Isolates the per-file check. One rule firing five times reads
+        // identically to five rules firing once, unless the FILES are read too.
+        const { fs, files } = makeFakeFs();
+        const dropped = PROBE_LINT_PLANTS[1];
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedLintOverride({
+                status: 1,
+                stdout: fullPlantedReport()
+                    .split(path.basename(dropped?.rel ?? ''))
+                    .join('elsewhere.tsx'),
+                stderr: '',
+            })().override,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
+    });
+
+    it('reports lint when the planted violations STILL exit 0 (the gate is vacuous)', async () => {
+        // The arm's reason for existing. A clean pass is equally produced by a
+        // config whose zone globs match nothing at all.
+        const { fs, files } = makeFakeFs();
+        let seen = 0;
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {
+            if (args[0] !== 'lint') return undefined;
+            seen += 1;
+            return seen === 2 ? { status: 0, stdout: '', stderr: '' } : undefined;
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
+    });
+
+    it('reports lint when every rule and every file is named but PAIRED WRONG', async () => {
+        // Every rule id appears and every path appears, but no finding carries
+        // its own rule. Read as one flat blob this is a passing report. It is
+        // the failure a zone glob widened by accident produces, and the two
+        // design-value plants land on it exactly, since they share a rule id and
+        // differ only by file.
+        //
+        // Rotated by TWO: those two plants sit adjacent, so a one-step rotation
+        // hands one of them back its own rule id and the fixture stops being
+        // what this comment says it is.
+        const { fs, files } = makeFakeFs();
+        const rotated = plantedFindings();
+        const ROTATION = 2;
+        const misplaced = rotated.map((finding, index) => ({
+            rel: finding.rel,
+            ruleId: rotated[(index + ROTATION) % rotated.length]?.ruleId ?? '',
+        }));
+        // Every pairing really is wrong. Two plants share a rule id, so the
+        // wrong rotation quietly hands one of them back its own — and the
+        // fixture would then prove less than this test claims.
+        expect(misplaced.filter((f, index) => f.ruleId === rotated[index]?.ruleId)).toEqual([]);
+
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedLintOverride({
+                status: 1,
+                stdout: eslintJsonReport(APP_DIR, misplaced),
+                stderr: '',
+            })().override,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
+    });
+
+    it('reads the report from STDOUT, so a bracketed stderr line cannot break it', async () => {
+        // Node writes deprecation warnings to stderr, bracketed and unbidden.
+        // Concatenating the two streams puts one after the JSON, which moves the
+        // closing-bracket search past the array — a gate that fails on a correct
+        // scaffold, on some runners and not others.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedLintOverride({
+                status: 1,
+                stdout: fullPlantedReport(),
+                stderr: '(node:1) [DEP0040] DeprecationWarning: `punycode` is deprecated.\n',
+            })().override,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(true);
+    });
+
+    it('quotes STDERR in the failure when the planted run crashed with an empty stdout', async () => {
+        // The excerpt and the slice read different streams on purpose. ESLint
+        // crashing on a bad config writes nothing to stdout and everything to
+        // stderr, so an excerpt taken from the parsed stream would report "no
+        // JSON report" and quote the empty string — leaving the operator the
+        // one message that explains it.
+        const { fs, files } = makeFakeFs();
+        const crash = 'Error: Could not find plugin "chimera" in configuration.';
+        const logged: string[] = [];
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedLintOverride({ status: 2, stdout: '', stderr: `${crash}\n` })().override,
+        );
+
+        const result = await verifyScaffold(
+            makeDeps(run, fs, { log: (message) => logged.push(message) }),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
+        // The step FAILURE names it, not just the earlier report dump — that dump
+        // is one `deps.log` among many in a long run, and the failure line is
+        // what an operator reads first.
+        expect(
+            logged.filter((message) => message.includes('step "lint"') && message.includes(crash)),
+        ).toHaveLength(1);
+    });
+
+    it('reports lint when the planted run prints no JSON report at all', async () => {
+        // A `-f json` that silently stopped reaching ESLint (a dropped flag, a
+        // forward that swallows trailing args) leaves a non-zero exit and a
+        // human-format blob. Parsing that to an empty finding set and passing
+        // would make the whole arm depend on the exit code alone.
+        const { fs, files } = makeFakeFs();
+        const { run } = makeFakeRun(
+            files,
+            TMP_ROOT,
+            plantedLintOverride({
+                status: 1,
+                stdout: PROBE_LINT_PLANTS.map(
+                    (plant) => `${path.join(APP_DIR, plant.rel)}\n  1:1  error  x  ${plant.ruleId}`,
+                ).join('\n'),
+                stderr: '',
+            })().override,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('lint');
     });
 
     it('reports validate-assets when the CLEAN run fails, even though it printed a count', async () => {

@@ -37,13 +37,11 @@ const typescriptEslintRulesOff = Object.fromEntries(
  *   - Generic TypeScript quality rules (typescript-eslint recommended + type-checked).
  *   - Module-boundary enforcement via `no-restricted-imports`
  *     (see docs/coding-standards.md §3).
- *   - Determinism guard via `no-restricted-globals` scoped to simulation/ai paths
+ *   - Determinism guard via `no-restricted-syntax` scoped to simulation/ai paths
  *     (see docs/coding-standards.md §7, §1.2).
- *
- * Explicitly deferred (tracked under roadmap F04 / F20):
- *   - `chimera/no-restricted-globals` custom rule
- *   These require the `FixedPoint` module and `simulation/` tree to exist
- *   before they can be implemented and tested.
+ *   - The seven `chimera/*` architecture rules, loaded as compiled JS from
+ *     `@chimera-engine/electron/eslint` — the same artifact a standalone game
+ *     composes through `standaloneLintConfig()` (see §3, §4.32).
  */
 export default tseslint.config(
     {
@@ -348,21 +346,22 @@ export default tseslint.config(
     // `@chimera-engine/ai` or `@chimera-engine/networking` runtime — neither is a renderer
     // dependency. (The renderer↔`@chimera-engine/electron/preload` type-only contract is
     // a tolerated back-edge cleaned up in F62.) `renderer/**` is also wholly
-    // game-agnostic (#784): it must not import any game — `@chimera-engine/tactics`, an
+    // game-agnostic: it must not import any game — `@chimera-engine/tactics`, an
     // `apps/*` consumer path, or a legacy `games/*` path. The renderer host is a
     // runtime injection seam (`renderer/game/rendererGameRegistry.ts` →
     // `registerRendererGame`); a game's renderer contribution enters only at the
     // consumer-app renderer composition root (`apps/tactics/renderer/register.ts`),
     // selected by the synthetic `chimera-game-registration` build alias — never by
-    // a renderer source import. The two public component barrels —
-    // `@chimera-engine/renderer/components/ui` and `.../components/chat` — are the only
-    // surface games may import (Invariant #96, enforced from the games side by
-    // `chimera/no-game-renderer-internals`). Mirrors the leaf-package zones above;
-    // like them it omits the global deep-relative ban, because renderer's own
+    // a renderer source import. What a game may import from renderer is decided
+    // by `chimera/no-game-renderer-internals` (Invariant #96), which enumerates
+    // it — restating the set here has gone stale once already.
+    //
+    // Mirrors the leaf-package zones above; like them it omits the global
+    // deep-relative ban, because renderer's own
     // deeply nested files legitimately reach package-internal modules with
     // relative paths — renderer code must not self-import through its public
-    // `@chimera-engine/renderer/*` alias (that alias resolves only the two barrels).
-    // See coding-standards.md §3, issues #772, #784.
+    // `@chimera-engine/renderer/*` alias, which resolves only what renderer's
+    // `exports` map publishes. See coding-standards.md §3.
     {
         files: ['renderer/**/*.{ts,tsx}'],
         rules: {
@@ -382,7 +381,7 @@ export default tseslint.config(
                                 '**/networking/*',
                             ],
                             message:
-                                'renderer/ must not import the @chimera-engine/ai or @chimera-engine/networking runtime — the renderer depends on @chimera-engine/simulation contracts only (Invariant #1). Game-facing renderer code is exposed solely through @chimera-engine/renderer/components/ui and .../components/chat (Invariant #96). See coding-standards.md §3, issue #772.',
+                                'renderer/ must not import the @chimera-engine/ai or @chimera-engine/networking runtime — the renderer depends on @chimera-engine/simulation contracts only (Invariant #1). Game-facing renderer code is exposed through the surfaces chimera/no-game-renderer-internals permits (Invariant #96). See coding-standards.md §3.',
                         },
                         {
                             group: [
@@ -553,8 +552,9 @@ export default tseslint.config(
     // Covers every module that runs in a main process: the engine's own tree and
     // each consumer composition root (`apps/*/electron/main.ts`, which calls
     // `main()`) — including a `--workspace` scaffold, which lands in `apps/`.
-    // A STANDALONE scaffold is not covered and cannot be from here: it ships no
-    // eslint flat config at all (see `buildStandaloneVscodeLaunchJson`).
+    // A STANDALONE scaffold is not covered and cannot be from here: it has its
+    // own flat config, composing the engine's curated preset, which carries the
+    // four games-side rules and not this engine-internal zone.
     //
     // Two neighbours are deliberately out, as a scope call rather than because
     // enforcement is impossible there. The preload layer would in fact ratchet

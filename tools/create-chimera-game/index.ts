@@ -56,6 +56,24 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', '.next']);
 /** The default template id when `--template` is omitted. */
 const DEFAULT_TEMPLATE = 'blank';
 
+/**
+ * Template files emitted for a STANDALONE project only.
+ *
+ * `eslint.config.mjs` exists because a standalone game has no root config above
+ * it. Inside the monorepo there is one, and it is the stricter of the two: on an
+ * `apps/<kebab>` tree it adds the `no-restricted-syntax` determinism guard
+ * (Invariant #43), the `no-restricted-imports` boundaries, `no-console` on the
+ * composition root (Invariant #67) and the type-checked TypeScript set, on top
+ * of the same four curated rules. Emitting this file there would SHADOW all of
+ * that: flat config resolves the nearest config and does not merge, and
+ * `pnpm -r lint` runs `eslint .` from inside each package.
+ *
+ * (The three engine-internal `chimera/*` rules are NOT among the losses — every
+ * zone they carry is anchored at an engine path, so they reach no game file
+ * either way.)
+ */
+const STANDALONE_ONLY_TEMPLATE_FILES = new Set(['eslint.config.mjs']);
+
 export interface ScaffoldGameOptions {
     /**
      * Absolute path to the monorepo root that owns the OUTPUT — it holds `apps/` (where the
@@ -422,6 +440,7 @@ export async function scaffoldGame(options: ScaffoldGameOptions): Promise<Scaffo
     const planned: { relPath: string; destPath: string; content: string | Buffer }[] = [];
     for (const segments of await collectFiles(templateDir)) {
         const relPath = path.join(...segments.map((segment) => renameTokensInPath(segment, names)));
+        if (mode !== 'standalone' && STANDALONE_ONLY_TEMPLATE_FILES.has(relPath)) continue;
         const raw = await readFile(path.join(templateDir, ...segments));
         // A NUL byte never occurs in the UTF-8 source the templates ship, so it reliably
         // flags a binary file (the boundary between "substitute" and "copy verbatim").
@@ -598,9 +617,12 @@ if (process.env['VITEST'] === undefined) {
                     console.log(
                         '  pnpm dev:mp 2      # instant 2-player multiplayer session (dev/scenarios/default.json: pnpm dev:mp --scenario default)',
                     );
-                    // All four `@chimera-engine/electron` dev tools are root scripts here (the
+                    // Every `@chimera-engine/electron` dev tool is a root script here (the
                     // emitted root forwards each to the app), so every line below runs from the
                     // directory the scaffold just created — no `--filter` incantation to learn.
+                    console.log(
+                        '  pnpm lint              # the architecture guardrails: fixed-point purity, design tokens, renderer barrels',
+                    );
                     console.log(
                         '  pnpm fetch:fonts --url "<google fonts css url>"   # self-host Google fonts (quote it — it contains &)',
                     );

@@ -87,7 +87,8 @@ holds because there is one helper, not because a rule rejects a second implement
 each consumer composition root (`apps/*/electron/main.ts`) — with no `ignores`, test files included,
 since none of them call `console.*` — and the #27/#77 guard is the single `eslint-disable-next-line`
 in that tree. A `--workspace` scaffold is covered, because it lands in `apps/`; a **standalone**
-scaffold is not, and cannot be from here — it ships no eslint flat config at all.
+scaffold is not covered from here — its own `eslint.config.mjs` composes the engine's
+curated preset, which does not carry the engine-internal `no-console` zone.
 
 The zone is pinned by `electron/main/__tests__/eslint-no-console.test.ts`, which checks three
 independent things, because each is defeatable alone. Fixtures prove the rule _discriminates_. The

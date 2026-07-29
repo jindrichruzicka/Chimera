@@ -67,7 +67,7 @@ Move `networking/` into a workspace package depending on `@chimera-engine/simula
 
 ## F61 — Extract `@chimera-engine/renderer` `Appendix C.3, §3`
 
-Package the Next.js / React / React-Three-Fiber renderer, depending on `@chimera-engine/simulation` (type-only contracts and `content`), React, and Three.js. The two public component barrels — `@chimera-engine/renderer/components/ui` (design primitives) and `@chimera-engine/renderer/components/chat` — are the only consumer entry points, upholding Invariants #80, #94, #96. Resolve the Next.js build so the renderer ships as a consumable component/shell library while each consumer app owns its own Next application.
+Package the Next.js / React / React-Three-Fiber renderer, depending on `@chimera-engine/simulation` (type-only contracts and `content`), React, and Three.js. Its public barrels — enumerated by Invariant #96, which has grown since — are the only consumer entry points, upholding Invariants #80, #94, #96. Resolve the Next.js build so the renderer ships as a consumable component/shell library while each consumer app owns its own Next application.
 
 ---
 
