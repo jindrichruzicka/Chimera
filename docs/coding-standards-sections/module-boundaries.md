@@ -37,7 +37,7 @@ These boundaries are hard constraints. Violations are **BLOCK** findings at revi
 - `chimera/no-shell-games-import` — blocks the engine shell pages and `GameShell`/`InGameMenuHost` from importing any game path (Invariants #80, #93, #94).
 - `chimera/no-main-games-import` / `chimera/no-main-provider-internals` — keep `electron/main` orchestration agnostic of which game exists and of which networking provider is wired (Invariant #47).
 
-Any `// eslint-disable` bypass requires a `@chimera-review: <reason>` comment on the preceding line. CI greps for unaccompanied disables and fails the build.
+Any `// eslint-disable` bypass requires a `@chimera-review: <reason>` comment on the preceding line. Only one of these rules enforces that itself: `chimera/no-fromfloat-in-simulation` reports a bare disable of itself as a second error. Everywhere else the requirement is a review obligation with no automated check — nothing greps for unaccompanied disables.
 
 ### These rules reach standalone games
 

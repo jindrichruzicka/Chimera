@@ -114,9 +114,9 @@ export function eq(a: FixedPoint, b: FixedPoint): boolean;
 
 Custom rule **`chimera/no-fromfloat-in-simulation`** (in `electron/dev-tools/eslint/`):
 
-- **Scope**: `simulation/**/*.ts` EXCEPT `simulation/content/loaders/**`
+- **Scope**: `simulation/**`, `apps/*/simulation/**` and `apps/*/ai/**`, EXCEPT `simulation/content/loaders/**` and test files, where the rule is turned off
 - **Check**: any call to `fromFloat` imported from `simulation/engine/FixedPoint` is an error
-- **Local bypass**: `// eslint-disable-next-line chimera/no-fromfloat-in-simulation` requires a companion `@chimera-review: <reason>` comment — grep-checked by CI
+- **Local bypass**: `// eslint-disable-next-line chimera/no-fromfloat-in-simulation` requires a companion `// @chimera-review: <reason>` comment on the same or previous line. The rule enforces this itself, on `Program:exit` — a bare disable is reported as a second error at the disable comment's own line, which the directive does not suppress. There is no separate CI grep, so the check travels with the rule into standalone games (§4.32).
 
 ---
 

@@ -45,7 +45,7 @@ Comments describe the code as it stands now, for a reader who has only the code 
 
 If a finding or issue drove a non-obvious decision, keep the **reason** and drop the reference: `// clamp before render — sub-pixel offset tore the boot logo` (not `// fixes BLOCK-1`).
 
-The `@chimera-review:` and `@ts-expect-error:` tags required by [§1 TypeScript](typescript.md) are the sole sanctioned exception — they state a reason, carry no issue/finding id, and are grep targets for CI.
+The `@chimera-review:` and `@ts-expect-error:` tags required by [§1 TypeScript](typescript.md) are the sole sanctioned exception — they state a reason and carry no issue/finding id. Neither is grepped by CI: `@ts-expect-error` needs its description because `@typescript-eslint/ban-ts-comment` demands one, and `@chimera-review:` is checked only where `chimera/no-fromfloat-in-simulation` requires it as a companion to a disable of that rule.
 
 ## 16.5 Style
 
