@@ -1,6 +1,6 @@
 ---
 title: 'Camera System'
-description: 'CameraMode/CameraPreset types, GameCanvas camera props, preset defaults table, CameraController interface, CameraAnimationCancelled error, useCamera() hook, and camera state ownership rules.'
+description: 'CameraMode/CameraPreset types, the GameCanvas declarative camera prop (presets, explicit configs, up vector, manual-projection rules), preset defaults table, CameraController interface, CameraAnimationCancelled error, useCamera() hook, and camera state ownership rules.'
 tags: [camera, r3f, animation, renderer, three-js]
 ---
 
@@ -15,98 +15,120 @@ tags: [camera, r3f, animation, renderer, three-js]
 
 React Three Fiber provides full camera control via `useThree()`, `three`'s `PerspectiveCamera`/`OrthographicCamera`, and `@react-three/drei`'s `<CameraControls>`. Camera state lives entirely inside the R3F Canvas tree — **never** in the simulation.
 
+`GameCanvas` is exported from the public r3f barrel (`@chimera-engine/renderer/components/r3f`, Invariant #96) and mounts `PerfProbe` and `FrameRateLimiter` inside its `<Canvas>` root — a game using it must not mount either again.
+
 ---
 
-## GameCanvas Camera Props
+## GameCanvas Camera Prop
+
+`GameCanvas` takes a single declarative `camera` prop: a named preset string, or a fully explicit config object. The game never constructs a three.js camera itself.
 
 ```typescript
-// renderer/components/r3f/GameCanvas.tsx
+// renderer/components/r3f/GameCanvas.tsx (all types re-exported from the r3f barrel)
 
 export type CameraMode = 'perspective' | 'orthographic';
 export type CameraPreset = 'isometric' | 'top-down' | 'side-scrolling' | 'free';
 
 export type Vector3Tuple = readonly [x: number, y: number, z: number];
 
-/** Pass a custom position/lookAt object instead of one of the named presets. */
-export type CameraPresetConfig = Readonly<{
+/**
+ * World-unit orthographic view volume. An explicit frustum always marks the
+ * camera `manual`: without it, R3F rewrites ortho frusta to pixel half-extents
+ * on every canvas resize, silently discarding the author's world framing.
+ */
+export type OrthographicFrustum = Readonly<{
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    near?: number; // default 0.1
+    far?: number; // default 1000
+}>;
+
+export type PerspectiveCameraConfig = Readonly<{
+    mode: 'perspective';
     position: Vector3Tuple;
     lookAt: Vector3Tuple;
-}>;
-
-/** Override any subset of PerspectiveCamera constructor args (defaults below). */
-export type PerspectiveCameraOptions = Readonly<{
+    up?: Vector3Tuple; // default [0, 1, 0]; applied before lookAt
     fov?: number; // default 50
-    aspect?: number; // default 1
     near?: number; // default 0.1
     far?: number; // default 1000
+    /** Pins the aspect ratio and marks the camera `manual`; omit to let R3F
+     *  maintain the aspect on resize (the default and usual choice). */
+    aspect?: number;
 }>;
 
-/** Override any subset of OrthographicCamera constructor args (defaults below). */
-export type OrthographicCameraOptions = Readonly<{
-    left?: number; // default -10
-    right?: number; // default  10
-    top?: number; // default  10
-    bottom?: number; // default -10
-    near?: number; // default 0.1
-    far?: number; // default 1000
+export type OrthographicCameraConfig = Readonly<{
+    mode: 'orthographic';
+    position: Vector3Tuple;
+    lookAt: Vector3Tuple;
+    up?: Vector3Tuple; // default [0, 1, 0]; applied before lookAt
+    frustum: OrthographicFrustum;
 }>;
 
-interface GameCanvasProps {
-    cameraMode: CameraMode;
-    /** Named built-in preset OR a custom { position, lookAt } object. */
-    cameraPreset: CameraPreset | CameraPresetConfig;
-    /** Optional fine-grained PerspectiveCamera constructor overrides. */
-    perspectiveCameraOptions?: PerspectiveCameraOptions;
-    /** Optional fine-grained OrthographicCamera constructor overrides. */
-    orthographicCameraOptions?: OrthographicCameraOptions;
+export type CameraConfig = PerspectiveCameraConfig | OrthographicCameraConfig;
+
+/** Named preset (documented mode + defaults) or a fully explicit config. */
+export type GameCanvasCamera = CameraPreset | CameraConfig;
+
+export type GameCanvasProps = Readonly<{
+    camera: GameCanvasCamera;
     children: React.ReactNode;
-}
+}>;
 ```
 
 ### Named Preset Defaults
 
-| Preset           | Mode         | Initial position | Look-at     |
-| ---------------- | ------------ | ---------------- | ----------- |
-| `isometric`      | orthographic | `(10, 10, 10)`   | `(0, 0, 0)` |
-| `top-down`       | orthographic | `(0, 20, 0)`     | `(0, 0, 0)` |
-| `side-scrolling` | perspective  | `(0, 5, 15)`     | `(0, 5, 0)` |
-| `free`           | perspective  | `(0, 5, 10)`     | `(0, 0, 0)` |
+Each preset carries its documented projection mode — `camera="isometric"` always yields an orthographic camera. A game wanting a preset viewpoint in the other mode writes the explicit config instead.
 
-### Custom preset example
+| Preset           | Mode         | Initial position | Look-at     | Frustum / fov              |
+| ---------------- | ------------ | ---------------- | ----------- | -------------------------- |
+| `isometric`      | orthographic | `(10, 10, 10)`   | `(0, 0, 0)` | `±10 × ±10` (manual)       |
+| `top-down`       | orthographic | `(0, 20, 0)`     | `(0, 0, 0)` | `±10 × ±10` (manual)       |
+| `side-scrolling` | perspective  | `(0, 5, 15)`     | `(0, 5, 0)` | fov 50 (responsive aspect) |
+| `free`           | perspective  | `(0, 5, 10)`     | `(0, 0, 0)` | fov 50 (responsive aspect) |
+
+### Manual-projection rules
+
+`manual` is derived from the config, never passed:
+
+- **Orthographic** (preset or explicit) ⇒ always `manual`. An author frustum is in world units; R3F's resize handler would otherwise replace it with pixel half-extents. Trade-off: a manual frustum is not aspect-corrected — content stretches if the canvas aspect diverges from the frustum aspect, so pick a frustum matching the intended canvas shape.
+- **Perspective** ⇒ `manual` only when `aspect` is pinned; otherwise R3F keeps the aspect correct on every resize (what you almost always want).
+
+### Preset example
 
 ```typescript
-// Pass any position/lookAt without defining a new named preset
-<GameCanvas
-    cameraMode="perspective"
-    cameraPreset={{ position: [5, 8, 3], lookAt: [0, 2, 0] }}
->
-    …
-</GameCanvas>
+<GameCanvas camera="isometric">…</GameCanvas>
 ```
 
-### Constructor options example
+### Explicit config examples
 
 ```typescript
 // Wider view frustum + deeper far plane for a space game
-<GameCanvas
-    cameraMode="perspective"
-    cameraPreset="free"
-    perspectiveCameraOptions={{ fov: 75, far: 5000 }}
->
-    …
-</GameCanvas>
+const SPACE_CAMERA = {
+    mode: 'perspective',
+    position: [0, 5, 10],
+    lookAt: [0, 0, 0],
+    fov: 75,
+    far: 5000,
+} as const satisfies PerspectiveCameraConfig;
 
-// Expanded ortho bounds for a zoomed-out game map
-<GameCanvas
-    cameraMode="orthographic"
-    cameraPreset="isometric"
-    orthographicCameraOptions={{ left: -25, right: 25, top: 20, bottom: -20 }}
->
-    …
-</GameCanvas>
+<GameCanvas camera={SPACE_CAMERA}>…</GameCanvas>
+
+// Fixed-frustum top-down board camera: exact world-unit ortho bounds, Z-up
+// plane (up is applied before lookAt, so a straight-down view is well-defined).
+const BOARD_CAMERA = {
+    mode: 'orthographic',
+    position: [1, 12, 0],
+    lookAt: [1, 0, 0],
+    up: [0, 0, 1],
+    frustum: { left: -3.75, right: 3.75, top: 2.5, bottom: -2.5, near: 0.1, far: 100 },
+} as const satisfies OrthographicCameraConfig;
+
+<GameCanvas camera={BOARD_CAMERA}>…</GameCanvas>
 ```
 
-> **Stability note:** if `cameraPreset` or the camera option props are constructed inline (e.g. `{{ position: … }}`), a new camera object is recreated on every render because `useMemo` compares by reference. Hoist them to a module-level constant or `useMemo` in the parent component to avoid unnecessary recreation.
+> **Stability note:** if the `camera` config object is constructed inline (`camera={{ mode: … }}`), a new three.js camera is recreated on every render because the internal `useMemo` compares by reference. Hoist the config to a module-level constant (as above) or `useMemo` it in the parent component.
 
 ---
 

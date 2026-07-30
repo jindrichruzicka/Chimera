@@ -3,7 +3,6 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
-import { OrthographicCamera } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     entityId,
@@ -61,31 +60,30 @@ interface ProjectedUnitFixture {
     readonly hp: number;
 }
 
-const canvasCalls = vi.hoisted(
+const gameCanvasCalls = vi.hoisted(
     (): {
         readonly camera: unknown;
     }[] => [],
 );
 
-vi.mock('@react-three/fiber', () => ({
-    Canvas: ({
+// The mock exports ONLY GameCanvas: the engine mounts PerfProbe and
+// FrameRateLimiter itself, so if the board ever re-adds either import (the
+// double-mount mutant — a second FrameRateLimiter presents every frame twice),
+// the component resolves `undefined` and every render test crashes red.
+vi.mock('@chimera-engine/renderer/components/r3f', () => ({
+    GameCanvas: ({
         camera,
         children,
     }: {
         readonly camera: unknown;
         readonly children: React.ReactNode;
     }) => {
-        canvasCalls.push({ camera });
+        gameCanvasCalls.push({ camera });
         const renderedChildren = React.Children.toArray(children).filter((child) => {
             return React.isValidElement(child) && typeof child.type !== 'string';
         });
         return <div data-testid="tactics-r3f-canvas">{renderedChildren}</div>;
     },
-}));
-
-vi.mock('@chimera-engine/renderer/components/r3f', () => ({
-    PerfProbe: () => <div data-testid="perf-probe" />,
-    FrameRateLimiter: () => <div data-testid="frame-rate-limiter" />,
 }));
 
 vi.mock('../scene/TacticsGroundPlane.js', () => ({
@@ -148,7 +146,7 @@ vi.mock('../scene/TacticsUnitPrimitive.js', () => ({
 
 afterEach(() => {
     cleanup();
-    canvasCalls.length = 0;
+    gameCanvasCalls.length = 0;
     useCommitmentBuffer.getState().reset();
 });
 
@@ -246,14 +244,21 @@ describe('TacticsDemoBoard', () => {
         expect(screen.queryByTestId('move-target')).not.toBeInTheDocument();
         expect(screen.queryByTestId('reveal-target')).not.toBeInTheDocument();
         expect(screen.queryByTestId('attack-target')).not.toBeInTheDocument();
-        expect(canvasCalls).toHaveLength(1);
-        const camera = canvasCalls[0]?.camera;
-        expect(camera).toBeInstanceOf(OrthographicCamera);
-        expect((camera as OrthographicCamera & { readonly manual?: boolean }).manual).toBe(true);
-        expect((camera as OrthographicCamera).up.toArray()).toEqual([0, 0, 1]);
+        expect(gameCanvasCalls).toHaveLength(1);
+        // The board's camera contract is the declarative config it hands the
+        // engine GameCanvas (instance realization — manual frustum, up before
+        // lookAt — is pinned in the renderer's GameCanvas tests). The e2e pixel
+        // projection in e2e/pages/GamePage.ts mirrors these numbers.
+        expect(gameCanvasCalls[0]?.camera).toEqual({
+            mode: 'orthographic',
+            position: [1, 12, 0],
+            lookAt: [1, 0, 0],
+            up: [0, 0, 1],
+            frustum: { left: -3.75, right: 3.75, top: 2.5, bottom: -2.5, near: 0.1, far: 100 },
+        });
     });
 
-    it('mounts the engine PerfProbe inside the canvas so the Perf HUD gets GL metrics', () => {
+    it('renders the scene through the engine GameCanvas', () => {
         const localPlayerId = playerId('p1');
         const sendAction = vi.fn();
 
@@ -265,9 +270,14 @@ describe('TacticsDemoBoard', () => {
             />,
         );
 
+        // GameCanvas owns PerfProbe/FrameRateLimiter mounting (pinned in the
+        // renderer's GameCanvas tests and the perf-hud e2e); the board only
+        // contributes the scene.
         const canvas = screen.getByTestId('tactics-r3f-canvas');
-        const probe = screen.getByTestId('perf-probe');
-        expect(canvas).toContainElement(probe);
+        expect(canvas).toContainElement(screen.getByTestId('tactics-ground-plane'));
+        expect(canvas).toContainElement(
+            screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`),
+        );
     });
 
     it("paints the host-configured board color and each unit's host-assigned color", () => {

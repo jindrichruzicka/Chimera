@@ -1805,7 +1805,7 @@ test_audio_barrel_in_game_surface_passes() {
 
 # Test: a deep import BEHIND the audio barrel in a game surface → violation
 # [invariant-96]. The negative control on the barrel above: opening the subpath
-# must not open the subtree, exactly as r3f's GameCanvas stays closed.
+# must not open the subtree, exactly as r3f's InteractionBlocker stays closed.
 test_audio_internal_in_game_surface_detected() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)

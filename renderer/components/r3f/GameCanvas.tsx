@@ -1,6 +1,7 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
+import type { Camera } from '@react-three/fiber';
 import React from 'react';
 import type { ReactNode } from 'react';
 import { PerfProbe } from '../shell/perf/PerfProbe';
@@ -12,67 +13,80 @@ export type CameraMode = 'perspective' | 'orthographic';
 export type CameraPreset = 'isometric' | 'top-down' | 'side-scrolling' | 'free';
 export type { Vector3Tuple } from '../../types/r3f-types.js';
 
-export type CameraPresetConfig = Readonly<{
+/**
+ * World-unit orthographic view volume. An explicit frustum always marks the
+ * camera `manual`: without it, R3F rewrites ortho frusta to pixel half-extents
+ * on every canvas resize, silently discarding the author's world framing.
+ */
+export type OrthographicFrustum = Readonly<{
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    near?: number; // default 0.1
+    far?: number; // default 1000
+}>;
+
+export type PerspectiveCameraConfig = Readonly<{
+    mode: 'perspective';
     position: Vector3Tuple;
     lookAt: Vector3Tuple;
-}>;
-
-export type PerspectiveCameraOptions = Readonly<{
-    fov?: number;
+    up?: Vector3Tuple; // default [0, 1, 0]; applied before lookAt
+    fov?: number; // default 50
+    near?: number; // default 0.1
+    far?: number; // default 1000
+    /**
+     * Pins the aspect ratio and marks the camera `manual`; omit to let R3F
+     * maintain the aspect on resize (the default and usual choice).
+     */
     aspect?: number;
-    near?: number;
-    far?: number;
 }>;
 
-export type OrthographicCameraOptions = Readonly<{
-    left?: number;
-    right?: number;
-    top?: number;
-    bottom?: number;
-    near?: number;
-    far?: number;
+export type OrthographicCameraConfig = Readonly<{
+    mode: 'orthographic';
+    position: Vector3Tuple;
+    lookAt: Vector3Tuple;
+    up?: Vector3Tuple; // default [0, 1, 0]; applied before lookAt
+    frustum: OrthographicFrustum;
 }>;
+
+export type CameraConfig = PerspectiveCameraConfig | OrthographicCameraConfig;
+
+/** Named preset (documented mode + defaults) or a fully explicit config. */
+export type GameCanvasCamera = CameraPreset | CameraConfig;
 
 export type GameCanvasProps = Readonly<{
-    cameraMode: CameraMode;
-    cameraPreset: CameraPreset | CameraPresetConfig;
-    perspectiveCameraOptions?: PerspectiveCameraOptions;
-    orthographicCameraOptions?: OrthographicCameraOptions;
+    camera: GameCanvasCamera;
     children: ReactNode;
 }>;
 
-type CameraPresetDefaults = Readonly<{
-    position: Vector3Tuple;
-    lookAt: Vector3Tuple;
-}>;
+// Each preset carries its documented projection mode (camera-system.md preset
+// table); a game wanting a preset viewpoint in the other mode writes the
+// explicit config instead.
+const cameraPresetConfigs = {
+    isometric: {
+        mode: 'orthographic',
+        position: [10, 10, 10],
+        lookAt: [0, 0, 0],
+        frustum: { left: -10, right: 10, top: 10, bottom: -10 },
+    },
+    'top-down': {
+        mode: 'orthographic',
+        position: [0, 20, 0],
+        lookAt: [0, 0, 0],
+        frustum: { left: -10, right: 10, top: 10, bottom: -10 },
+    },
+    'side-scrolling': { mode: 'perspective', position: [0, 5, 15], lookAt: [0, 5, 0] },
+    free: { mode: 'perspective', position: [0, 5, 10], lookAt: [0, 0, 0] },
+} satisfies Record<CameraPreset, CameraConfig>;
 
-const cameraPresetDefaults = {
-    isometric: { position: [10, 10, 10], lookAt: [0, 0, 0] },
-    'top-down': { position: [0, 20, 0], lookAt: [0, 0, 0] },
-    'side-scrolling': { position: [0, 5, 15], lookAt: [0, 5, 0] },
-    free: { position: [0, 5, 10], lookAt: [0, 0, 0] },
-} satisfies Record<CameraPreset, CameraPresetDefaults>;
+const DEFAULT_UP: Vector3Tuple = [0, 1, 0];
 
-export function GameCanvas({
-    cameraMode,
-    cameraPreset,
-    perspectiveCameraOptions,
-    orthographicCameraOptions,
-    children,
-}: GameCanvasProps): React.ReactElement {
-    const camera = React.useMemo(
-        () =>
-            createCamera(
-                cameraMode,
-                cameraPreset,
-                perspectiveCameraOptions,
-                orthographicCameraOptions,
-            ),
-        [cameraMode, cameraPreset, perspectiveCameraOptions, orthographicCameraOptions],
-    );
+export function GameCanvas({ camera, children }: GameCanvasProps): React.ReactElement {
+    const cameraInstance = React.useMemo(() => createCamera(camera), [camera]);
 
     return (
-        <Canvas camera={camera}>
+        <Canvas camera={cameraInstance}>
             <PerfProbe />
             <FrameRateLimiter />
             {children}
@@ -80,51 +94,61 @@ export function GameCanvas({
     );
 }
 
-function resolveCameraPreset(
-    cameraPreset: CameraPreset | CameraPresetConfig,
-): CameraPresetDefaults {
-    if (typeof cameraPreset === 'string') {
-        return cameraPresetDefaults[cameraPreset];
-    }
-    return cameraPreset;
+function resolveCameraConfig(camera: GameCanvasCamera): CameraConfig {
+    return typeof camera === 'string' ? cameraPresetConfigs[camera] : camera;
 }
 
-function createCamera(
-    cameraMode: CameraMode,
-    cameraPreset: CameraPreset | CameraPresetConfig,
-    perspectiveCameraOptions: PerspectiveCameraOptions | undefined,
-    orthographicCameraOptions: OrthographicCameraOptions | undefined,
-): PerspectiveCamera | OrthographicCamera {
-    const camera =
-        cameraMode === 'orthographic'
-            ? new OrthographicCamera(
-                  orthographicCameraOptions?.left ?? -10,
-                  orthographicCameraOptions?.right ?? 10,
-                  orthographicCameraOptions?.top ?? 10,
-                  orthographicCameraOptions?.bottom ?? -10,
-                  orthographicCameraOptions?.near ?? 0.1,
-                  orthographicCameraOptions?.far ?? 1000,
-              )
-            : new PerspectiveCamera(
-                  perspectiveCameraOptions?.fov ?? 50,
-                  perspectiveCameraOptions?.aspect ?? 1,
-                  perspectiveCameraOptions?.near ?? 0.1,
-                  perspectiveCameraOptions?.far ?? 1000,
-              );
+function createCamera(camera: GameCanvasCamera): Camera {
+    const config = resolveCameraConfig(camera);
+    const instance =
+        config.mode === 'orthographic'
+            ? createOrthographicCamera(config)
+            : createPerspectiveCamera(config);
 
-    applyCameraPreset(camera, cameraPreset);
+    orientCamera(instance, config);
+
+    return instance;
+}
+
+function createOrthographicCamera(config: OrthographicCameraConfig): Camera {
+    const { frustum } = config;
+    const camera: Camera = new OrthographicCamera(
+        frustum.left,
+        frustum.right,
+        frustum.top,
+        frustum.bottom,
+        frustum.near ?? 0.1,
+        frustum.far ?? 1000,
+    );
+
+    // A world-unit frustum must survive canvas resizes: without `manual`,
+    // R3F's updateCamera() replaces left/right/top/bottom with pixel
+    // half-extents. The trade-off is that a manual frustum is not
+    // aspect-corrected — content stretches if the canvas aspect diverges.
+    camera.manual = true;
 
     return camera;
 }
 
-function applyCameraPreset(
-    camera: PerspectiveCamera | OrthographicCamera,
-    cameraPreset: CameraPreset | CameraPresetConfig,
-): void {
-    const { position, lookAt } = resolveCameraPreset(cameraPreset);
+function createPerspectiveCamera(config: PerspectiveCameraConfig): Camera {
+    const camera: Camera = new PerspectiveCamera(
+        config.fov ?? 50,
+        config.aspect ?? 1,
+        config.near ?? 0.1,
+        config.far ?? 1000,
+    );
 
-    camera.position.set(...position);
-    camera.lookAt(new Vector3(...lookAt));
+    if (config.aspect !== undefined) {
+        camera.manual = true; // pinned aspect: opt out of R3F resize correction
+    }
+
+    return camera;
+}
+
+function orientCamera(camera: Camera, config: CameraConfig): void {
+    camera.up.set(...(config.up ?? DEFAULT_UP)); // before lookAt: lookAt derives roll from up
+    camera.position.set(...config.position); // before lookAt: lookAt aims from the position
+    camera.lookAt(new Vector3(...config.lookAt));
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld();
 }

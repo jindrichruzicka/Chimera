@@ -8,13 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
 import { Canvas } from '@react-three/fiber';
 import { GameCanvas } from './GameCanvas';
-import type {
-    CameraMode,
-    CameraPreset,
-    CameraPresetConfig,
-    PerspectiveCameraOptions,
-    OrthographicCameraOptions,
-} from './GameCanvas';
+import type { CameraPreset, OrthographicCameraConfig, PerspectiveCameraConfig } from './GameCanvas';
 
 const perfProbeSpy = vi.hoisted(() => vi.fn());
 
@@ -32,16 +26,17 @@ vi.mock('@react-three/fiber', () => ({
 }));
 
 type ExpectedCameraPreset = Readonly<{
-    mode: CameraMode;
+    instance: typeof OrthographicCamera | typeof PerspectiveCamera;
     position: readonly [number, number, number];
     lookAt: readonly [number, number, number];
 }>;
 
+// Presets carry their documented projection mode (camera-system.md preset table).
 const expectedPresets = {
-    isometric: { mode: 'orthographic', position: [10, 10, 10], lookAt: [0, 0, 0] },
-    'top-down': { mode: 'orthographic', position: [0, 20, 0], lookAt: [0, 0, 0] },
-    'side-scrolling': { mode: 'perspective', position: [0, 5, 15], lookAt: [0, 5, 0] },
-    free: { mode: 'perspective', position: [0, 5, 10], lookAt: [0, 0, 0] },
+    isometric: { instance: OrthographicCamera, position: [10, 10, 10], lookAt: [0, 0, 0] },
+    'top-down': { instance: OrthographicCamera, position: [0, 20, 0], lookAt: [0, 0, 0] },
+    'side-scrolling': { instance: PerspectiveCamera, position: [0, 5, 15], lookAt: [0, 5, 0] },
+    free: { instance: PerspectiveCamera, position: [0, 5, 10], lookAt: [0, 0, 0] },
 } satisfies Record<CameraPreset, ExpectedCameraPreset>;
 
 afterEach(() => {
@@ -51,10 +46,10 @@ afterEach(() => {
 
 describe('GameCanvas', () => {
     it.each(Object.entries(expectedPresets))(
-        'renders %s and initializes the camera preset',
+        'renders %s and initializes the preset camera in its documented mode',
         (cameraPreset, expected) => {
             render(
-                <GameCanvas cameraMode={expected.mode} cameraPreset={cameraPreset as CameraPreset}>
+                <GameCanvas camera={cameraPreset as CameraPreset}>
                     <mesh />
                 </GameCanvas>,
             );
@@ -62,7 +57,9 @@ describe('GameCanvas', () => {
             const camera = latestCanvasCamera();
 
             expect(screen.getByTestId('r3f-canvas')).toBeInTheDocument();
+            expect(camera).toBeInstanceOf(expected.instance);
             expect(camera.position.toArray()).toEqual(expected.position);
+            expect(camera.up.toArray()).toEqual([0, 1, 0]);
             expectVectorToBeClose(
                 cameraDirection(camera),
                 expectedDirection(expected.position, expected.lookAt),
@@ -70,29 +67,50 @@ describe('GameCanvas', () => {
         },
     );
 
-    it('passes a PerspectiveCamera when perspective mode is selected', () => {
-        render(
-            <GameCanvas cameraMode="perspective" cameraPreset="isometric">
-                <mesh />
-            </GameCanvas>,
-        );
+    it.each(['isometric', 'top-down'] as const)(
+        'marks the %s preset camera manual with the default world-unit frustum',
+        (cameraPreset) => {
+            render(
+                <GameCanvas camera={cameraPreset}>
+                    <mesh />
+                </GameCanvas>,
+            );
 
-        expect(latestCanvasCamera()).toBeInstanceOf(PerspectiveCamera);
-    });
+            const camera = latestCanvasCamera() as OrthographicCamera & { manual?: boolean };
 
-    it('passes an OrthographicCamera when orthographic mode is selected', () => {
-        render(
-            <GameCanvas cameraMode="orthographic" cameraPreset="free">
-                <mesh />
-            </GameCanvas>,
-        );
+            // An author/preset frustum must survive canvas resizes: without
+            // `manual`, R3F rewrites ortho frusta to pixel half-extents.
+            expect(camera.manual).toBe(true);
+            expect(camera.left).toBe(-10);
+            expect(camera.right).toBe(10);
+            expect(camera.top).toBe(10);
+            expect(camera.bottom).toBe(-10);
+            expect(camera.near).toBe(0.1);
+            expect(camera.far).toBe(1000);
+        },
+    );
 
-        expect(latestCanvasCamera()).toBeInstanceOf(OrthographicCamera);
-    });
+    it.each(['side-scrolling', 'free'] as const)(
+        'leaves the %s preset camera non-manual so R3F keeps the aspect responsive',
+        (cameraPreset) => {
+            render(
+                <GameCanvas camera={cameraPreset}>
+                    <mesh />
+                </GameCanvas>,
+            );
+
+            const camera = latestCanvasCamera() as PerspectiveCamera & { manual?: boolean };
+
+            expect(camera.manual).toBeUndefined();
+            expect(camera.fov).toBe(50);
+            expect(camera.near).toBe(0.1);
+            expect(camera.far).toBe(1000);
+        },
+    );
 
     it('mounts one PerfProbe inside the R3F canvas root', () => {
         render(
-            <GameCanvas cameraMode="perspective" cameraPreset="free">
+            <GameCanvas camera="free">
                 <mesh />
             </GameCanvas>,
         );
@@ -100,72 +118,130 @@ describe('GameCanvas', () => {
         expect(perfProbeSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('uses a custom preset object to set camera position and lookAt', () => {
-        const customPreset: CameraPresetConfig = {
+    it('builds a perspective camera from an explicit config', () => {
+        const config: PerspectiveCameraConfig = {
+            mode: 'perspective',
             position: [5, 8, 3],
             lookAt: [1, 2, 3],
-        };
-
-        render(
-            <GameCanvas cameraMode="perspective" cameraPreset={customPreset}>
-                <mesh />
-            </GameCanvas>,
-        );
-
-        const camera = latestCanvasCamera();
-
-        expect(camera.position.toArray()).toEqual([5, 8, 3]);
-        expectVectorToBeClose(cameraDirection(camera), expectedDirection([5, 8, 3], [1, 2, 3]));
-    });
-
-    it('applies perspectiveCameraOptions when creating a PerspectiveCamera', () => {
-        const options: PerspectiveCameraOptions = { fov: 75, near: 0.5, far: 500 };
-
-        render(
-            <GameCanvas
-                cameraMode="perspective"
-                cameraPreset="free"
-                perspectiveCameraOptions={options}
-            >
-                <mesh />
-            </GameCanvas>,
-        );
-
-        const camera = latestCanvasCamera() as PerspectiveCamera;
-
-        expect(camera.fov).toBe(75);
-        expect(camera.near).toBe(0.5);
-        expect(camera.far).toBe(500);
-    });
-
-    it('applies orthographicCameraOptions when creating an OrthographicCamera', () => {
-        const options: OrthographicCameraOptions = {
-            left: -20,
-            right: 20,
-            top: 15,
-            bottom: -15,
+            fov: 75,
             near: 0.5,
             far: 500,
         };
 
         render(
-            <GameCanvas
-                cameraMode="orthographic"
-                cameraPreset="top-down"
-                orthographicCameraOptions={options}
-            >
+            <GameCanvas camera={config}>
                 <mesh />
             </GameCanvas>,
         );
 
-        const camera = latestCanvasCamera() as OrthographicCamera;
+        const camera = latestCanvasCamera() as PerspectiveCamera & { manual?: boolean };
 
+        expect(camera).toBeInstanceOf(PerspectiveCamera);
+        expect(camera.fov).toBe(75);
+        expect(camera.near).toBe(0.5);
+        expect(camera.far).toBe(500);
+        expect(camera.manual).toBeUndefined();
+        expect(camera.position.toArray()).toEqual([5, 8, 3]);
+        expectVectorToBeClose(cameraDirection(camera), expectedDirection([5, 8, 3], [1, 2, 3]));
+    });
+
+    it('pins the aspect ratio and marks the camera manual when aspect is set', () => {
+        const config: PerspectiveCameraConfig = {
+            mode: 'perspective',
+            position: [0, 5, 10],
+            lookAt: [0, 0, 0],
+            aspect: 1.5,
+        };
+
+        render(
+            <GameCanvas camera={config}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        const camera = latestCanvasCamera() as PerspectiveCamera & { manual?: boolean };
+
+        expect(camera.aspect).toBe(1.5);
+        expect(camera.manual).toBe(true);
+    });
+
+    it('builds a manual orthographic camera from an explicit frustum', () => {
+        const config: OrthographicCameraConfig = {
+            mode: 'orthographic',
+            position: [0, 20, 0],
+            lookAt: [0, 0, 0],
+            frustum: { left: -20, right: 20, top: 15, bottom: -15 },
+        };
+
+        render(
+            <GameCanvas camera={config}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        const camera = latestCanvasCamera() as OrthographicCamera & { manual?: boolean };
+
+        expect(camera).toBeInstanceOf(OrthographicCamera);
+        expect(camera.manual).toBe(true);
         expect(camera.left).toBe(-20);
         expect(camera.right).toBe(20);
         expect(camera.top).toBe(15);
         expect(camera.bottom).toBe(-15);
-        expect(camera.near).toBe(0.5);
-        expect(camera.far).toBe(500);
+        // near/far fall back to the defaults when the frustum omits them.
+        expect(camera.near).toBe(0.1);
+        expect(camera.far).toBe(1000);
+    });
+
+    it('applies a custom up vector', () => {
+        const config: OrthographicCameraConfig = {
+            mode: 'orthographic',
+            position: [1, 12, 0],
+            lookAt: [1, 0, 0],
+            up: [0, 0, 1],
+            frustum: { left: -3.75, right: 3.75, top: 2.5, bottom: -2.5, near: 0.1, far: 100 },
+        };
+
+        render(
+            <GameCanvas camera={config}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasCamera().up.toArray()).toEqual([0, 0, 1]);
+    });
+
+    it('reproduces the tactics board camera matrices exactly', () => {
+        // The tactics e2e page object mirrors this projection for pixel-space
+        // clicks, so the declarative config must yield the same matrices as the
+        // imperative sequence the board used to run. `up` before `lookAt` is
+        // load-bearing: this view direction (0,-1,0) is degenerate against the
+        // default up vector.
+        const config: OrthographicCameraConfig = {
+            mode: 'orthographic',
+            position: [1, 12, 0],
+            lookAt: [1, 0, 0],
+            up: [0, 0, 1],
+            frustum: { left: -3.75, right: 3.75, top: 2.5, bottom: -2.5, near: 0.1, far: 100 },
+        };
+
+        const reference = new OrthographicCamera(-3.75, 3.75, 2.5, -2.5, 0.1, 100);
+        reference.up.set(0, 0, 1);
+        reference.position.set(1, 12, 0);
+        reference.lookAt(new Vector3(1, 0, 0));
+        reference.updateProjectionMatrix();
+        reference.updateMatrixWorld();
+
+        render(
+            <GameCanvas camera={config}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        const camera = latestCanvasCamera() as OrthographicCamera & { manual?: boolean };
+
+        expect(camera.manual).toBe(true);
+        expect(camera.projectionMatrix.toArray()).toEqual(reference.projectionMatrix.toArray());
+        expect(camera.matrixWorld.toArray()).toEqual(reference.matrixWorld.toArray());
     });
 });
 

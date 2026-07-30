@@ -7,8 +7,9 @@
  *   - Pressing F3 makes the HUD visible
  *   - Pressing F3 again hides the HUD
  *   - GL metrics (FPS, draw calls, triangles) go live during a match — pins the
- *     PerfProbe mount inside the game's <Canvas> (metrics froze at 0 when the
- *     probe was only mounted in the never-rendered GameCanvas)
+ *     PerfProbe mount inside the RENDERED game canvas (metrics froze at 0 when
+ *     the probe was only mounted in a GameCanvas nothing rendered; the board now
+ *     renders through GameCanvas, which mounts the probe)
  *
  * `settings.gameplay.showPerfHud` is explicitly set to `false` before assertions
  * so the settings force-visible path cannot mask the F3 toggle behaviour.

@@ -137,8 +137,8 @@ function isPublicChatBarrelImport(source: string): boolean {
     );
 }
 
-// The in-Canvas engine component barrel (Invariant #96): headless/visual R3F
-// components (e.g. PerfProbe) a game mounts inside its own <Canvas>.
+// The R3F engine barrel (Invariant #96): the GameCanvas root plus headless/
+// visual R3F components (e.g. PerfProbe) a game mounts inside its own <Canvas>.
 function isPublicR3fBarrelImport(source: string): boolean {
     return (
         source === '@chimera-engine/renderer/components/r3f' ||

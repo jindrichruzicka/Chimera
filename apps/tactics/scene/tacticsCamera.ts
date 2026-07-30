@@ -1,6 +1,11 @@
 export const TACTICS_CAMERA_POSITION = [1, 12, 0] as const;
 export const TACTICS_CAMERA_LOOK_AT = [1, 0, 0] as const;
 
+// Z-up board plane: looking straight down from TACTICS_CAMERA_POSITION the view
+// direction is (0, -1, 0), which is degenerate against three.js's default Y-up,
+// so the camera must be oriented with this up vector (applied before lookAt).
+export const TACTICS_CAMERA_UP = [0, 0, 1] as const;
+
 // Orthographic frustum, centred on the board centre (1, 0) via TACTICS_CAMERA_POSITION.
 // Widened ~1.25× from the board-exact 6×4 framing so units at the seat 2–3 corner
 // start positions (TACTICS_START_POSITIONS) clear the viewport edge instead of being

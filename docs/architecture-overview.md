@@ -218,7 +218,7 @@ function PlayfieldScreen() {
   const snapshot = useGameStore(s => s.snapshot);   // §4.4 PlayerSnapshot
   if (!snapshot) return null;
   return (
-    <GameCanvas>
+    <GameCanvas camera="top-down">
       {Object.values(snapshot.entities).map(e =>
         <Entity key={e.id} entity={e}/>
       )}

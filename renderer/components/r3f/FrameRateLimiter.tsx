@@ -2,9 +2,11 @@
 
 /**
  * Engine frame-rate limiter — caps the R3F render loop to the active game's
- * `settings.display.targetFps`. Mount it once inside a game's <Canvas> (the
- * engine GameCanvas does this for you); games with their own <Canvas> import it
- * from `@chimera-engine/renderer/components/r3f` and mount it like PerfProbe.
+ * `settings.display.targetFps`. Mounted once per canvas: games rendering through
+ * the engine <GameCanvas> (r3f barrel) get it automatically; a game with its own
+ * <Canvas> imports it from `@chimera-engine/renderer/components/r3f` and mounts
+ * it like PerfProbe. Never mount it twice in one canvas: two priority-1
+ * `useFrame` subscribers each call `gl.render`, presenting every frame twice.
  *
  * Why this exists: Chromium presents `requestAnimationFrame` vsync-locked to the
  * display, so an uncapped scene renders at the panel's full refresh (120/144/240

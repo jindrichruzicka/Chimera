@@ -56,9 +56,11 @@ interface PerfSample {
 export function PerfHud(): JSX.Element | null;
 ```
 
-`PerfProbe` is mounted by `GameCanvas` inside each R3F `<Canvas>` root. It writes
-FPS, frame-time, draw-call, and triangle samples into `perfStore`; `PerfHud` reads
-those samples from shell chrome without calling R3F hooks outside a canvas.
+`PerfProbe` is mounted by `GameCanvas` inside its R3F `<Canvas>` root; a game
+that renders its own `<Canvas>` mounts `PerfProbe` from the r3f barrel instead.
+Either way it writes FPS, frame-time, draw-call, and triangle samples into
+`perfStore`; `PerfHud` reads those samples from shell chrome without calling R3F
+hooks outside a canvas.
 
 ### Module Tree
 

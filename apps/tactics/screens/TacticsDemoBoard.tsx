@@ -1,9 +1,7 @@
 'use client';
 
-import { Canvas } from '@react-three/fiber';
 import React, { useState } from 'react';
-import { OrthographicCamera, Vector3 } from 'three';
-import { FrameRateLimiter, PerfProbe } from '@chimera-engine/renderer/components/r3f';
+import { GameCanvas, type OrthographicCameraConfig } from '@chimera-engine/renderer/components/r3f';
 import { useTranslate } from '@chimera-engine/renderer/i18n';
 import type { GameScreenProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import {
@@ -30,6 +28,7 @@ import {
     TACTICS_CAMERA_BOUNDS,
     TACTICS_CAMERA_LOOK_AT,
     TACTICS_CAMERA_POSITION,
+    TACTICS_CAMERA_UP,
 } from '../scene/tacticsCamera.js';
 import { TacticsGroundPlane } from '../scene/TacticsGroundPlane.js';
 import { TacticsUnitPrimitive } from '../scene/TacticsUnitPrimitive.js';
@@ -74,7 +73,19 @@ const boardFallbackStyle: React.CSSProperties = {
     color: 'var(--ch-color-text-secondary)',
 };
 
-type ManualOrthographicCamera = OrthographicCamera & { manual: true };
+// Declarative engine camera (§4.22): fixed 3:2 world-unit frustum, Z-up board
+// plane. GameCanvas derives `manual` from the explicit frustum, so R3F never
+// aspect-corrects it (see the TACTICS_CAMERA_BOUNDS comment). Module-level so
+// GameCanvas's reference-compared memo keeps one camera per mount. The e2e
+// pixel projection mirrors these numbers — TACTICS_CANVAS_WORLD_BOUNDS in
+// e2e/pages/GamePage.ts; the GamePage sync guards go red if they drift.
+const TACTICS_GAME_CANVAS_CAMERA = {
+    mode: 'orthographic',
+    position: TACTICS_CAMERA_POSITION,
+    lookAt: TACTICS_CAMERA_LOOK_AT,
+    up: TACTICS_CAMERA_UP,
+    frustum: TACTICS_CAMERA_BOUNDS,
+} as const satisfies OrthographicCameraConfig;
 
 export function TacticsDemoBoard({
     snapshot,
@@ -113,7 +124,6 @@ export function TacticsDemoBoard({
         snapshot.gameResult === null &&
         snapshot.phase !== 'ended';
     const [prevIsBoardInteractive, setPrevIsBoardInteractive] = useState(isBoardInteractive);
-    const camera = React.useMemo(createTacticsCamera, []);
 
     if (prevIsBoardInteractive !== isBoardInteractive) {
         setPrevIsBoardInteractive(isBoardInteractive);
@@ -260,9 +270,7 @@ export function TacticsDemoBoard({
                     })}
                 </div>
             )}
-            <Canvas camera={camera}>
-                <PerfProbe />
-                <FrameRateLimiter />
+            <GameCanvas camera={TACTICS_GAME_CANVAS_CAMERA}>
                 <ambientLight intensity={0.65} />
                 <directionalLight intensity={0.9} position={[3, 6, 4]} />
                 <TacticsGroundPlane
@@ -283,7 +291,7 @@ export function TacticsDemoBoard({
                         onSelect={handleUnitSelect}
                     />
                 ))}
-            </Canvas>
+            </GameCanvas>
         </div>
     );
 }
@@ -322,26 +330,6 @@ function bufferedActionForIntent(intent: TacticsSelectionIntent): BufferedTactic
         };
     }
     return null;
-}
-
-function createTacticsCamera(): ManualOrthographicCamera {
-    const camera = new OrthographicCamera(
-        TACTICS_CAMERA_BOUNDS.left,
-        TACTICS_CAMERA_BOUNDS.right,
-        TACTICS_CAMERA_BOUNDS.top,
-        TACTICS_CAMERA_BOUNDS.bottom,
-        TACTICS_CAMERA_BOUNDS.near,
-        TACTICS_CAMERA_BOUNDS.far,
-    ) as ManualOrthographicCamera;
-
-    camera.manual = true;
-    camera.up.set(0, 0, 1);
-    camera.position.set(...TACTICS_CAMERA_POSITION);
-    camera.lookAt(new Vector3(...TACTICS_CAMERA_LOOK_AT));
-    camera.updateProjectionMatrix();
-    camera.updateMatrixWorld();
-
-    return camera;
 }
 
 export default TacticsDemoBoard;
