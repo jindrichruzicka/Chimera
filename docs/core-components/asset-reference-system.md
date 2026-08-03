@@ -266,12 +266,15 @@ export function useAsset<T extends AssetKind>(
 };
 ```
 
-### Example — Entity Component
+### Example — Entity Component (engine-internal)
+
+`renderer/assets/` is a renderer internal: it has no entry in the renderer package's public `exports`, and game surfaces must not import it (Invariant #96). The example below therefore lives **inside `renderer/`** and uses relative imports.
 
 ```tsx
-// games/<game>/screens/components/EntityMesh.tsx
-import { useAsset } from '@chimera-engine/renderer/assets/useAsset';
-import { TextureAsset, AssetRef } from '@chimera-engine/simulation/content';
+// renderer/components/r3f/ — engine-internal example (not a shipped file)
+import type { AssetRef, TextureAsset } from '@chimera-engine/simulation/content';
+
+import { useAsset } from '../../assets/useAsset';
 
 interface EntityMeshProps {
     portraitRef: AssetRef<TextureAsset>;

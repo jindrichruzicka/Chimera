@@ -20,13 +20,14 @@ tags:
 
 ```typescript
 // ✅ Correct — check the loading flag
-const { asset, loading } = useAsset<THREE.Texture>(ref);
+const { asset, loading } = useAsset<TextureAsset>(ref);
 if (loading) return <Fallback />;
 
 // ❌ WARNING — checking the type of a fallback value
 if (asset instanceof THREE.Texture) { ... }
 ```
 
+- `useAsset`'s type parameter is `TAssetKind extends AssetKind` — pass an asset-kind type such as `TextureAsset` (from `simulation/content`), never a Three.js class like `THREE.Texture`.
 - `AssetRef<T>` strings always come from content data. Never construct them as string literals in component code.
 - Do not create geometries or materials inside a component's render path. Hoist to `useMemo` or module scope.
 

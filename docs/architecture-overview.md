@@ -104,11 +104,11 @@ This appendix walks through how a single gameplay entity — an `Entity` with st
 
 A gameplay entity exists in three layers, connected only by **IDs and ref strings** — never by direct object references.
 
-| Layer                           | What "Entity" looks like                                                                                | Where it lives                                                                  |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Content** (static definition) | `EntityData` JSON — max HP, damage, sprites, model, sfx. Designer-authored, read-only at runtime.       | `games/<game>/data/entities/entity.json` → loaded into `ContentDatabase` (§4.8) |
-| **Simulation** (dynamic state)  | `EntityState` — `{ id, entityDefId: 'entity', hp: 47, position, ownerId }`. The _current_ numbers only. | `GameSnapshot.entities` on the host (§4.2)                                      |
-| **Renderer** (visual)           | `<Entity />` R3F component that reads sprites and models via `useAsset()`                               | `renderer/components/r3f/Entity.tsx` (§4.10)                                    |
+| Layer                           | What "Entity" looks like                                                                                | Where it lives                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Content** (static definition) | `EntityData` JSON — max HP, damage, sprites, model, sfx. Designer-authored, read-only at runtime.       | `games/<game>/data/entities/entity.json` → loaded into `ContentDatabase` (§4.8)          |
+| **Simulation** (dynamic state)  | `EntityState` — `{ id, entityDefId: 'entity', hp: 47, position, ownerId }`. The _current_ numbers only. | `GameSnapshot.entities` on the host (§4.2)                                               |
+| **Renderer** (visual)           | `<Entity />` R3F component that reads sprites via `useAsset()`                                          | illustrative engine-internal component under `renderer/components/r3f/` (§4.10; see B.3) |
 
 The simulation entity stores only `entityDefId: 'entity'`, not the stats themselves. All _static_ entity data (portrait, model, sfx, base stats, sprite variants) stays in the content database. This is what lets a designer change a sprite by editing JSON without recompiling anything, and why a 200-entity snapshot stays small over the wire.
 
@@ -185,10 +185,12 @@ No sprite info here. No Three.js import reachable from this file — the simulat
 
 #### R3F Component (renderer — the only place that sees pixels)
 
+The `<Entity>` component below is **illustrative** — the engine ships no entity component; per-game entity rendering is game code. It is written as an engine-internal component (relative imports inside `renderer/`) because `renderer/assets/` and the content-database context are renderer internals that game surfaces must not import (Invariant #96).
+
 ```typescript
-// renderer/components/r3f/Entity.tsx
+// renderer/components/r3f/ — engine-internal example (not a shipped file)
 import { useAsset } from '../../assets/useAsset';
-import { useContentDb } from '../../content/useContentDb';
+import { useContentDatabase } from '../shell/ContentDatabaseContext';
 
 function pickSpriteRef(def: EntityData, hp: number): AssetRef<TextureAsset> {
   const ratio = hp / def.stats.maxHp;
@@ -198,7 +200,7 @@ function pickSpriteRef(def: EntityData, hp: number): AssetRef<TextureAsset> {
 }
 
 export function Entity({ entity }: { entity: ObservedEntityState }) {
-  const db        = useContentDb();
+  const db        = useContentDatabase();
   const def       = db.getByIdOrThrow<EntityData>('entities', entity.entityDefId);
   const spriteRef = pickSpriteRef(def, entity.hp);
   const { asset, loading } = useAsset(spriteRef);   // §4.10
