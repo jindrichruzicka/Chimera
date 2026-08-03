@@ -8,6 +8,9 @@ vi.mock('three', () => ({
     },
 }));
 
+import type { AnimationClip } from 'three';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
 import {
     type AssetKind,
     type AssetKindBrand,
@@ -35,6 +38,7 @@ import {
 import {
     DefaultAssetManager,
     type AssetManager,
+    type LoadedGltfAsset,
     type ResolvedAsset,
     UnknownAssetManifestEntryError,
 } from './AssetManager';
@@ -378,6 +382,74 @@ describe('DefaultAssetManager', () => {
         expect(geometry.dispose).toHaveBeenCalledTimes(1);
         expect(material.dispose).toHaveBeenCalledTimes(1);
         expect(unrelatedValue.dispose).not.toHaveBeenCalled();
+    });
+
+    it('keeps LoadedGltfAsset.scene assignable to GLTF scene and animations elements typed as AnimationClip', () => {
+        const gltf = {} as LoadedGltfAsset;
+
+        // Widening probe: each line compiles only while `scene` is a `Group` and every
+        // `animations` element is an `AnimationClip`. `GLTF['animations']` is a mutable
+        // array, so the readonly field is probed per-field — a whole-object
+        // `Pick<GLTF, …>` assignment would reject any `readonly` array.
+        const sceneWidening: GLTF['scene'] = gltf.scene;
+        const animationsWidening: readonly AnimationClip[] = gltf.animations;
+
+        expect(sceneWidening).toBe(gltf.scene);
+        expect(animationsWidening).toBe(gltf.animations);
+    });
+
+    it('returns the identical cached object for repeated loads of one gltf-model ref', async () => {
+        // A fresh object per loader call means identity across loads can only come
+        // from the cache — a cache miss on the second load fails the toBe below.
+        const load = vi.fn(
+            async (): Promise<ResolvedAsset> => ({ animations: [], scene: { name: 'root' } }),
+        );
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createSingleLoaderRegistry('gltf-model', load),
+        );
+        const gltfRef = buildAssetRef<GLTFModelAsset>('tactics', 'models/mesh-placeholder.glb');
+        registerManifest(manager, [createManifestEntry(gltfRef, 'gltf-model')]);
+
+        expect(await manager.load(gltfRef)).toBe(await manager.load(gltfRef));
+        expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it('disposes the shared geometry, material, and skeleton of a SkinnedMesh scene', async () => {
+        const geometry = { dispose: vi.fn() };
+        const material = { dispose: vi.fn() };
+        const skeleton = { dispose: vi.fn() };
+        const skinnedMesh = {
+            geometry,
+            material,
+            skeleton,
+            traverse: vi.fn(),
+        };
+        const scene = {
+            traverse: vi.fn((visitor: (child: unknown) => void) => {
+                visitor(scene);
+                visitor(skinnedMesh);
+            }),
+        };
+        const ref = buildAssetRef<GLTFModelAsset>('tactics', 'models/mesh-placeholder.glb');
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createSingleLoaderRegistry(
+                'gltf-model',
+                async (): Promise<ResolvedAsset> => ({ animations: [], scene, scenes: [scene] }),
+            ),
+        );
+        registerManifest(manager, [createManifestEntry(ref, 'gltf-model')]);
+
+        await manager.load(ref);
+        manager.dispose();
+
+        // The cached original owns these shared resources; teardown must destroy them
+        // (Invariant #21) — which is exactly why a per-instance release path must not.
+        expect(geometry.dispose).toHaveBeenCalledTimes(1);
+        expect(material.dispose).toHaveBeenCalledTimes(1);
+        expect(skeleton.dispose).toHaveBeenCalledTimes(1);
+        expect(skinnedMesh.traverse).not.toHaveBeenCalled();
     });
 
     it('routes custom manifest kinds to custom loaders without relying on file extensions', async () => {

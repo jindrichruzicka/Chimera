@@ -1,5 +1,5 @@
 import { TextureLoader } from 'three';
-import type { Texture } from 'three';
+import type { AnimationClip, Group, Texture } from 'three';
 
 import { isTraversalUnsafe } from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
 
@@ -28,10 +28,20 @@ import {
 
 export type { AssetLoadRequest, AssetLoader, AssetLoaderRegistry } from './AssetLoaderRegistry';
 
+/**
+ * The value a `gltf-model` ref resolves to — the `GLTF` result of
+ * `GLTFLoader.load`.
+ *
+ * The loader's runtime value also carries `cameras`, `asset`, `parser` and
+ * `userData`; they are deliberately not named here. Widening this interface
+ * later (naming one of them) is additive and safe, whereas narrowing a named
+ * field would break every consumer — so absence means "not yet contracted",
+ * not "not present".
+ */
 export interface LoadedGltfAsset {
-    readonly scene?: unknown;
+    readonly scene: Group;
     readonly scenes?: readonly unknown[];
-    readonly animations?: readonly unknown[];
+    readonly animations: readonly AnimationClip[];
     readonly dispose?: () => void;
 }
 
