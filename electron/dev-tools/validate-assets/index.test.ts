@@ -1,6 +1,6 @@
 import { chmod, mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 
 import type { AudioClipMetadata } from '@chimera-engine/simulation/foundation/audio-cue-sheet.js';
 import { describe, expect, it, vi } from 'vitest';
@@ -2339,5 +2339,201 @@ describe('runValidateAssetsCli', () => {
         const exitCode = await runValidateAssetsCli([dir]);
 
         expect(exitCode).toBe(1);
+    });
+});
+
+// ── on-demand load detection — useModelInstance + the Invariant #96 surfaces ──
+
+describe('on-demand load detection — useModelInstance and the Invariant #96 surfaces', () => {
+    it('flags an undeclared useModelInstance load in a game screen as a hard error', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/screens/board.tsx'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        import { useModelInstance } from '@chimera-engine/renderer/assets';
+                        export function Board() {
+                            return useModelInstance('tactics/models/undeclared.glb');
+                        }
+                    `,
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(false);
+        expect(toAssetValidationExitCode(report)).toBe(1);
+        expect(report.undeclaredOnDemandLoads.map((load) => load.ref)).toContain(
+            'tactics/models/undeclared.glb',
+        );
+        // The finding's location is labelled with the MATCHED hook name, not a
+        // hardcoded 'useAsset'.
+        const finding = report.undeclaredOnDemandLoads.find(
+            (load) => load.ref === 'tactics/models/undeclared.glb',
+        );
+        expect(finding?.source.location.startsWith('useModelInstance (')).toBe(true);
+    });
+
+    it('reports an undeclared useModelInstance load under apps/<game>/shell/', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/shell/UnitPortrait.tsx'],
+                files: {
+                    'apps/tactics/shell/UnitPortrait.tsx': `
+                        export function UnitPortrait() {
+                            return useModelInstance('tactics/models/portrait.glb');
+                        }
+                    `,
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(false);
+        expect(report.undeclaredOnDemandLoads.map((load) => load.ref)).toContain(
+            'tactics/models/portrait.glb',
+        );
+    });
+
+    it('reports an undeclared useModelInstance load under apps/<game>/renderer/', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: ['apps/tactics/renderer/loaders.ts'],
+                files: {
+                    'apps/tactics/renderer/loaders.ts': `
+                        export function preload() {
+                            return useModelInstance('tactics/models/hero.glb');
+                        }
+                    `,
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(false);
+        expect(report.undeclaredOnDemandLoads.map((load) => load.ref)).toContain(
+            'tactics/models/hero.glb',
+        );
+    });
+
+    it('passes declared useModelInstance refs across all three Invariant #96 surfaces (negative control)', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                onDemandLoadSourceFiles: [
+                    'apps/tactics/screens/board.tsx',
+                    'apps/tactics/shell/UnitPortrait.tsx',
+                    'apps/tactics/renderer/loaders.ts',
+                ],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                files: {
+                    'apps/tactics/screens/board.tsx': `
+                        export function Board() {
+                            // A non-member identifier call with a ref-shaped,
+                            // UNDECLARED literal: the matcher must ignore it —
+                            // a coarsened matcher would hard-error CI on it.
+                            trackTelemetry('tactics/telemetry/board-open');
+                            return useModelInstance('tactics/models/knight.glb');
+                        }
+                    `,
+                    'apps/tactics/shell/UnitPortrait.tsx': `
+                        export function UnitPortrait() {
+                            return useModelInstance('tactics/models/knight.glb');
+                        }
+                    `,
+                    'apps/tactics/renderer/loaders.ts': `
+                        export function preload() {
+                            return useModelInstance('tactics/models/knight.glb');
+                        }
+                    `,
+                    'apps/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/models/knight.glb', kind: 'gltf-model', priority: 'critical' },
+                            ],
+                        };
+                    `,
+                    'apps/tactics/assets/models/knight.glb': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.undeclaredOnDemandLoads).toHaveLength(0);
+        expect(report.unresolvedOnDemandLoads).toHaveLength(0);
+    });
+
+    it('findOnDemandLoadSourceFiles opens exactly the Invariant #96 surfaces plus the engine scene root', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const plant = async (relPath: string): Promise<void> => {
+            const absPath = join(dir, ...relPath.split('/'));
+            await mkdir(dirname(absPath), { recursive: true });
+            await writeFile(absPath, '');
+        };
+        await plant('apps/tactics/screens/board.tsx');
+        await plant('apps/tactics/shell/UnitPortrait.tsx');
+        await plant('apps/tactics/renderer/loaders.ts');
+        // NOT scanned: a nested renderer/ dir below the surface position — the
+        // widened segments are anchored to apps/<name>/<surface>, never matched
+        // as bare path segments.
+        await plant('apps/tactics/lib/renderer/util.ts');
+        // NOT scanned: the walked roots are apps/ and simulation/scene/, so an
+        // engine-shaped tree like renderer/components/shell/ is never walked —
+        // and the anchor keeps 'shell'/'renderer' from ever matching as bare
+        // segments inside a walked root.
+        await plant('renderer/components/shell/GameShell.tsx');
+        await plant('simulation/scene/sceneGraph.ts');
+        // NOT scanned: build output and test/declaration files stay excluded
+        // inside the widened surfaces.
+        await plant('apps/tactics/renderer/dist/generated.ts');
+        await plant('apps/tactics/shell/UnitPortrait.test.tsx');
+
+        const host = createNodeWorkspaceFileHost();
+        if (host.findOnDemandLoadSourceFiles === undefined) {
+            throw new Error(
+                'createNodeWorkspaceFileHost must provide findOnDemandLoadSourceFiles.',
+            );
+        }
+        const files = (await host.findOnDemandLoadSourceFiles(dir)).map((file) =>
+            relative(dir, file).split(sep).join('/'),
+        );
+
+        expect(files).toEqual([
+            'apps/tactics/renderer/loaders.ts',
+            'apps/tactics/screens/board.tsx',
+            'apps/tactics/shell/UnitPortrait.tsx',
+            'simulation/scene/sceneGraph.ts',
+        ]);
+    });
+
+    it('finds the widened surfaces even when an ancestor directory is named apps', async () => {
+        // Mirrors the per-game-scope ancestor test: a checkout like
+        // /srv/apps/Chimera must not anchor the surface check on the ancestor
+        // 'apps' segment of the absolute path.
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const workspace = join(dir, 'srv', 'apps', 'Chimera');
+        const plant = async (relPath: string): Promise<void> => {
+            const absPath = join(workspace, ...relPath.split('/'));
+            await mkdir(dirname(absPath), { recursive: true });
+            await writeFile(absPath, '');
+        };
+        await plant('apps/tactics/shell/UnitPortrait.tsx');
+        await plant('apps/tactics/renderer/loaders.ts');
+
+        const host = createNodeWorkspaceFileHost();
+        if (host.findOnDemandLoadSourceFiles === undefined) {
+            throw new Error(
+                'createNodeWorkspaceFileHost must provide findOnDemandLoadSourceFiles.',
+            );
+        }
+        const files = (await host.findOnDemandLoadSourceFiles(workspace)).map((file) =>
+            relative(workspace, file).split(sep).join('/'),
+        );
+
+        expect(files).toEqual([
+            'apps/tactics/renderer/loaders.ts',
+            'apps/tactics/shell/UnitPortrait.tsx',
+        ]);
     });
 });

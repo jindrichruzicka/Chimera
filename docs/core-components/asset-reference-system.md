@@ -306,6 +306,16 @@ function EntityMesh({ portraitRef }: EntityMeshProps) {
 
 > **Invariant #22** — All `AssetRef` strings must pass this validation before merge. A data object referencing a non-existent file is a CI-blocking error.
 
+The on-demand arm (Invariant #52) additionally AST-scans every Invariant #96 game surface —
+`apps/<name>/screens/`, `apps/<name>/shell/`, and `apps/<name>/renderer/` — plus engine scene
+descriptors for `useAsset(...)` / `useModelInstance(...)` calls and `<receiver>.load(...)` /
+`<receiver>.get(...)` calls, and requires each statically-resolvable ref to be a member of the
+workspace-wide declared-ref union (a manifest entry, a scene's `requiredAssets`, content data
+JSON, or a font `src` — Invariant #52's membership rule). The `.load`/`.get` matchers are receiver-gated on `/asset/i` — a deliberate
+false-negative: a load through a receiver whose name lacks "asset" (for example
+`const { load } = useAssetManager()`) is not scanned at all. Keep asset-manager receivers named
+accordingly (`assets.load(...)`, `assetManager.get(...)`) so your loads stay inside the gate.
+
 Game font declarations use the same local `game-id/relative/path` string shape, but they are loaded
 by `renderer/game/GameFontLoader.ts` rather than by `AssetManager`. Validation also crawls
 `games/*/shell/fonts.ts` and requires each font file to exist under `games/<game>/assets/`.

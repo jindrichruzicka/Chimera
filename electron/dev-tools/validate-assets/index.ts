@@ -1184,7 +1184,10 @@ function collectManifestConstMembers(
 }
 
 /**
- * AST-scans scene/screen source for on-demand asset load call sites — `useAsset(...)`,
+ * AST-scans the on-demand load scope — engine scene descriptors plus every
+ * Invariant #96 game surface (`apps/<name>/{screens,shell,renderer}` and any
+ * scene/screen-segment path) — for on-demand asset load call sites:
+ * `useAsset(...)`, `useModelInstance(...)`,
  * `<assetReceiver>.load(...)`, `<assetReceiver>.get(...)` — and resolves the first
  * argument to a ref key. String literals and `buildAssetRef(g, p)` (tier A) and
  * manifest-const member accesses (tier B, via `manifestConstMembers`) become refs;
@@ -1414,8 +1417,17 @@ function isCalleeNamed(expression: Expression, name: string): boolean {
 }
 
 /**
+ * The exact hook identifiers the on-demand scan matches as direct calls. Both
+ * take an `AssetRef` first argument and load on demand: `useAsset` resolves
+ * any declared ref, `useModelInstance` resolves a `gltf-model` ref and clones
+ * it. A hook missing from this set is a blind spot in a CI-blocking check.
+ */
+const ON_DEMAND_LOAD_HOOK_NAMES: ReadonlySet<string> = new Set(['useAsset', 'useModelInstance']);
+
+/**
  * Returns a display label for an on-demand load callee, or undefined when the call
- * is not one: `useAsset(...)` (exact identifier), or `<recv>.load(...)`/`<recv>.get(...)`
+ * is not one: a hook in {@link ON_DEMAND_LOAD_HOOK_NAMES} (exact identifier,
+ * labelled with the matched name), or `<recv>.load(...)`/`<recv>.get(...)`
  * where the receiver name matches `/asset/iu`. The receiver gate is what keeps the very
  * generic `.load`/`.get` matchers from firing on unrelated Map/loader call sites; the
  * cost is a deliberate false-negative — a load through an aliased or destructured
@@ -1425,7 +1437,7 @@ function isCalleeNamed(expression: Expression, name: string): boolean {
 function matchOnDemandLoadCallee(call: CallExpression): string | undefined {
     const target = call.expression;
     if (isIdentifier(target)) {
-        return target.text === 'useAsset' ? 'useAsset' : undefined;
+        return ON_DEMAND_LOAD_HOOK_NAMES.has(target.text) ? target.text : undefined;
     }
     if (isPropertyAccessExpression(target)) {
         const method = target.name.text;
@@ -1559,7 +1571,14 @@ async function findOnDemandLoadSourceFiles(workspaceRoot: string): Promise<reado
     const files: string[] = [];
 
     for (const root of roots) {
-        files.push(...(await collectFiles(root, isOnDemandLoadSourceFile)));
+        // Relativized first (the `gameIdFromPath` pattern): a checkout under an
+        // ancestor directory named `apps` (e.g. /srv/apps/Chimera) would
+        // otherwise anchor the surface check on the wrong segment.
+        files.push(
+            ...(await collectFiles(root, (filePath) =>
+                isOnDemandLoadSourceFile(relative(workspaceRoot, filePath)),
+            )),
+        );
     }
 
     return files.sort();
@@ -1640,8 +1659,30 @@ function isSceneSourceFile(filePath: string): boolean {
 const buildOrDependencyDirectories = new Set(['node_modules', 'dist', '.next', 'out', 'build']);
 const onDemandLoadDirectories = new Set(['scene', 'scenes', 'screen', 'screens']);
 
-// Scope: scene + screen source only (Invariant #52's "on-demand inside the new scene"),
-// excluding build output and dependencies so the generic `.get`/`.load` scan stays narrow.
+// The two additional Invariant #96 game surfaces (shell contributions and the
+// renderer composition root), matched ONLY at the `apps/<name>/<surface>`
+// position of the WORKSPACE-RELATIVE path. `renderer` and `shell` are broad
+// segment names: matched as bare segments anywhere, the scan would newly open
+// the engine's own `renderer/` package (which nests a `components/shell/`) if
+// the walker were ever pointed at the repo root, and any game's nested
+// `lib/renderer/` helper dir. The caller relativizes before calling, so
+// `apps` is segment 0 — never an ancestor directory that happens to share
+// the name.
+const appsAnchoredOnDemandLoadDirectories = new Set(['shell', 'renderer']);
+
+function hasAppsAnchoredSurfaceSegment(segments: readonly string[]): boolean {
+    if (segments[0] !== GAMES_DIR) {
+        return false;
+    }
+    const surfaceSegment = segments[2];
+    return surfaceSegment !== undefined && appsAnchoredOnDemandLoadDirectories.has(surfaceSegment);
+}
+
+// Scope: Invariant #52's "on-demand inside the new scene" across every surface
+// Invariant #96 legalises — scene/screen-segment paths anywhere in the walked
+// roots, plus the apps-anchored `shell` and `renderer` surfaces — excluding
+// build output and dependencies so the generic `.get`/`.load` scan stays
+// narrow. `filePath` must be workspace-relative (see the caller).
 function isOnDemandLoadSourceFile(filePath: string): boolean {
     if (!isSceneSourceFile(filePath)) {
         return false;
@@ -1650,7 +1691,10 @@ function isOnDemandLoadSourceFile(filePath: string): boolean {
     if (segments.some((segment) => buildOrDependencyDirectories.has(segment))) {
         return false;
     }
-    return segments.some((segment) => onDemandLoadDirectories.has(segment));
+    return (
+        segments.some((segment) => onDemandLoadDirectories.has(segment)) ||
+        hasAppsAnchoredSurfaceSegment(segments)
+    );
 }
 
 function isAssetLoaderSourceFile(filePath: string): boolean {
