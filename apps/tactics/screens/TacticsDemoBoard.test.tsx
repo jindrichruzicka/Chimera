@@ -116,6 +116,49 @@ vi.mock('../scene/TacticsGroundPlane.js', () => ({
     ),
 }));
 
+// Mutable per-test fixture for the showcase mock's reports: tests overwrite
+// `a`/`b` before render to drive the status element through error paths, and
+// afterEach restores the clean defaults.
+const showcaseMockReports = vi.hoisted(() => ({
+    a: { rootUuid: 'uuid-a', topBonePoseZ: Math.PI / 2, errorName: '' },
+    b: { rootUuid: 'uuid-b', topBonePoseZ: 0, errorName: '' },
+    reportBEnabled: true,
+    resetToClean(): void {
+        showcaseMockReports.a = { rootUuid: 'uuid-a', topBonePoseZ: Math.PI / 2, errorName: '' };
+        showcaseMockReports.b = { rootUuid: 'uuid-b', topBonePoseZ: 0, errorName: '' };
+        showcaseMockReports.reportBEnabled = true;
+    },
+}));
+
+vi.mock('./TacticsModelShowcase.js', () => ({
+    // The real showcase reaches useModelInstance → useAssetManager, which
+    // throws outside a provider; the board unit tests exercise the board, and
+    // the showcase has its own co-located test plus the model-instances e2e.
+    TacticsModelShowcase: ({
+        onReportA,
+        onReportB,
+    }: {
+        readonly onReportA: (report: {
+            rootUuid: string;
+            topBonePoseZ: number;
+            errorName: string;
+        }) => void;
+        readonly onReportB: (report: {
+            rootUuid: string;
+            topBonePoseZ: number;
+            errorName: string;
+        }) => void;
+    }) => {
+        React.useEffect(() => {
+            onReportA(showcaseMockReports.a);
+            if (showcaseMockReports.reportBEnabled) {
+                onReportB(showcaseMockReports.b);
+            }
+        }, [onReportA, onReportB]);
+        return <div data-testid="tactics-model-showcase-mock" />;
+    },
+}));
+
 vi.mock('../scene/TacticsUnitPrimitive.js', () => ({
     TacticsUnitPrimitive: ({
         unit,
@@ -147,6 +190,7 @@ vi.mock('../scene/TacticsUnitPrimitive.js', () => ({
 afterEach(() => {
     cleanup();
     gameCanvasCalls.length = 0;
+    showcaseMockReports.resetToClean();
     useCommitmentBuffer.getState().reset();
 });
 
@@ -244,7 +288,13 @@ describe('TacticsDemoBoard', () => {
         expect(screen.queryByTestId('move-target')).not.toBeInTheDocument();
         expect(screen.queryByTestId('reveal-target')).not.toBeInTheDocument();
         expect(screen.queryByTestId('attack-target')).not.toBeInTheDocument();
-        expect(gameCanvasCalls).toHaveLength(1);
+        // The showcase report lands via effect state, so the board renders
+        // once more after mount; what matters is that every render hands
+        // GameCanvas the SAME camera object (reference-compared memo — a new
+        // identity per render would re-realize the camera).
+        expect(gameCanvasCalls.length).toBeGreaterThanOrEqual(1);
+        const cameraIdentities = new Set(gameCanvasCalls.map((call) => call.camera));
+        expect(cameraIdentities.size).toBe(1);
         // The board's camera contract is the declarative config it hands the
         // engine GameCanvas (instance realization — manual frustum, up before
         // lookAt — is pinned in the renderer's GameCanvas tests). The e2e pixel
@@ -278,6 +328,93 @@ describe('TacticsDemoBoard', () => {
         expect(canvas).toContainElement(
             screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`),
         );
+    });
+
+    it('exposes the model-showcase reports as status data attributes (clean path)', () => {
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        const status = screen.getByTestId('tactics-model-showcase-status');
+        expect(status).toHaveAttribute('data-models-settled', 'true');
+        expect(status).toHaveAttribute('data-models-loaded', '2');
+        expect(status).toHaveAttribute('data-model-roots-distinct', 'true');
+        expect(status).toHaveAttribute('data-model-pose-a', (Math.PI / 2).toFixed(3));
+        expect(status).toHaveAttribute('data-model-pose-b', (0).toFixed(3));
+        expect(status).toHaveAttribute('data-model-error', '');
+    });
+
+    it("surfaces instance B's failure in the status element even when A loaded clean", () => {
+        // `reportA?.errorName ?? reportB?.errorName` would let A's clean ''
+        // mask B's failure — the attribute must carry the first NON-EMPTY name.
+        showcaseMockReports.b = {
+            rootUuid: '',
+            topBonePoseZ: Number.NaN,
+            errorName: 'UnknownAssetManifestEntryError',
+        };
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        const status = screen.getByTestId('tactics-model-showcase-status');
+        expect(status).toHaveAttribute('data-models-settled', 'true');
+        expect(status).toHaveAttribute('data-models-loaded', '1');
+        expect(status).toHaveAttribute('data-model-roots-distinct', '');
+        expect(status).toHaveAttribute('data-model-error', 'UnknownAssetManifestEntryError');
+    });
+
+    it("surfaces instance A's failure and withholds roots-distinct even when B loaded clean", () => {
+        // Mirror of the B-fails case: the A-side error guard must withhold
+        // roots-distinct (comparing '' against B's uuid would publish 'true'
+        // in exactly the failure state the attribute exists to diagnose).
+        showcaseMockReports.a = {
+            rootUuid: '',
+            topBonePoseZ: Number.NaN,
+            errorName: 'MalformedModelAssetError',
+        };
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        const status = screen.getByTestId('tactics-model-showcase-status');
+        expect(status).toHaveAttribute('data-models-settled', 'true');
+        expect(status).toHaveAttribute('data-models-loaded', '1');
+        expect(status).toHaveAttribute('data-model-roots-distinct', '');
+        expect(status).toHaveAttribute('data-model-error', 'MalformedModelAssetError');
+    });
+
+    it('stays unsettled while only instance A has reported', () => {
+        // The settled attribute must require BOTH reports: an ||-coarsened
+        // guard would flip it after the first report and re-open the round-1
+        // wait-budget race in the e2e.
+        showcaseMockReports.reportBEnabled = false;
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        const status = screen.getByTestId('tactics-model-showcase-status');
+        expect(status).toHaveAttribute('data-models-settled', 'false');
+        expect(status).toHaveAttribute('data-models-loaded', '1');
+        expect(status).toHaveAttribute('data-model-pose-b', '');
     });
 
     it("paints the host-configured board color and each unit's host-assigned color", () => {

@@ -31,6 +31,7 @@ import {
     TACTICS_CAMERA_UP,
 } from '../scene/tacticsCamera.js';
 import { TacticsGroundPlane } from '../scene/TacticsGroundPlane.js';
+import { TacticsModelShowcase, type TacticsModelShowcaseReport } from './TacticsModelShowcase.js';
 import { TacticsUnitPrimitive } from '../scene/TacticsUnitPrimitive.js';
 import { parseRevealedTurn } from '../simulation/commitment/revealView.js';
 import {
@@ -99,6 +100,8 @@ export function TacticsDemoBoard({
     // until content loads, so the resolvers fall back to the default hexes.
     const palette = paletteFromCollections(content ?? {});
     const [selectedUnitId, setSelectedUnitId] = useState<TacticsSceneUnit['id'] | null>(null);
+    const [showcaseReportA, setShowcaseReportA] = useState<TacticsModelShowcaseReport | null>(null);
+    const [showcaseReportB, setShowcaseReportB] = useState<TacticsModelShowcaseReport | null>(null);
 
     // Commitment battle mode: move/attack/reveal selections are buffered locally
     // (never dispatched) and shown as an optimistic view until the player commits.
@@ -257,6 +260,7 @@ export function TacticsDemoBoard({
 
     return (
         <div aria-label={t(BOARD_KEYS.ariaLabel)} style={boardSceneStyle}>
+            <TacticsModelShowcaseStatus reportA={showcaseReportA} reportB={showcaseReportB} />
             {revealedTurn !== null && (
                 <div
                     data-testid="tactics-reveal"
@@ -291,6 +295,10 @@ export function TacticsDemoBoard({
                         onSelect={handleUnitSelect}
                     />
                 ))}
+                <TacticsModelShowcase
+                    onReportA={setShowcaseReportA}
+                    onReportB={setShowcaseReportB}
+                />
             </GameCanvas>
         </div>
     );
@@ -330,6 +338,55 @@ function bufferedActionForIntent(intent: TacticsSelectionIntent): BufferedTactic
         };
     }
     return null;
+}
+
+// No visible content — the element exists only to carry data attributes, so
+// it needs no size; pointer-events stays off so it can never occlude a click.
+const showcaseStatusStyle: React.CSSProperties = {
+    position: 'absolute',
+    pointerEvents: 'none',
+};
+
+/**
+ * DOM observability for the in-canvas model showcase: the canvas can show
+ * pixels, but only the scene graph can say the two clones are distinct roots
+ * and independently posed — this element carries those facts as data
+ * attributes for the model-instances e2e spec. Empty attribute values mean
+ * "not reported yet"; an error name means the load or clone failed.
+ */
+function TacticsModelShowcaseStatus({
+    reportA,
+    reportB,
+}: {
+    readonly reportA: TacticsModelShowcaseReport | null;
+    readonly reportB: TacticsModelShowcaseReport | null;
+}): React.ReactElement {
+    const loadedCount = [reportA, reportB].filter(
+        (report) => report !== null && report.errorName === '',
+    ).length;
+    // First NON-EMPTY error, from either instance: `reportA?.errorName ?? …`
+    // would let A's clean '' mask B's failure and turn a named error into an
+    // undiagnosed timeout downstream.
+    const errorName =
+        [reportA?.errorName, reportB?.errorName].find(
+            (name) => name !== undefined && name !== '',
+        ) ?? '';
+    const rootsDistinct =
+        reportA !== null && reportB !== null && reportA.errorName === '' && reportB.errorName === ''
+            ? String(reportA.rootUuid !== reportB.rootUuid)
+            : '';
+    return (
+        <div
+            data-testid="tactics-model-showcase-status"
+            data-models-settled={String(reportA !== null && reportB !== null)}
+            data-models-loaded={String(loadedCount)}
+            data-model-roots-distinct={rootsDistinct}
+            data-model-pose-a={reportA === null ? '' : reportA.topBonePoseZ.toFixed(3)}
+            data-model-pose-b={reportB === null ? '' : reportB.topBonePoseZ.toFixed(3)}
+            data-model-error={errorName}
+            style={showcaseStatusStyle}
+        />
+    );
 }
 
 export default TacticsDemoBoard;

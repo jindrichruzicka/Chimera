@@ -54,6 +54,7 @@ describe('analyzeCanvasPixels', () => {
             redPixels: 1,
             greenPixels: 0,
             amberPixels: 0,
+            magentaPixels: 0,
         });
     });
 
@@ -76,6 +77,38 @@ describe('analyzeCanvasPixels', () => {
         expect(stats.redPixels).toBe(2);
     });
 
+    it('counts magenta showcase-model pixels without tripping the red or blue counters', () => {
+        // Pixel palette: magenta #ff00ff (showcase rig), blue #2563eb,
+        // red #dc2626, blank. Magenta has red AND blue high, so the dominance
+        // deltas in the red/blue classifiers must both reject it.
+        const stats = analyzeCanvasPixels({
+            width: 4,
+            height: 1,
+            rgba: [255, 0, 255, 255, 37, 99, 235, 255, 220, 38, 38, 255, 0, 0, 0, 0],
+        });
+
+        expect(stats.magentaPixels).toBe(1);
+        expect(stats.bluePixels).toBe(1);
+        expect(stats.redPixels).toBe(1);
+    });
+
+    it('rejects near-miss magenta pixels that each violate exactly one classifier conjunct', () => {
+        // One pixel per conjunct, isolating it: low-alpha magenta; red below
+        // its minimum; blue below its minimum; red under the green-suppression
+        // delta; blue under the green-suppression delta. A dropped conjunct
+        // admits its pixel and the count moves off zero.
+        const stats = analyzeCanvasPixels({
+            width: 5,
+            height: 1,
+            rgba: [
+                255, 0, 255, 40, 100, 0, 255, 255, 255, 0, 100, 255, 200, 130, 255, 255, 255, 130,
+                200, 255,
+            ],
+        });
+
+        expect(stats.magentaPixels).toBe(0);
+    });
+
     it('decodes a PNG buffer into a full-resolution RGBA frame analyzable in-process', () => {
         const png = new PNG({ width: 2, height: 1 });
         // Pixel 0: opaque blue primitive; pixel 1: transparent blank.
@@ -96,6 +129,7 @@ describe('analyzeCanvasPixels', () => {
             redPixels: 0,
             greenPixels: 0,
             amberPixels: 0,
+            magentaPixels: 0,
         });
     });
 
@@ -110,8 +144,9 @@ describe('analyzeCanvasPixels', () => {
                 redPixels: 0,
                 greenPixels: 3,
                 amberPixels: 1,
+                magentaPixels: 0,
             }),
-        ).toBe('canvas=10x5 pixels=50 nonblank=42 blue=7 red=0 green=3 amber=1');
+        ).toBe('canvas=10x5 pixels=50 nonblank=42 blue=7 red=0 green=3 amber=1 magenta=0');
     });
 });
 

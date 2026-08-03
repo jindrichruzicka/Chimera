@@ -16,6 +16,7 @@ export interface CanvasPixelStats {
     readonly redPixels: number;
     readonly greenPixels: number;
     readonly amberPixels: number;
+    readonly magentaPixels: number;
 }
 
 /** Mean RGB summary of a frame, used for board-colour parity assertions. */
@@ -43,6 +44,12 @@ const MIN_AMBER_GREEN_CHANNEL = 70;
 const MAX_AMBER_BLUE_CHANNEL = 90;
 const AMBER_RED_BLUE_DOMINANCE_DELTA = 80;
 const AMBER_GREEN_BLUE_DOMINANCE_DELTA = 30;
+// Magenta (#ff00ff) is the showcase-model band: red AND blue both high with
+// green suppressed — deliberately classified by neither the red nor the blue
+// primitive detectors (each requires dominance over the other channel).
+const MIN_MAGENTA_RED_CHANNEL = 150;
+const MIN_MAGENTA_BLUE_CHANNEL = 150;
+const MAGENTA_GREEN_SUPPRESSION_DELTA = 80;
 
 export function analyzeCanvasPixels(frame: CanvasRgbaFrame): CanvasPixelStats {
     assertValidFrame(frame);
@@ -52,6 +59,7 @@ export function analyzeCanvasPixels(frame: CanvasRgbaFrame): CanvasPixelStats {
     let redPixels = 0;
     let greenPixels = 0;
     let amberPixels = 0;
+    let magentaPixels = 0;
 
     for (let pixelOffset = 0; pixelOffset < frame.rgba.length; pixelOffset += 4) {
         const red = frame.rgba[pixelOffset] ?? 0;
@@ -74,6 +82,9 @@ export function analyzeCanvasPixels(frame: CanvasRgbaFrame): CanvasPixelStats {
         if (isAmberPrimitivePixel(red, green, blue, alpha)) {
             amberPixels += 1;
         }
+        if (isMagentaPrimitivePixel(red, green, blue, alpha)) {
+            magentaPixels += 1;
+        }
     }
 
     const totalPixels = frame.width * frame.height;
@@ -86,6 +97,7 @@ export function analyzeCanvasPixels(frame: CanvasRgbaFrame): CanvasPixelStats {
         redPixels,
         greenPixels,
         amberPixels,
+        magentaPixels,
     };
 }
 
@@ -147,6 +159,7 @@ export function formatCanvasPixelStats(stats: CanvasPixelStats): string {
         `red=${stats.redPixels}`,
         `green=${stats.greenPixels}`,
         `amber=${stats.amberPixels}`,
+        `magenta=${stats.magentaPixels}`,
     ].join(' ');
 }
 
@@ -205,5 +218,14 @@ function isAmberPrimitivePixel(red: number, green: number, blue: number, alpha: 
         blue <= MAX_AMBER_BLUE_CHANNEL &&
         red >= blue + AMBER_RED_BLUE_DOMINANCE_DELTA &&
         green >= blue + AMBER_GREEN_BLUE_DOMINANCE_DELTA
+    );
+}
+function isMagentaPrimitivePixel(red: number, green: number, blue: number, alpha: number): boolean {
+    return (
+        alpha >= MIN_COLOR_ALPHA &&
+        red >= MIN_MAGENTA_RED_CHANNEL &&
+        blue >= MIN_MAGENTA_BLUE_CHANNEL &&
+        red >= green + MAGENTA_GREEN_SUPPRESSION_DELTA &&
+        blue >= green + MAGENTA_GREEN_SUPPRESSION_DELTA
     );
 }

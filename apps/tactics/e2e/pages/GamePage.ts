@@ -345,6 +345,13 @@ export class GamePage {
         );
     }
 
+    public async assertTacticsCanvasHasMagentaPrimitive(): Promise<void> {
+        await this.waitForTacticsCanvasPixelExpectation(
+            (stats) => stats.magentaPixels >= minimumColorPixels(stats),
+            'Tactics canvas did not render the expected magenta showcase-model pixels',
+        );
+    }
+
     /**
      * Mean opaque colour of the tactics canvas — a stable proxy for the rendered
      * board colour (units occupy <1% of pixels). Used to assert board-colour
