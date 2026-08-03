@@ -1333,6 +1333,46 @@ describe('renderer app protocol', () => {
         ).toBeNull();
     });
 
+    it('serves .glb with the model/gltf-binary content type (not octet-stream)', async () => {
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/games/tactics/assets/models/knight.glb',
+            data: Buffer.from('fake-glb-bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.headers.get('content-type')).toBe('model/gltf-binary');
+    });
+
+    it('serves .gltf with the model/gltf+json content type', async () => {
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/games/tactics/assets/models/knight.gltf',
+            data: Buffer.from('{}'),
+            rangeHeader: null,
+        });
+
+        expect(response.headers.get('content-type')).toBe('model/gltf+json');
+    });
+
+    it('serves .bin external buffers as application/octet-stream (deliberate table entry)', async () => {
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/games/tactics/assets/models/knight.bin',
+            data: Buffer.from('fake-buffer-bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.headers.get('content-type')).toBe('application/octet-stream');
+    });
+
+    it('falls back to application/octet-stream for an unknown extension (negative control)', async () => {
+        const response = buildRendererProtocolResponse({
+            filePath: '/abs/path/games/tactics/assets/models/knight.xyz',
+            data: Buffer.from('bytes'),
+            rangeHeader: null,
+        });
+
+        expect(response.headers.get('content-type')).toBe('application/octet-stream');
+    });
+
     it('serves .mp4 with the video/mp4 content type (not octet-stream)', async () => {
         const response = buildRendererProtocolResponse({
             filePath: '/abs/path/renderer/out/chimera_logo.mp4',

@@ -573,7 +573,12 @@ const RSC_CONTENT_TYPE = 'text/x-component; charset=utf-8';
 const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
 
 const CONTENT_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
+    // .bin matches the fallback on purpose: a gltf external buffer is served
+    // as octet-stream DELIBERATELY, not because the table forgot it.
+    '.bin': 'application/octet-stream',
     '.css': 'text/css; charset=utf-8',
+    '.glb': 'model/gltf-binary',
+    '.gltf': 'model/gltf+json',
     '.html': HTML_CONTENT_TYPE,
     '.js': 'application/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
