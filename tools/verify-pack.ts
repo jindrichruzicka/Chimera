@@ -17,7 +17,8 @@
  *      `overrides` so EVERY `@chimera-engine/*` edge resolves through a tarball's `exports`
  *      (no `workspace:*` reach-through; the gate's whole point)
  *   4. `npm install`                 — install the tarballs into the throwaway
- *   5. subpath resolution probe      — assert every entry of `PROBE_SUBPATHS` below
+ *   5. subpath resolution probe      — first assert `PROBE_SUBPATHS` covers every
+ *      key of the packed renderer manifest's `exports` map, then assert every entry
  *      resolves from the installed tarball (Invariant #96) — a missing
  *      `exports`/`files` entry makes `require.resolve` throw
  *   6. scoped Playwright E2E         — run the tactics suite with the four library
@@ -39,7 +40,10 @@
  *   #2  — lives in `tools/`; imports only node builtins — never a package or app module.
  *   #47 — orchestration resolves ONLY through each package's public `exports`, never an
  *         internal subpath (no `workspace:*` symlink fallback inside the throwaway).
- *   #96 — the probe catches a missing `exports`/`files` entry for a public subpath.
+ *   #96 — `PROBE_SUBPATHS` completeness is derived from the `exports` map of the
+ *         packed renderer manifest (`missingProbeSubpaths`): a renderer exports key
+ *         with no probe entry fails the gate; wildcard keys are covered by concrete
+ *         representative entries.
  *
  * Usage (run via `pnpm verify:pack` / `pnpm verify:pack:selftest`, not in unit tests):
  *   tsx tools/verify-pack.ts            # positive gate
@@ -90,10 +94,19 @@ export interface VerifyPackDeps {
  */
 export const E2E_NODE_MODULES_ENV = 'CHIMERA_VERIFY_PACK_NODE_MODULES';
 
-/** Public subpaths the resolution probe asserts ship in the packed surface. */
-const PROBE_SUBPATHS = [
+/**
+ * Public subpaths the resolution probe asserts ship in the packed surface.
+ * Hand-curated; renderer completeness is enforced by `assertProbeCoverage` below.
+ */
+export const PROBE_SUBPATHS = [
     '@chimera-engine/renderer/components/ui',
     '@chimera-engine/renderer/components/chat',
+    // The engine R3F barrel (§4.16, §4.22) — `GameCanvas` plus the engine components
+    // a game mounts inside its own `<Canvas>` (e.g. `PerfProbe`).
+    '@chimera-engine/renderer/components/r3f',
+    // The i18n runtime barrel (§4.39) — the only legal import for a game's
+    // translation catalogues, so a dropped export strands every localised game.
+    '@chimera-engine/renderer/i18n',
     '@chimera-engine/renderer/game',
     // The audio hooks (§4.25). A game surface may reach `useSound`/`useMusicTrack`
     // only through this barrel (Invariant #96), so a dropped export leaves an
@@ -158,6 +171,50 @@ class VerifyPackStepError extends Error {
 }
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
+
+/**
+ * The package whose packed `exports` map PROBE_SUBPATHS must fully cover — the
+ * renderer, whose public barrel set Invariant #96 names. Electron subpaths are
+ * probed selectively above: its exports map also carries dev-only and types-only
+ * entries (`./eslint`, the `preload/*-types` aliases) outside the #96 surface.
+ */
+const COVERAGE_PACKAGE = '@chimera-engine/renderer';
+
+/** True when `exportsKey` of `packageName` is represented by at least one probe entry. */
+function isKeyProbed(
+    packageName: string,
+    exportsKey: string,
+    probeSubpaths: readonly string[],
+): boolean {
+    if (exportsKey === '.') return probeSubpaths.includes(packageName);
+    if (!exportsKey.startsWith('./')) return false; // uninterpretable key → report it
+    const specifier = `${packageName}/${exportsKey.slice(2)}`;
+    const star = specifier.indexOf('*');
+    if (star === -1) return probeSubpaths.includes(specifier);
+    // A wildcard key (`./shell/*`, `./styles/*.css`) cannot be resolved as written;
+    // it counts as covered when a concrete probe entry instantiates its pattern.
+    const prefix = specifier.slice(0, star);
+    const suffix = specifier.slice(star + 1);
+    return probeSubpaths.some(
+        (probe) =>
+            probe.length > prefix.length + suffix.length &&
+            probe.startsWith(prefix) &&
+            probe.endsWith(suffix),
+    );
+}
+
+/**
+ * The probe-list completeness derivation: every key of `exportsMap` (as packed —
+ * callers must feed the manifest from inside the tarball, not the source tree)
+ * that no entry of `probeSubpaths` represents, in manifest order.
+ */
+export function missingProbeSubpaths(
+    packageName: string,
+    exportsMap: Readonly<Record<string, unknown>>,
+    probeSubpaths: readonly string[],
+): readonly string[] {
+    return Object.keys(exportsMap).filter((key) => !isKeyProbed(packageName, key, probeSubpaths));
+}
 
 /**
  * Synthesize the throwaway consumer `package.json`. Every `@chimera-engine/*` package is a
@@ -291,6 +348,46 @@ function installTarballs(deps: VerifyPackDeps, consumerDir: string, cacheDir: st
     );
 }
 
+/**
+ * Completeness gate for the probe list (Invariant #96): every subpath key in the
+ * PACKED renderer manifest's `exports` map must be represented in `PROBE_SUBPATHS` —
+ * exactly for a plain key, by a concrete representative entry for a wildcard key
+ * (so a dropped file under a wildcard family is caught only via its representatives).
+ * Reads the manifest npm extracted from the installed tarball — never the source
+ * tree — so the hand-maintained list cannot silently drift from what ships. Runs
+ * only in the positive gate: the self-test's job is proving the resolution probe
+ * bites, and a coverage failure there would mask a slipped-through drop.
+ */
+async function assertProbeCoverage(
+    deps: VerifyPackDeps,
+    consumerNodeModules: string,
+): Promise<void> {
+    deps.log(`checking PROBE_SUBPATHS covers every packed ${COVERAGE_PACKAGE} exports key…`);
+    const manifestPath = path.join(consumerNodeModules, COVERAGE_PACKAGE, 'package.json');
+    let exportsMap: Record<string, unknown>;
+    try {
+        const manifest = JSON.parse(await deps.fs.readFile(manifestPath)) as {
+            exports?: Record<string, unknown> | null;
+        };
+        if (manifest.exports === undefined || manifest.exports === null) {
+            throw new Error('manifest has no exports map');
+        }
+        exportsMap = manifest.exports;
+    } catch (error) {
+        throw new VerifyPackStepError(
+            'probe',
+            `verify:pack: cannot read the packed exports map at ${manifestPath} — the probe coverage gate cannot run (${String(error)})`,
+        );
+    }
+    const missing = missingProbeSubpaths(COVERAGE_PACKAGE, exportsMap, PROBE_SUBPATHS);
+    if (missing.length > 0) {
+        throw new VerifyPackStepError(
+            'probe',
+            `verify:pack: PROBE_SUBPATHS misses packed exports key(s): ${missing.join(', ')}`,
+        );
+    }
+}
+
 /** Write + run the renderer/electron resolution probe from the throwaway consumer. */
 async function runProbe(deps: VerifyPackDeps, consumerDir: string): Promise<RunResult> {
     await deps.fs.writeFile(path.join(consumerDir, 'probe.mjs'), buildProbeScript());
@@ -388,6 +485,7 @@ export async function verifyPack(
     try {
         const setup = await buildPackInstall(deps, tmp);
 
+        await assertProbeCoverage(deps, setup.consumerNodeModules);
         assertStepOk('probe', await runProbe(deps, setup.consumerDir));
 
         if (options.skipE2e !== true) {

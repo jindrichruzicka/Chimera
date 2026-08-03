@@ -1,6 +1,6 @@
 // tools/verify-pack.test.ts
 //
-// Unit tests for the `verify:pack` true-artifact release gate (issue #794, F64 T2).
+// Unit tests for the `verify:pack` true-artifact release gate.
 //
 // Exercises the pure wiring — package list, pack argv + tarball-path parsing, the
 // throwaway consumer manifest (file: deps + overrides, no workspace:* leak), the
@@ -10,15 +10,18 @@
 
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import {
     CHIMERA_PACKAGES,
     RENDERER_PEERS,
     E2E_NODE_MODULES_ENV,
+    PROBE_SUBPATHS,
     parsePackTarballPath,
     readPeerVersions,
     buildConsumerManifest,
     buildProbeScript,
     e2ePlaywrightArgs,
+    missingProbeSubpaths,
     packAll,
     verifyPack,
     verifyPackSelfTest,
@@ -116,6 +119,40 @@ function makeDeps(run: RunFn, fs: FsLike, extra: Partial<VerifyPackDeps> = {}): 
         },
         ...extra,
     };
+}
+
+/**
+ * The eight exports keys the packed renderer manifest ships today. The real gate
+ * derives coverage from the manifest inside the installed tarball, so drift here
+ * surfaces at `verify:pack` — this suite exercises the derivation, not the manifest.
+ */
+const RENDERER_EXPORTS: Readonly<Record<string, unknown>> = {
+    './components/ui': { default: './dist/components/ui/index.js' },
+    './components/chat': { default: './dist/components/chat/index.js' },
+    './components/r3f': { default: './dist/components/r3f/index.js' },
+    './i18n': { default: './dist/i18n/index.js' },
+    './audio': { default: './dist/audio/index.js' },
+    './game': { default: './dist/game/rendererGameRegistry.js' },
+    './shell/*': { default: './dist/app/*.js' },
+    './styles/*.css': './dist/styles/*.css',
+};
+
+/** Where the completeness gate reads the installed renderer manifest in the fake
+ * consumer (the fake mkdtemp names the first temp dir `<prefix>1`). */
+function installedRendererManifestPath(): string {
+    const tmp = `${path.join(tmpdir(), 'chimera-verify-pack-')}1`;
+    return path.join(tmp, 'consumer', 'node_modules', '@chimera-engine/renderer', 'package.json');
+}
+
+/** Seed the manifest npm extracts from the renderer tarball into the fake consumer. */
+function seedInstalledRendererManifest(
+    files: Map<string, string>,
+    exportsMap: Readonly<Record<string, unknown>> = RENDERER_EXPORTS,
+): void {
+    files.set(
+        installedRendererManifestPath(),
+        JSON.stringify({ name: '@chimera-engine/renderer', exports: exportsMap }),
+    );
 }
 
 // ── Package list ──────────────────────────────────────────────────────────────
@@ -253,10 +290,102 @@ describe('buildProbeScript', () => {
         expect(script).toContain('@chimera-engine/electron/preload/api');
     });
 
+    it('asserts the r3f and i18n barrels (Invariant #96) resolve from the tarball', () => {
+        const script = buildProbeScript();
+        expect(script).toContain('@chimera-engine/renderer/components/r3f');
+        expect(script).toContain('@chimera-engine/renderer/i18n');
+    });
+
     it('is resolution-based (createRequire / require.resolve), not a runtime render', () => {
         const script = buildProbeScript();
         expect(script).toContain('createRequire');
         expect(script).toContain('require.resolve');
+    });
+});
+
+// ── missingProbeSubpaths (probe-list completeness derivation) ────────────────
+
+describe('missingProbeSubpaths', () => {
+    it('reports no gap: every packed renderer exports key is covered by the shipped list', () => {
+        expect(
+            missingProbeSubpaths('@chimera-engine/renderer', RENDERER_EXPORTS, PROBE_SUBPATHS),
+        ).toEqual([]);
+    });
+
+    it('treats a wildcard key as covered by a concrete probe entry matching its pattern', () => {
+        expect(
+            missingProbeSubpaths('@chimera-engine/renderer', { './shell/*': {} }, [
+                '@chimera-engine/renderer/shell/layout',
+            ]),
+        ).toEqual([]);
+    });
+
+    it('reports an unprobed exports key by name', () => {
+        expect(
+            missingProbeSubpaths(
+                '@chimera-engine/renderer',
+                { ...RENDERER_EXPORTS, './models': {} },
+                PROBE_SUBPATHS,
+            ),
+        ).toEqual(['./models']);
+    });
+
+    it('does not count a probe entry under a different prefix as covering a wildcard key', () => {
+        expect(
+            missingProbeSubpaths('@chimera-engine/renderer', { './shell/*': {} }, [
+                '@chimera-engine/renderer/styles/tokens.css',
+            ]),
+        ).toEqual(['./shell/*']);
+    });
+
+    it('requires the wildcard suffix to match and the * to consume at least one character', () => {
+        // Missing the `.css` suffix → not a representative of `./styles/*.css`.
+        expect(
+            missingProbeSubpaths('@chimera-engine/renderer', { './styles/*.css': {} }, [
+                '@chimera-engine/renderer/styles/tokens',
+            ]),
+        ).toEqual(['./styles/*.css']);
+        // Prefix + suffix with an empty middle names no real file under the pattern.
+        expect(
+            missingProbeSubpaths('@chimera-engine/renderer', { './styles/*.css': {} }, [
+                '@chimera-engine/renderer/styles/.css',
+            ]),
+        ).toEqual(['./styles/*.css']);
+        // A genuine concrete file under the pattern is covered.
+        expect(
+            missingProbeSubpaths('@chimera-engine/renderer', { './styles/*.css': {} }, [
+                '@chimera-engine/renderer/styles/tokens.css',
+            ]),
+        ).toEqual([]);
+    });
+
+    it('reports keys it cannot interpret (a conditions-only exports object) instead of passing them', () => {
+        expect(
+            missingProbeSubpaths(
+                '@chimera-engine/renderer',
+                { import: {}, default: {} },
+                PROBE_SUBPATHS,
+            ),
+        ).toEqual(['import', 'default']);
+    });
+
+    it('covers a root "." key only by the bare package name, and exact keys only exactly', () => {
+        expect(
+            missingProbeSubpaths('@chimera-engine/simulation', { '.': {} }, [
+                '@chimera-engine/simulation',
+            ]),
+        ).toEqual([]);
+        expect(
+            missingProbeSubpaths('@chimera-engine/simulation', { '.': {} }, [
+                '@chimera-engine/simulation/engine',
+            ]),
+        ).toEqual(['.']);
+        // A deeper probe entry does not stand in for the exact barrel key.
+        expect(
+            missingProbeSubpaths('@chimera-engine/renderer', { './audio': {} }, [
+                '@chimera-engine/renderer/audio/AudioManager',
+            ]),
+        ).toEqual(['./audio']);
     });
 });
 
@@ -305,7 +434,8 @@ describe('packAll', () => {
 describe('verifyPack', () => {
     it('runs build → pack → install → probe → e2e in order and cleans up', async () => {
         const { run, calls } = makeFakeRun();
-        const { fs, removed } = makeFakeFs();
+        const { fs, files, removed } = makeFakeFs();
+        seedInstalledRendererManifest(files);
 
         const result = await verifyPack(makeDeps(run, fs));
 
@@ -333,7 +463,8 @@ describe('verifyPack', () => {
 
     it('installs with --ignore-scripts in the throwaway consumer dir (no workspace ancestor)', async () => {
         const { run, calls } = makeFakeRun();
-        const { fs } = makeFakeFs();
+        const { fs, files } = makeFakeFs();
+        seedInstalledRendererManifest(files);
 
         await verifyPack(makeDeps(run, fs));
 
@@ -364,7 +495,49 @@ describe('verifyPack', () => {
                 ? { status: 1, stdout: '', stderr: 'Cannot find module' }
                 : undefined,
         );
-        const { fs } = makeFakeFs();
+        const { fs, files } = makeFakeFs();
+        seedInstalledRendererManifest(files);
+
+        const result = await verifyPack(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('probe');
+    });
+
+    it('fails at the probe step when the packed exports map has a key no probe entry covers', async () => {
+        const { run, calls } = makeFakeRun();
+        const { fs, files, removed } = makeFakeFs();
+        seedInstalledRendererManifest(files, { ...RENDERER_EXPORTS, './models': {} });
+        const logs: string[] = [];
+
+        const result = await verifyPack(makeDeps(run, fs, { log: (m) => logs.push(m) }));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('probe');
+        // The gap report names the uncovered exports key.
+        expect(logs.some((m) => m.includes('./models'))).toBe(true);
+        // Completeness is checked before the resolution probe ever runs.
+        expect(calls.some((c) => c.cmd === 'node' && c.args[0] === 'probe.mjs')).toBe(false);
+        expect(removed.length).toBeGreaterThan(0);
+    });
+
+    it('fails at the probe step when the packed renderer manifest cannot be read', async () => {
+        const { run } = makeFakeRun();
+        const { fs } = makeFakeFs(); // nothing seeded → the installed manifest is absent
+
+        const result = await verifyPack(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('probe');
+    });
+
+    it('fails at the probe step when the packed manifest carries no exports map at all', async () => {
+        const { run } = makeFakeRun();
+        const { fs, files } = makeFakeFs();
+        files.set(
+            installedRendererManifestPath(),
+            JSON.stringify({ name: '@chimera-engine/renderer' }),
+        );
 
         const result = await verifyPack(makeDeps(run, fs));
 
