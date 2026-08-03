@@ -30,13 +30,14 @@ Quality gate for Chimera branch review. Read changed files, measure against sour
 ## Mutation Sweep
 
 - Enumerate a mutant for every changed guard, key, comparator, dependency-list entry, emitted artifact, each mode/fork of an emitter, and each unchanged guard sharing a catch-set with a changed one — two guards that cancel are invisible one at a time: drop each entry in turn, negate each conjunct separately, coarsen each value (`Math.floor`, `Boolean`, `=== <the default>`), swap each ordering, skip each fork's emission (`mode === X && skip`).
-- Apply one at a time, run the covering suite, record the killing test — or `SURVIVED` with the mutant text. `git checkout -- <file>` after each; `git status` clean before reporting.
+- Apply one at a time, run the covering suite, record the killing test — or `SURVIVED` with the mutant text. Require `git status` clean BEFORE the sweep — on a dirty tree `git checkout -- <file>` discards the uncommitted work together with the mutant; stop and report instead of sweeping. `git checkout -- <file>` after each; `git status` clean before reporting.
 - Report the inventory: enumerated N, ran N, skipped N and why. An unreported skip reads as coverage it is not.
 
 ## Claim Sweep
 
 - Sweep the whole changed FILE's prose the first round it enters the diff — a diff shows added lines, not the pre-existing sentence the branch just falsified. A pre-existing sentence THIS branch falsifies is a BLOCK; a falsehood it did not cause is a WARN. Later rounds: the new hunks, the fact greps below, and a full-prose re-sweep of every file on the 3+-rounds list.
 - For each changed claim, list what the new wording covers that the old did not ("every field of X"), then mutation-test each newly covered item — including pre-existing code outside the diff. Verify every citation in changed prose (Invariant #nn, §n, a file path) against its target.
+- A changed claim about third-party or toolchain behaviour — in prose or an emitted error message — is measured against the installed package's sources or a probe, never accepted from the issue or PR body: issue rationale is a claim, not an authority, and has carried false library facts into shipped messages. The durable fix is module-scoped wording ("this module never disposes X"), which cannot rot with a dependency upgrade.
 - For every fact the branch inverts, grep repo-wide for its identifiers and phrasings and report ALL copies as ONE finding in this round — one copy per round is how a branch reaches round eight.
 - Check the new rule holds everywhere it claims: implementation, fixtures, test data, other call sites. A fixture row breaking a rule this branch just wrote is a BLOCK.
 - A rationale now living in more than one place is deleted from all but one, not qualified in each.

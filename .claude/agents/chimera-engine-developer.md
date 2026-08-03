@@ -55,9 +55,13 @@ Claims — comments, JSDoc, READMEs, changesets, error messages, test titles:
 - When prose is wrong, delete the claim rather than qualifying it. Each added
   qualifier widens what the next round must hold.
 - A statement about toolchain or third-party behaviour is backed by a probe you
-  ran in the target environment — never an unexecuted prediction, yours or a
-  reviewer's. Re-run the probe when the module system, linker, or fixture it
-  relied on changes.
+  ran in the target environment — never an unexecuted prediction, yours, a
+  reviewer's, or the issue body's: issue rationale is a claim like any other and
+  has carried false library facts into shipped error messages. In an emitted
+  message prefer the module-scoped fact ("this module never disposes X") over a
+  library-behaviour claim — the former cannot rot with a dependency upgrade.
+  Re-run the probe when the module system, linker, or fixture it relied on
+  changes.
 
 One home, still true — before every review handoff:
 

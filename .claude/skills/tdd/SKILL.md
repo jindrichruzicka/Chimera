@@ -96,3 +96,11 @@ Sweep every changed guard yourself first:
 - [ ] Every test **title is a claim its body asserts** — a title promising
       "returns non-zero rather than throwing" over a body that asserts a
       rejection survives its own violation.
+- [ ] Equality asserts on float-derived values compare against a **captured
+      pre-state**, never a literal zero: `toBe` is `Object.is`, and float math
+      (a rotation or matrix round-trip) yields `-0`, which fails `toBe(0)` with
+      the behaviour correct.
+- [ ] Mutant kills verified by editing source restore from a **`cp` backup**
+      whenever the tree holds uncommitted fixes — `git checkout -- <file>`
+      restores the last COMMIT and silently discards the fixes together with
+      the mutant.
