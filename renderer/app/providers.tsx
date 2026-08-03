@@ -4,7 +4,7 @@ import React, { type ReactNode } from 'react';
 import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AssetManager } from '../assets/AssetManager';
-import { AssetManagerContext } from '../assets/AssetManagerContext.js';
+import { AssetManagerProvider } from '../assets/AssetManagerProvider.js';
 import { createDelegatingAssetManager } from '../assets/DelegatingAssetManager';
 import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
 import { createAudioManager, type AudioHandle, type AudioManager } from '../audio/AudioManager';
@@ -112,7 +112,7 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
     return (
         <DeviceInfoProvider systemApi={systemApi}>
             <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
-                <AssetManagerContext.Provider value={delegatingAssetManager}>
+                <AssetManagerProvider assetManager={delegatingAssetManager}>
                     <AudioManagerProvider audioManager={audioManager}>
                         <InputActionRegistryContext.Provider value={inputRegistry}>
                             <InputManagerContext.Provider value={inputManager}>
@@ -120,7 +120,7 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
                             </InputManagerContext.Provider>
                         </InputActionRegistryContext.Provider>
                     </AudioManagerProvider>
-                </AssetManagerContext.Provider>
+                </AssetManagerProvider>
             </SetGameAssetManagerContext.Provider>
         </DeviceInfoProvider>
     );

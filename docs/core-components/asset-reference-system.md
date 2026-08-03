@@ -268,7 +268,7 @@ export function useAsset<T extends AssetKind>(
 
 ### Example — Entity Component (engine-internal)
 
-`renderer/assets/` is a renderer internal: it has no entry in the renderer package's public `exports`, and game surfaces must not import it (Invariant #96). The example below therefore lives **inside `renderer/`** and uses relative imports.
+`renderer/assets/` ships one public surface: the `@chimera-engine/renderer/assets` barrel (`./assets` in the package `exports`), which carries `useAsset`, `useAssetManager`, `useModelInstance`, the `AssetManagerProvider`, and the asset/error types they take. Every individual file behind the barrel (`AssetManager.ts`, `AssetResolver.ts`, …) remains a renderer internal game surfaces must not import (Invariant #96). The example below lives **inside `renderer/`** and uses relative imports.
 
 ```tsx
 // renderer/components/r3f/ — engine-internal example (not a shipped file)

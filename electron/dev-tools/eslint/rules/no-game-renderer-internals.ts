@@ -184,6 +184,19 @@ function isPublicAudioBarrelImport(source: string): boolean {
     );
 }
 
+// The engine asset barrel (§4.10): `useAsset`, `useAssetManager`,
+// `useModelInstance`, the `AssetManagerProvider`, and the asset/error types a
+// game needs to read declared assets. Curated: every individual file behind
+// it (e.g. `assets/AssetManager.js`) stays internal.
+function isPublicAssetsBarrelImport(source: string): boolean {
+    return (
+        source === '@chimera-engine/renderer/assets' ||
+        source === '@chimera-engine/renderer/assets/index' ||
+        source === '@chimera-engine/renderer/assets/index.ts' ||
+        source === '@chimera-engine/renderer/assets/index.js'
+    );
+}
+
 // The engine GUI shell surface: the public `@chimera-engine/renderer/shell/*`
 // route + layout exports a consumer app's OWN Next host re-exports so the app owns its
 // renderer GUI while the game-agnostic shell ships from the package. Allowed ONLY from
@@ -210,13 +223,13 @@ const rule: Rule.RuleModule = {
         type: 'problem',
         docs: {
             description:
-                'Allow games to import only the public renderer barrels (components/ui, components/chat, components/r3f, game, i18n, audio) from renderer code.',
+                'Allow games to import only the public renderer barrels (components/ui, components/chat, components/r3f, game, i18n, audio, assets) from renderer code.',
         },
         messages: {
             gameRendererImportOutsideSurface:
                 'Only game renderer surfaces under apps/<name>/screens/*.tsx, apps/<name>/shell/*.tsx, or apps/<name>/renderer/*.{ts,tsx} may import from the renderer package.',
             gameRendererInternalImport:
-                'Game renderer surfaces may import only the public @chimera-engine/renderer/components/ui, @chimera-engine/renderer/components/chat, @chimera-engine/renderer/components/r3f, @chimera-engine/renderer/game, @chimera-engine/renderer/i18n, or @chimera-engine/renderer/audio barrels from renderer code. Renderer internals are forbidden in game-app packages.',
+                'Game renderer surfaces may import only the public @chimera-engine/renderer/components/ui, @chimera-engine/renderer/components/chat, @chimera-engine/renderer/components/r3f, @chimera-engine/renderer/game, @chimera-engine/renderer/i18n, @chimera-engine/renderer/audio, or @chimera-engine/renderer/assets barrels from renderer code. Renderer internals are forbidden in game-app packages.',
             gameRendererUiDeepImport:
                 'Game renderer surfaces must import UI primitives from the public @chimera-engine/renderer/components/ui barrel, not individual renderer component files.',
         },
@@ -255,7 +268,8 @@ const rule: Rule.RuleModule = {
                 isPublicR3fBarrelImport(source) ||
                 isPublicGameSeamImport(source) ||
                 isPublicI18nBarrelImport(source) ||
-                isPublicAudioBarrelImport(source)
+                isPublicAudioBarrelImport(source) ||
+                isPublicAssetsBarrelImport(source)
             ) {
                 return;
             }

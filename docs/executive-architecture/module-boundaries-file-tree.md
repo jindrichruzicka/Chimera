@@ -254,8 +254,10 @@ chimera/
 │   │   ├── profileStore.ts          # see §4.24
 │   │   ├── chatStore.ts             # see §4.29
 │   │   └── toastStore.ts            # see §4.30
-│   ├── assets/                      # Asset loading layer
+│   ├── assets/                      # Asset loading layer; PUBLIC barrel: @chimera-engine/renderer/assets (curated: hooks + provider + asset/error types; files behind it stay internal)
+│   │   ├── index.ts                 # Public barrel (exports useAsset, useAssetManager, useModelInstance, AssetManagerProvider, error/asset types; remaining internals stay unexported)
 │   │   ├── AssetManager.ts
+│   │   ├── AssetManagerProvider.tsx
 │   │   ├── AssetResolver.ts
 │   │   ├── AssetPreloader.ts
 │   │   └── useAsset.ts

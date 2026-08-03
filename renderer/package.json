@@ -37,6 +37,10 @@
             "types": "./dist/audio/index.d.ts",
             "default": "./dist/audio/index.js"
         },
+        "./assets": {
+            "types": "./dist/assets/index.d.ts",
+            "default": "./dist/assets/index.js"
+        },
         "./game": {
             "types": "./dist/game/rendererGameRegistry.d.ts",
             "default": "./dist/game/rendererGameRegistry.js"
@@ -61,10 +65,16 @@
         "next": "^15",
         "react": "^19",
         "react-dom": "^19",
-        "three": ">=0.184"
+        "three": ">=0.184",
+        "@types/three": "*"
     },
     "dependencies": {
         "@chimera-engine/simulation": "workspace:*",
         "zustand": "^5"
+    },
+    "peerDependenciesMeta": {
+        "@types/three": {
+            "optional": true
+        }
     }
 }

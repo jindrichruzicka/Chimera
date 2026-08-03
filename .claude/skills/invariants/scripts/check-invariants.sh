@@ -516,13 +516,14 @@ done
 # by the ESLint rule alone — matched through the package specifier across the cut
 # (issue #774). The
 # barrel allow-list is tail-anchored to the closing quote so `.../ui` and
-# `.../ui/index.js` pass while `.../ui/Button.js` is flagged; note i18n, game and
-# audio are TOP-LEVEL subpaths (@chimera-engine/renderer/{i18n,game,audio}), NOT under
-# components/ — and the tail anchor is what keeps `audio/AudioManager.js` flagged
-# while `audio` and `audio/index.js` pass. Bare
+# `.../ui/index.js` pass while `.../ui/Button.js` is flagged; note i18n, game,
+# audio and assets are TOP-LEVEL subpaths (@chimera-engine/renderer/{i18n,game,audio,assets}),
+# NOT under components/ — and the tail anchor is what keeps `audio/AudioManager.js`
+# and `assets/AssetManager.js` flagged while the bare barrels and their
+# index.js forms pass. Bare
 # `renderer/` paths are intentionally NOT matched: a game's own renderer/ helper
 # (apps/<name>/renderer/*) is not a boundary crossing.
-RENDERER_BARREL_RE="@chimera-engine/renderer/(components/(ui|chat|r3f)|i18n|game|audio)(/index(\.(ts|js))?)?['\"]"
+RENDERER_BARREL_RE="@chimera-engine/renderer/(components/(ui|chat|r3f)|i18n|game|audio|assets)(/index(\.(ts|js))?)?['\"]"
 GAME_SURFACE_DIRS=()
 for surface_dir in apps/*/screens apps/*/shell; do
     [[ -d "${surface_dir}" ]] && GAME_SURFACE_DIRS+=("${surface_dir}")

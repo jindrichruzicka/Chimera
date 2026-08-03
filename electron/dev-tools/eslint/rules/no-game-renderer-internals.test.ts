@@ -146,7 +146,7 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `import { useSound } from '@chimera-engine/renderer/audio/index.js';`,
         },
         {
-            // Extensionless and .ts forms of the same barrel, matching the five
+            // Extensionless and .ts forms of the same barrel, matching its
             // sibling predicates — a game surface may name any of the four spellings.
             filename: 'apps/tactics/renderer/register.ts',
             code: `import { useAudioManager } from '@chimera-engine/renderer/audio/index';`,
@@ -154,6 +154,27 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
             code: `import { MUSIC_PRIORITY } from '@chimera-engine/renderer/audio/index.ts';`,
+        },
+        {
+            // The public assets barrel (§4.10) — the subpath that makes any
+            // loaded asset reachable by a game surface at all: useAsset,
+            // useAssetManager, useModelInstance, and the provider.
+            filename: 'apps/tactics/screens/TacticsBoard.tsx',
+            code: `import { useAsset, useModelInstance } from '@chimera-engine/renderer/assets';`,
+        },
+        {
+            filename: 'apps/tactics/shell/TacticsShellHud.tsx',
+            code: `import { useAssetManager } from '@chimera-engine/renderer/assets/index.js';`,
+        },
+        {
+            // Extensionless and .ts forms of the same barrel, matching its
+            // sibling predicates — a game surface may name any of the four spellings.
+            filename: 'apps/tactics/renderer/register.ts',
+            code: `import { useAssetManager } from '@chimera-engine/renderer/assets/index';`,
+        },
+        {
+            filename: 'apps/tactics/screens/TacticsBoard.tsx',
+            code: `import { useModelInstance } from '@chimera-engine/renderer/assets/index.ts';`,
         },
     ],
     invalid: [

@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AssetManager } from './AssetManager';
-import { createDelegatingAssetManager } from './DelegatingAssetManager';
+import { createDelegatingAssetManager, NoActiveGameSessionError } from './DelegatingAssetManager';
 
 function makeStubAssetManager(): AssetManager {
     return {
@@ -19,11 +19,14 @@ function makeStubAssetManager(): AssetManager {
 }
 
 describe('DelegatingAssetManager', () => {
-    it('rejects load() when no delegate is set', async () => {
+    it('rejects load() with NoActiveGameSessionError naming the ref and GameShell when no delegate is set', async () => {
         const mgr = createDelegatingAssetManager();
-        await expect(
-            mgr.load('tactics/audio/sfx/hit.ogg' as Parameters<typeof mgr.load>[0]),
-        ).rejects.toThrow('no active match');
+        const rejection = mgr.load('tactics/audio/sfx/hit.ogg' as Parameters<typeof mgr.load>[0]);
+        await expect(rejection).rejects.toBeInstanceOf(NoActiveGameSessionError);
+        await expect(rejection).rejects.toThrow(/tactics\/audio\/sfx\/hit\.ogg/);
+        await expect(rejection).rejects.toThrow(/GameShell/);
+        // error.name is consumer-visible: the logging pipeline serializes it.
+        await expect(rejection).rejects.toHaveProperty('name', 'NoActiveGameSessionError');
     });
 
     it('forwards load() to the current delegate', async () => {
@@ -121,7 +124,7 @@ describe('DelegatingAssetManager', () => {
 
         await expect(
             mgr.load('tactics/audio/sfx/hit.ogg' as Parameters<typeof mgr.load>[0]),
-        ).rejects.toThrow('no active match');
+        ).rejects.toBeInstanceOf(NoActiveGameSessionError);
     });
 
     it('dispose() clears the delegate', async () => {
@@ -132,7 +135,7 @@ describe('DelegatingAssetManager', () => {
 
         await expect(
             mgr.load('tactics/audio/sfx/hit.ogg' as Parameters<typeof mgr.load>[0]),
-        ).rejects.toThrow('no active match');
+        ).rejects.toBeInstanceOf(NoActiveGameSessionError);
     });
 
     it('does NOT dispose the underlying delegate when dispose() is called', () => {

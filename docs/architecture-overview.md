@@ -185,7 +185,7 @@ No sprite info here. No Three.js import reachable from this file — the simulat
 
 #### R3F Component (renderer — the only place that sees pixels)
 
-The `<Entity>` component below is **illustrative** — the engine ships no entity component; per-game entity rendering is game code. It is written as an engine-internal component (relative imports inside `renderer/`) because `renderer/assets/` and the content-database context are renderer internals that game surfaces must not import (Invariant #96).
+The `<Entity>` component below is **illustrative** — the engine ships no entity component; per-game entity rendering is game code. It is written as an engine-internal component (relative imports inside `renderer/`) because the individual files under `renderer/assets/` and the content-database context are renderer internals that game surfaces must not import (Invariant #96); a game surface reaches the asset hooks only through the public `@chimera-engine/renderer/assets` barrel.
 
 ```typescript
 // renderer/components/r3f/ — engine-internal example (not a shipped file)

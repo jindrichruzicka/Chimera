@@ -7,6 +7,24 @@ export interface DelegatingAssetManager extends AssetManager {
     setDelegate(manager: AssetManager | null): void;
 }
 
+/**
+ * A load ran while no match-level manager was registered with the app-level
+ * delegating manager — i.e. outside an active game session. `GameShell`
+ * registers the delegate while a match is mounted, so surfaces above it (an
+ * `apps/<name>/shell/*.tsx` contribution, Invariant #96) hit this whenever
+ * they load before a match starts or after it ends.
+ */
+export class NoActiveGameSessionError extends Error {
+    constructor(public readonly ref: string) {
+        super(
+            `No active game session: cannot load '${ref}'. The AssetManager delegate is ` +
+                'registered by GameShell while a match is mounted; above GameShell, loads ' +
+                'resolve only during an active match.',
+        );
+        this.name = 'NoActiveGameSessionError';
+    }
+}
+
 class DefaultDelegatingAssetManager implements DelegatingAssetManager {
     private delegate: AssetManager | null = null;
 
@@ -37,11 +55,7 @@ class DefaultDelegatingAssetManager implements DelegatingAssetManager {
         ref: AssetRef<TAssetKind>,
     ): Promise<ResolvedAsset<TAssetKind>> {
         if (this.delegate === null) {
-            return Promise.reject(
-                new Error(
-                    `AssetManager delegate not set; no active match. Cannot load '${String(ref)}'.`,
-                ),
-            );
+            return Promise.reject(new NoActiveGameSessionError(String(ref)));
         }
         return this.delegate.load(ref);
     }

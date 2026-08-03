@@ -44,6 +44,7 @@ interface RendererManifest {
     exports?: Record<string, { types?: string; default?: string } | string>;
     dependencies?: Record<string, string>;
     peerDependencies?: Record<string, string>;
+    peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 }
 
 const manifest = JSON.parse(
@@ -61,6 +62,7 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
     it('exposes the component barrels, the game seam, the engine shell, and the design-token styles, pointing at dist/', () => {
         const exportsMap = manifest.exports ?? {};
         expect(Object.keys(exportsMap).sort()).toEqual([
+            './assets',
             './audio',
             './components/chat',
             './components/r3f',
@@ -111,6 +113,15 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
             default: './dist/audio/index.js',
         });
 
+        // The assets barrel (§4.10) is the reachability half of the model seam
+        // (the audio barrel's pattern, repeated): `useAsset`, `useAssetManager`,
+        // `useModelInstance` and the provider a game's tests mount. Without
+        // this entry a game surface has no legal route to any loaded asset.
+        expect(exportsMap['./assets']).toEqual({
+            types: './dist/assets/index.d.ts',
+            default: './dist/assets/index.js',
+        });
+
         // F65 Phase 2c: the engine GUI shell (every route under app/) ships from dist
         // so a consumer app's thin per-app Next host re-exports each route from
         // `@chimera-engine/renderer/shell/<route>` (resolving every shared singleton through
@@ -136,6 +147,7 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
                     key === './game' ||
                     key === './i18n' ||
                     key === './audio' ||
+                    key === './assets' ||
                     key === './shell/*' ||
                     key === './styles/*.css',
             ).toBe(true);
@@ -159,13 +171,35 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
 
     it('declares React/Three/Next stack as peer dependencies (consumer owns one copy)', () => {
         const peers = manifest.peerDependencies ?? {};
-        for (const peer of ['react', 'react-dom', 'three', '@react-three/fiber', 'next']) {
+        for (const peer of [
+            'react',
+            'react-dom',
+            'three',
+            '@react-three/fiber',
+            'next',
+            '@types/three',
+        ]) {
             expect(peers[peer]).toBeDefined();
         }
         // Peers must not be duplicated as hard dependencies.
         const deps = manifest.dependencies ?? {};
-        for (const peer of ['react', 'react-dom', 'three', '@react-three/fiber', 'next']) {
+        for (const peer of [
+            'react',
+            'react-dom',
+            'three',
+            '@react-three/fiber',
+            'next',
+            '@types/three',
+        ]) {
             expect(deps[peer]).toBeUndefined();
         }
+
+        // The assets barrel's .d.ts names three types (Group, AnimationClip),
+        // and three ships no types of its own. A pinned @types/three in
+        // dependencies would hand a consumer two declaration sets ("Two
+        // different types with this name exist" at every call site), so it is
+        // an OPTIONAL peer: the consumer owns the one copy, and JS-only
+        // consumers need none.
+        expect(manifest.peerDependenciesMeta?.['@types/three']?.optional).toBe(true);
     });
 });

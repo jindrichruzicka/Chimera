@@ -112,6 +112,10 @@ export const PROBE_SUBPATHS = [
     // only through this barrel (Invariant #96), so a dropped export leaves an
     // adopting game with no route to the cue/fade/crossfade verbs at all.
     '@chimera-engine/renderer/audio',
+    // The asset hooks (§4.10). A game surface may reach `useAsset` /
+    // `useModelInstance` only through this barrel (Invariant #96), so a
+    // dropped export would strand every asset-rendering game.
+    '@chimera-engine/renderer/assets',
     // A consumer app's per-app Next host re-exports the engine shell from
     // `@chimera-engine/renderer/shell/*`; probe a representative route + the root layout
     // so a missing `dist/app/*` entry in the packed artifact fails the gate.
