@@ -222,6 +222,58 @@ export const PROBE_LINT_PLANTS = [
     },
 ] as const;
 
+/**
+ * Compile-only asset-seam probe, planted into the generated app immediately
+ * before the production `tsc` build and removed in a `finally`. It proves a
+ * standalone install can NAME the public asset barrels from a real game
+ * screen: a dropped barrel re-export or a renamed symbol fails the build step
+ * naming the symbol, and a missing `./assets` exports entry fails it naming
+ * the module. It lives under `screens/` (any app-tsc-covered path outside
+ * `e2e/**` works; the shape test pins this one) — the e2e tsconfig maps
+ * `@chimera-engine/renderer/*` straight onto `dist/`, bypassing the exports
+ * map, so an e2e file can type-resolve an import game source can never
+ * write. Nothing mounts it, and no model, manifest, or Canvas enters the
+ * blank template.
+ */
+export const PROBE_SEAM_PLANT = {
+    rel: path.join('screens', 'VerifyScaffoldSeamProbe.tsx'),
+    source: [
+        "'use client';",
+        '',
+        'import {',
+        '    AssetManagerProvider,',
+        '    useAsset,',
+        '    useAssetManager,',
+        '    useModelInstance,',
+        '    type ModelInstance,',
+        "} from '@chimera-engine/renderer/assets';",
+        "import { useModelAnimation } from '@chimera-engine/renderer/components/r3f';",
+        "import type { TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';",
+        '',
+        '// Compile-only: verify:scaffold plants this file around the production',
+        '// tsc step and removes it again; nothing ever mounts it.',
+        'export const SeamProbeProvider = AssetManagerProvider;',
+        '',
+        'export function VerifyScaffoldSeamProbe(): { readonly ready: boolean } {',
+        '    const manager = useAssetManager();',
+        '    const { asset, loading, error } = useAsset<TextureAsset>(null);',
+        '    const { instance } = useModelInstance(null);',
+        '    const mixer = useModelAnimation(instance);',
+        '    const held: ModelInstance | null = instance;',
+        '    return {',
+        '        ready:',
+        '            manager !== null &&',
+        '            asset === null &&',
+        '            !loading &&',
+        '            error === null &&',
+        '            mixer === null &&',
+        '            held === null,',
+        '    };',
+        '}',
+        '',
+    ].join('\n'),
+} as const;
+
 /** The undeclared token appended to the scaffolded override stylesheet. */
 export const PROBE_UNKNOWN_TOKEN = '--ch-verify-scaffold-not-a-token';
 
@@ -940,10 +992,19 @@ async function scaffoldPipeline(
     //    EMITTED script self-sets `CHIMERA_VERIFY_PACK_NODE_MODULES`, so the host resolves from the
     //    installed `@chimera-engine/electron`, not absent monorepo source.
     deps.log('production-building the generated app (tsc + app bundle)…');
-    assertStepOk(
-        'prod-build',
-        deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'build'], { cwd: tmp }),
-    );
+    //    The asset-seam probe (see {@link PROBE_SEAM_PLANT}) is in place for
+    //    exactly this tsc run and removed in a `finally`, so no failure can
+    //    leave the generated app dirty.
+    const seamProbePath = path.join(appDir, PROBE_SEAM_PLANT.rel);
+    try {
+        await deps.fs.writeFile(seamProbePath, PROBE_SEAM_PLANT.source);
+        assertStepOk(
+            'prod-build',
+            deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'build'], { cwd: tmp }),
+        );
+    } finally {
+        await deps.fs.rm(seamProbePath);
+    }
     assertStepOk(
         'prod-build',
         deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'build:app'], { cwd: tmp }),

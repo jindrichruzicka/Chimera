@@ -21,6 +21,7 @@ import {
     PROBE_GAME,
     PROBE_ICONS_GENERATE_SCRIPT,
     PROBE_LINT_PLANTS,
+    PROBE_SEAM_PLANT,
     PROBE_UNKNOWN_TOKEN,
     PROBE_UNKNOWN_TOKEN_RULE,
     PROBE_NPMRC,
@@ -722,6 +723,78 @@ describe('verifyScaffold', () => {
         expect(result.ok).toBe(false);
         expect(result.failedStep).toBe('prod-build');
         expect(removed).toContain(tmpRoot);
+    });
+
+    it('plants the asset-seam probe for the standalone tsc build and removes it after a passing run', async () => {
+        const { fs, files, removed } = makeFakeFs();
+        const seamPath = path.join(APP_DIR, PROBE_SEAM_PLANT.rel);
+        let probeBytesDuringBuild: string | undefined;
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {
+            if (args.join(' ') === `--filter ${PROBE_GAME.pkg} build`) {
+                probeBytesDuringBuild = files.get(seamPath);
+            }
+            return undefined;
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(true);
+        // The FULL probe source is in place exactly while tsc runs (an empty
+        // plant would compile and leave the gate green with zero seam
+        // coverage), and the wrap keeps the tsc step's input to exactly the
+        // emitted app plus this one probe, removed again in the finally.
+        expect(probeBytesDuringBuild).toBe(PROBE_SEAM_PLANT.source);
+        expect(removed).toContain(seamPath);
+    });
+
+    it('removes the asset-seam probe in a finally even when the standalone tsc build fails', async () => {
+        const { fs, files, removed } = makeFakeFs();
+        const seamPath = path.join(APP_DIR, PROBE_SEAM_PLANT.rel);
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) =>
+            args.join(' ') === `--filter ${PROBE_GAME.pkg} build`
+                ? {
+                      status: 2,
+                      stdout: '',
+                      stderr: "error TS2305: has no exported member 'useAsset'",
+                  }
+                : undefined,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('prod-build');
+        expect(removed).toContain(seamPath);
+    });
+
+    it('the seam probe pins its exact specifier list and its screens/ path', () => {
+        // The e2e tsconfig maps @chimera-engine/renderer/* straight onto dist,
+        // bypassing the exports map — a screens/ file is the pinned convention
+        // for a path the app tsc covers and e2e/** excludes.
+        expect(PROBE_SEAM_PLANT.rel.startsWith('screens/')).toBe(true);
+        const importedSpecifiers = [...PROBE_SEAM_PLANT.source.matchAll(/from '([^']+)'/gu)].map(
+            (match) => match[1],
+        );
+        // Exact and exhaustive: a deep or dist specifier, a swapped simulation
+        // path, or a dropped barrel import all change this list.
+        expect(importedSpecifiers).toEqual([
+            '@chimera-engine/renderer/assets',
+            '@chimera-engine/renderer/components/r3f',
+            '@chimera-engine/simulation/content/AssetRef.js',
+        ]);
+        for (const symbol of [
+            'useAsset',
+            'useAssetManager',
+            'AssetManagerProvider',
+            'useModelInstance',
+            // The TYPE re-export is a distinct barrel surface: substring
+            // matching on 'ModelInstance' alone is satisfied by
+            // 'useModelInstance', so pin the import form textually.
+            'type ModelInstance',
+            'useModelAnimation',
+        ]) {
+            expect(PROBE_SEAM_PLANT.source).toContain(symbol);
+        }
     });
 
     it("reports packaged-bundle when the generated app's Invariant #27 gate fails", async () => {
