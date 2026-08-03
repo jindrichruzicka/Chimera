@@ -36,6 +36,7 @@ import {
     UnknownAssetKindError,
 } from './AssetLoaderRegistry';
 import {
+    createAssetManager,
     DefaultAssetManager,
     type AssetManager,
     type LoadedGltfAsset,
@@ -794,5 +795,37 @@ describe('DefaultAssetManager.getManifestMetadata', () => {
             (ref: AssetRef) => unknown
         >();
         expectTypeOf(manager.getManifestMetadata(ref)).toBeUnknown();
+    });
+});
+
+describe('createAssetManager — construction manifest', () => {
+    it('registers a construction manifest before returning: load(declaredRef) resolves and get does not throw', async () => {
+        const ref = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        const asset = { id: 'grass-texture' };
+        const manager = createAssetManager(
+            createResolver(),
+            { gameId: 'tactics', entries: [createManifestEntry(ref, 'texture')] },
+            createSingleLoaderRegistry('texture', async (): Promise<ResolvedAsset> => asset),
+        );
+
+        expect(manager.get(ref)).toBeNull();
+        await expect(manager.load(ref)).resolves.toBe(asset);
+        expect(manager.get(ref)).toBe(asset);
+    });
+
+    it('behaves exactly as before when the manifest argument is omitted: an undeclared load fails fast', async () => {
+        const ref = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        const manager = createAssetManager(
+            createResolver(),
+            undefined,
+            createSingleLoaderRegistry(
+                'texture',
+                async (): Promise<ResolvedAsset> => ({
+                    id: 'unused',
+                }),
+            ),
+        );
+
+        await expect(manager.load(ref)).rejects.toBeInstanceOf(UnknownAssetManifestEntryError);
     });
 });

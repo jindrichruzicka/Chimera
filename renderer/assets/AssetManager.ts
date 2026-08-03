@@ -111,7 +111,12 @@ export class DefaultAssetManager implements AssetManager {
     constructor(
         private readonly resolver: AssetResolver,
         private readonly loaderRegistry: AssetLoaderRegistry = createDefaultAssetLoaderRegistry(),
-    ) {}
+        manifest?: AssetManifest,
+    ) {
+        if (manifest !== undefined) {
+            this.registerManifest(manifest);
+        }
+    }
 
     registerManifest(manifest: AssetManifest): void {
         // Build the new index first — without mutating state — so we can compare.
@@ -246,11 +251,26 @@ export class DefaultAssetManager implements AssetManager {
     }
 }
 
+/**
+ * Creates a `DefaultAssetManager`, optionally registering `manifest` before
+ * the manager is returned. Construction-time registration exists because the
+ * alternatives fail (canonical rationale — call-site comments point here):
+ * a passive-effect registration is provably too late for a child's first
+ * `load()`, since React flushes passive mount effects children-first and
+ * `useAsset` latches the resulting `UnknownAssetManifestEntryError`
+ * permanently (its effect deps never change when the manifest arrives later);
+ * a render-phase `registerManifest` on a shared, already-committed manager
+ * destructively evicts and disposes during a phase React may discard; and
+ * `useLayoutEffect` only holds up while `useAsset` stays passive.
+ * Configuring the fresh object the factory is about to return is discard-safe
+ * in any React phase — it touches no shared, already-committed state.
+ */
 export function createAssetManager(
     resolver: AssetResolver,
+    manifest?: AssetManifest,
     loaderRegistry?: AssetLoaderRegistry,
 ): AssetManager {
-    return new DefaultAssetManager(resolver, loaderRegistry);
+    return new DefaultAssetManager(resolver, loaderRegistry, manifest);
 }
 
 export function createDefaultAssetLoaderRegistry(): AssetLoaderRegistry {

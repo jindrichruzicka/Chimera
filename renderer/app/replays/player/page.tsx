@@ -319,7 +319,11 @@ function ReplayPlayerView(): React.ReactElement {
 
     const loadedGame = useLoadedRendererGame(info?.gameId ?? null, reportError);
     const assetManager = React.useMemo<AssetManager | null>(
-        () => (loadedGame === null ? null : createAssetManager(createRendererGameAssetResolver())),
+        // Manifest at construction — see createAssetManager's JSDoc.
+        () =>
+            loadedGame === null
+                ? null
+                : createAssetManager(createRendererGameAssetResolver(), loadedGame.assetManifest),
         [loadedGame],
     );
     // The game's content collections, keyed by the replay's gameId, exactly as the

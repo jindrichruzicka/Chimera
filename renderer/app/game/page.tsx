@@ -80,7 +80,8 @@ export default function GamePage(): React.ReactElement | null {
             return null;
         }
 
-        return createAssetManager(createRendererGameAssetResolver());
+        // Manifest at construction — see createAssetManager's JSDoc.
+        return createAssetManager(createRendererGameAssetResolver(), loadedGame.assetManifest);
     }, [loadedGame]);
     const sendActionToHost = useSendAction();
     const sendAction = React.useCallback(

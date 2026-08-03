@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // renderer/components/shell/GameShell.test.tsx
 
-import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider.js';
@@ -10,8 +10,19 @@ import {
     playerId,
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
-import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
-import type { AssetManager } from '../../assets/AssetManager';
+import type {
+    AssetRef,
+    AudioClipAsset,
+    TextureAsset,
+} from '@chimera-engine/simulation/content/AssetRef.js';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import {
+    createAssetManager,
+    UnknownAssetManifestEntryError,
+    type AssetManager,
+    type ResolvedAsset,
+} from '../../assets/AssetManager';
+import { createAssetLoaderRegistry } from '../../assets/AssetLoaderRegistry';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
 import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
 import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerContext.js';
@@ -1059,5 +1070,210 @@ describe('GameShell saveGame capability threading (#825)', () => {
 
         expect(hudProps()).not.toHaveProperty('isHost');
         expect(typeof hudProps().saveGame).toBe('function');
+    });
+});
+
+describe('GameShell — manifest visible to first-commit loads (registry mode)', () => {
+    const declaredRef = 'demo/textures/stone.webp' as AssetRef<TextureAsset>;
+    const manifest: AssetManifest = {
+        gameId: 'demo',
+        entries: [{ ref: declaredRef, kind: 'texture', priority: 'deferred' }],
+    };
+
+    function createLoadCapturingPlayfield(): {
+        readonly Playfield: (props: GameScreenProps) => React.ReactElement;
+        readonly outcome: () => unknown;
+    } {
+        let captured: unknown = 'pending';
+        function Playfield(_props: GameScreenProps): React.ReactElement {
+            const manager = useAssetManager();
+            React.useEffect(() => {
+                manager.load(declaredRef).then(
+                    (asset) => {
+                        captured = { resolved: asset };
+                    },
+                    (error: unknown) => {
+                        captured = error;
+                    },
+                );
+            }, [manager]);
+            return <div data-testid="load-capturing-playfield" />;
+        }
+        return { Playfield, outcome: () => captured };
+    }
+
+    it('a first-commit load with no injected manager fails on the unconfigured resolver, never on a missing manifest entry', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+        const { Playfield, outcome } = createLoadCapturingPlayfield();
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: Playfield }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManifest={manifest}
+            />,
+        );
+        await screen.findByTestId('load-capturing-playfield');
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        // React flushes passive effects children-first, so the playfield's
+        // load runs before GameShell's backstop registerManifest effect. The
+        // manifest must therefore already be registered at construction: the
+        // fallback manager's load fails on its unconfigured resolver, which
+        // proves the manifest entry check had already passed.
+        expect(outcome()).toBeInstanceOf(Error);
+        expect(outcome()).not.toBeInstanceOf(UnknownAssetManifestEntryError);
+        expect((outcome() as Error).message).toMatch(/not configured/);
+    });
+
+    it('a first-commit load resolves through an injected manager constructed with the manifest', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+        const stubAsset = { id: 'stone-texture' };
+        const manager = createAssetManager(
+            { resolve: (ref) => `resolved://${ref}` },
+            manifest,
+            createAssetLoaderRegistry([
+                { kind: 'texture', load: async (): Promise<ResolvedAsset> => stubAsset },
+            ]),
+        );
+        const { Playfield, outcome } = createLoadCapturingPlayfield();
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: Playfield }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={manager}
+                assetManifest={manifest}
+            />,
+        );
+        await screen.findByTestId('load-capturing-playfield');
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(outcome()).toEqual({ resolved: stubAsset });
+    });
+
+    it('keeps a loaded asset alive when the backstop effect re-registers an equivalent manifest', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+        const disposeSpy = vi.fn();
+        const stubAsset = { id: 'stone-texture', dispose: disposeSpy };
+        const manager = createAssetManager(
+            { resolve: (ref) => `resolved://${ref}` },
+            manifest,
+            createAssetLoaderRegistry([
+                { kind: 'texture', load: async (): Promise<ResolvedAsset> => stubAsset },
+            ]),
+        );
+        await manager.load(declaredRef);
+        // A distinct-but-equivalent manifest object: the backstop effect must
+        // treat it as a no-op (no eviction, no disposal).
+        const equivalentManifest = JSON.parse(JSON.stringify(manifest)) as AssetManifest;
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: () => <div data-testid="retention-playfield" /> }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={manager}
+                assetManifest={equivalentManifest}
+            />,
+        );
+        await screen.findByTestId('retention-playfield');
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(disposeSpy).not.toHaveBeenCalled();
+        expect(manager.get(declaredRef)).toBe(stubAsset);
+    });
+
+    it('the backstop effect registers the manifest on an injected manager that was not constructed with it', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+        const manifestWithMetadata: AssetManifest = {
+            gameId: 'demo',
+            entries: [
+                { ref: declaredRef, kind: 'texture', priority: 'deferred', metadata: { tag: 'a' } },
+            ],
+        };
+        const manager = createAssetManager(
+            { resolve: (ref) => `resolved://${ref}` },
+            undefined,
+            createAssetLoaderRegistry([
+                { kind: 'texture', load: async (): Promise<ResolvedAsset> => ({ id: 'stone' }) },
+            ]),
+        );
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: () => <div data-testid="backstop-playfield" /> }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={manager}
+                assetManifest={manifestWithMetadata}
+            />,
+        );
+        await screen.findByTestId('backstop-playfield');
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(manager.getManifestMetadata(declaredRef)).toEqual({ tag: 'a' });
+    });
+
+    it('rebuilds the fallback manager when the manifest identity changes and disposes the old one', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+        const observedManagers: AssetManager[] = [];
+        function Playfield(_props: GameScreenProps): React.ReactElement {
+            const manager = useAssetManager();
+            if (observedManagers[observedManagers.length - 1] !== manager) {
+                observedManagers.push(manager);
+            }
+            return <div data-testid="rebuild-playfield" />;
+        }
+        const audioManager = createAudioManagerSpy();
+        const overrides = { setGameAssetManager: vi.fn() };
+        const inequivalentManifest: AssetManifest = {
+            gameId: 'demo',
+            entries: [
+                { ref: declaredRef, kind: 'texture', priority: 'deferred', metadata: { tag: 'b' } },
+            ],
+        };
+        const shellFor = (activeManifest: AssetManifest): React.ReactElement => (
+            <GameShell
+                registry={{ playfield: Playfield }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManifest={activeManifest}
+            />
+        );
+
+        const view = renderWithAudio(shellFor(manifest), audioManager, overrides);
+        await screen.findByTestId('rebuild-playfield');
+        const firstManager = observedManagers[0];
+        if (firstManager === undefined) {
+            throw new Error('Expected the fallback manager to be observed.');
+        }
+        const disposeSpy = vi.spyOn(firstManager, 'dispose');
+
+        view.rerender(wrapWithAudio(shellFor(inequivalentManifest), audioManager, overrides));
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        const lastManager = observedManagers[observedManagers.length - 1];
+        expect(observedManagers.length).toBeGreaterThan(1);
+        expect(lastManager).not.toBe(firstManager);
+        expect(disposeSpy).toHaveBeenCalledTimes(1);
+        expect(lastManager?.getManifestMetadata(declaredRef)).toEqual({ tag: 'b' });
     });
 });

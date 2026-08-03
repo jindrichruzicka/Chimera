@@ -247,11 +247,23 @@ function useGameAssetManager(
     // loud error rather than a silent no-op; tests mount the provider via the shell wrapper.
     const setGameAssetManager = useSetGameAssetManager();
 
+    // Manifest at CONSTRUCTION — see createAssetManager's JSDoc for why every
+    // alternative registration point fails. A manifest identity change
+    // rebuilds the fallback manager (the old one is disposed by the effect
+    // below); an injected manager is never rebuilt here.
     const assetManager = React.useMemo(
-        () => injectedAssetManager ?? createAssetManager(createUnconfiguredAssetResolver()),
-        [injectedAssetManager],
+        () =>
+            injectedAssetManager ??
+            createAssetManager(createUnconfiguredAssetResolver(), assetManifest),
+        [injectedAssetManager, assetManifest],
     );
 
+    // Backstop only: for an INJECTED manager the injector owns registration
+    // (the pages construct with the manifest), and this re-registration is
+    // idempotent because registerManifest retains entries that
+    // assetManifestEntryEquivalent judges unchanged. Sharp edge, deliberately
+    // not fixed here: that equivalence compares metadata by JSON.stringify,
+    // so identical metadata with a different key ORDER evicts and disposes.
     React.useEffect(() => {
         if (assetManifest !== undefined) {
             assetManager.registerManifest(assetManifest);
