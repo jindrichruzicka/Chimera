@@ -12,7 +12,7 @@ import type {
 
 import type { AssetManager, ResolvedAsset } from './AssetManager';
 import { AssetManagerContext } from './AssetManagerContext.js';
-import { useAsset } from './useAsset.js';
+import { useAsset, type UseAssetState } from './useAsset.js';
 
 const particleRef = 'tactics/particles/spark.json' as AssetRef<ParticleConfigAsset>;
 
@@ -113,6 +113,67 @@ describe('useAsset', () => {
         rerender();
 
         expect(result.current).toEqual({ asset: null, loading: true, error: null });
+    });
+
+    it("never exposes the previous ref's resolved asset in the render pass that switches the ref", async () => {
+        const refA = 'tactics/particles/spark.json' as AssetRef<ParticleConfigAsset>;
+        const refB = 'tactics/particles/ember.json' as AssetRef<ParticleConfigAsset>;
+
+        const deferredA = createDeferred<ResolvedAsset<ParticleConfigAsset>>();
+        const deferredB = createDeferred<ResolvedAsset<ParticleConfigAsset>>();
+        let currentRef = refA;
+        const manager = createAssetManagerStub(function load<TAssetKind extends AssetKind>(
+            ref: AssetRef<TAssetKind>,
+        ): Promise<ResolvedAsset<TAssetKind>> {
+            if ((ref as string) === refA) {
+                return deferredA.promise as Promise<ResolvedAsset<TAssetKind>>;
+            }
+            return deferredB.promise as Promise<ResolvedAsset<TAssetKind>>;
+        });
+        const observed: UseAssetState<ParticleConfigAsset>[] = [];
+
+        const { rerender } = renderHook(
+            () => {
+                const state = useAsset(currentRef);
+                observed.push(state);
+                return state;
+            },
+            { wrapper: createWrapper(manager) },
+        );
+
+        await act(async () => {
+            deferredA.resolve({ effect: 'spark' });
+            await deferredA.promise;
+            await flushMicrotasks();
+        });
+
+        const rendersBeforeSwitch = observed.length;
+        currentRef = refB;
+        rerender();
+        await act(async () => {
+            await flushMicrotasks();
+        });
+
+        // A post-effect assertion cannot see the switch render itself, so
+        // record every render: the synchronous stale-state guard is what
+        // keeps that render pass from re-exposing refA's resolved asset
+        // before the load effect has run.
+        expect(observed.length).toBeGreaterThan(rendersBeforeSwitch);
+        for (const state of observed.slice(rendersBeforeSwitch)) {
+            expect(state).toEqual({ asset: null, loading: true, error: null });
+        }
+
+        await act(async () => {
+            deferredB.resolve({ effect: 'ember' });
+            await deferredB.promise;
+            await flushMicrotasks();
+        });
+
+        expect(observed[observed.length - 1]).toEqual({
+            asset: { effect: 'ember' },
+            loading: false,
+            error: null,
+        });
     });
 
     it('does not report a React state update warning after unmount before resolve', async () => {
