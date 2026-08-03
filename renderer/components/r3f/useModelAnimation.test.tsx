@@ -1,0 +1,258 @@
+// @vitest-environment jsdom
+
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { act, cleanup, renderHook } from '@testing-library/react';
+import React, { StrictMode, type ReactElement, type ReactNode } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { Group } from 'three';
+import type * as ThreeModule from 'three';
+import type { AnimationMixer } from 'three';
+
+import type { ModelInstance } from '../../assets/ModelInstance.js';
+import { useModelAnimation } from './useModelAnimation.js';
+
+const { recordedFrames, mixerLog } = vi.hoisted(() => ({
+    recordedFrames: [] as {
+        callback: (state: unknown, deltaSeconds: number) => void;
+        priority: number | undefined;
+    }[],
+    mixerLog: {
+        created: [] as unknown[],
+        events: [] as { kind: 'stopAllAction' | 'uncacheRoot'; mixer: unknown; root?: unknown }[],
+    },
+}));
+
+vi.mock('@react-three/fiber', () => ({
+    useFrame: vi.fn(
+        (callback: (state: unknown, deltaSeconds: number) => void, priority?: number) => {
+            recordedFrames.push({ callback, priority });
+        },
+    ),
+}));
+
+vi.mock('three', async (importOriginal) => {
+    const original = await importOriginal<typeof ThreeModule>();
+    class TrackedAnimationMixer extends original.AnimationMixer {
+        constructor(root: ThreeModule.Object3D) {
+            super(root);
+            mixerLog.created.push(this);
+        }
+        override stopAllAction(): AnimationMixer {
+            mixerLog.events.push({ kind: 'stopAllAction', mixer: this });
+            return super.stopAllAction();
+        }
+        override uncacheRoot(root: ThreeModule.Object3D): void {
+            mixerLog.events.push({ kind: 'uncacheRoot', mixer: this, root });
+            super.uncacheRoot(root);
+        }
+    }
+    return { ...original, AnimationMixer: TrackedAnimationMixer };
+});
+
+beforeEach(() => {
+    recordedFrames.length = 0;
+    mixerLog.created.length = 0;
+    mixerLog.events.length = 0;
+    vi.clearAllMocks();
+});
+
+afterEach(() => {
+    cleanup();
+});
+
+function createInstance(): ModelInstance {
+    return { root: new Group(), clips: [] };
+}
+
+function requireMixer(value: AnimationMixer | null): AnimationMixer {
+    if (value === null) {
+        throw new Error('Expected the hook to have published an AnimationMixer.');
+    }
+    return value;
+}
+
+/**
+ * Drives one frame the way R3F would: the real `useFrame` keeps a single
+ * subscription whose ref always points at the latest render's callback, so
+ * only the LAST recorded callback is "live".
+ */
+function driveFrame(deltaSeconds: number): void {
+    const lastRecorded = recordedFrames[recordedFrames.length - 1];
+    if (lastRecorded === undefined) {
+        throw new Error('No frame callback was recorded.');
+    }
+    lastRecorded.callback({}, deltaSeconds);
+}
+
+function releasedEventKindsFor(mixer: unknown): string[] {
+    return mixerLog.events.filter((event) => event.mixer === mixer).map((event) => event.kind);
+}
+
+describe('useModelAnimation', () => {
+    it('registers its frame callback at the default render priority on every render', async () => {
+        const instance = createInstance();
+        const { rerender } = renderHook(() => useModelAnimation(instance));
+        await act(async () => {
+            await Promise.resolve();
+        });
+        rerender();
+
+        expect(recordedFrames.length).toBeGreaterThanOrEqual(1);
+        for (const { priority } of recordedFrames) {
+            expect(priority).toBeUndefined();
+        }
+    });
+
+    it('returns null before the commit-phase effect and advances the mixer exactly once per frame with the supplied delta', async () => {
+        const instance = createInstance();
+        const observed: (AnimationMixer | null)[] = [];
+        const { result } = renderHook(() => {
+            const mixer = useModelAnimation(instance);
+            observed.push(mixer);
+            return mixer;
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(observed[0]).toBeNull();
+        const mixer = requireMixer(result.current);
+        const updateSpy = vi.spyOn(mixer, 'update');
+
+        driveFrame(0.016);
+        expect(updateSpy).toHaveBeenCalledTimes(1);
+        expect(updateSpy).toHaveBeenCalledWith(0.016);
+
+        driveFrame(0.033);
+        expect(updateSpy).toHaveBeenCalledTimes(2);
+        expect(updateSpy).toHaveBeenLastCalledWith(0.033);
+    });
+
+    it('keeps the mixer identity across re-renders and creates a new one when the instance identity changes', async () => {
+        let instance = createInstance();
+        const { result, rerender } = renderHook(() => useModelAnimation(instance));
+        await act(async () => {
+            await Promise.resolve();
+        });
+        const firstMixer = requireMixer(result.current);
+        const createdAfterFirst = mixerLog.created.length;
+
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(result.current).toBe(firstMixer);
+        expect(mixerLog.created.length).toBe(createdAfterFirst);
+
+        instance = createInstance();
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+        const secondMixer = requireMixer(result.current);
+        expect(secondMixer).not.toBe(firstMixer);
+        expect(mixerLog.created.length).toBe(createdAfterFirst + 1);
+        expect(releasedEventKindsFor(firstMixer)).toEqual(['stopAllAction', 'uncacheRoot']);
+    });
+
+    it('releases with stopAllAction then uncacheRoot(root), and creations equal releases after a StrictMode mount/unmount', async () => {
+        const instance = createInstance();
+        const wrapper = ({ children }: { readonly children: ReactNode }): ReactElement => (
+            <StrictMode>{children}</StrictMode>
+        );
+        const { result, unmount } = renderHook(() => useModelAnimation(instance), { wrapper });
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(result.current).not.toBeNull();
+
+        unmount();
+
+        expect(mixerLog.created.length).toBeGreaterThanOrEqual(1);
+        for (const mixer of mixerLog.created) {
+            expect(releasedEventKindsFor(mixer)).toEqual(['stopAllAction', 'uncacheRoot']);
+        }
+        const uncacheEvents = mixerLog.events.filter((event) => event.kind === 'uncacheRoot');
+        for (const event of uncacheEvents) {
+            expect(event.root).toBe(instance.root);
+        }
+    });
+
+    it('returns null again and stops driving the released mixer after the instance changes to null', async () => {
+        let instance: ModelInstance | null = createInstance();
+        const { result, rerender } = renderHook(() => useModelAnimation(instance));
+        await act(async () => {
+            await Promise.resolve();
+        });
+        const mixer = requireMixer(result.current);
+        const updateSpy = vi.spyOn(mixer, 'update');
+
+        instance = null;
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(result.current).toBeNull();
+        expect(releasedEventKindsFor(mixer)).toEqual(['stopAllAction', 'uncacheRoot']);
+        driveFrame(0.016);
+        expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns null for a null instance, creates no mixer, and keeps every registered frame callback inert', async () => {
+        const { result } = renderHook(() => useModelAnimation(null));
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(result.current).toBeNull();
+        expect(mixerLog.created).toHaveLength(0);
+        // Contract is an inert callback, not an absent subscription — see the
+        // rules-of-hooks note above useFrame in useModelAnimation.ts.
+        for (const { callback } of recordedFrames) {
+            expect(() => {
+                callback({}, 0.016);
+            }).not.toThrow();
+        }
+        expect(mixerLog.events).toHaveLength(0);
+    });
+});
+
+describe('useModelAnimation module shape', () => {
+    function readSource(fileName: string): string {
+        // Vite rewrites `new URL(<relative>, import.meta.url)` asset
+        // references to root-relative URLs: this dynamic-template form yields
+        // `file:///<path rooted at the vitest --dir>` — a direct read
+        // ENOENTs — while raw `import.meta.url` stays the true absolute file
+        // URL. Resolve the pathname against cwd; every pnpm-run script's cwd
+        // is the --dir.
+        const moduleUrl = new URL(`./${fileName}`, import.meta.url);
+        const directPath =
+            moduleUrl.protocol === 'file:' ? fileURLToPath(moduleUrl) : moduleUrl.pathname;
+        const modulePath = existsSync(directPath)
+            ? directPath
+            : join(process.cwd(), moduleUrl.pathname);
+        return readFileSync(modulePath, 'utf8');
+    }
+
+    it(`keeps 'use client' as line 1 and contains no timers and no frame-invalidation call`, () => {
+        const source = readSource('useModelAnimation.ts');
+        const [firstLine] = source.split('\n');
+
+        expect(firstLine).toBe(`'use client';`);
+        expect(source).not.toMatch(/setInterval|setTimeout|invalidate/);
+    });
+
+    it('is exported from the r3f barrel by exactly one export line', () => {
+        const barrelSource = readSource('index.ts');
+        const exportLines = barrelSource
+            .split('\n')
+            .filter((line) => line.startsWith('export') && line.includes('useModelAnimation'));
+
+        expect(exportLines).toEqual([`export { useModelAnimation } from './useModelAnimation';`]);
+    });
+});

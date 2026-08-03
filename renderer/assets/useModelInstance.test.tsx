@@ -290,9 +290,11 @@ describe('useModelInstance', () => {
 
 describe('useModelInstance module shape', () => {
     it(`keeps 'use client' as line 1 and never re-exports the ModelInstance seam`, () => {
-        // Under the jsdom environment import.meta.url is an http URL whose
-        // pathname is rooted at the vitest --dir (the renderer package, which
-        // is also the test run's cwd), so resolve it against cwd.
+        // Vite rewrites this static-literal `new URL(..., import.meta.url)`
+        // pattern to an http URL whose pathname is rooted at the vitest --dir
+        // under jsdom (raw import.meta.url stays the true file URL), so
+        // resolve the pathname against cwd — the --dir for every pnpm-run
+        // script.
         const moduleUrl = new URL('./useModelInstance.ts', import.meta.url);
         const modulePath =
             moduleUrl.protocol === 'file:'
