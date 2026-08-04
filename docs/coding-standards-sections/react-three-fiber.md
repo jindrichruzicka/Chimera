@@ -30,9 +30,14 @@ if (asset instanceof THREE.Texture) { ... }
 - `useAsset`'s type parameter is `TAssetKind extends AssetKind` — pass an asset-kind type such as `TextureAsset` (from `simulation/content`), never a Three.js class like `THREE.Texture`.
 - `AssetRef<T>` strings always come from content data. Never construct them as string literals in component code.
 - Do not create geometries or materials inside a component's render path. Hoist to `useMemo` or module scope.
+- `useModelInstance` allocates its clone in a commit-phase effect, so `loading` stays `true` for one extra render after the asset resolves and `instance` is `null` until then — check before reading, exactly as with `useAsset`.
+- The clone is component-owned (Invariant #21's carve-out): never dispose, mutate, or re-bind anything it shares with the cached asset — geometry, materials, textures, `geometry.morphAttributes`, animation clips, `skeleton.boneInverses`.
+- One ref, many mounts: every mount gets its own clone. Never mount the cached `gltf.scene` directly — three.js reparents it and the first mount silently vanishes (§4.10, Per-Instance Model Use).
 
 ## 6.3 Render loop
 
 - Per-frame logic belongs in `useFrame`. Never use `setInterval` or `setTimeout` to drive animation.
 - Do not call `setState` inside `useFrame`. Update the ref, let the next render derive from it, or use `invalidate()` explicitly.
 - The render loop and simulation tick are **decoupled**. The R3F canvas reads from the Zustand store; it never drives the simulation.
+- Animation mixers subscribe at the DEFAULT render priority (0), as `useModelAnimation` does. A non-zero-priority `useFrame` subscriber takes over the canvas render and becomes responsible for `gl.render` — see the render-priority notes in `FrameRateLimiter.tsx`'s header; that component owns priority 1.
+- Animation is renderer-local (Invariants #42/#43, #56–#58): no animation event may gate an `EngineAction`, and no mixer or clone state may enter a `GameSnapshot`, a Zustand store, an IPC payload, a save, or a replay.

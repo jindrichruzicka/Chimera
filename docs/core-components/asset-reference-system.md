@@ -19,8 +19,8 @@ The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-sy
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `shared/asset-ref-parse.ts`              | `parseAssetRef`, `isTraversalUnsafe`, `MalformedAssetRefError` — pure string logic, no deps; shared by `simulation/` and `renderer/`  |
 | `simulation/content/AssetRef.ts`         | `AssetRef<T>` type, open `AssetKindRegistry`, `buildAssetRef()` helper; re-exports parsing utilities from `shared/asset-ref-parse.ts` |
-| `games/<name>/data/*.json`               | JSON data objects carry `AssetRef` strings as plain strings                                                                           |
-| `games/<name>/asset-manifest.ts`         | Declares every `AssetRef` the game exposes, runtime kind id, load priority, and optional loader metadata                              |
+| `apps/<name>/data/*.json`                | JSON data objects carry `AssetRef` strings as plain strings                                                                           |
+| `apps/<name>/asset-manifest.ts`          | Declares every `AssetRef` the game exposes, runtime kind id, load priority, and optional loader metadata                              |
 | `renderer/assets/AssetResolver.ts`       | `AssetRef<T>` → `file://` URL (env-aware: dev vs prod)                                                                                |
 | `renderer/assets/AssetLoaderRegistry.ts` | Runtime kind id → loader, open to game-contributed loaders without engine edits                                                       |
 | `renderer/assets/AssetManager.ts`        | Loads, caches, and disposes resolved assets                                                                                           |
@@ -93,7 +93,7 @@ The `T` parameter is intentionally embedded in the brand. This keeps refs for di
 Games and first-party extension libraries may contribute new phantom kinds without changing `simulation/content/AssetRef.ts`:
 
 ```typescript
-// games/<game>/assets/asset-kinds.ts
+// apps/<game>/assets/asset-kinds.ts
 import type { AssetKindBrand } from '@chimera-engine/simulation/content/AssetRef.js';
 
 export interface GameVoxelAsset extends AssetKindBrand<'<game>:voxel'> {
@@ -114,7 +114,7 @@ Custom kind ids should be namespaced by game or package (`<game>:voxel`, `<packa
 ## Asset References in Content JSON
 
 ```json
-// games/<game>/data/entities/entity.json
+// apps/<game>/data/entities/entity.json
 {
     "id": "entity",
     "portrait": "<game>/textures/entities/entity-portrait.webp",
@@ -148,9 +148,9 @@ export interface AssetManifest {
 }
 ```
 
-The manifest value is **injected via `AssetManagerContext`** at game session start — the renderer never imports from any `games/*` path. `kind` is the runtime bridge from the phantom type to the renderer loader registry. `metadata` is loader-owned structured data for cases such as atlas descriptors, compression options, or game-specific decode hints.
+The manifest value is **injected via `AssetManagerContext`** at game session start — the renderer never imports from any game package path. `kind` is the runtime bridge from the phantom type to the renderer loader registry. `metadata` is loader-owned structured data for cases such as atlas descriptors, compression options, or game-specific decode hints.
 
-> **Invariant #47** — `AssetManager` never imports from `games/*`.
+> **Module boundary (§3)** — the renderer never imports game packages; `AssetManager` included.
 > **Invariant #22** — All `AssetRef` strings in content JSON must pass `electron/dev-tools/validate-assets/index.ts` before merge.
 
 ---
@@ -177,7 +177,7 @@ export function createDevResolver(projectRoot: string): AssetResolver {
     return {
         resolve(ref) {
             const { gameId, relativePath } = parseAssetRef(ref);
-            return `file://${projectRoot}/games/${gameId}/assets/${relativePath}`;
+            return `file://${projectRoot}/apps/${gameId}/assets/${relativePath}`;
         },
     };
 }
@@ -195,7 +195,7 @@ export function createRendererGameAssetResolver(): AssetResolver {
 
 The renderer constructs only the safe app-protocol URL. Electron main owns the protocol handler and
 maps `/game-assets/<gameId>/<relativePath>` to the game-owned asset directory after traversal
-checks. In the monorepo this directory is `games/<gameId>/assets/`; in a future package-split build
+checks. In the monorepo this directory is `apps/<gameId>/assets/`; in a future package-split build
 the same protocol can resolve to an installed game package asset root.
 
 ## `AssetLoaderRegistry` — Extensible Runtime Loading
@@ -300,6 +300,56 @@ function EntityMesh({ portraitRef }: EntityMeshProps) {
 
 ---
 
+## Per-Instance Model Use
+
+A `gltf-model` ref resolves to ONE cached `LoadedGltfAsset` shared by every consumer of
+that ref — the cache-by-ref rule every asset kind follows. For models the cached value
+is a live `Object3D` tree, and that makes naive reuse destructive in ways a texture
+never is. `useModelInstance` (public `@chimera-engine/renderer/assets` barrel) exists
+so a component can own an independently posable clone; `useModelAnimation` (public
+`@chimera-engine/renderer/components/r3f` barrel, requires a `<Canvas>`) drives one
+`AnimationMixer` per clone.
+
+```tsx
+import { useModelInstance } from '@chimera-engine/renderer/assets';
+import { useModelAnimation } from '@chimera-engine/renderer/components/r3f';
+
+function Knight({ modelRef }: { readonly modelRef: AssetRef<GLTFModelAsset> }) {
+    const { instance, loading, error } = useModelInstance(modelRef);
+    const mixer = useModelAnimation(instance);
+    if (loading || error !== null || instance === null) return null;
+    return <primitive object={instance.root} />;
+}
+```
+
+The failure modes the hook exists to prevent — each one silent or
+cache-corrupting when reached by hand:
+
+1. **Reparenting.** Mounting the cached `gltf.scene` in two places does not render it
+   twice — three.js reparents the object, and the first mount silently vanishes.
+2. **Shared skeleton.** `gltf.scene.clone()` produces distinct meshes that still share
+   ONE `Skeleton` — posing either instance poses both. `useModelInstance` clones via
+   `SkeletonUtils`, which re-links each clone's skeleton to its own bones.
+3. **Shared-cache disposal.** Everything reachable from a clone except its skeletons
+   and the cloned node tree itself — geometry, materials, textures,
+   `geometry.morphAttributes`, animation clips — is the cached original, shared by
+   reference. Disposing any of it corrupts every sibling
+   instance and the cache itself (Invariant #21's carve-out states the ownership rule).
+4. **Shared `boneInverses`.** Each clone's skeleton shares `boneInverses` BY REFERENCE
+   with the cached original. Never call `bind(skeleton)` without an explicit bind
+   matrix on any mesh under a clone — that recomputes the shared array in place.
+5. **Instanced-mesh refusal.** Models using `EXT_mesh_gpu_instancing` are refused with
+   `MalformedModelAssetError`: each clone would copy per-instance buffers that
+   `releaseModelInstance` never disposes.
+
+Two adjacent sharp edges: a live object placed on the shared `gltf.scene.userData`
+breaks cloning for EVERY consumer of that ref (`Object3D.copy` round-trips `userData`
+through JSON), and the `validate-assets` on-demand scan's receiver-name false-negative
+(see CI Validation below) applies to model loads exactly as to any other —
+keep asset-manager receivers named accordingly.
+
+---
+
 ## CI Validation
 
 `electron/dev-tools/validate-assets/index.ts` crawls all content JSON files, collects every field whose value matches the `AssetRef` format (`<gameId>/<path>`), and asserts that the file exists on disk.
@@ -318,7 +368,7 @@ accordingly (`assets.load(...)`, `assetManager.get(...)`) so your loads stay ins
 
 Game font declarations use the same local `game-id/relative/path` string shape, but they are loaded
 by `renderer/game/GameFontLoader.ts` rather than by `AssetManager`. Validation also crawls
-`games/*/shell/fonts.ts` and requires each font file to exist under `games/<game>/assets/`.
+`apps/*/shell/fonts.ts` and requires each font file to exist under `apps/<game>/assets/`.
 Renderer runtime loading uses the `chimera://renderer/game-assets/<game>/<path>` protocol path,
 which Electron resolves to the game-owned asset directory. External font URLs are rejected, and
 committed game assets under `renderer/public/assets/` are forbidden so the renderer does not become
@@ -351,7 +401,7 @@ mechanics and the `typescript` runtime dependency the AST crawl needs.
 - **Invariant #20** — `simulation/` never resolves `AssetRef` values. Only `renderer/assets/AssetManager` may resolve them.
 - **Invariant #21** — `AssetManager.dispose()` is called unconditionally on every game session end.
 - **Invariant #22** — All `AssetRef` strings in content JSON must pass CI validation before merge.
-- **Invariant #47** — `AssetManager` never imports from `games/*`.
+- **Module boundary (§3)** — the renderer never imports game packages; `AssetManager` included.
 - **Invariant #97** — Game assets are owned by game packages; runtime loading uses the game-asset protocol and must not depend on renderer-public mirrors or Google-hosted font files.
 
 ---
@@ -361,3 +411,4 @@ mechanics and the `typescript` runtime dependency the AST crawl needs.
 - [Content Database](content-database-data-refs.md) — `DataRef<T>` for cross-collection data references
 - [Renderer Contexts](gameshell-ui-design-system.md) — `AssetManagerContext` injection in `GameShell`
 - [Module Boundaries](../executive-architecture/module-boundaries-file-tree.md) — `renderer/assets/` file tree
+- `@chimera-engine/renderer/assets` — the public barrel (Invariant #96) carrying `useAsset`, `useAssetManager`, `useModelInstance`, `AssetManagerProvider`, and the asset/error types they take

@@ -111,7 +111,7 @@ A card-game toolkit that provides shared card/deck action definitions (built on 
 Key points, each mirroring the real engine manifests:
 
 - **`"private": false` + `"publishConfig": { "access": "public" }`** — publishable as a public scoped package, exactly as `@chimera-engine/simulation` and friends declare.
-- **`"type": "module"` + an `exports` map onto `./dist`** — consumers resolve only your curated public subpaths, never internal files (Invariant #47). Add a subpath (`./ai` above) when you want a separately-importable surface.
+- **`"type": "module"` + an `exports` map onto `./dist`** — consumers resolve only your curated public subpaths, never internal files. Add a subpath (`./ai` above) when you want a separately-importable surface.
 - **`"files": ["dist", "CHANGELOG.md"]`** — ship the built output and the changelog, nothing else. (npm does not auto-include `CHANGELOG.md`; list it explicitly.)
 - **`peerDependencies` on the engine packages** — `@chimera-engine/simulation` always; add `@chimera-engine/ai` only because this toolkit uses AI. Use a caret range (`^0.9.0`) so the consumer's matching-major simulation satisfies it.
 - **The same packages echoed in `devDependencies`** — peers are not installed for you, so the library needs them present to compile and run its own tests.

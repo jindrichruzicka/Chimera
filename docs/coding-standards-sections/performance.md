@@ -23,7 +23,7 @@ tags: [performance, simulation, IPC, renderer, memory, useMemo, selectors, codin
 ## 13.3 Renderer
 
 - R3F geometry and materials must be created inside `useMemo` or at module scope — never inside the render function.
-- `useAsset` must receive a stable `AssetRef` reference (not an object literal constructed inline each render). Inline object literals break referential equality and cause redundant asset re-fetches.
+- `useAsset` and `useModelInstance` must receive a value-stable `AssetRef`. Refs are branded STRINGS, so effect deps compare them by value — an inline-built ref with the same value is harmless, but a ref whose VALUE changes across renders re-runs the load, and through `useModelInstance` that costs a deep `Object3D` clone per change, not merely a redundant cache hit.
 - Do not subscribe to the entire Zustand store. Use narrow selectors to limit re-renders.
 
 ## 13.4 Memory baseline (production target)
@@ -37,7 +37,7 @@ tags: [performance, simulation, IPC, renderer, memory, useMemo, selectors, codin
 
 The §13.1 and §13.4 budgets are constants in [`shared/perf-budget.ts`](../../shared/perf-budget.ts) (`TICK_BUDGET_MS`, `RENDERER_HEAP_BUDGET_MB`, `MAIN_HEAP_BUDGET_MB`) and are exercised by:
 
-- **Engine tick + heap** — [`games/tactics/__tests__/ActionPipelinePerf.bench.test.ts`](../../games/tactics/__tests__/ActionPipelinePerf.bench.test.ts) drives `ActionPipeline.process()` (the shared live + replay hot path, Invariants #42/#70) and a long-run heap-growth check. Run with `npm run test:perf` (sets `--expose-gc` so the host-heap leak gate activates). The benchmark lives with the tactics reference game whose fixtures it drives — keeping `electron/main` free of game-specific test coupling — and uses `performance.now`, which is ESLint-banned in `simulation/**`, `ai/**`, and `games/*/actions/**` (Invariant #43) but permitted under `games/*/__tests__/`.
+- **Engine tick + heap** — [`apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts`](../../apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts) drives `ActionPipeline.process()` (the shared live + replay hot path, Invariants #42/#70) and a long-run heap-growth check. Run with `npm run test:perf` (sets `--expose-gc` so the host-heap leak gate activates). The benchmark lives with the tactics reference game whose fixtures it drives — keeping `electron/main` free of game-specific test coupling — and uses `performance.now`, which is ESLint-banned in `simulation/**`, `ai/**`, and `apps/*/actions/**` (Invariant #43) but permitted under `apps/*/__tests__/`.
 - **Renderer heap** — [`apps/tactics/e2e/tests/perf-renderer-heap.spec.ts`](../../apps/tactics/e2e/tests/perf-renderer-heap.spec.ts) (live match) and the replay-playback assertion in [`apps/tactics/e2e/tests/replay.spec.ts`](../../apps/tactics/e2e/tests/replay.spec.ts), both reading `performance.memory.usedJSHeapSize` the same way `perfStore.readHeapMb()` does.
 
 Gating policy: assertions are **strict locally / under `CHIMERA_PERF_STRICT=1`** and **informational on CI** (CI runners are ~an order of magnitude slower); the measured numbers are always logged so the baseline is visible on every run.
