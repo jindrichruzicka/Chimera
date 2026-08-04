@@ -239,12 +239,52 @@ describe('useModelAnimation module shape', () => {
         return readFileSync(modulePath, 'utf8');
     }
 
+    /**
+     * Comments stripped, so a guard about CALLS cannot be tripped by prose that
+     * merely names the API — the header explains why this hook does not
+     * invalidate, and saying so must not read as doing so.
+     */
+    function stripComments(source: string): string {
+        return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    }
+
     it(`keeps 'use client' as line 1 and contains no timers and no frame-invalidation call`, () => {
         const source = readSource('useModelAnimation.ts');
         const [firstLine] = source.split('\n');
 
         expect(firstLine).toBe(`'use client';`);
-        expect(source).not.toMatch(/setInterval|setTimeout|invalidate/);
+        expect(stripComments(source)).not.toMatch(/setInterval|setTimeout|invalidate/);
+    });
+
+    // The stripper is tested on fixtures, not on the module's live prose: a
+    // guard that leans on another file's wording breaks when that file is
+    // reworded, for a reason unrelated to what it guards. Equality, not
+    // `toMatch` — an alternation is satisfied by any one token surviving, so it
+    // cannot see a stripper that erases only the others.
+    it.each([
+        [
+            'a block comment naming the API',
+            '/* calls invalidate() */\nconst a = 1;',
+            '\nconst a = 1;',
+        ],
+        ['a line comment naming a timer', '// never setTimeout\nconst b = 2;', '\nconst b = 2;'],
+        [
+            'code between two block comments',
+            '/* one */\nsetTimeout(f, 0);\n/* two */',
+            '\nsetTimeout(f, 0);\n',
+        ],
+        [
+            'a url, whose // is not a comment',
+            'const u = "https://x/y"; invalidate();',
+            'const u = "https://x/y"; invalidate();',
+        ],
+        [
+            'a comment on a code line',
+            'invalidate(); // why\nconst c = 3;',
+            'invalidate(); \nconst c = 3;',
+        ],
+    ])('strips %s', (_name, input, expected) => {
+        expect(stripComments(input)).toBe(expected);
     });
 
     it('is exported from the r3f barrel by exactly one export line', () => {

@@ -26,6 +26,11 @@ vi.mock('@react-three/fiber', async () => {
             callbackIndexRef.current ??= frameCallbacks.length;
             frameCallbacks[callbackIndexRef.current] = callback;
         }),
+        // `invalidate` is here for `useTweenCallback`, which `useCamera`
+        // composes: it reads it via `useThree((state) => state.invalidate)` and
+        // calls it from `start()`/`stop()`. The frame-callback calls take theirs
+        // off the state `advanceFrames` passes. `useCamera` itself never
+        // invalidates.
         useThree: vi.fn(
             (selector?: (state: FrameState & { camera: PerspectiveCamera }) => unknown) => {
                 const state = { camera: activeCamera, invalidate };

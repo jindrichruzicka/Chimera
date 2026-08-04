@@ -19,13 +19,12 @@ import type { ModelInstance } from '../../assets/ModelInstance.js';
  * becomes responsible for calling `gl.render` — see the co-presenter notes in
  * `FrameRateLimiter.tsx`'s header.
  *
- * On a `frameloop="demand"` canvas, `useFrame` only runs for frames something
- * else has already scheduled, so a caller starting an action from an event
- * handler must also request a frame through R3F's frame-scheduling API; this
- * hook never requests frames itself. The engine `GameCanvas` passes the
- * `frameloop` from `useEngineFrameloop()` — `'never'` whenever a frame-rate cap
- * is active, which `display.targetFps` defaults to, and `'always'` when
- * uncapped.
+ * This hook never requests frames itself, and on an engine canvas it never needs
+ * to: frames arrive unasked under both frameloops `useEngineFrameloop()`
+ * returns. Only a game setting `frameloop="demand"` on its own `<Canvas>` makes
+ * `useFrame` wait for a frame something else scheduled, and there calling
+ * `invalidate()` is the caller's job. See `useEngineFrameloop.ts` for why demand
+ * rendering reaches no engine canvas.
  *
  * The mixer is allocated in a commit-phase effect, never `useMemo`:
  * StrictMode double-invokes memo factories and discards one result, which

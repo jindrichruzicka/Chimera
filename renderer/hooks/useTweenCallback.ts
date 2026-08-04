@@ -1,5 +1,15 @@
 'use client';
 
+/**
+ * The callback-driven sibling of `useTween`: same frame loop, values delivered
+ * through `onTick`/`onComplete`/`onCancel` instead of read off a returned object.
+ *
+ * Its `invalidate()` call sites carry the same caveat and the same reason for
+ * keeping them — see `useTween.ts`'s header, and `useEngineFrameloop.ts` for the
+ * frameloop fact behind it. Both hooks are exercised under a capped and an
+ * uncapped canvas in `renderer/hooks/__tests__/tween-frameloop-modes.test.tsx`.
+ */
+
 import { useFrame, useThree } from '@react-three/fiber';
 import { useCallback, useMemo, useReducer, useRef } from 'react';
 import { type EasingFn } from '../utils/curves.js';

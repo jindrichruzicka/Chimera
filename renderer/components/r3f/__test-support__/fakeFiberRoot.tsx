@@ -18,6 +18,10 @@
  *  - `Canvas` applies its `frameloop` prop before rendering children, because
  *    R3F awaits `configure()` before `root.render(children)` — that sequence is
  *    in `dist/react-three-fiber.esm.js:61-116`, not in `events-*`.
+ *  - `invalidate` early-returns whenever `frameloop === 'never'`. Getting past
+ *    that return is not the same as having an effect — under `'always'` R3F
+ *    ignores the counter `invalidate` writes — so the counters below say only
+ *    which calls the early return let through.
  *
  * NOT modelled, deliberately:
  *  - The native loop. A test drives it, so it can choose whether R3F would have
@@ -30,8 +34,13 @@
  *    later, through `root.render(children)`; here they mount in the same commit
  *    as `<Canvas>`. The consequences of the real split are pinned where they
  *    matter, in `FrameRateLimiter.test.tsx`'s deferred-report specs.
- *  - `invalidate`, `internal.frames`, and `useThree`'s zustand subscription:
- *    nothing here needs demand rendering or a re-render on root-state change.
+ *  - Demand rendering itself. `invalidate` is modelled only far enough to record
+ *    which calls the `'never'` early return let through; `internal.frames` and
+ *    the demand queue are not modelled, so this fake cannot say whether a call
+ *    that got through would have rendered anything. On a real `'always'` root it
+ *    would not.
+ *  - `useThree`'s zustand subscription: nothing here re-renders on root-state
+ *    change.
  */
 
 import React from 'react';
@@ -55,6 +64,7 @@ export interface FakeRootState {
     scene: object;
     camera: object;
     advance: (timestamp: number) => void;
+    invalidate: () => void;
     internal: { priority: number; subscribers: Subscriber[] };
 }
 
@@ -62,6 +72,10 @@ export interface FakeRootState {
 let glRenderCount = 0;
 /** Only the calls R3F's OWN automatic render made (the `!priority` branch). */
 let automaticRenderCount = 0;
+/** `invalidate` calls that got past the `'never'` early return. */
+let pastEarlyReturnInvalidateCount = 0;
+/** `invalidate` calls made, whether or not they did anything. */
+let attemptedInvalidateCount = 0;
 
 let state: FakeRootState = makeState();
 
@@ -79,6 +93,14 @@ function makeState(): FakeRootState {
         camera: {},
         advance: (timestamp: number): void => {
             update(timestamp);
+        },
+        invalidate: (): void => {
+            attemptedInvalidateCount++;
+            // The early return that makes demand rendering dead under a cap.
+            if (root.frameloop === 'never') {
+                return;
+            }
+            pastEarlyReturnInvalidateCount++;
         },
         internal: { priority: 0, subscribers: [] },
     };
@@ -172,7 +194,18 @@ export function useFrame(callback: FrameCallback, renderPriority = 0): void {
 export function resetFakeFiberRoot(): void {
     glRenderCount = 0;
     automaticRenderCount = 0;
+    pastEarlyReturnInvalidateCount = 0;
+    attemptedInvalidateCount = 0;
     state = makeState();
+}
+
+/**
+ * `attempted` counts every call; `pastEarlyReturn` only those `'never'` did not
+ * reject. Getting past that return is NOT the same as having an effect — under
+ * `'always'` R3F ignores what invalidate writes; see useEngineFrameloop.ts.
+ */
+export function invalidateCounts(): { attempted: number; pastEarlyReturn: number } {
+    return { attempted: attemptedInvalidateCount, pastEarlyReturn: pastEarlyReturnInvalidateCount };
 }
 
 export function fakeRootState(): FakeRootState {

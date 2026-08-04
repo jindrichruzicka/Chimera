@@ -107,6 +107,11 @@ export function TacticsUnitPrimitive({
             movementTweenRef.current = null;
             visualPositionRef.current = movementTween.to;
             applyVisualPosition(group, movementTween.to);
+            // Inert on the engine canvas this board renders through — neither
+            // frameloop `useEngineFrameloop()` returns honours a demand-render
+            // request. Kept for the same reason the engine's tween hooks keep
+            // theirs: it is the correct contract for a `frameloop="demand"`
+            // canvas, and it costs nothing here.
             state.invalidate();
             return;
         }

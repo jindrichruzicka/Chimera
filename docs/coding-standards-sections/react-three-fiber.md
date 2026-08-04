@@ -37,7 +37,7 @@ if (asset instanceof THREE.Texture) { ... }
 ## 6.3 Render loop
 
 - Per-frame logic belongs in `useFrame`. Never use `setInterval` or `setTimeout` to drive animation.
-- Do not call `setState` inside `useFrame`. Update the ref, let the next render derive from it, or use `invalidate()` explicitly.
+- Do not call `setState` inside `useFrame`. Update the ref and let the next render derive from it. Do **not** reach for `invalidate()` as the remedy: on an engine canvas it is inert under both frameloops the engine produces — see `renderer/components/r3f/useEngineFrameloop.ts` for the two reasons — so nothing may depend on it to get a frame.
 - The render loop and simulation tick are **decoupled**. The R3F canvas reads from the Zustand store; it never drives the simulation.
 - Animation mixers subscribe at the DEFAULT render priority (0), as `useModelAnimation` does. A non-zero-priority `useFrame` subscriber becomes responsible for `gl.render` — see the co-presenter notes in `FrameRateLimiter.tsx`'s header. The engine frame-rate cap registers no `useFrame` of its own.
 - Animation is renderer-local (Invariants #42/#43, #56–#58): no animation event may gate an `EngineAction`, and no mixer or clone state may enter a `GameSnapshot`, a Zustand store, an IPC payload, a save, or a replay.
