@@ -369,6 +369,11 @@ describe('GameShell page object locators', () => {
         ).toBe('provided');
 
         unmount();
+        // Disposal is deferred one microtask so a StrictMode simulated remount
+        // can cancel it; a real unmount has no canceller.
+        await act(async () => {
+            await Promise.resolve();
+        });
         expect(assetManager.dispose).toHaveBeenCalledOnce();
     });
 
@@ -1275,5 +1280,113 @@ describe('GameShell — manifest visible to first-commit loads (registry mode)',
         expect(lastManager).not.toBe(firstManager);
         expect(disposeSpy).toHaveBeenCalledTimes(1);
         expect(lastManager?.getManifestMetadata(declaredRef)).toEqual({ tag: 'b' });
+    });
+});
+
+describe('GameShell — StrictMode-root remount safety (registry mode)', () => {
+    // StrictMode must be the ROOT element of the render: nested under any
+    // provider it does not double-invoke effects in this environment, which
+    // would leave every assertion here vacuously green — the outcome-count
+    // positive controls below fail if the simulated remount stops happening.
+    function renderAtStrictModeRoot(element: React.ReactElement): ReturnType<typeof baseRender> {
+        return baseRender(
+            <React.StrictMode>
+                <I18nProvider>{wrapWithAudio(element)}</I18nProvider>
+            </React.StrictMode>,
+        );
+    }
+
+    const declaredRef = 'demo/textures/stone.webp' as AssetRef<TextureAsset>;
+    const manifest: AssetManifest = {
+        gameId: 'demo',
+        entries: [{ ref: declaredRef, kind: 'texture', priority: 'deferred' }],
+    };
+
+    // Records EVERY load settlement, not only the last one: the two StrictMode
+    // mounts each fire one load, and the failure mode under test is the second
+    // mount's load rejecting after the between-mounts dispose emptied the
+    // manifest.
+    function createLoadRecordingPlayfield(): {
+        readonly Playfield: (props: GameScreenProps) => React.ReactElement;
+        readonly outcomes: () => readonly unknown[];
+    } {
+        const captured: unknown[] = [];
+        function Playfield(_props: GameScreenProps): React.ReactElement {
+            const manager = useAssetManager();
+            React.useEffect(() => {
+                manager.load(declaredRef).then(
+                    (asset) => captured.push({ resolved: asset }),
+                    (error: unknown) => captured.push(error),
+                );
+            }, [manager]);
+            return <div data-testid="strict-mode-playfield" />;
+        }
+        return { Playfield, outcomes: () => captured };
+    }
+
+    it('never disposes an injected manager between simulated mounts, and both mount loads resolve', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+        const stubAsset = { id: 'stone-texture' };
+        const manager = createAssetManager(
+            { resolve: (ref) => `resolved://${ref}` },
+            manifest,
+            createAssetLoaderRegistry([
+                { kind: 'texture', load: async (): Promise<ResolvedAsset> => stubAsset },
+            ]),
+        );
+        const disposeSpy = vi.spyOn(manager, 'dispose');
+        const { Playfield, outcomes } = createLoadRecordingPlayfield();
+
+        const view = renderAtStrictModeRoot(
+            <GameShell
+                registry={{ playfield: Playfield }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={manager}
+                assetManifest={manifest}
+            />,
+        );
+        await screen.findByTestId('strict-mode-playfield');
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(outcomes()).toHaveLength(2);
+        expect(outcomes()).toEqual([{ resolved: stubAsset }, { resolved: stubAsset }]);
+        expect(disposeSpy).not.toHaveBeenCalled();
+
+        view.unmount();
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(disposeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('a second-mount load on the fallback manager still fails on the unconfigured resolver, never on a missing manifest entry', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+        const { Playfield, outcomes } = createLoadRecordingPlayfield();
+
+        renderAtStrictModeRoot(
+            <GameShell
+                registry={{ playfield: Playfield }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManifest={manifest}
+            />,
+        );
+        await screen.findByTestId('strict-mode-playfield');
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(outcomes()).toHaveLength(2);
+        for (const outcome of outcomes()) {
+            expect(outcome).toBeInstanceOf(Error);
+            expect(outcome).not.toBeInstanceOf(UnknownAssetManifestEntryError);
+            expect((outcome as Error).message).toMatch(/not configured/);
+        }
     });
 });

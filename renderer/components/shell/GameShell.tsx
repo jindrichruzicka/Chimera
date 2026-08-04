@@ -278,13 +278,41 @@ function useGameAssetManager(
         };
     }, [assetManager, setGameAssetManager]);
 
+    // Session-end disposal (Invariant #21): GameShell is the unique disposer
+    // of a match-level manager, injected or fallback. The dispose is deferred
+    // by one microtask and cancelled when this effect re-runs for the SAME
+    // manager: StrictMode's simulated mount→unmount→mount runs the cleanup
+    // between the two mounts, so an immediate dispose here would empty the
+    // manifest out from under the second mount's children-first loads — and
+    // destroy a page-injected manager the page still holds. A real unmount has
+    // no re-run, so the microtask disposes exactly once; a manifest-identity
+    // rebuild re-runs with a DIFFERENT manager, so the old manager's scheduled
+    // dispose proceeds. The cancellation window is safe because React runs the
+    // cleanup and the re-run synchronously in one passive-effect flush, which
+    // no microtask can interleave.
+    const pendingDisposeRef = React.useRef<PendingAssetManagerDispose | null>(null);
     React.useEffect(() => {
+        const pending = pendingDisposeRef.current;
+        if (pending !== null && pending.assetManager === assetManager) {
+            pending.cancelled = true;
+        }
         return () => {
-            assetManager.dispose();
+            const scheduled: PendingAssetManagerDispose = { assetManager, cancelled: false };
+            pendingDisposeRef.current = scheduled;
+            queueMicrotask(() => {
+                if (!scheduled.cancelled) {
+                    assetManager.dispose();
+                }
+            });
         };
     }, [assetManager]);
 
     return assetManager;
+}
+
+interface PendingAssetManagerDispose {
+    readonly assetManager: AssetManager;
+    cancelled: boolean;
 }
 
 function useStopAudioOnGameEnd(audioManager: AudioManager, isGameEnded: boolean): void {
