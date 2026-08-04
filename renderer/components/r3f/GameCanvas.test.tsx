@@ -9,6 +9,7 @@ import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
 import { Canvas } from '@react-three/fiber';
 import { GameCanvas } from './GameCanvas';
 import type { CameraPreset, OrthographicCameraConfig, PerspectiveCameraConfig } from './GameCanvas';
+import { useSettingsStore } from '../../state/settingsStore';
 
 const perfProbeSpy = vi.hoisted(() => vi.fn());
 
@@ -19,10 +20,27 @@ vi.mock('../shell/perf/PerfProbe', () => ({
     },
 }));
 
+// `useThree` is mocked because the real FrameRateLimiter mounts inside the
+// canvas and reads the store-bound `advance` / `frameloop` / `clock` from it.
+// This tree has no R3F root, so the selectors run against a stand-in state whose
+// `frameloop` is 'always' — the limiter stays inert and drives nothing.
+const fiberMock = vi.hoisted(() => {
+    const rootState = {
+        advance: vi.fn(),
+        frameloop: 'always' as const,
+        clock: { elapsedTime: 0, oldTime: 0 },
+    };
+    return {
+        rootState,
+        useThree: vi.fn((selector: (state: typeof rootState) => unknown) => selector(rootState)),
+    };
+});
+
 vi.mock('@react-three/fiber', () => ({
     Canvas: vi.fn(({ children }: { readonly children?: ReactNode }) => (
         <div data-testid="r3f-canvas">{children}</div>
     )),
+    useThree: fiberMock.useThree,
 }));
 
 type ExpectedCameraPreset = Readonly<{
@@ -42,6 +60,7 @@ const expectedPresets = {
 afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    useSettingsStore.setState({ activeGameId: null, settings: {} });
 });
 
 describe('GameCanvas', () => {
@@ -116,6 +135,28 @@ describe('GameCanvas', () => {
         );
 
         expect(perfProbeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('mounts the FrameRateLimiter, which stays inert under this canvas frameloop', () => {
+        // A real cap must be hydrated or `frameloop` is not the reason the
+        // driver stays idle — an unhydrated store reads as uncapped and would
+        // hold this test green under any frameloop.
+        useSettingsStore.setState({
+            activeGameId: 'game',
+            settings: { game: { display: { targetFps: 60 } } },
+        } as never);
+
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        // PerfProbe is mocked out, so the limiter is the only child that reads
+        // the R3F root state — dropping it from GameCanvas leaves this at zero.
+        expect(fiberMock.useThree).toHaveBeenCalled();
+        // The stand-in frameloop is 'always', so the driver starts no chain.
+        expect(fiberMock.rootState.advance).not.toHaveBeenCalled();
     });
 
     it('builds a perspective camera from an explicit config', () => {

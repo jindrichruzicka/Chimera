@@ -68,8 +68,10 @@ const gameCanvasCalls = vi.hoisted(
 
 // The mock exports ONLY GameCanvas: the engine mounts PerfProbe and
 // FrameRateLimiter itself, so if the board ever re-adds either import (the
-// double-mount mutant — a second FrameRateLimiter presents every frame twice),
-// the component resolves `undefined` and every render test crashes red.
+// double-mount mutant — a second FrameRateLimiter owns a second
+// requestAnimationFrame chain and advances the canvas at roughly double the
+// target rate), the component resolves `undefined` and every render test
+// crashes red.
 vi.mock('@chimera-engine/renderer/components/r3f', () => ({
     GameCanvas: ({
         camera,

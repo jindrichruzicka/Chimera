@@ -16,9 +16,8 @@ import type { ModelInstance } from '../../assets/ModelInstance.js';
  * `instance` is `null`. Requires a `<Canvas>`.
  *
  * DEFAULT priority is load-bearing: a non-zero `renderPriority` subscriber
- * takes over the canvas render — see the render-priority notes in
- * `FrameRateLimiter.tsx`'s header; that component owns priority 1 in engine
- * canvases.
+ * becomes responsible for calling `gl.render` — see the co-presenter notes in
+ * `FrameRateLimiter.tsx`'s header.
  *
  * On a `frameloop="demand"` canvas, `useFrame` only runs for frames something
  * else has already scheduled, so a caller starting an action from an event
