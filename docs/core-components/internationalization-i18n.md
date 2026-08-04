@@ -38,7 +38,7 @@ Three properties define the design:
 | --------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | **Layered override / merge**      | `resolveTranslation()` (`translation-bundle.ts`)                      | Game override → engine English → raw key; override wins, never deletes                 |
 | **Provider + context hook**       | `<I18nProvider>` + `useTranslate()`                                   | One provider high in the tree; consumers read a stable `t` by context                  |
-| **Registry indirection**          | `GameTranslations` via `LoadedRendererGameShell.translations`         | Game bundles reach the provider by prop, never a `games/*` import (Invariants #80/#94) |
+| **Registry indirection**          | `GameTranslations` via `LoadedRendererGameShell.translations`         | Game bundles reach the provider by prop, never an `apps/*` import (Invariants #80/#94) |
 | **Pure presentational + wrapper** | `<LanguageSelector>` (ui barrel) + `SettingsLanguageSelector` (shell) | Keeps the `components/ui` barrel side-effect-free (Invariant #96)                      |
 
 ---

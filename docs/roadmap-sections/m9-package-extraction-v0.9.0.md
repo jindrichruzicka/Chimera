@@ -55,7 +55,7 @@ As part of this absorption, **eliminate the `shared → simulation`/`networking`
 
 ## F59 — Extract `@chimera-engine/ai` `Appendix C.3, §3`
 
-Move `ai/` into a workspace package depending on `@chimera-engine/simulation`. Curate the `index.ts` barrel to expose the game-agnostic agent framework only (`PlayerAgent`, `AIBrain`, `CommandScheduler`), and enforce Invariants #106/#107 across the new package boundary — game-specific AI stays in the consumer's `games/<name>/ai/`, never inside the package.
+Move `ai/` into a workspace package depending on `@chimera-engine/simulation`. Curate the `index.ts` barrel to expose the game-agnostic agent framework only (`PlayerAgent`, `AIBrain`, `CommandScheduler`), and enforce Invariants #106/#107 across the new package boundary — game-specific AI stays in the consumer's `apps/<name>/ai/`, never inside the package.
 
 ---
 

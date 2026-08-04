@@ -15,7 +15,7 @@ tags: [settings, configuration, layered-merge, repository, electron]
 
 | Pattern                                | Where used                                      | Why                                                          |
 | -------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------ |
-| **Schema-per-game** (Zod)              | `games/<name>/settings-schema.ts`               | Compile-time type safety; runtime parse + strip unknowns     |
+| **Schema-per-game** (Zod)              | `apps/<name>/settings-schema.ts`                | Compile-time type safety; runtime parse + strip unknowns     |
 | **Layered defaults / Prototype merge** | `SettingsMerger.mergeAll()`                     | Engine → game → user; each layer only overrides what it sets |
 | **Repository**                         | `SettingsRepository` + `FileSettingsRepository` | Mirrors `SaveRepository`; atomic write; swappable for tests  |
 

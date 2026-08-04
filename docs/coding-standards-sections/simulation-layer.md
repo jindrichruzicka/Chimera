@@ -13,7 +13,7 @@ tags: [simulation, determinism, reducer, GameSnapshot, FixedPoint, rng, coding-s
 ## 7.1 Determinism — three inviolable rules
 
 1. **Action-driven clock only.** Time advances via `snapshot.tick`, never `Date.now()` or `performance.now()`.
-2. **Seeded RNG only.** All randomness flows through `ctx.rng` (xoshiro256\*\* seeded from `(snapshot.seed, snapshot.tick)`). No `Math.random()` anywhere in `simulation/` or `games/*/actions/`.
+2. **Seeded RNG only.** All randomness flows through `ctx.rng` (xoshiro256\*\* seeded from `(snapshot.seed, snapshot.tick)`). No `Math.random()` anywhere in `simulation/` or `apps/*/simulation/`.
 3. **Integer arithmetic only in `GameSnapshot`.** All snapshot fields that participate in equality or arithmetic must be `bigint` (Q32.32 fixed-point via `FixedPoint`) or plain `number` integers. No `float` fields in `GameSnapshot`.
 
 ## 7.2 Reducer purity

@@ -53,7 +53,7 @@ export interface GameResultBannerProps {
 ### Game Registration Pattern
 
 ```typescript
-// games/<game>/screens/index.ts
+// apps/<game>/screens/index.ts
 const PlayfieldScreen = React.lazy(() => import('./PlayfieldScreen'));
 const GameHud = React.lazy(() => import('./GameHud'));
 const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
@@ -75,16 +75,25 @@ export const gameScreenRegistry: GameScreenRegistry = {
 
 ### GameShell Resolution
 
+The renderer host never imports a game path to reach this registry (Invariants #80/#94 — the
+renderer `no-restricted-imports` zone blocks `apps/*`). A game's renderer contribution enters at
+the consumer-app composition root, which the build selects through the synthetic
+`chimera-game-registration` specifier (`renderer/next.config.ts` aliases it onto the game's
+`register.ts`); registration runs as an import side effect, and the game page resolves the active
+game through the registry (`renderer/game/rendererGameRegistry.ts`):
+
 ```typescript
-// renderer/app/game/page.tsx
-async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
-    switch (gameId) {
-        case '<game>':
-            return (await import('../../games/<game>/screens/index')).gameScreenRegistry;
-        default:
-            throw new Error(`No screen registry for game '${gameId}'`);
-    }
-}
+// apps/<game>/renderer/register.ts — the sole renderer-side module that names the game
+import { registerRendererGame, type RendererGameContribution } from '@chimera-engine/renderer/game';
+import { load<Game>RendererGame, load<Game>RendererGameShell } from './loaders.js';
+
+export const rendererContribution: RendererGameContribution = {
+    gameId: '<game>',
+    loadGame: load<Game>RendererGame,
+    loadShell: load<Game>RendererGameShell,
+};
+
+registerRendererGame(rendererContribution);
 ```
 
 ### Within-Scene Screen Navigation
@@ -142,7 +151,7 @@ stable across games.
 
 | #   | Rule                                                                                                                                                             |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #80 | `GameShell.tsx` must never import from any `games/*` path. `GameScreenRegistry` is the sole coupling point.                                                      |
+| #80 | `GameShell.tsx` must never import from any `apps/*` path. `GameScreenRegistry` is the sole coupling point.                                                       |
 | #81 | `GameScreenRegistry.playfield` is the only required slot. A game providing only `playfield` is fully valid.                                                      |
 | #82 | Within-scene panel navigation (`useNavigateToScreen`) is renderer-local state. It must never trigger an IPC call, advance `tick`, or dispatch an `EngineAction`. |
 
@@ -429,7 +438,7 @@ The executable contract is `renderer/components/ui/focusStyles.test.ts`.
 
 The gallery covers all six §4.35 primitive categories — **Actions**, **Overlays**, **Containers**, **Forms**, **Feedback**, and **Typography** — each rendered as a named section. The top-level category navigation is implemented with `Tabs` (from the Containers category), making the gallery the primary live demonstration of that component. The gallery also includes a **Toasts** dev tab for exercising the §4.30 `toastStore` and `ToastHost` stack.
 
-Boundary rules (invariants [#93](../executive-architecture/architecture-invariants.md) and [#94](../executive-architecture/architecture-invariants.md)): the gallery must not import from any `games/*` path, and must not directly import game token override CSS — overrides enter the cascade only as side-effects of game registry initialisation (§4.36).
+Boundary rules (invariants [#93](../executive-architecture/architecture-invariants.md) and [#94](../executive-architecture/architecture-invariants.md)): the gallery must not import from any `apps/*` path, and must not directly import game token override CSS — overrides enter the cascade only as side-effects of game registry initialisation (§4.36).
 
 ### Design Token Naming: `--ch-<category>-<variant>`
 
@@ -657,14 +666,14 @@ itself.
 Games inject a CSS file as a side-effect import:
 
 ```css
-/* games/<game>/styles/tokens-override.css */
+/* apps/<game>/styles/tokens-override.css */
 --ch-color-surface: #0d1117;
 --ch-color-accent: #58a6ff;
 --ch-radius-md: 2px;
 ```
 
 ```typescript
-// games/<game>/screens/index.ts
+// apps/<game>/screens/index.ts
 import './styles/tokens-override.css'; // side-effect; redefines tokens for this game
 ```
 
@@ -674,7 +683,7 @@ Font-family tokens may reference game-contributed font faces only after the game
 faces through `LoadedRendererGameShell.fonts` (§4.37.7). The font files must be self-hosted local
 assets, not runtime Google Fonts URLs. For example, a game may declare local `.woff2` font files and
 then override `--ch-font-game` and `--ch-font-ui` to `'MyFont', serif` in
-`games/<game>/styles/tokens-override.css`.
+`apps/<game>/styles/tokens-override.css`.
 
 ### Motion & Animation
 
@@ -798,19 +807,13 @@ renderer/
 
 ### Registry-Level Split
 
-```typescript
-// renderer/app/game/page.tsx
-async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
-    switch (gameId) {
-        case '<game>':
-            return (await import('../../games/<game>/screens/index')).gameScreenRegistry;
-        default:
-            throw new Error(`No screen registry for game '${gameId}'`);
-    }
-}
-```
+The registry-level split lives in the composition root's contribution loaders: `loadGame`/`loadShell`
+keep the heavy screen/shell/font modules behind dynamic `import()` (e.g. `import('../screens/index.js')`
+in `apps/<game>/renderer/loaders.ts`), and the game-agnostic host invokes those loaders only after
+the game ID is known — registration stays a cheap, eager side effect while those bundles remain
+code-split, and the renderer host still never names a game path (Invariants #80/#94).
 
-### Screen-Level Split (inside `games/<name>/screens/index.ts`)
+### Screen-Level Split (inside `apps/<name>/screens/index.ts`)
 
 ```typescript
 const PlayfieldScreen = React.lazy(() => import('./PlayfieldScreen'));
@@ -833,10 +836,10 @@ return (
 
 ### Invariants
 
-| #   | Rule                                                                                                                                                  |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #87 | Every screen component exported from `games/<name>/screens/index.ts` must be wrapped in `React.lazy()`. Eager static imports defeat the bundle split. |
-| #88 | `GameShell` wraps every active screen in `<React.Suspense>`. No game screen may assume it renders without a Suspense ancestor.                        |
+| #   | Rule                                                                                                                                                 |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #87 | Every screen component exported from `apps/<name>/screens/index.ts` must be wrapped in `React.lazy()`. Eager static imports defeat the bundle split. |
+| #88 | `GameShell` wraps every active screen in `<React.Suspense>`. No game screen may assume it renders without a Suspense ancestor.                       |
 
 ---
 

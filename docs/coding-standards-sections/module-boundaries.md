@@ -15,27 +15,28 @@ These boundaries are hard constraints. Violations are **BLOCK** findings at revi
 
 ## Boundary Table
 
-| Package                      | May import from                                                                                                     | Must NOT import from                                              |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `simulation/`                | `shared/`                                                                                                           | `renderer/`, `electron/`, `games/*`, any DOM API                  |
-| `ai/`                        | `simulation/`, `shared/`                                                                                            | `renderer/`, `electron/`, `games/*`, any DOM API                  |
-| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals                                                 | `electron/main/`, `ai/engine/` (except IPC types), `games/*/data` |
-| `games/<name>/`              | `simulation/`, `ai/`, `shared/`, own files; renderer surfaces may import what Invariant #96 permits, per file group | Other `games/` directories; every other renderer path             |
-| `electron/main/`             | All packages                                                                                                        | DOM APIs                                                          |
-| `networking/provider/local/` | Only within `local/`                                                                                                | Engine or renderer internals                                      |
+| Package                      | May import from                                                                                                     | Must NOT import from                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `simulation/`                | `shared/`                                                                                                           | `renderer/`, `electron/`, `apps/*`, any DOM API                                             |
+| `ai/`                        | `simulation/`, `shared/`                                                                                            | `renderer/`, `electron/`, `apps/*`, any DOM API                                             |
+| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals                                                 | `electron/main/`, `ai/engine/` (except IPC types), `apps/*/data`                            |
+| `apps/<name>/`               | `simulation/`, `ai/`, `shared/`, own files; renderer surfaces may import what Invariant #96 permits, per file group | Other `apps/` directories; every other renderer path                                        |
+| `electron/main/`             | All engine packages                                                                                                 | DOM APIs; `apps/*` game code (game wiring enters only at a consumer app's composition root) |
+| `networking/provider/local/` | Only within `local/`                                                                                                | Engine or renderer internals                                                                |
 
 ---
 
 ## ESLint Enforcement
 
 - `no-restricted-syntax` — blocks `Math.random`, `Date.now` and `performance.now` inside `simulation/`, `ai/` and each game's `actions/`, `simulation/` and `ai/`.
-- `no-restricted-imports` — blocks `simulation/` from importing `renderer/` or `games/`.
+- `no-restricted-imports` — blocks `simulation/` from importing `renderer/` or `apps/*`.
 - `chimera/no-fromfloat-in-simulation` — blocks `FixedPoint.fromFloat()` inside hot simulation paths (Invariant #76).
 - `chimera/no-game-renderer-internals` — the executable form of Invariant #96, which states per file group what a games package may reach in renderer. Everything outside those groups is blocked.
 - `chimera/no-hardcoded-design-values` — blocks colour and size literals in renderer UI and game screens; design values flow through `var(--ch-*)` tokens (Invariants #86, #91).
 - `chimera/no-unknown-token-overrides` — blocks a game token override that redefines a token the engine does not declare (Invariant #85).
 - `chimera/no-shell-games-import` — blocks the engine shell pages and `GameShell`/`InGameMenuHost` from importing any game path (Invariants #80, #93, #94).
-- `chimera/no-main-games-import` / `chimera/no-main-provider-internals` — keep `electron/main` orchestration agnostic of which game exists and of which networking provider is wired (Invariant #47).
+- `chimera/no-main-games-import` — keeps `electron/main` orchestration agnostic of which game exists (the `electron/main/` boundary-table row above; game wiring enters only at a consumer app's composition root such as `apps/<name>/electron/main.ts`).
+- `chimera/no-main-provider-internals` — keeps `electron/main` orchestration agnostic of which networking provider is wired (Invariant #47).
 
 Any `// eslint-disable` bypass requires a `@chimera-review: <reason>` comment on the preceding line. Only one of these rules enforces that itself: `chimera/no-fromfloat-in-simulation` reports a bare disable of itself as a second error. Everywhere else the requirement is a review obligation with no automated check — nothing greps for unaccompanied disables.
 

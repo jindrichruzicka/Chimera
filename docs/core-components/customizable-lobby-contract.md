@@ -184,8 +184,8 @@ package into the shell or host:
 
 ### Tactics example
 
-[`games/tactics/lobby/lobby-setup.ts`](../../games/tactics/lobby/lobby-setup.ts) declares the descriptor;
-[`games/tactics/shell/TacticsLobbyScreen.tsx`](../../games/tactics/shell/TacticsLobbyScreen.tsx) renders it.
+[`apps/tactics/lobby/lobby-setup.ts`](../../apps/tactics/lobby/lobby-setup.ts) declares the descriptor;
+[`apps/tactics/shell/TacticsLobbyScreen.tsx`](../../apps/tactics/shell/TacticsLobbyScreen.tsx) renders it.
 
 ```ts
 export const tacticsLobbySetup: GameLobbySetup = {
@@ -233,7 +233,7 @@ renderer/
 └── app/lobby/
     ├── page.tsx                     # Engine lobby route; renders gameShell.LobbyScreen when present
     └── useLobbyApi.ts               # setMatchSetting / setPlayerAttribute → IPC
-games/
+apps/
 └── tactics/
     ├── lobby/lobby-setup.ts         # tacticsLobbySetup descriptor + colour palettes
     └── shell/TacticsLobbyScreen.tsx # First LobbyScreen consumer (host board colour + own-seat unit colour)

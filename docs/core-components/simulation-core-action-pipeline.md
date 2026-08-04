@@ -346,7 +346,7 @@ Floats are permitted inside the renderer (camera, animation, UI) but must never 
 ### Full Implementation Example
 
 ```typescript
-// games/<game>/actions/MoveEntityAction.ts
+// apps/<game>/simulation/actions/MoveEntityAction.ts
 import { ActionDefinition, ValidationResult } from '@chimera-engine/simulation/engine';
 import { MyGameSnapshot } from '../state/GameSnapshot';
 

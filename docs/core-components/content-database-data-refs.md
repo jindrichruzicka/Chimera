@@ -85,7 +85,7 @@ interface DataObject {
 **Preferred: one directory per collection, one file per item** (easy to diff/review in git)
 
 ```
-games/<game>/data/
+apps/<game>/data/
 ├── damage-types/
 │   ├── fire.json
 │   └── physical.json
@@ -97,7 +97,7 @@ games/<game>/data/
 **Alternative: flat array file** (for small collections)
 
 ```
-games/<game>/data/
+apps/<game>/data/
 └── abilities.json   ← [{ "id": "taunt", ... }, { "id": "rally", ... }]
 ```
 
@@ -190,8 +190,8 @@ interface ContentLoadOptions {
 ```typescript
 const db = await createContentLoader().load(
     [
-        { type: 'directory', path: 'games/<game>/data' }, // base game
-        { type: 'directory', path: 'games/<game>-expansion/data' }, // expansion
+        { type: 'directory', path: 'apps/<game>/data' }, // base game
+        { type: 'directory', path: 'apps/<game>-expansion/data' }, // expansion
     ],
     { schemas: { 'damage-types': DamageTypeSchema, units: UnitSchema } },
 );

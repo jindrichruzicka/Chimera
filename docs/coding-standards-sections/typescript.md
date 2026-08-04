@@ -19,15 +19,15 @@ tags: [typescript, strict, formatting, imports, branded-types, readonly, coding-
 
 ## 1.2 Forbidden patterns
 
-| Pattern                                                         | Why forbidden                   | Allowed alternative                                                                |
-| --------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
-| `any` (explicit or inferred)                                    | Destroys type safety end-to-end | Use `unknown` and narrow at runtime                                                |
-| `@ts-ignore`                                                    | Silently hides errors           | Fix the type; if impossible add `@ts-expect-error` with a mandatory comment        |
-| `@ts-expect-error` without comment                              | Hides the rationale             | `// @ts-expect-error: <reason why this specific cast is safe>`                     |
-| `as unknown as X` without comment                               | Unsafe double-cast              | Fix the type; if bridging generated code, comment with `@chimera-review: <reason>` |
-| `Object.assign(existingObject, ...)` in simulation              | Mutates state                   | Return a new object: `{ ...existing, field: newValue }`                            |
-| `Math.random()` anywhere in `simulation/` or `games/*/actions/` | Breaks determinism              | Use `ctx.rng` from `ReduceContext`                                                 |
-| `Date.now()` / `performance.now()` in `simulation/`             | Breaks determinism              | Use `snapshot.tick` for all simulation time                                        |
+| Pattern                                                           | Why forbidden                   | Allowed alternative                                                                |
+| ----------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
+| `any` (explicit or inferred)                                      | Destroys type safety end-to-end | Use `unknown` and narrow at runtime                                                |
+| `@ts-ignore`                                                      | Silently hides errors           | Fix the type; if impossible add `@ts-expect-error` with a mandatory comment        |
+| `@ts-expect-error` without comment                                | Hides the rationale             | `// @ts-expect-error: <reason why this specific cast is safe>`                     |
+| `as unknown as X` without comment                                 | Unsafe double-cast              | Fix the type; if bridging generated code, comment with `@chimera-review: <reason>` |
+| `Object.assign(existingObject, ...)` in simulation                | Mutates state                   | Return a new object: `{ ...existing, field: newValue }`                            |
+| `Math.random()` anywhere in `simulation/` or `apps/*/simulation/` | Breaks determinism              | Use `ctx.rng` from `ReduceContext`                                                 |
+| `Date.now()` / `performance.now()` in `simulation/`               | Breaks determinism              | Use `snapshot.tick` for all simulation time                                        |
 
 ## 1.3 Data types
 

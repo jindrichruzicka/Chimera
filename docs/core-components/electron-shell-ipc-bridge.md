@@ -265,7 +265,7 @@ interface ChimeraExtensions {}
 A game (or engine module) extends the surface:
 
 ```typescript
-// games/<game>/preload-extension.ts
+// apps/<game>/preload-extension.ts
 import type {} from '@chimera-engine/core/electron/preload/api-types';
 
 declare module '@chimera-engine/core/electron/preload/api-types' {
@@ -302,7 +302,7 @@ export function buildExtensionsApi(): ChimeraExtensions {
 Extensions must be registered **before** `api.ts` is evaluated. In a game's preload entry:
 
 ```typescript
-// games/<game>/preload.ts
+// apps/<game>/preload.ts
 import './preload-extension'; // FIRST — register extension
 import '@chimera-engine/core/electron/preload/api.js'; // SECOND — build + expose
 ```

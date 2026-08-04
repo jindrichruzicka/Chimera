@@ -157,10 +157,10 @@ CSS, because the override is a side-effect import loaded at game registry initia
 (§4.35):
 
 ```typescript
-// games/<game>/styles/register-token-overrides.tsx
+// apps/<game>/styles/register-token-overrides.tsx
 import './tokens-override.css'; // Re-declares --ch-* tokens for the game's visual language
 
-// games/<game>/screens/index.tsx and renderer-owned shell loaders import the registration module.
+// apps/<game>/screens/index.tsx and renderer-owned shell loaders import the registration module.
 export const gameScreenRegistry: GameScreenRegistry = { ... };
 ```
 
@@ -255,7 +255,7 @@ the engine simply supplies the default menu, settings, lobby, and background.
 
 Games customize the top-level main menu by contributing a declarative
 `GameMainMenuDefinition` through their renderer shell registration. The shared contract lives in
-`shared/game-shell-contract.ts`, so `renderer/` and `games/*` can both depend on the type without
+`shared/game-shell-contract.ts`, so `renderer/` and `apps/*` can both depend on the type without
 creating a renderer-to-game static import.
 
 ```typescript
@@ -382,7 +382,7 @@ owns its button list; only omitted field-level defaults from `GameMainMenuLayout
 ## 4.37.7 Game Font Contributions
 
 Games may contribute self-hosted font faces through `LoadedRendererGameShell.fonts`. Font
-declarations are pure shared data, so game packages declare them in `games/<name>/shell/fonts.ts`
+declarations are pure shared data, so game packages declare them in `apps/<name>/shell/fonts.ts`
 using the `GameFontFace` type from `shared/game-shell-contract.ts`; the renderer registry imports
 that data while assembling the game shell bundle.
 
@@ -400,9 +400,9 @@ export interface GameFontFace {
 `<game>/fonts/MyFont-Regular.woff2`. Runtime Google Fonts URLs are forbidden. Font files are
 committed only as game-owned assets:
 
-| Purpose                 | Path example                                     |
-| ----------------------- | ------------------------------------------------ |
-| Game-owned source asset | `games/<game>/assets/fonts/MyFont-Regular.woff2` |
+| Purpose                 | Path example                                    |
+| ----------------------- | ----------------------------------------------- |
+| Game-owned source asset | `apps/<game>/assets/fonts/MyFont-Regular.woff2` |
 
 `renderer/game/GameFontLoader.ts` resolves the local `src` through the app protocol as
 `chimera://renderer/game-assets/<game>/fonts/MyFont-Regular.woff2`, loads it with the browser
@@ -447,7 +447,7 @@ contributing a registry through their renderer shell module. The implementation 
 `GameMenuCommand` registry as a `menuCommands` object keyed by branded `GameMenuCommandId` values:
 
 ```typescript
-// games/<name>/shell/main-menu.ts
+// apps/<name>/shell/main-menu.ts
 export const gameMenuCommands: Partial<Record<GameMenuCommandId, () => void>> = {
     ['game:start-tutorial' as GameMenuCommandId]: () => {
         // renderer-local command
@@ -510,7 +510,7 @@ readability.
 
 Games customize which settings appear on the engine-owned settings page by contributing a
 declarative `GameSettingsPageDefinition` through their renderer shell registration. The shared
-contract lives in `shared/game-shell-contract.ts`, so `renderer/` and `games/*` can both depend on
+contract lives in `shared/game-shell-contract.ts`, so `renderer/` and `apps/*` can both depend on
 the type without creating a renderer-to-game static import.
 
 The settings page remains renderer-owned. Games declare tabs, sections, fields, labels, and control
@@ -630,9 +630,9 @@ When settings is opened with explicit URL game context, the Close action returns
 
 ### Declaring a Game Settings Page
 
-A game declares its settings page in `games/<name>/shell/settings-page.ts` and exposes it through
+A game declares its settings page in `apps/<name>/shell/settings-page.ts` and exposes it through
 the renderer game registry as `LoadedRendererGame.shell.settings`. A game's definition (e.g.
-`games/<game>/shell/settings-page.ts`) might contribute five tabs: Audio, Display, Gameplay, AI,
+`apps/<game>/shell/settings-page.ts`) might contribute five tabs: Audio, Display, Gameplay, AI,
 and Controls.
 
 ```typescript
@@ -690,7 +690,7 @@ shared/
 └── game-shell-contract.ts     # GameMainMenuDefinition, GameSettingsPageDefinition, shell-page contracts
 renderer/
 ├── game/
-│   ├── rendererGameRegistry.ts # Dynamic game shell loading; no shell-page games/* import
+│   ├── rendererGameRegistry.ts # Dynamic game shell loading; no shell-page apps/* import
 │   ├── gameShellAssetSource.ts # Shared local-asset-ref resolver for shell fonts/images/cursors
 │   ├── GameFontLoader.ts       # Loads shell.fonts via FontFace (§4.37.7)
 │   ├── GameImageWarmup.ts      # Fetches + decodes shell.preloadImages (§4.37.13)
@@ -727,7 +727,7 @@ renderer/
     │   └── page.tsx            # Chrome-less <Modal size="lg" fixedHeight>; footer Reset (danger, dismiss:false) + Close
     └── saves/
         └── page.tsx            # Chrome-less <Modal size="lg">; footer Close; nested delete-confirm Modal
-games/
+apps/
 └── <game>/
     └── shell/
     ├── ShellBackground.tsx # Optional shellBackground component contribution
@@ -954,12 +954,12 @@ never silently overrides an engine built-in.
 | #34  | `SettingsManager.registerSchema()` must be called for a game before `getSettings()` or `updateSettings()` is called. Calling `getSettings` for an unregistered `gameId` returns only engine defaults and logs a warning; a settings page definition selects presentation fields only.                                                                                                                                                                                                                               |
 | #35  | The engine top-level namespaces (`audio`, `display`, `gameplay`, `controls`) must reach `registerSchema()` intact — present, an object, owning every engine sub-key; shadowed, partial and missing namespaces are all rejected. `game-field.path` entries must be backed by the registered game settings schema; presentation metadata never admits unregistered settings keys.                                                                                                                                     |
 | #36  | Settings remain outside simulation state and the `ActionPipeline`. The settings page edits values through the renderer settings store and `window.__chimera.settings`; any game parameter that affects simulation outcomes belongs in match config transmitted during lobby setup.                                                                                                                                                                                                                                  |
-| #80  | `GameShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code. Shell-page customization follows the same registry-indirection principle through renderer registry loaders.                                                                                                                                                                                                                    |
+| #80  | `GameShell.tsx` must never import from any `apps/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code. Shell-page customization follows the same registry-indirection principle through renderer registry loaders.                                                                                                                                                                                                                     |
 | #85  | Game token override files may only redefine tokens declared in `renderer/styles/tokens.css`. Introducing new `--ch-*` custom property names in a game's override file is a module-boundary violation.                                                                                                                                                                                                                                                                                                               |
 | #91  | Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`.                                                                                                                                                                                                                                                                                                      |
 | #92  | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.                                                                                                                                                                                                                                                                                                                                                    |
 | #93  | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).                                                                                                                                                                                                                                                                                                                                            |
-| #94  | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.                                                                                                                                                                                                                                                                                                                  |
+| #94  | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `apps/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.                                                                                                                                                                                                                                                                                                                   |
 | #96  | Game renderer surfaces may import the shared renderer library only through its public barrels (enumerated by Invariant #96 itself — `@chimera-engine/renderer/components/{ui,chat,r3f}` plus the top-level `@chimera-engine/renderer/{game,i18n,audio,assets}`); shell pages continue to receive game customization through renderer registry indirection.                                                                                                                                                          |
 | #99  | Lobby match settings are host-authored; per-player attributes are owner-authored. `LobbyManager.setMatchSetting()` rejects a non-hosted session; `setPlayerAttribute()` rejects any seat but the caller's own and (for a joined client) forwards the own-seat intent to the host, which applies it to the connection-derived sender seat. The two IPC channels are the sole write path; changes broadcast to every peer. (§4.37.12)                                                                                 |
 | #100 | Game `LobbyScreen` components perform no privileged writes directly — they call the engine-provided `setMatchSetting` / `setPlayerAttribute` props (routed renderer API → IPC → `LobbyManager`) and never write `lobbyStore`, call `LobbyManager`, or open IPC channels themselves. (§4.37.12)                                                                                                                                                                                                                      |
