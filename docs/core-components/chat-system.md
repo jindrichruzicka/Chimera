@@ -20,7 +20,7 @@ A bounded, rate-limited chat layer for in-match communication. All messages rout
 ## Core Types
 
 ```typescript
-// shared/chat.ts
+// simulation/foundation/chat.ts
 
 export type ChatScope =
     | { kind: 'lobby' }

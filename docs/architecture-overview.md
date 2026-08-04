@@ -292,7 +292,7 @@ Once that bar is met, the project transitions to a **published package hierarchy
 ### C.3 Target Package Layout
 
 ```
-@chimera-engine/simulation     ←  simulation/ + shared/          (pure TS, zero runtime deps)
+@chimera-engine/simulation     ←  simulation/                     (pure TS, no runtime deps on React, DOM, or networking — Invariant #1; absorbed the former shared/ contracts as simulation/foundation/)
 @chimera-engine/ai             ←  ai/                             (depends on @chimera-engine/simulation)
 @chimera-engine/networking     ←  networking/                     (depends on @chimera-engine/simulation)
 @chimera-engine/renderer       ←  renderer/                       (depends on @chimera-engine/simulation, React, Three.js)

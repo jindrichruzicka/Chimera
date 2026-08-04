@@ -37,7 +37,7 @@ Implement `lobbyStore` (Zustand). Build `lobby/page.tsx` with host / join / leav
 
 ## F13 — WebSocket Message Protocol `§4.3`
 
-Implement the full typed wire protocol (`ClientMessage`, `ServerMessage`) in `shared/messages.ts`. Add action checksums (CRC32) and `PING`/`PONG` round-trip latency measurement. Wire `SNAPSHOT` broadcast through `StateBroadcaster` → `HostTransport.sendSnapshot()`.
+Implement the full typed wire protocol (`ClientMessage`, `ServerMessage`) in `simulation/foundation/messages.ts`. Add action checksums (CRC32) and `PING`/`PONG` round-trip latency measurement. Wire `SNAPSHOT` broadcast through `StateBroadcaster` → `HostTransport.sendSnapshot()`.
 
 ---
 

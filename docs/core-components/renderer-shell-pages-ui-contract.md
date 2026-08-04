@@ -255,8 +255,8 @@ the engine simply supplies the default menu, settings, lobby, and background.
 
 Games customize the top-level main menu by contributing a declarative
 `GameMainMenuDefinition` through their renderer shell registration. The shared contract lives in
-`shared/game-shell-contract.ts`, so `renderer/` and `apps/*` can both depend on the type without
-creating a renderer-to-game static import.
+`simulation/foundation/game-shell-contract.ts`, so `renderer/` and `apps/*` can both depend on the
+type without creating a renderer-to-game static import.
 
 ```typescript
 export type GameMenuCommandId = string & { readonly __brand: 'GameMenuCommandId' };
@@ -383,7 +383,7 @@ owns its button list; only omitted field-level defaults from `GameMainMenuLayout
 
 Games may contribute self-hosted font faces through `LoadedRendererGameShell.fonts`. Font
 declarations are pure shared data, so game packages declare them in `apps/<name>/shell/fonts.ts`
-using the `GameFontFace` type from `shared/game-shell-contract.ts`; the renderer registry imports
+using the `GameFontFace` type from `simulation/foundation/game-shell-contract.ts`; the renderer registry imports
 that data while assembling the game shell bundle.
 
 ```typescript
@@ -476,7 +476,7 @@ silently missing button.
 
 Games may contribute a renderer-owned React component for the shell background through
 `LoadedRendererGameShell.shellBackground`. This is intentionally **not** part of
-`shared/game-shell-contract.ts`: it is a renderer component slot, comparable to `GameScreenRegistry`
+`simulation/foundation/game-shell-contract.ts`: it is a renderer component slot, comparable to `GameScreenRegistry`
 presentation slots, and is not serializable data.
 
 ```typescript
@@ -510,8 +510,8 @@ readability.
 
 Games customize which settings appear on the engine-owned settings page by contributing a
 declarative `GameSettingsPageDefinition` through their renderer shell registration. The shared
-contract lives in `shared/game-shell-contract.ts`, so `renderer/` and `apps/*` can both depend on
-the type without creating a renderer-to-game static import.
+contract lives in `simulation/foundation/game-shell-contract.ts`, so `renderer/` and `apps/*` can
+both depend on the type without creating a renderer-to-game static import.
 
 The settings page remains renderer-owned. Games declare tabs, sections, fields, labels, and control
 metadata; they do not contribute React components, import renderer UI primitives, or bypass the
@@ -636,7 +636,7 @@ the renderer game registry as `LoadedRendererGame.shell.settings`. A game's defi
 and Controls.
 
 ```typescript
-import type { GameSettingsPageDefinition } from '@chimera-engine/shared/game-shell-contract.js';
+import type { GameSettingsPageDefinition } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 
 export const gameSettingsPageDefinition: GameSettingsPageDefinition = {
     tabs: [
@@ -686,7 +686,7 @@ export interface LoadedRendererGameShell {
 ## 4.37.11 Module Tree
 
 ```
-shared/
+simulation/foundation/
 └── game-shell-contract.ts     # GameMainMenuDefinition, GameSettingsPageDefinition, shell-page contracts
 renderer/
 ├── game/

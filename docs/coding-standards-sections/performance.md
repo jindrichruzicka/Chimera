@@ -35,7 +35,7 @@ tags: [performance, simulation, IPC, renderer, memory, useMemo, selectors, codin
 
 ## 13.5 Enforcement (F49)
 
-The §13.1 and §13.4 budgets are constants in [`shared/perf-budget.ts`](../../shared/perf-budget.ts) (`TICK_BUDGET_MS`, `RENDERER_HEAP_BUDGET_MB`, `MAIN_HEAP_BUDGET_MB`) and are exercised by:
+The §13.1 and §13.4 budgets are constants in [`simulation/foundation/perf-budget.ts`](../../simulation/foundation/perf-budget.ts) (`TICK_BUDGET_MS`, `RENDERER_HEAP_BUDGET_MB`, `MAIN_HEAP_BUDGET_MB`) and are exercised by:
 
 - **Engine tick + heap** — [`apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts`](../../apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts) drives `ActionPipeline.process()` (the shared live + replay hot path, Invariants #42/#70) and a long-run heap-growth check. Run with `npm run test:perf` (sets `--expose-gc` so the host-heap leak gate activates). The benchmark lives with the tactics reference game whose fixtures it drives — keeping `electron/main` free of game-specific test coupling — and uses `performance.now`, which is ESLint-banned in `simulation/**`, `ai/**`, and `apps/*/actions/**` (Invariant #43) but permitted under `apps/*/__tests__/`.
 - **Renderer heap** — [`apps/tactics/e2e/tests/perf-renderer-heap.spec.ts`](../../apps/tactics/e2e/tests/perf-renderer-heap.spec.ts) (live match) and the replay-playback assertion in [`apps/tactics/e2e/tests/replay.spec.ts`](../../apps/tactics/e2e/tests/replay.spec.ts), both reading `performance.memory.usedJSHeapSize` the same way `perfStore.readHeapMb()` does.

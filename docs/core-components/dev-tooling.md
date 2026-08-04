@@ -49,7 +49,7 @@ A game injects its own test data by committing fixtures next to its app:
     └── skirmish.json
 ```
 
-A scenario (validated by `DevScenarioSchema`, `shared/dev-fixture-contract.ts`):
+A scenario (validated by `DevScenarioSchema`, `simulation/foundation/dev-fixture-contract.ts`):
 
 ```json
 {
@@ -436,4 +436,4 @@ if (env['CHIMERA_DEV_HARNESS'] === '1' && isProductionRuntime(env, isPackaged)) 
 - [Multiplayer Provider](multiplayer-provider-websocket.md) — the `LobbyManager` operations the coordinator drives
 - [Player Profiles & Directory](player-profiles-directory.md) — seed profiles and `ProfileSanitizer.admit()`
 - [E2E Testing](../testing/e2e-testing-playwright.md) — the automated assertion layer above this harness
-- `shared/dev-fixture-contract.ts` — the scenario/announce schemas + pure helpers
+- `simulation/foundation/dev-fixture-contract.ts` — the scenario/announce schemas + pure helpers

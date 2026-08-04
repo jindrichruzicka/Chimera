@@ -20,7 +20,7 @@ This wire protocol is the **internal contract of `LocalWebSocketProvider`**. It 
 ## Message Types
 
 ```typescript
-// shared/messages.ts
+// simulation/foundation/messages.ts
 
 // Client → Server
 type ClientMessage =

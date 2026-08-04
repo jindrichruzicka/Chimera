@@ -47,9 +47,9 @@ is public, projected verbatim).
 
 ## Core Types
 
-Declared in [`shared/game-lobby-contract.ts`](../../shared/game-lobby-contract.ts) — a `shared/` module
-with type-only imports, so it carries zero runtime imports and is safe to load in both `main` and the
-renderer (mirroring `game-shell-contract.ts`).
+Declared in [`simulation/foundation/game-lobby-contract.ts`](../../simulation/foundation/game-lobby-contract.ts) — a
+foundation contract module with no cross-package imports (mechanical Check 13), so it is safe to load
+in both `main` and the renderer (mirroring `game-shell-contract.ts`).
 
 ```ts
 /** A single selectable value for a match setting or player attribute. */
@@ -98,7 +98,7 @@ export interface GameLobbyScreenProps {
 }
 ```
 
-The synced state lives on the wire types in [`shared/messages-schemas.ts`](../../shared/messages-schemas.ts):
+The synced state lives on the wire types in [`simulation/foundation/messages-schemas.ts`](../../simulation/foundation/messages-schemas.ts):
 `LobbyState.matchSettings?: Record<string, string>` and `LobbyPlayerEntry.attributes?: Record<string, string>`.
 Both are **optional and backward-compatible** — absent on older clients and on games with no lobby setup.
 
@@ -212,7 +212,7 @@ on `snapshot.setup`.
 ## Module Tree
 
 ```
-shared/
+simulation/foundation/
 ├── game-lobby-contract.ts      # GameLobbySetup, GameSetupConfig, GameLobbyScreenProps, LobbyFieldOption
 └── messages-schemas.ts         # LobbyState.matchSettings?, LobbyPlayerEntry.attributes?
 electron/

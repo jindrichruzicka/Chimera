@@ -75,7 +75,6 @@ export default defineConfig({
                 'ai/**/*.ts',
                 'networking/**/*.ts',
                 'renderer/**/*.{ts,tsx}',
-                'shared/**/*.ts',
             ],
             exclude: ['**/*.test.*', '**/__tests__/**', '**/index.ts'],
             thresholds: { lines: 80, functions: 80, branches: 75 },
