@@ -5,7 +5,6 @@
  *
  * Unit tests for the PerfProbe R3F GL stats collector (§4.16).
  * Architecture reference: §4.16 — Performance HUD
- * Task: issue #582 — Implement PerfProbe.tsx
  *
  * Rules:
  *  - Tests written first (red confirmed).
@@ -207,12 +206,85 @@ describe('PerfProbe — PerfFrameSample content', () => {
         const sample = await mountAndAdvance(5, 100, 32, 16);
         expect(sample.frameMsP95).toBeGreaterThanOrEqual(sample.frameMsAvg);
     });
+
+    // The probe counts ADVANCED frames, so the frame-time baseline moves with
+    // the cap; baseline rationale in `PerfProbe.tsx`'s header, and what the two
+    // rates mean end to end in
+    // renderer/components/r3f/__tests__/perf-hud-presented-rate.test.tsx.
+    it.each([
+        [30, 1000 / 30],
+        [60, 1000 / 60],
+        [120, 1000 / 120],
+    ])('reports the %i fps cadence as its frame-time baseline', async (fps, intervalMs) => {
+        const frames = Math.ceil(600 / intervalMs); // past the 500 ms publish gate
+        const sample = await mountAndAdvance(5, 100, frames, intervalMs);
+
+        expect(sample.frameMsAvg).toBeCloseTo(intervalMs, 1);
+        expect(sample.frameMsP95).toBeCloseTo(intervalMs, 1);
+    });
+
+    it('separates p95 from the mean when the cadence is uneven', async () => {
+        // A uniform cadence makes mean and p95 the same number, so neither
+        // assertion above can tell them apart. 18 frames at 25 ms then 2 at
+        // 40 ms: the publish gate is crossed on frame 20 (450 + 40 = 490 ms,
+        // then 530 ms), so the ring holds all 20. mean = 530/20 = 26.5, and
+        // nearest-rank p95 is index ceil(0.95·20)-1 = 18 of the ascending array
+        // — the first of the two long frames, 40 ms.
+        const store = createPerfStore();
+        let captured: PerfFrameSample | undefined;
+        vi.spyOn(store.getState(), 'setPerfFrame').mockImplementation((f) => {
+            captured = f;
+        });
+        const { usePerfStore } = await import('./perfStore');
+        const spy = vi.spyOn(usePerfStore, 'getState').mockReturnValue(store.getState());
+
+        const { PerfProbe } = await importPerfProbe();
+        const fiberState: FiberState = { gl: { info: { render: { calls: 5, triangles: 100 } } } };
+        render(<PerfProbe />);
+
+        advanceFrames(fiberState, 18, 25);
+        advanceFrames(fiberState, 2, 40);
+        spy.mockRestore();
+
+        if (!captured) throw new Error('setPerfFrame was not called');
+        expect(captured.frameMsAvg).toBeCloseTo(26.5, 1);
+        expect(captured.frameMsP95).toBeCloseTo(40, 1);
+        expect(captured.frameMsP95).toBeGreaterThan(captured.frameMsAvg);
+    });
+
+    // The rolling one-second window counts the frames it was called on, so the
+    // reported rate IS the advanced-frame rate. Separate mounts: the harness
+    // keeps every registered callback, so two probes in one test drive together.
+    it('reports ~30 fps from a 30 fps advanced cadence', async () => {
+        const sample = await mountAndAdvance(5, 100, 40, 1000 / 30);
+        expect(sample.fps).toBeGreaterThanOrEqual(28);
+        expect(sample.fps).toBeLessThanOrEqual(31);
+    });
+
+    it('reports ~120 fps from a 120 fps advanced cadence', async () => {
+        const sample = await mountAndAdvance(5, 100, 130, 1000 / 120);
+        expect(sample.fps).toBeGreaterThanOrEqual(118);
+        expect(sample.fps).toBeLessThanOrEqual(122);
+    });
+
+    it("drops a sample landing exactly on the window's left edge", async () => {
+        // The FPS window is half-open: a sample at exactly `accTime - 1000` is
+        // trimmed, one just inside is kept. 150 frames of 10 ms publish on
+        // frames 50, 100 and 150; at the third, accTime is 1500 and the edge is
+        // 500 — precisely frame 50's timestamp. Counting it would give 101.
+        const sample = await mountAndAdvance(5, 100, 150, 10);
+
+        expect(sample.fps).toBe(100);
+    });
 });
 
 describe('PerfProbe — rolling window caps', () => {
-    it('fps stays finite after many frames', async () => {
+    it('averages only the last 120 frame times, discarding older samples', async () => {
         const store = createPerfStore();
-        vi.spyOn(store.getState(), 'setPerfFrame').mockImplementation(() => undefined);
+        let captured: PerfFrameSample | undefined;
+        vi.spyOn(store.getState(), 'setPerfFrame').mockImplementation((f) => {
+            captured = f;
+        });
 
         const { usePerfStore } = await import('./perfStore');
         const spy = vi.spyOn(usePerfStore, 'getState').mockReturnValue(store.getState());
@@ -221,12 +293,17 @@ describe('PerfProbe — rolling window caps', () => {
         const fiberState: FiberState = { gl: { info: { render: { calls: 1, triangles: 100 } } } };
         render(<PerfProbe />);
 
-        // Run for many frames well over 120-frame cap
-        advanceFrames(fiberState, 300, 16);
+        // 200 frames at 50 ms then 120 at 10 ms. The last publish lands on fast
+        // frame 100 (500 ms of 10 ms frames), so a 120-sample ring holds those
+        // 100 fast frames plus the 20 slow ones just behind them:
+        // (100·10 + 20·50)/120 = 16.67 ms. The number moves in BOTH directions
+        // if the cap changes — a smaller ring drops the slow tail towards 10 ms,
+        // a larger one (or none) pulls in more 50 ms frames.
+        advanceFrames(fiberState, 200, 50);
+        advanceFrames(fiberState, 120, 10);
         spy.mockRestore();
 
-        // No assertions beyond "doesn't throw"; fps finiteness is checked via
-        // the next publish
-        expect(true).toBe(true);
+        if (!captured) throw new Error('setPerfFrame was not called');
+        expect(captured.frameMsAvg).toBeCloseTo(16.67, 1);
     });
 });

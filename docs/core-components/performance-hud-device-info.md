@@ -21,8 +21,8 @@ A lightweight floating overlay showing key performance numbers at a glance. Togg
 
 | Metric             | Source                                                                | Updated every  |
 | ------------------ | --------------------------------------------------------------------- | -------------- |
-| FPS                | `useFrame` frame count in rolling 1 s window                          | 500 ms         |
-| Frame time avg/p95 | R3F `useFrame` `deltaSeconds`; last 120 frames                        | 500 ms         |
+| FPS                | Advanced-frame count in rolling 1 s window                            | 500 ms         |
+| Frame time avg/p95 | R3F `useFrame` `deltaSeconds`; last 120 advanced frames               | 500 ms         |
 | Sim tick           | `PlayerSnapshot.tick` from `gameStore`                                | On snapshot    |
 | Actions/sec        | Rolling count of snapshots received in last 1 s                       | 500 ms         |
 | Action round-trip  | `sendAction()` stamp → matching `onSnapshot()` tick advance           | Per own-action |
@@ -32,6 +32,17 @@ A lightweight floating overlay showing key performance numbers at a glance. Togg
 | R3F triangles      | `gl.info.render.triangles`                                            | 500 ms         |
 
 Numbers display with colour markers — green / amber / red — against configurable thresholds (e.g. FPS < 30 = red).
+
+**Which frames FPS and frame time count.** The frames **its canvas advanced** — a property of the canvas, not of the setting. `useFrame` subscribers run from R3F's `update()`, so the reported rate follows whatever drives that canvas.
+
+On a canvas paced by both halves of the frame-rate cap — `<FrameRateLimiter />` **and** `frameloop={useEngineFrameloop()}`, which `GameCanvas` wires for you — those are the capped frames, and the numbers are the ones the player sees. On a 120 Hz display at `targetFps: 30` the HUD reports ~30, and a **healthy** `frameMsAvg` is the capped interval — ~33 ms, not the panel's ~8 ms. Reading ~33 ms as a regression from ~8 ms is the mistake to avoid: the baseline moves with the cap, by design.
+
+A game that mounts `PerfProbe` in its own `<Canvas>` and wires only one half gets one of two readings, neither of them the capped rate:
+
+- **Driver mounted, `frameloop` prop missing** — the canvas keeps R3F's own loop, so the HUD reports the **native** rate whatever `targetFps` says.
+- **`frameloop: 'never'` with no driver** — nothing ever advances the canvas, so the HUD reports a flat **zero** and the canvas is black.
+
+What the engine does about each of those — which one it detects and why the other cannot be — is recorded in `renderer/components/r3f/FrameRateLimiter.tsx`'s header. Uncapped (`targetFps: 0`), advanced and native frames are the same frames and the numbers coincide.
 
 ### Interface
 

@@ -10,12 +10,18 @@
  *     PerfProbe mount inside the RENDERED game canvas (metrics froze at 0 when
  *     the probe was only mounted in a GameCanvas nothing rendered; the board now
  *     renders through GameCanvas, which mounts the probe)
+ *   - Under `display.targetFps: 30` the canvas still PAINTS and the reported FPS
+ *     stays bounded. A capped canvas runs `frameloop: "never"` and renders
+ *     nothing until the engine's loop driver calls `advance()`, so the paint
+ *     guard is read from canvas PIXELS (the HUD's own metrics survive a dead
+ *     driver as a stale sample), and the FPS bound guards against the cap
+ *     silently not applying.
  *
  * `settings.gameplay.showPerfHud` is explicitly set to `false` before assertions
  * so the settings force-visible path cannot mask the F3 toggle behaviour.
  *
- * Invariant #65: PerfHud is a DOM overlay outside the R3F canvas; toggled via
- * perfStore.toggle() which is wired to the `engine:toggle-perf-hud` input action.
+ * PerfHud is a DOM overlay outside the R3F canvas, toggled via perfStore.toggle()
+ * which is wired to the `engine:toggle-perf-hud` input action.
  */
 
 import { test, expect } from '../fixtures/direct-game.fixture';
@@ -82,4 +88,94 @@ test.describe('Performance HUD', () => {
             .poll(async () => (await game.perfTriangles.textContent()) ?? '', { timeout: 30_000 })
             .not.toBe('Triangles: 0');
     });
+
+    test('paints and stays under the cap with display.targetFps 30', async ({ hostWindow }) => {
+        const game = new GamePage(hostWindow);
+        await expect(game.canvas).toBeVisible();
+
+        await hostWindow.evaluate(async (gameId: string) => {
+            await (globalThis as RendererGlobal).__chimera.settings.update(gameId, {
+                display: { targetFps: 30 },
+            });
+        }, GAME_ID);
+
+        // (a) The canvas paints, read from PIXELS rather than from the HUD. The
+        // HUD cannot serve as this guard: `targetFps` defaults to 60, so the
+        // canvas was already `frameloop: 'never'` at boot and perfStore holds a
+        // non-zero draw-call sample from before this test changed anything — a
+        // driver that died at the cap change would leave that stale sample in
+        // place and satisfy any assertion made against it.
+        await game.assertTacticsCanvasIsNonBlank();
+
+        // (b) …and it is still presenting NEW content after the cap change, not
+        // showing a frozen framebuffer: selecting a unit must alter the pixels.
+        // Inline rather than GamePage.assertOwnedSelectionFeedbackChangesCanvas():
+        // that helper settles on three requestAnimationFrame callbacks, which are
+        // NATIVE frames — under a 30 fps cap on a 120 Hz panel all three can
+        // elapse inside ONE advanced frame, leaving it comparing a framebuffer
+        // with itself. A bounded poll holds at any cap.
+        const beforeSelection = await game.tacticsCanvas.screenshot();
+        await game.selectOwnedPrimitive();
+        await expect
+            .poll(async () => (await game.tacticsCanvas.screenshot()).equals(beforeSelection), {
+                timeout: 15_000,
+            })
+            .toBe(false);
+
+        await hostWindow.keyboard.press('F3');
+        await expect(game.perfHud).toBeVisible();
+
+        // (c) The reported rate is live and bounded. Form, not value: the CI
+        // runner is roughly 10x slower, so the floor is only "moving at all".
+        await expect
+            .poll(async () => readMetric(await game.perfFps.textContent()), { timeout: 30_000 })
+            .toBeGreaterThan(0);
+
+        // Converge first: right after the cap changes the 1 s window still holds
+        // 16.7 ms frames alongside 33.3 ms ones, so the reading decays through
+        // the ceiling rather than starting below it.
+        await expect
+            .poll(async () => readMetric(await game.perfFps.textContent()), { timeout: 30_000 })
+            .toBeLessThanOrEqual(FPS_CEILING_AT_30_CAP);
+
+        // Then settled, not first-satisfying: `fps` counts frames over
+        // accumulated delta, so one hitch inside the window can drop an
+        // uncapped reading under the ceiling for a single sample. Take three
+        // readings a publish interval apart and require every one of them.
+        const readings: number[] = [];
+        for (let i = 0; i < 3; i++) {
+            await hostWindow.waitForTimeout(PUBLISH_INTERVAL_MS + 200);
+            readings.push(readMetric(await game.perfFps.textContent()));
+        }
+        for (const fps of readings) {
+            expect(fps, `settled FPS readings: ${readings.join(', ')}`).toBeLessThanOrEqual(
+                FPS_CEILING_AT_30_CAP,
+            );
+        }
+    });
 });
+
+/**
+ * A 30 fps cap plus jitter. The contrast this bound has to survive is 30-vs-60:
+ * the canvas is never uncapped in this spec, since `display.targetFps` defaults
+ * to 60, so a cap that silently stopped applying reports the previous 60 and
+ * trips this — as does any panel-rate loop at 60/120/144.
+ */
+const FPS_CEILING_AT_30_CAP = 45;
+
+/**
+ * Mirrors `PUBLISH_INTERVAL_MS` in `renderer/components/shell/perf/PerfProbe.tsx`
+ * — an e2e cannot import renderer internals, so this is a copy. A new sample
+ * cannot appear faster than this.
+ */
+const PUBLISH_INTERVAL_MS = 500;
+
+/**
+ * Read the value of a `Label: 42` HUD row, anchored past the colon so a label
+ * containing digits (`Frame p95: 8.3 ms`) yields the value and not the label.
+ * Returns -1 when the row carries no number at all — an unmeasured `—` row.
+ */
+function readMetric(text: string | null): number {
+    const match = /:\s*(-?\d+(?:\.\d+)?)/.exec(text ?? '');
+    return match ? Number(match[1]) : -1;
+}

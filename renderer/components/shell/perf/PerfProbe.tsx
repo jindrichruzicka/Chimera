@@ -6,6 +6,23 @@
  *
  * Architecture reference: §4.16 — Performance HUD
  *
+ * Which frames it counts: the frames ITS CANVAS advanced. `useFrame` subscribers
+ * run from R3F's `update()`, so the reported rate follows whatever drives that
+ * canvas, not the panel and not the setting:
+ *  - On a canvas paced by `<FrameRateLimiter />` AND
+ *    `frameloop={useEngineFrameloop()}` — both halves, which `<GameCanvas>`
+ *    wires for you — those are the capped frames. On a 120 Hz panel at
+ *    `display.targetFps: 30`, `fps` reports ~30 and a HEALTHY `frameMsAvg` is
+ *    the capped interval, ~33 ms rather than the panel's ~8 ms.
+ *  - Driver mounted but no `frameloop` prop: the canvas keeps R3F's own loop and
+ *    this reports the NATIVE rate whatever `targetFps` says.
+ *  - `frameloop: 'never'` with no driver: nothing ever advances the canvas, so
+ *    this reports a flat zero and the canvas is black.
+ *  So the number is a property of the canvas, never of the setting alone. What
+ *  the engine does about each half-wiring is `FrameRateLimiter.tsx`'s header.
+ *  - Uncapped, advanced and native frames are the same frames and the numbers
+ *    coincide.
+ *
  * Rules:
  *  - Must be mounted inside a <Canvas> (uses useFrame).
  *  - Returns null — no DOM output.
@@ -14,7 +31,8 @@
  *  - Rolling frame-time array capped at 120 entries (§4.16).
  *  - FPS computed by counting frames within the last 1 s of accumulated delta.
  *  - p95 uses nearest-rank: index = ceil(0.95 * n) - 1.
- *  - All elapsed-time tracking is driven by R3F-provided deltaSeconds.
+ *  - All elapsed-time tracking is driven by R3F-provided deltaSeconds; under a
+ *    cap that delta is `timestamp - clock.elapsedTime` between advanced frames.
  *  - Publishes to the singleton usePerfStore.getState().setPerfFrame().
  *  - Module boundary: renderer-only; no simulation/, electron/, or ai/ imports.
  */
