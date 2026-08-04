@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -62,6 +62,13 @@ afterEach(() => {
     vi.clearAllMocks();
     useSettingsStore.setState({ activeGameId: null, settings: {} });
 });
+
+function setTargetFps(targetFps: 30 | 60 | 120 | 0): void {
+    useSettingsStore.setState({
+        activeGameId: 'game',
+        settings: { game: { display: { targetFps } } },
+    } as never);
+}
 
 describe('GameCanvas', () => {
     it.each(Object.entries(expectedPresets))(
@@ -137,14 +144,11 @@ describe('GameCanvas', () => {
         expect(perfProbeSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('mounts the FrameRateLimiter, which stays inert under this canvas frameloop', () => {
+    it('mounts the FrameRateLimiter, which stays inert under the stand-in root state', () => {
         // A real cap must be hydrated or `frameloop` is not the reason the
         // driver stays idle — an unhydrated store reads as uncapped and would
         // hold this test green under any frameloop.
-        useSettingsStore.setState({
-            activeGameId: 'game',
-            settings: { game: { display: { targetFps: 60 } } },
-        } as never);
+        setTargetFps(60);
 
         render(
             <GameCanvas camera="free">
@@ -155,9 +159,95 @@ describe('GameCanvas', () => {
         // PerfProbe is mocked out, so the limiter is the only child that reads
         // the R3F root state — dropping it from GameCanvas leaves this at zero.
         expect(fiberMock.useThree).toHaveBeenCalled();
-        // The stand-in frameloop is 'always', so the driver starts no chain.
+        // Canvas is a plain <div> here, so the prop below never reaches the
+        // stand-in root state; its frameloop stays 'always' and the driver
+        // starts no chain.
         expect(fiberMock.rootState.advance).not.toHaveBeenCalled();
     });
+
+    it.each([30, 60, 120] as const)('passes frameloop never at a %i fps cap', (targetFps) => {
+        setTargetFps(targetFps);
+
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        // The PROP, not an internal setFrameloop call: CanvasImpl re-applies
+        // `frameloop` on every Canvas render, clobbering any internally-set
+        // value.
+        expect(latestCanvasFrameloop()).toBe('never');
+    });
+
+    it('passes frameloop always at targetFps 0 so the uncapped path is untouched', () => {
+        setTargetFps(0);
+
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasFrameloop()).toBe('always');
+    });
+
+    it('passes frameloop always when settings are not yet hydrated', () => {
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasFrameloop()).toBe('always');
+    });
+
+    it.each([
+        [120, 0, 'never', 'always'],
+        [0, 30, 'always', 'never'],
+    ] as const)('flips the prop from %i to %i fps on re-render', (from, to, before, after) => {
+        setTargetFps(from);
+        const { rerender } = render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+        expect(latestCanvasFrameloop()).toBe(before);
+
+        setTargetFps(to);
+        rerender(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasFrameloop()).toBe(after);
+    });
+
+    it.each([
+        [120, 0, 'never', 'always'],
+        [0, 30, 'always', 'never'],
+    ] as const)(
+        'flips the prop from %i to %i fps on a store change alone',
+        (from, to, before, after) => {
+            setTargetFps(from);
+            render(
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>,
+            );
+            expect(latestCanvasFrameloop()).toBe(before);
+
+            // `settingsStore` changes with no re-render from above, so the prop
+            // must follow the store on its own or the cap silently stops
+            // matching the setting.
+            act(() => {
+                setTargetFps(to);
+            });
+
+            expect(latestCanvasFrameloop()).toBe(after);
+        },
+    );
 
     it('builds a perspective camera from an explicit config', () => {
         const config: PerspectiveCameraConfig = {
@@ -285,6 +375,15 @@ describe('GameCanvas', () => {
         expect(camera.matrixWorld.toArray()).toEqual(reference.matrixWorld.toArray());
     });
 });
+
+function latestCanvasFrameloop(): unknown {
+    const lastCall = vi.mocked(Canvas).mock.calls.at(-1);
+    if (!lastCall) {
+        throw new Error('Expected GameCanvas to render R3F Canvas');
+    }
+
+    return (lastCall[0] as { readonly frameloop?: unknown }).frameloop;
+}
 
 function latestCanvasCamera(): PerspectiveCamera | OrthographicCamera {
     const lastCall = vi.mocked(Canvas).mock.calls.at(-1);

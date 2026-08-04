@@ -6,6 +6,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { PerfProbe } from '../shell/perf/PerfProbe';
 import { FrameRateLimiter } from './FrameRateLimiter';
+import { useEngineFrameloop } from './useEngineFrameloop';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
 import type { Vector3Tuple } from '../../types/r3f-types.js';
 
@@ -84,9 +85,13 @@ const DEFAULT_UP: Vector3Tuple = [0, 1, 0];
 
 export function GameCanvas({ camera, children }: GameCanvasProps): React.ReactElement {
     const cameraInstance = React.useMemo(() => createCamera(camera), [camera]);
+    // Both halves of the frame-rate cap — the prop below and the
+    // <FrameRateLimiter /> driver inside; see selectTargetFps.ts for why they
+    // must read one cap.
+    const frameloop = useEngineFrameloop();
 
     return (
-        <Canvas camera={cameraInstance}>
+        <Canvas camera={cameraInstance} frameloop={frameloop}>
             <PerfProbe />
             <FrameRateLimiter />
             {children}

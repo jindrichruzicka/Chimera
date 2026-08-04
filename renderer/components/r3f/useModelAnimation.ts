@@ -22,8 +22,10 @@ import type { ModelInstance } from '../../assets/ModelInstance.js';
  * On a `frameloop="demand"` canvas, `useFrame` only runs for frames something
  * else has already scheduled, so a caller starting an action from an event
  * handler must also request a frame through R3F's frame-scheduling API; this
- * hook never requests frames itself. The engine `GameCanvas` sets no
- * `frameloop`, so it defaults to `"always"`.
+ * hook never requests frames itself. The engine `GameCanvas` passes the
+ * `frameloop` from `useEngineFrameloop()` — `'never'` whenever a frame-rate cap
+ * is active, which `display.targetFps` defaults to, and `'always'` when
+ * uncapped.
  *
  * The mixer is allocated in a commit-phase effect, never `useMemo`:
  * StrictMode double-invokes memo factories and discards one result, which

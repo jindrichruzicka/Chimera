@@ -240,7 +240,7 @@ chimera/
 │   │   │   ├── index.ts             # Public barrel
 │   │   │   └── ChatPanel.tsx        # In-match chat UI; see §4.29
 │   │   ├── ui/                      # PUBLIC UI primitive library (Tier 1); barrel: @chimera-engine/renderer/components/ui (includes <LanguageSelector>, §4.39)
-│   │   └── r3f/                     # Reusable R3F building blocks; PUBLIC barrel: @chimera-engine/renderer/components/r3f (curated: GameCanvas root + in-Canvas components and Canvas-bound hooks)
+│   │   └── r3f/                     # Reusable R3F building blocks; PUBLIC barrel: @chimera-engine/renderer/components/r3f (curated: GameCanvas root, what a game mounts inside its own <Canvas>, and the Canvas-free hook computing that canvas's frameloop prop)
 │   │       ├── index.ts             # Public barrel (exports GameCanvas, PerfProbe, FrameRateLimiter, useModelAnimation; remaining internals stay unexported)
 │   │       ├── GameCanvas.tsx       # <Canvas> root; declarative `camera` prop (preset | explicit config); mounts PerfProbe + FrameRateLimiter; see §4.22
 │   │       ├── InteractionBlocker.tsx  # Context provider; see §4.23

@@ -8,6 +8,9 @@
  *
  * The barrel also carries Canvas-bound hooks (`useModelAnimation`) alongside
  * its components — they call `useFrame`, so they too require a `<Canvas>`.
+ * `useEngineFrameloop` is the exception and is Canvas-FREE by contract: it
+ * computes the `frameloop` prop a `<Canvas>` is given, so it is called outside
+ * one.
  *
  * Keep this barrel curated: internals (InteractionBlocker, interactionContext,
  * shell/*) are NOT exported.
@@ -16,7 +19,9 @@
 export { PerfProbe } from '../shell/perf/PerfProbe';
 export { FrameRateLimiter } from './FrameRateLimiter';
 export { GameCanvas } from './GameCanvas';
+export { useEngineFrameloop } from './useEngineFrameloop';
 export { useModelAnimation } from './useModelAnimation';
+export type { EngineFrameloop } from './useEngineFrameloop';
 export type {
     CameraMode,
     CameraPreset,

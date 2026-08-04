@@ -17,9 +17,11 @@
  * How it works — this component PACES the loop, it never presents a frame:
  *  - It drives only a canvas whose `frameloop` is `'never'`, i.e. one that has
  *    stopped driving R3F's own `requestAnimationFrame` chain and renders nothing
- *    until something calls `advance()`. Under any other `frameloop`, and at
- *    `targetFps === 0`, the component is inert: no chain, no advance, R3F's
- *    default loop untouched.
+ *    until something calls `advance()`. `GameCanvas` computes that prop with
+ *    `useEngineFrameloop()`, so on the engine canvas both halves read one cap
+ *    (see `selectTargetFps.ts`); a game that owns its `<Canvas>` must wire both
+ *    itself. Under any other `frameloop`, and at `targetFps === 0`, this
+ *    component is inert: no chain, no advance, R3F's default loop untouched.
  *  - When it does drive, it owns that one chain: on every native frame it
  *    accumulates elapsed time and calls the store-bound `advance()` only once
  *    the frame interval is reached. Whoever presents — R3F's own automatic
@@ -45,11 +47,8 @@
 import { useThree } from '@react-three/fiber';
 import type { RootState } from '@react-three/fiber';
 import React from 'react';
-import type { EngineSettings } from '@chimera-engine/simulation/bridge/api-types.js';
-import { useSettingsStore, type SettingsStoreState } from '../../state/settingsStore.js';
-
-/** Fallback settings namespace when no game context is active (mirrors AudioBus). */
-const ENGINE_SETTINGS_GAME_ID = '__engine__';
+import { useSettingsStore } from '../../state/settingsStore.js';
+import { selectTargetFps } from './selectTargetFps.js';
 
 /**
  * Tolerance applied to the frame interval so that when the target equals the
@@ -59,19 +58,6 @@ const ENGINE_SETTINGS_GAME_ID = '__engine__';
  * lower cap on a high-refresh display.
  */
 const INTERVAL_TOLERANCE = 0.99;
-
-/** Read the active game's frame-rate cap; `0` (uncapped) when unavailable. */
-function selectTargetFps(state: SettingsStoreState): number {
-    const active = state.activeGameId === null ? undefined : state.settings[state.activeGameId];
-    // Cast so `.display` reads the declared EngineSettings key rather than
-    // ResolvedSettings' index signature (ResolvedSettings is index-typed, so a
-    // plain annotation is rejected — this mirrors AudioBus reading the store).
-    const resolved = (active ?? state.settings[ENGINE_SETTINGS_GAME_ID]) as
-        | EngineSettings
-        | undefined;
-    const targetFps = resolved?.display?.targetFps;
-    return typeof targetFps === 'number' ? targetFps : 0;
-}
 
 /**
  * The store-bound `advance`, which advances only THIS canvas root. The

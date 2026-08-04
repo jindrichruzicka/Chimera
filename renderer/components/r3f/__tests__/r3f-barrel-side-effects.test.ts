@@ -6,7 +6,7 @@
  * had none until `useModelAnimation` joined it.
  *
  * **What it drags in.** The graph reaches TWO stores (`perfStore` via
- * `PerfProbe`, `settingsStore` via `FrameRateLimiter`) — recorded decisions,
+ * `PerfProbe`, `settingsStore` via `selectTargetFps`) — recorded decisions,
  * not drift. `useModelAnimation`'s `ModelInstance` import is TYPE-ONLY, so
  * the clone seam (and with it `SkeletonUtils`) is deliberately NOT in this
  * graph: the model machinery ships from the `assets` barrel, and this one
@@ -36,6 +36,7 @@ import type {
     GameCanvasCamera,
     GameCanvasProps,
     Vector3Tuple,
+    EngineFrameloop,
 } from '../index';
 
 /** The barrel's TYPE surface — see the audio sibling for why each is named. */
@@ -49,6 +50,7 @@ interface BarrelTypeSurface {
     readonly camera: GameCanvasCamera;
     readonly props: GameCanvasProps;
     readonly vector: Vector3Tuple;
+    readonly frameloop: EngineFrameloop;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -104,16 +106,18 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'FrameRateLimiter',
             'GameCanvas',
             'PerfProbe',
+            'useEngineFrameloop',
             'useModelAnimation',
         ]);
     });
 
-    it('pulls in exactly seven modules — two stores, and no clone seam', async () => {
+    it('pulls in exactly nine modules — two stores, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The two
-        // store edges are real: PerfProbe publishes into perfStore and
-        // FrameRateLimiter reads settings.display.targetFps. useModelAnimation
+        // store edges are real: PerfProbe publishes into perfStore, and both
+        // FrameRateLimiter and useEngineFrameloop read settings.display.targetFps
+        // through the one shared selectTargetFps module. useModelAnimation
         // imports ModelInstance TYPE-ONLY, so no assets/ module — and no
         // SkeletonUtils — appears; the clone seam ships from the assets barrel.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
@@ -123,6 +127,8 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/FrameRateLimiter.tsx',
             'r3f/GameCanvas.tsx',
             'r3f/index.ts',
+            'r3f/selectTargetFps.ts',
+            'r3f/useEngineFrameloop.ts',
             'r3f/useModelAnimation.ts',
             'state/settingsStore.ts',
         ]);
@@ -140,6 +146,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         for (const [dir, moduleFile] of [
             ['..', 'GameCanvas.tsx'],
             ['..', 'FrameRateLimiter.tsx'],
+            ['..', 'useEngineFrameloop.ts'],
             ['..', 'useModelAnimation.ts'],
             ['../../shell/perf', 'PerfProbe.tsx'],
         ] as const) {
