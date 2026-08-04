@@ -199,9 +199,12 @@ function isPublicAssetsBarrelImport(source: string): boolean {
 
 // The engine GUI shell surface: the public `@chimera-engine/renderer/shell/*`
 // route + layout exports a consumer app's OWN Next host re-exports so the app owns its
-// renderer GUI while the game-agnostic shell ships from the package. Allowed ONLY from
-// the app's Next host route tree (apps/<name>/renderer/app/**), never from game logic
-// (screens/shell) or the composition root (register.ts/loaders.ts).
+// renderer GUI while the game-agnostic shell ships from the package, plus the shell
+// composition modules such a route may compose rather than re-export (e.g.
+// `shell/gameAssetSession`). The check is on the importing FILE, not on what the import
+// is used for: allowed ONLY from the app's Next host route tree
+// (apps/<name>/renderer/app/**), never from game logic (screens/shell) or the
+// composition root (register.ts/loaders.ts).
 function isPublicShellImport(source: string): boolean {
     return source.startsWith('@chimera-engine/renderer/shell/');
 }

@@ -9,8 +9,9 @@ import { audioClipEntry } from '@chimera-engine/simulation/content/audioManifest
 /**
  * The showcase rig (model seam adoption, §4.10): one self-contained `.glb` —
  * embedded buffer, no textures — holding a two-bone skinned quad with an
- * unlit magenta material. Both board showcase instances mount this ONE ref;
- * independence comes from `useModelInstance`'s per-mount clone.
+ * unlit magenta material. Both instances on the `/model-showcase/` test route
+ * mount this ONE ref; independence comes from `useModelInstance`'s per-mount
+ * clone. No gameplay screen mounts it.
  */
 export const tacticsModelRefs = {
     showcaseRig: 'tactics/models/showcase-rig.glb' as AssetRef<GLTFModelAsset>,
@@ -56,7 +57,8 @@ export const tacticsAssetManifest: AssetManifest = {
     gameId: 'tactics',
     entries: [
         // Deferred: the showcase rig loads on demand through useModelInstance
-        // when the board mounts, not during scene preload.
+        // when the /model-showcase/ route mounts, not during scene preload —
+        // no gameplay scene needs it.
         { ref: tacticsModelRefs.showcaseRig, kind: 'gltf-model', priority: 'deferred' },
         audioClipEntry({ ref: tacticsAudioRefs.step, priority: 'deferred' }),
         audioClipEntry({ ref: tacticsAudioRefs.swordHit, priority: 'deferred' }),

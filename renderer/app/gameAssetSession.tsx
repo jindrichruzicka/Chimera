@@ -1,0 +1,134 @@
+'use client';
+
+// renderer/app/gameAssetSession.tsx
+//
+// The one place a game-asset `AssetManager` is built for a renderer route.
+//
+// Every route that shows a game's assets needs the same manager: the default
+// implementation, pointed at the `chimera://renderer/game-assets` protocol
+// root, with the game's manifest registered at CONSTRUCTION (see
+// `createAssetManager`'s JSDoc for why a passive-effect registration is
+// provably too late for a child's first `load()`). `/game` and
+// `/replays/player` each open-coded that triple; this module owns it.
+//
+// Two entry points, split by who disposes:
+//
+//   * `useRendererGameAssetManager` builds and memoises, and disposes
+//     NOTHING. Its callers hand the manager to `<GameShell assetManager>`,
+//     and GameShell is the unique disposer of a match-level manager
+//     (Invariant #21). A dispose here would race that owner.
+//   * `GameAssetSession` is for a route with no GameShell above it — a
+//     game-owned page that renders assets outside a match. It builds,
+//     publishes and DISPOSES, because nothing else will.
+//
+// Architecture reference: §4.10 Asset Reference System.
+
+import React, { type ReactNode } from 'react';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+
+import { createAssetManager, type AssetManager } from '../assets/AssetManager';
+import { AssetManagerContext } from '../assets/AssetManagerContext.js';
+import { createRendererGameAssetResolver } from '../assets/AssetResolver';
+import type { LoadedRendererGame } from '../game/rendererGameRegistry';
+
+/**
+ * Builds a game-asset `AssetManager`, registering `assetManifest` when the
+ * game declares one.
+ *
+ * `assetManifest` is optional because `LoadedRendererGame.assetManifest` is:
+ * a game that declares no manifest still gets a manager, and every `load()`
+ * through it rejects `UnknownAssetManifestEntryError` — which is the correct
+ * outcome, and NOT the same as having no manager at all.
+ *
+ * Not memoised and not disposed — every caller is a React surface that owns
+ * one or both of those, so keeping this a plain function leaves the lifetime
+ * decision where it belongs.
+ */
+function createRendererGameAssetManager(assetManifest: AssetManifest | undefined): AssetManager {
+    // Manifest at construction — see createAssetManager's JSDoc.
+    return createAssetManager(createRendererGameAssetResolver(), assetManifest);
+}
+
+/**
+ * Memoises one game-asset `AssetManager` per loaded renderer game, for a route
+ * that passes it to `<GameShell assetManager>`.
+ *
+ * Keyed on the loaded GAME, not on its manifest: a game whose `assetManifest`
+ * is absent must still get a manager (see
+ * {@link createRendererGameAssetManager}), so a manifest-shaped `null` could
+ * not tell "no game yet" from "game with no manifest" — collapsing the two
+ * blanks the route.
+ *
+ * **Disposal is the injectee's**: GameShell disposes whatever manager it is
+ * handed (Invariant #21), so this hook must not — a surface with no GameShell
+ * wants {@link GameAssetSession} instead.
+ *
+ * This allocates in `useMemo`, which {@link GameAssetSession} deliberately does
+ * not, and the difference is ownership. StrictMode double-invokes the factory
+ * and discards one manager here too, and the allocate-and-dispose-in-effect
+ * shape that removes that orphan is technically open to this hook — but taking
+ * it would make the hook a disposer of the match-level manager, which
+ * Invariant #21 reserves to `GameShell`. The orphan is accepted instead, and it
+ * is inert: the discarded manager is never returned to the caller, so nothing
+ * can `load()` through it — it holds manifest entries and no asset, its
+ * `dispose()` would free nothing, and it is unreachable (hence collectable) the
+ * moment the factory returns.
+ */
+export function useRendererGameAssetManager(
+    loadedGame: Pick<LoadedRendererGame, 'assetManifest'> | null,
+): AssetManager | null {
+    return React.useMemo(
+        () =>
+            loadedGame === null ? null : createRendererGameAssetManager(loadedGame.assetManifest),
+        [loadedGame],
+    );
+}
+
+export interface GameAssetSessionProps {
+    readonly assetManifest: AssetManifest;
+    readonly children: ReactNode;
+}
+
+/**
+ * Opens a self-contained game-asset session for a route that has no
+ * `GameShell` above it, and publishes its manager to `useAssetManager()` /
+ * `useAsset()` / `useModelInstance()` consumers in the subtree.
+ *
+ * This is the second owner Invariant #21 names: it builds the manager AND
+ * disposes it, on unmount and whenever the manifest identity changes, because
+ * no GameShell exists to do either. It does **not** register itself as the
+ * app-level `DelegatingAssetManager` delegate — that binding exists so the
+ * app-level `AudioManager` can reach a *match's* assets, and a session outside
+ * a match must not impersonate one.
+ *
+ * The manager is allocated in a commit-phase effect, never during render:
+ * StrictMode double-invokes render-phase factories and discards one result,
+ * and a discarded render runs no cleanup — so a `useMemo`/`useState`-allocated
+ * manager would leave an orphan that no dispose path can reach (the same
+ * reason `useModelInstance` clones in an effect). The cost is that this
+ * renders `null` until that effect commits, so `children` — and any DOM they
+ * carry — appear one commit late.
+ */
+export function GameAssetSession({
+    assetManifest,
+    children,
+}: GameAssetSessionProps): React.ReactElement | null {
+    const [assetManager, setAssetManager] = React.useState<AssetManager | null>(null);
+
+    React.useEffect(() => {
+        const manager = createRendererGameAssetManager(assetManifest);
+        setAssetManager(manager);
+
+        return () => {
+            manager.dispose();
+        };
+    }, [assetManifest]);
+
+    if (assetManager === null) {
+        return null;
+    }
+
+    return (
+        <AssetManagerContext.Provider value={assetManager}>{children}</AssetManagerContext.Provider>
+    );
+}

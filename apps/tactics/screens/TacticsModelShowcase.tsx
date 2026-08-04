@@ -7,10 +7,11 @@ import type { Object3D } from 'three';
 import { tacticsModelRefs } from '../asset-manifest.js';
 
 /**
- * One showcase instance's observable state, reported to the board so the DOM
- * status element (and through it the e2e spec) can assert what the canvas
- * cannot say on its own: that the two clones are DISTINCT scene-graph roots
- * and that posing one leaves the other unmoved.
+ * One showcase instance's observable state, reported to
+ * `TacticsModelShowcaseScreen` so the DOM status element (and through it the
+ * e2e spec) can assert what the canvas cannot say on its own: that the two
+ * clones are DISTINCT scene-graph roots and that posing one leaves the other
+ * unmoved.
  */
 export interface TacticsModelShowcaseReport {
     readonly rootUuid: string;
@@ -27,17 +28,15 @@ export interface TacticsModelShowcaseProps {
 const POSED_BONE_NAME = 'top';
 export const SHOWCASE_POSE_RADIANS = Math.PI / 2;
 
-// Board-plane placement (§4.22 camera: looking down -Y at the XZ plane).
-// Bottom corners of the widened frustum, clear of the gameplay grid rows so
-// the quads can never occlude a board click. The colour-count specs sample
-// the WHOLE canvas — what keeps magenta out of their counts is classifier
-// arithmetic (it fails the red/blue dominance deltas), pinned in
-// e2e/helpers/canvas-pixels.test.ts, not this placement. The quad is
-// authored in the XY plane facing +Z, so -PI/2 around X lays it onto the
-// board plane facing the camera.
-const MODEL_A_POSITION: readonly [number, number, number] = [-2.2, 0.02, -2.0];
-const MODEL_B_POSITION: readonly [number, number, number] = [4.2, 0.02, -2.0];
-const MODEL_ROTATION: readonly [number, number, number] = [-Math.PI / 2, 0, 0];
+// Placement on the showcase screen's own camera (`TacticsModelShowcaseScreen`,
+// looking straight down -Z). The quads are authored upright in the XY plane
+// facing +Z, so they need no corrective rotation here; they are simply set
+// side by side about the origin, far enough apart that the posed instance's
+// sideways swing cannot overlap the unposed one — the e2e reads the pose off
+// the scene graph, but an overlap would make the rendered frame unreadable to
+// a human diagnosing a failure.
+const MODEL_A_POSITION: readonly [number, number, number] = [-1.1, 0, 0];
+const MODEL_B_POSITION: readonly [number, number, number] = [1.1, 0, 0];
 
 function findPosedBone(root: Object3D): Object3D | undefined {
     return root.getObjectByName(POSED_BONE_NAME);
@@ -78,14 +77,16 @@ function ShowcaseModel({
     if (instance === null) {
         return null;
     }
-    return <primitive object={instance.root} position={position} rotation={MODEL_ROTATION} />;
+    return <primitive object={instance.root} position={position} />;
 }
 
 /**
- * Model-seam adoption surface (§4.10): TWO instances of ONE `gltf-model` ref, mounted in the
- * live board canvas. This is the runtime proof of the model seam — the cached
- * gltf loads over `chimera://` through the webpack async chunk, and each
- * mount receives its own `SkeletonUtils` clone.
+ * Model-seam adoption surface (§4.10): TWO instances of ONE `gltf-model` ref,
+ * mounted in the `/model-showcase/` route's canvas — a test-only screen no
+ * in-app navigation reaches, so this geometry is in no gameplay frame. This is
+ * the runtime proof of the model seam — the cached gltf loads over
+ * `chimera://` through the webpack async chunk, and each mount receives its
+ * own `SkeletonUtils` clone.
  *
  * A is posed, B is not, and B reads its own bone AFTER A's pose runs: both
  * instances resolve from the same in-flight load, so their publish commits

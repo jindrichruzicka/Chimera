@@ -104,6 +104,14 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `export { default, metadata } from '@chimera-engine/renderer/shell/layout';`,
         },
         {
+            // The allowance is on the importing FILE, not on the shape of the
+            // import (Invariant #96): a route may COMPOSE a shell composition
+            // module — a named value import of a non-page `shell/*` module —
+            // as well as re-export a shell page.
+            filename: 'apps/tactics/renderer/app/model-showcase/page.tsx',
+            code: `import { GameAssetSession } from '@chimera-engine/renderer/shell/gameAssetSession';`,
+        },
+        {
             // Public r3f barrel (in-Canvas engine components, e.g. PerfProbe) is
             // allowed from a game surface.
             filename: 'apps/tactics/screens/TacticsDemoBoard.tsx',

@@ -40,11 +40,14 @@ interface CommittedClone {
  * render-phase throw is `useAssetManager`'s missing-provider refusal
  * (Invariant #83).
  *
- * Loads reject into `error` whenever no match-level delegate is registered
- * with the app-level `DelegatingAssetManager` (no active match), so the
- * hook is only reliably meaningful under `GameShell`; surfaces above it —
- * e.g. Invariant #96's `apps/<name>/shell/*.tsx` — resolve loads only while
- * a match is active.
+ * Loads reject into `error` whenever the manager in context is the app-level
+ * `DelegatingAssetManager` with no delegate registered (no active match), so
+ * a surface above `GameShell` — e.g. Invariant #96's `apps/<name>/shell/*.tsx`
+ * — resolves loads only while a match is active. The other way to satisfy the
+ * hook is to be under a manager that is not the delegating one at all:
+ * `GameShell` publishes the match-level manager, and `GameAssetSession`
+ * (`renderer/app/gameAssetSession.tsx`) publishes a matchless one for a route
+ * that renders a game's assets outside a match.
  */
 export function useModelInstance(ref: AssetRef<GLTFModelAsset> | null): UseModelInstanceState {
     const { asset, error } = useAsset<GLTFModelAsset>(ref);

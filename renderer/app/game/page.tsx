@@ -23,13 +23,12 @@ import {
     type EngineAction,
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
-import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
-import { createRendererGameAssetResolver } from '../../assets/AssetResolver';
 import { useOptionalFade } from '../../components/shell/FadeContext';
 import { screenFadeMs } from '../../components/shell/screenFadeDuration';
 import { GameShell } from '../../components/shell/GameShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
+import { useRendererGameAssetManager } from '../gameAssetSession.js';
 import { useSavesApi } from '../../hooks/useSavesApi';
 import { TOAST_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
@@ -75,14 +74,8 @@ export default function GamePage(): React.ReactElement | null {
     const loadedGame = useLoadedRendererGame(gameId);
     const savesApi = useSavesApi();
     const t = useTranslate();
-    const assetManager = React.useMemo<AssetManager | null>(() => {
-        if (loadedGame === null) {
-            return null;
-        }
-
-        // Manifest at construction — see createAssetManager's JSDoc.
-        return createAssetManager(createRendererGameAssetResolver(), loadedGame.assetManifest);
-    }, [loadedGame]);
+    // GameShell below disposes this manager (Invariant #21); the hook only builds.
+    const assetManager = useRendererGameAssetManager(loadedGame);
     const sendActionToHost = useSendAction();
     const sendAction = React.useCallback(
         (action: EngineAction): void => {

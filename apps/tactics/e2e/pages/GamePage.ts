@@ -1,12 +1,18 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import {
-    analyzeCanvasPixels,
     decodePngToRgbaFrame,
     formatCanvasPixelStats,
     summarizeOpaqueColor,
     type CanvasColor,
     type CanvasPixelStats,
 } from '../helpers/canvas-pixels';
+import {
+    CANVAS_PIXEL_TIMEOUT_MS,
+    minimumColorPixels,
+    readCanvasPixelStats,
+    waitForCanvasFrame,
+    waitForCanvasPixelExpectation,
+} from '../helpers/canvas-probe';
 
 /**
  * Host-authored game setup as carried on the projected PlayerSnapshot
@@ -80,14 +86,7 @@ const PROJECTED_SNAPSHOT_TIMEOUT_MS = 30_000;
 // This window only needs to outlast canvas/render settle on a slow CI runner; it
 // is the per-attempt budget for detecting whether a select+click actually buffered.
 const TACTICS_OPTIMISTIC_BUFFER_TIMEOUT_MS = 10_000;
-// One pixel read = rAF settle + locator.screenshot(); on CI runners (2-core,
-// Xvfb + software GL) a single screenshot alone was measured at 6–11s, so the
-// poll budget must fit several worst-case iterations or the predicate never
-// gets evaluated at all.
-const TACTICS_CANVAS_PIXEL_TIMEOUT_MS = 45_000;
 const TACTICS_MIN_NONBLANK_PIXEL_RATIO = 0.05;
-const TACTICS_MIN_COLOR_PIXEL_RATIO = 0.0001;
-const TACTICS_MIN_COLOR_PIXELS = 2;
 const TACTICS_MAX_ABSENT_COLOR_PIXEL_RATIO = 0.00002;
 const TACTICS_MAX_ABSENT_COLOR_PIXELS = 1;
 
@@ -120,7 +119,7 @@ export class GamePage {
 
     public constructor(
         private readonly page: Page,
-        private readonly pixelPollTimeoutMs = TACTICS_CANVAS_PIXEL_TIMEOUT_MS,
+        private readonly pixelPollTimeoutMs = CANVAS_PIXEL_TIMEOUT_MS,
     ) {
         this.canvas = page.getByTestId('game-canvas');
         this.tacticsCanvas = this.canvas.locator('canvas').first();
@@ -342,13 +341,6 @@ export class GamePage {
         await this.waitForTacticsCanvasPixelExpectation(
             (stats) => stats.amberPixels >= minimumColorPixels(stats),
             'Tactics canvas did not render the expected amber primitive pixels',
-        );
-    }
-
-    public async assertTacticsCanvasHasMagentaPrimitive(): Promise<void> {
-        await this.waitForTacticsCanvasPixelExpectation(
-            (stats) => stats.magentaPixels >= minimumColorPixels(stats),
-            'Tactics canvas did not render the expected magenta showcase-model pixels',
         );
     }
 
@@ -683,62 +675,24 @@ export class GamePage {
     }
 
     private async waitForCanvasInteractionFrame(): Promise<void> {
-        await this.page.waitForFunction(
-            () =>
-                new Promise<boolean>((resolve) => {
-                    const scheduleFrame = (
-                        globalThis as typeof globalThis & {
-                            readonly requestAnimationFrame: (callback: () => void) => number;
-                        }
-                    ).requestAnimationFrame;
-                    let framesRemaining = 3;
-                    const waitForFrame = (): void => {
-                        framesRemaining -= 1;
-                        if (framesRemaining <= 0) {
-                            resolve(true);
-                            return;
-                        }
-                        scheduleFrame(waitForFrame);
-                    };
-
-                    scheduleFrame(waitForFrame);
-                }),
-            undefined,
-            { timeout: 5_000 },
-        );
+        await waitForCanvasFrame(this.page);
     }
 
     private async waitForTacticsCanvasPixelExpectation(
         predicate: (stats: CanvasPixelStats) => boolean,
         failureMessage: string,
     ): Promise<void> {
-        let lastStats: CanvasPixelStats | null = null;
-        try {
-            await expect
-                .poll(
-                    async () => {
-                        lastStats = await this.readTacticsCanvasPixelStats();
-                        return predicate(lastStats);
-                    },
-                    { timeout: this.pixelPollTimeoutMs },
-                )
-                .toBe(true);
-        } catch (error) {
-            const stats = lastStats ?? (await this.readTacticsCanvasPixelStats());
-            throw new Error(`${failureMessage}. ${formatCanvasPixelStats(stats)}.`, {
-                cause: error,
-            });
-        }
+        await waitForCanvasPixelExpectation({
+            page: this.page,
+            canvas: this.tacticsCanvas,
+            predicate,
+            failureMessage,
+            timeoutMs: this.pixelPollTimeoutMs,
+        });
     }
 
     private async readTacticsCanvasPixelStats(): Promise<CanvasPixelStats> {
-        await this.waitForCanvasInteractionFrame();
-        const screenshot = await this.tacticsCanvas.screenshot({ type: 'png' });
-        // Decode and analyze in the test process (pngjs) — never via
-        // page.evaluate. On CI the renderer main thread is saturated by
-        // software-GL R3F rendering, and a CDP round-trip with the decoded
-        // pixel payload was measured at ~8s per read, blowing the poll budget.
-        return analyzeCanvasPixels(decodePngToRgbaFrame(screenshot));
+        return readCanvasPixelStats(this.page, this.tacticsCanvas);
     }
 
     private async waitForVisibleAdjacentOpponent(): Promise<void> {
@@ -984,13 +938,6 @@ function summarizeTacticsSnapshot(snapshot: TacticsSnapshotProjection): string {
 
 function minimumNonBlankPixels(stats: CanvasPixelStats): number {
     return Math.max(1, Math.floor(stats.totalPixels * TACTICS_MIN_NONBLANK_PIXEL_RATIO));
-}
-
-function minimumColorPixels(stats: CanvasPixelStats): number {
-    return Math.max(
-        TACTICS_MIN_COLOR_PIXELS,
-        Math.floor(stats.totalPixels * TACTICS_MIN_COLOR_PIXEL_RATIO),
-    );
 }
 
 function maximumAbsentColorPixels(stats: CanvasPixelStats): number {

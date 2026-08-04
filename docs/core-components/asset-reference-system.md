@@ -248,6 +248,17 @@ export interface AssetManager {
 
 `AssetManager.load(ref)` resolves `ref` to a URL through `AssetResolver`, looks up the matching `AssetManifestEntry`, then dispatches to the loader registered for `entry.kind`. It does not infer semantic type from file extension. Extension sniffing is allowed inside a loader implementation, but the engine-level dispatch key is always the manifest kind.
 
+### Asset sessions outside a match — `GameAssetSession`
+
+The manager the hooks below read comes from `GameShell` while a match is running. Outside one — on a game-owned route that renders assets with no `GameShell` above it — the manager in context is the app-level `DelegatingAssetManager`, whose delegate only `GameShell` sets, so every load rejects `NoActiveGameSessionError`.
+
+`renderer/app/gameAssetSession.tsx` is the seam for that case, and it is the one place a game-asset manager is built for any renderer route:
+
+- **`<GameAssetSession assetManifest>`** — exported to an app's own Next host tree as `@chimera-engine/renderer/shell/gameAssetSession` (Invariant #96). It builds a manager for the manifest and publishes it to `useAsset` / `useModelInstance` / `useAssetManager` consumers in the subtree. It registers no `SetGameAssetManagerContext` delegate, so a session outside a match never redirects the app-level `AudioManager` at its own manifest.
+- **`useRendererGameAssetManager(loadedGame)`** — for a route that hands the manager to `<GameShell assetManager>` (`/game`, `/replays/player`). It is keyed on the loaded game rather than its manifest because `LoadedRendererGame.assetManifest` is optional, and a game that declares no manifest must still get a manager.
+
+Which surface disposes which manager is enumerated in **Invariant #21**.
+
 ---
 
 ## `useAsset<T>` Hook

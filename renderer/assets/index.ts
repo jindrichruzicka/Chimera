@@ -23,7 +23,8 @@
  * `DefaultAssetManager`, `AssetResolver`, `AssetPreloader`,
  * `DelegatingAssetManager` and the context object stay internal, by rule
  * rather than by list — what is not re-exported below is not reachable.
- * `GameShell` remains the unique disposer (Invariant #21).
+ * Which surface disposes which manager is enumerated in Invariant #21 and
+ * not restated here.
  *
  * Re-export only: importing this barrel mounts nothing, loads nothing, and —
  * unlike `audio` — constructs no store.

@@ -72,6 +72,29 @@ describe('TacticsModelShowcase', () => {
         expect(stubB.topBone.rotation.z).toBe(0);
     });
 
+    it('places the two quads apart, so the posed one cannot overlap the unposed one', () => {
+        // Measured from showcase-rig.glb: each quad spans x ±0.45 about its
+        // position and the `top` bone sits at y=0.7, so posing A by π/2 about
+        // z swings its upper half ~0.7 sideways. At x=∓1.1 that gives
+        // A x∈[-1.8,-0.65] and B x∈[0.65,1.55] — disjoint, and both inside the
+        // screen camera's left/right ±2.4 frustum. Collapsing the two onto one
+        // spot still satisfies the e2e magenta-pixel floor, so only this pins it.
+        const stubA = createStubInstance('uuid-a');
+        const stubB = createStubInstance('uuid-b');
+        useModelInstanceMock
+            .mockReturnValueOnce({ instance: stubA.instance, loading: false, error: null })
+            .mockReturnValueOnce({ instance: stubB.instance, loading: false, error: null });
+
+        const { container } = render(
+            <TacticsModelShowcase onReportA={() => {}} onReportB={() => {}} />,
+        );
+
+        const positions = Array.from(container.querySelectorAll('primitive')).map((node) =>
+            node.getAttribute('position'),
+        );
+        expect(positions).toEqual(['-1.1,0,0', '1.1,0,0']);
+    });
+
     it('surfaces a load failure as the report errorName instead of throwing', () => {
         const error = new Error('undeclared');
         error.name = 'UnknownAssetManifestEntryError';

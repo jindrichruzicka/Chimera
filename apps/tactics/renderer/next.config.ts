@@ -1,14 +1,18 @@
 import type { NextConfig } from 'next';
 import path from 'path';
 
-// The tactics app's OWN Next host. The app owns its renderer GUI:
-// every route under app/** is a thin re-export of the engine shell from
+// The tactics app's OWN Next host. The app owns its renderer GUI: every
+// ENGINE-GUI route under app/** is a thin re-export of the engine shell from
 // `@chimera-engine/renderer/shell/*` (compiled by `transpilePackages`), and the single
 // `chimera-game-registration` alias binds the game-agnostic shell to THIS game's
 // renderer composition root. There are NO source-twin aliases: the app's route
 // re-exports AND the game's screens both resolve `@chimera-engine/renderer/*` to the one
 // package dist, so EscapeStack / the Zustand stores / the game registry are
 // single-instance via uniform resolution.
+//
+// One route is not a re-export: `app/model-showcase/` is this game's own
+// test-only page (§4.10), which composes the engine's `shell/gameAssetSession`
+// rather than re-exporting a shell page. See that route's own files for why.
 const appRendererDir = __dirname; // apps/tactics/renderer
 
 interface WebpackResolve {

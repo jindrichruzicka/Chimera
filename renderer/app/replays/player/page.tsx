@@ -30,13 +30,12 @@ import type {
     PlayerSnapshot,
     ReplayPlaybackInfo,
 } from '@chimera-engine/simulation/bridge/api-types.js';
-import { createAssetManager, type AssetManager } from '../../../assets/AssetManager';
-import { createRendererGameAssetResolver } from '../../../assets/AssetResolver';
 import { useLeaveGame } from '../../../bridge/useLeaveGame';
 import { GameShell } from '../../../components/shell/GameShell';
 import { ReplayControls } from '../../../components/replay/ReplayControls';
 import { parseReplayKind } from '../../../components/replay/replayKind';
 import { loadRendererGame, type LoadedRendererGame } from '../../../game/rendererGameRegistry';
+import { useRendererGameAssetManager } from '../../gameAssetSession.js';
 import { REPLAYS_KEYS } from '../../../i18n/engine-keys';
 import { useTranslate } from '../../../i18n/useTranslate';
 import { useReplayApi } from '../../../hooks/useReplayApi';
@@ -318,14 +317,8 @@ function ReplayPlayerView(): React.ReactElement {
     }, [isPlaying, info, currentTick]);
 
     const loadedGame = useLoadedRendererGame(info?.gameId ?? null, reportError);
-    const assetManager = React.useMemo<AssetManager | null>(
-        // Manifest at construction — see createAssetManager's JSDoc.
-        () =>
-            loadedGame === null
-                ? null
-                : createAssetManager(createRendererGameAssetResolver(), loadedGame.assetManifest),
-        [loadedGame],
-    );
+    // GameShell below disposes this manager (Invariant #21); the hook only builds.
+    const assetManager = useRendererGameAssetManager(loadedGame);
     // The game's content collections, keyed by the replay's gameId, exactly as the
     // live game route supplies them (`renderer/app/game/page.tsx`). A game's screen
     // interprets these (tactics derives its colour palette); without them every
