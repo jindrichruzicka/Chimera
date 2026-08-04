@@ -35,9 +35,12 @@ interface EngineSettings {
     };
     display: {
         // Caps the renderer frame rate; 0 = uncapped (native refresh). Applied
-        // by the renderer FrameRateLimiter (r3f barrel), never read by the
-        // simulation. Games always run fullscreen in packaged builds, so there
-        // is no fullscreen/vsync/uiScale setting.
+        // by PACING the R3F loop, never by presenting frames: the <Canvas>
+        // frameloop prop from useEngineFrameloop() plus the FrameRateLimiter
+        // driver inside it, both from the r3f barrel and both wired by
+        // GameCanvas (§4.22). Never read by the simulation. Games always run
+        // fullscreen in packaged builds, so there is no
+        // fullscreen/vsync/uiScale setting.
         targetFps: 30 | 60 | 120 | 0;
     };
     gameplay: {

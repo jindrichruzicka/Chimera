@@ -5,9 +5,9 @@
 
 RC polish across the engine chrome and settings:
 
-- New real frame-rate limiter: `FrameRateLimiter` (exported from the r3f barrel) gates
-  `gl.render` at render priority and reads `targetFps` from resolved settings, replacing
-  the previously non-functional display cap.
+- New real frame-rate limiter: `FrameRateLimiter` (exported from the r3f barrel) reads
+  `targetFps` from resolved settings and paces the R3F render loop rather than presenting
+  frames itself, replacing the previously non-functional display cap.
 - Removed the dead `display.fullscreen`, `display.vsync`, and `display.uiScale` settings
   engine-wide (they had no runtime effect; fullscreen is forced in production). The
   gameplay settings tab is now language-only.

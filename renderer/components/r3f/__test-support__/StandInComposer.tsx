@@ -1,13 +1,13 @@
 /**
  * renderer/components/r3f/__test-support__/StandInComposer.tsx
  *
- * A composer-shaped third-party presenter, subscribing exactly as
- * `@react-three/postprocessing`'s `EffectComposer` does —
- * `useFrame(cb, enabled ? renderPriority : 0)` with `renderPriority = 1` — and
- * calling `gl.render` from that callback. drei's `<Effects>` and
- * `<View>`/scissor renderers have the same shape, as does any hand-rolled
- * render-target pipeline; see `fakeFiberRoot.tsx` for the R3F mechanism that
- * makes them all co-presenters.
+ * A composer-shaped third-party presenter: `useFrame(cb, 1)` plus a `gl.render`
+ * from that callback. That is the shape of every third-party pass — a
+ * post-processing composer, a portal/scissor renderer, a hand-rolled
+ * render-target pipeline — and the shape is what matters, not any one library:
+ * see `fakeFiberRoot.tsx` for the R3F mechanism that makes them all
+ * co-presenters. No such package is installed here, so nothing in this file's
+ * behaviour can be checked against one.
  *
  * It is a stand-in and not the real package on purpose: the collision is a
  * property of R3F's subscriber model, not of any one library, and the engine

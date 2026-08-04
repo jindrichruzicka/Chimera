@@ -241,8 +241,10 @@ chimera/
 │   │   │   └── ChatPanel.tsx        # In-match chat UI; see §4.29
 │   │   ├── ui/                      # PUBLIC UI primitive library (Tier 1); barrel: @chimera-engine/renderer/components/ui (includes <LanguageSelector>, §4.39)
 │   │   └── r3f/                     # Reusable R3F building blocks; PUBLIC barrel: @chimera-engine/renderer/components/r3f (curated: GameCanvas root, what a game mounts inside its own <Canvas>, and the Canvas-free hook computing that canvas's frameloop prop)
-│   │       ├── index.ts             # Public barrel (exports GameCanvas, PerfProbe, FrameRateLimiter, useModelAnimation; remaining internals stay unexported)
-│   │       ├── GameCanvas.tsx       # <Canvas> root; declarative `camera` prop (preset | explicit config); mounts PerfProbe + FrameRateLimiter; see §4.22
+│   │       ├── index.ts             # Public barrel (exports GameCanvas, PerfProbe, FrameRateLimiter, useEngineFrameloop, useModelAnimation; remaining internals stay unexported)
+│   │       ├── GameCanvas.tsx       # <Canvas> root; declarative `camera` prop (preset | explicit config); mounts PerfProbe + FrameRateLimiter and owns the frameloop prop from useEngineFrameloop(); see §4.22
+│   │       ├── FrameRateLimiter.tsx # Loop DRIVER for display.targetFps: one rAF chain calling advance(); registers no useFrame and never presents; see §4.22
+│   │       ├── useEngineFrameloop.ts # Canvas-FREE hook returning the frameloop prop that canvas needs ('never' capped, 'always' uncapped); see §4.22
 │   │       ├── InteractionBlocker.tsx  # Context provider; see §4.23
 │   │       └── primitives/          # Shared meshes / materials
 │   ├── state/

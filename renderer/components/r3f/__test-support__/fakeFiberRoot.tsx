@@ -6,7 +6,8 @@
  * than a convenient fiction. Mirrored from `@react-three/fiber@9.6.1`
  * `dist/events-b389eeca.esm.js` unless noted:
  *
- *  - `subscribe` increments a COUNTER, `internal.priority + (priority > 0 ? 1 : 0)`,
+ *  - `subscribe` increments a COUNTER,
+ *    `internal.priority = internal.priority + (priority > 0 ? 1 : 0)`,
  *    and sorts subscribers ascending by priority with a stable sort. This is the
  *    mechanism behind the co-presenter collision; `FrameRateLimiter.tsx`'s
  *    header explains why it makes a presenting cap unworkable.

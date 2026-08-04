@@ -15,7 +15,8 @@ export interface EngineSettings {
     };
     readonly display: {
         /** Caps the renderer's frame rate; `0` = uncapped (native refresh).
-         *  Applied by the renderer FrameRateLimiter, not the simulation. */
+         *  Applied by the renderer, never read by the simulation; see §4.13/§4.22
+         *  for the mechanism. */
         readonly targetFps: 30 | 60 | 120 | 0;
     };
     readonly gameplay: {

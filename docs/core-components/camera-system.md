@@ -1,6 +1,6 @@
 ---
 title: 'Camera System'
-description: 'CameraMode/CameraPreset types, the GameCanvas declarative camera prop (presets, explicit configs, up vector, manual-projection rules), preset defaults table, CameraController interface, CameraAnimationCancelled error, useCamera() hook, and camera state ownership rules.'
+description: 'CameraMode/CameraPreset types, the GameCanvas declarative camera prop (presets, explicit configs, up vector, manual-projection rules), preset defaults table, CameraController interface, CameraAnimationCancelled error, useCamera() hook, camera state ownership rules, and the render-loop pacing that applies the display.targetFps frame-rate cap.'
 tags: [camera, r3f, animation, renderer, three-js]
 ---
 
@@ -15,7 +15,23 @@ tags: [camera, r3f, animation, renderer, three-js]
 
 React Three Fiber provides full camera control via `useThree()`, `three`'s `PerspectiveCamera`/`OrthographicCamera`, and `@react-three/drei`'s `<CameraControls>`. Camera state lives entirely inside the R3F Canvas tree — **never** in the simulation.
 
-`GameCanvas` is exported from the public r3f barrel (`@chimera-engine/renderer/components/r3f`, Invariant #96) and mounts `PerfProbe` and `FrameRateLimiter` inside its `<Canvas>` root — a game using it must not mount either again.
+`GameCanvas` is exported from the public r3f barrel (`@chimera-engine/renderer/components/r3f`, Invariant #96) and mounts `PerfProbe` and `FrameRateLimiter` inside its `<Canvas>` root — a game using it must not mount either again. It also owns the `frameloop` **prop** on that root, taking it from `useEngineFrameloop()`.
+
+### The render loop and the frame-rate cap
+
+`display.targetFps` is applied by **pacing the loop**, never by presenting frames. Two halves, both required, both wired by `GameCanvas`:
+
+1. `frameloop={useEngineFrameloop()}` on the `<Canvas>` — `'never'` at any cap, `'always'` when uncapped. It must be the prop: R3F's `CanvasImpl` re-applies `frameloop` from a layout effect with no dependency array, so an internal `setFrameloop` is clobbered on the next render.
+2. `<FrameRateLimiter />` inside it — a loop **driver** that owns one `requestAnimationFrame` chain and calls the store-bound `advance()` at the target rate. It registers no `useFrame` and calls no `gl.render`.
+
+**An engine cap must never present a frame.** R3F's `internal.priority` is a _counter_, not a lock: `subscribe` does `internal.priority = internal.priority + (priority > 0 ? 1 : 0)`, and `update()` suppresses only R3F's own automatic render while calling every subscriber unconditionally. Any `useFrame(cb, priority > 0)` subscriber a game mounts — a post-processing composer, a portal/scissor renderer, a hand-rolled render-target pipeline — therefore becomes a co-presenter that nothing can suppress, including a cap implemented the same way. Pacing the loop caps whoever presents, including presenters the engine has never heard of, and writing an engine composer would not help: it would be one more co-presenter.
+
+A game that owns its own `<Canvas>` must wire **both** halves. Wiring one is a defect in each direction, and only one of them is detectable:
+
+- Driver mounted, prop missing → the canvas keeps R3F's own loop, the cap silently does nothing, and the perf HUD reports the native rate. The limiter detects this and reports a named `FrameloopWiringError` through the renderer logger — logged, not thrown, because the failure degrades to the behaviour that existed before any cap and R3F's error boundary re-throws outward past the `<Canvas>`.
+- `frameloop="never"` with no driver → **a permanently black canvas**, and nothing detects it. The limiter cannot: none of it is mounted. A registration check from `useEngineFrameloop` cannot either, because R3F renders canvas children into a separate reconciler root after `configure()` resolves. A frame-counting watchdog cannot tell a missing driver from a backgrounded window, which advances no frames either. This one is documented rather than guessed at.
+
+Demand rendering reaches no engine canvas: `invalidate()` early-returns under `'never'`, and under `'always'` R3F renders every frame regardless of the counter it writes. See `renderer/components/r3f/useEngineFrameloop.ts`.
 
 ---
 

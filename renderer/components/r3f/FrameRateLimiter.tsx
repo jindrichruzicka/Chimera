@@ -2,10 +2,19 @@
 
 /**
  * Engine frame-rate limiter — paces the R3F render loop to the active game's
- * `settings.display.targetFps`. Mounted once per canvas: games rendering through
- * the engine <GameCanvas> (r3f barrel) get it automatically; a game with its own
- * <Canvas> imports it from `@chimera-engine/renderer/components/r3f` and mounts
- * it like PerfProbe. Never mount it twice in one canvas: each instance owns its
+ * `settings.display.targetFps`.
+ *
+ * It is HALF of the cap, and both halves are required. Games rendering through
+ * the engine <GameCanvas> (r3f barrel) get both automatically. A game with its
+ * own <Canvas> wires them itself, from the same barrel:
+ *
+ *     <Canvas frameloop={useEngineFrameloop()}>
+ *         <FrameRateLimiter />
+ *         …
+ *     </Canvas>
+ *
+ * `useEngineFrameloop()` is Canvas-FREE and is called OUTSIDE the canvas whose
+ * prop it computes. Mount this component once per canvas: each instance owns its
  * own `requestAnimationFrame` chain, so two of them advance the canvas at
  * roughly double the target rate.
  *
@@ -49,7 +58,8 @@
  *    would fire on every minimised game. Documented, not guessed at.
  *
  * Why it must not present: R3F's `internal.priority` is a COUNTER, not a lock —
- * `subscribe` does `priority + (p > 0 ? 1 : 0)`, and `update()` suppresses only
+ * `subscribe` does `internal.priority = internal.priority + (priority > 0 ? 1 : 0)`,
+ * and `update()` suppresses only
  * R3F's own automatic render while calling every subscriber unconditionally. A
  * `useFrame(cb, 1)` limiter is therefore just one co-presenter among however
  * many the game mounts — any `useFrame(cb, priority > 0)` subscriber becomes
