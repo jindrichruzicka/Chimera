@@ -6,7 +6,8 @@
  * had none until `useModelAnimation` joined it.
  *
  * **What it drags in.** The graph reaches TWO stores (`perfStore` via
- * `PerfProbe`, `settingsStore` via `selectTargetFps`) — recorded decisions,
+ * `PerfProbe`, `settingsStore` via `selectTargetFps`) and the renderer log
+ * bridge (via `FrameRateLimiter`'s half-wired-canvas report) — recorded decisions,
  * not drift. `useModelAnimation`'s `ModelInstance` import is TYPE-ONLY, so
  * the clone seam (and with it `SkeletonUtils`) is deliberately NOT in this
  * graph: the model machinery ships from the `assets` barrel, and this one
@@ -111,17 +112,21 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         ]);
     });
 
-    it('pulls in exactly nine modules — two stores, and no clone seam', async () => {
+    it('pulls in exactly ten modules — two stores, the log bridge, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The two
         // store edges are real: PerfProbe publishes into perfStore, and both
         // FrameRateLimiter and useEngineFrameloop read settings.display.targetFps
-        // through the one shared selectTargetFps module. useModelAnimation
-        // imports ModelInstance TYPE-ONLY, so no assets/ module — and no
-        // SkeletonUtils — appears; the clone seam ships from the assets barrel.
+        // through the one shared selectTargetFps module. rendererLogger is the
+        // third recorded edge: FrameRateLimiter reports a half-wired canvas
+        // through the log bridge rather than console (Invariant #67).
+        // useModelAnimation imports ModelInstance TYPE-ONLY, so no assets/
+        // module — and no SkeletonUtils — appears; the clone seam ships from the
+        // assets barrel.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
+            'logging/rendererLogger.ts',
             'perf/PerfProbe.tsx',
             'perf/perfStore.ts',
             'r3f/FrameRateLimiter.tsx',

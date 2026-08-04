@@ -4,7 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
 import { Canvas } from '@react-three/fiber';
 import { GameCanvas } from './GameCanvas';
@@ -22,12 +22,18 @@ vi.mock('../shell/perf/PerfProbe', () => ({
 
 // `useThree` is mocked because the real FrameRateLimiter mounts inside the
 // canvas and reads the store-bound `advance` / `frameloop` / `clock` from it.
-// This tree has no R3F root, so the selectors run against a stand-in state whose
-// `frameloop` is 'always' — the limiter stays inert and drives nothing.
+// This tree has no R3F root, so the stand-in Canvas applies the `frameloop` prop
+// it is given to the stand-in root state before rendering children — R3F awaits
+// `configure()` before `root.render(children)`, so a child does observe the
+// prop's final value — or the two halves of the cap would be wired to each
+// other only in production. What this stand-in does NOT model is the two-root
+// interleaving on a runtime cap change, where the limiter re-renders on its own
+// settings subscription before the canvas is reconfigured; that ordering is
+// driven directly in FrameRateLimiter.test.tsx.
 const fiberMock = vi.hoisted(() => {
     const rootState = {
         advance: vi.fn(),
-        frameloop: 'always' as const,
+        frameloop: 'always' as string,
         clock: { elapsedTime: 0, oldTime: 0 },
     };
     return {
@@ -37,9 +43,18 @@ const fiberMock = vi.hoisted(() => {
 });
 
 vi.mock('@react-three/fiber', () => ({
-    Canvas: vi.fn(({ children }: { readonly children?: ReactNode }) => (
-        <div data-testid="r3f-canvas">{children}</div>
-    )),
+    Canvas: vi.fn(
+        ({
+            children,
+            frameloop,
+        }: {
+            readonly children?: ReactNode;
+            readonly frameloop?: string;
+        }) => {
+            fiberMock.rootState.frameloop = frameloop ?? 'always';
+            return <div data-testid="r3f-canvas">{children}</div>;
+        },
+    ),
     useThree: fiberMock.useThree,
 }));
 
@@ -57,11 +72,51 @@ const expectedPresets = {
     free: { instance: PerspectiveCamera, position: [0, 5, 10], lookAt: [0, 0, 0] },
 } satisfies Record<CameraPreset, ExpectedCameraPreset>;
 
+let logEmit: ReturnType<typeof vi.fn>;
+let rafCallbacks: Map<number, (timestamp: number) => void>;
+let nextRafHandle: number;
+
+beforeEach(() => {
+    fiberMock.rootState.frameloop = 'always';
+    logEmit = vi.fn();
+    vi.stubGlobal('__chimera', { logs: { emit: logEmit } });
+    // The limiter drives a real rAF chain under a capped canvas, and defers its
+    // wiring report by a frame. Keep both off jsdom's timer-backed rAF so
+    // nothing outlives the test and the deferred report is flushable here.
+    rafCallbacks = new Map();
+    nextRafHandle = 1;
+    vi.stubGlobal('requestAnimationFrame', (callback: (timestamp: number) => void): number => {
+        const handle = nextRafHandle++;
+        rafCallbacks.set(handle, callback);
+        return handle;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (handle: number): void => {
+        rafCallbacks.delete(handle);
+    });
+});
+
 afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
     useSettingsStore.setState({ activeGameId: null, settings: {} });
 });
+
+/** Fire one frame, which is what a deferred wiring report waits for. */
+function flushFrame(): void {
+    const due = [...rafCallbacks.values()];
+    rafCallbacks.clear();
+    for (const callback of due) {
+        callback(0);
+    }
+}
+
+/** Error-level entries the renderer log bridge received. */
+function loggedErrors(): { level: string }[] {
+    return logEmit.mock.calls
+        .map((call) => call[0] as { level: string })
+        .filter((entry) => entry.level === 'error');
+}
 
 function setTargetFps(targetFps: 30 | 60 | 120 | 0): void {
     useSettingsStore.setState({
@@ -144,10 +199,7 @@ describe('GameCanvas', () => {
         expect(perfProbeSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('mounts the FrameRateLimiter, which stays inert under the stand-in root state', () => {
-        // A real cap must be hydrated or `frameloop` is not the reason the
-        // driver stays idle — an unhydrated store reads as uncapped and would
-        // hold this test green under any frameloop.
+    it('mounts the FrameRateLimiter and the capped prop reaches it', () => {
         setTargetFps(60);
 
         render(
@@ -159,11 +211,39 @@ describe('GameCanvas', () => {
         // PerfProbe is mocked out, so the limiter is the only child that reads
         // the R3F root state — dropping it from GameCanvas leaves this at zero.
         expect(fiberMock.useThree).toHaveBeenCalled();
-        // Canvas is a plain <div> here, so the prop below never reaches the
-        // stand-in root state; its frameloop stays 'always' and the driver
-        // starts no chain.
+        // Both halves connected: the prop put the canvas on 'never' and the
+        // driver took over, presenting the eager first frame.
+        expect(fiberMock.rootState.advance).toHaveBeenCalled();
+    });
+
+    it('leaves the FrameRateLimiter idle when the uncapped prop reaches it', () => {
+        setTargetFps(0);
+
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(fiberMock.useThree).toHaveBeenCalled();
         expect(fiberMock.rootState.advance).not.toHaveBeenCalled();
     });
+
+    it.each([0, 30, 60, 120] as const)(
+        'never reports a frameloop-wiring error at %i fps',
+        (targetFps) => {
+            setTargetFps(targetFps);
+
+            render(
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>,
+            );
+            flushFrame();
+
+            expect(loggedErrors()).toHaveLength(0);
+        },
+    );
 
     it.each([30, 60, 120] as const)('passes frameloop never at a %i fps cap', (targetFps) => {
         setTargetFps(targetFps);
@@ -222,6 +302,9 @@ describe('GameCanvas', () => {
         );
 
         expect(latestCanvasFrameloop()).toBe(after);
+        // A runtime cap change on a wired canvas must not read as a mis-wiring.
+        flushFrame();
+        expect(loggedErrors()).toHaveLength(0);
     });
 
     it.each([
@@ -246,6 +329,8 @@ describe('GameCanvas', () => {
             });
 
             expect(latestCanvasFrameloop()).toBe(after);
+            flushFrame();
+            expect(loggedErrors()).toHaveLength(0);
         },
     );
 

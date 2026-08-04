@@ -28,6 +28,26 @@
  *    render, or any third-party pass mounted in the canvas — then runs only on
  *    those frames.
  *
+ * The two halves, and what happens when only one is wired:
+ *  - Driver mounted, cap set, `frameloop` NOT `'never'` → detectable from here,
+ *    and reported as a named `FrameloopWiringError` through the renderer logger.
+ *    It is LOGGED, not thrown: this direction degrades to an uncapped loop — the
+ *    behaviour before any cap existed — and R3F's `ErrorBoundary` re-throws
+ *    OUTWARD past the `<Canvas>`, so a throw here takes down the surrounding
+ *    tree, not just the canvas, at exactly the moment an author is wiring up.
+ *    Invariant #83's throwing precedent covers engine context hooks, where the
+ *    alternative is a silently wrong value rather than a working-but-
+ *    unthrottled loop.
+ *  - `frameloop: 'never'` with NO driver mounted → a permanently black canvas,
+ *    and not detected. This module cannot observe it — nothing of it is mounted
+ *    — and neither can a registration check from `useEngineFrameloop`: R3F
+ *    renders canvas children into a separate reconciler root, from CanvasImpl's
+ *    own layout effect after `configure()` resolves, so the driver's mount is
+ *    not observable from a same-commit effect outside the canvas. A
+ *    frame-counting watchdog cannot tell a missing driver from a legitimately
+ *    paused canvas either — a backgrounded window advances no frames — so it
+ *    would fire on every minimised game. Documented, not guessed at.
+ *
  * Why it must not present: R3F's `internal.priority` is a COUNTER, not a lock —
  * `subscribe` does `priority + (p > 0 ? 1 : 0)`, and `update()` suppresses only
  * R3F's own automatic render while calling every subscriber unconditionally. A
@@ -47,8 +67,25 @@
 import { useThree } from '@react-three/fiber';
 import type { RootState } from '@react-three/fiber';
 import React from 'react';
+import { emitRendererError } from '../../logging/rendererLogger.js';
 import { useSettingsStore } from '../../state/settingsStore.js';
 import { selectTargetFps } from './selectTargetFps.js';
+
+/** Log module name, so the report is attributable rather than 'global'. */
+const LOG_MODULE = 'frame-rate-limiter';
+
+/** Names a canvas wired with only one half of the cap; see the header. */
+class FrameloopWiringError extends Error {
+    constructor(targetFps: number, frameloop: string) {
+        super(
+            `A ${targetFps} fps cap cannot take effect: <FrameRateLimiter /> is mounted in a ` +
+                `canvas whose frameloop is '${frameloop}'. Pass the other half of the ` +
+                `contract — frameloop={useEngineFrameloop()} on the <Canvas> that mounts it. ` +
+                `<GameCanvas> wires both for you.`,
+        );
+        this.name = 'FrameloopWiringError';
+    }
+}
 
 /**
  * Tolerance applied to the frame interval so that when the target equals the
@@ -76,6 +113,15 @@ function selectClock(state: RootState): RootState['clock'] {
     return state.clock;
 }
 
+/** The preload log bridge, absent until the preload has run (and in tests). */
+function readLogsApi(): Parameters<typeof emitRendererError>[0] {
+    return (
+        globalThis as Record<string, unknown> & {
+            __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+        }
+    ).__chimera?.logs;
+}
+
 export function FrameRateLimiter(): null {
     const targetFps = useSettingsStore(selectTargetFps);
     const advance = useThree(selectAdvance);
@@ -86,6 +132,31 @@ export function FrameRateLimiter(): null {
     // or 'demand' R3F still drives its own chain, so a second one would double
     // the work and cap nothing.
     const paced = targetFps > 0 && frameloop === 'never';
+
+    React.useEffect(() => {
+        if (targetFps <= 0 || frameloop === 'never') {
+            return;
+        }
+        // Deferred a frame, and cancelled if the pair resolves first. The cap
+        // and the <Canvas frameloop> prop reach their consumers through two
+        // different React roots — R3F renders canvas children in its own
+        // reconciler — so a correctly wired canvas is briefly mismatched on
+        // every cap change, the boot hydration from 0 to the default included.
+        // The deferral costs one frame per change, never per frame, and it also
+        // collapses StrictMode's mount-unmount-mount into a single report.
+        const handle = requestAnimationFrame(() => {
+            emitRendererError(
+                readLogsApi(),
+                '[FrameRateLimiter] frame-rate cap is not wired to the canvas frameloop',
+                new FrameloopWiringError(targetFps, frameloop),
+                undefined,
+                LOG_MODULE,
+            );
+        });
+        return () => {
+            cancelAnimationFrame(handle);
+        };
+    }, [targetFps, frameloop]);
 
     // Layout phase, not passive: under 'never' the canvas shows nothing at all
     // until the first advance, so the eager frame below must land before paint.

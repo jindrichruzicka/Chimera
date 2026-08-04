@@ -129,6 +129,32 @@ function mount(): ReturnType<typeof render> {
     return render(<FrameRateLimiter />);
 }
 
+// ── Renderer log bridge ───────────────────────────────────────────────────────
+
+interface LoggedEntry {
+    level: string;
+    message: string;
+    source: { module: string };
+    error?: { name: string; message: string };
+}
+
+let logEmit: ReturnType<typeof vi.fn>;
+
+function loggedErrors(): LoggedEntry[] {
+    return logEmit.mock.calls
+        .map((call) => call[0] as LoggedEntry)
+        .filter((entry) => entry.level === 'error');
+}
+
+/**
+ * Let a deferred wiring report fire. The report is scheduled a frame out so a
+ * cap change that has not yet reached the `<Canvas>` prop does not read as a
+ * mis-wiring, so nothing is reported until a frame elapses.
+ */
+function flushReport(): void {
+    tick(0);
+}
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -138,6 +164,8 @@ beforeEach(() => {
     fiber.useThree.mockImplementation((selector: (state: FiberState) => unknown) =>
         selector(fiberState),
     );
+    logEmit = vi.fn();
+    vi.stubGlobal('__chimera', { logs: { emit: logEmit } });
     useSettingsStore.setState({ activeGameId: null, settings: {} });
 });
 
@@ -209,6 +237,9 @@ describe('FrameRateLimiter — inert cases', () => {
             setTargetFps(60);
             fiberState = makeFiberState(frameloop);
             mount();
+            // The one pending frame here is the deferred wiring report; firing
+            // it must leave no chain behind.
+            flushReport();
 
             expect(rafCallbacks.size).toBe(0);
             drive(10, 1000 / 60);
@@ -232,6 +263,7 @@ describe('FrameRateLimiter — inert cases', () => {
 
         fiberState.frameloop = 'always';
         rerender(<FrameRateLimiter />);
+        flushReport(); // the mis-wiring report is now the only pending frame
 
         expect(rafCallbacks.size).toBe(0);
         drive(10, 1000 / 60);
@@ -263,6 +295,156 @@ describe('FrameRateLimiter — inert cases', () => {
 
         expect(advanceCalls()).toEqual([0]);
         expect(rafCallbacks.size).toBe(1);
+    });
+});
+
+describe('FrameRateLimiter — half-wired canvas', () => {
+    // Both diagnostics vary across the matrix, so no single hardcoded constant
+    // satisfies every row.
+    it.each([
+        [30, 'always'],
+        [120, 'demand'],
+        [120, 'always'],
+    ] as const)(
+        'reports once when a %i fps cap is active but frameloop is %s',
+        (targetFps, frameloop) => {
+            setTargetFps(targetFps);
+            fiberState = makeFiberState(frameloop);
+            mount();
+            flushReport();
+
+            const errors = loggedErrors();
+            expect(errors).toHaveLength(1);
+            const entry = errors[0];
+            expect(entry?.error?.name).toBe('FrameloopWiringError');
+            // Attributable, not 'global' — every emitRendererError call site in
+            // the renderer names its own module.
+            expect(entry?.source.module).toBe('frame-rate-limiter');
+            expect(entry?.message).toContain('[FrameRateLimiter]');
+            // The message must name the fix, not just the symptom, and carry the
+            // two diagnostics that say WHICH canvas is mis-wired.
+            expect(entry?.error?.message).toContain('useEngineFrameloop()');
+            expect(entry?.error?.message).toContain(`${targetFps} fps`);
+            expect(entry?.error?.message).toContain(`'${frameloop}'`);
+        },
+    );
+
+    it('reports nothing and drives normally under frameloop never', () => {
+        setTargetFps(60);
+        mount();
+        drive(10, 1000 / 60);
+
+        expect(loggedErrors()).toHaveLength(0);
+        expect(advanceCalls()).toHaveLength(10);
+    });
+
+    it.each(['always', 'demand', 'never'] as const)(
+        'reports nothing at targetFps 0 under frameloop %s',
+        (frameloop) => {
+            setTargetFps(0);
+            fiberState = makeFiberState(frameloop);
+            mount();
+            flushReport();
+
+            expect(loggedErrors()).toHaveLength(0);
+        },
+    );
+
+    it('reports when a cap is switched on while the canvas keeps its own loop', () => {
+        setTargetFps(0);
+        fiberState = makeFiberState('always');
+        const { rerender } = mount();
+        flushReport();
+        expect(loggedErrors()).toHaveLength(0);
+
+        // The game hard-coded its <Canvas> and never passed the prop; the player
+        // turns a cap on at runtime. Nothing about the canvas changed, so only
+        // the targetFps half of the pair can surface this.
+        setTargetFps(60);
+        rerender(<FrameRateLimiter />);
+        flushReport();
+
+        expect(loggedErrors()).toHaveLength(1);
+    });
+
+    it('reports when a wired canvas later leaves frameloop never', () => {
+        setTargetFps(60);
+        const { rerender } = mount();
+        flushReport();
+        expect(loggedErrors()).toHaveLength(0);
+
+        fiberState.frameloop = 'always';
+        rerender(<FrameRateLimiter />);
+        flushReport();
+
+        expect(loggedErrors()).toHaveLength(1);
+    });
+
+    it('reports nothing when a transient mismatch resolves within the frame', () => {
+        setTargetFps(60);
+        const { rerender } = mount();
+
+        // The cap and the <Canvas frameloop> prop reach their consumers through
+        // two different React roots, so a correctly wired canvas is briefly
+        // mismatched on every cap change — the boot hydration from 0 to the
+        // default included. Reporting that would fire on every healthy game.
+        fiberState.frameloop = 'always';
+        rerender(<FrameRateLimiter />);
+        fiberState.frameloop = 'never';
+        rerender(<FrameRateLimiter />);
+        flushReport();
+
+        expect(loggedErrors()).toHaveLength(0);
+    });
+
+    it('reports once per mount, not once per render or frame', () => {
+        setTargetFps(60);
+        fiberState = makeFiberState('always');
+        const { rerender } = mount();
+
+        for (let i = 0; i < 5; i++) {
+            rerender(<FrameRateLimiter />);
+        }
+        drive(20, 1000 / 60);
+
+        expect(loggedErrors()).toHaveLength(1);
+    });
+
+    it('reports once, not twice, under StrictMode', () => {
+        setTargetFps(60);
+        fiberState = makeFiberState('always');
+        render(
+            <React.StrictMode>
+                <FrameRateLimiter />
+            </React.StrictMode>,
+        );
+        flushReport();
+
+        // StrictMode mounts, unmounts and remounts; the cancelled first report
+        // must not survive as a duplicate. Dev is the only place this report
+        // exists, and dev is where StrictMode runs.
+        expect(loggedErrors()).toHaveLength(1);
+    });
+
+    it('routes the report through the log bridge, never console', () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        setTargetFps(60);
+        fiberState = makeFiberState('always');
+        mount();
+        flushReport();
+
+        expect(logEmit).toHaveBeenCalledTimes(1);
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+        consoleErrorSpy.mockRestore();
+    });
+
+    it('survives a missing log bridge without throwing', () => {
+        setTargetFps(60);
+        fiberState = makeFiberState('always');
+        vi.stubGlobal('__chimera', undefined);
+        mount();
+
+        expect(() => flushReport()).not.toThrow();
     });
 });
 
