@@ -39,7 +39,7 @@ const typescriptEslintRulesOff = Object.fromEntries(
  *     (see docs/coding-standards.md §3).
  *   - Determinism guard via `no-restricted-syntax` scoped to simulation/ai paths
  *     (see docs/coding-standards.md §7, §1.2).
- *   - The seven `chimera/*` architecture rules, loaded as compiled JS from
+ *   - The eight `chimera/*` architecture rules, loaded as compiled JS from
  *     `@chimera-engine/electron/eslint` — the same artifact a standalone game
  *     composes through `standaloneLintConfig()` (see §3, §4.32).
  */
@@ -655,6 +655,8 @@ export default tseslint.config(
         plugins: { chimera: chimeraPlugin },
         rules: {
             'chimera/no-game-renderer-internals': 'error',
+            // Invariant #127 — GameCanvas is the only canvas root a game mounts.
+            'chimera/no-raw-r3f-canvas': 'error',
         },
     },
 

@@ -13,10 +13,11 @@ token rule guards, a screen `*.module.css` the playfield actually uses, and a pr
 dev-tool forwards, for a different reason: `eslint`'s bin is already at the root, but the
 config that drives it lives in the app.
 
-Four rules are live from the first commit: `fromFloat()` out of `simulation/` and `ai/`
+Five rules are live from the first commit: `fromFloat()` out of `simulation/` and `ai/`
 (with test files exempt, so a fixture builder does not red), design values through
 `var(--ch-*)` tokens in `screens/` and its CSS modules, only engine-declared tokens in the
-override stylesheet, and the renderer's public barrels only.
+override stylesheet, the renderer's public barrels only, and no raw r3f `<Canvas>`
+(`GameCanvas` is the only canvas root a game mounts).
 
 The config is emitted for a **standalone** project only. A `--workspace` game inherits the
 monorepo's root config, which is the stricter of the two; a file in the app directory would

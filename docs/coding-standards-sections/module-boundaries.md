@@ -32,6 +32,7 @@ These boundaries are hard constraints. Violations are **BLOCK** findings at revi
 - `no-restricted-imports` — blocks `simulation/` from importing `renderer/` or `apps/*`.
 - `chimera/no-fromfloat-in-simulation` — blocks `FixedPoint.fromFloat()` inside hot simulation paths (Invariant #76).
 - `chimera/no-game-renderer-internals` — the executable form of Invariant #96, which states per file group what a games package may reach in renderer. Everything outside those groups is blocked.
+- `chimera/no-raw-r3f-canvas` — the ESLint arm of Invariant #127: a game surface must not obtain the `Canvas` binding from `@react-three/fiber`; `GameCanvas` is the only canvas root a game mounts. Name-based, so `useFrame`/`useThree`/type-only imports from the same specifier stay legal.
 - `chimera/no-hardcoded-design-values` — blocks colour and size literals in renderer UI and game screens; design values flow through `var(--ch-*)` tokens (Invariants #86, #91).
 - `chimera/no-unknown-token-overrides` — blocks a game token override that redefines a token the engine does not declare (Invariant #85).
 - `chimera/no-shell-games-import` — blocks the engine shell pages and `GameShell`/`InGameMenuHost` from importing any game path (Invariants #80, #93, #94).
@@ -42,13 +43,14 @@ Any `// eslint-disable` bypass requires a `@chimera-review: <reason>` comment on
 
 ### These rules reach standalone games
 
-Four of the `chimera/*` rules are not monorepo-only. They ship from
+Five of the `chimera/*` rules are not monorepo-only. They ship from
 `@chimera-engine/electron/eslint` (§4.32), so a game scaffolded by `create-chimera-game` and
 developed outside this repo enforces them on its own code — and the monorepo's own root
 config loads that same compiled plugin, so there is one implementation rather than two.
 
-Those four are the ones that bind GAME code: `no-fromfloat-in-simulation`,
-`no-hardcoded-design-values`, `no-unknown-token-overrides` and `no-game-renderer-internals`.
+Those five are the ones that bind GAME code: `no-fromfloat-in-simulation`,
+`no-hardcoded-design-values`, `no-unknown-token-overrides`, `no-game-renderer-internals`
+and `no-raw-r3f-canvas`.
 The three that guard the engine's own internals stay here — `curated-rules.ts` records the
 per-rule reason, as data, so a rule dropped by accident is distinguishable from one withheld
 on purpose.

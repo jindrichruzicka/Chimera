@@ -310,7 +310,7 @@ above and recorded in the section above this one: the rules ride the already-pub
 `@chimera-engine/electron`.
 
 What is _not_ a distribution question, and is settled here, is **which** rules travel. The
-answer is not "all seven": three of them guard boundaries internal to the engine, and the
+answer is not "all eight": three of them guard boundaries internal to the engine, and the
 reason each is withheld differs — two would guard nothing, one would guard the wrong thing.
 
 | Rule                         | Invariant     | Verdict      | Zones (relative to the game app root)                                             | Why                                                                                                                                                                                                                                                                                            |
@@ -319,6 +319,7 @@ reason each is withheld differs — two would guard nothing, one would guard the
 | `no-hardcoded-design-values` | #86, #91      | **applies**  | `screens/**` (TS/TSX) — `error`; plus `screens/**/*.module.css` via `@eslint/css` | Game screens are design-value-bearing UI; this is the exact relative form of the monorepo's games-side glob. The game's `renderer/` is out not because it would be noisy but because there is nothing there to guard — loaders, `register.ts` and Next route re-exports.                       |
 | `no-unknown-token-overrides` | #85           | **applies**  | `styles/tokens-override.css` via `@eslint/css` — `error`                          | The one rule that reads a file. Its base token set resolves through the published `@chimera-engine/renderer/styles/tokens.css` specifier rather than any path relative to the rule module — which is what lets it work outside the monorepo, and what makes a BUILT renderer its prerequisite. |
 | `no-game-renderer-internals` | #96           | **applies**  | the whole app — `error`                                                           | The games-**side** enforcement of the renderer public-barrel boundary; the single most on-point rule for a game.                                                                                                                                                                               |
+| `no-raw-r3f-canvas`          | #127          | **applies**  | the whole app — `error`                                                           | The ESLint arm of the GameCanvas-only canvas root: a game must not obtain the raw `Canvas` binding from `@react-three/fiber`; name-based, so the scene hooks from the same specifier stay legal.                                                                                               |
 | `no-shell-games-import`      | #80, #93, #94 | **does not** | —                                                                                 | The one withheld rule that would be **live**: its predicate is directory-shaped (`/app/<shell-dir>/`) and a scaffold ships all six of those directories in its own Next host route tree. Withheld because there the forbidden import is legitimate — see below.                                |
 | `no-main-games-import`       | —             | **does not** | —                                                                                 | Its predicate needs an `electron/main/` **directory** segment, which a game's flat `electron/main.ts` never has, so it would guard nothing. And were the zone widened to reach it, that file is the sanctioned composition root which names exactly one game — by design.                      |
 | `no-main-provider-internals` | #47           | **does not** | —                                                                                 | Same two reasons as its sibling: no `electron/main/` directory to match, and a game's `electron/main.ts` is the composition root where wiring a concrete provider is the point rather than the violation.                                                                                      |
@@ -332,7 +333,7 @@ composing itself, not the engine acquiring a game dependency. The invariants it 
 the engine's shell, which ships inside `@chimera-engine/renderer` and is linted there.
 
 The verdicts are data, not prose: `electron/dev-tools/eslint/curated-rules.ts` exports the
-four curated entries **and** the three exclusions with their reasons, so a rule dropped by
+five curated entries **and** the three exclusions with their reasons, so a rule dropped by
 accident is distinguishable from one withheld on purpose.
 
 One property of that manifest is load-bearing and invisible from a rule id: **a rule fires
@@ -340,7 +341,8 @@ only where the flat-config glob and the rule's own internal predicate agree**, a
 predicates read the absolute filename. `no-fromfloat-in-simulation` wants a `/simulation/`
 segment **or** an `apps/<name>/ai/` one — so its `ai/**` zone is live only under `apps/`;
 `no-unknown-token-overrides` wants `apps/<name>/styles/tokens-override.css`;
-`no-game-renderer-internals` wants an `apps/<name>/` segment. A scaffolded game satisfies all
+`no-game-renderer-internals` and `no-raw-r3f-canvas` want an `apps/<name>/` segment. A
+scaffolded game satisfies all
 of them because it lives at `apps/<kebab>`, which makes that layout part of the contract.
 
 One known gap, inherited rather than introduced: a game's `shell/` contributions are renderer

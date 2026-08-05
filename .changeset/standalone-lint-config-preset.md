@@ -3,7 +3,8 @@
 ---
 
 Add `standaloneLintConfig()` to `@chimera-engine/electron/eslint` — the games-facing
-half of the architecture-lint surface. The subpath already exposed the seven rules as a
+half of the architecture-lint surface. The subpath already exposed the architecture-lint
+rules as a
 plugin object; a game still had to know which of them apply to game code, at what
 severity, and on which of its own directories. The factory answers that:
 
@@ -19,10 +20,11 @@ export default [
 ```
 
 It is an **overlay, not a base**. What comes back is the curated rule blocks and nothing
-else — no recommended sets, no parser options, no global `ignores`. Four rules travel:
+else — no recommended sets, no parser options, no global `ignores`. Five rules travel:
 `no-fromfloat-in-simulation` on `simulation/**` and `ai/**`, `no-hardcoded-design-values`
 on `screens/**` and its CSS modules, `no-unknown-token-overrides` on
-`styles/tokens-override.css`, and `no-game-renderer-internals` across the app. The three
+`styles/tokens-override.css`, and `no-game-renderer-internals` and `no-raw-r3f-canvas`
+across the app. The three
 engine-internal boundary rules do not, and the reasons are recorded per rule.
 
 `silenceOnCss` matters, and passing the base twice is not redundancy. Two of the curated
@@ -49,10 +51,11 @@ scoped to JS/TS files needs none of this.
 
 Two facts worth knowing before trusting a green run. The CSS arm **widens** what
 `eslint .` covers — it pulls `.css` files into a run that previously skipped them, which is
-how the token rules reach them at all. And three of the four rules require an
+how the token rules reach them at all. And four of the five rules require an
 `apps/<name>/` segment in the absolute path, because their own predicates read it: a game
-at `<project>/apps/<kebab>` gets all four, and the same game at a bare project root loses
-`no-game-renderer-internals` and `no-unknown-token-overrides` silently.
+at `<project>/apps/<kebab>` gets all five, and the same game at a bare project root loses
+`no-game-renderer-internals`, `no-raw-r3f-canvas`, and `no-unknown-token-overrides`
+silently.
 
 `@eslint/css` and `@eslint/js` are declared as **optional** peer dependencies and required
 on demand, never at module scope: a module-top import would break `chimeraPlugin` too, for every consumer

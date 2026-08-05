@@ -220,6 +220,15 @@ export const PROBE_LINT_PLANTS = [
             '',
         ].join('\n'),
     },
+    {
+        rel: 'screens/VerifyScaffoldProbeCanvas.tsx',
+        ruleId: 'chimera/no-raw-r3f-canvas',
+        source: [
+            "import { Canvas } from '@react-three/fiber';",
+            'export const probe = Canvas;',
+            '',
+        ].join('\n'),
+    },
 ] as const;
 
 /**

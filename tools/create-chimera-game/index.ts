@@ -64,7 +64,7 @@ const DEFAULT_TEMPLATE = 'blank';
  * `apps/<kebab>` tree it adds the `no-restricted-syntax` determinism guard
  * (Invariant #43), the `no-restricted-imports` boundaries, `no-console` on the
  * composition root (Invariant #67) and the type-checked TypeScript set, on top
- * of the same four curated rules. Emitting this file there would SHADOW all of
+ * of the same five curated rules. Emitting this file there would SHADOW all of
  * that: flat config resolves the nearest config and does not merge, and
  * `pnpm -r lint` runs `eslint .` from inside each package.
  *

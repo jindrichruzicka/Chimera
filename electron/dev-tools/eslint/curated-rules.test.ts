@@ -61,12 +61,13 @@ const ENGINE_INTERNAL_RULES = [
 ] as const;
 
 describe('STANDALONE_LINT_RULES', () => {
-    it('curates exactly the four games-side rules', () => {
+    it('curates exactly the five games-side rules', () => {
         expect(STANDALONE_LINT_RULES.map((rule) => rule.ruleId)).toEqual([
             'chimera/no-fromfloat-in-simulation',
             'chimera/no-hardcoded-design-values',
             'chimera/no-unknown-token-overrides',
             'chimera/no-game-renderer-internals',
+            'chimera/no-raw-r3f-canvas',
         ]);
     });
 
@@ -117,6 +118,15 @@ describe('STANDALONE_LINT_RULES', () => {
     it('maps the renderer-barrel boundary onto the whole app', () => {
         const rule = ruleById('chimera/no-game-renderer-internals');
 
+        expect(rule.zones).toEqual(['**/*.{ts,tsx,js,jsx,mjs}']);
+        expect(rule.cssZones).toBeUndefined();
+        expect(rule.exemptZones).toBeUndefined();
+    });
+
+    it('maps the raw-canvas ban onto the whole app', () => {
+        const rule = ruleById('chimera/no-raw-r3f-canvas');
+
+        expect(rule.severity).toBe('error');
         expect(rule.zones).toEqual(['**/*.{ts,tsx,js,jsx,mjs}']);
         expect(rule.cssZones).toBeUndefined();
         expect(rule.exemptZones).toBeUndefined();
@@ -177,11 +187,11 @@ describe('STANDALONE_LINT_EXCLUSIONS', () => {
         }
     });
 
-    it('partitions all seven plugin rules between curated and excluded', () => {
+    it('partitions all eight plugin rules between curated and excluded', () => {
         const curated = STANDALONE_LINT_RULES.map((rule) => rule.ruleId);
         const excluded = STANDALONE_LINT_EXCLUSIONS.map((exclusion) => exclusion.ruleId);
 
-        expect(new Set([...curated, ...excluded]).size).toBe(7);
+        expect(new Set([...curated, ...excluded]).size).toBe(8);
         for (const ruleId of excluded) {
             expect(curated).not.toContain(ruleId);
         }

@@ -1,7 +1,7 @@
 /**
  * electron/dev-tools/eslint/curated-rules.ts
  *
- * The curated standalone lint rule set — which of the seven Chimera lint rules
+ * The curated standalone lint rule set — which of the eight Chimera lint rules
  * a game gets once it leaves the monorepo, at what severity, on which of its
  * own zones. The reasoning behind each verdict lives in §4.32; this file is the
  * machine-readable form of it.
@@ -118,6 +118,14 @@ export const STANDALONE_LINT_RULES: readonly CuratedLintRule[] = [
         // inside a game are renderer surfaces, and a forbidden deep import is
         // worth catching wherever it is written.
         ruleId: 'chimera/no-game-renderer-internals',
+        severity: 'error',
+        zones: ['**/*.{ts,tsx,js,jsx,mjs}'],
+    },
+    {
+        // Invariant #127 — GameCanvas is the only canvas root a game mounts.
+        // Whole-app zone for the same reason as its sibling above; the rule
+        // header records the name-based rationale.
+        ruleId: 'chimera/no-raw-r3f-canvas',
         severity: 'error',
         zones: ['**/*.{ts,tsx,js,jsx,mjs}'],
     },

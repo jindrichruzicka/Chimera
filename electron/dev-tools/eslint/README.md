@@ -1,6 +1,6 @@
 # `chimera` ESLint rules + the standalone preset
 
-The seven `chimera/*` rules are the executable half of the architecture invariants. Without
+The eight `chimera/*` rules are the executable half of the architecture invariants. Without
 them, §3's module boundaries and §4.35's design-token discipline are prose that reviewers
 have to remember.
 
@@ -12,16 +12,16 @@ a plugin object and never spawns anything.
 import { chimeraPlugin, standaloneLintConfig } from '@chimera-engine/electron/eslint';
 ```
 
-`chimeraPlugin` is the plugin object, carrying all seven rules. The monorepo's own root
+`chimeraPlugin` is the plugin object, carrying all eight rules. The monorepo's own root
 config registers it directly, per rule and per zone. `standaloneLintConfig()` is the
-games-facing half: the four rules that apply to game code, already mapped onto a game's own
+games-facing half: the five rules that apply to game code, already mapped onto a game's own
 directories.
 
 ---
 
 ## What a game gets, and what it does not
 
-Four rules travel with a game. Three stay behind.
+Five rules travel with a game. Three stay behind.
 
 | Rule                         | Invariant | Where it fires in a game                                           |
 | ---------------------------- | --------- | ------------------------------------------------------------------ |
@@ -29,6 +29,7 @@ Four rules travel with a game. Three stay behind.
 | `no-hardcoded-design-values` | #86, #91  | `screens/**` (TS/TSX) and `screens/**/*.module.css`                |
 | `no-unknown-token-overrides` | #85       | `styles/tokens-override.css`                                       |
 | `no-game-renderer-internals` | #96       | the whole app                                                      |
+| `no-raw-r3f-canvas`          | #127      | the whole app                                                      |
 
 The withheld three — `no-shell-games-import`, `no-main-games-import`,
 `no-main-provider-internals` — guard boundaries internal to the engine. §4.32 records the
@@ -39,10 +40,10 @@ Two facts the rule ids do not carry, and both are load-bearing:
 
 - **Zones are app-root-relative.** A game runs `eslint .` from its own app root, so the
   globs read `simulation/**`, not the monorepo's `apps/<game>/simulation/**`.
-- **Three of the four also need an `apps/<name>/` segment in the ABSOLUTE path**, because
+- **Four of the five also need an `apps/<name>/` segment in the ABSOLUTE path**, because
   their own predicates read it. A scaffolded game satisfies that by living at
-  `apps/<kebab>`; the same game at a bare project root loses `no-game-renderer-internals`
-  and `no-unknown-token-overrides` silently, and `no-fromfloat-in-simulation` keeps only its
+  `apps/<kebab>`; the same game at a bare project root loses `no-game-renderer-internals`,
+  `no-raw-r3f-canvas`, and `no-unknown-token-overrides` silently, and `no-fromfloat-in-simulation` keeps only its
   simulation arm.
 
 ---

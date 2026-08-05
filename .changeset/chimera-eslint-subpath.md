@@ -2,7 +2,7 @@
 '@chimera-engine/electron': minor
 ---
 
-Publish the seven Chimera architecture-lint rules at a new
+Publish the Chimera architecture-lint rules at a new
 `@chimera-engine/electron/eslint` subpath. Until now they lived in the repo-root
 `tools/` package, which is never published, so a game that left the monorepo lost every
 architectural guardrail: a `fromFloat()` in a reducer (Invariant #76), a hardcoded hex in

@@ -1208,7 +1208,7 @@ describe('verifyScaffold', () => {
             .split('ruleId: ')
             .slice(1)
             .map((chunk) => ({
-                ruleId: /^'(chimera\/[a-z-]+)'/u.exec(chunk)?.[1] ?? '',
+                ruleId: /^'(chimera\/[a-z0-9-]+)'/u.exec(chunk)?.[1] ?? '',
                 lintsCss: chunk.includes('cssZones:'),
                 lintsCode: chunk.includes('zones: '),
             }));

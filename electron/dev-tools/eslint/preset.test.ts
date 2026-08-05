@@ -132,6 +132,17 @@ describe('standaloneLintConfig', () => {
         });
     });
 
+    it('maps the raw-canvas ban onto the whole app', () => {
+        const blocks = blocksFor(config, 'chimera/no-raw-r3f-canvas');
+
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({
+            files: ['**/*.{ts,tsx,js,jsx,mjs}'],
+            severity: 'error',
+            isCss: false,
+        });
+    });
+
     it('registers the CSS language plugin on exactly the CSS blocks', () => {
         // The namespace is spelled out rather than imported from the source: a
         // test that restates the implementation cannot notice it changing.
@@ -231,7 +242,7 @@ describe('overlay discipline', () => {
  *   - `files` globs resolve against the linter's CWD, which for a game is its
  *     own app root — so the zone globs are app-root-relative, as the manifest
  *     says;
- *   - a rule's own predicate reads the ABSOLUTE filename, and three of the four
+ *   - a rule's own predicate reads the ABSOLUTE filename, and four of the five
  *     want an `apps/<name>/` segment in it.
  *
  * Get either half wrong and the rules go quiet, which is why the game path

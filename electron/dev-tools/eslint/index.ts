@@ -11,6 +11,7 @@
  *   - `chimera/no-hardcoded-design-values` (Invariants #86, #91)
  *   - `chimera/no-unknown-token-overrides` (Invariant #85)
  *   - `chimera/no-game-renderer-internals` (game renderer UI boundary)
+ *   - `chimera/no-raw-r3f-canvas` (Invariant #127)
  *   - `chimera/no-shell-games-import` (Invariants #93, #94)
  *   - `chimera/no-main-games-import` (main-process game boundary)
  *   - `chimera/no-main-provider-internals` (main-process networking provider boundary, Invariant #47)
@@ -29,6 +30,7 @@
 
 import noFromFloatInSimulation from './rules/no-fromfloat-in-simulation.js';
 import noGameRendererInternals from './rules/no-game-renderer-internals.js';
+import noRawR3fCanvas from './rules/no-raw-r3f-canvas.js';
 import noHardcodedDesignValues from './rules/no-hardcoded-design-values.js';
 import noUnknownTokenOverrides from './rules/no-unknown-token-overrides.js';
 import noShellGamesImport from './rules/no-shell-games-import.js';
@@ -39,6 +41,7 @@ export const chimeraPlugin = {
     rules: {
         'no-fromfloat-in-simulation': noFromFloatInSimulation,
         'no-game-renderer-internals': noGameRendererInternals,
+        'no-raw-r3f-canvas': noRawR3fCanvas,
         'no-hardcoded-design-values': noHardcodedDesignValues,
         'no-unknown-token-overrides': noUnknownTokenOverrides,
         'no-shell-games-import': noShellGamesImport,

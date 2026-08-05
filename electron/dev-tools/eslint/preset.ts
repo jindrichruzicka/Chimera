@@ -48,10 +48,11 @@
  *
  *   - Zone globs are relative to the game's app root, because `files` globs
  *     resolve against the directory ESLint runs in.
- *   - Three of the four rules additionally require an `apps/<name>/` segment in
+ *   - Four of the five rules additionally require an `apps/<name>/` segment in
  *     the ABSOLUTE path — their own predicates read it. A game at
  *     `<project>/apps/<kebab>` satisfies that; the same game at a bare project
- *     root loses `no-game-renderer-internals` and `no-unknown-token-overrides`
+ *     root loses `no-game-renderer-internals`, `no-raw-r3f-canvas`, and
+ *     `no-unknown-token-overrides`
  *     silently, and `no-fromfloat-in-simulation` keeps only its simulation arm.
  *
  * ## What the CSS arm changes about `eslint .`
