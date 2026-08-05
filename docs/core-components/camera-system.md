@@ -90,6 +90,14 @@ export type GameCanvasCamera = CameraPreset | CameraConfig;
 export type GameCanvasProps = Readonly<{
     camera: GameCanvasCamera;
     children: React.ReactNode;
+    /**
+     * Forwarded to the r3f wrapper `<div>` so a game sizes and positions the
+     * canvas from its own module CSS (a zero-height wrapper never mounts the
+     * scene).
+     */
+    className?: string;
+    /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */
+    onPointerMissed?: (event: MouseEvent) => void;
 }>;
 ```
 

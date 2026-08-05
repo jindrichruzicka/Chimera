@@ -59,6 +59,14 @@ export type GameCanvasCamera = CameraPreset | CameraConfig;
 export type GameCanvasProps = Readonly<{
     camera: GameCanvasCamera;
     children: ReactNode;
+    /**
+     * Forwarded to the r3f wrapper `<div>` so a game sizes and positions the
+     * canvas from its own module CSS (a zero-height wrapper never mounts the
+     * scene).
+     */
+    className?: string;
+    /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */
+    onPointerMissed?: (event: MouseEvent) => void;
 }>;
 
 // Each preset carries its documented projection mode (camera-system.md preset
@@ -83,7 +91,12 @@ const cameraPresetConfigs = {
 
 const DEFAULT_UP: Vector3Tuple = [0, 1, 0];
 
-export function GameCanvas({ camera, children }: GameCanvasProps): React.ReactElement {
+export function GameCanvas({
+    camera,
+    children,
+    className,
+    onPointerMissed,
+}: GameCanvasProps): React.ReactElement {
     const cameraInstance = React.useMemo(() => createCamera(camera), [camera]);
     // Both halves of the frame-rate cap — the prop below and the
     // <FrameRateLimiter /> driver inside; see selectTargetFps.ts for why they
@@ -91,7 +104,15 @@ export function GameCanvas({ camera, children }: GameCanvasProps): React.ReactEl
     const frameloop = useEngineFrameloop();
 
     return (
-        <Canvas camera={cameraInstance} frameloop={frameloop}>
+        <Canvas
+            camera={cameraInstance}
+            frameloop={frameloop}
+            className={className}
+            // r3f types onPointerMissed without `| undefined`, so under
+            // exactOptionalPropertyTypes the key must be omitted, not set to
+            // undefined.
+            {...(onPointerMissed ? { onPointerMissed } : {})}
+        >
             <PerfProbe />
             <FrameRateLimiter />
             {children}

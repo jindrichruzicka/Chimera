@@ -189,6 +189,120 @@ describe('GameCanvas', () => {
         },
     );
 
+    it('forwards className to the Canvas and leaves it undefined when absent', () => {
+        const { rerender } = render(
+            <GameCanvas camera="free" className="game-surface">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().className).toBe('game-surface');
+
+        rerender(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        // The forwarded value stays `undefined` — no default or override class
+        // is synthesized for the r3f wrapper <div> when the game passes
+        // nothing. (The key itself is still emitted; `@types/react` accepts
+        // `string | undefined`, which is why className needs no conditional
+        // spread.)
+        expect(latestCanvasProps().className).toBeUndefined();
+    });
+
+    it('forwards onPointerMissed and the canvas invokes the game handler', () => {
+        const onPointerMissed = vi.fn();
+
+        render(
+            <GameCanvas camera="free" onPointerMissed={onPointerMissed}>
+                <mesh />
+            </GameCanvas>,
+        );
+
+        const forwarded = latestCanvasProps().onPointerMissed;
+        if (typeof forwarded !== 'function') {
+            throw new Error('Expected GameCanvas to forward onPointerMissed to Canvas');
+        }
+        const missEvent = new MouseEvent('click');
+        forwarded(missEvent);
+
+        expect(onPointerMissed).toHaveBeenCalledTimes(1);
+        expect(onPointerMissed).toHaveBeenCalledWith(missEvent);
+    });
+
+    it('leaves onPointerMissed undefined when the game passes none', () => {
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(latestCanvasProps().onPointerMissed).toBeUndefined();
+    });
+
+    it('rejects r3f CanvasProps pass-through keys at the type level', () => {
+        // GameCanvasProps is curated by construction — no CanvasProps
+        // rest-spread — so every r3f key below is an excess property at a
+        // literal call site. The @ts-expect-error lines ARE the assertions:
+        // typecheck fails the moment any key becomes accepted. One pin per key
+        // so widening by a single key kills a named line.
+        void (
+            <GameCanvas
+                camera="free"
+                // @ts-expect-error: gl is not a curated GameCanvas prop
+                gl={{ antialias: true }}
+            >
+                <mesh />
+            </GameCanvas>
+        );
+        void (
+            <GameCanvas
+                camera="free"
+                // @ts-expect-error: dpr is not a curated GameCanvas prop
+                dpr={2}
+            >
+                <mesh />
+            </GameCanvas>
+        );
+        void (
+            <GameCanvas
+                camera="free"
+                // @ts-expect-error: shadows is not a curated GameCanvas prop
+                shadows
+            >
+                <mesh />
+            </GameCanvas>
+        );
+        void (
+            <GameCanvas
+                camera="free"
+                // @ts-expect-error: style is withheld — className + module CSS only
+                style={{ width: '100%' }}
+            >
+                <mesh />
+            </GameCanvas>
+        );
+        void (
+            <GameCanvas
+                camera="free"
+                // @ts-expect-error: frameloop is engine-owned and non-overridable
+                frameloop="demand"
+            >
+                <mesh />
+            </GameCanvas>
+        );
+        void (
+            <GameCanvas
+                // @ts-expect-error: camera takes a GameCanvasCamera, not a THREE instance
+                camera={new PerspectiveCamera()}
+            >
+                <mesh />
+            </GameCanvas>
+        );
+    });
+
     it('mounts one PerfProbe inside the R3F canvas root', () => {
         render(
             <GameCanvas camera="free">
@@ -461,27 +575,31 @@ describe('GameCanvas', () => {
     });
 });
 
-function latestCanvasFrameloop(): unknown {
+function latestCanvasProps(): Readonly<{
+    camera?: unknown;
+    frameloop?: unknown;
+    className?: unknown;
+    onPointerMissed?: unknown;
+}> {
     const lastCall = vi.mocked(Canvas).mock.calls.at(-1);
     if (!lastCall) {
         throw new Error('Expected GameCanvas to render R3F Canvas');
     }
 
-    return (lastCall[0] as { readonly frameloop?: unknown }).frameloop;
+    return lastCall[0];
+}
+
+function latestCanvasFrameloop(): unknown {
+    return latestCanvasProps().frameloop;
 }
 
 function latestCanvasCamera(): PerspectiveCamera | OrthographicCamera {
-    const lastCall = vi.mocked(Canvas).mock.calls.at(-1);
-    if (!lastCall) {
-        throw new Error('Expected GameCanvas to render R3F Canvas');
-    }
-
-    const props = lastCall[0] as { readonly camera?: PerspectiveCamera | OrthographicCamera };
-    if (!props.camera) {
+    const camera = latestCanvasProps().camera;
+    if (!(camera instanceof PerspectiveCamera) && !(camera instanceof OrthographicCamera)) {
         throw new Error('Expected GameCanvas to pass an initialized camera to Canvas');
     }
 
-    return props.camera;
+    return camera;
 }
 
 function cameraDirection(camera: PerspectiveCamera | OrthographicCamera): number[] {
