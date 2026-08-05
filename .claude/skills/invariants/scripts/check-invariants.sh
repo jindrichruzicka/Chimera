@@ -1024,6 +1024,111 @@ if [[ -d electron/main ]]; then
     )
 fi
 
+# ─── Check 32: no raw r3f Canvas binding in a game app (invariant 127) ───────
+# The belt-and-braces arm of Invariant #127: GameCanvas (role="main" |
+# "overlay") is the only canvas root a game mounts, so no file under apps/*/
+# may take the `Canvas` BINDING from '@react-three/fiber' on an import or
+# re-export statement. The precise arm is ESLint `chimera/no-raw-r3f-canvas`;
+# the split between the arms is recorded in the invariant. The mutation probe
+# for this check: `import * as fiber` + `<fiber.Canvas>` keeps this check
+# silent while the property is false — nothing on the import statement names
+# Canvas — and is caught by the ESLint arm; dynamic import() destructuring is
+# visible to neither.
+#
+# Statements are JOINED before matching (prettier splits long specifier
+# lists, and a line grep goes blind on the split form): the awk pass emits
+# one `path:line:statement` record per import/export statement, numbered at
+# the statement's FIRST line. Only lines STARTING with import/export enter a
+# record, which is also what excludes commented copies (`// import`,
+# `* import`) — a leading-comment `/* x */ import` evades this check and is
+# caught by the ESLint arm.
+#
+# Word-boundary by construction: the binding must follow `{` or `,`, so the
+# engine's GameCanvas (a letter before Canvas) never matches; `Canvas as X`
+# and the string-named `'Canvas' as X` do. Type-only forms are exempt — a
+# type cannot mount a canvas (the ESLint arm's verdict, shared).
+RAW_CANVAS_FIBER_RE="from[[:space:]]*['\"]@react-three/fiber['\"]"
+RAW_CANVAS_BINDING_RE="[{,][[:space:]]*('Canvas'|\"Canvas\"|Canvas)[[:space:]]*(,|\}|as[[:space:]])"
+# Statement-level `import type` / `export type` only: an INLINE `type X`
+# specifier needs no exclusion leg, because the `type` keyword sits between
+# the `{`/`,` delimiter and the name, so a type-qualified specifier can never
+# match the binding RE above in the first place.
+RAW_CANVAS_TYPE_RE="^[^:]*:[0-9]+:[[:space:]]*(import|export)[[:space:]]+type[[:space:]]"
+
+# Emits one `path:line:statement` record per import/export statement in $1,
+# multi-line statements joined onto one record. A statement ends on the first
+# line carrying a quote (the specifier) or a trailing semicolon; non-import
+# export statements (`export function …`) produce join noise that the fiber
+# filter below discards, erring loud rather than silent.
+check32_scan_file() {
+    awk -v path="$1" -v sq="'" '
+        {
+            if (!joining) {
+                if ($0 !~ /^[[:space:]]*(import|export)[[:space:]]/) next
+                joining = 1; start = NR; buf = $0
+            } else {
+                buf = buf " " $0
+            }
+            if (index($0, sq) > 0 || index($0, "\"") > 0 || $0 ~ /;[[:space:]]*$/) {
+                print path ":" start ":" buf
+                joining = 0
+            }
+        }
+    ' "$1"
+}
+
+# One filter for the real scan AND the anti-rot control below, over
+# `path:line:statement` records.
+check32_filter() {
+    grep -E "${RAW_CANVAS_FIBER_RE}" \
+        | grep -E "${RAW_CANVAS_BINDING_RE}" \
+        | grep -vE "${RAW_CANVAS_TYPE_RE}" \
+        || true
+}
+
+# Anti-rot control (the Check 9 lesson: a gate that cannot fail is a no-op).
+# Every run first proves the REAL pipeline — the statement joiner and the
+# filter — still catches known-bad fixtures (single-line and multi-line) and
+# still passes the known-good ones. Fixture files are planted in a throwaway
+# temp dir, so the control runs identically in the repo and in test harness
+# fixture roots.
+CHECK32_CONTROL_DIR=$(mktemp -d -t chimera-check32-control-XXXXXX)
+cat > "${CHECK32_CONTROL_DIR}/bad.tsx" <<'CHECK32_EOF'
+import { Canvas } from '@react-three/fiber';
+import {
+    useFrame,
+    Canvas as Root,
+} from '@react-three/fiber';
+CHECK32_EOF
+cat > "${CHECK32_CONTROL_DIR}/good.tsx" <<'CHECK32_EOF'
+import { useFrame } from '@react-three/fiber';
+import type { Canvas } from '@react-three/fiber';
+import { GameCanvas } from '@chimera-engine/renderer/components/r3f';
+// import { Canvas } from '@react-three/fiber';
+CHECK32_EOF
+CHECK32_BAD_HITS=$(check32_scan_file "${CHECK32_CONTROL_DIR}/bad.tsx" | check32_filter | wc -l | tr -d ' ')
+CHECK32_GOOD_HITS=$(check32_scan_file "${CHECK32_CONTROL_DIR}/good.tsx" | check32_filter | wc -l | tr -d ' ')
+rm -rf "${CHECK32_CONTROL_DIR}"
+if [[ "${CHECK32_BAD_HITS}" != "2" ]]; then
+    violation "127" ".claude/skills/invariants/scripts/check-invariants.sh:1: Check 32 negative control — the pipeline caught ${CHECK32_BAD_HITS}/2 planted violations; the gate has rotted, fix the joiner or the filter"
+fi
+if [[ "${CHECK32_GOOD_HITS}" != "0" ]]; then
+    violation "127" ".claude/skills/invariants/scripts/check-invariants.sh:1: Check 32 negative control — the pipeline flags ${CHECK32_GOOD_HITS} known-good record(s); the gate over-fires"
+fi
+
+if [[ -d apps ]]; then
+    while IFS= read -r check32_file; do
+        while IFS= read -r match; do
+            violation "127" "${match}"
+        done < <(check32_scan_file "${check32_file}" | check32_filter)
+    done < <(
+        find apps \( -name node_modules -o -name dist -o -name out -o -name coverage \
+                -o -name .next -o -name test-results \) -prune -o \
+            -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' \) -print 2>/dev/null \
+        | sort
+    )
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then

@@ -2524,6 +2524,203 @@ test_chimera_protocol_not_flagged_as_egress() {
     expect_clean "${tmp}" "Check 31: chimera:// protocol registration is not egress"
 }
 
+# ─── Check 32: raw r3f Canvas binding in a game app (invariant 127) ──────────
+
+test_raw_canvas_import_in_game_screen_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/TacticsScene.tsx" \
+        "import { Canvas } from '@react-three/fiber';"
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+    if [[ ${exit_code} -ne 0 ]] \
+        && echo "${out}" | grep -q "\[invariant-127\]" \
+        && echo "${out}" | grep -q "apps/tactics/screens/TacticsScene.tsx:1:"; then
+        pass "Check 32: raw Canvas import flagged with a path:line anchor"
+    else
+        fail "Check 32: raw Canvas import — expected [invariant-127] anchored at apps/tactics/screens/TacticsScene.tsx:1: (exit ${exit_code})"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+test_raw_canvas_alias_import_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/scene/TacticsBoardScene.tsx" \
+        "import { useFrame, Canvas as Root } from '@react-three/fiber';"
+    expect_violation "${tmp}" "127" "Check 32: aliased Canvas import in a game scene"
+}
+
+# Prettier splits long specifier lists, so the statement must be caught in its
+# multi-line form — a pure line grep goes blind here. The anchor must name the
+# statement's FIRST line, as the check comment claims.
+test_raw_canvas_multiline_import_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/TacticsScene.tsx" \
+"import {
+    useFrame,
+    Canvas,
+} from '@react-three/fiber';"
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+    if [[ ${exit_code} -ne 0 ]] \
+        && echo "${out}" | grep -q "\[invariant-127\]" \
+        && echo "${out}" | grep -q "apps/tactics/screens/TacticsScene.tsx:1:"; then
+        pass "Check 32: multi-line Canvas import anchored at its first line"
+    else
+        fail "Check 32: multi-line Canvas import — expected [invariant-127] anchored at apps/tactics/screens/TacticsScene.tsx:1: (exit ${exit_code})"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# The mixed form — a value Canvas beside an inline type sibling — is the most
+# realistic violation, and the exact record a coarsened type-exemption would
+# silently pass.
+test_raw_canvas_beside_inline_type_sibling_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/TacticsScene.tsx" \
+        "import { Canvas, type ThreeEvent } from '@react-three/fiber';"
+    expect_violation "${tmp}" "127" "Check 32: value Canvas beside an inline type sibling"
+}
+
+# The invariant claims the arms scan the WHOLE apps/<name>/ tree — pin a
+# directory outside the screens/scene pair the other fixtures use.
+test_raw_canvas_in_shell_dir_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/shell/TacticsHudOverlay.tsx" \
+        "import { Canvas } from '@react-three/fiber';"
+    expect_violation "${tmp}" "127" "Check 32: raw Canvas import outside screens/scene (shell/)"
+}
+
+test_raw_canvas_string_named_import_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/TacticsScene.tsx" \
+        "import { 'Canvas' as C } from '@react-three/fiber';"
+    expect_violation "${tmp}" "127" "Check 32: string-named Canvas import"
+}
+
+test_raw_canvas_reexport_detected() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/index.ts" \
+        "export { Canvas } from '@react-three/fiber';"
+    expect_violation "${tmp}" "127" "Check 32: Canvas re-export from a game barrel"
+}
+
+test_useframe_only_fiber_import_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/scene/TacticsUnitPrimitive.tsx" \
+        "import { useFrame, useThree } from '@react-three/fiber';"
+    expect_clean "${tmp}" "Check 32: the legitimate scene hooks from the same specifier"
+}
+
+test_type_only_canvas_import_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/TacticsScene.tsx" \
+        "import type { Canvas } from '@react-three/fiber';"
+    expect_clean "${tmp}" "Check 32: a type-only Canvas import cannot mount a canvas"
+}
+
+test_inline_type_canvas_import_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/TacticsScene.tsx" \
+        "import { type Canvas, useFrame } from '@react-three/fiber';"
+    expect_clean "${tmp}" "Check 32: an inline type Canvas specifier"
+}
+
+# The word-boundary axis: GameCanvas contains Canvas but is the sanctioned root.
+test_gamecanvas_engine_import_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/TacticsDemoBoard.tsx" \
+        "import { GameCanvas } from '@chimera-engine/renderer/components/r3f';"
+    expect_clean "${tmp}" "Check 32: the engine GameCanvas import"
+}
+
+# The name axis pinned INDEPENDENTLY of the specifier axis (a guard has two
+# axes — pin the product): a synthetic GameCanvas binding from the fiber
+# specifier itself must stay clean, or the word-boundary anchor has rotted.
+# fiber exports no GameCanvas — the fixture exists purely to isolate the axis.
+test_gamecanvas_name_from_fiber_specifier_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/TacticsDemoBoard.tsx" \
+        "import { GameCanvas } from '@react-three/fiber';"
+    expect_clean "${tmp}" "Check 32: the word-boundary anchor on the fiber specifier itself"
+}
+
+# The recorded split: namespace member access is the ESLint arm's catch — the
+# import line itself names no Canvas binding, so this check stays silent.
+test_namespace_fiber_import_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/scene/TacticsScene.tsx" \
+        "import * as fiber from '@react-three/fiber';"
+    expect_clean "${tmp}" "Check 32: a bare namespace import (member access is the ESLint arm)"
+}
+
+test_commented_canvas_import_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/screens/TacticsScene.tsx" \
+        "// import { Canvas } from '@react-three/fiber';"
+    expect_clean "${tmp}" "Check 32: a commented-out Canvas import"
+}
+
+test_raw_canvas_outside_apps_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "renderer/components/r3f/GameCanvas.tsx" \
+        "import { Canvas } from '@react-three/fiber';"
+    expect_clean "${tmp}" "Check 32: renderer-internal raw Canvas is the sanctioned mount"
+}
+
+# Generated output is pruned: an emitted bundle under .next/ or a Playwright
+# test-results/ dump must not raise a false positive.
+test_raw_canvas_in_generated_output_passes() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    plant_file "${tmp}" "apps/tactics/renderer/.next/chunks/page.js" \
+        "import { Canvas } from '@react-three/fiber';"
+    plant_file "${tmp}" "apps/tactics/test-results/trace/snippet.ts" \
+        "import { Canvas } from '@react-three/fiber';"
+    expect_clean "${tmp}" "Check 32: generated .next/ and test-results/ output is pruned"
+}
+
+# The anti-rot control must turn a rotted binding pattern into a loud failure:
+# a gate that cannot fail is a no-op.
+test_check32_negative_control_fires_on_rotted_pattern() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    mkdir -p "${tmp}/apps"
+    local patched; patched=$(mktemp /tmp/chimera-inv-rot-XXXXXX.sh)
+    sed "s|REPO_ROOT=.*|REPO_ROOT=\"${tmp}\"|" "${SCRIPT_UNDER_TEST}" \
+        | sed 's|^RAW_CANVAS_BINDING_RE=.*|RAW_CANVAS_BINDING_RE="THIS-NEVER-MATCHES"|' \
+        > "${patched}"
+    local out exit_code
+    out=$(cd "${tmp}" && bash "${patched}" 2>&1) && exit_code=0 || exit_code=$?
+    rm -f "${patched}"
+    if [[ ${exit_code} -ne 0 ]] && echo "${out}" | grep -q "Check 32 negative control"; then
+        pass "Check 32: rotted binding pattern trips the negative control"
+    else
+        fail "Check 32: rotted binding pattern — expected the negative control to fire (exit ${exit_code})"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Partial rot: breaking only the statement JOINER loses the multi-line control
+# fixture (1/2 caught) — the exact-count comparator must fire on that too, or
+# it could be weakened to full-rot-only without the suite noticing.
+test_check32_negative_control_fires_on_rotted_joiner() {
+    local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
+    mkdir -p "${tmp}/apps"
+    local patched; patched=$(mktemp /tmp/chimera-inv-rot-XXXXXX.sh)
+    sed "s|REPO_ROOT=.*|REPO_ROOT=\"${tmp}\"|" "${SCRIPT_UNDER_TEST}" \
+        | sed 's|buf = buf " " \$0|buf = $0|' \
+        > "${patched}"
+    local out exit_code
+    out=$(cd "${tmp}" && bash "${patched}" 2>&1) && exit_code=0 || exit_code=$?
+    rm -f "${patched}"
+    if [[ ${exit_code} -ne 0 ]] \
+        && echo "${out}" | grep -q "Check 32 negative control" \
+        && echo "${out}" | grep -q "1/2"; then
+        pass "Check 32: rotted joiner trips the negative control at 1/2"
+    else
+        fail "Check 32: rotted joiner — expected the negative control to fire naming 1/2 (exit ${exit_code})"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -2643,6 +2840,24 @@ test_console_in_composition_root_passes
 test_fetch_https_egress_in_main_detected
 test_node_https_import_in_main_detected
 test_chimera_protocol_not_flagged_as_egress
+test_raw_canvas_import_in_game_screen_detected
+test_raw_canvas_alias_import_detected
+test_raw_canvas_multiline_import_detected
+test_raw_canvas_beside_inline_type_sibling_detected
+test_raw_canvas_in_shell_dir_detected
+test_raw_canvas_string_named_import_detected
+test_raw_canvas_reexport_detected
+test_useframe_only_fiber_import_passes
+test_type_only_canvas_import_passes
+test_inline_type_canvas_import_passes
+test_gamecanvas_engine_import_passes
+test_gamecanvas_name_from_fiber_specifier_passes
+test_namespace_fiber_import_passes
+test_commented_canvas_import_passes
+test_raw_canvas_outside_apps_passes
+test_raw_canvas_in_generated_output_passes
+test_check32_negative_control_fires_on_rotted_pattern
+test_check32_negative_control_fires_on_rotted_joiner
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then

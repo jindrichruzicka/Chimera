@@ -1,6 +1,6 @@
 ---
 title: 'Architecture Invariants Roll-Call'
-description: 'Merge-readiness audit of the architecture invariants hardening set: an explicit per-invariant enforcement roll-call (all 126) plus the full-gate and firing-proof record. Every invariant is classified enforced-by | code-verified | doc-only with concrete evidence.'
+description: 'Merge-readiness audit of the architecture invariants hardening set: an explicit per-invariant enforcement roll-call (all 127) plus the full-gate and firing-proof record. Every invariant is classified enforced-by | code-verified | doc-only with concrete evidence.'
 tags: [invariants, review-gate, audit, roll-call, hardening]
 ---
 
@@ -9,7 +9,7 @@ tags: [invariants, review-gate, audit, roll-call, hardening]
 > Review gate for the **architecture invariants hardening** set. This is the
 > merge-readiness record: it ratifies the whole hardening set, captures the full quality-gate
 > run, and — the artifact the original part-by-part audit lacked — classifies **every one of the
-> 126** [architecture invariants](architecture-invariants.md) by **how it is actually held up**.
+> 127** [architecture invariants](architecture-invariants.md) by **how it is actually held up**.
 >
 > Related: [Architecture Invariants](architecture-invariants.md) · [Module Boundaries](module-boundaries-file-tree.md)
 
@@ -36,12 +36,12 @@ Where both a guard and tests exist, the row is **enforced-by** and names the gua
 
 | Status                                | Count   | Share    |
 | ------------------------------------- | ------- | -------- |
-| **enforced-by** (mechanical CI guard) | 48      | 38%      |
-| **code-verified** (dedicated test)    | 70      | 56%      |
+| **enforced-by** (mechanical CI guard) | 49      | 39%      |
+| **code-verified** (dedicated test)    | 70      | 55%      |
 | **doc-only** (prose contract)         | 8       | 6%       |
-| **Total**                             | **126** | **100%** |
+| **Total**                             | **127** | **100%** |
 
-**94% of invariants (118 / 126) are caught automatically** — by a checker Check, an ESLint
+**94% of invariants (119 / 127) are caught automatically** — by a checker Check, an ESLint
 rule, `validate-assets`, or a dedicated test in the gate. The 8 doc-only rows (#4, #20, #36,
 #40, #53, #74, #84, #105) are architectural principles whose full contract is not directly
 testable; each names its nearest partial guard below.
@@ -104,7 +104,7 @@ and an absent ref together: a reader that resolved neither would report the same
 
 ---
 
-## The roll-call — all 126 invariants
+## The roll-call — all 127 invariants
 
 | #   | Invariant (short)                                         | Status        | Enforced-by / evidence                                                                                                                                                                                                                                                                                                                                  |
 | --- | --------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -234,6 +234,7 @@ and an absent ref together: a reader that resolved neither would report the same
 | 124 | Cue sheets are sim-authored, renderer-read only           | enforced-by   | Check 2 + Check 13 (sim↛renderer, incl. `renderer/audio`; fixtures pin `simulation/foundation/audio-cue-sheet.ts`); `audioManifest.test.ts` `unknown` slot                                                                                                                                                                                              |
 | 125 | `validate-assets` range-checks every cue sheet            | enforced-by   | `validate-assets` audio-cue-sheet gate (`electron/dev-tools/validate-assets/index.test.ts`); non-vacuous since #923 — `apps/tactics/asset-manifest.ts` carries two sheets                                                                                                                                                                               |
 | 126 | `AudioHandle` gains no fields; never spread-built         | code-verified | `AudioManager.test.ts` › exposes exactly id, ref, bus, priority, and valid (#126); builds the handle from a class, never from a spread literal                                                                                                                                                                                                          |
+| 127 | `GameCanvas` is the only canvas root a game mounts        | enforced-by   | ESLint `chimera/no-raw-r3f-canvas` (named/aliased/string-named/re-export + namespace reaches) + Check 32 (statement-joining import scan over `apps/*/` with an every-run negative control); split recorded in the invariant — namespace member access is ESLint-only, dynamic `import()` visible to neither arm                                         |
 
 ---
 
@@ -270,15 +271,15 @@ concrete test.
   (no manifest carried `metadata`), now reaches production input: `apps/tactics/asset-manifest.ts`
   carries two sheets, and a cue moved out of range there fails `pnpm validate:assets`.
 
-No coverage gap was found: every one of the 126 resolves to a mechanical guard or a real test,
+No coverage gap was found: every one of the 127 resolves to a mechanical guard or a real test,
 except the 8 architectural principles honestly marked doc-only.
 
 ## Checker firing proof
 
 Phase-C proof that the guards actually trip. The checker self-test harness
-(`check-invariants.test.sh`, **105 cases**) plants synthetic violations in repo-shaped fixture
+(`check-invariants.test.sh`, **134 cases**) plants synthetic violations in repo-shaped fixture
 roots and asserts each Check both **fires** on a violation and **stays clean** on valid code
-(negative controls). It exercises the full Check 1–31 range, including the hardening
+(negative controls). It exercises the full Check 1–32 range, including the hardening
 additions/repairs:
 
 - **Per-game gameplay checks (Checks 19–24):** `Math.random()`/`Date.now()` in
@@ -344,7 +345,7 @@ Each guard-repair shipped a test that fails without its fix:
 
 ## Cross-references
 
-- [Architecture Invariants](architecture-invariants.md) — the 126 numbered rules.
+- [Architecture Invariants](architecture-invariants.md) — the 127 numbered rules.
 - [Module Boundaries](module-boundaries-file-tree.md) — the file tree these boundary checks defend.
-- Checker: `.claude/skills/invariants/scripts/check-invariants.sh` (Checks 1–31) and its self-test
-  `.claude/skills/invariants/tests/check-invariants.test.sh` (105 cases).
+- Checker: `.claude/skills/invariants/scripts/check-invariants.sh` (Checks 1–32) and its self-test
+  `.claude/skills/invariants/tests/check-invariants.test.sh` (134 cases).
