@@ -6,6 +6,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { PerfProbe } from '../shell/perf/PerfProbe';
 import { FrameRateLimiter } from './FrameRateLimiter';
+import { registerMainCanvas } from './mainCanvasRegistry';
 import { useEngineFrameloop } from './useEngineFrameloop';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
 import type { Vector3Tuple } from '../../types/r3f-types.js';
@@ -60,6 +61,14 @@ export type GameCanvasProps = Readonly<{
     camera: GameCanvasCamera;
     children: ReactNode;
     /**
+     * Which canvas this is. The `'main'` canvas (the default) publishes perf
+     * metrics; an `'overlay'` (minimap, preview) mounts no `PerfProbe`, so the
+     * HUD keeps measuring the main scene. Both roles are paced by the
+     * `display.targetFps` cap. Mounting two concurrent mains is reported by
+     * name through the renderer logger — logged, not thrown.
+     */
+    role?: 'main' | 'overlay';
+    /**
      * Forwarded to the r3f wrapper `<div>` so a game sizes and positions the
      * canvas from its own module CSS (a zero-height wrapper never mounts the
      * scene).
@@ -94,6 +103,7 @@ const DEFAULT_UP: Vector3Tuple = [0, 1, 0];
 export function GameCanvas({
     camera,
     children,
+    role = 'main',
     className,
     onPointerMissed,
 }: GameCanvasProps): React.ReactElement {
@@ -102,6 +112,13 @@ export function GameCanvas({
     // <FrameRateLimiter /> driver inside; see selectTargetFps.ts for why they
     // must read one cap.
     const frameloop = useEngineFrameloop();
+
+    React.useEffect(() => {
+        if (role !== 'main') {
+            return;
+        }
+        return registerMainCanvas();
+    }, [role]);
 
     return (
         <Canvas
@@ -113,7 +130,7 @@ export function GameCanvas({
             // undefined.
             {...(onPointerMissed ? { onPointerMissed } : {})}
         >
-            <PerfProbe />
+            {role === 'main' ? <PerfProbe /> : null}
             <FrameRateLimiter />
             {children}
         </Canvas>

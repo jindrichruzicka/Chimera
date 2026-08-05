@@ -7,8 +7,8 @@
  *
  * **What it drags in.** The graph reaches TWO stores (`perfStore` via
  * `PerfProbe`, `settingsStore` via `selectTargetFps`) and the renderer log
- * bridge (via `FrameRateLimiter`'s half-wired-canvas report) — recorded decisions,
- * not drift. `useModelAnimation`'s `ModelInstance` import is TYPE-ONLY, so
+ * bridge (attribution recorded at the module-set assertion below) — recorded
+ * decisions, not drift. `useModelAnimation`'s `ModelInstance` import is TYPE-ONLY, so
  * the clone seam (and with it `SkeletonUtils`) is deliberately NOT in this
  * graph: the model machinery ships from the `assets` barrel, and this one
  * only animates an instance a caller already holds. What this test measures
@@ -112,15 +112,16 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         ]);
     });
 
-    it('pulls in exactly ten modules — two stores, the log bridge, and no clone seam', async () => {
+    it('pulls in exactly eleven modules — two stores, the log bridge, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The two
         // store edges are real: PerfProbe publishes into perfStore, and both
         // FrameRateLimiter and useEngineFrameloop read settings.display.targetFps
         // through the one shared selectTargetFps module. rendererLogger is the
-        // third recorded edge: FrameRateLimiter reports a half-wired canvas
-        // through the log bridge rather than console (Invariant #67).
+        // third recorded edge: FrameRateLimiter reports a half-wired canvas and
+        // mainCanvasRegistry a duplicate role="main" pair through the log
+        // bridge rather than console (Invariant #67).
         // useModelAnimation imports ModelInstance TYPE-ONLY, so no assets/
         // module — and no SkeletonUtils — appears; the clone seam ships from the
         // assets barrel.
@@ -132,6 +133,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/FrameRateLimiter.tsx',
             'r3f/GameCanvas.tsx',
             'r3f/index.ts',
+            'r3f/mainCanvasRegistry.ts',
             'r3f/selectTargetFps.ts',
             'r3f/useEngineFrameloop.ts',
             'r3f/useModelAnimation.ts',

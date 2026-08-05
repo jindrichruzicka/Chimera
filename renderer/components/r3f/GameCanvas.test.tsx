@@ -118,6 +118,14 @@ function loggedErrors(): { level: string }[] {
         .filter((entry) => entry.level === 'error');
 }
 
+/** Names of the error-level entries, in emission order. */
+function loggedErrorNames(): (string | undefined)[] {
+    return logEmit.mock.calls
+        .map((call) => call[0] as { level: string; error?: { name?: string } })
+        .filter((entry) => entry.level === 'error')
+        .map((entry) => entry.error?.name);
+}
+
 function setTargetFps(targetFps: 30 | 60 | 120 | 0): void {
     useSettingsStore.setState({
         activeGameId: 'game',
@@ -311,6 +319,189 @@ describe('GameCanvas', () => {
         );
 
         expect(perfProbeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('mounts a PerfProbe under an explicit role="main"', () => {
+        render(
+            <GameCanvas camera="free" role="main">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(perfProbeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('mounts no PerfProbe but keeps the limiter and children under role="overlay"', () => {
+        setTargetFps(60);
+
+        render(
+            <GameCanvas camera="free" role="overlay">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(perfProbeSpy).not.toHaveBeenCalled();
+        // Root-state reads prove the limiter mounted (see the limiter test
+        // for why that inference holds).
+        expect(fiberMock.useThree).toHaveBeenCalled();
+        expect(fiberMock.rootState.advance).toHaveBeenCalled();
+        expect(screen.getByTestId('r3f-canvas').querySelector('mesh')).not.toBeNull();
+    });
+
+    it.each([30, 60, 120] as const)(
+        'paces an overlay canvas with frameloop never at a %i fps cap',
+        (targetFps) => {
+            setTargetFps(targetFps);
+
+            render(
+                <GameCanvas camera="free" role="overlay">
+                    <mesh />
+                </GameCanvas>,
+            );
+
+            expect(latestCanvasFrameloop()).toBe('never');
+        },
+    );
+
+    it('reports two concurrently-mounted mains exactly once, by name', () => {
+        render(
+            <>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+                <GameCanvas camera="free" role="main">
+                    <mesh />
+                </GameCanvas>
+            </>,
+        );
+        flushFrame();
+
+        expect(loggedErrorNames()).toEqual(['DuplicateMainGameCanvasError']);
+    });
+
+    it('never reports a main plus an overlay', () => {
+        render(
+            <>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+                <GameCanvas camera="free" role="overlay">
+                    <mesh />
+                </GameCanvas>
+            </>,
+        );
+        flushFrame();
+
+        expect(loggedErrors()).toHaveLength(0);
+    });
+
+    it('never reports a StrictMode-root remount of a single main', () => {
+        render(
+            <React.StrictMode>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+            </React.StrictMode>,
+        );
+        flushFrame();
+
+        expect(loggedErrors()).toHaveLength(0);
+    });
+
+    it('cancels the pending report when one of two mains unmounts before it fires', () => {
+        const { rerender } = render(
+            <>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+            </>,
+        );
+
+        rerender(
+            <>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+            </>,
+        );
+        flushFrame();
+
+        expect(loggedErrors()).toHaveLength(0);
+    });
+
+    it('releases the slot of a main flipped to overlay before the report fires', () => {
+        const { rerender } = render(
+            <>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+            </>,
+        );
+
+        rerender(
+            <>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+                <GameCanvas camera="free" role="overlay">
+                    <mesh />
+                </GameCanvas>
+            </>,
+        );
+        flushFrame();
+
+        expect(loggedErrors()).toHaveLength(0);
+    });
+
+    it('counts an overlay flipped to main beside an existing main', () => {
+        const { rerender } = render(
+            <>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+                <GameCanvas camera="free" role="overlay">
+                    <mesh />
+                </GameCanvas>
+            </>,
+        );
+
+        rerender(
+            <>
+                <GameCanvas camera="free">
+                    <mesh />
+                </GameCanvas>
+                <GameCanvas camera="free" role="main">
+                    <mesh />
+                </GameCanvas>
+            </>,
+        );
+        flushFrame();
+
+        expect(loggedErrorNames()).toEqual(['DuplicateMainGameCanvasError']);
+    });
+
+    it('frees the main slot on unmount so a later main mounts cleanly', () => {
+        const first = render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+        first.unmount();
+
+        render(
+            <GameCanvas camera="free">
+                <mesh />
+            </GameCanvas>,
+        );
+        flushFrame();
+
+        expect(loggedErrors()).toHaveLength(0);
     });
 
     it('mounts the FrameRateLimiter and the capped prop reaches it', () => {

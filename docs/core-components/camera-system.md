@@ -15,7 +15,7 @@ tags: [camera, r3f, animation, renderer, three-js]
 
 React Three Fiber provides full camera control via `useThree()`, `three`'s `PerspectiveCamera`/`OrthographicCamera`, and `@react-three/drei`'s `<CameraControls>`. Camera state lives entirely inside the R3F Canvas tree — **never** in the simulation.
 
-`GameCanvas` is exported from the public r3f barrel (`@chimera-engine/renderer/components/r3f`, Invariant #96) and mounts `PerfProbe` and `FrameRateLimiter` inside its `<Canvas>` root — a game using it must not mount either again. It also owns the `frameloop` **prop** on that root, taking it from `useEngineFrameloop()`.
+`GameCanvas` is exported from the public r3f barrel (`@chimera-engine/renderer/components/r3f`, Invariant #96) and mounts `FrameRateLimiter` inside its `<Canvas>` root — and `PerfProbe` too on the `role="main"` canvas (the default); a `role="overlay"` canvas (minimap, preview) mounts no probe, so the perf HUD keeps measuring the main scene (§4.16). A game using it must not mount either component again. It also owns the `frameloop` **prop** on that root, taking it from `useEngineFrameloop()`.
 
 ### The render loop and the frame-rate cap
 
@@ -90,6 +90,14 @@ export type GameCanvasCamera = CameraPreset | CameraConfig;
 export type GameCanvasProps = Readonly<{
     camera: GameCanvasCamera;
     children: React.ReactNode;
+    /**
+     * Which canvas this is. The `'main'` canvas (the default) publishes perf
+     * metrics; an `'overlay'` (minimap, preview) mounts no `PerfProbe`, so the
+     * HUD keeps measuring the main scene. Both roles are paced by the
+     * `display.targetFps` cap. Mounting two concurrent mains is reported by
+     * name through the renderer logger — logged, not thrown.
+     */
+    role?: 'main' | 'overlay';
     /**
      * Forwarded to the r3f wrapper `<div>` so a game sizes and positions the
      * canvas from its own module CSS (a zero-height wrapper never mounts the
