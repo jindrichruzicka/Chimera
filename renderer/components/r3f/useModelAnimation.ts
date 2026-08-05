@@ -21,7 +21,8 @@ import type { ModelInstance } from '../../assets/ModelInstance.js';
  *
  * This hook never requests frames itself, and on an engine canvas it never needs
  * to: frames arrive unasked under both frameloops `useEngineFrameloop()`
- * returns. Only a game setting `frameloop="demand"` on its own `<Canvas>` makes
+ * returns. Only a `frameloop="demand"` root — one no game canvas can be under
+ * Invariant #127, since GameCanvas never produces that value — makes
  * `useFrame` wait for a frame something else scheduled, and there calling
  * `invalidate()` is the caller's job. See `useEngineFrameloop.ts` for why demand
  * rendering reaches no engine canvas.

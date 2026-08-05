@@ -15,7 +15,7 @@ tags: [camera, r3f, animation, renderer, three-js]
 
 React Three Fiber provides full camera control via `useThree()`, `three`'s `PerspectiveCamera`/`OrthographicCamera`, and `@react-three/drei`'s `<CameraControls>`. Camera state lives entirely inside the R3F Canvas tree — **never** in the simulation.
 
-`GameCanvas` is exported from the public r3f barrel (`@chimera-engine/renderer/components/r3f`, Invariant #96) and mounts `FrameRateLimiter` inside its `<Canvas>` root — and `PerfProbe` too on the `role="main"` canvas (the default); a `role="overlay"` canvas (minimap, preview) mounts no probe, so the perf HUD keeps measuring the main scene (§4.16). A game using it must not mount either component again. It also owns the `frameloop` **prop** on that root, taking it from `useEngineFrameloop()`.
+`GameCanvas` is exported from the public r3f barrel (`@chimera-engine/renderer/components/r3f`, Invariant #96) and is the **only canvas root a game mounts** (Invariant #127 — the barrel exports no other runtime component, and `chimera/no-raw-r3f-canvas` plus mechanical Check 32 ban the raw r3f `Canvas` binding from game code). It mounts `FrameRateLimiter` inside its `<Canvas>` root — and `PerfProbe` too on the `role="main"` canvas (the default); a `role="overlay"` canvas (minimap, preview) mounts no probe, so the perf HUD keeps measuring the main scene (§4.16). It also owns the `frameloop` **prop** on that root, taking it from `useEngineFrameloop()`.
 
 ### The render loop and the frame-rate cap
 
@@ -26,12 +26,20 @@ React Three Fiber provides full camera control via `useThree()`, `three`'s `Pers
 
 **An engine cap must never present a frame.** R3F's `internal.priority` is a _counter_, not a lock: `subscribe` does `internal.priority = internal.priority + (priority > 0 ? 1 : 0)`, and `update()` suppresses only R3F's own automatic render while calling every subscriber unconditionally. Any `useFrame(cb, priority > 0)` subscriber a game mounts — a post-processing composer, a portal/scissor renderer, a hand-rolled render-target pipeline — therefore becomes a co-presenter that nothing can suppress, including a cap implemented the same way. Pacing the loop caps whoever presents, including presenters the engine has never heard of, and writing an engine composer would not help: it would be one more co-presenter.
 
-A game that owns its own `<Canvas>` must wire **both** halves. Wiring one is a defect in each direction, and only one of them is detectable:
+Both halves are **engine-internal wiring**: `GameCanvas` is the only canvas root a game mounts (Invariant #127), it wires both on every role, and neither half is exported from the r3f barrel. The half-wired states remain physically possible inside the engine, so the limiter keeps its self-check. Wiring one half is a defect in each direction, and only one of them is detectable:
 
 - Driver mounted, prop missing → the canvas keeps R3F's own loop, the cap silently does nothing, and the perf HUD reports the native rate. The limiter detects this and reports a named `FrameloopWiringError` through the renderer logger — logged, not thrown, because the failure degrades to the behaviour that existed before any cap and R3F's error boundary re-throws outward past the `<Canvas>`.
-- `frameloop="never"` with no driver → **a permanently black canvas**, and nothing detects it. The limiter cannot: none of it is mounted. A registration check from `useEngineFrameloop` cannot either, because R3F renders canvas children into a separate reconciler root after `configure()` resolves. A frame-counting watchdog cannot tell a missing driver from a backgrounded window, which advances no frames either. This one is documented rather than guessed at.
+- `frameloop="never"` with no driver → **a permanently black canvas**, and nothing detects it. The limiter cannot: none of it is mounted. A registration check from `useEngineFrameloop` cannot either, because R3F renders canvas children into a separate reconciler root after `configure()` resolves. A frame-counting watchdog cannot tell a missing driver from a backgrounded window, which advances no frames either. This one is documented rather than guessed at — and closing the own-`<Canvas>` hatch is what confines it to engine code.
 
 Demand rendering reaches no engine canvas: `invalidate()` early-returns under `'never'`, and under `'always'` R3F renders every frame regardless of the counter it writes. See `renderer/components/r3f/useEngineFrameloop.ts`.
+
+### Multi-canvas and the `role` prop
+
+A game needing a second view — a minimap, a unit preview — mounts a second `GameCanvas` with `role="overlay"` instead of a raw `<Canvas>` (Invariant #127; the tactics demo board's minimap is the reference adoption):
+
+- `role="main"` (the default) mounts `PerfProbe`, so the perf HUD measures the main scene; an `'overlay'` mounts no probe (§4.16). Two concurrently-mounted mains are reported by name (`DuplicateMainGameCanvasError`) through the renderer logger — logged, not thrown, deferred one frame and cancelled if the pair resolves first, so a same-frame handover never false-fires.
+- **Every** role mounts `FrameRateLimiter` and takes `frameloop={useEngineFrameloop()}`: each canvas is paced by the `display.targetFps` cap.
+- Placement and size are the game's: r3f pins `position`/`width`/`height` as inline styles on its wrapper div, so the corner anchor and the explicit size live on a game-owned wrapper element, and the curated `className` prop carries canvas chrome (a zero-height wrapper never mounts the scene).
 
 ---
 
@@ -99,9 +107,10 @@ export type GameCanvasProps = Readonly<{
      */
     role?: 'main' | 'overlay';
     /**
-     * Forwarded to the r3f wrapper `<div>` so a game sizes and positions the
-     * canvas from its own module CSS (a zero-height wrapper never mounts the
-     * scene).
+     * Forwarded to the r3f wrapper `<div>` for canvas chrome. r3f pins
+     * position and size as inline styles on that div, so placement and the
+     * explicit size live on a game-owned wrapper element — and a zero-height
+     * wrapper never mounts the scene.
      */
     className?: string;
     /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */

@@ -6,10 +6,11 @@
  * About the `invalidate()` calls below: on an ENGINE canvas none of them has any
  * observable effect, in either direction — see `useEngineFrameloop.ts` for why
  * neither engine frameloop honours a demand-render request. They are kept
- * because they are the correct contract for a `frameloop="demand"` canvas, which
- * only a game owning its own `<Canvas>` can create, and they cost nothing on the
- * engine's own. Deleting them would silently narrow this hook to canvases the
- * engine happens to produce today.
+ * because they are the correct contract for a `frameloop="demand"` canvas —
+ * one no game canvas can be under Invariant #127, but renderer-internal code
+ * may still create — and they cost nothing on the engine's own. Deleting them
+ * would silently narrow this hook to canvases the engine happens to produce
+ * today.
  *
  * The tween completes identically under both engine frameloops; what changes is
  * sampling resolution, not the destination — pinned in

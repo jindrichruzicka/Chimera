@@ -69,9 +69,10 @@ export type GameCanvasProps = Readonly<{
      */
     role?: 'main' | 'overlay';
     /**
-     * Forwarded to the r3f wrapper `<div>` so a game sizes and positions the
-     * canvas from its own module CSS (a zero-height wrapper never mounts the
-     * scene).
+     * Forwarded to the r3f wrapper `<div>` for canvas chrome. r3f pins
+     * position and size as inline styles on that div, so placement and the
+     * explicit size live on a game-owned wrapper element — and a zero-height
+     * wrapper never mounts the scene.
      */
     className?: string;
     /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */

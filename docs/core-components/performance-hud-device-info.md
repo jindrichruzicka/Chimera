@@ -35,9 +35,9 @@ Numbers display with colour markers — green / amber / red — against configur
 
 **Which frames FPS and frame time count.** The frames **its canvas advanced** — a property of the canvas, not of the setting. `useFrame` subscribers run from R3F's `update()`, so the reported rate follows whatever drives that canvas.
 
-On a canvas paced by both halves of the frame-rate cap — `<FrameRateLimiter />` **and** `frameloop={useEngineFrameloop()}`, which `GameCanvas` wires for you — those are the capped frames, and the numbers are the ones the player sees. On a 120 Hz display at `targetFps: 30` the HUD reports ~30, and a **healthy** `frameMsAvg` is the capped interval — ~33 ms, not the panel's ~8 ms. Reading ~33 ms as a regression from ~8 ms is the mistake to avoid: the baseline moves with the cap, by design.
+On a canvas paced by both halves of the frame-rate cap — `<FrameRateLimiter />` **and** `frameloop={useEngineFrameloop()}`, which `GameCanvas` wires itself — those are the capped frames, and the numbers are the ones the player sees. On a 120 Hz display at `targetFps: 30` the HUD reports ~30, and a **healthy** `frameMsAvg` is the capped interval — ~33 ms, not the panel's ~8 ms. Reading ~33 ms as a regression from ~8 ms is the mistake to avoid: the baseline moves with the cap, by design.
 
-A game that mounts `PerfProbe` in its own `<Canvas>` and wires only one half gets one of two readings, neither of them the capped rate:
+A half-wired canvas — an engine-internal defect state since Invariant #127 made `GameCanvas` the only game canvas root — gets one of two readings, neither of them the capped rate:
 
 - **Driver mounted, `frameloop` prop missing** — the canvas keeps R3F's own loop, so the HUD reports the **native** rate whatever `targetFps` says.
 - **`frameloop: 'never'` with no driver** — nothing ever advances the canvas, so the HUD reports a flat **zero** and the canvas is black.
@@ -69,9 +69,10 @@ export function PerfHud(): JSX.Element | null;
 
 `PerfProbe` is mounted by `GameCanvas` inside its R3F `<Canvas>` root — on the
 `role="main"` canvas (the default) only; a `role="overlay"` canvas mounts no
-probe (two concurrent mains are reported, not prevented — §4.22). A game
-that renders its own `<Canvas>` mounts `PerfProbe` from the r3f barrel instead.
-Either way it writes FPS, frame-time, draw-call, and triangle samples into
+probe (two concurrent mains are reported, not prevented — §4.22). It is not
+exported from the r3f barrel: `GameCanvas` is the only canvas root a game
+mounts (Invariant #127), so probe placement is engine wiring, never a game
+step. The probe writes FPS, frame-time, draw-call, and triangle samples into
 `perfStore`; `PerfHud` reads those samples from shell chrome without calling R3F
 hooks outside a canvas.
 

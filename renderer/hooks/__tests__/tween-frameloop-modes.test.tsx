@@ -9,8 +9,9 @@
  * `useEngineFrameloop.ts` for both halves.
  *
  * The audit outcome is to KEEP them: they are the correct contract for a
- * `frameloop="demand"` canvas, which only a game owning its own `<Canvas>` can
- * create, and they cost nothing on the engine's own. What must not rot is the
+ * `frameloop="demand"` canvas — one no game canvas can be under Invariant
+ * #127, but renderer-internal code may still create — and they cost nothing
+ * on the engine's own. What must not rot is the
  * belief that a tween DEPENDS on them — so this spec drives the same tween under
  * both engine frameloops and asserts it completes either way.
  *

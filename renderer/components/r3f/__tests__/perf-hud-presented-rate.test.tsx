@@ -195,10 +195,10 @@ describe('the perf HUD reports the presented frame rate', () => {
     });
 
     it('reports the NATIVE rate for a probe in a canvas that wired no cap', () => {
-        // The number is a property of the canvas, not of the setting. A game
-        // mounting PerfProbe in its own <Canvas> with neither the frameloop prop
-        // nor the driver keeps R3F's own loop, so a 30 fps setting changes
-        // nothing here.
+        // The number is a property of the canvas, not of the setting. A canvas
+        // wired with neither the frameloop prop nor the driver — an
+        // engine-internal defect state since Invariant #127 — keeps R3F's own
+        // loop, so a 30 fps setting changes nothing here.
         setTargetFps(30);
         render(
             <Canvas>
