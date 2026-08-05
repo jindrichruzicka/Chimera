@@ -78,6 +78,10 @@ Boundary checks: `from.*electron/`/bare `@chimera-engine/electron` inside `simul
 | 23/33 | Atomic file writes (`.tmp` + rename) — FS impl reading. The `.tmp`+`rename` call in `FileSaveRepository.save()` is now pinned by Check 25; full atomicity (never partially overwrites a valid save) still needs the FS impl read                       |
 | 44    | Float fields in `GameSnapshot` — decimal-notation literal floats (e.g. `0.5`) in per-game simulation are caught by Check 21; leading-dot (`.5`), exponential (`1e-3`), aliased (`type Money = number`), and computed floats still need type inspection |
 
+## Citing Invariants
+
+In comments and docs, cite by number (`Invariant #96`, `§3`) and state only your module's own measured fact ("this module's workspace imports are X"). Never paraphrase a multi-clause invariant — surface classes, file-extension splits, and named carve-outs do not survive a one-line summary, and an adjusted summary trades one false edge for another. Deleting a paraphrase converges; sharpening it does not.
+
 ## Usage
 
 **Developer self-check** (before commit): run after touching `simulation/`/`ai/`/`apps/`/`electron/`. Fix violations before commit. Pre-commit gate fires the pnpm checks; this script is a complementary early warning.

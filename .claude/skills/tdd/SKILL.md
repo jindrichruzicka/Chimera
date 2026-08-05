@@ -91,6 +91,14 @@ Sweep every changed guard yourself first:
       ships a negative control with two blocks proving a cross-block leak is
       caught — regexes here have missed `import 'x';`, stripped across
       newlines, and paired a file with a later block's rule id.
+- [ ] A source-scan guard lifts each predicate — file filter, match pattern,
+      allowance classifier — into a named function pinned against **synthetic
+      inputs**: both ends of every segment and suffix anchor, each quote
+      style, each import form. The tree's current contents are not the pin.
+      Assert the **exact matched set**, never a count>0 control, and assemble
+      the probed token in fixtures at runtime (`${'x'}` interpolation) so the
+      guard file never becomes its own match — the exact-set assertion then
+      enforces that it stays that way.
 - [ ] Tests that run a **built artifact rebuild it first** — green against a
       stale `dist` says nothing about the source you just edited.
 - [ ] Every test **title is a claim its body asserts** — a title promising

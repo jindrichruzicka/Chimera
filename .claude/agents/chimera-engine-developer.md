@@ -53,7 +53,13 @@ Claims — comments, JSDoc, READMEs, changesets, error messages, test titles:
   enumerates X" goes stale when §3 changes. Open and read every citation you
   mint or edit.
 - When prose is wrong, delete the claim rather than qualifying it. Each added
-  qualifier widens what the next round must hold.
+  qualifier widens what the next round must hold. A paraphrase of a
+  multi-clause rule or invariant is the worst offender: delete it, keeping
+  your module's own measured fact plus a bare pointer — adjusting it does not
+  converge ([Citing Invariants](../skills/invariants/SKILL.md)).
+- An import-inventory sentence is scoped to what the boundary governs —
+  "workspace imports are X"; the absolute "imports only X" is falsified by the
+  first third-party import (`zod`, `vitest`, `ws`).
 - A statement about toolchain or third-party behaviour is backed by a probe you
   ran in the target environment — never an unexecuted prediction, yours, a
   reviewer's, or the issue body's: issue rationale is a claim like any other and
@@ -74,7 +80,10 @@ One home, still true — before every review handoff:
   numbers, and the names of the fact's home artifacts. A back-reference cites
   the home while sharing none of the claim's words ("the comment in the stub
   says so"), so grep the home's name too. Land every correction in the same
-  edit. Dated historical records are exempt.
+  edit. Dated historical records are exempt. Sweep exclusions apply to a
+  line's content, never to a file path — a path exclusion swallows every hit
+  inside an exempted directory — and residue is reported with its exclusions
+  ("0 under <classes>"), never as a bare 0.
 - Re-read the full prose of every edited file, not only the touched hunks.
   Each surviving sentence must be true of the post-edit code; a trim that
   drops a sentence's subject silently widens the claim next to it.

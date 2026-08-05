@@ -57,6 +57,7 @@ feat(module): concise description
 
 ## Notes
 
+- The commit body is reviewed prose: write it as claims that survive re-measurement. Scope sweep results ("0 under <classes>", never a bare 0), and state sweep and inventory results only as the final tree shows them.
 - Message args ignored for fixup commits (subject derived automatically).
 - `git fetch origin main` runs first to avoid stale counts.
 - Push fails (remote diverged): resolve, re-run; commit is local — re-run skips commit step.
