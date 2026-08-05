@@ -20,13 +20,14 @@
  * Test files are exempt — they legitimately import provider internals as
  * fixtures (e.g. WsHostTransport.test.ts).
  *
- * Mirrors `chimera/no-main-games-import` (the games/* electron/main boundary).
+ * Mirrors `chimera/no-main-games-import` (the game-import electron/main boundary).
  * Glob-based `no-restricted-imports` is unreliable for deep `provider/*` paths
  * and cannot express the composition-root allowlist, so this rule classifies the
- * import source directly. It covers every static and dynamic form that can pull
- * in a module: `import`, `export … from`, `export * from`, and dynamic
- * `import('…')` with a string-literal specifier — so the boundary cannot be
- * bypassed by a lazy load.
+ * import source directly. It matches four specifier positions: `import`,
+ * `export … from`, `export * from`, and dynamic `import('…')` with a
+ * string-literal specifier — so the boundary cannot be bypassed by a lazy load.
+ * Unlike its game-import siblings it does NOT read a no-substitution template
+ * specifier, so `import(\`…/provider/local/…\`)` walks past it.
  */
 
 import type { Rule } from 'eslint';

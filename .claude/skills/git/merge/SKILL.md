@@ -78,4 +78,4 @@ Even if structural checks pass, scan diff for:
 - New `any`/`@ts-ignore`
 - Float fields added to `GameSnapshot`
 - `Math.random()`/`Date.now()` in `simulation/`
-- `AssetManager`/`renderer/assets/` importing `games/*`
+- `AssetManager`/`renderer/assets/` importing a game (`apps/*`, `games/*`, `@chimera-engine/<game>`)

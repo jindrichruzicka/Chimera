@@ -1,7 +1,9 @@
 /**
  * ESLint rule: chimera/no-main-games-import
  *
- * Forbids `electron/main` modules from importing any `games/*` path so the host
+ * Forbids `electron/main` modules from importing any game path — an `apps/`
+ * segment (a game's on-disk home), a legacy `games/` segment, or a
+ * non-engine `@chimera-engine/<pkg>` specifier — so the host
  * (main process) stays agnostic of which games exist — required for packaged,
  * multi-game builds. The game's wiring lives in the consumer app's composition
  * root (`apps/tactics/electron/main.ts`), a flat file under `electron/` rather
@@ -17,13 +19,14 @@
  * Mirrors `chimera/no-shell-games-import` on the renderer side (Invariant #94)
  * and the renderer's single-composition-point pattern (rendererGameRegistry.ts).
  *
- * Glob-based `no-restricted-imports` is unreliable for deep `games/*` paths, so
- * this rule classifies the import source directly (as no-shell-games-import
- * does): any relative/bare `games/*` path, or any `@chimera-engine/<pkg>` package that
- * is not on the engine allowlist (i.e. a game such as `@chimera-engine/tactics`). It
- * covers every static and dynamic form that can pull in a module:
- * `import`, `export … from`, `export * from`, and dynamic `import('…')` with a
- * string-literal specifier — so the boundary cannot be bypassed by a lazy load.
+ * Glob-based `no-restricted-imports` is unreliable for deep game paths, so this
+ * rule classifies the import source directly (as no-shell-games-import does):
+ * any relative/bare `apps/*` or `games/*` path, or any `@chimera-engine/<pkg>`
+ * package that is not on the engine allowlist (i.e. a game such as
+ * `@chimera-engine/tactics`). It matches four specifier positions — `import`,
+ * `export … from`, `export * from`, and dynamic `import('…')` — so the boundary
+ * cannot be bypassed by a lazy load; no-shell-games-import's header records why
+ * the dynamic one has to be visited here rather than delegated.
  */
 
 import type { Rule } from 'eslint';
@@ -59,18 +62,29 @@ const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * A path that enters the game-app tree by name: an `apps/` or `games/` path
+ * SEGMENT, leading or embedded (`apps/…`, `../../apps/…`). `apps/` is a game's
+ * on-disk home; `games/` is the legacy home, matched so the old form stays
+ * rejected. Anchored at BOTH ends, so neither a prefix lookalike
+ * (`…/webapps/…`) nor a suffix one (`…/gamestate.js`) is read as a game.
+ */
+const GAME_PATH_SEGMENT_RE = /(?:^|\/)(?:apps|games)\//u;
+
+/**
  * True if `source` imports from a game (rather than an engine package):
- *   - a relative/bare `games/*` path (`games/…`, `…/games/…`), or
+ *   - a relative/bare `apps/*` or `games/*` path (`apps/…`, `…/apps/…`), or
  *   - a `@chimera-engine/<pkg>` package whose `<pkg>` is NOT an engine package
  *     (e.g. `@chimera-engine/tactics`).
  *
- * Detecting games by the engine allowlist — rather than a `/games/` directory
- * substring — keeps the guard correct now that games are first-class
- * `@chimera-engine/<game>` packages that live outside `games/`.
+ * Detecting games by the engine allowlist — rather than a directory substring
+ * alone — keeps the guard correct for games that are first-class
+ * `@chimera-engine/<game>` packages; the path arm keeps it correct for the same
+ * game reached by its on-disk `apps/<name>/` location, which carries no scoped
+ * specifier at all.
  */
 function isGamesImport(source: string): boolean {
     const n = source.replace(/\\/gu, '/');
-    if (n.startsWith('games/') || n.includes('/games/')) {
+    if (GAME_PATH_SEGMENT_RE.test(n)) {
         return true;
     }
     const scoped = /^@chimera-engine\/([^/]+)/u.exec(n);
@@ -81,16 +95,38 @@ function isGamesImport(source: string): boolean {
     return pkg !== undefined && !ENGINE_PACKAGES.has(pkg);
 }
 
+/** The `source` of a dynamic `import()`, as ESLint's untyped AST exposes it. */
+interface DynamicSource {
+    type: string;
+    value?: unknown;
+    quasis?: readonly { value: { cooked?: string | null } }[];
+    expressions?: readonly unknown[];
+}
+
+/**
+ * The single module a dynamic `import()` specifier names, when it names one.
+ * The reason each arm is here lives on the twin in `no-shell-games-import.ts`.
+ */
+function dynamicSpecifier(source: DynamicSource): unknown {
+    if (source.type === 'Literal') {
+        return source.value;
+    }
+    if (source.type === 'TemplateLiteral' && source.expressions?.length === 0) {
+        return source.quasis?.[0]?.value.cooked ?? undefined;
+    }
+    return undefined;
+}
+
 const rule: Rule.RuleModule = {
     meta: {
         type: 'problem',
         docs: {
             description:
-                'Forbid electron/main modules (outside the composition registries) from importing any games/* path.',
+                'Forbid electron/main modules (outside the composition registries) from importing any game path — an apps/*|games/* segment or a non-engine @chimera-engine/* package.',
         },
         messages: {
             mainGamesImport:
-                'electron/main must not import from games/* (multi-game packaging). Inject the game at runtime via the consumer app composition root (apps/tactics/electron/main.ts), which constructs the MainGameContribution (including contentSchemas and lobbySetup) and calls main(contributions). Mirrors renderer/game/rendererGameRegistry.ts.',
+                'electron/main must not import from a game — apps/*, games/*, or a non-engine @chimera-engine/* package (multi-game packaging). Inject the game at runtime via the consumer app composition root (apps/tactics/electron/main.ts), which constructs the MainGameContribution (including contentSchemas and lobbySetup) and calls main(contributions). Mirrors renderer/game/rendererGameRegistry.ts.',
         },
         schema: [],
     },
@@ -119,13 +155,9 @@ const rule: Rule.RuleModule = {
             ImportDeclaration: checkStaticSource,
             ExportNamedDeclaration: checkStaticSource,
             ExportAllDeclaration: checkStaticSource,
-            // Dynamic `import('…')` — flag only string-literal specifiers; a
-            // computed specifier cannot be statically resolved to a games path.
             ImportExpression(node: Rule.Node) {
-                const n = node as Rule.Node & { source: { type: string; value?: unknown } };
-                if (n.source.type === 'Literal') {
-                    check(node, n.source.value);
-                }
+                const n = node as Rule.Node & { source: DynamicSource };
+                check(node, dynamicSpecifier(n.source));
             },
         };
     },

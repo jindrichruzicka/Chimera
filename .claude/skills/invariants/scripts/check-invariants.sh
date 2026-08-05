@@ -78,20 +78,37 @@ check_grep() {
 
 # Game-import detection (engine allowlist).
 #
-# Games are now first-class `@chimera-engine/<game>` packages (F57: `@chimera-engine/tactics`
-# replaces the old `@chimera-engine/games/tactics` alias) and will leave `games/`
-# entirely in F63 (→ `apps/tactics`). A `@chimera-engine/<game>` specifier carries no
-# `/games/` substring and is indistinguishable from an engine package by shape,
-# so a game is identified by exclusion: any `@chimera-engine/<pkg>` import whose `<pkg>`
-# is NOT an engine package, plus any relative/bare `games/*` path.
+# A game can be named three ways, and a guard that misses one is a guard the
+# other two can be routed around:
+#   - `apps/<game>/…`   — its on-disk home, reached by a relative or bare path
+#   - `games/<game>/…`  — the legacy home; kept so the old form stays rejected
+#   - `@chimera-engine/<game>` — the package specifier, which carries no path
+#     segment at all and is indistinguishable from an engine package by shape
+# The third is therefore identified by EXCLUSION: any `@chimera-engine/<pkg>`
+# whose `<pkg>` is not on the engine allowlist. The first two by a path SEGMENT
+# anchored at both ends — `(^|/)(apps|games)/` — so neither a prefix lookalike
+# (`…/webapps/…`) nor a suffix one (`…/gamestate.js`) is read as a game. Both
+# arms match the ESLint classifiers in
+# electron/dev-tools/eslint/rules/no-{shell,main}-games-import.ts verbatim,
+# including the scoped arm's anchor at the opening quote: a specifier reaching a
+# game through a vendored `…/node_modules/@chimera-engine/<game>` path is
+# therefore not matched here either.
 #
-# Usage in a pipeline: match a candidate-import RE below, then drop engine
-# packages with `grep -vE "${ENGINE_PKG_EXCLUDE_RE}"`.
+# Three specifier positions are matched — `… from '…'`, a side-effect
+# `import '…'`, and a dynamic `import('…')` — because a lazy or
+# side-effect-only load crosses the boundary exactly as an eager one does.
+# `require('…')` is not among them; it is banned repo-wide by
+# @typescript-eslint/no-require-imports.
+#
+# Usage in a pipeline: match the import RE below, then drop engine packages
+# with `grep -vE "${ENGINE_PKG_EXCLUDE_RE}"`.
 ENGINE_PKG_EXCLUDE_RE="@chimera-engine/(simulation|ai|networking|renderer|electron)[/'\"]"
-# Static `import … from`/`export … from` of a games/ path or any @chimera-engine/ pkg.
-GAME_IMPORT_STATIC_RE="from ['\"][^'\"]*(games/|@chimera-engine/)"
-# Static + dynamic `import('…')` of a games/ path or any @chimera-engine/ pkg.
-GAME_IMPORT_ANY_RE="(from|import\()[[:space:]]*['\"][^'\"]*(games/|@chimera-engine/)"
+# A quoted specifier that names a game: an apps/|games/ path segment, or any
+# @chimera-engine/ pkg (engine packages filtered back out by the exclude RE).
+GAME_SPECIFIER_RE="['\"](([^'\"]*/)?(apps|games)/|@chimera-engine/)"
+# That specifier in the three import positions: `from '…'`, `import '…'`,
+# `import('…')` — the optional paren tolerates a space before it.
+GAME_IMPORT_RE="(from|import[[:space:]]*\(?)[[:space:]]*${GAME_SPECIFIER_RE}"
 
 # ─── Check 1 & 43: no Math.random / Date.now / performance.now (sim/ai + per-game) ───
 # Covers both invariant 2 (purity) and invariant 43 (no non-deterministic APIs).
@@ -117,8 +134,8 @@ check_grep "1" \
     simulation ai networking apps/*/simulation apps/*/ai
 
 # ─── Check 4: simulation/ ai/ networking/ must not import a game ──────────────
-# A game is a relative/bare games/ path or a non-engine @chimera-engine/<game> package
-# (e.g. @chimera-engine/tactics); engine @chimera-engine/* imports are filtered back out.
+# A game is a relative/bare apps/ or games/ path or a non-engine @chimera-engine/<game>
+# package (e.g. @chimera-engine/tactics); engine @chimera-engine/* imports are filtered out.
 for games_guard_dir in simulation ai networking; do
     [[ -d "${games_guard_dir}" ]] || continue
     while IFS= read -r match; do
@@ -128,7 +145,7 @@ for games_guard_dir in simulation ai networking; do
             --include="*.ts" --include="*.tsx" --include="*.js" \
             --exclude="*.test.ts" --exclude="*.test.tsx" \
             --exclude-dir="fixtures" --exclude-dir="node_modules" \
-            "${GAME_IMPORT_STATIC_RE}" "${games_guard_dir}" 2>/dev/null \
+            "${GAME_IMPORT_RE}" "${games_guard_dir}" 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
         || true
@@ -148,7 +165,7 @@ check_grep "3" \
     'GameSnapshot' \
     electron/preload renderer apps/*/screens apps/*/shell apps/*/scene apps/*/renderer
 
-# ─── Check 7: GameShell / InGameMenuHost must not import games/ (inv 48 & 80) ─
+# ─── Check 7: GameShell / InGameMenuHost must not import a game (inv 48 & 80) ─
 # These engine-renderer shell components stay game-agnostic; the
 # GameScreenRegistry passed as a prop is the sole coupling point between the
 # engine renderer and a game's React code. Invariant #80 names both GameShell
@@ -162,7 +179,7 @@ for shell_file in "${SHELL_GAME_AGNOSTIC_FILES[@]}"; do
     while IFS= read -r match; do
         violation "48/80" "${shell_file}:${match}"
     done < <(
-        grep -nE "${GAME_IMPORT_STATIC_RE}" "${shell_file}" \
+        grep -nE "${GAME_IMPORT_RE}" "${shell_file}" \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
         || true
@@ -307,7 +324,7 @@ fi
 #     the emitted bundle itself, which is the property rather than a proxy for it.
 # Both run under `pnpm test`, which CI runs alongside this script.
 
-# ─── Check 10: electron/main core must not import games/* (invariant 2) ──────
+# ─── Check 10: electron/main core must not import a game (invariant 2) ───────
 # The host (main process) stays agnostic of which games exist. Since F62 (#778)
 # the main-side game registry is a runtime injection seam (mainGameRegistry.ts is
 # a game-agnostic factory); since #788/#789 content schemas and lobby setup also
@@ -316,17 +333,16 @@ fi
 # the consumer app composition root apps/tactics/electron/main.ts (a flat file
 # under electron/, not the electron/main/ dir, so outside this check). Mirrors the
 # renderer-side GameShell / rendererGameRegistry guard (Check 7) and the ESLint
-# rule chimera/no-main-games-import. Matches static (`import … from`,
-# `export … from`) and dynamic (`import('…')`) specifiers alike. Test files are
-# excluded (they import game fixtures), as are comment lines (jsdoc may cite a
-# games/ path).
+# rule chimera/no-main-games-import. Matches the specifier positions listed at
+# GAME_IMPORT_RE. Test files are excluded (they import game fixtures), as are
+# comment lines (jsdoc may cite an apps/ or games/ path).
 if [[ -d electron/main ]]; then
     while IFS= read -r match; do
         violation "2" "${match}"
     done < <(
         grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
             --exclude-dir="node_modules" \
-            "${GAME_IMPORT_ANY_RE}" electron/main 2>/dev/null \
+            "${GAME_IMPORT_RE}" electron/main 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
         || true
@@ -339,7 +355,7 @@ fi
 # game-specific subtree (e.g. a re-introduced policies/<game>/) nor a stray
 # game source file at top level (e.g. tacticsPolicy.ts) — game-specific AI
 # belongs in apps/<game>/ai/. The import-direction half of this invariant
-# (ai/ must not import games/*) is enforced by Check 4 (invariant 47).
+# (ai/ must not import a game) is enforced by Check 4 (invariant 47).
 #
 # Directories: only the framework dirs below are allowed as immediate children.
 # `dist` is the generated build output (F59, issue #764) — it mirrors the
@@ -442,7 +458,7 @@ fi
 # provider/steam/*, or their server/client internals) — provider-internal
 # containment (issue #769). The sole exempt file is the composition root
 # electron/main/index.ts, which wires the concrete provider into the DI graph
-# (Invariant #38). Mirrors Check 10 (electron/main must not import games/*) and
+# (Invariant #38). Mirrors Check 10 (electron/main must not import a game) and
 # the ESLint rule chimera/no-main-provider-internals. Matches static
 # (`import … from`, `export … from`) and dynamic (`import('…')`) specifiers; the
 # server/client internals live under provider/local/, so (local|steam) covers
@@ -470,16 +486,17 @@ fi
 # renderer game-registration seam (renderer/game/) is now
 # game-agnostic too (#784): the registry became a runtime injection point
 # (registerRendererGame) and the tactics loaders moved to the consumer app
-# (apps/tactics/renderer/register.ts). None of these may import a games/* module
-# or a @chimera-engine/<game> package directly — a game's renderer contribution enters
-# only at the consumer-app composition root, selected by the
+# (apps/tactics/renderer/register.ts). None of these may import an apps/* or
+# games/* module or a @chimera-engine/<game> package directly — a game's renderer
+# contribution enters only at the consumer-app composition root, selected by the
 # chimera-game-registration build alias. The lobby page may parse LobbyConfig via
 # @chimera-engine/simulation helpers (engine, allowed). Mirrors the ESLint
 # renderer/** game-import ban + chimera/no-shell-games-import and the host-side
 # Check 7 (#80); locks the boundary across the @chimera-engine/renderer package cut
-# (issues #774, #784). Matches static + dynamic specifiers; engine @chimera-engine/*
-# packages and comment lines are filtered out. No file is exempt — the renderer
-# registry seam is scanned alongside the shell pages.
+# (issues #774, #784). Matches the specifier positions listed at GAME_IMPORT_RE,
+# across all three ways a game can be named; engine @chimera-engine/* packages
+# and comment lines are filtered out. No file is exempt — the renderer registry
+# seam is scanned alongside the shell pages.
 # Glob every page dir under renderer/app/ (so pages added later are covered
 # automatically — the old hardcoded list had already gone stale, missing
 # logo-screen) plus the renderer game-registration seam renderer/game/.
@@ -492,7 +509,7 @@ for shell_page_dir in renderer/app/*/ renderer/game; do
             --include="*.ts" --include="*.tsx" --include="*.js" \
             --exclude="*.test.ts" --exclude="*.test.tsx" \
             --exclude-dir="fixtures" --exclude-dir="node_modules" \
-            "${GAME_IMPORT_ANY_RE}" "${shell_page_dir}" 2>/dev/null \
+            "${GAME_IMPORT_RE}" "${shell_page_dir}" 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
         || true

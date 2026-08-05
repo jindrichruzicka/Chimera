@@ -95,6 +95,28 @@ ruleTester.run('chimera/no-main-games-import', rule, {
             filename: 'electron/main/index.ts',
             code: `const x = 1; export { x };`,
         },
+        // Detection is path-SEGMENT-anchored at BOTH ends. Leading anchor: the
+        // letters mid-segment (`webapps/`) are not a game app. Trailing slash:
+        // neither is a segment those letters merely START (`gamestate.js`,
+        // `appsettings.ts`) — an anchor pinned at one end only leaves the other
+        // free to be deleted.
+        {
+            filename: 'electron/main/index.ts',
+            code: `import { x } from './runtime/webapps/registry.js';`,
+        },
+        {
+            filename: 'electron/main/index.ts',
+            code: `import { state } from './runtime/gamestate.js';`,
+        },
+        {
+            filename: 'electron/main/index.ts',
+            code: `import { config } from './config/appsettings.js';`,
+        },
+        // A template specifier built at runtime resolves to no single module.
+        {
+            filename: 'electron/main/index.ts',
+            code: `const m = import(\`../../apps/\${gameId}/electron/main.js\`);`,
+        },
     ],
 
     // ── Invalid — rule must fire ─────────────────────────────────────────────
@@ -169,6 +191,37 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         {
             filename: 'electron/main/index.ts',
             code: `export * from '@chimera-engine/tactics/actions.js';`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        // ── The `apps/` path family — a game's on-disk home ──────────────────
+        // Same classifier as the renderer side: a game reached by that path
+        // carries neither a `games/` segment nor a `@chimera-engine/` specifier.
+        // Pinned in each specifier position, matching the sibling bash Check.
+        {
+            filename: 'electron/main/runtime/SomeRuntime.ts',
+            code: `import { x } from '../../../apps/tactics/entities.js';`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        {
+            filename: 'electron/main/index.ts',
+            code: `const m = import('../../apps/tactics/electron/contribution.js');`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        {
+            filename: 'electron/main/index.ts',
+            code: `export * from 'apps/tactics/actions.js';`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        // A no-substitution template specifier names exactly one module, so it
+        // is as resolvable as a string literal and must be classified alike.
+        {
+            filename: 'electron/main/index.ts',
+            code: `const m = import(\`../../apps/tactics/electron/contribution.js\`);`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        {
+            filename: 'electron/main/game/mainGameRegistry.ts',
+            code: `const m = import(\`@chimera-engine/tactics/actions.js\`);`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
     ],

@@ -1750,6 +1750,335 @@ test_games_import_in_globbed_shell_page_detected() {
     fi
 }
 
+# ─── The apps/ path family, in every specifier position the guards claim ──────
+# A game reached by its on-disk apps/<name>/ path carries neither a `games/`
+# segment nor a `@chimera-engine/` specifier, so it must be classified on the
+# path segment alone. The cases below cover each position GAME_IMPORT_RE
+# claims — `… from '…'`, a side-effect `import '…'`, and a dynamic
+# `import('…')` — because a guard credited with a form it does not match is
+# worse than one that admits the gap.
+#
+# Mutation check: dropping the `apps` alternation from GAME_SPECIFIER_RE, or its
+# trailing `/`, makes the guard pass on a shell page that loads a game — exactly
+# Invariant #94's forbidden state. The detection cases below fail on the first
+# edit, the lookalike cases on the second.
+
+# Test: shell page dynamically importing an apps/ module → violation [invariant-94]
+test_apps_dynamic_import_in_shell_page_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/game/page.tsx" \
+        "const registry = import('../../../apps/tactics/screens/index.js');"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-94\]'; then
+            pass "dynamic apps/ import in a shell page detected as [invariant-94]"
+        else
+            fail "shell-page dynamic apps/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "dynamic apps/ import in a shell page not detected (exit 0)"
+    fi
+}
+
+# Test: shell page statically importing an apps/ module → violation [invariant-94]
+test_apps_static_import_in_shell_page_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/settings/page.tsx" \
+        "import { tacticsSettings } from '../../../apps/tactics/settings-schema.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-94\]'; then
+            pass "static apps/ import in a shell page detected as [invariant-94]"
+        else
+            fail "shell-page static apps/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "static apps/ import in a shell page not detected (exit 0)"
+    fi
+}
+
+# Test: electron/main dynamically importing an apps/ module → violation [invariant-2]
+# Check 10 shares GAME_IMPORT_RE with Check 16, so the host-side guard gains
+# the same apps/ coverage; its ESLint sibling chimera/no-main-games-import pins
+# the matching rule test.
+test_apps_dynamic_import_in_main_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "electron/main/runtime/SomeRuntime.ts" \
+        "const contribution = import('../../../apps/tactics/electron/contribution.js');"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-2\]'; then
+            pass "dynamic apps/ import in electron/main detected as [invariant-2]"
+        else
+            fail "electron/main dynamic apps/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "dynamic apps/ import in electron/main not detected (exit 0)"
+    fi
+}
+
+# Test: shell page with a SIDE-EFFECT import of a game's token override CSS →
+# violation [invariant-94]. A bare `import '…'` carries no `from` and no
+# `import(`, so it is its own specifier position; this is the exact shape
+# Invariant #93 exists for, which makes it the one a shell-page guard can least
+# afford to miss.
+test_side_effect_apps_import_in_shell_page_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/main-menu/page.tsx" \
+        "import '../../../apps/tactics/styles/tokens-override.css';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-94\]'; then
+            pass "side-effect apps/ import in a shell page detected as [invariant-94]"
+        else
+            fail "shell-page side-effect apps/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "side-effect apps/ import in a shell page not detected (exit 0)"
+    fi
+}
+
+# Test: shell page side-effect-importing a @chimera-engine/<game> package →
+# violation [invariant-94]. The side-effect position must recognise all three
+# naming forms, not just the path one.
+test_side_effect_game_package_import_in_shell_page_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/lobby/page.tsx" \
+        "import '@chimera-engine/tactics/styles/tokens-override.css';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-94\]'; then
+            pass "side-effect @chimera-engine/<game> import in a shell page detected as [invariant-94]"
+        else
+            fail "shell-page side-effect game-package import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "side-effect @chimera-engine/<game> import in a shell page not detected (exit 0)"
+    fi
+}
+
+# Test: simulation/ dynamically importing a game → violation [invariant-47]
+# Check 4 guards the engine's pure packages. A lazy game load evades a guard
+# that reads only `from` specifiers just as surely as an eager one does.
+test_dynamic_apps_import_in_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/engine/Reducer.ts" \
+        "const rules = import('../../apps/tactics/visibility-rules.js');"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-47\]'; then
+            pass "dynamic apps/ import in simulation/ detected as [invariant-47]"
+        else
+            fail "simulation/ dynamic apps/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "dynamic apps/ import in simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test: GameShell.tsx dynamically importing a game → violation [invariant-48/80]
+# Check 7 names the two engine↔game-React coupling surfaces; the same lazy-load
+# evasion applies there.
+test_dynamic_apps_import_in_game_shell_host_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/components/shell/GameShell.tsx" \
+        "const registry = import('../../../apps/tactics/screens/index.js');"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-48/80\]'; then
+            pass "dynamic apps/ import in GameShell.tsx detected as [invariant-48/80]"
+        else
+            fail "GameShell.tsx dynamic apps/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "dynamic apps/ import in GameShell.tsx not detected (exit 0)"
+    fi
+}
+
+# Test: the full naming × position cross-product → 9 violations [invariant-94]
+# GAME_IMPORT_RE is two independent alternations — three ways to name a game by
+# three specifier positions — so a guard credited with the product has to be
+# measured over the product, not over one cell of it. The count is asserted, not
+# just the exit code: a regex that collapsed two arms into one would still fail
+# the run non-zero.
+test_game_specifier_cross_product_in_shell_page_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/main-menu/fromApps.tsx" \
+        "import { a } from '../../../apps/tactics/screens/index.js';"
+    plant_file "${tmp}" "renderer/app/main-menu/fromGames.tsx" \
+        "import { a } from '../../../games/tactics/screens/index.js';"
+    plant_file "${tmp}" "renderer/app/main-menu/fromPackage.tsx" \
+        "import { a } from '@chimera-engine/tactics/screens/index.js';"
+    plant_file "${tmp}" "renderer/app/lobby/sideEffectApps.tsx" \
+        "import '../../../apps/tactics/styles/tokens-override.css';"
+    plant_file "${tmp}" "renderer/app/lobby/sideEffectGames.tsx" \
+        "import 'games/tactics/styles/tokens-override.css';"
+    plant_file "${tmp}" "renderer/app/lobby/sideEffectPackage.tsx" \
+        "import '@chimera-engine/tactics/styles/tokens-override.css';"
+    plant_file "${tmp}" "renderer/app/settings/dynamicApps.tsx" \
+        "const a = import('../../../apps/tactics/settings-schema.js');"
+    plant_file "${tmp}" "renderer/app/settings/dynamicGames.tsx" \
+        "const a = import('games/tactics/settings-schema.js');"
+    plant_file "${tmp}" "renderer/app/settings/dynamicPackage.tsx" \
+        "const a = import('@chimera-engine/tactics/settings-schema.js');"
+    # A space before the paren is still the dynamic position, not a fourth one:
+    # prettier normalises it away, so the only file that carries it is one
+    # nobody formatted — exactly where a guard should not go quiet.
+    plant_file "${tmp}" "renderer/app/saves/dynamicSpacedParen.tsx" \
+        "const a = import ('../../../apps/tactics/screens/index.js');"
+
+    local out exit_code count
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+    count=$(echo "${out}" | grep -c '\[invariant-94\]' || true)
+
+    if [[ ${exit_code} -ne 0 && ${count} -eq 10 ]]; then
+        pass "all 9 naming x position combinations (+ spaced paren) detected as [invariant-94]"
+    else
+        fail "expected 10 [invariant-94] violations, got ${count} (exit ${exit_code}):"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Negative control: `apps` matching must be path-SEGMENT-anchored at BOTH ends.
+# The leading anchor keeps a prefix lookalike (`…/webapps/…`) clean; the
+# trailing slash keeps a suffix lookalike (`…/gamestate.js`, `…/appsettings.ts`)
+# clean. Both are planted, because an anchor tested at one end only leaves the
+# other end free to be deleted.
+test_apps_lookalike_segment_in_shell_page_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/main-menu/page.tsx" \
+        "import { Panel } from '../../components/webapps/Panel.js';"
+    plant_file "${tmp}" "renderer/app/settings/page.tsx" \
+        "import { state } from '../../state/gamestate.js';"
+    plant_file "${tmp}" "renderer/app/saves/page.tsx" \
+        "import { config } from '../../config/appsettings.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "shell-page webapps/, gamestate and appsettings paths not flagged (segment-anchored both ends)"
+    else
+        fail "shell-page apps/games lookalike path wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Negative control: the comment filter. Each game-import Check drops a line
+# whose code begins with a comment marker, so jsdoc that CITES a game path is
+# documentation rather than a violation. All four carry their own copy of the
+# filter, so all four are planted — a filter deleted from one copy is invisible
+# to a control that only exercises another.
+test_commented_apps_citation_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/game/page.tsx" \
+        "// a game enters via register.ts, never from '../../../apps/tactics/screens/index.js'"
+    plant_file "${tmp}" "electron/main/index.ts" \
+        "// the contribution is injected, never import('../../apps/tactics/electron/main.js')"
+    plant_file "${tmp}" "simulation/engine/Reducer.ts" \
+        "// a reducer never reaches a game: no import('../../apps/tactics/visibility-rules.js')"
+    plant_file "${tmp}" "renderer/components/shell/GameShell.tsx" \
+        "// the registry arrives as a prop, never from '../../../apps/tactics/screens/index.js'"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "commented apps/ citation not flagged (comment filter live in both Checks)"
+    else
+        fail "commented apps/ citation wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Negative control: the engine allowlist. A game is any @chimera-engine/<pkg>
+# that is NOT an engine package, so every engine package must survive the
+# scoped-specifier arm — not just the one a single clean case happens to name.
+test_engine_packages_in_shell_page_pass() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/lobby/page.tsx" \
+        "import { parseLobbyConfig } from '@chimera-engine/simulation/foundation/lobby-config.js';"
+    plant_file "${tmp}" "renderer/app/main-menu/page.tsx" \
+        "import { Button } from '@chimera-engine/renderer/components/ui/index.js';"
+    plant_file "${tmp}" "renderer/app/saves/page.tsx" \
+        "import { playerId } from '@chimera-engine/electron/preload/api-types.js';"
+    plant_file "${tmp}" "renderer/app/settings/page.tsx" \
+        "const scheduler = import('@chimera-engine/ai/engine/index.js');"
+    plant_file "${tmp}" "renderer/app/replays/page.tsx" \
+        "import '@chimera-engine/networking/provider/index.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "all five engine packages importable from a shell page (allowlist complete)"
+    else
+        fail "an engine package import from a shell page wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # Test: game surface importing the r3f, i18n, and game public barrels → NOT flagged
 # ui/chat/r3f (under components/) plus the TOP-LEVEL i18n runtime and the game-
 # registration seam @chimera-engine/renderer/game are five of the six public surfaces that
@@ -2266,6 +2595,17 @@ test_electron_import_in_app_simulation_detected
 test_bare_electron_specifier_in_simulation_detected
 test_game_snapshot_in_app_screen_detected
 test_games_import_in_globbed_shell_page_detected
+test_apps_dynamic_import_in_shell_page_detected
+test_apps_static_import_in_shell_page_detected
+test_apps_dynamic_import_in_main_detected
+test_side_effect_apps_import_in_shell_page_detected
+test_side_effect_game_package_import_in_shell_page_detected
+test_dynamic_apps_import_in_simulation_detected
+test_dynamic_apps_import_in_game_shell_host_detected
+test_game_specifier_cross_product_in_shell_page_detected
+test_apps_lookalike_segment_in_shell_page_passes
+test_commented_apps_citation_passes
+test_engine_packages_in_shell_page_pass
 test_r3f_i18n_game_barrels_in_game_surface_pass
 test_audio_barrel_in_game_surface_passes
 test_audio_internal_in_game_surface_detected

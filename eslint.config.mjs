@@ -701,7 +701,8 @@ export default tseslint.config(
     // Main-process boundaries — electron/main orchestration must stay agnostic of
     // (a) which games exist (packaged, multi-game builds, F18), and (b) which
     // concrete networking provider is in use (Invariant #47, issue #769).
-    //   * no-main-games-import — no electron/main module may import `games/*`;
+    //   * no-main-games-import — no electron/main module may import a game, by
+    //     an `apps/`/`games/` path segment or a non-engine `@chimera-engine/*`;
     //     since #788/#789 every game seam (actions, content schemas, lobby setup)
     //     arrives via the injected MainGameContribution, so no in-package
     //     composition registries remain exempt.
