@@ -2,26 +2,22 @@
  * renderer/components/r3f/index.ts
  *
  * Public R3F component barrel (`@chimera-engine/renderer/components/r3f`).
- * The engine `<GameCanvas>` root (declarative camera, §4.22) plus engine-owned
- * components a game mounts inside its own `<Canvas>` — the only renderer R3F
- * surface game apps may import (Invariant #96).
+ * The engine `<GameCanvas>` root (declarative camera, §4.22; `role="main" |
+ * "overlay"` multi-canvas) plus the Canvas-bound `useModelAnimation` hook —
+ * the only renderer R3F surface game apps may import (Invariant #96).
  *
- * The barrel also carries Canvas-bound hooks (`useModelAnimation`) alongside
- * its components — they call `useFrame`, so they too require a `<Canvas>`.
- * `useEngineFrameloop` is the exception and is Canvas-FREE by contract: it
- * computes the `frameloop` prop a `<Canvas>` is given, so it is called outside
- * one.
+ * GameCanvas is the only canvas root a game mounts. It wires `PerfProbe`
+ * (main role only), `FrameRateLimiter`, and the `frameloop` prop itself, so
+ * none of those modules is exported: they are engine wiring, not game
+ * surface.
  *
- * Keep this barrel curated: internals (InteractionBlocker, interactionContext,
- * shell/*) are NOT exported.
+ * Keep this barrel curated: internals (PerfProbe, FrameRateLimiter,
+ * useEngineFrameloop, mainCanvasRegistry, InteractionBlocker,
+ * interactionContext, shell/*) are NOT exported.
  */
 
-export { PerfProbe } from '../shell/perf/PerfProbe';
-export { FrameRateLimiter } from './FrameRateLimiter';
 export { GameCanvas } from './GameCanvas';
-export { useEngineFrameloop } from './useEngineFrameloop';
 export { useModelAnimation } from './useModelAnimation';
-export type { EngineFrameloop } from './useEngineFrameloop';
 export type {
     CameraMode,
     CameraPreset,

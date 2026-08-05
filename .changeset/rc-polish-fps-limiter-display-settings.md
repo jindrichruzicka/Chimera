@@ -5,7 +5,7 @@
 
 RC polish across the engine chrome and settings:
 
-- New real frame-rate limiter: `FrameRateLimiter` (exported from the r3f barrel) reads
+- New real frame-rate limiter: `FrameRateLimiter` reads
   `targetFps` from resolved settings and paces the R3F render loop rather than presenting
   frames itself, replacing the previously non-functional display cap.
 - Removed the dead `display.fullscreen`, `display.vsync`, and `display.uiScale` settings

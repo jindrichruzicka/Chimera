@@ -4,14 +4,10 @@
  * Engine frame-rate limiter — paces the R3F render loop to the active game's
  * `settings.display.targetFps`.
  *
- * It is HALF of the cap, and both halves are required. Games rendering through
- * the engine <GameCanvas> (r3f barrel) get both automatically. A game with its
- * own <Canvas> wires them itself, from the same barrel:
- *
- *     <Canvas frameloop={useEngineFrameloop()}>
- *         <FrameRateLimiter />
- *         …
- *     </Canvas>
+ * It is HALF of the cap, and both halves are required. <GameCanvas> wires both
+ * itself: this driver inside the canvas and `frameloop={useEngineFrameloop()}`
+ * on the root. Neither half is public — the r3f barrel header (index.ts)
+ * records the surface rationale.
  *
  * `useEngineFrameloop()` is Canvas-FREE and is called OUTSIDE the canvas whose
  * prop it computes. Mount this component once per canvas: each instance owns its
@@ -27,10 +23,10 @@
  *  - It drives only a canvas whose `frameloop` is `'never'`, i.e. one that has
  *    stopped driving R3F's own `requestAnimationFrame` chain and renders nothing
  *    until something calls `advance()`. `GameCanvas` computes that prop with
- *    `useEngineFrameloop()`, so on the engine canvas both halves read one cap
- *    (see `selectTargetFps.ts`); a game that owns its `<Canvas>` must wire both
- *    itself. Under any other `frameloop`, and at `targetFps === 0`, this
- *    component is inert: no chain, no advance, R3F's default loop untouched.
+ *    `useEngineFrameloop()`, so both halves read one cap (see
+ *    `selectTargetFps.ts`). Under any other `frameloop`, and at
+ *    `targetFps === 0`, this component is inert: no chain, no advance, R3F's
+ *    default loop untouched.
  *  - When it does drive, it owns that one chain: on every native frame it
  *    accumulates elapsed time and calls the store-bound `advance()` only once
  *    the frame interval is reached. Whoever presents — R3F's own automatic
@@ -43,7 +39,7 @@
  *    It is LOGGED, not thrown: this direction degrades to an uncapped loop — the
  *    behaviour before any cap existed — and R3F's `ErrorBoundary` re-throws
  *    OUTWARD past the `<Canvas>`, so a throw here takes down the surrounding
- *    tree, not just the canvas, at exactly the moment an author is wiring up.
+ *    tree, not just the canvas.
  *    Invariant #83's throwing precedent covers engine context hooks, where the
  *    alternative is a silently wrong value rather than a working-but-
  *    unthrottled loop.
@@ -89,9 +85,10 @@ class FrameloopWiringError extends Error {
     constructor(targetFps: number, frameloop: string) {
         super(
             `A ${targetFps} fps cap cannot take effect: <FrameRateLimiter /> is mounted in a ` +
-                `canvas whose frameloop is '${frameloop}'. Pass the other half of the ` +
-                `contract — frameloop={useEngineFrameloop()} on the <Canvas> that mounts it. ` +
-                `<GameCanvas> wires both for you.`,
+                `canvas whose frameloop is '${frameloop}'. <GameCanvas> wires both halves ` +
+                `of the cap — the frameloop prop and this driver — itself, so a capped ` +
+                `canvas in this state is an engine wiring defect, not a game integration ` +
+                `step.`,
         );
         this.name = 'FrameloopWiringError';
     }

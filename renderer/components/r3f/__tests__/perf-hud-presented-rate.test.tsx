@@ -43,7 +43,11 @@ import {
     resetFakeFiberRoot,
     update,
 } from '../__test-support__/fakeFiberRoot';
-import { GameCanvas, PerfProbe } from '../index';
+import { GameCanvas } from '../index';
+// Module path, not the barrel: PerfProbe is engine wiring with no public
+// re-export, and this renderer-internal spec mounts it in bare stand-in
+// canvases the way GameCanvas itself does.
+import { PerfProbe } from '../../shell/perf/PerfProbe';
 
 vi.mock('@react-three/fiber', () => import('../__test-support__/fakeFiberRoot'));
 

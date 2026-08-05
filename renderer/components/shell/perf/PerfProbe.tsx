@@ -11,7 +11,7 @@
  * canvas, not the panel and not the setting:
  *  - On a canvas paced by `<FrameRateLimiter />` AND
  *    `frameloop={useEngineFrameloop()}` — both halves, which `<GameCanvas>`
- *    wires for you — those are the capped frames. On a 120 Hz panel at
+ *    wires itself — those are the capped frames. On a 120 Hz panel at
  *    `display.targetFps: 30`, `fps` reports ~30 and a HEALTHY `frameMsAvg` is
  *    the capped interval, ~33 ms rather than the panel's ~8 ms.
  *  - Driver mounted but no `frameloop` prop: the canvas keeps R3F's own loop and

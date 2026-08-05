@@ -321,9 +321,12 @@ describe('FrameRateLimiter — half-wired canvas', () => {
             // the renderer names its own module.
             expect(entry?.source.module).toBe('frame-rate-limiter');
             expect(entry?.message).toContain('[FrameRateLimiter]');
-            // The message must name the fix, not just the symptom, and carry the
-            // two diagnostics that say WHICH canvas is mis-wired.
-            expect(entry?.error?.message).toContain('useEngineFrameloop()');
+            // The message must name the owning root — never instruct the game
+            // to wire the prop itself (the r3f barrel does not export the
+            // halves) — and carry the two diagnostics that say WHICH canvas is
+            // mis-wired.
+            expect(entry?.error?.message).toContain('engine wiring defect');
+            expect(entry?.error?.message).not.toContain('Pass the other half');
             expect(entry?.error?.message).toContain(`${targetFps} fps`);
             expect(entry?.error?.message).toContain(`'${frameloop}'`);
         },

@@ -5,8 +5,8 @@
  * (issue #772 — F61 surface contract; updated by #773 once the dist/ build landed):
  *
  *   - the public `exports` entry points are the three component barrels
- *     `./components/ui`, `./components/chat`, and `./components/r3f` (in-Canvas
- *     engine components, e.g. PerfProbe) plus the game-registration seam
+ *     `./components/ui`, `./components/chat`, and `./components/r3f` (the
+ *     GameCanvas root + useModelAnimation) plus the game-registration seam
  *     `./game` (#784 — the runtime injection point a consumer app populates via
  *     `registerRendererGame`) — no `.` barrel (there is intentionally no
  *     `renderer/index.ts`) and no deep internal subpath (Invariant #96, AC #2);

@@ -37,7 +37,6 @@ import type {
     GameCanvasCamera,
     GameCanvasProps,
     Vector3Tuple,
-    EngineFrameloop,
 } from '../index';
 
 /** The barrel's TYPE surface — see the audio sibling for why each is named. */
@@ -51,7 +50,6 @@ interface BarrelTypeSurface {
     readonly camera: GameCanvasCamera;
     readonly props: GameCanvasProps;
     readonly vector: Vector3Tuple;
-    readonly frameloop: EngineFrameloop;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -103,13 +101,10 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         const typeSurface: BarrelTypeSurface | undefined = undefined;
         expect(typeSurface).toBeUndefined();
 
-        expect(Object.keys(r3fBarrel).sort()).toEqual([
-            'FrameRateLimiter',
-            'GameCanvas',
-            'PerfProbe',
-            'useEngineFrameloop',
-            'useModelAnimation',
-        ]);
+        // The runtime surface is the GameCanvas root plus the one Canvas-bound
+        // hook; the barrel header (index.ts) records why the wiring modules
+        // are not public.
+        expect(Object.keys(r3fBarrel).sort()).toEqual(['GameCanvas', 'useModelAnimation']);
     });
 
     it('pulls in exactly eleven modules — two stores, the log bridge, and no clone seam', async () => {
@@ -147,6 +142,24 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         expect(externals.has('three/examples/jsm/utils/SkeletonUtils.js')).toBe(false);
         expect(importsRuntime(externals, '@chimera-engine/ai')).toBe(false);
         expect(importsRuntime(externals, '@chimera-engine/networking')).toBe(false);
+    });
+
+    it('names none of the removed engine-wiring exports in its export statements', () => {
+        // The runtime-keys pin above cannot see TYPE exports and
+        // BarrelTypeSurface is removal-only, so a re-added
+        // `export type { EngineFrameloop }` would survive every other gate.
+        // index.ts holds nothing but comments and export statements, so after
+        // stripping comments any surviving mention IS a re-export.
+        const source = readFileSync(resolve(__dirname, '..', 'index.ts'), 'utf8');
+        const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+        for (const name of [
+            'PerfProbe',
+            'FrameRateLimiter',
+            'useEngineFrameloop',
+            'EngineFrameloop',
+        ]) {
+            expect(withoutComments, `${name} must not be re-exported`).not.toContain(name);
+        }
     });
 
     it("carries 'use client' on line 1 of every module shipping React surface", () => {

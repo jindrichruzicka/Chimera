@@ -16,12 +16,10 @@ portal/scissor renderer, a hand-rolled render-target pipeline), and none of them
 suppress the others. Pacing the loop caps whoever presents, including presenters the
 engine has never heard of.
 
-- New `useEngineFrameloop()` export from `@chimera-engine/renderer/components/r3f`,
-  returning the `frameloop` prop a `<Canvas>` needs. `GameCanvas` applies it for you; a
-  game that owns its `<Canvas>` writes `<Canvas frameloop={useEngineFrameloop()}>` **and**
-  mounts `<FrameRateLimiter />` inside it. Wiring only the driver is an uncapped loop and
-  is reported as a named `FrameloopWiringError`; wiring only the prop is a black canvas
-  and cannot be detected.
+- `GameCanvas` wires both halves of the cap itself — the `frameloop` prop and the
+  `<FrameRateLimiter />` driver mounted inside the canvas. A canvas wired with only the
+  driver is an uncapped loop and is reported as a named `FrameloopWiringError`; only the
+  prop is a black canvas and cannot be detected.
 - The perf HUD's `fps` now reports the **presented** rate. It previously counted native
   frames, so a 30 fps cap on a 120 Hz display read as ~120. A healthy `frameMsAvg` at a
   30 fps cap is ~33 ms, not the panel's ~8 ms — the baseline moves with the cap by design.

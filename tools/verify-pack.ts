@@ -101,8 +101,8 @@ export const E2E_NODE_MODULES_ENV = 'CHIMERA_VERIFY_PACK_NODE_MODULES';
 export const PROBE_SUBPATHS = [
     '@chimera-engine/renderer/components/ui',
     '@chimera-engine/renderer/components/chat',
-    // The engine R3F barrel (§4.16, §4.22) — `GameCanvas` plus the engine components
-    // a game mounts inside its own `<Canvas>` (e.g. `PerfProbe`).
+    // The engine R3F barrel (§4.16, §4.22) — the `GameCanvas` root plus
+    // `useModelAnimation`.
     '@chimera-engine/renderer/components/r3f',
     // The i18n runtime barrel (§4.39) — the only legal import for a game's
     // translation catalogues, so a dropped export strands every localised game.

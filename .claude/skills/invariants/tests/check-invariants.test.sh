@@ -2091,7 +2091,7 @@ test_r3f_i18n_game_barrels_in_game_surface_pass() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "apps/tactics/screens/TacticsScene.tsx" \
-        "import { PerfProbe } from '@chimera-engine/renderer/components/r3f';"
+        "import { GameCanvas } from '@chimera-engine/renderer/components/r3f';"
     plant_file "${tmp}" "apps/tactics/shell/TacticsShellHud.tsx" \
         "import { useTranslate } from '@chimera-engine/renderer/i18n';"
     plant_file "${tmp}" "apps/tactics/shell/TacticsGameSeam.tsx" \

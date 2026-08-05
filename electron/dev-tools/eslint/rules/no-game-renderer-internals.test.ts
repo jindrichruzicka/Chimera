@@ -112,14 +112,14 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `import { GameAssetSession } from '@chimera-engine/renderer/shell/gameAssetSession';`,
         },
         {
-            // Public r3f barrel (in-Canvas engine components, e.g. PerfProbe) is
-            // allowed from a game surface.
+            // Public r3f barrel (the GameCanvas root and its Canvas-bound
+            // hooks) is allowed from a game surface.
             filename: 'apps/tactics/screens/TacticsDemoBoard.tsx',
-            code: `import { PerfProbe } from '@chimera-engine/renderer/components/r3f';`,
+            code: `import { GameCanvas } from '@chimera-engine/renderer/components/r3f';`,
         },
         {
             filename: 'apps/tactics/screens/TacticsDemoBoard.tsx',
-            code: `import { PerfProbe } from '@chimera-engine/renderer/components/r3f/index.js';`,
+            code: `import { GameCanvas } from '@chimera-engine/renderer/components/r3f/index.js';`,
         },
         {
             // F71: the engine i18n runtime barrel (I18nProvider, useTranslate, the

@@ -2,10 +2,10 @@
 
 /**
  * Turns the active game's `settings.display.targetFps` into the `frameloop` a
- * `<Canvas>` must be given. The engine `<GameCanvas>` applies it itself; a game
- * that owns its `<Canvas>` writes `<Canvas frameloop={useEngineFrameloop()}>`
- * and mounts `<FrameRateLimiter />` inside it — see `selectTargetFps.ts` for
- * why both halves are one contract.
+ * `<Canvas>` must be given. `<GameCanvas>` applies it itself and mounts
+ * `<FrameRateLimiter />` inside; see `selectTargetFps.ts` for why both halves
+ * are one contract. Not public — the r3f barrel header (index.ts) records the
+ * surface rationale.
  *
  * It must be the PROP, never an internal `setFrameloop` call: R3F's `CanvasImpl`
  * runs `configure()` from a layout effect with NO dependency array, so every
@@ -25,8 +25,8 @@
  *    renders an active root whenever `frameloop === 'always' || internal.frames
  *    > 0` and never consults the counter `invalidate` writes, and the rAF chain
  *    it would otherwise restart is already running.
- * Demand rendering therefore reaches a canvas only when a game sets
- * `frameloop="demand"` on its own `<Canvas>`, which this hook never returns.
+ * Demand rendering therefore reaches a canvas only when its root is given
+ * `frameloop="demand"`, which this hook never returns.
  *
  * Canvas-FREE by contract: this is called OUTSIDE the `<Canvas>` whose prop it
  * computes, so it reads `settingsStore` and must reach no R3F hook.
