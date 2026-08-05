@@ -92,7 +92,11 @@ const TACTICS_MAX_ABSENT_COLOR_PIXELS = 1;
 
 export class GamePage {
     readonly canvas: Locator;
-    /** The R3F `<canvas>` inside the game-canvas wrapper; cursor specs read its computed cursor. */
+    /**
+     * The first `<canvas>` under the game-canvas wrapper — the board scene;
+     * the minimap overlay canvas mounts after it (tree order pinned by the
+     * board's role-order unit test). Cursor specs read its computed cursor.
+     */
     readonly tacticsCanvas: Locator;
     readonly undoButton: Locator;
     readonly redoButton: Locator;

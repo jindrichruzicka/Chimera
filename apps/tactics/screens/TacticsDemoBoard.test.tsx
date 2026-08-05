@@ -4,6 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import boardStyles from './TacticsDemoBoard.module.css';
 import {
     entityId,
     gamePhase,
@@ -63,6 +64,8 @@ interface ProjectedUnitFixture {
 const gameCanvasCalls = vi.hoisted(
     (): {
         readonly camera: unknown;
+        readonly role: string | undefined;
+        readonly className: string | undefined;
     }[] => [],
 );
 
@@ -71,20 +74,57 @@ const gameCanvasCalls = vi.hoisted(
 // double-mount mutant — a second FrameRateLimiter owns a second
 // requestAnimationFrame chain and advances the canvas at roughly double the
 // target rate), the component resolves `undefined` and every render test
-// crashes red.
+// crashes red. The `role` fork keys the testid so the board canvas and the
+// minimap overlay stay individually addressable.
 vi.mock('@chimera-engine/renderer/components/r3f', () => ({
     GameCanvas: ({
         camera,
         children,
+        role,
+        className,
     }: {
         readonly camera: unknown;
         readonly children: React.ReactNode;
+        readonly role?: string;
+        readonly className?: string;
     }) => {
-        gameCanvasCalls.push({ camera });
+        gameCanvasCalls.push({ camera, role, className });
         const renderedChildren = React.Children.toArray(children).filter((child) => {
             return React.isValidElement(child) && typeof child.type !== 'string';
         });
-        return <div data-testid="tactics-r3f-canvas">{renderedChildren}</div>;
+        return (
+            <div data-testid={role === 'overlay' ? 'tactics-minimap-canvas' : 'tactics-r3f-canvas'}>
+                {renderedChildren}
+            </div>
+        );
+    },
+}));
+
+interface MinimapMockUnit {
+    readonly id: string;
+    readonly ownerId: string;
+}
+
+const minimapCalls = vi.hoisted(
+    (): {
+        readonly units: readonly MinimapMockUnit[];
+        readonly boardColor: string;
+        readonly unitColorFor: (unit: MinimapMockUnit) => string;
+    }[] => [],
+);
+
+vi.mock('../scene/TacticsMinimap.js', () => ({
+    TacticsMinimap: ({
+        units,
+        boardColor,
+        unitColorFor,
+    }: {
+        readonly units: readonly MinimapMockUnit[];
+        readonly boardColor: string;
+        readonly unitColorFor: (unit: MinimapMockUnit) => string;
+    }) => {
+        minimapCalls.push({ units, boardColor, unitColorFor });
+        return <div data-testid="tactics-minimap-scene" data-board-color={boardColor} />;
     },
 }));
 
@@ -118,6 +158,8 @@ vi.mock('../scene/TacticsGroundPlane.js', () => ({
     ),
 }));
 
+const unitPrimitiveUnits = vi.hoisted((): { readonly id: string }[] => []);
+
 vi.mock('../scene/TacticsUnitPrimitive.js', () => ({
     TacticsUnitPrimitive: ({
         unit,
@@ -132,23 +174,28 @@ vi.mock('../scene/TacticsUnitPrimitive.js', () => ({
         readonly color: string;
         readonly isSelected: boolean;
         readonly onSelect: (unitId: string) => void;
-    }) => (
-        <button
-            data-testid={`tactics-unit-${unit.id}`}
-            data-color={color}
-            data-ownership={unit.ownership}
-            data-selected={String(isSelected)}
-            type="button"
-            onClick={() => onSelect(unit.id)}
-        >
-            {unit.id}
-        </button>
-    ),
+    }) => {
+        unitPrimitiveUnits.push(unit);
+        return (
+            <button
+                data-testid={`tactics-unit-${unit.id}`}
+                data-color={color}
+                data-ownership={unit.ownership}
+                data-selected={String(isSelected)}
+                type="button"
+                onClick={() => onSelect(unit.id)}
+            >
+                {unit.id}
+            </button>
+        );
+    },
 }));
 
 afterEach(() => {
     cleanup();
     gameCanvasCalls.length = 0;
+    minimapCalls.length = 0;
+    unitPrimitiveUnits.length = 0;
     useCommitmentBuffer.getState().reset();
 });
 
@@ -246,12 +293,19 @@ describe('TacticsDemoBoard', () => {
         expect(screen.queryByTestId('move-target')).not.toBeInTheDocument();
         expect(screen.queryByTestId('reveal-target')).not.toBeInTheDocument();
         expect(screen.queryByTestId('attack-target')).not.toBeInTheDocument();
-        // Every render must hand GameCanvas the SAME camera object
+        // Every render must hand each GameCanvas the SAME camera object
         // (reference-compared memo — a new identity per render would
-        // re-realize the camera).
-        expect(gameCanvasCalls.length).toBeGreaterThanOrEqual(1);
-        const cameraIdentities = new Set(gameCanvasCalls.map((call) => call.camera));
-        expect(cameraIdentities.size).toBe(1);
+        // re-realize the camera). Two mounts now: the board (default role)
+        // and the minimap overlay, one stable camera each.
+        expect(gameCanvasCalls.length).toBeGreaterThanOrEqual(2);
+        const mainCameraIdentities = new Set(
+            gameCanvasCalls.filter((call) => call.role === undefined).map((call) => call.camera),
+        );
+        expect(mainCameraIdentities.size).toBe(1);
+        const overlayCameraIdentities = new Set(
+            gameCanvasCalls.filter((call) => call.role === 'overlay').map((call) => call.camera),
+        );
+        expect(overlayCameraIdentities.size).toBe(1);
         // The board's camera contract is the declarative config it hands the
         // engine GameCanvas (instance realization — manual frustum, up before
         // lookAt — is pinned in the renderer's GameCanvas tests). The e2e pixel
@@ -263,6 +317,102 @@ describe('TacticsDemoBoard', () => {
             up: [0, 0, 1],
             frustum: { left: -3.75, right: 3.75, top: 2.5, bottom: -2.5, near: 0.1, far: 100 },
         });
+    });
+
+    it('mounts exactly two GameCanvas roots — the default-role board and the overlay minimap', () => {
+        const localPlayerId = playerId('p1');
+
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={localPlayerId}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByTestId('tactics-r3f-canvas')).toBeInTheDocument();
+        expect(screen.getByTestId('tactics-minimap-canvas')).toBeInTheDocument();
+        expect(screen.getByTestId('tactics-minimap')).toBeInTheDocument();
+
+        const roles = gameCanvasCalls.map((call) => call.role);
+        expect(roles).toEqual([undefined, 'overlay']);
+        // The wrapper and the overlay canvas carry exactly the board's own
+        // module-CSS classes — the corner anchor and the canvas chrome; a
+        // dropped or swapped class survives every layout-blind assertion.
+        const minimapClass = boardStyles['minimap'];
+        const minimapCanvasClass = boardStyles['minimapCanvas'];
+        if (!minimapClass || !minimapCanvasClass) {
+            throw new Error('Expected the board stylesheet to resolve both minimap classes');
+        }
+        expect(screen.getByTestId('tactics-minimap').className).toBe(minimapClass);
+        expect(gameCanvasCalls[1]?.className).toBe(minimapCanvasClass);
+        // The minimap camera is a module-level top-down config framing the
+        // whole board — the same world framing the main camera uses.
+        expect(gameCanvasCalls[1]?.camera).toEqual({
+            mode: 'orthographic',
+            position: [1, 12, 0],
+            lookAt: [1, 0, 0],
+            up: [0, 0, 1],
+            frustum: { left: -3.75, right: 3.75, top: 2.5, bottom: -2.5, near: 0.1, far: 100 },
+        });
+
+        // Reference-stable across renders, per mount.
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={localPlayerId}
+                sendAction={vi.fn()}
+            />,
+        );
+        const overlayCameras = new Set(
+            gameCanvasCalls.filter((call) => call.role === 'overlay').map((call) => call.camera),
+        );
+        expect(overlayCameras.size).toBe(1);
+    });
+
+    it('feeds the minimap the same parsed units, board color, and unit colors the board renders', () => {
+        const localPlayerId = playerId('p1');
+
+        // WITH content: every colour resolves off its default, so a minimap
+        // hardwired to the defaults cannot pass vacuously.
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ includeSetup: true })}
+                localPlayerId={localPlayerId}
+                sendAction={vi.fn()}
+                content={TACTICS_CONTENT}
+            />,
+        );
+
+        const minimapProps = minimapCalls.at(-1);
+        if (minimapProps === undefined) {
+            throw new Error('Expected the board to mount the TacticsMinimap');
+        }
+        // The SAME unit objects, by identity — one parse feeds both scenes, so
+        // a second data path (or a store subscription widening) cannot appear
+        // without failing this.
+        expect(minimapProps.units).toHaveLength(unitPrimitiveUnits.length);
+        for (const unit of unitPrimitiveUnits) {
+            expect(minimapProps.units).toContain(unit);
+        }
+        // The same resolved board color the ground plane paints — the
+        // content-supplied navy, never the default.
+        expect(minimapProps.boardColor).toBe('#1e293b');
+        expect(screen.getByTestId('tactics-minimap-scene')).toHaveAttribute(
+            'data-board-color',
+            screen.getByTestId('tactics-ground-plane').getAttribute('data-board-color') ?? '',
+        );
+        // The board's own resolver reaches the minimap: host-assigned green
+        // for the local seat, amber for the opponent.
+        const ownUnit = minimapProps.units.find(
+            (unit) => unit.id === TACTICS_DEFAULT_UNIT_ID_VALUE,
+        );
+        const opponentUnit = minimapProps.units.find((unit) => unit.id === 'unit-2');
+        if (ownUnit === undefined || opponentUnit === undefined) {
+            throw new Error('Expected both fixture units to reach the minimap');
+        }
+        expect(minimapProps.unitColorFor(ownUnit)).toBe('#16a34a');
+        expect(minimapProps.unitColorFor(opponentUnit)).toBe('#f59e0b');
     });
 
     it('renders the scene through the engine GameCanvas', () => {

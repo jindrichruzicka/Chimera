@@ -65,6 +65,46 @@ test.describe('Performance HUD', () => {
         await expect(game.perfHud).not.toBeVisible();
     });
 
+    test('renders the minimap overlay canvas beside the board with the HUD still live', async ({
+        hostWindow,
+    }) => {
+        const game = new GamePage(hostWindow);
+        await expect(game.canvas).toBeVisible();
+
+        // Two canvas elements: the board plus the minimap overlay, both
+        // mounted through the public GameCanvas root.
+        await expect(game.canvas.locator('canvas')).toHaveCount(2);
+
+        // The minimap sits INSIDE the board's bottom-right quadrant with a
+        // real extent — not merely "visible somewhere at some size".
+        const minimap = hostWindow.getByTestId('tactics-minimap');
+        await expect(minimap).toBeVisible();
+        const board = await game.tacticsCanvas.boundingBox();
+        const box = await minimap.boundingBox();
+        if (board === null || box === null) {
+            throw new Error('Expected both the board canvas and the minimap to lay out');
+        }
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.height).toBeGreaterThan(0);
+        expect(box.x).toBeGreaterThan(board.x + board.width / 2);
+        expect(box.y).toBeGreaterThan(board.y + board.height / 2);
+        expect(box.x + box.width).toBeLessThanOrEqual(board.x + board.width + 1);
+        expect(box.y + box.height).toBeLessThanOrEqual(board.y + board.height + 1);
+        // Readout only: the overlay must not swallow bottom-right board clicks.
+        await expect(minimap).toHaveCSS('pointer-events', 'none');
+
+        // The perf HUD still publishes live metrics with the overlay mounted
+        // (probe exclusivity per role is pinned at unit level, not re-derived
+        // here).
+        await hostWindow.keyboard.press('F3');
+        await expect(game.perfHud).toBeVisible();
+        await expect
+            .poll(async () => (await game.perfFps.textContent()) ?? '', { timeout: 30_000 })
+            .not.toBe('FPS: 0');
+        await hostWindow.keyboard.press('F3');
+        await expect(game.perfHud).not.toBeVisible();
+    });
+
     test('shows live GL metrics during a match (PerfProbe mounted in the game canvas)', async ({
         hostWindow,
     }) => {

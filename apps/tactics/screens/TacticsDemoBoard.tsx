@@ -31,7 +31,9 @@ import {
     TACTICS_CAMERA_UP,
 } from '../scene/tacticsCamera.js';
 import { TacticsGroundPlane } from '../scene/TacticsGroundPlane.js';
+import { TacticsMinimap } from '../scene/TacticsMinimap.js';
 import { TacticsUnitPrimitive } from '../scene/TacticsUnitPrimitive.js';
+import styles from './TacticsDemoBoard.module.css';
 import { parseRevealedTurn } from '../simulation/commitment/revealView.js';
 import {
     selectBuffer,
@@ -80,6 +82,16 @@ const boardFallbackStyle: React.CSSProperties = {
 // pixel projection mirrors these numbers — TACTICS_CANVAS_WORLD_BOUNDS in
 // e2e/pages/GamePage.ts; the GamePage sync guards go red if they drift.
 const TACTICS_GAME_CANVAS_CAMERA = {
+    mode: 'orthographic',
+    position: TACTICS_CAMERA_POSITION,
+    lookAt: TACTICS_CAMERA_LOOK_AT,
+    up: TACTICS_CAMERA_UP,
+    frustum: TACTICS_CAMERA_BOUNDS,
+} as const satisfies OrthographicCameraConfig;
+
+// The minimap's own module-level camera (one stable config per mount): the
+// same top-down world framing as the board camera, on the overlay canvas.
+const TACTICS_MINIMAP_CAMERA = {
     mode: 'orthographic',
     position: TACTICS_CAMERA_POSITION,
     lookAt: TACTICS_CAMERA_LOOK_AT,
@@ -292,6 +304,29 @@ export function TacticsDemoBoard({
                     />
                 ))}
             </GameCanvas>
+            <div className={styles['minimap']} data-testid="tactics-minimap">
+                <GameCanvas
+                    role="overlay"
+                    camera={TACTICS_MINIMAP_CAMERA}
+                    // The index-signature lookup types as possibly-undefined;
+                    // the class exists in the sibling stylesheet, and
+                    // exactOptionalPropertyTypes forbids handing an explicit
+                    // undefined to the curated optional prop.
+                    className={styles['minimapCanvas'] ?? ''}
+                >
+                    <TacticsMinimap
+                        units={units}
+                        boardColor={boardColor}
+                        unitColorFor={(unit) =>
+                            resolveTacticsUnitColor(
+                                unit.ownerId,
+                                snapshot.setup,
+                                palette.playerColorHex,
+                            )
+                        }
+                    />
+                </GameCanvas>
+            </div>
         </div>
     );
 }

@@ -1,0 +1,24 @@
+/*
+ * TacticsDemoBoard — minimap overlay placement.
+ *
+ * The corner anchor and the EXPLICIT size live on this game-owned wrapper:
+ * r3f pins position/width/height as inline styles on its own wrapper div, so
+ * a class on the canvas cannot re-position it — and a zero-height canvas
+ * never mounts its children, hence the fixed block size here.
+ */
+.minimap {
+    position: absolute;
+    right: var(--ch-space-sm);
+    bottom: var(--ch-space-sm);
+    inline-size: calc(var(--ch-space-md) * 12);
+    block-size: calc(var(--ch-space-md) * 8);
+    /* Readout only: board clicks pass through unimpeded. */
+    pointer-events: none;
+}
+
+/* Canvas chrome rides the GameCanvas className (nothing here fights r3f's
+ * inline styles): rounded clip and a surface seam against the board. */
+.minimapCanvas {
+    border-radius: var(--ch-radius-md);
+    border: var(--ch-border-width-sm) solid var(--ch-color-surface-overlay);
+}
