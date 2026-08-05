@@ -146,7 +146,7 @@ type MutableReduceContext = { -readonly [K in keyof ReduceContext]: ReduceContex
  *   sub-contexts (db, undoManager, broadcast, debugObserver, history).
  *   Stages destructure only the narrow sub-context they need.
  *   The `logger` is optional and defaults to a noop. Pass any `Logger` from
- *   `shared/logging.ts` — the pipeline never creates its own logger.
+ *   `simulation/foundation/logging.ts` — the pipeline never creates its own logger.
  */
 export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #registry: ActionRegistry<TState>;

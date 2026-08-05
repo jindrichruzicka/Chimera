@@ -1,5 +1,5 @@
 /**
- * shared/dev-fixture-contract.ts
+ * simulation/foundation/dev-fixture-contract.ts
  *
  * Shared declarative contract for the dev multiplayer harness fixtures (§4.32):
  * the game-owned test data a developer authors under `<appRoot>/dev/` so the
@@ -25,7 +25,7 @@
  * Consumed by the harness CLI (spawn planning) and by `electron/main/dev/*`
  * (instance-side seeding); both re-validate at their own JSON boundaries.
  * Pure data + pure helpers only — zero I/O, no environment reads, and zero
- * imports beyond sibling `shared/` modules (mirroring `messages-schemas.ts`
+ * imports beyond `zod` and sibling foundation modules (mirroring `messages-schemas.ts`
  * local invariant #2 — nothing from renderer/, electron/, or DOM APIs).
  */
 

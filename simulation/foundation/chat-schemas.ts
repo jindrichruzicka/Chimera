@@ -1,11 +1,11 @@
 /**
- * shared/chat-schemas.ts
+ * simulation/foundation/chat-schemas.ts
  *
  * Runtime Zod schema for the chat routing scope, mirroring {@link ChatScope} in
- * `shared/chat.ts`. This is the single definition reused by every *server-side*
+ * `simulation/foundation/chat.ts`. This is the single definition reused by every *server-side*
  * boundary that must validate a scope:
  *
- *   - the wire protocol's `CHAT` frame (`shared/messages-schemas.ts`),
+ *   - the wire protocol's `CHAT` frame (`simulation/foundation/messages-schemas.ts`),
  *   - the main-process IPC request for `chimera:chat:send` (`electron/main/ipc/ipc-schemas.ts`).
  *
  * The preload boundary owns an independent copy (Invariant #5: no schema file

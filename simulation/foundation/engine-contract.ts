@@ -1,5 +1,5 @@
 /**
- * shared/engine-contract.ts
+ * simulation/foundation/engine-contract.ts
  *
  * Foundation brand/contract types for the Chimera engine.
  *

@@ -17,7 +17,7 @@
  *
  * Design note: docs/security-trust/tactics-commitment-battle-mode.md §3, §5
  *
- * Module boundary: imports only `shared/`, `simulation/`, and own files.
+ * Module boundary: workspace imports are `simulation/` and own files only.
  */
 
 import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '../constants.js';

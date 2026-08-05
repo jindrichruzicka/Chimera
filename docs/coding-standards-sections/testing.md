@@ -1,6 +1,6 @@
 ---
 title: 'Chimera Coding Standards — §12 Testing'
-description: 'TDD cycle, Vitest/Playwright toolchain, file conventions, coverage gates, test scope matrix, no-mocks policy for simulation, and no-real-resources rule for unit tests.'
+description: 'TDD cycle, Vitest/Playwright toolchain, file conventions, coverage targets, test scope matrix, no-mocks policy for simulation, and no-real-resources rule for unit tests.'
 tags: [testing, tdd, vitest, playwright, coverage, mocks, simulation, coding-standards]
 ---
 
@@ -35,13 +35,16 @@ Committing implementation code without a corresponding test is a workflow violat
 - Test doubles (fakes, stubs): `<package>/__test-support__/`.
 - E2E fixtures and specs: `apps/tactics/e2e/` only. Never imported from unit tests.
 
-## 12.4 Coverage gates (CI)
+## 12.4 Coverage targets
 
-| Metric    | Minimum |
-| --------- | ------- |
-| Lines     | 80%     |
-| Functions | 80%     |
-| Branches  | 75%     |
+`pnpm coverage` runs `vitest run --coverage` and **reports** these numbers. They are
+review targets, not a mechanical gate — nothing fails a build on them.
+
+| Metric    | Target |
+| --------- | ------ |
+| Lines     | 80%    |
+| Functions | 80%    |
+| Branches  | 75%    |
 
 ## 12.5 What to test
 

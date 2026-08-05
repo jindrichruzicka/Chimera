@@ -1,13 +1,13 @@
 /**
- * shared/snapshot-contract.ts
+ * simulation/foundation/snapshot-contract.ts
  *
  * Foundation contract types for the two projected-snapshot shapes that cross
  * boundaries (Invariant #1 — only a projected snapshot ever leaves the host;
  * `GameSnapshot` never does).
  *
  * Both shapes live in `@chimera-engine/simulation/foundation` — the zero-dependency foundation leaf —
- * so the foundation can describe the wire protocol (`shared/messages.ts`) and
- * the game-screen contract (`shared/game-screen-contract.ts`) without importing
+ * so the foundation can describe the wire protocol (`simulation/foundation/messages.ts`) and
+ * the game-screen contract (`simulation/foundation/game-screen-contract.ts`) without importing
  * *up* into `networking` or `electron`. Two distinct shapes are kept on purpose
  * (they are NOT unified — that would be a real logic change):
  *
@@ -16,7 +16,7 @@
  *    `GameScreenProps.snapshot`.
  *  - {@link WirePlayerSnapshot} — the loose, opaque wire projection that crosses
  *    the network. `networking/provider/MultiplayerProvider.ts` re-exports it as
- *    `PlayerSnapshot`; `shared/messages.ts` carries it on the `SNAPSHOT` frame.
+ *    `PlayerSnapshot`; `simulation/foundation/messages.ts` carries it on the `SNAPSHOT` frame.
  *
  * This module is PURE TYPE DECLARATIONS only — zero runtime code.
  */

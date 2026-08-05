@@ -1,5 +1,5 @@
 /**
- * shared/messages.ts
+ * simulation/foundation/messages.ts
  *
  * Wire-level message types for the LocalWebSocketProvider internal protocol.
  *
@@ -9,7 +9,7 @@
  * never depend on these types directly; they interact only through the
  * `HostTransport` / `ClientTransport` interface.
  *
- * Placed in `shared/` per §4.3. All cross-module type references use
+ * Placed in the `simulation/foundation/` leaf per §4.3. All cross-module type references use
  * `import type` to avoid any circular runtime dependencies.
  *
  * Architecture: §4.3 — WebSocket Message Protocol

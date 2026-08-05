@@ -3,7 +3,7 @@
 // plain data (`Record<collectionType, items[]>`), or null when the game declares
 // no content. The renderer never interprets the items — the authoring game does.
 //
-// Channel name lives here (not in shared/) because it is an internal preload↔main
+// Channel name lives here (not in `simulation/foundation/`) because it is an internal preload↔main
 // protocol detail; the main-process handler imports this same constant so the
 // channel string matches on both sides (invariant 5).
 

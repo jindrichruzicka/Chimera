@@ -1,5 +1,5 @@
 /**
- * shared/chat.ts
+ * simulation/foundation/chat.ts
  *
  * Canonical chat contract shared across the host relay, the wire protocol, and
  * the renderer. This is the type surface the Chat System (§4.29) builds on:

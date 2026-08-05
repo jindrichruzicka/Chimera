@@ -1,22 +1,21 @@
 /**
- * shared/game-screen-contract.test.ts
+ * simulation/foundation/game-screen-contract.test.ts
  *
  * Type-level and runtime unit tests for the in-game-menu contract additions:
  * the optional `GameScreenRegistry.inGameMenu` slot and the `InGameMenuProps`
  * interface handed to a game's in-game menu component.
  *
  * Architecture reference: §4.33–§4.34 — GameScreenRegistry / GameShell
- * Task: #735 (T2 of #733 — F55 In-Game Menu + Role-Aware Leave Game)
  *
  * Invariants upheld:
  *   #80 — the in-game menu is supplied only via `GameScreenRegistry`; the slot is
- *     just a `GameScreenComponent`, so `GameShell` never imports `games/*`.
+ *     just a `GameScreenComponent`, so `GameShell` never imports `apps/*`.
  *   #81 — `playfield` remains the only required slot; `inGameMenu` is optional (a
  *     registry providing only `playfield` type-checks).
- *   §3 Module Boundary — `shared/` must not import from `renderer/`, `games/*`,
+ *   §3 Module Boundary — `simulation/` must not import from `renderer/`, `apps/*`,
  *     or `electron/main`. This test imports React types and the contract module
- *     only; the contract reuses the canonical `PlayerId` already imported from
- *     the preload boundary type module.
+ *     only; the contract's `PlayerId` comes from the sibling
+ *     `./engine-contract.js`.
  *
  * Tests written first (TDD — red confirmed: `InGameMenuProps` was not exported
  * before this commit; the import below fails to resolve / type-check).
@@ -36,7 +35,7 @@ import type {
 
 // `PlayerId` is a branded type at the preload boundary; a bare string literal is
 // not assignable. Cast rather than import simulation's `playerId()` helper, which
-// would be a runtime import crossing the `shared/` module boundary (§3).
+// would be a runtime import crossing out of the foundation leaf (§3).
 const localPlayerId = 'p1' as unknown as PlayerId;
 
 const playfield: GameScreenComponent<GameScreenProps> = () => null;

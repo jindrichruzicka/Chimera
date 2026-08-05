@@ -2,7 +2,7 @@
 // §4.8 / §4.10 — Typed asset reference primitives.
 //
 // parseAssetRef, MalformedAssetRefError, and isTraversalUnsafe live in
-// shared/asset-ref-parse.ts so that renderer/assets/AssetResolver.ts can
+// simulation/foundation/asset-ref-parse.ts so that renderer/assets/AssetResolver.ts can
 // import them without violating the renderer→simulation runtime-value boundary.
 // They are re-exported here for backwards compatibility.
 //
@@ -93,7 +93,7 @@ export function buildAssetRef<T extends AssetKind>(
 /**
  * Decompose an `AssetRef` into its `gameId` and `relativePath` parts.
  *
- * Delegates to the shared `parseAssetRef` in `shared/asset-ref-parse.ts`;
+ * Delegates to the shared `parseAssetRef` in `simulation/foundation/asset-ref-parse.ts`;
  * this typed overload narrows the parameter to `AssetRef` for simulation-layer
  * callers without duplicating validation logic.
  *

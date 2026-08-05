@@ -1,5 +1,5 @@
 /**
- * shared/game-lobby-contract.test.ts
+ * simulation/foundation/game-lobby-contract.test.ts
  *
  * Type-level and runtime unit tests for the customizable-lobby contract types:
  * LobbyFieldOption, GameLobbySetup, GameSetupConfig, LobbyPendingAction,
@@ -8,15 +8,15 @@
  * optionLabel).
  *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
- * Task: #703 (part of #702 — game lobby contract types)
  *
  * Invariants upheld:
- *   §3 Module Boundary Table — `shared/` must not import from `renderer/`,
- *     `games/*`, or `electron/`. The module's sole import is a type-only re-use
- *     of the canonical LobbyState/PlayerId from a sibling `shared/` module
- *     (messages-schemas.ts); type-only imports are erased at build, so the
- *     emitted module has zero runtime imports (cf. messages-schemas.ts local
- *     invariant #2 — zero runtime imports from renderer/, electron/, or DOM).
+ *   §3 Module Boundary Table — `simulation/` must not import from `renderer/`,
+ *     `apps/*`, or `electron/`. Every import in the module is a re-use of a
+ *     sibling foundation module: the canonical LobbyState/PlayerId/GameContent
+ *     types (type-only, erased at build) plus the
+ *     `WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH` compile-time constant, so the
+ *     emitted module has no cross-package runtime import (cf. messages-schemas.ts
+ *     local invariant #2 — zero runtime imports from renderer/, electron/, or DOM).
  *
  * Tests written first (TDD — red confirmed: module did not exist before
  * this commit; `pnpm test` reported "cannot find module").

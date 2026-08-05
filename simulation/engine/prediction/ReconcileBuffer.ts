@@ -19,8 +19,8 @@
  *   #43 — No Math.random, Date.now, performance.now inside the buffer.
  *
  * Module boundaries (hard constraints):
- *   May import from: simulation/engine, shared/
- *   Must NOT import from: renderer/, electron/, games/*, any DOM API
+ *   May import from: simulation/engine, simulation/foundation
+ *   Must NOT import from: renderer/, electron/, apps/*, any DOM API
  */
 
 import type { Logger } from '../../foundation/logging.js';

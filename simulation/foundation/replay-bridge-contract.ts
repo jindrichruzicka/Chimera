@@ -1,26 +1,24 @@
 /**
- * shared/replay-bridge-contract.ts
+ * simulation/foundation/replay-bridge-contract.ts
  *
  * Shared structural contract for the slice of the Chimera preload replay bridge
  * (`window.__chimera.replay.perspective`) that a game's shell module reads
  * directly off `globalThis` to gate replay-related menu affordances.
  *
- * Why this lives in `shared/`: `games/*` may import only from `simulation/`,
- * `ai/`, `shared/`, and their own files (§3 Module Boundary Table) — never from
- * `electron/*` (where the canonical `PerspectiveReplayAPI` lives) nor
- * `renderer/*`. A game shell module (e.g. `games/tactics/shell/main-menu.ts`)
- * gates its "Replays" button on whether any perspective replays exist, so it
- * needs the `list` slice of that bridge but cannot reach the canonical type.
+ * A game shell module (e.g. `apps/tactics/shell/main-menu.ts`) gates its
+ * "Replays" button on whether any perspective replays exist, so it needs the
+ * `list` slice of that bridge — this narrow, zero-import contract rather than
+ * the whole canonical preload surface.
  *
- * Drift protection: `electron/preload/api-types.ts` declares
+ * Drift protection: `simulation/bridge/api-types.ts` declares
  * `PerspectiveReplayAPI extends PerspectiveReplayListBridge`, so the canonical
  * preload surface is structurally pinned to this shared slice — a change to
  * `list`'s signature that diverges from this contract is a compile error in the
  * preload layer. Both the game consumer and the canonical producer therefore
  * reference one source of truth for this method's shape.
  *
- * Module boundary (§3 Module Boundary Table): `shared/` must not import from
- * `renderer/`, `electron/`, or `games/*`. This module has zero imports — the
+ * Module boundary (§3 Module Boundary Table): `simulation/` must not import from
+ * `renderer/`, `electron/`, or `apps/*`. This module has zero imports — the
  * constraint is structurally enforced.
  */
 
@@ -36,8 +34,7 @@
  * playback (`openCurrent`), so it never reaches the filesystem — it is deliberately
  * NOT a valid path and can never escape the replay directory (OWASP A01 unaffected).
  *
- * Shared here (not in `electron/*`) so both the main-process IPC handlers and a
- * game screen (which may import only `simulation/`/`ai/`/`shared/`, Invariant #96)
+ * Shared here so both the main-process IPC handlers and a game screen
  * reference one source of truth for the token.
  */
 export const CURRENT_MATCH_REPLAY_PATH = '::chimera-current-match::';
@@ -50,8 +47,8 @@ export const CURRENT_MATCH_REPLAY_PATH = '::chimera-current-match::';
  * reflect BOTH saved deterministic and perspective replays reads both slices.
  *
  * The item shape is intentionally opaque (`unknown`) — only the presence of
- * entries is consumed here — so this slice stays free of the electron-only
- * `ReplayListItem` type while remaining assignable from it.
+ * entries is consumed here, and this module takes no import at all, so it cannot
+ * name `ReplayListItem` while still remaining assignable from it.
  */
 export interface ReplayListBridge {
     /** List stored deterministic-replay entries for `gameId`, newest-first. */
@@ -83,13 +80,12 @@ export interface PerspectiveReplayListBridge {
  * finalise the in-progress recording and hand it to the replay player from the
  * post-game summary.
  *
- * Why this lives in `shared/`: a game screen (`games/<name>/screens/*.tsx`) may
- * import only from `simulation/`, `ai/`, `shared/`, and its own files (§3 Module
- * Boundary Table; Invariant #96) — never the canonical `ReplayAPI` in
- * `electron/*` nor the `useReplayApi` hook in `renderer/*`. It therefore reads
- * the bridge off `globalThis`, typed against this shared slice.
+ * A game screen (`apps/<name>/screens/*.tsx`) reaches `renderer/*` only through
+ * the barrels Invariant #96 enumerates, so the `useReplayApi` hook is not
+ * available to it. It therefore reads the bridge off `globalThis`, typed against
+ * this shared slice.
  *
- * Drift protection: `electron/preload/api-types.ts` declares
+ * Drift protection: `simulation/bridge/api-types.ts` declares
  * `ReplayAPI extends ReplayExportBridge`, so the canonical preload surface is
  * structurally pinned to this slice — a divergent signature is a compile error
  * in the preload layer, not a silent drift.
@@ -152,7 +148,7 @@ export interface ReplayExportBridge {
  * no "Replay saved" toast push on the perspective channel, so the post-game
  * summary reflects a successful save with its own inline confirmation.
  *
- * Drift protection: `electron/preload/api-types.ts` declares
+ * Drift protection: `simulation/bridge/api-types.ts` declares
  * `PerspectiveReplayAPI extends PerspectiveReplayExportBridge`, pinning the
  * canonical preload surface to this slice — a divergent signature is a compile
  * error in the preload layer, not a silent drift.

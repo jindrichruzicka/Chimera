@@ -4,10 +4,9 @@
 // Written first (TDD - red confirmed before implementation).
 //
 // Architecture reference: section 4.13 Settings System, section 4.37.9 Settings page definition.
-// Task: #629
 //
 // Module boundary enforced by import statements below:
-//   - apps/tactics/shell/ may import from shared/ and own Tactics files only.
+//   - this module's workspace imports are simulation/foundation/ and own Tactics files only.
 
 import { describe, expect, it } from 'vitest';
 import type {

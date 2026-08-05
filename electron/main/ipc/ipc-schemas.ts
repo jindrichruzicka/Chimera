@@ -592,7 +592,7 @@ export const EngineProfilePatchSchema = z
  * Schema for the `{ body, scope }` payload accepted by `chimera:chat:send`.
  *
  * Reuses the canonical {@link ChatScopeSchema} (shared with the wire `CHAT`
- * frame in `shared/messages-schemas.ts`) so a single scope definition guards
+ * frame in `simulation/foundation/messages-schemas.ts`) so a single scope definition guards
  * every *server-side* boundary — this does not span the main↔preload IPC
  * boundary (the preload owns an independent copy, Invariant #5). The
  * `as unknown as` cast bridges the `PlayerId` brand inside a `private` scope; the

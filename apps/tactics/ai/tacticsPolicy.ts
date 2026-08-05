@@ -237,7 +237,7 @@ function commitAction(viewerId: PlayerId, tick: number): EngineAction {
  * after committing the AI's projected `isMyTurn` flips false — so it stops acting
  * and never double-commits. The mode is read from the projected
  * `setup.matchSettings` (projected verbatim by the StateProjector), keeping this a
- * pure `shared/`-only decision with no host-local field.
+ * pure projection-only decision with no host-local field.
  */
 function finishTurnAction(
     snapshot: PlayerSnapshot,

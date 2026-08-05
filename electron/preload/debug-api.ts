@@ -22,7 +22,7 @@
 // Zod-validates every request (Invariant #29) and never throws on the invoke
 // channel — failures come back as `{ type: 'ERROR' }`. A discriminant check
 // suffices, matching the `subscribePush` trust precedent in
-// `shared/listener.ts`.
+// `./shared/listener.ts`.
 
 import { contextBridge, ipcRenderer } from 'electron';
 import {

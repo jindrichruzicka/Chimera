@@ -1,13 +1,12 @@
 /**
- * shared/chat-schemas.test.ts
+ * simulation/foundation/chat-schemas.test.ts
  *
  * Tests for the runtime Zod scope schema that mirrors the canonical chat
- * contract in shared/chat.ts. This is the single scope definition reused by the
+ * contract in simulation/foundation/chat.ts. This is the single scope definition reused by the
  * wire-protocol `CHAT` frame and the main-process IPC `chimera:chat:send`
  * request validation.
  *
  * Architecture: §4.29 — Chat System
- * Task: F45 / T03 (issue #681)
  */
 
 import { describe, it, expect } from 'vitest';

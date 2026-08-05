@@ -4,8 +4,8 @@
 //
 // Architecture reference: section 4.13 Settings System, section 4.37.9 Settings page definition.
 //
-// Module boundary: games/* may import from simulation/, ai/, shared/, and own files.
-// This module imports from shared/ only; it must never import from renderer/*.
+// Module boundary (§3): this module's workspace imports are
+// simulation/foundation/ only; it must never import from renderer/*.
 
 import type { GameSettingsPageDefinition } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 

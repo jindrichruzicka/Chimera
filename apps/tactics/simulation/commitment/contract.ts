@@ -11,10 +11,10 @@
  *
  * Full protocol + invariants: docs/security-trust/tactics-commitment-battle-mode.md
  *
- * Module boundary (§3): a games/* module may import `shared/` (runtime) and
- * `simulation/` (type-only here). The only runtime import is the pure
+ * Module boundary (§3): an apps/* module may import `simulation/` (type-only
+ * here) and its own files. The only runtime import is the game's own pure
  * action-type constant module, used for the discriminated-union tags — the same
- * source `apps/tactics/actions.ts` already imports.
+ * source `apps/tactics/simulation/actions.ts` already imports.
  */
 
 import {

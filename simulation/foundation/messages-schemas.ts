@@ -1,8 +1,8 @@
 /**
- * shared/messages-schemas.ts
+ * simulation/foundation/messages-schemas.ts
  *
  * Zod runtime schemas for every variant of `ClientMessage` and `ServerMessage`
- * declared in `shared/messages.ts`.
+ * declared in `simulation/foundation/messages.ts`.
  *
  * **Why strict schemas here?**
  * The existing `isClientMessage` / `isServerMessage` guards only check the
@@ -109,7 +109,7 @@ const JoinSeatClaim = z
 
 /**
  * Routing scope for a CHAT frame. Reuses the canonical {@link ChatScopeSchema}
- * from `shared/chat-schemas.ts` so the wire boundary, the IPC boundary, and the
+ * from `simulation/foundation/chat-schemas.ts` so the wire boundary, the IPC boundary, and the
  * preload boundary all validate the same shape — the discriminated union rejects
  * malformed `kind` discriminants before any field is read.
  */
@@ -217,7 +217,7 @@ const LobbyState = z.object({
 
 /**
  * Synced match-setup config carried on `PlayerSnapshot.setup`. Runtime mirror of
- * the `GameSetupConfig` interface in `shared/game-lobby-contract.ts`: the chosen
+ * the `GameSetupConfig` interface in `simulation/foundation/game-lobby-contract.ts`: the chosen
  * match settings plus each player's attributes keyed by player id.
  */
 const GameSetupConfig = z.object({

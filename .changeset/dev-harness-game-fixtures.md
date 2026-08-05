@@ -16,7 +16,7 @@ Dev multiplayer harness: game-owned fixtures, auto-session, standalone packaging
   engine-shaped identities, seeded as each instance's active profile) and
   `scenarios/*.json` (per-seat game-defined attributes such as a JSON-encoded deck,
   host-authored match settings such as an arena id, AI seats, auto-start) — validated by
-  the new `@chimera-engine/simulation` `shared/dev-fixture-contract.ts` schemas and
+  the new `@chimera-engine/simulation/foundation/dev-fixture-contract.js` schemas and
   riding the same lobby channels a real player uses into `snapshot.setup`.
 - Per-game player-attribute value cap: `GameLobbySetup.maxAttributeValueLength`
   (default 256 — unchanged behaviour) lets a game admit deck-sized values; the wire

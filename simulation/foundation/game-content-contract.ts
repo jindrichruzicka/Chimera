@@ -1,5 +1,5 @@
 /**
- * shared/game-content-contract.ts
+ * simulation/foundation/game-content-contract.ts
  *
  * Generic, game-agnostic shape for content-database collections as they cross a
  * process boundary (main → renderer over IPC) and flow into a game's renderer
@@ -7,7 +7,7 @@
  *
  * The engine, IPC framework, and renderer never interpret these collections:
  * each item is only guaranteed to carry a string `id` plus arbitrary JSON
- * fields. A concrete game (e.g. `games/tactics/`) owns the Zod schema that
+ * fields. A concrete game (e.g. `apps/tactics/`) owns the Zod schema that
  * validates its collections at load time and the code that reads the fields it
  * authored. This keeps the engine agnostic about which games use which data
  * contracts (Invariant #2; §4.8 Content Database).
@@ -17,8 +17,8 @@
  * type-import `simulation/content` and so cannot reconstruct a live
  * `ContentDatabase`.
  *
- * Module boundary (§3): `shared/` carries zero runtime imports; this module is
- * pure types.
+ * Module boundary (§3): this module carries zero imports of any kind; it is pure
+ * types.
  */
 
 /**

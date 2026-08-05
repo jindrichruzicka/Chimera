@@ -1,11 +1,10 @@
 /**
- * shared/messages-schemas.test.ts
+ * simulation/foundation/messages-schemas.test.ts
  *
  * Tests for Zod schemas that validate the wire protocol messages defined in
- * shared/messages.ts.
+ * simulation/foundation/messages.ts.
  *
  * Architecture: §4.3 — WebSocket Message Protocol
- * Task: F10.1 / T01 (issue #225)
  */
 
 import { describe, it, expect } from 'vitest';
@@ -21,8 +20,8 @@ import {
     WIRE_MAX_PROFILE_REJECT_REASON_LENGTH,
 } from './messages-schemas.js';
 
-// shared/ is the foundation leaf, so its tests construct branded ids locally
-// rather than importing the `playerId` factory from simulation/networking (#758).
+// simulation/foundation/ is the foundation leaf, so its tests construct branded ids locally
+// rather than importing the `playerId` factory from simulation/engine/types.ts.
 const toPlayerId = (raw: string): PlayerId => raw as PlayerId;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

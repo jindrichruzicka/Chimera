@@ -1,7 +1,7 @@
-// shared/asset-ref-parse.ts
+// simulation/foundation/asset-ref-parse.ts
 // §4.10 — Parsing utilities for AssetRef strings.
 //
-// Extracted into `shared/` so that both `simulation/content/` and
+// Extracted into `simulation/foundation/` so that both `simulation/content/` and
 // `renderer/assets/` can import these without violating the module-boundary
 // rule that restricts `renderer/` to type-only imports from `simulation/`.
 //

@@ -1,5 +1,5 @@
 /**
- * F44 / T9 — replay.spec.ts (#663)
+ * replay.spec.ts
  *
  * End-to-end coverage of the Tactics replay lifecycle, exercised through the real
  * renderer + main IPC path (not mocks):
@@ -32,10 +32,9 @@ import { GamePage } from '../pages/GamePage';
 import { LobbyPage } from '../pages/LobbyPage';
 import { MainMenuPage } from '../pages/MainMenuPage';
 import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
-// F49 / #715 — §13.4 renderer-heap budget during replay playback, from the single
-// source of truth. Imported by relative path (not the @chimera-engine/* alias, which the
-// Playwright spec runner does not resolve) so the gate can never drift;
-// shared/perf-budget.test.ts locks the canonical value. Replay reuses the live
+// §13.4 renderer-heap budget during replay playback, from the single
+// source of truth, imported rather than re-declared so the gate can never drift;
+// simulation/foundation/perf-budget.test.ts locks the canonical value. Replay reuses the live
 // ActionPipeline (Inv #42/#70), so its renderer-side heap must stay within the
 // same budget as a live match. Strict locally / under CHIMERA_PERF_STRICT=1,
 // informational on CI.

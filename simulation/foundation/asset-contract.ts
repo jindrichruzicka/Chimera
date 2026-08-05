@@ -1,4 +1,4 @@
-// shared/asset-contract.ts
+// simulation/foundation/asset-contract.ts
 // §4.8 / §4.10 — Typed asset reference primitives (foundation layer).
 //
 // The phantom asset-kind brands, the open `AssetKindRegistry`, and the

@@ -174,7 +174,7 @@ export type DisconnectReason = 'kicked' | 'timeout' | 'host_closed' | 'error' | 
  * authoritative values.
  *
  * This payload is the wire form of the canonical `ChatMessage` in
- * `shared/chat.ts`; the field names differ (`senderId`/`text`/`timestamp`). It
+ * `simulation/foundation/chat.ts`; the field names differ (`senderId`/`text`/`timestamp`). It
  * is named `WireChatPayload` (not `ChatMessage`) precisely so the two never
  * collide at a call site. Chat is a cosmetic side-channel and never an
  * `EngineAction` (Invariant #72).

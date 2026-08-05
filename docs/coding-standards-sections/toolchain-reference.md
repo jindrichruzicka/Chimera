@@ -17,9 +17,9 @@ tags: [toolchain, pnpm, vitest, scripts, path-aliases, tsconfig, coding-standard
 ## 15.2 Common scripts
 
 ```bash
-pnpm test              # vitest run — all unit and integration tests
+pnpm test              # all unit and integration tests, every package
 pnpm test:watch        # vitest — interactive watch mode
-pnpm test:coverage     # vitest run --coverage
+pnpm coverage          # vitest run --coverage (reported, not threshold-gated)
 pnpm test:e2e          # playwright test --config=apps/tactics/e2e/playwright.config.ts --project=electron-e2e
 pnpm lint              # eslint with all chimera/* rules
 pnpm validate:assets   # check AssetRef strings in game data and SceneDescriptor.requiredAssets
@@ -32,17 +32,13 @@ pnpm dev:mp 3          # 1 host + 2 auto-joining clients (multiplayer dev)
 
 ## 15.3 Path aliases
 
-All `@chimera-engine/*` path aliases are declared in the root `tsconfig.json` and resolved by `vite-tsconfig-paths` in Vitest and the renderer's Vite config. Never add bare relative `../../` imports across package boundaries — use the alias.
+`@chimera-engine/*` specifiers resolve through each package's `exports` map; several toolchains hook that resolution onto in-tree source instead. [`docs/architecture-overview.md` §C.7 As-Built Package Build Model](../architecture-overview.md) is the single source of truth for which toolchain uses which hook. Never add bare relative `../../` imports across package boundaries — use the package specifier.
 
 ## 15.4 Vitest config
 
 ```typescript
-// vitest.config.ts (root)
-environmentMatchGlobs: [
-    ['renderer/**/*.test.tsx', 'jsdom'],
-    ['renderer/**/*.test.ts', 'jsdom'],
-];
-// Default: 'node' — simulation and ai tests run without DOM
+// vitest.config.mts (root)
+environment: 'node'; // simulation, ai, networking and tools tests run without DOM
 ```
 
-Override per file with `// @vitest-environment jsdom` when a single file in a non-renderer package needs browser APIs.
+There is no per-glob environment mapping: every file that needs browser APIs — renderer components included — opts in with a `// @vitest-environment jsdom` pragma. House rule: put it on the first line.

@@ -64,11 +64,11 @@ export type { SceneId, SceneTransitionState };
 /** Resolved game outcome. Canonical: simulation/ (§4.38). */
 export type { GameResult };
 
-/** Chat contract types. Canonical: shared/chat.ts (§4.29 — Chat System). */
+/** Chat contract types. Canonical: simulation/foundation/chat.ts (§4.29 — Chat System). */
 export type { ChatMessage, ChatScope, RelayResult };
 
 /**
- * Replay-export intent. Canonical: shared/replay-bridge-contract.ts (§4.28).
+ * Replay-export intent. Canonical: simulation/foundation/replay-bridge-contract.ts (§4.28).
  * Re-exported so renderer/preload consumers reach it through the api-types
  * surface alongside {@link ReplayAPI}.
  */

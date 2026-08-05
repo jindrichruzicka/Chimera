@@ -13,8 +13,8 @@
  * real {@link LocalActionBuffer} — the repo's branded-zod idiom (cf.
  * `PlayerIdSchema = NonEmptyStringSchema.transform(playerId)`).
  *
- * Module boundary: imports only `shared/`, `simulation/` (type-only), and own
- * files — never renderer/electron/other games.
+ * Module boundary: workspace imports are `simulation/` and own files only — never
+ * renderer/electron/other apps.
  */
 
 import { z } from 'zod';

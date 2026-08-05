@@ -1,5 +1,5 @@
 /**
- * shared/commitment-contract.ts
+ * simulation/foundation/commitment-contract.ts
  *
  * Foundation contract types for the cryptographic commit/reveal protocol
  * (§4.6 / §8).

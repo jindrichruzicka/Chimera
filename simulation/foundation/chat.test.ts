@@ -1,23 +1,22 @@
 /**
- * shared/chat.test.ts
+ * simulation/foundation/chat.test.ts
  *
- * Tests for the canonical chat contract defined in shared/chat.ts.
+ * Tests for the canonical chat contract defined in simulation/foundation/chat.ts.
  *
  * Architecture: §4.29 — Chat System
- * Task: F45 / T01 (issue #679)
  */
 
 import { describe, it, expect } from 'vitest';
 import type { PlayerId } from './engine-contract.js';
 import type { ChatScope, ChatMessage, RelayResult } from './chat.js';
 
-// shared/ is the foundation leaf, so its tests construct branded ids locally
-// rather than importing the `playerId` factory from simulation/networking (#758).
+// simulation/foundation/ is the foundation leaf, so its tests construct branded ids locally
+// rather than importing the `playerId` factory from simulation/engine/types.ts.
 const toPlayerId = (raw: string): PlayerId => raw as PlayerId;
 
 // ─── ChatScope ──────────────────────────────────────────────────────────────
 
-describe('shared/chat — ChatScope', () => {
+describe('simulation/foundation/chat — ChatScope', () => {
     it('lobby scope narrows on kind', () => {
         const scope: ChatScope = { kind: 'lobby' };
         expect(scope.kind).toBe('lobby');
@@ -50,7 +49,7 @@ describe('shared/chat — ChatScope', () => {
 
 // ─── ChatMessage ──────────────────────────────────────────────────────────────
 
-describe('shared/chat — ChatMessage', () => {
+describe('simulation/foundation/chat — ChatMessage', () => {
     it('carries id, fromPlayerId, scope, body and serverTime', () => {
         const msg: ChatMessage = {
             id: 'msg-1',
@@ -81,7 +80,7 @@ describe('shared/chat — ChatMessage', () => {
 
 // ─── RelayResult ──────────────────────────────────────────────────────────────
 
-describe('shared/chat — RelayResult', () => {
+describe('simulation/foundation/chat — RelayResult', () => {
     it('ok result narrows to true', () => {
         const result: RelayResult = { ok: true };
         expect(result.ok).toBe(true);

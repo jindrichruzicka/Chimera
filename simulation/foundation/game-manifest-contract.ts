@@ -1,9 +1,9 @@
-// shared/game-manifest-contract.ts
+// simulation/foundation/game-manifest-contract.ts
 //
 // Per-game manifest: the small, pure-data descriptor each game declares about
 // itself (display name, window title, real-time loop mode, optional icon,
-// hardware-cursor textures, logo screen and UI languages). Lives in `shared/`
-// with zero platform imports so BOTH the main process (window title +
+// hardware-cursor textures, logo screen and UI languages). Lives in the
+// `simulation/foundation/` leaf with zero platform imports so BOTH the main process (window title +
 // RealtimeTicker) and the renderer (game-shell display name, cursor token
 // overrides) read one source of truth.
 // The host wall-clock fields (`realtime`, `tickRateMs`) never enter the
@@ -16,7 +16,7 @@ export const DEFAULT_WINDOW_TITLE = 'Chimera';
 /**
  * Default heartbeat interval, in milliseconds, for a real-time game that does
  * not pin its own `tickRateMs`. 50ms ≈ 20Hz — the per-tick perf-budget
- * baseline (`TICK_BUDGET_MS = 16`, see {@link shared/perf-budget.ts}).
+ * baseline (`TICK_BUDGET_MS = 16`, see {@link simulation/foundation/perf-budget.ts}).
  */
 export const DEFAULT_TICK_RATE_MS = 50;
 

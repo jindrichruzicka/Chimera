@@ -8,11 +8,11 @@
  * conflicts when run in parallel.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T02 (issue #217)
  *
  * Invariants upheld:
  *   #2 — no imports from renderer/, electron/, or DOM APIs
- *   networking boundary — only imports from within local/ or shared/
+ *   networking boundary — workspace imports are `networking/provider/` and the
+ *     public `simulation` contract subpaths only; no engine or renderer internals
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -637,7 +637,7 @@ describe('LobbyServer — restored-session seams (#821)', () => {
     });
 
     it('honors a matchId-proof claim even after the seat holder sent LEAVE', async () => {
-        // LEAVE forgets the player (#687) but must not orphan the SAVED seat:
+        // LEAVE forgets the player but must not orphan the SAVED seat:
         // the claim presents matchId proof from the save file, so the seat
         // stays reclaimable for the lobby's lifetime.
         const server = makeRestoredServer();
@@ -745,7 +745,7 @@ describe('LobbyServer — password gate (F56)', () => {
     });
 });
 
-// ─── LEAVE / intentional departure (#687) ──────────────────────────────────────
+// ─── LEAVE / intentional departure ─────────────────────────────────────────────
 
 describe('LobbyServer — LEAVE / intentional departure (#687)', () => {
     it('fires onPlayerDisconnected with reason "normal" when the client sends LEAVE', async () => {

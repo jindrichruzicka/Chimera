@@ -4,10 +4,10 @@
 // Written first (TDD — red confirmed before implementation).
 //
 // Architecture reference: §4.37 — Renderer Shell Pages UI Contract
-// Task: #620
 //
 // Module boundary enforced by import statement below:
-//   - apps/tactics/shell/ may import from shared/ only (not renderer/)
+//   - this module's workspace imports are simulation/foundation/ and own Tactics
+//     files only (not renderer/)
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GameMainMenuDefinition } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
@@ -138,7 +138,7 @@ describe('button variants', () => {
     });
 });
 
-// ─── Replays button availability check (F44 T7 — #661) ──────────────────────────
+// ─── Replays button availability check ──────────────────────────────────────
 //
 // The Replays button is disabled when there are no replays to browse — of EITHER
 // kind (deterministic or perspective; both are saved only on an explicit save, not

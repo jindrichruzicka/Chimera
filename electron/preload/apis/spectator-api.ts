@@ -3,7 +3,7 @@
 // `SpectatorApiIpcPort` so the factory is trivially testable without spinning
 // up Electron.
 //
-// Channel names live here (not in `shared/`) because they are an internal
+// Channel names live here (not in `simulation/foundation/`) because they are an internal
 // preload↔main protocol detail: renderer code never references them, and the
 // main-process handler module imports these same constants to guarantee the
 // channel strings match on both sides (Invariant #5).

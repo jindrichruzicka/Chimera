@@ -1,10 +1,9 @@
 /**
- * shared/messages.test.ts
+ * simulation/foundation/messages.test.ts
  *
- * Tests for the wire protocol types defined in shared/messages.ts.
+ * Tests for the wire protocol types defined in simulation/foundation/messages.ts.
  *
  * Architecture: §4.3 — WebSocket Message Protocol
- * Task: F10 / T01 (issue #216)
  */
 
 import { describe, it, expect } from 'vitest';
@@ -16,13 +15,13 @@ import {
     type ServerMessage,
 } from './messages.js';
 
-// shared/ is the foundation leaf, so its tests construct branded ids locally
-// rather than importing the `playerId` factory from simulation/networking (#758).
+// simulation/foundation/ is the foundation leaf, so its tests construct branded ids locally
+// rather than importing the `playerId` factory from simulation/engine/types.ts.
 const toPlayerId = (raw: string): PlayerId => raw as PlayerId;
 
 // ─── ClientMessage ────────────────────────────────────────────────────────────
 
-describe('shared/messages — ClientMessage', () => {
+describe('simulation/foundation/messages — ClientMessage', () => {
     it('JOIN message has the correct shape', () => {
         const msg: ClientMessage = {
             type: 'JOIN',
@@ -115,7 +114,7 @@ describe('shared/messages — ClientMessage', () => {
 
 // ─── ServerMessage ────────────────────────────────────────────────────────────
 
-describe('shared/messages — ServerMessage', () => {
+describe('simulation/foundation/messages — ServerMessage', () => {
     const lobbyInfo = { sessionId: 's1', hostId: toPlayerId('host'), gameId: 'test' };
 
     it('WELCOME message has playerId and lobbyState', () => {
@@ -220,7 +219,7 @@ describe('shared/messages — ServerMessage', () => {
 
 // ─── isClientMessage ──────────────────────────────────────────────────────────
 
-describe('shared/messages — isClientMessage type guard', () => {
+describe('simulation/foundation/messages — isClientMessage type guard', () => {
     it('returns true for a valid ClientMessage', () => {
         expect(isClientMessage({ type: 'PING', sentAt: 0 })).toBe(true);
     });
@@ -262,7 +261,7 @@ describe('shared/messages — isClientMessage type guard', () => {
 
 // ─── isServerMessage ──────────────────────────────────────────────────────────
 
-describe('shared/messages — isServerMessage type guard', () => {
+describe('simulation/foundation/messages — isServerMessage type guard', () => {
     it('returns true for a valid ServerMessage type', () => {
         expect(isServerMessage({ type: 'PONG', sentAt: 0 })).toBe(true);
     });

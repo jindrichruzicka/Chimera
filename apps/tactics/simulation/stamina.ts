@@ -10,8 +10,8 @@
  * The stored `refreshedTurn` marker is internal bookkeeping; only `{ current,
  * max }` is projected to clients via the tactics `VisibilityRules`.
  *
- * Imports stay inside the simulation ownership boundary (`shared/`,
- * `simulation/engine`) — no renderer/electron/networking (Invariant #3).
+ * Workspace imports stay inside the simulation ownership boundary
+ * (`simulation/engine` and own files) — no renderer/electron/networking (§3).
  */
 
 import { TACTICS_MAX_STAMINA, readTacticsTurnMode } from './constants.js';

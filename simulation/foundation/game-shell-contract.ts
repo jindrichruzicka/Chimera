@@ -1,13 +1,13 @@
 /**
- * shared/game-shell-contract.ts
+ * simulation/foundation/game-shell-contract.ts
  *
  * Shared declarative contract for game-customisable shell pages (§4.37).
- * Consumed by both renderer/ (to render menus) and games/* (to declare menus).
+ * Consumed by both renderer/ (to render menus) and apps/* (to declare menus).
  *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
  *
- * Module boundary (§3 Module Boundary Table): `shared/` must not import from
- * `renderer/` or `games/*`. This module has zero imports — the constraint is
+ * Module boundary (§3 Module Boundary Table): `simulation/` must not import from
+ * `renderer/` or `apps/*`. This module has zero imports — the constraint is
  * structurally enforced.
  */
 
@@ -29,7 +29,7 @@ export type GameFontDisplay = 'auto' | 'block' | 'swap' | 'fallback' | 'optional
 /**
  * A self-hosted font face contributed by a concrete game for shell and game UI.
  * `src` uses the same `game-id/relative/path` shape as AssetRef strings and
- * must resolve to a committed file owned by the game under `games/<game>/assets/`.
+ * must resolve to a committed file owned by the game under `apps/<game>/assets/`.
  */
 export interface GameFontFace {
     readonly family: string;
@@ -175,7 +175,7 @@ export interface GameMainMenuButton {
  * Top-level declarative contract for a game-customised main menu.
  *
  * Games export a value satisfying this type from
- * `games/<name>/shell/main-menu.ts` and contribute it via
+ * `apps/<name>/shell/main-menu.ts` and contribute it via
  * `LoadedRendererGame.shell.mainMenu`.
  *
  * If a game provides `undefined` instead, the renderer falls back to the
@@ -303,7 +303,7 @@ export interface SettingsTabDefinition {
  * Top-level declarative contract for a game-customised settings page.
  *
  * Games export a value satisfying this type from
- * `games/<name>/shell/settings-page.ts` and contribute it via
+ * `apps/<name>/shell/settings-page.ts` and contribute it via
  * `LoadedRendererGame.shell.settings`.
  *
  * If a game provides `undefined`, the renderer falls back to the engine default

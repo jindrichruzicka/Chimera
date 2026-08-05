@@ -1,5 +1,5 @@
 /**
- * shared/game-lobby-contract.ts
+ * simulation/foundation/game-lobby-contract.ts
  *
  * Shared declarative contract for customizable game lobbies (§4.37).
  * This is the data contract every game's lobby builds on:
@@ -11,14 +11,14 @@
  *                          per-player attributes) carried alongside the snapshot.
  *   - `GameLobbyScreenProps` — props passed to a game's lobby-screen component.
  *
- * Consumed by both renderer/ (to render the lobby) and games/* (to declare it),
- * mirroring `shared/game-shell-contract.ts`.
+ * Consumed by both renderer/ (to render the lobby) and apps/* (to declare it),
+ * mirroring `simulation/foundation/game-shell-contract.ts`.
  *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
  *
- * Module boundary (§3 Module Boundary Table): `shared/` must not import from
- * `renderer/`, `games/*`, `electron/`, or simulation runtime. The imports
- * below re-use only sibling `shared/` modules: the canonical
+ * Module boundary (§3 Module Boundary Table): `simulation/` must not import from
+ * `renderer/`, `apps/*`, or `electron/`, and the foundation leaf must not import
+ * simulation runtime. The imports below re-use only sibling foundation modules: the canonical
  * `LobbyState`/`PlayerId`/`GameContent` types (type-only, erased at build) and
  * the `WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH` wire bound (a compile-time
  * constant; sibling runtime imports mirror `messages-schemas.ts` →

@@ -12,7 +12,7 @@ Source of truth:
 
 Use this file only as the fast BLOCK/WARNING checklist:
 
-- Renderer imports stay inside `renderer/`, `shared/`, and type-only `simulation/content`; never import `electron/main`, game data, provider internals, or broad simulation runtime modules.
+- Renderer imports stay inside `renderer/` internals, the `simulation/foundation` contracts, the `simulation/bridge` preload API contract, and `simulation/content` (types only in production code); test files may also import `simulation/settings` for cross-boundary compatibility guards. Never import `electron/main`, game data, provider internals, or broad simulation runtime modules.
 - Use narrow typed Zustand selectors; components do not call whole-store hooks or mutate IPC-only store methods.
 - Dispatch authoritative actions through `useSendAction()` and keep renderer state local or derived.
 - Derive UI state in selectors or `useMemo`; reserve `useEffect` for real side effects.

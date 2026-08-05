@@ -10,7 +10,7 @@
  *
  * Invariants upheld:
  *   #43 — This module is the ONLY approved source of randomness inside
- *          simulation/. Math.random() is blocked by no-restricted-globals.
+ *          simulation/. Math.random() is blocked by no-restricted-syntax.
  *   Rule 2 — same (seed, tick) always produces the same draw sequence.
  */
 

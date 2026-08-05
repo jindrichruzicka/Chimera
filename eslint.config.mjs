@@ -300,10 +300,10 @@ export default tseslint.config(
     // must not import ANY sibling workspace package — not ai, networking,
     // renderer, electron, or games. The foundation it absorbed (formerly
     // `@chimera-engine/shared`) now lives at `@chimera-engine/simulation/foundation`, so the
-    // package declares no runtime dependencies; only the reserved `engine:`
-    // namespace crosses cuts (Invariant #107). Test files are included on
+    // package needs no workspace dependency at all, and has zero runtime
+    // dependencies on React, DOM, or networking (Invariant #1).
+    // Only the reserved `engine:` namespace crosses cuts (Invariant #107). Test files are included on
     // purpose — a type-only back-edge in a test still makes the leaf non-pure.
-    // See issue #759.
     {
         files: ['simulation/**/*.{ts,tsx}'],
         rules: {

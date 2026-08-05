@@ -411,9 +411,9 @@ export const PerspectiveReplayPlaybackInfoSchema = z.object({
 
 // ─── Chat domain schemas (§4.29) ──────────────────────────────────────────────
 //
-// Response-side mirror of the canonical chat contract (`shared/chat.ts`). Kept
-// local to the preload boundary like every other namespace's response schema —
-// the preload owns its own drift gate and imports `shared/` type-only.
+// Response-side mirror of the canonical chat contract
+// (`simulation/foundation/chat.ts`). Kept local to the preload boundary like
+// every other namespace's response schema — the preload owns its own drift gate.
 
 /**
  * Schema for the {@link import('../api-types.js').ChatScope} routing discriminant

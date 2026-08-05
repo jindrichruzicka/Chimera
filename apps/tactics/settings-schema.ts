@@ -6,8 +6,8 @@
  *
  * Architecture reference: §4.13
  *
- * Module boundary: may import from simulation/, ai/, shared/ and own files only.
- * Must NOT import from renderer/, electron/, or other games/ directories.
+ * Module boundary: workspace imports are simulation/, ai/ and own files only.
+ * Must NOT import from renderer/, electron/, or other apps/ directories.
  */
 
 import { z } from 'zod';

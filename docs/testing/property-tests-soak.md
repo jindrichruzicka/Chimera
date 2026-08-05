@@ -1,6 +1,6 @@
 ---
 title: 'Testing Strategy — Unit, Integration & Property Tests'
-description: 'Vitest/RTL/@react-three/test-renderer/fast-check toolchain, file conventions, vitest.config.ts, package.json scripts, test utilities, example unit tests (ActionPipeline, gameStore), property-based projection test, CI pipeline, and §10.1 full test scenario matrix.'
+description: 'Vitest/RTL/@react-three/test-renderer/fast-check toolchain, file conventions, vitest.config.mts, package.json scripts, test utilities, example unit tests (ActionPipeline, gameStore), property-based projection test, CI pipeline, and §10.1 full test scenario matrix.'
 tags: [testing, vitest, unit-tests, property-tests, fast-check, react-testing-library, ci]
 ---
 
@@ -26,9 +26,8 @@ tags: [testing, vitest, unit-tests, property-tests, fast-check, react-testing-li
 Vitest is chosen over Jest because:
 
 - Native ESM support without transform overhead (entire codebase is ESM TypeScript)
-- Vite config reuse (renderer already uses Vite; test config shares aliases, env, plugins)
+- Vite's transform pipeline and plugin API are reusable in the test config (aliases, env, custom resolvers) — the renderer itself is a Next.js static export, so there is no renderer Vite config to share
 - First-class `jsdom`/`happy-dom` environments per test file via `// @vitest-environment jsdom`
-- Vitest UI mode gives a browser-based watch dashboard with per-file results and inline diffs
 
 ---
 
@@ -53,31 +52,40 @@ apps/tactics/e2e/         ← E2E fixtures and specs — never imported from uni
 
 ---
 
-### `vitest.config.ts`
+### `vitest.config.mts`
+
+The repo-root [`vitest.config.mts`](../../vitest.config.mts) is the source of
+truth; the excerpt below is **abridged**.
 
 ```typescript
 import { defineConfig } from 'vitest/config';
-import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
-    plugins: [tsconfigPaths()],
     test: {
-        globals: true,
-        environment: 'node', // default: pure Node
-        environmentMatchGlobs: [
-            ['renderer/**/*.test.tsx', 'jsdom'],
-            ['renderer/**/*.test.ts', 'jsdom'],
+        name: 'chimera',
+        environment: 'node', // default: pure Node — jsdom is opted into per file
+        globals: false,
+        restoreMocks: true,
+        clearMocks: true,
+        include: ['**/*.test.ts', '**/*.test.tsx'],
+        exclude: [
+            /* … */
         ],
         coverage: {
             provider: 'v8',
+            reporter: ['text', 'html', 'lcov'],
             include: [
+                'electron/**/*.ts',
                 'simulation/**/*.ts',
                 'ai/**/*.ts',
+                'renderer/**/*.ts',
+                'apps/tactics/**/*.ts',
                 'networking/**/*.ts',
-                'renderer/**/*.{ts,tsx}',
+                'tools/**/*.ts',
             ],
-            exclude: ['**/*.test.*', '**/__tests__/**', '**/index.ts'],
-            thresholds: { lines: 80, functions: 80, branches: 75 },
+            exclude: [
+                /* … */
+            ],
         },
     },
 });
@@ -90,16 +98,15 @@ export default defineConfig({
 ```json
 {
     "scripts": {
-        "test": "vitest run",
-        "test:watch": "vitest",
-        "test:ui": "vitest --ui",
-        "test:coverage": "vitest run --coverage",
-        "test:e2e": "CHIMERA_E2E=1 playwright test"
+        "test": "pnpm build:packages && pnpm -r test && vitest run --dir tools",
+        "test:watch": "pnpm build:packages && vitest",
+        "test:e2e": "pnpm build:packages && playwright test --config=apps/tactics/e2e/playwright.config.ts --project=electron-e2e",
+        "coverage": "pnpm build:packages && vitest run --coverage"
     }
 }
 ```
 
-`test` runs all unit + integration tests — fast, no Electron launch. `test:e2e` is always separate and gated by `CHIMERA_E2E=1`.
+`test` runs all unit + integration tests — fast, no Electron launch. `test:e2e` is always separate. `CHIMERA_E2E=1` is set by the Playwright fixture when it launches Electron, not by the script; `tools/e2e-workflow.test.ts` pins that it never appears in the CI workflow's `env:` block either. The flag's contract is [§13.10 CHIMERA_E2E Flag Contract](e2e-testing-playwright.md).
 
 ---
 
@@ -190,21 +197,14 @@ Unit tests (vitest run)
   └── simulation/   — pure Node
   └── ai/           — pure Node
   └── networking/   — Node + in-process ws server
-  └── renderer/     — jsdom
+  └── renderer/     — jsdom where the file opts in, else Node
   └── tools/        — Node
 
-Coverage gate (vitest --coverage)
-  └── fails PR if lines < 80%, functions < 80%, branches < 75%
-
-Lint gates (parallel)
-  └── no-restricted-globals: blocks Math.random/Date.now in simulation/ + apps/*/actions/
-  └── no-restricted-imports: blocks simulation/ from importing renderer/ or game packages
-  └── no-snapshot-floats: flags number fields in snapshot interfaces
-
-E2E (playwright — separate job, gated on unit test pass)
-  └── CHIMERA_E2E=1 playwright test
-  └── Trace + video retained on failure
 ```
+
+The lint gates and the E2E job are not mirrored here: `.github/workflows/ci.yml`
+and `.github/workflows/e2e.yml` are the authorities for what CI runs, and
+[`eslint.config.mjs`](../../eslint.config.mjs) for the rule set.
 
 ---
 

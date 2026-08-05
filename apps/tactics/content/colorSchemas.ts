@@ -12,8 +12,8 @@
  * field so seat-`n` colour defaults and the lobby dropdowns stay independent of
  * filenames. Required so a new colour cannot silently land in the wrong slot.
  *
- * Module boundary (§3): may import from simulation/, ai/, shared/ and own files
- * only. Must NOT import from renderer/, electron/, or other games/ directories.
+ * Module boundary (§3): workspace imports are simulation/, ai/ and own files
+ * only. Must NOT import from renderer/, electron/, or other apps/ directories.
  */
 
 import { z } from 'zod';

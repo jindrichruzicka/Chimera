@@ -4,13 +4,11 @@
 //
 // Architecture reference: §4.37 — Renderer Shell Pages UI Contract
 //
-// Module boundary (§3 Module Boundary Table): games/* may only import from
-// simulation/, ai/, shared/, and own files. This module imports from shared/
-// only — it must NEVER import from renderer/*.
+// Module boundary (§3 Module Boundary Table): this module's workspace imports
+// are simulation/foundation/ only — it must NEVER import from renderer/*.
 //
 // Invariants:
-//   #80  — Shell pages must never statically import from games/*
-//   #94  — Games contribute data through the registry, not shell-page imports
+//   #94  — Engine shell pages must not import from apps/*
 
 import type {
     GameMainMenuDefinition,
@@ -29,8 +27,7 @@ import type {
 // Chimera preload bridge, which the renderer exposes as `window.__chimera`
 // (≡ `globalThis.__chimera` at runtime).
 //
-// Games may not import `renderer/*` or `electron/*` (module boundary §3), and
-// this file is type-checked by the DOM-less root tsconfig (so `window` is not
+// This file is type-checked by the DOM-less root tsconfig (so `window` is not
 // available here). We therefore read the bridge off `globalThis`, typed against
 // the shared `ReplayListBridge` / `PerspectiveReplayListBridge` contracts — the
 // same `list` slices the canonical preload APIs extend, so the two cannot

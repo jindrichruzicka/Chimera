@@ -5,7 +5,7 @@
 // deterministic `replay-api.ts`: perspective replays store one seat's already
 // fog-filtered `PlayerSnapshot` frames for a single locked `viewerId`.
 //
-// Channel names live here (not in `shared/`) for the same reason as the
+// Channel names live here (not in `simulation/foundation/`) for the same reason as the
 // deterministic surface: they are an internal preload↔main protocol detail, and
 // the main-process handler module imports these same constants so the channel
 // strings match on both sides (invariant #5).

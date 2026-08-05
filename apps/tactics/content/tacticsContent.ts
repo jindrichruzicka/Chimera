@@ -13,8 +13,8 @@
  *      the lobby and in-match scene consume. It tolerates missing collections so
  *      a game with no content (or a not-yet-loaded fetch) degrades to defaults.
  *
- * Module boundary (§3): may import from simulation/, ai/, shared/ and own files
- * only. Must NOT import from renderer/, electron/, or other games/ directories.
+ * Module boundary (§3): workspace imports are simulation/, ai/ and own files
+ * only. Must NOT import from renderer/, electron/, or other apps/ directories.
  * Safe to import from both `electron/main` (descriptor composition) and the
  * tactics renderer surfaces (prop interpretation).
  */

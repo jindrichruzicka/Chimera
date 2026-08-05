@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { MalformedAssetRefError, isTraversalUnsafe, parseAssetRef } from './asset-ref-parse';
 
 // ---------------------------------------------------------------------------
-// shared/asset-ref-parse.ts — §4.10 co-located unit tests
+// simulation/foundation/asset-ref-parse.ts — §4.10 co-located unit tests
 // ---------------------------------------------------------------------------
 
 describe('isTraversalUnsafe', () => {

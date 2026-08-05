@@ -1,20 +1,18 @@
 /**
- * shared/game-shell-contract.test.ts
+ * simulation/foundation/game-shell-contract.test.ts
  *
  * Type-level and runtime unit tests for GameMainMenuDefinition contract types:
  * GameMenuCommandId, GameMainMenuLayout, GameMainMenuButton, GameMainMenuAction,
  * GameMainMenuDefinition.
  *
- * Also tests GameSettingsPageDefinition contract types introduced in #625:
+ * Also tests the GameSettingsPageDefinition contract types:
  * EngineSettingsFieldId, SettingsControlDefinition, SettingsItemDefinition,
  * SettingsSectionDefinition, SettingsTabDefinition, GameSettingsPageDefinition.
  *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
- * Task: #616 (F51 — GameMainMenuDefinition contract types)
- * Task: #625 (F52 — GameSettingsPageDefinition contract types)
  *
  * Invariants upheld:
- *   #80 — shared contract types must not import from games/* or renderer/*
+ *   §3 — foundation contract types must not import from apps/* or renderer/*
  *   §4.13 — EngineSettingsFieldId mirrors documented EngineSettings paths
  *
  * Tests written first (TDD — red confirmed: module did not exist before

@@ -105,12 +105,8 @@ const MISSING_BRIDGE_ERROR = 'Chimera replay API not available';
  * The perspective slice of the bridge (`window.__chimera.replay.perspective`),
  * read off `globalThis` and typed against the shared
  * {@link PerspectiveReplayExportBridge} — the privacy-safe replay every player
- * (host and client alike) previews and saves from its own point of view. A game
- * screen (`apps/<name>/screens/*.tsx`) may import only `simulation/`, `ai/`,
- * `shared/`, and its own files (§3 Module Boundary Table; Invariant #96), so it
- * may not reach the canonical `PerspectiveReplayAPI` (`electron/*`) nor the
- * `useReplayApi` hook (`renderer/*`); instead it reads the bridge off
- * `globalThis`.
+ * (host and client alike) previews and saves from its own point of view. The
+ * bridge is read off `globalThis` for the reason the contract module records.
  */
 function requirePerspectiveReplayBridge(): PerspectiveReplayExportBridge {
     const bridge = (
