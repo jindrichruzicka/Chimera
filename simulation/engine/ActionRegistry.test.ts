@@ -4,9 +4,9 @@
  * Written first (red phase) per TDD mandate — ActionRegistry.ts does not exist yet.
  *
  * Architecture reference: §4.7
- * Task: F03 / T3 (issue #26)
+ * Task: F03 / T3
  *
- * Acceptance criteria (from issue #26):
+ * Acceptance criteria:
  *   ✓ register() throws NamespaceCollisionError for any type beginning with engine:
  *   ✓ resolve() throws UnknownActionTypeError for an unregistered type, with the
  *     type string in the error message
@@ -284,7 +284,7 @@ describe('ActionRegistry game definitions', () => {
         ).toEqual({ winnerIds: [toPlayerId('p1')] });
     });
 
-    it('buildInitialEntities accepts an optional setup argument and can read it (#705)', () => {
+    it('buildInitialEntities accepts an optional setup argument and can read it', () => {
         let receivedSetup: GameSetupConfig | undefined;
         const definition: GameDefinition<BaseGameSnapshot> = {
             buildInitialEntities: (_playerIds, setup) => {

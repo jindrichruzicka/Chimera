@@ -16,7 +16,7 @@
  *     types (type-only, erased at build) plus the
  *     `WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH` compile-time constant, so the
  *     emitted module has no cross-package runtime import (cf. messages-schemas.ts
- *     local invariant #2 — zero runtime imports from renderer/, electron/, or DOM).
+ *     zero runtime imports from renderer/, electron/, or DOM).
  *
  * Tests written first (TDD — red confirmed: module did not exist before
  * this commit; `pnpm test` reported "cannot find module").

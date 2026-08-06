@@ -2,7 +2,7 @@
  * networking/__tests__/contract-barrel-side-effects.test.ts
  *
  * Asserts the `@chimera-engine/networking` public root barrel is SIDE-EFFECT-FREE in
- * the sense the F60 AC (issue #768) requires: "Importing the barrel is
+ * the sense the F60 AC requires: "Importing the barrel is
  * side-effect-free (no provider runtime evaluated)." Importing
  * `@chimera-engine/networking` must evaluate NO concrete-provider runtime — neither a
  * module under `provider/local/` (the WebSocket provider, lobby server, client
@@ -19,8 +19,8 @@
  * provider ever leaked into the barrel, its source file (or `ws`) would appear
  * in the inputs and this test would fail (Invariant #47).
  *
- * Mirrors `simulation/__tests__/contract-barrel-side-effects.test.ts` (#759) and
- * `ai/__tests__/contract-barrel-side-effects.test.ts` (#764) in mechanism;
+ * Mirrors `simulation/__tests__/contract-barrel-side-effects.test.ts` and
+ * `ai/__tests__/contract-barrel-side-effects.test.ts` in mechanism;
  * differs only in the assertion shape (inputs filter vs empty-string), as the
  * networking contract surface legitimately includes runtime contract values.
  */
@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const networkingDir = resolve(__dirname, '..');
 
-describe('@chimera-engine/networking contract barrel is side-effect-free (issue #768)', () => {
+describe('@chimera-engine/networking contract barrel is side-effect-free', () => {
     it('importing @chimera-engine/networking evaluates no concrete-provider runtime (provider/local, provider/steam, ws)', async () => {
         const result = await build({
             entryPoints: [resolve(networkingDir, 'index.ts')],

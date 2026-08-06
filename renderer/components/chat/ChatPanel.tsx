@@ -14,7 +14,7 @@
 // `unmute` still suppress host-side delivery and filter `history()` backfill,
 // and the renderer `chatStore` still tracks the `muted` set.
 //
-// This is a game-agnostic shared component: it imports nothing from `games/*` and
+// This is a game-agnostic shared component: it imports nothing from `apps/*` and
 // never derives content from authoritative simulation state. Chat is a cosmetic
 // side channel (Invariant #72) and is routed through the host relay (Invariant
 // #73) — this component never messages peers directly.

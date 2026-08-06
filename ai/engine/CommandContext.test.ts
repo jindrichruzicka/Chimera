@@ -4,7 +4,7 @@
  * Unit tests for CommandContext interface and CommandContextImpl.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F23 (issue #418), F24 (issue #424)
+ * Task: F23, F24
  *
  * Invariants upheld:
  *   #16 — AI players submit EngineAction through ActionPipeline (dispatch bridge).

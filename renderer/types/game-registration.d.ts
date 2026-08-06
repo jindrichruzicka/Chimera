@@ -1,6 +1,6 @@
 // renderer/types/game-registration.d.ts
 //
-// Ambient declaration for the synthetic game-registration specifier (#784).
+// Ambient declaration for the synthetic game-registration specifier.
 //
 // `renderer/**` source must name no game, so the renderer pulls in the active
 // game's renderer contribution through this build-selected specifier rather than

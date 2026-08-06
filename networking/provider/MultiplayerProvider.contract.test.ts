@@ -19,10 +19,7 @@
  *     a provider that adds listLobbies())
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider
- * Task: F09 / T5 (issue #205)
- *
- * Invariants upheld:
- *   #2 — no simulation/ imports; contract tests live entirely in networking/
+ * Task: F09 / T5
  */
 
 import { describe, it, expect } from 'vitest';

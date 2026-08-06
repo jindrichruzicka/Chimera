@@ -4,7 +4,7 @@
  * Unit tests for AIBrain<TParams> facade.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F23 (issue #420)
+ * Task: F23
  *
  * Tests written first (TDD — red confirmed before implementation).
  *

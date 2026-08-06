@@ -7,7 +7,7 @@
  *      Escape first (the drawer closes without the menu opening in its place).
  *   2. A host's Leave game returns the host AND the connected client to the
  *      lobby (#736 return-to-lobby), from which a new match starts.
- *   3. A client's Leave game returns that client to the main menu (#741) while
+ *   3. A client's Leave game returns that client to the main menu while
  *      the host's match keeps advancing.
  *
  * Base fixture: game.fixture leaves both windows in a started Tactics match
@@ -67,7 +67,7 @@ test.describe('in-game menu and role-aware leave', () => {
         await expect(hostMenu.prompt).toContainText('returns all players to the lobby');
         await hostMenu.confirmLeave();
 
-        // Return-to-lobby (#736): both windows land back on the lobby screen,
+        // Return-to-lobby: both windows land back on the lobby screen,
         // roster intact.
         await expect(hostLobby.lobbyScreen).toBeVisible({ timeout: NAV_TIMEOUT_MS });
         await expect(clientLobby.lobbyScreen).toBeVisible({ timeout: NAV_TIMEOUT_MS });
@@ -119,7 +119,7 @@ test.describe('in-game menu and role-aware leave', () => {
         await expect(clientMenu.prompt).toContainText('returns you to the main menu');
         await clientMenu.confirmLeave();
 
-        // Client (#741): the leaving player lands on the main menu.
+        // Client: the leaving player lands on the main menu.
         await expect(clientWindow.getByTestId('main-menu')).toBeVisible({
             timeout: NAV_TIMEOUT_MS,
         });

@@ -1,5 +1,5 @@
 /**
- * Issue #641 — Add visual validation for tactics 3D rendering.
+ * Visual validation for tactics 3D rendering.
  *
  * Verifies the R3F tactics canvas renders projected state as pixels:
  *   - the canvas is nonblank after match start

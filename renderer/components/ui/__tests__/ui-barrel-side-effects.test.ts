@@ -2,7 +2,7 @@
  * renderer/components/ui/__tests__/ui-barrel-side-effects.test.ts
  *
  * Asserts the `@chimera-engine/renderer/components/ui` public barrel is
- * SIDE-EFFECT-FREE (issue #772, AC #3: "Importing each barrel is side-effect-free
+ * SIDE-EFFECT-FREE (AC: "Importing each barrel is side-effect-free
  * — no store/bridge/R3F runtime evaluated").
  *
  * The UI barrel exposes stateless design primitives plus the React-only
@@ -12,8 +12,8 @@
  * React-Three-Fiber runtime. A game importing only the design primitives must not
  * drag in renderer state, the host bridge, or the 3D runtime (Invariant #96).
  *
- * Mechanism mirrors `networking/__tests__/contract-barrel-side-effects.test.ts`
- * (#768): esbuild bundles the barrel with tree-shaking and the test asserts over
+ * Mechanism mirrors `networking/__tests__/contract-barrel-side-effects.test.ts`:
+ * esbuild bundles the barrel with tree-shaking and the test asserts over
  * the resolved inputs / external specifiers. Bare deps are externalized and `.css`
  * is loaded empty so the `.tsx` / CSS-module barrel bundles without a React or CSS
  * pipeline.
@@ -69,7 +69,7 @@ function importsRuntime(externals: ReadonlySet<string>, name: string): boolean {
     return [...externals].some((spec) => spec === name || spec.startsWith(`${name}/`));
 }
 
-describe('@chimera-engine/renderer/components/ui barrel is side-effect-free (issue #772)', () => {
+describe('@chimera-engine/renderer/components/ui barrel is side-effect-free', () => {
     it('evaluates no store, no IPC bridge, and no React-Three-Fiber / @chimera-engine sibling runtime', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 

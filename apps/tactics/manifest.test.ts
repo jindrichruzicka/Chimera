@@ -29,7 +29,7 @@ describe('tacticsManifest', () => {
         expect(tacticsManifest.icon).toBeUndefined();
     });
 
-    it('declares a hardware cursor texture for every engine cursor role (#847)', () => {
+    it('declares a hardware cursor texture for every engine cursor role', () => {
         expect(tacticsManifest.cursor).toEqual({
             default: { image: 'cursors/default.png' },
             pointer: { image: 'cursors/pointer.png' },
@@ -47,11 +47,11 @@ describe('tacticsManifest', () => {
         },
     );
 
-    it('declares the engine default logo screen so a packaged boot lands on it (#856)', () => {
+    it('declares the engine default logo screen so a packaged boot lands on it', () => {
         expect(tacticsManifest.logoScreen).toEqual({ route: '/logo-screen' });
     });
 
-    it('re-exports the engine logo-screen page at the declared route (#856)', () => {
+    it('re-exports the engine logo-screen page at the declared route', () => {
         const pageSource = readFileSync(
             fileURLToPath(new URL('./renderer/app/logo-screen/page.tsx', import.meta.url)),
             'utf8',
@@ -68,7 +68,7 @@ describe('tacticsManifest', () => {
         ]);
     });
 
-    it('opts into perspective-following spectators (#882)', () => {
+    it('opts into perspective-following spectators', () => {
         expect(tacticsManifest.spectators).toEqual({ mode: 'perspective' });
         expect(resolveSpectatorSupport(tacticsManifest)).toEqual({ mode: 'perspective' });
     });

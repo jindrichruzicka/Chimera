@@ -1,6 +1,6 @@
 // electron/preload/__tests__/fixtures/bad-cross-boundary-import.fixture.ts
 //
-// ESLint import-boundary smoke-test fixture (issue #777, F62).
+// ESLint import-boundary smoke-test fixture (F62).
 //
 // The preload bridge is the sole renderer-facing surface (Invariant #5) and
 // depends on the @chimera-engine/simulation contract surface ONLY. It must never import

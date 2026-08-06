@@ -6,7 +6,7 @@
  * Routing tests for GameStoreBootstrap — the global wiring component that drives
  * snapshot-phase-based navigation between /lobby and /game.
  *
- * Covers issue #741: a phase:'lobby' snapshot on /game returns to /lobby (host
+ * Covers: a phase:'lobby' snapshot on /game returns to /lobby (host
  * return-to-lobby + following clients) after dropping the stale match snapshot,
  * and the pre-existing /lobby → /game redirect on the first match snapshot still
  * works.
@@ -100,7 +100,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('GameStoreBootstrap — /game → /lobby on a phase:lobby snapshot (#741)', () => {
+describe('GameStoreBootstrap — /game → /lobby on a phase:lobby snapshot', () => {
     it('pushes /lobby and resets the store when a phase:lobby snapshot arrives on /game', () => {
         window.history.replaceState({}, '', '/game');
         mockPathname = '/game';
@@ -195,7 +195,7 @@ describe('GameStoreBootstrap — existing /lobby → /game redirect (regression)
     });
 });
 
-describe('GameStoreBootstrap — /saves → /game redirect on a playing snapshot (#828)', () => {
+describe('GameStoreBootstrap — /saves → /game redirect on a playing snapshot', () => {
     it('pushes /game when a playing snapshot arrives on /saves (restore completed)', () => {
         window.history.replaceState({}, '', '/saves');
         mockPathname = '/saves';

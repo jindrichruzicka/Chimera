@@ -4,13 +4,12 @@
 // Only depends on a narrow `SystemApiIpcPort` so the factory is trivially
 // testable without spinning up Electron.
 //
-// Channel names live here (not in `simulation/foundation/`) because they are an internal
-// preload↔main protocol detail: renderer code never references them, and the
-// main-process handler module imports these same constants to guarantee the
-// channel strings match on both sides. Exception: the debug toggle channel
-// is imported from `simulation/foundation/constants.ts` — the documented home of the
-// `chimera:debug*` channels (§4.12), shared with `debug-bridge.ts` so the
-// debug module graph never leaks into this preload (Invariant #27).
+// Channel names are declared here rather than in the contract package; the
+// reason is stated once, in `electron/preload/api.ts`. Exception: the debug
+// toggle channels are imported from `simulation/foundation/constants.ts` — the
+// documented home of the `chimera:debug*` channels (§4.12), shared with
+// `debug-bridge.ts` so the debug module graph never leaks into this preload
+// (Invariant #27).
 
 import {
     DEBUG_TOGGLE_I18N_TOKEN_MODE_CHANNEL,

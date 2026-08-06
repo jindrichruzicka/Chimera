@@ -1,7 +1,7 @@
 /**
  * apps/tactics/ai/tacticsPolicy.test.ts
  *
- * Unit tests for the tactics AI policy (issue #725).
+ * Unit tests for the tactics AI policy.
  *
  * Architecture reference: §4 — AI Framework; game-owned policy built on `ai/`.
  * Tests written first (TDD — red confirmed before implementation).

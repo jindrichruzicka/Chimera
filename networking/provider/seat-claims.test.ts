@@ -20,7 +20,7 @@ import { sanitizeSeatClaims } from './seat-claims.js';
 
 const valid = (n: number): SeatClaim => ({ matchId: 'match-1', playerId: `seat-${n}` });
 
-describe('sanitizeSeatClaims (F68/#821)', () => {
+describe('sanitizeSeatClaims (F68)', () => {
     it('returns undefined for undefined (no claims presented)', () => {
         expect(sanitizeSeatClaims(undefined)).toBeUndefined();
     });

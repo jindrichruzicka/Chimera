@@ -5,7 +5,7 @@
  * Tests written first (RED before implementation).
  *
  * Architecture reference: §4.28
- * Task: F44 / T2 (issue #656)
+ * Task: F44 / T2
  *
  * Invariants upheld:
  *   #1  — simulation/replay has zero runtime deps on Electron, renderer, games, or networking

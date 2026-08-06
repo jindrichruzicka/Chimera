@@ -7,10 +7,9 @@
  * Tests are authored here first (TDD — red before implementation); the same
  * `runSaveRepositoryContractTests` helper is invoked from
  * `electron/main/saves/FileSaveRepository.test.ts` for `FileSaveRepository`,
- * satisfying acceptance criterion #2 ("both impls pass the same suite").
+ * satisfying the acceptance criterion "both impls pass the same suite".
  *
  * Invariants upheld:
- *   #2  — simulation/ is side-effect-free; no FS or Electron imports.
  *   #41 — InMemorySaveRepository passes the identical contract suite as
  *           FileSaveRepository.
  *   #23 — atomic-write contract (`.tmp` rename) is verified for

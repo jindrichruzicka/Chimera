@@ -10,7 +10,7 @@
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
  *
  * Invariants upheld:
- *   #2 — no imports from renderer/, electron/, or DOM APIs
+ *   No imports from renderer/, electron/, or DOM APIs
  *   networking boundary — workspace imports are `networking/provider/` and the
  *     public `simulation` contract subpaths only; no engine or renderer internals
  */
@@ -438,7 +438,7 @@ describe('LobbyServer — spectator delivery and action boundary (Invariant #114
 
 // ─── Restored-session seams (F68/#821) ───────────────────────────────────────
 
-describe('LobbyServer — restored-session seams (#821)', () => {
+describe('LobbyServer — restored-session seams', () => {
     const hostSaved = toPlayerId('host-saved');
     const seatA = toPlayerId('seat-a');
     const seatB = toPlayerId('seat-b');
@@ -747,7 +747,7 @@ describe('LobbyServer — password gate (F56)', () => {
 
 // ─── LEAVE / intentional departure ─────────────────────────────────────────────
 
-describe('LobbyServer — LEAVE / intentional departure (#687)', () => {
+describe('LobbyServer — LEAVE / intentional departure', () => {
     it('fires onPlayerDisconnected with reason "normal" when the client sends LEAVE', async () => {
         const server = makeServer();
         await server.ready();

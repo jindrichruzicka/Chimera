@@ -4,7 +4,7 @@
  * Locks the "no side effects on import" property of the `@chimera-engine/electron`
  * package entry (`./main` → electron/main/index.ts), the electron-side analogue
  * of the side-effect-free barrel assertions shipped by @chimera-engine/simulation
- * (#759) and @chimera-engine/networking (#768/contract-barrel-side-effects.test.ts).
+ * and @chimera-engine/networking (#768/contract-barrel-side-effects.test.ts).
  *
  * `@chimera-engine/electron` is not a pure-contract barrel — its entry exports the
  * `main()` Electron bootstrap. The equivalent "inert import" guarantee is
@@ -15,7 +15,7 @@
  * which the consumer app's composition root (apps/tactics/electron/main.ts)
  * invokes explicitly.
  *
- * This is what makes the package a thin, composable wrapper (issue #779, F62):
+ * This is what makes the package a thin, composable wrapper (F62):
  * a consumer that merely imports `@chimera-engine/electron/main` gets the bootstrap as
  * a value, not an app that boots itself as a side effect of being required.
  */
@@ -67,7 +67,7 @@ vi.mock('electron', () => ({
     },
 }));
 
-describe('@chimera-engine/electron entry — no side effects on import (issue #779)', () => {
+describe('@chimera-engine/electron entry — no side effects on import', () => {
     it('exports the main() bootstrap as a value without running it', async () => {
         const mod = await import('../main/index.js');
 

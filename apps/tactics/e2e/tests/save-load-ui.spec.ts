@@ -1,5 +1,5 @@
 /**
- * F68 — save-load-ui.spec.ts (issue #829)
+ * F68 — save-load-ui.spec.ts
  * §13 E2E Testing (Playwright) · §4.11 Save/Load & Persistence
  *
  * Covers the full single-player save lifecycle through the SHIPPED UI — unlike

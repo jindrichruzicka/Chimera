@@ -1,7 +1,7 @@
 /**
  * simulation/__tests__/contract-barrel-side-effects.test.ts
  *
- * Asserts the public contract barrels are SIDE-EFFECT-FREE (issue #759, AC #2):
+ * Asserts the public contract barrels are SIDE-EFFECT-FREE:
  * importing `@chimera-engine/simulation` (the root `.` entry) or
  * `@chimera-engine/simulation/contracts` must evaluate NO simulation runtime module.
  *
@@ -47,7 +47,7 @@ async function bundleAndStrip(entryRelativeToSimulation: string): Promise<string
         .replace(/\s+/g, '');
 }
 
-describe('contract barrels are side-effect-free (Invariant #1, issue #759)', () => {
+describe('contract barrels are side-effect-free (Invariant #1)', () => {
     it('@chimera-engine/simulation/contracts evaluates no runtime module', async () => {
         expect(await bundleAndStrip('contracts/index.ts')).toBe('');
     });

@@ -26,7 +26,7 @@
  * (instance-side seeding); both re-validate at their own JSON boundaries.
  * Pure data + pure helpers only — zero I/O, no environment reads, and zero
  * imports beyond `zod` and sibling foundation modules (mirroring `messages-schemas.ts`
- * local invariant #2 — nothing from renderer/, electron/, or DOM APIs).
+ * nothing from renderer/, electron/, or DOM APIs).
  */
 
 import { z } from 'zod';

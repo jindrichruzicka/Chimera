@@ -12,7 +12,7 @@
  * The crash dump is written atomically: first to `<path>.tmp`, then renamed
  * to the final path to prevent partial writes (Invariant 68).
  *
- * No import from `renderer/`, `simulation/`, or `games/*` — all
+ * No import from `renderer/`, `simulation/`, or `apps/*` — all
  * simulation/game state is accessed through injected callbacks (DIP).
  */
 

@@ -4,7 +4,7 @@
 //
 // Store-connected wrapper around the pure `<LanguageSelector>` design primitive.
 // It resolves the game context, loads the game's declared `languages` through the
-// registry shell seam (`translations.languages` — never a direct `games/*`
+// registry shell seam (`translations.languages` — never a direct `apps/*`
 // import, Invariants #80/#94), reads the persisted `gameplay.language`, and writes
 // the chosen locale back through the settings store's existing IPC path.
 //

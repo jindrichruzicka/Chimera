@@ -43,7 +43,7 @@ const {
     capturedSaveManagerRepoClassName,
 } = vi.hoisted(() => ({
     mockSaveManagerAutoSave: vi.fn<(file: unknown) => Promise<void>>(() => Promise.resolve()),
-    // Backs the saves:load wiring tests (#823): individual tests seed the
+    // Backs the saves:load wiring tests: individual tests seed the
     // SaveFile the "repository" returns for a load.
     mockSaveManagerRestoreFromSave: vi.fn<(slotId: string) => Promise<unknown>>(() =>
         Promise.reject(new Error('test did not seed mockSaveManagerRestoreFromSave')),
@@ -133,10 +133,10 @@ vi.mock('./settings/SettingsManager.js', () => ({
 
 // ── LobbyManager mock — captures constructor args for wiring assertions ────────
 // The instance exposes `isLocalSeat` because the live session-manifest closure
-// (#820) consults it when a save is captured after game start; the default is
+// consults it when a save is captured after game start; the default is
 // "no local seats" and individual tests override the shared fn.
 //
-// For the session-restore wiring tests (#823) the instance also exposes
+// For the session-restore wiring tests the instance also exposes
 // `hostLobby` / `addLocalSeat` / `closeLobby` mirroring the real manager's
 // observable contract: `hostLobby` synchronously invokes the captured
 // `onSessionHosted` callback with a fake transport + metadata derived from the
@@ -549,7 +549,7 @@ const fsOpenSync = vi.fn<(path: string, flags: string) => number>(() => 42);
 
 vi.mock('node:fs', async () => {
     // Real fs.promises so the startup ContentDatabase load (loadAllGameContent →
-    // ContentLoader) can read the real games/ data dir; the sync surface stays
+    // ContentLoader) can read the real apps/ data dir; the sync surface stays
     // mocked for the save/replay paths these tests drive.
     const actual = await vi.importActual<typeof nodeFs>('node:fs');
     return {
@@ -3469,7 +3469,7 @@ describe('main', () => {
 
     it('launches into the declared logo-screen route when packaged and the manifest declares one', async () => {
         // The suite's electron mock reports app.isPackaged === true and the
-        // REAL tactics manifest declares logoScreen (#856), so the packaged
+        // REAL tactics manifest declares logoScreen, so the packaged
         // boot must land on it — no synthetic manifest override needed.
         const origEnv = process.env;
         const { CHIMERA_E2E: _removed, ...envWithoutE2e } = origEnv;
@@ -3631,7 +3631,7 @@ describe('main', () => {
         expect(mockSaveManagerAutoSave).not.toHaveBeenCalled();
     });
 
-    describe('session manifest + matchId wiring (#820)', () => {
+    describe('session manifest + matchId wiring', () => {
         const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
         interface CapturedSaveFile {
@@ -4561,7 +4561,7 @@ describe('main() dev-harness bootstrap failure', () => {
 
 // ─── agent ordering: onGameStart deferred until all expected players join ─────
 //
-// Issue #416: onGameStart was called synchronously inside onSessionHosted,
+// Regression: onGameStart was called synchronously inside onSessionHosted,
 // before any onPlayerJoined events fired — so zero agents were registered at
 // that point, violating SimulationHost.ts lines 82–85 contract.
 //
@@ -4571,7 +4571,7 @@ describe('main() dev-harness bootstrap failure', () => {
 // Invariant #17: all game state projections must route through SimulationHost /
 //   AgentManager; onGameStart must fire after agents are fully wired.
 
-describe('onSessionHosted agent-ordering: onGameStart deferred until all expected players join (Issue #416)', () => {
+describe('onSessionHosted agent-ordering: onGameStart deferred until all expected players join', () => {
     let capturedPlayerJoinedCb:
         | ((entry: { playerId: ReturnType<typeof playerId> }) => void)
         | null = null;
@@ -5226,7 +5226,7 @@ describe('main() — perspective replay IPC wiring (F44b T7)', () => {
     });
 });
 
-// ── Host return-to-lobby orchestration (#737) ─────────────────────────────────
+// ── Host return-to-lobby orchestration ───────────────────────────────────────
 // Covers the onReturnToLobbyRequested wiring in main(): dispatching
 // engine:return_to_lobby into the live session (broadcasting phase:'lobby' to the
 // host + every client) and the host-local match-state resets that make the lobby
@@ -5234,7 +5234,7 @@ describe('main() — perspective replay IPC wiring (F44b T7)', () => {
 // state, the gameStarted one-shot guard, and AI agent re-registration. This is an
 // *abandon* (gameResult stays null): it must NOT fire the match-end / replay-
 // finalise path.
-describe('main() — host return-to-lobby orchestration (#737)', () => {
+describe('main() — host return-to-lobby orchestration', () => {
     interface RtlTransport {
         onPlayerJoined: ReturnType<typeof vi.fn>;
         onPlayerLeft: ReturnType<typeof vi.fn>;
@@ -5498,7 +5498,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
     });
 });
 
-// ── Session restore wiring (#823) ─────────────────────────────────────────────
+// ── Session restore wiring ───────────────────────────────────────────────────
 // Covers the saves:load composition-root wiring in main(): with no active
 // session the SessionRestoreCoordinator hosts a restored lobby seeded from the
 // SaveFile session manifest (hostLobby restore params, #821), applies the
@@ -5510,7 +5510,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
 // unit-tested in SessionRestoreCoordinator.test.ts; these tests assert the
 // observable main() effects (hostLobby params, broadcasts, game start, the
 // re-captured session manifest).
-describe('main() — session restore wiring (#823)', () => {
+describe('main() — session restore wiring', () => {
     interface RestoreCapturedSaveFile {
         readonly checkpoint: { readonly tick: number; readonly matchId?: string };
         readonly session: {
@@ -5876,7 +5876,7 @@ describe('main() — session restore wiring (#823)', () => {
             );
         });
 
-        it('rebuilds the AI agent roster when live-applying an in-session same-match load (#907)', async () => {
+        it('rebuilds the AI agent roster when live-applying an in-session same-match load', async () => {
             const { matchId } = await hostAndStartMatch();
             // Isolate the assertion from any rebuilds during host/start setup.
             mockAgentManagerInstance.clear.mockClear();
@@ -5913,7 +5913,7 @@ describe('main() — session restore wiring (#823)', () => {
         });
     });
 
-    describe('restore-status push + cancel-restore (#826)', () => {
+    describe('restore-status push + cancel-restore', () => {
         /** Events sent on the restore-status channel to `win`, in order. */
         const restoreStatusSends = (win: FakeBrowserWindow): readonly unknown[] =>
             win.webContents.send.mock.calls
@@ -6009,7 +6009,7 @@ describe('main() — session restore wiring (#823)', () => {
             });
         });
 
-        it('cancel-restore clears the get-current-snapshot replay cache with the session (#843)', async () => {
+        it('cancel-restore clears the get-current-snapshot replay cache with the session', async () => {
             mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
             await main(makeTestContributions());
             makeLiveWindow();
@@ -6040,7 +6040,7 @@ describe('main() — session restore wiring (#823)', () => {
             expect(getCurrentSnapshot?.()).toBeNull();
         });
 
-        it('joined-session teardown clears the get-current-snapshot replay cache too (#843)', async () => {
+        it('joined-session teardown clears the get-current-snapshot replay cache too', async () => {
             await main(makeTestContributions());
 
             const options = mockLobbyManagerCtor.mock.calls.at(-1)?.[2] as

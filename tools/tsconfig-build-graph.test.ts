@@ -6,7 +6,7 @@ import ts from 'typescript';
 /**
  * tools/tsconfig-build-graph.test.ts
  *
- * Structural guard for the `tsc -b` project-reference graph (issue #756).
+ * Structural guard for the `tsc -b` project-reference graph.
  *
  * `tsc --build` drives dependency-ordered incremental compilation of the composite
  * @chimera-engine/* packages off the root solution config `tsconfig.build.json`. The reference
@@ -17,7 +17,7 @@ import ts from 'typescript';
  * here instead of silently corrupting the build order.
  *
  * Mirrors the invariant-guard culture of the per-package eslint-import-boundary tests
- * (#759/#764/#768) and the standalone `tools/vitest-config-filename-guard.test.ts`.
+ * and the standalone `tools/vitest-config-filename-guard.test.ts`.
  */
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -48,8 +48,8 @@ const COMPOSITE_PACKAGE_DIRS = [...ENGINE_PACKAGE_DIRS, ...APP_PACKAGE_DIRS] as 
 
 /**
  * Source-only app-layer packages that must NEVER be a project reference (Invariant #1).
- * `@chimera-engine/electron` graduated to a composite build in F62 (#777); the tactics consumer
- * app (`apps/tactics`) graduated in F63 (#782). None remain source-only today.
+ * `@chimera-engine/electron` graduated to a composite build in F62; the tactics consumer
+ * app (`apps/tactics`) graduated in F63. None remain source-only today.
  */
 const APP_LAYER_PACKAGE_DIRS = [] as const;
 
@@ -59,9 +59,9 @@ const APP_LAYER_PACKAGE_DIRS = [] as const;
  * Same-rank (sibling) or higher-rank (back-edge) references would form a cycle or escape
  * the core.
  *
- * `apps/tactics` is the LAYER-3 consumer app (#791): it sits ABOVE `@chimera-engine/electron`
- * (layer 2) and may reference it. This is sound because, since the game-agnosticism work
- * (#784/#788/#789), no engine package statically imports a game — electron and renderer
+ * `apps/tactics` is the LAYER-3 consumer app: it sits ABOVE `@chimera-engine/electron`
+ * (layer 2) and may reference it. This is sound because, since the game-agnosticism
+ * work, no engine package statically imports a game — electron and renderer
  * reach the game only by runtime registration — so `apps/tactics` is a pure sink (depends
  * on everything, nothing depends on it). Engine packages stay ≤ layer 2 and never
  * reference the app layer.
@@ -129,7 +129,7 @@ function referencedPackageDirs(config: TsconfigShape, configDir: string): string
  * (`apps/<game>`) instead declare them under `devDependencies`: electron-builder ships only
  * production `dependencies`, and the app esbuild-bundles the engine code into its main/preload,
  * so declaring the engine packages as production deps would dereference ~hundreds of MB of
- * already-bundled code into the package (#817). Either way the composite build IMPORTS those
+ * already-bundled code into the package. Either way the composite build IMPORTS those
  * packages, so the `tsc -b` references must mirror them — regardless of which field carries
  * the `workspace:*` spec.
  */

@@ -40,7 +40,7 @@ import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
 /**
  * Resolves the {@link VisibilityRules} for a game id, or `undefined` when the
  * game is unknown to this build. Injected (DIP) so the manager stays free of any
- * concrete `games/*` import — the composition root owns the game→rules mapping.
+ * concrete `apps/*` import — the composition root owns the game→rules mapping.
  */
 export type VisibilityRulesResolver = (gameId: string) => VisibilityRules | undefined;
 

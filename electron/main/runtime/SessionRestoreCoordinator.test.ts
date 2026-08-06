@@ -7,7 +7,7 @@
  * FS, network, or Electron IPC (repo unit-test rule).
  *
  * Architecture reference: §4.11 / §4.14
- * Task: F68 / issue #823
+ * Task: F68 /
  */
 
 import { describe, expect, it, vi } from 'vitest';

@@ -1,6 +1,6 @@
 // electron/main/__tests__/fixtures/good-barrel-import.fixture.ts
 //
-// ESLint import-boundary smoke-test fixture (issue #769) — the allowed control.
+// ESLint import-boundary smoke-test fixture — the allowed control.
 //
 // Importing the @chimera-engine/networking public barrel (the provider/transport
 // interfaces) from electron/main orchestration is the SANCTIONED path and must

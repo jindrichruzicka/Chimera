@@ -412,7 +412,7 @@ describe('buildDefaultAIPlayerAgent', () => {
     });
 });
 
-describe('buildDefaultAIPlayerAgent with the tactics policy (issue #725)', () => {
+describe('buildDefaultAIPlayerAgent with the tactics policy', () => {
     const aiUnit = entityId('ai-unit');
     const enemyUnit = entityId('enemy-unit');
 

@@ -155,7 +155,7 @@ describe('rendererGameRegistry', () => {
         });
     });
 
-    describe('shell.cursor hardware-cursor override injection (#847)', () => {
+    describe('shell.cursor hardware-cursor override injection', () => {
         class FakeImage {
             public src = '';
             public decode = vi.fn(async (): Promise<void> => undefined);
@@ -233,7 +233,7 @@ describe('rendererGameRegistry', () => {
         });
     });
 
-    describe('shell.translations game-contribution seam (#866)', () => {
+    describe('shell.translations game-contribution seam', () => {
         const EN: GameLanguage = { code: 'en-US', label: 'English' };
         const CS: GameLanguage = { code: 'cs-CZ', label: 'Čeština' };
         const EN_BUNDLE: TranslationBundle = { 'engine.menu.play': 'Play' };
@@ -489,7 +489,7 @@ describe('rendererGameRegistry', () => {
         expect(registryApi).not.toContain('getDefaultRendererGameId');
     });
 
-    describe('LoadedRendererGame.shell type contract (#617)', () => {
+    describe('LoadedRendererGame.shell type contract', () => {
         it('shell.mainMenu is typed as GameMainMenuDefinition | undefined', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['mainMenu']>().toEqualTypeOf<
@@ -504,7 +504,7 @@ describe('rendererGameRegistry', () => {
             >();
         });
 
-        it('shell.settings is typed as GameSettingsPageDefinition | undefined (#626)', () => {
+        it('shell.settings is typed as GameSettingsPageDefinition | undefined', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['settings']>().toEqualTypeOf<
                 GameSettingsPageDefinition | undefined
@@ -532,21 +532,21 @@ describe('rendererGameRegistry', () => {
             >();
         });
 
-        it('shell.cursor is typed as Partial<Record<GameCursorRole, GameCursorImage>> | undefined (#847)', () => {
+        it('shell.cursor is typed as Partial<Record<GameCursorRole, GameCursorImage>> | undefined', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['cursor']>().toEqualTypeOf<
                 Partial<Record<GameCursorRole, GameCursorImage>> | undefined
             >();
         });
 
-        it('shell.LobbyScreen is typed as ComponentType<GameLobbyScreenProps> | undefined (#708)', () => {
+        it('shell.LobbyScreen is typed as ComponentType<GameLobbyScreenProps> | undefined', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['LobbyScreen']>().toEqualTypeOf<
                 ComponentType<GameLobbyScreenProps> | undefined
             >();
         });
 
-        it('shell.translations is typed as GameTranslations | undefined (#866)', () => {
+        it('shell.translations is typed as GameTranslations | undefined', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['translations']>().toEqualTypeOf<
                 GameTranslations | undefined

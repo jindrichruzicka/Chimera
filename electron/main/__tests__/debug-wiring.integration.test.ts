@@ -2,7 +2,7 @@
  * electron/main/__tests__/debug-wiring.integration.test.ts
  *
  * Integration tests for the host-session debug wiring (§4.12 — Runtime
- * Debug Layer, F47 T5, issue #694).
+ * Debug Layer, F47 T5).
  *
  * Part 1 — `buildHostSessionPipeline` debug port:
  *   - `debugPort.observer` is wired into `PipelineContext.debugObserver`

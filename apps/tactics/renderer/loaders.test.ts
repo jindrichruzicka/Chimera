@@ -58,7 +58,7 @@ describe('tactics renderer loaders', () => {
         }
     });
 
-    it('loadTacticsRendererGameShell forwards the manifest cursor declaration verbatim (#847)', async () => {
+    it('loadTacticsRendererGameShell forwards the manifest cursor declaration verbatim', async () => {
         const shell = await loadTacticsRendererGameShell();
 
         expect(shell.cursor).toBe(tacticsManifest.cursor);

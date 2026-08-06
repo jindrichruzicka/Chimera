@@ -7,7 +7,7 @@
  * (unlike InMemoryMultiplayerProvider which delivers synchronously).
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T07 (issue #222)
+ * Task: F10 / T07
  *
  * Note: The existing contract test suite (MultiplayerProvider.contract.test.ts)
  * has synchronous delivery assertions optimised for in-memory providers. Rather

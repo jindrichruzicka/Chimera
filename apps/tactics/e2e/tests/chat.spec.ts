@@ -1,5 +1,5 @@
 /**
- * F45 / M8 — chat.spec.ts (#685)
+ * F45 / M8 — chat.spec.ts
  * §13.8 Core E2E Test Specifications · §4.29 Chat System
  *
  * End-to-end coverage of the Tactics chat lifecycle through the real renderer +

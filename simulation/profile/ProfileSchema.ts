@@ -3,7 +3,6 @@
  * Architecture: §4.24 — Player Profiles & Directory
  *
  * Invariants upheld:
- *   #2  — zero imports from renderer/, electron/, games/*, or DOM APIs
  *   #59 — Profile data is never stored in GameSnapshot, PlayerSnapshot, or SaveFile.
  *         This module establishes the type boundary that enforces that rule.
  */

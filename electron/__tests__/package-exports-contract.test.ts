@@ -2,19 +2,17 @@
  * electron/__tests__/package-exports-contract.test.ts
  *
  * Locks the `@chimera-engine/electron` package surface declared in `package.json`
- * (issue #777 — F62 surface contract + dist build), mirroring the contract
- * tests of @chimera-engine/simulation (#759), @chimera-engine/networking (#768) and
- * @chimera-engine/renderer (#772/#773):
+ * (F62 surface contract + dist build), mirroring the contract
+ * tests of @chimera-engine/simulation, @chimera-engine/networking and
+ * @chimera-engine/renderer:
  *
  *   - the package is an ES module shipping the built `dist/` (Appendix C.3);
- *   - the public `exports` are the TWO entry points named by the issue — the
- *     main-process bootstrap (`./main`) and the preload bridge (`./preload/api`
- *     + the renderer-facing type contracts `./preload/api-types` and
- *     `./preload/debug-api-types`). Every export resolves to a `dist/` artifact;
+ *   - the public `exports` are exactly the subpaths pinned by
+ *     `EXPECTED_EXPORTS` below;
  *   - there is NO broad `./*.js` wildcard and NO `.` barrel, so main-process
  *     internals (ipc/, managers, runtime/, the debug-api runtime preload) are
- *     built into dist but NOT reachable as package subpaths (Invariant #5,
- *     AC #3 — the preload bridge is the sole renderer-facing surface);
+ *     built into dist but NOT reachable as package subpaths (Invariant #5
+ *     — the preload bridge is the sole renderer-facing surface);
  *   - the preload TYPE contracts (`./preload/api-types`, `./preload/debug-api-types`)
  *     resolve `types` to SOURCE while `default` stays on dist. This is the #772-style
  *     bridge: renderer's chat barrel carries a tolerated type-only back-edge onto
@@ -109,7 +107,7 @@ const EXPECTED_EXPORTS = {
     },
 } as const;
 
-describe('@chimera-engine/electron package surface (issue #777)', () => {
+describe('@chimera-engine/electron package surface', () => {
     it('is an ES module shipping the dist/ build', () => {
         expect(manifest.type).toBe('module');
         expect(manifest.files).toContain('dist');

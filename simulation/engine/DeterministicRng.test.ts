@@ -4,7 +4,7 @@
  * Unit tests for `DeterministicRng` and `createRng`.
  *
  * Architecture reference: §4.2.1 — Rule 2 (Seeded RNG Only)
- * Task: F04 / T1 (issue #41) and T4 (issue #44)
+ * Task: F04 / T1 and T4
  *
  * Invariants upheld:
  *   #43 — No Math.random() or Date.now() inside simulation/; tests confirm

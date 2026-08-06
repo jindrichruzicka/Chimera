@@ -1,13 +1,10 @@
 /**
  * simulation/persistence/SaveFile.test.ts
  *
- * Tests for JsonSaveSerializer (issue #120, §4.11).
+ * Tests for JsonSaveSerializer (§4.11).
  *
  * CompressedSaveSerializer has moved to electron/main/saves/ and is tested
- * in electron/main/saves/CompressedSaveSerializer.test.ts (issue #137).
- *
- * Invariants upheld:
- *   #2 — simulation/ is side-effect-free; no FS or Electron imports here.
+ * in electron/main/saves/CompressedSaveSerializer.test.ts.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -199,7 +196,7 @@ describe('JsonSaveSerializer', () => {
         expect(result.stagedReveals).toBeUndefined();
     });
 
-    it('round-trip preserves the session manifest including an omniscient ai seat (#820)', async () => {
+    it('round-trip preserves the session manifest including an omniscient ai seat', async () => {
         const serializer = new JsonSaveSerializer();
         const session = {
             matchId: 'match-uuid-1',
@@ -223,7 +220,7 @@ describe('JsonSaveSerializer', () => {
         expect(result.session).toStrictEqual(session);
     });
 
-    it('parses a legacy save that predates the session manifest (optional field, #820)', async () => {
+    it('parses a legacy save that predates the session manifest (optional field)', async () => {
         const serializer = new JsonSaveSerializer();
         const raw = await serializer.serialize(makeSaveFile());
         const legacy = JSON.parse(raw) as Record<string, unknown>;
@@ -280,7 +277,7 @@ describe('JsonSaveSerializer', () => {
     });
 });
 
-// ─── JsonSaveSerializer — security (OWASP A08 / issue #133) ──────────────────
+// ─── JsonSaveSerializer — security (OWASP A08) ───────────────────────────────
 
 describe('JsonSaveSerializer — security', () => {
     it('rejects with SaveParseError when raw input exceeds MAX_SAVE_SIZE_CHARS', async () => {
@@ -408,9 +405,9 @@ describe('JsonSaveSerializer — security', () => {
     });
 });
 
-// ─── CommitmentEnvelope F27 shape — revealedAt field (issue #440) ────────────
+// ─── CommitmentEnvelope F27 shape — revealedAt field ─────────────────────────
 
-describe('CommitmentEnvelope F27 shape — revealedAt (issue #440)', () => {
+describe('CommitmentEnvelope F27 shape — revealedAt', () => {
     it('round-trip preserves CommitmentEnvelope with revealedAt tick', async () => {
         const serializer = new JsonSaveSerializer();
         const commitmentId = toCommitmentId('c-reveal-1');
@@ -621,7 +618,7 @@ describe('JsonSaveSerializer — checkpoint.turnNumber schema enforcement', () =
     });
 });
 
-// ─── JsonSaveSerializer — GameTimer serialization (issue #407) ──────────────
+// ─── JsonSaveSerializer — GameTimer serialization ────────────────────────────
 
 describe('JsonSaveSerializer — GameTimer serialization', () => {
     it('round-trips checkpoint.timers with populated GameTimer entries', async () => {

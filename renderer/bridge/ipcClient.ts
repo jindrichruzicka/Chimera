@@ -11,7 +11,7 @@
  *
  * Module boundary rules (hard constraints):
  *  - Must NOT import `ClientPredictor` or `ReconcileBuffer` from simulation/.
- *  - Must NOT import from electron/main/, games/<name>/data, or any DOM API.
+ *  - Must NOT import from electron/main/, apps/<name>/data, or any DOM API.
  *  - Renderer interacts with `PredictionStore` methods only; simulation types
  *    stay in simulation/.
  *

@@ -15,7 +15,7 @@
  * Rules:
  *  - 'use client' — renderer component.
  *  - Named export only (§coding-standards §8.3).
- *  - No imports from simulation/debug, electron/main/, ai/, or games/* (module
+ *  - No imports from simulation/debug, electron/main/, ai/, or apps/* (module
  *    boundary §3, Invariant #65); main is reached only via window.__chimera.system.
  *  - Silent no-op when the preload bridge is unavailable (web preview) — in
  *    production the bridge exists and the IPC send itself is the no-op

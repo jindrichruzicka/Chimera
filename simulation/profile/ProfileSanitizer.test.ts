@@ -3,12 +3,11 @@
  *
  * Unit tests for ProfileSanitizer.admit() — the host-side trust gate.
  * Architecture: §4.24 — Player Profiles & Directory
- * Task: F14-T02 (issue #339)
+ * Task: F14-T02
  *
  * Tests written first (red) — implementation lands in ProfileSanitizer.ts.
  *
  * Invariants verified:
- *   #2  — zero imports from renderer/, electron/, games/*, or DOM APIs
  *   #61 — admit() is the mandatory gate; all 7 rejection types covered
  */
 

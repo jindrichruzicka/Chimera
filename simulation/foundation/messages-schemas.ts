@@ -21,7 +21,7 @@
  * Architecture: §4.3 — WebSocket Message Protocol
  *
  * Invariants upheld:
- *   #2 — Zero runtime imports from renderer/, electron/, or DOM APIs.
+ *   Zero runtime imports from renderer/, electron/, or DOM APIs.
  */
 
 import { z } from 'zod';

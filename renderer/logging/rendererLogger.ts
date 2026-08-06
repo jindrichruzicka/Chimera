@@ -4,7 +4,7 @@
 // window.addEventListener('error'), and window.addEventListener('unhandledrejection'),
 // forwarding entries to the main process via the window.__chimera.logs IPC channel.
 //
-// Must NOT import from electron/, simulation/, or games/*.
+// Must NOT import from electron/, simulation/, or apps/*.
 // Uses globalThis.__chimera?.logs for root-tsconfig compatibility (no DOM).
 // The renderer tsconfig has DOM, so `window` is valid in renderer source.
 

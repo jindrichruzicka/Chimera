@@ -7,7 +7,6 @@
  * Covers sendAction() prediction wiring and onSnapshot bootstrapping.
  *
  * Architecture: §4.4 — Renderer State Stores, renderer/bridge/ipcClient.ts
- * Task: issue #368
  *
  * Rules:
  *  - No real Electron IPC — all port interactions use test doubles.

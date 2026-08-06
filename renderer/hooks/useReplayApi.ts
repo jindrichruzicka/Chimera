@@ -10,7 +10,7 @@
  * Architecture reference: §4.28 — Replay System
  *
  * Rules:
- *   - Must NOT import from: electron/main/, simulation/, games/*.
+ *   - Must NOT import from: electron/main/, simulation/, apps/*.
  *   - Reads `window.__chimera.replay` at call-time via getReplayBridge() so that
  *     tests can mock the bridge after module load.
  */

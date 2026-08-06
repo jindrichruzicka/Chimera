@@ -4,10 +4,8 @@
 // (§4.1). Only depends on a narrow `GameApiIpcPort` so the factory is
 // trivially testable without spinning up Electron.
 //
-// Channel names live here (not in `simulation/foundation/`) because they are an internal
-// preload↔main protocol detail: renderer code never references them, and the
-// main-process handler module imports these same constants to guarantee the
-// channel strings match on both sides (invariant 5).
+// Channel names are declared here rather than in the contract package; the
+// reason is stated once, in `electron/preload/api.ts`.
 //
 // Invariant 1: `GameSnapshot` never crosses any IPC boundary. This module
 // deliberately imports only `PlayerSnapshot` — the projected-for-viewer type.

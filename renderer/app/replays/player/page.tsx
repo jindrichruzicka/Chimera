@@ -17,7 +17,7 @@
  *
  * Engine shell page: it loads the game renderer through the engine's
  * `loadRendererGame` registry and passes the registry to `GameShell` as data —
- * it never imports from `games/*` (Invariants #80/#94). The replay file path
+ * it never imports from `apps/*` (Invariants #80/#94). The replay file path
  * arrives as a `?path=` query param, written by `ReplayNavigationBridge` in
  * response to a main-process `navigate` push.
  */

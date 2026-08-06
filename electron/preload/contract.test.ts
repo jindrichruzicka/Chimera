@@ -1,7 +1,7 @@
 // electron/preload/contract.test.ts
 //
 // Contract tests for the composed `window.__chimera` surface exposed by
-// `preload/api.ts`. Each of the five namespace factories already has a
+// `preload/api.ts`. Each namespace factory already has a
 // focused unit suite that drives it through a hand-rolled narrow-port stub.
 // This file sits one layer higher and drives every namespace through the
 // real `preload/api.ts` runtime with a mocked Electron module, so the

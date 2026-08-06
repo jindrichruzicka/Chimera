@@ -1,6 +1,6 @@
 // simulation/engine/__tests__/fixtures/bad-cross-boundary-import.fixture.ts
 //
-// ESLint import-boundary smoke-test fixture (issue #759).
+// ESLint import-boundary smoke-test fixture.
 //
 // `@chimera-engine/simulation` is the zero-dependency engine leaf (Invariant #1): it
 // must not import any sibling workspace package. Importing `@chimera-engine/networking`

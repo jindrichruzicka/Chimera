@@ -4,8 +4,8 @@
 // (§4.27, §4.32). Only depends on a narrow `LogsApiIpcPort` so the factory
 // is trivially testable without spinning up Electron.
 //
-// Channel names live here; main-process ipc-handlers.ts imports them to
-// guarantee the channel strings match on both sides (invariant 5).
+// Channel names are declared here rather than in the contract package; the
+// reason is stated once, in `electron/preload/api.ts`.
 
 import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
 import type { LogsAPI } from '../api-types.js';

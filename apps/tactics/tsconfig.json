@@ -18,7 +18,7 @@
         "types": ["node", "react", "react-dom"]
     },
     "include": ["**/*.ts", "**/*.tsx"],
-    // The simulation/ and ai/ __tests__/fixtures dirs hold the per-game gameplay
+    // The simulation/, ai/ and content/ __tests__/fixtures dirs hold the per-game
     // lint fixtures, not program source. They are
     // excluded here for the same reason the root tsconfig excludes them, and its
     // comment carries the detail (this app config overrides — not merges — the
@@ -30,6 +30,7 @@
         "electron/**",
         "e2e/**",
         "simulation/__tests__/fixtures/**",
-        "ai/__tests__/fixtures/**"
+        "ai/__tests__/fixtures/**",
+        "content/__tests__/fixtures/**"
     ]
 }

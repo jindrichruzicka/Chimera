@@ -24,7 +24,7 @@ function mover(id: string): CommittedTurn {
 const SEED = 42;
 const TICK = 7;
 
-describe('resolveRevealOrder (T9 / #729 — deterministic, attack-first, grouped)', () => {
+describe('resolveRevealOrder (deterministic, attack-first, grouped)', () => {
     it('returns an empty order for no committed turns', () => {
         expect(resolveRevealOrder([], SEED, TICK)).toEqual([]);
     });

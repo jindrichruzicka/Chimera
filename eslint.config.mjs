@@ -67,7 +67,7 @@ export default tseslint.config(
             // Per-app Next host build output (F65 Phase 2c): apps/<game>/renderer/{out,.next}.
             '**/.next/**',
             'apps/*/renderer/out/**',
-            // electron-builder app-bundle output (#813): apps/<game>/release — generated installers/bundles.
+            // electron-builder app-bundle output: apps/<game>/release — generated installers/bundles.
             'apps/*/release/**',
             '**/*.d.ts',
             // Fixture files used by the ESLint smoke tests, which lint them
@@ -83,6 +83,7 @@ export default tseslint.config(
             // import boundaries in both specifier positions.
             'apps/*/simulation/__tests__/fixtures/**',
             'apps/*/ai/__tests__/fixtures/**',
+            'apps/*/content/__tests__/fixtures/**',
             // Playwright output directories — generated artefacts, not source.
             '.e2e-build/**',
             'apps/tactics/e2e/playwright-report/**',
@@ -133,6 +134,7 @@ export default tseslint.config(
                         // project rather than a named one.
                         'apps/*/simulation/__tests__/fixtures/*.ts',
                         'apps/*/ai/__tests__/fixtures/*.ts',
+                        'apps/*/content/__tests__/fixtures/*.ts',
                     ],
                 },
                 tsconfigRootDir: import.meta.dirname,
@@ -222,19 +224,29 @@ export default tseslint.config(
         },
     },
 
-    // AI + game simulation layers (apps/*/simulation, apps/*/ai, legacy
-    // apps/*/actions): forbid importing the UI/host/game/networking layers.
-    // `@chimera-engine/ai` depends on `@chimera-engine/simulation` ONLY (Invariant #1):
+    // `@chimera-engine/ai` and the game-side code that shares its dependency
+    // profile — a game's gameplay tree, its content descriptors and its settings
+    // schema — forbid importing the UI/host/game/networking layers.
+    // `@chimera-engine/ai` depends on `@chimera-engine/simulation` ONLY (coding-standards §3):
     // now that the package is consumed through its `exports` map, the realistic
     // violation is the `@chimera-engine/<pkg>` workspace-alias form, so both the alias
     // and the legacy relative-path forms are forbidden. (simulation/ has its own
     // stricter zero-dependency leaf rule below.)
+    //
+    // The content and settings-schema globs are here because their headers state
+    // this boundary and, before these globs joined, nothing enforced its
+    // electron and networking half (the renderer half is held by
+    // `chimera/no-game-renderer-internals` on the `apps/**` zone). Their
+    // workspace imports already honour the boundary, so the ban is a ratchet,
+    // not a migration.
     {
         files: [
             'ai/**/*.{ts,tsx}',
             'apps/*/actions/**/*.{ts,tsx}',
             'apps/*/simulation/**/*.{ts,tsx}',
             'apps/*/ai/**/*.{ts,tsx}',
+            'apps/*/content/**/*.{ts,tsx}',
+            'apps/*/settings-schema.{ts,tsx}',
         ],
         plugins: { chimera: chimeraPlugin },
         rules: {
@@ -264,7 +276,7 @@ export default tseslint.config(
                                 '**/apps/*',
                             ],
                             message:
-                                'ai/ and game gameplay code (apps/*/simulation, apps/*/ai) must not import from networking, renderer, electron, or game-app aliases — @chimera-engine/simulation (plus sibling-relative game modules) is the only dependency (Invariant #1). See coding-standards.md §3.',
+                                'ai/ and per-game code must not import from networking, renderer, electron, or game-app aliases. See coding-standards.md §3.',
                         },
                     ],
                 },
@@ -278,7 +290,7 @@ export default tseslint.config(
     // realistic violation is the `@chimera-engine/<pkg>` workspace-alias form, so both
     // the alias and the legacy relative-path forms are forbidden. The barrel
     // exposes the provider/transport interfaces only; concrete providers stay
-    // internal (Invariant #47). See issue #768.
+    // internal (Invariant #47).
     {
         files: ['networking/**/*.{ts,tsx}'],
         plugins: { chimera: chimeraPlugin },
@@ -309,7 +321,7 @@ export default tseslint.config(
                                 '**/apps/*',
                             ],
                             message:
-                                'networking/ must not import from ai, renderer, electron, or game apps (apps/*) — @chimera-engine/simulation is its only @chimera-engine/* dependency (Invariant #1). The barrel exposes provider/transport interfaces only; concrete providers stay internal (Invariant #47). See coding-standards.md §3, issue #768.',
+                                'networking/ must not import from ai, renderer, electron, or game apps (apps/*) — @chimera-engine/simulation is its only @chimera-engine/* dependency. The barrel exposes provider/transport interfaces only; concrete providers stay internal (Invariant #47). See coding-standards.md §3.',
                         },
                     ],
                 },
@@ -357,7 +369,7 @@ export default tseslint.config(
                                 '**/apps/*',
                             ],
                             message:
-                                '@chimera-engine/simulation is the zero-dependency engine leaf — it must not import from ai, networking, renderer, electron, or game apps (apps/*) (Invariant #1). Keep contracts in @chimera-engine/simulation/foundation; only the reserved engine: namespace crosses cuts (Invariant #107). See issue #759.',
+                                '@chimera-engine/simulation is the zero-dependency engine leaf — it must not import from ai, networking, renderer, electron, or game apps (apps/*). Keep contracts in @chimera-engine/simulation/foundation; only the reserved engine: namespace crosses cuts (Invariant #107).',
                         },
                     ],
                 },
@@ -430,7 +442,7 @@ export default tseslint.config(
                                 '**/games/**',
                             ],
                             message:
-                                'renderer/ must name no game (Invariants #80, #94; #784). The renderer host is a runtime injection seam; a game enters only at the consumer-app renderer composition root (apps/tactics/renderer/register.ts), selected by the chimera-game-registration build alias — never by a renderer source import. See coding-standards.md §3, issue #784.',
+                                'renderer/ must name no game (Invariants #80, #94). The renderer host is a runtime injection seam; a game enters only at the consumer-app renderer composition root (apps/tactics/renderer/register.ts), selected by the chimera-game-registration build alias — never by a renderer source import. See coding-standards.md §3.',
                         },
                     ],
                 },
@@ -447,7 +459,7 @@ export default tseslint.config(
     // form and the legacy relative-path form (the F59 lesson). The main-process
     // games + provider-internal boundaries are enforced separately on
     // `electron/main/**` (chimera/no-main-games-import, chimera/no-main-provider-internals).
-    // See coding-standards.md §3, issue #777.
+    // See coding-standards.md §3.
     {
         files: ['electron/preload/**/*.{ts,tsx}'],
         plugins: { chimera: chimeraPlugin },
@@ -483,7 +495,7 @@ export default tseslint.config(
                                 '**/electron/main/*',
                             ],
                             message:
-                                'electron/preload is the sole renderer-facing surface (Invariant #5) and depends on @chimera-engine/simulation contracts only (Invariant #1). It must not import the ai/networking runtime, the renderer UI library, a game package, or electron/main internals. See coding-standards.md §3, issue #777.',
+                                'electron/preload is the sole renderer-facing surface and depends on @chimera-engine/simulation contracts only. It must not import the ai/networking runtime, the renderer UI library, a game package, or electron/main internals. See coding-standards.md §3.',
                         },
                     ],
                 },
@@ -738,7 +750,7 @@ export default tseslint.config(
 
     // Main-process boundaries — electron/main orchestration must stay agnostic of
     // (a) which games exist (packaged, multi-game builds, F18), and (b) which
-    // concrete networking provider is in use (Invariant #47, issue #769).
+    // concrete networking provider is in use (Invariant #47).
     //   * no-main-games-import — no electron/main module may import a game, by
     //     an `apps/`/`games/` path segment or a non-engine `@chimera-engine/*`;
     //     since #788/#789 every game seam (actions, content schemas, lobby setup)

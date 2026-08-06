@@ -5,7 +5,7 @@
  * contract between the Inspector Window and the main-process debug bridge.
  *
  * Architecture reference: §4.12 (runtime-debug-layer.md)
- * Task: F47 / T3 (issue #692)
+ * Task: F47 / T3
  *
  * Tests are written FIRST (red) before DebugProtocol.ts exists. The module
  * is type-only, so these are construct-and-narrow value tests: each union

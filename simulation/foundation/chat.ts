@@ -17,7 +17,7 @@
  * Architecture: §4.29 — Chat System
  *
  * Invariants upheld:
- *   #2  — Zero runtime imports from electron/, renderer/, or DOM APIs;
+ *   Zero runtime imports from electron/, renderer/, or DOM APIs;
  *         `PlayerId` is referenced via `import type` only.
  *   #72 — `ChatMessage` is a cosmetic side-channel payload, not an EngineAction.
  */

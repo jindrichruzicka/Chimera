@@ -6,7 +6,7 @@
  * Each test runs against a unique temp directory so tests never share state.
  * TDD: tests written before implementation — confirmed red.
  *
- * Task: F14-T04 (issue #341)
+ * Task: F14-T04
  */
 
 import * as fs from 'fs/promises';

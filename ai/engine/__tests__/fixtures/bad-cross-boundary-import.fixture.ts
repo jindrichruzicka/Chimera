@@ -1,6 +1,6 @@
 // ai/engine/__tests__/fixtures/bad-cross-boundary-import.fixture.ts
 //
-// ESLint import-boundary smoke-test fixture (issue #764).
+// ESLint import-boundary smoke-test fixture.
 //
 // `@chimera-engine/ai` depends on `@chimera-engine/simulation` ONLY (Invariant #1): it must
 // not import the UI/host/game layers. Importing `@chimera-engine/renderer` from ai/ is

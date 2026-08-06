@@ -8,7 +8,7 @@
  *   - apps/tactics/shell/TacticsLobbyScreen.tsx  (tactics-lobby-screen,
  *     tactics-lobby-player, tactics-ready-toggle, start, leave) — the
  *     registry-loaded lobby screen that actually renders for a Tactics lobby,
- *     replacing the engine default for Tactics (#702).
+ *     replacing the engine default for Tactics.
  *   - renderer/app/lobby/ActiveLobbyPanel.tsx  (start, leave) — the engine-default
  *     fallback rendered only for a game that ships no custom LobbyScreen; kept in
  *     the scan so the guard also covers that path.

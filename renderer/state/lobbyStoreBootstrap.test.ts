@@ -7,7 +7,7 @@
  * Verifies that bootstrapLobbyStore registers the onUpdate and onConnectionStatus
  * callbacks and routes incoming push events into the lobbyStore singleton.
  *
- * Architecture reference: §F12/T02 (issue #269)
+ * Architecture reference: §F12/T02
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

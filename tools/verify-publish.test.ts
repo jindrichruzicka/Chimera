@@ -1,6 +1,6 @@
 // tools/verify-publish.test.ts
 //
-// Unit tests for the `verify:publish` publish-readiness gate (issue #804, F66).
+// Unit tests for the `verify:publish` publish-readiness gate (F66).
 //
 // Exercises the pure wiring — external-specifier extraction (via the TypeScript
 // pre-processor), specifier→package-name normalization, the node-builtin filter,

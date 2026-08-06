@@ -19,7 +19,7 @@
  * Architecture: §4.29 — Chat System
  *
  * Invariants upheld:
- *   #2 — Zero runtime imports from electron/, renderer/, simulation/, or DOM
+ *   Zero runtime imports from electron/, renderer/, simulation/, or DOM
  *        APIs. `PlayerId` is a branded string in the engine; here it is validated
  *        structurally as a plain string (the brand is a compile-time concern,
  *        re-applied by branded schemas in the consuming layers).

@@ -14,7 +14,6 @@
  *      On host REJECT → call `discardCandidate()` to throw away the candidate.
  *
  * Invariants upheld:
- *   #2  — zero imports from renderer/, games/*, or any DOM API.
  *   #60 — Only the local machine's profiles are ever persisted here.
  *   #67 — Constructed with an injected Logger child (structured logging path).
  */

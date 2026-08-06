@@ -22,7 +22,6 @@
  * newest `SESSION_TICKET_CAP` entries.
  *
  * Invariants upheld:
- *   #2      — zero imports from renderer/, games/*, or any DOM API.
  *   #59/#60 — opaque ids only, this machine's own tickets only.
  */
 

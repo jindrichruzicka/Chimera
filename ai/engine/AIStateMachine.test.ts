@@ -4,7 +4,7 @@
  * Unit tests for AIStateMachine<TParams> interface and AIStateMachineImpl<TParams>.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F23 (issue #418)
+ * Task: F23
  *
  * Invariants upheld:
  *   #18 — AIParams are passed by value (frozen) to every lifecycle method.

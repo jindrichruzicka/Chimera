@@ -2,17 +2,17 @@
  * renderer/__tests__/eslint-import-boundary.test.ts
  *
  * ESLint smoke test for the module-import boundary that keeps `@chimera-engine/renderer`
- * depending on `@chimera-engine/simulation` contracts only (Invariant #1, issue #772).
+ * depending on `@chimera-engine/simulation` contracts only (Invariant #1).
  *
  * Runs ESLint programmatically against fixtures and asserts the
  * `no-restricted-imports` rule fires on a forbidden sibling-runtime import
  * (`@chimera-engine/ai`) but not on the allowed `@chimera-engine/simulation` contract import.
  * This proves the boundary is enforced by the linter, not merely by convention —
- * the AC for issue #772:
+ * the acceptance criterion:
  *   "Import-boundary ESLint rule for @chimera-engine/renderer is wired and fails on a
  *    forbidden cross-boundary import."
  *
- * Mirrors `networking/__tests__/eslint-import-boundary.test.ts` (#768).
+ * Mirrors `networking/__tests__/eslint-import-boundary.test.ts`.
  */
 
 import { describe, it, expect } from 'vitest';

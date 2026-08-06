@@ -13,7 +13,7 @@ const COMPONENT_GALLERY_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER
  * §13.6 — E2E page object conventions.
  *
  * Invariant #93: does NOT import game token override CSS.
- * Invariant #94: does NOT import from games/* paths.
+ * Invariant #94: does NOT import from apps/* paths.
  * Invariant #86: token assertions use public DOM/style contracts only
  *               (see component-gallery.spec.ts for --ch-* checks).
  */

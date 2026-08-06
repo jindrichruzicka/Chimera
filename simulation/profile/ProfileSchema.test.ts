@@ -3,7 +3,7 @@
  *
  * Unit tests for ProfileSchema types and EngineProfileSchema Zod validator.
  * Architecture: §4.24 — Player Profiles & Directory
- * Task: F14-T01 (issue #338)
+ * Task: F14-T01
  *
  * Tests written first (red) — implementation lands in ProfileSchema.ts.
  */

@@ -97,7 +97,7 @@ const dummyEnvelope: ActionEnvelope = {
     payload: {},
 };
 
-/** Minimal valid session manifest for restore fixtures (#820). */
+/** Minimal valid session manifest for restore fixtures. */
 const TEST_SESSION: SaveFile['session'] = {
     matchId: 'match-test-fixture',
     maxPlayers: 2,
@@ -514,7 +514,7 @@ describe('SessionRuntime', () => {
             expect(file.pendingCommitments).toEqual(pendingCommitments);
         });
 
-        describe('session manifest stamping (#820)', () => {
+        describe('session manifest stamping', () => {
             const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
             it('stamps session from the injected getSessionManifest provider', () => {

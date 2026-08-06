@@ -1,12 +1,9 @@
 /**
  * simulation/persistence/SaveChecksum.test.ts
  *
- * Tests for computeBodyChecksum (issue #134).
+ * Tests for computeBodyChecksum.
  *
  * TDD cycle: tests written first — RED before SaveChecksum.ts exists.
- *
- * Invariants upheld:
- *   #2 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -116,7 +113,7 @@ describe('computeBodyChecksum', () => {
         expect(withEmpty).toBe(withoutField);
     });
 
-    it('excludes the session manifest entirely, like the header (#820)', async () => {
+    it('excludes the session manifest entirely, like the header', async () => {
         // A v5 file's stored checksum was computed without `session`; after the
         // v5→v6 migration backfills a manifest, recomputing must still match —
         // even for a POPULATED manifest (unlike stagedReveals, `session` is

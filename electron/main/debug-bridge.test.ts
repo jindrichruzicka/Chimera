@@ -1,7 +1,7 @@
 /**
  * electron/main/debug-bridge.test.ts
  *
- * TDD tests for the Runtime Debug Layer bridge (§4.12, F47 T5, issue #694).
+ * TDD tests for the Runtime Debug Layer bridge (§4.12, F47 T5).
  *
  * Everything runs with in-process doubles — fake ipcMain, fake Inspector
  * window factory, fake projector/replay — no real Electron windows.
@@ -1019,7 +1019,7 @@ describe('debug-bridge — stop', () => {
     });
 });
 
-// ─── Default Inspector window construction (#701) ─────────────────────────────
+// ─── Default Inspector window construction ───────────────────────────────────
 //
 // The default factory was previously untested: it shipped without a
 // backgroundColor (white flash / white-on-failure window) and silently showed

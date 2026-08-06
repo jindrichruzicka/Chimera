@@ -2,9 +2,10 @@
  * apps/tactics/__tests__/eslint-determinism-fromfloat-zone.test.ts
  *
  * ESLint smoke test proving the per-game gameplay lint zones cover code under
- * `apps/<game>/simulation/` and `apps/<game>/ai/` after the `games/` ->
- * `apps/<game>/` restructure: determinism (`no-restricted-syntax`, Invariant
- * #43), `chimera/no-fromfloat-in-simulation` (Invariant #76), and the module
+ * `apps/<game>/simulation/` and `apps/<game>/ai/` — and, for the module
+ * boundary, `apps/<game>/content/` and `apps/<game>/settings-schema.ts`:
+ * determinism (`no-restricted-syntax`, Invariant #43),
+ * `chimera/no-fromfloat-in-simulation` (Invariant #76), and the module
  * boundary (`no-restricted-imports`, Invariant #1).
  *
  * Three checks, because each is defeatable without the others (mirrors
@@ -17,8 +18,9 @@
  *    the rule for ai files yet never fire (dead config). This fixture is the only
  *    check that catches that.
  * 2. **Shape** — the fromFloat error zone must list exactly the engine + per-game
- *    simulation + per-game ai globs, and the determinism zone must include both
- *    per-game globs. A shape drift here silently narrows coverage.
+ *    simulation + per-game ai globs, the determinism zone must include both
+ *    per-game globs, and the gameplay boundary zone must list exactly its six
+ *    globs. A shape drift here silently narrows coverage.
  * 3. **Reach** — the config ESLint RESOLVES for a real file in every apps
  *    gameplay subtree must carry both rules at error severity; a game test file
  *    must resolve the fromFloat rule to off (the exemption). The probe list is
@@ -217,6 +219,16 @@ describe('ESLint apps zone — behaviour (Invariants #76, #43, #1)', () => {
             'apps/tactics/ai/__tests__/fixtures/bad-import.fixture.ts',
             BOUNDARY_RULE,
         ],
+        // The content/settings-schema half of the same boundary. Its file
+        // headers stated it before any zone did: the renderer side was held by
+        // `chimera/no-game-renderer-internals` on the `apps/**` zone, the
+        // electron and networking side by nothing — an `@chimera-engine/electron/main`
+        // import here linted clean.
+        [
+            'a forbidden layer import in a per-game content path',
+            'apps/tactics/content/__tests__/fixtures/bad-electron-import.fixture.ts',
+            BOUNDARY_RULE,
+        ],
     ];
 
     for (const [label, fixture, ruleId] of badCases) {
@@ -271,6 +283,21 @@ describe('ESLint apps zone — shape', () => {
         expect(files).toContain('apps/*/simulation/**/*.{ts,tsx}');
         expect(files).toContain('apps/*/ai/**/*.{ts,tsx}');
     });
+
+    it('scopes the gameplay boundary zone to ai/ + the per-game gameplay, content, and settings-schema globs', () => {
+        const zones = zonesConfiguring(BOUNDARY_RULE).filter((z) =>
+            (z.files ?? []).includes('ai/**/*.{ts,tsx}'),
+        );
+        expect(zones).toHaveLength(1);
+        expect(zones[0]!.files).toEqual([
+            'ai/**/*.{ts,tsx}',
+            'apps/*/actions/**/*.{ts,tsx}',
+            'apps/*/simulation/**/*.{ts,tsx}',
+            'apps/*/ai/**/*.{ts,tsx}',
+            'apps/*/content/**/*.{ts,tsx}',
+            'apps/*/settings-schema.{ts,tsx}',
+        ]);
+    });
 });
 
 // ── 3. Reach ──────────────────────────────────────────────────────────────
@@ -312,6 +339,22 @@ describe('ESLint apps zone — reach', () => {
                     targets.map((file) => [file, { [DETERMINISM_RULE]: 2, [FROMFLOAT_RULE]: 2 }]),
                 ),
             );
+        },
+        ESLINT_REACH_TIMEOUT_MS,
+    );
+
+    it(
+        'resolves the gameplay boundary rule for the settings-schema file, not just the deep-relative ban',
+        async () => {
+            const file = 'apps/tactics/settings-schema.ts';
+            expect(existsSync(resolve(repoRoot, file)), `${file} must exist`).toBe(true);
+            const rule = await resolvedRule(file, BOUNDARY_RULE);
+            expect(severityOf(rule)).toBe(2);
+            // The settings-schema glob is what routes this file into the
+            // gameplay boundary zone. Without it the rule still resolves at the
+            // same severity from the repo-wide deep-relative ban, so severity
+            // alone cannot pin the zone — the forbidden-layer group can.
+            expect(JSON.stringify(rule)).toContain('@chimera-engine/electron');
         },
         ESLINT_REACH_TIMEOUT_MS,
     );

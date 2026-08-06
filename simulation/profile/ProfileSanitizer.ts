@@ -5,7 +5,6 @@
  * Architecture: §4.24 — Player Profiles & Directory
  *
  * Invariants upheld:
- *   #2  — zero imports from renderer/, electron/, games/*, or DOM APIs
  *   #59 — Profile data is never stored in GameSnapshot, PlayerSnapshot, or SaveFile
  *   #61 — admit() is the mandatory gate between inbound JOIN/PROFILE_UPDATE and
  *          PlayerDirectory; a failed admission results in a REJECT — the raw

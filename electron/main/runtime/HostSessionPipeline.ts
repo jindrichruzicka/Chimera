@@ -14,7 +14,6 @@
  *   host bootstrap, autosave wiring.
  *
  * Invariants upheld:
- *   #2  — Zero imports from renderer/, electron/, games/*, or DOM APIs.
  *   #7  — engine:undo/redo enter the pipeline via Stage 3 intercept when
  *          PipelineContext.undoManager is present; this factory ensures it
  *          always is for hosted sessions.

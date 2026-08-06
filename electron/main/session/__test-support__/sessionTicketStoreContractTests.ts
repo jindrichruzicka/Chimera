@@ -136,7 +136,7 @@ export function runSessionTicketStoreContractTests(
         // unpresentable tickets out: ids longer than the JOIN claim wire bound
         // would be dropped by sanitizeSeatClaims at join time — and an
         // all-dropped list goes out as `claims: []`, opting the client out of
-        // the claimless slot fallback (#821).
+        // the claimless slot fallback.
 
         const INVALID_TICKETS: readonly {
             readonly label: string;

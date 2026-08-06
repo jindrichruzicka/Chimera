@@ -4,7 +4,7 @@
  * Unit tests for PlayerAgent interface, HumanPlayerAgent, and AIPlayerAgent.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F22 (issue #412)
+ * Task: F22
  *
  * Tests written first (TDD — red confirmed before implementation).
  */

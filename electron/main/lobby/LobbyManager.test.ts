@@ -6,7 +6,7 @@
  * Uses InMemoryMultiplayerProvider so no real network or WebSocket is involved.
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider / LobbyManager
- * Task: F11-T01 (issue #234)
+ * Task: F11-T01
  *
  * Invariants covered:
  *   #1 — LobbyManager only handles PlayerSnapshot; never references GameSnapshot.
@@ -59,7 +59,7 @@ const HOST_PARAMS: HostLobbyParams = { gameId: 'tactics', maxPlayers: 2 };
 
 /**
  * Fixture lobby-setup descriptor used to exercise host-side defaults seeding and
- * host-only writes (#706). Seat 0 → red, seat 1 → blue (alternating).
+ * host-only writes. Seat 0 → red, seat 1 → blue (alternating).
  */
 const SAMPLE_SETUP: GameLobbySetup = {
     maxPlayers: 4,
@@ -226,7 +226,7 @@ function makeTrackingProvider(inner: InMemoryMultiplayerProvider = makeProvider(
  * `onPlayerLeft` with a chosen {@link DisconnectReason}, `onPlayerJoined`, or an
  * inbound client side-channel message. The InMemory double only models clean
  * `'normal'` disconnects, so this is how the transient-drop ('timeout') and
- * mid-session `profile_reject` paths get covered deterministically (#687/#688).
+ * mid-session `profile_reject` paths get covered deterministically.
  */
 function makeControllableProvider(inner: InMemoryMultiplayerProvider = makeProvider()): {
     provider: MultiplayerProvider;
@@ -2088,9 +2088,9 @@ describe('LobbyManagerOptions', () => {
     });
 });
 
-// ── opponent presence: disconnect / reconnect (#687) ────────────────────────────
+// ── opponent presence: disconnect / reconnect ────────────────────────────────
 
-describe('LobbyManager — opponent presence (#687)', () => {
+describe('LobbyManager — opponent presence', () => {
     const OPP = playerId('opponent-1');
     const oppEntry: LobbyPlayerEntry = { playerId: OPP, displayName: 'Opp', ready: false };
 
@@ -2193,9 +2193,9 @@ describe('LobbyManager — opponent presence (#687)', () => {
     });
 });
 
-// ── profile rejection forwarding (#688) ─────────────────────────────────────────
+// ── profile rejection forwarding ─────────────────────────────────────────────
 
-describe('LobbyManager — profile rejection forwarding (#688)', () => {
+describe('LobbyManager — profile rejection forwarding', () => {
     it('forwards a JOIN-time profile rejection as onProfileRejected and rethrows', async () => {
         const directory = new PlayerDirectory();
         const inner = makeProvider();
@@ -2251,9 +2251,9 @@ describe('LobbyManager — profile rejection forwarding (#688)', () => {
     });
 });
 
-// ── Lobby setup defaults & host-only writes (#706) ───────────────────────────────
+// ── Lobby setup defaults & host-only writes ──────────────────────────────────
 
-describe('LobbyManager — lobby setup defaults (#706)', () => {
+describe('LobbyManager — lobby setup defaults', () => {
     it('seeds matchSettings and the host (seat 0) attributes from the descriptor on host', async () => {
         const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
             resolveLobbySetup: resolveSampleSetup,
@@ -2370,7 +2370,7 @@ describe('LobbyManager — lobby setup defaults (#706)', () => {
     });
 });
 
-describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerAttribute (#706, F53)', () => {
+describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerAttribute (F53)', () => {
     it('setMatchSetting merges into matchSettings, republishes, and broadcasts', async () => {
         let capturedTransport: HostTransport | null = null;
         const states: LobbyState[] = [];
@@ -2611,7 +2611,7 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         expect(() => manager.setSpectatorTarget(playerId('seat-host'))).not.toThrow();
     });
 
-    describe('AI agent slots (#724)', () => {
+    describe('AI agent slots', () => {
         it('addAi appends an AI slot to the synced lobby state and broadcasts it', async () => {
             let capturedTransport: HostTransport | null = null;
             const states: LobbyState[] = [];
@@ -2652,13 +2652,13 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
             await manager.closeLobby();
         });
 
-        it('addAi skips slot indexes occupied by joined humans (#832)', async () => {
+        it('addAi skips slot indexes occupied by joined humans', async () => {
             const manager = makeManager();
             await manager.hostLobby({ gameId: 'tactics', maxPlayers: 3 });
             // A second human seat occupies slot 1 (players[1]) by the
             // seat-index convention (a human's seat index = its `players`
             // position). The AI must not reuse it — a collision corrupts the
-            // save manifest and makes the save restore-rejected (#832).
+            // save manifest and makes the save restore-rejected.
             await manager.addLocalSeat(playerId('seat-1'));
 
             await manager.addAi();
@@ -2668,7 +2668,7 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
             await manager.closeLobby();
         });
 
-        it('addAi added BEFORE a human joins skips the human, so a later AI does not collide (#836)', async () => {
+        it('addAi added BEFORE a human joins skips the human, so a later AI does not collide', async () => {
             const manager = makeManager();
             await manager.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
 
@@ -2781,7 +2781,7 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
             await hostManager.closeLobby();
         });
 
-        it('removeAi notifies onAiSlotRemoved with the removed slot index — and not for an absent slot (#838)', async () => {
+        it('removeAi notifies onAiSlotRemoved with the removed slot index — and not for an absent slot', async () => {
             const removed: number[] = [];
             const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
                 onAiSlotRemoved: (slotIndex) => removed.push(slotIndex),
@@ -2800,7 +2800,7 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
             await manager.closeLobby();
         });
 
-        it('the overflow auto-remove notifies onAiSlotRemoved with the dropped slot index (#838)', async () => {
+        it('the overflow auto-remove notifies onAiSlotRemoved with the dropped slot index', async () => {
             const provider = makeProvider();
             const removed: number[] = [];
             const hostManager = new LobbyManager(provider, createNoopLogger(), {

@@ -2,7 +2,7 @@
  * renderer/components/chat/__tests__/chat-barrel-side-effects.test.ts
  *
  * Asserts the `@chimera-engine/renderer/components/chat` public barrel is
- * SIDE-EFFECT-FREE at import (issue #772, AC #3: "Importing each barrel is
+ * SIDE-EFFECT-FREE at import (AC: "Importing each barrel is
  * side-effect-free — no store/bridge/R3F runtime evaluated").
  *
  * The chat barrel's only export is `ChatPanel`, a stateful component wired to the
@@ -13,14 +13,14 @@
  * proves both halves:
  *
  *   1. importing the barrel evaluates NO store (zustand `createStore` is never
- *      called) — the literal AC #3 guarantee, and the regression guard against a
+ *      called) — the quoted AC guarantee, and the regression guard against a
  *      store ever reverting to an eager module-level singleton;
  *   2. the first store access lazily creates exactly one instance — the wiring is
  *      intact, not merely dead.
  *
  * A second, static esbuild assertion (below) proves the barrel pulls no IPC
  * bridge module and no React-Three-Fiber / sibling-package runtime, mirroring
- * `networking/__tests__/contract-barrel-side-effects.test.ts` (#768): like the
+ * `networking/__tests__/contract-barrel-side-effects.test.ts`: like the
  * networking barrel, the chat barrel legitimately carries the runtime it needs
  * (the pure Zustand stores), so the assertion is over the bundle's resolved
  * inputs/externals, not bundle emptiness.
@@ -104,7 +104,7 @@ vi.mock('zustand', async (importOriginal) => {
     };
 });
 
-describe('@chimera-engine/renderer/components/chat barrel is side-effect-free at import (issue #772)', () => {
+describe('@chimera-engine/renderer/components/chat barrel is side-effect-free at import', () => {
     beforeEach(() => {
         createStoreSpy.mockClear();
         vi.resetModules();
@@ -129,7 +129,7 @@ describe('@chimera-engine/renderer/components/chat barrel is side-effect-free at
     });
 });
 
-describe('@chimera-engine/renderer/components/chat barrel pulls no bridge / R3F / sibling runtime (issue #772)', () => {
+describe('@chimera-engine/renderer/components/chat barrel pulls no bridge / R3F / sibling runtime', () => {
     it('evaluates no IPC bridge module and no React-Three-Fiber / @chimera-engine sibling runtime', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 

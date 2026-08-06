@@ -2,8 +2,6 @@
  * F34 - settings-persistence.spec.ts
  * Section 13.8 Core E2E Test Specifications - Section 4.13 Settings System
  *
- * Part of #526. Implements issue #529.
- *
  * Verifies settings persistence through the renderer-facing Settings page and
  * preload bridge only. The spec intentionally does not inspect GameSnapshot,
  * SaveFile, PlayerSnapshot, simulation state, or main-process internals.

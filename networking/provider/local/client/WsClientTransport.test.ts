@@ -4,7 +4,7 @@
  * Tests for WsClientTransport — implements ClientTransport over a ServerConnection.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T05 (issue #220)
+ * Task: F10 / T05
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -472,7 +472,7 @@ describe('WsClientTransport — onSideChannelReceived', () => {
         expect(message.kind).toBe('chat');
     });
 
-    it('fires with a profile_reject when the host sends a PROFILE_REJECT frame (#688)', async () => {
+    it('fires with a profile_reject when the host sends a PROFILE_REJECT frame', async () => {
         const { hostTransport, playerId, transport } = await makeClientTransport();
 
         const messageReceived = new Promise<SideChannelMessage>((resolve) => {

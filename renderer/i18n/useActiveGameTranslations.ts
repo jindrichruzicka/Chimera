@@ -6,7 +6,7 @@
 // declared languages, the persisted locale (`gameplay.language`), and the
 // game's contributed override bundle for that locale. The bundle reaches the
 // provider ONLY through the registry shell seam (`translations` — never a direct
-// `games/*` import, Invariants #80/#94), mirroring how SettingsLanguageSelector
+// `apps/*` import, Invariants #80/#94), mirroring how SettingsLanguageSelector
 // resolves declared languages and ShellBackgroundHost resolves the background.
 //
 // Live-switch: the locale is read from `settingsStore` with a narrow selector,

@@ -4,7 +4,7 @@
  * Tests for WsHostTransport — implements HostTransport over a LobbyServer.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T03 (issue #218)
+ * Task: F10 / T03
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -458,9 +458,9 @@ describe('WsHostTransport — profile side-channel (T04)', () => {
     });
 });
 
-// ─── profile_reject side-channel → PROFILE_REJECT wire frame (#688) ─────────────
+// ─── profile_reject side-channel → PROFILE_REJECT wire frame ─────────────────
 
-describe('WsHostTransport — profile_reject side-channel (#688)', () => {
+describe('WsHostTransport — profile_reject side-channel', () => {
     it('unicast delivers a PROFILE_REJECT frame carrying the structured reason', async () => {
         const { server, transport } = makeTransport();
         await server.ready();

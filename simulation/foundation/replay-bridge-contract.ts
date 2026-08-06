@@ -75,22 +75,6 @@ export interface PerspectiveReplayListBridge {
 }
 
 /**
- * The export / open-in-player slice of `window.__chimera.replay`
- * (`ReplayAPI`, §4.28) that a game's *screen* module reads off `globalThis` to
- * finalise the in-progress recording and hand it to the replay player from the
- * post-game summary.
- *
- * A game screen (`apps/<name>/screens/*.tsx`) reaches `renderer/*` only through
- * the barrels Invariant #96 enumerates, so the `useReplayApi` hook is not
- * available to it. It therefore reads the bridge off `globalThis`, typed against
- * this shared slice.
- *
- * Drift protection: `simulation/bridge/api-types.ts` declares
- * `ReplayAPI extends ReplayExportBridge`, so the canonical preload surface is
- * structurally pinned to this slice — a divergent signature is a compile error
- * in the preload layer, not a silent drift.
- */
-/**
  * Why the recording is being finalised:
  *
  * - `'save'` — the user pressed the replay player's **save icon**. Main raises the
@@ -106,6 +90,22 @@ export interface PerspectiveReplayListBridge {
  */
 export type ReplayExportIntent = 'save' | 'view';
 
+/**
+ * The export / open-in-player slice of `window.__chimera.replay`
+ * (`ReplayAPI`, §4.28) that a game's *screen* module reads off `globalThis` to
+ * finalise the in-progress recording and hand it to the replay player from the
+ * post-game summary.
+ *
+ * A game screen (`apps/<name>/screens/*.tsx`) reaches `renderer/*` only through
+ * the barrels Invariant #96 enumerates, so the `useReplayApi` hook is not
+ * available to it. It therefore reads the bridge off `globalThis`, typed against
+ * this shared slice.
+ *
+ * Drift protection: `simulation/bridge/api-types.ts` declares
+ * `ReplayAPI extends ReplayExportBridge`, so the canonical preload surface is
+ * structurally pinned to this slice — a divergent signature is a compile error
+ * in the preload layer, not a silent drift.
+ */
 export interface ReplayExportBridge {
     /**
      * Finalise the in-progress host recording to disk and resolve with the saved

@@ -1,7 +1,7 @@
 /**
  * electron/main/replay/CompressedReplaySerializer.test.ts
  *
- * TDD tests for the gzip-compressed replay serializer (issue #655, §4.28).
+ * TDD tests for the gzip-compressed replay serializer (§4.28).
  * Tests written first (RED before source file).
  *
  * Invariants upheld:

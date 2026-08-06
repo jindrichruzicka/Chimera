@@ -5,7 +5,7 @@
 // Store-connected wrapper around the pure <I18nProvider>. It resolves the active
 // game's i18n inputs — the persisted locale (`gameplay.language`), the declared
 // languages, and the game's contributed override bundle for that locale, all via
-// the registry shell seam (never a direct `games/*` import, Invariants #80/#94) —
+// the registry shell seam (never a direct `apps/*` import, Invariants #80/#94) —
 // and forwards them plus the renderer-only debug flag
 // `debugI18nStore.showTranslationTokens` to the provider.
 //

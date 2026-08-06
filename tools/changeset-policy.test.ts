@@ -1,6 +1,6 @@
 // tools/changeset-policy.test.ts
 //
-// Unit tests for the `verify:changeset-policy` bump-policy gate (issue #805, F66).
+// Unit tests for the `verify:changeset-policy` bump-policy gate (F66).
 //
 // Exercises the pure surface only — changeset frontmatter parsing, internal
 // `@chimera-engine/*` dependency-graph construction, release merging (the strongest bump

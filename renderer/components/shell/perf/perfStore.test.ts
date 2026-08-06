@@ -5,11 +5,11 @@
  *
  * Unit tests for the perfStore Zustand store.
  * Architecture: §4.16 — Performance HUD
- * Task: issue #581 — Implement perfStore.ts
+ * Task: Implement perfStore.ts
  *
  * Rules:
  *  - No real Electron IPC — all tests use the createPerfStore() factory.
- *  - No imports from simulation/, electron/, ai/, or games/*.
+ *  - No imports from simulation/, electron/, ai/, or apps/*.
  *  - Tests written first (red confirmed), then implementation added.
  */
 

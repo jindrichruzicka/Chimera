@@ -28,7 +28,7 @@ import styles from './page.module.css';
 /**
  * Load the active game's renderer shell so the lobby can render a game-provided
  * `LobbyScreen` when one exists. Loading goes through the renderer game registry
- * only — the lobby page never imports `games/*` directly (Invariant #94).
+ * only — the lobby page never imports `apps/*` directly (Invariant #94).
  *
  * Returns `null` while idle, loading, or on failure; a failed load is a
  * resilient fallback to the engine-default `ActiveLobbyPanel` rather than an

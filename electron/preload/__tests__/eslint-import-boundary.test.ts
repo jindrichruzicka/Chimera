@@ -1,7 +1,7 @@
 /**
  * electron/preload/__tests__/eslint-import-boundary.test.ts
  *
- * ESLint smoke test for the preload import boundary added in F62 (#777).
+ * ESLint smoke test for the preload import boundary added in F62.
  *
  * The preload bridge is the sole renderer-facing surface (Invariant #5) and
  * depends on the `@chimera-engine/simulation` contract surface ONLY (Invariant #1): it
@@ -13,7 +13,7 @@
  * `no-restricted-imports` rule fires on a forbidden cross-boundary import
  * (the @chimera-engine/renderer component barrel) but NOT on the sanctioned
  * @chimera-engine/simulation contract import. Mirrors
- * `electron/main/__tests__/eslint-import-boundary.test.ts` (#769) and the
+ * `electron/main/__tests__/eslint-import-boundary.test.ts` and the
  * ai/ + networking/ + renderer/ boundary smoke tests.
  */
 

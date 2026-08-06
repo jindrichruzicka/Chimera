@@ -1,6 +1,6 @@
 // renderer/__tests__/fixtures/bad-cross-boundary-import.fixture.ts
 //
-// ESLint import-boundary smoke-test fixture (issue #772).
+// ESLint import-boundary smoke-test fixture.
 //
 // `@chimera-engine/renderer` depends on `@chimera-engine/simulation` contracts only
 // (Invariant #1): it must not import the `@chimera-engine/ai` or `@chimera-engine/networking`

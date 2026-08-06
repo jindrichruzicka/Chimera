@@ -2,7 +2,7 @@
  * electron/main/saves/FileSaveRepository.errors.test.ts
  *
  * Tests that non-ENOENT filesystem errors (EACCES, EIO, EMFILE, etc.) are
- * propagated rather than swallowed (issue #135 / WARN-5).
+ * propagated rather than swallowed.
  *
  * Uses vi.mock('fs/promises') so that individual methods can be made to
  * throw controlled errors — ESM module namespaces are not configurable, so

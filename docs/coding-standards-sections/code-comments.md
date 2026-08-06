@@ -37,13 +37,16 @@ Add a comment only for something a competent reader cannot infer from the code a
 
 Comments describe the code as it stands now, for a reader who has only the code — not the history that produced it. These never belong in a comment:
 
-| Forbidden                      | Examples                                                           |
-| ------------------------------ | ------------------------------------------------------------------ |
-| Issue / ticket references      | `// see #853`, `// per M9`, `// TODO(#123)`                        |
-| Code-review finding references | `// WARN-1`, `// BLOCK-1`, `// addresses BLOCK-2`, `// review fix` |
-| PR / commit references         | `// from PR 42`, `// reverted in abc1234`                          |
+| Forbidden                         | Examples                                                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Issue / ticket references         | `// see #853`, `// per M9`, `// TODO(#123)`                                                                  |
+| Code-review finding references    | `// WARN-1`, `// BLOCK-1`, `// addresses BLOCK-2`, `// review fix`                                           |
+| PR / commit references            | `// from PR 42`, `// reverted in abc1234`                                                                    |
+| Numbered acceptance-criteria refs | `// (AC #2)`, `// acceptance criterion #3` — the number points into an issue's AC list the code cannot reach |
 
 If a finding or issue drove a non-obvious decision, keep the **reason** and drop the reference: `// clamp before render — sub-pixel offset tore the boot logo` (not `// fixes BLOCK-1`).
+
+For acceptance criteria, carry the criterion **text** instead of its number: `(AC: "importing the barrel is side-effect-free")` stays true without the issue. Unnumbered quoted forms and structural per-test labels (an `AC1:` describe prefix that other tests name) are fine; the numbered `AC #N` pointer is not. Enforced by `tools/stale-ac-references.test.ts`.
 
 The `@chimera-review:` and `@ts-expect-error:` tags required by [§1 TypeScript](typescript.md) are the sole sanctioned exception — they state a reason and carry no issue/finding id. Neither is grepped by CI: `@ts-expect-error` needs its description because `@typescript-eslint/ban-ts-comment` demands one, and `@chimera-review:` is checked only where `chimera/no-fromfloat-in-simulation` requires it as a companion to a disable of that rule.
 

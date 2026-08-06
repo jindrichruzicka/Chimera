@@ -10,7 +10,7 @@
  * Architecture reference: §4.16 — Performance HUD; §5.5 (store mutation ownership)
  *
  * Module boundary rules:
- *  - Must NOT import from simulation/, electron/, ai/, or games/*.
+ *  - Must NOT import from simulation/, electron/, ai/, or apps/*.
  *  - Renderer reads state; never writes simulation state directly (Invariant #4).
  *  - Store mutation methods (setSimTick, setPingMs, etc.) are called by bootstrap
  *    wiring only; components read via narrow selectors and call toggle/setVisible.

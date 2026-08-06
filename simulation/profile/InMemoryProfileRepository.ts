@@ -8,7 +8,6 @@
  * Architecture: §4.24 — Player Profiles & Directory
  *
  * Invariants upheld:
- *   #2  — zero imports from renderer/, electron/, games/*, or DOM APIs
  *   #60 — ProfileRepository persists only the local machine's profiles;
  *          this is the in-memory variant used for testing.
  */

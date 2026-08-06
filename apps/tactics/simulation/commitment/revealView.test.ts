@@ -12,7 +12,7 @@ import { parseRevealedTurn } from './revealView.js';
 
 const P1 = toPlayerId('player-1');
 
-describe('parseRevealedTurn (T9 / #729)', () => {
+describe('parseRevealedTurn', () => {
     it('returns null for an absent reveal', () => {
         expect(parseRevealedTurn(null)).toBeNull();
         expect(parseRevealedTurn(undefined)).toBeNull();

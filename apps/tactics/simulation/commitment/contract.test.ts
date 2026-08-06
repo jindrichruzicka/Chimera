@@ -43,7 +43,7 @@ const attack: BufferedTacticsAction = {
     },
 };
 
-describe('bufferHasAttack (T6 / #726 — reveal-order discriminant)', () => {
+describe('bufferHasAttack (reveal-order discriminant)', () => {
     it('is false for an empty buffer', () => {
         expect(bufferHasAttack([])).toBe(false);
     });

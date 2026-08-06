@@ -72,7 +72,7 @@ describe('ClientMessageSchema — JOIN', () => {
     });
 });
 
-describe('ClientMessageSchema — JOIN claims (F68/#821)', () => {
+describe('ClientMessageSchema — JOIN claims (F68)', () => {
     const baseJoin = {
         type: 'JOIN',
         token: 'abc123',
@@ -374,7 +374,7 @@ describe('ClientMessageSchema — LEAVE', () => {
     });
 });
 
-describe('ClientMessageSchema — SPECTATE_TARGET_UPDATE (spectator perspective switch, #876)', () => {
+describe('ClientMessageSchema — SPECTATE_TARGET_UPDATE (spectator perspective switch)', () => {
     it('parses a valid SPECTATE_TARGET_UPDATE message', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'SPECTATE_TARGET_UPDATE',
@@ -462,7 +462,7 @@ describe('ServerMessageSchema — WELCOME', () => {
         expect(result.success).toBe(false);
     });
 
-    it('defaults the handshake role to "player" when the host omits it (old hosts, #876)', () => {
+    it('defaults the handshake role to "player" when the host omits it (old hosts)', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'WELCOME',
             playerId: toPlayerId('p1'),
@@ -474,7 +474,7 @@ describe('ServerMessageSchema — WELCOME', () => {
         }
     });
 
-    it('parses a WELCOME that declares a spectator handshake role (#876)', () => {
+    it('parses a WELCOME that declares a spectator handshake role', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'WELCOME',
             playerId: toPlayerId('p1'),
@@ -487,7 +487,7 @@ describe('ServerMessageSchema — WELCOME', () => {
         }
     });
 
-    it('rejects a WELCOME with an unknown handshake role (#876)', () => {
+    it('rejects a WELCOME with an unknown handshake role', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'WELCOME',
             playerId: toPlayerId('p1'),
@@ -685,7 +685,7 @@ describe('ServerMessageSchema — LOBBY_STATE', () => {
     });
 });
 
-describe('LobbyPlayerEntry role (who-is-watching flag, #876)', () => {
+describe('LobbyPlayerEntry role (who-is-watching flag)', () => {
     const entryWith = (role?: unknown) => ({
         type: 'LOBBY_STATE' as const,
         state: {
@@ -723,7 +723,7 @@ describe('LobbyPlayerEntry role (who-is-watching flag, #876)', () => {
     });
 });
 
-describe('wire schemas — parsing never mutates its input (#876)', () => {
+describe('wire schemas — parsing never mutates its input', () => {
     it('leaves a frozen SPECTATE_TARGET_UPDATE input unchanged', () => {
         const input = Object.freeze({ type: 'SPECTATE_TARGET_UPDATE', targetPlayerId: 'p2' });
         const snapshot = { ...input };
@@ -812,7 +812,7 @@ describe('ServerMessageSchema — SNAPSHOT setup (synced lobby config)', () => {
     });
 });
 
-describe('ServerMessageSchema — SNAPSHOT matchId (host-minted match identity, #820)', () => {
+describe('ServerMessageSchema — SNAPSHOT matchId (host-minted match identity)', () => {
     const baseSnapshot = {
         tick: 1,
         viewerId: toPlayerId('p1'),

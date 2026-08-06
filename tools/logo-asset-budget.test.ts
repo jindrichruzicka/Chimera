@@ -55,7 +55,7 @@ describe.each(shippedLogoPaths)('shipped logo asset budget: %s', (relativePath) 
 const MAX_VIDEO_FILE_BYTES = 8_000_000;
 
 // Next serves each host's own public/, so every adopting app commits its own
-// copy: engine + tactics (#856) + the blank template (#857).
+// copy: engine + tactics + the blank template.
 const shippedLogoVideoPaths = [
     'renderer/public/chimera_logo.mp4',
     'apps/tactics/renderer/public/chimera_logo.mp4',

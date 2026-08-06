@@ -1,9 +1,9 @@
 /**
  * §4.37 main-menu-custom.spec.ts
- * Issue #622 — Add E2E spec for game-customized main menu (fallback + tactics override)
+ * E2E coverage for the game-customized main menu (fallback + tactics override).
  * Part of: #615 F51 — Game-Customizable Main Menu
  *
- * Invariant #94: Engine shell pages must not import from any `games/*` path.
+ * Invariant #94: Engine shell pages must not import from any `apps/*` path.
  * Customisation enters via rendererGameRegistry only.
  *
  * Invariant #5: window.__chimera is exposed only through preload/api.ts.
@@ -76,7 +76,7 @@ async function readRootTokenColor(page: {
 
 // ── Test suite ────────────────────────────────────────────────────────────────
 
-test.describe('Game-customized main menu (§4.37 / #622)', () => {
+test.describe('Game-customized main menu (§4.37)', () => {
     /**
      * Scenario 1 — Engine fallback:
      * When no lobby is active the main menu must show the engine-default

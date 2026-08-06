@@ -7,7 +7,7 @@
  * `electron/main/runtime/RealtimeTicker.test.ts`.
  *
  * Architecture reference: §4.2.1 — Rule 1 (Action-Driven Clock)
- * Task: F04 / T2 (issue #42); relocation: issue #89
+ * Task: F04 / T2
  *
  * Invariants upheld:
  *   Rule 1 — tick is a logical counter; wall-clock time never enters the state.

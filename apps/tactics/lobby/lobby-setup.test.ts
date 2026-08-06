@@ -4,7 +4,7 @@
  * Unit tests for the pure Tactics lobby-setup builder. The selectable colours
  * now come from the content database; `buildTacticsLobbySetup` takes the
  * interpreted {@link TacticsPalette} and produces the descriptor `main` reads
- * for seat defaults and host/join validation (#702). The `DEFAULT_*` constants
+ * for seat defaults and host/join validation. The `DEFAULT_*` constants
  * remain the guaranteed-string fallbacks.
  *
  * Architecture: §4.37 — Renderer Shell Pages UI Contract; §4.4 — Lobby State Sync

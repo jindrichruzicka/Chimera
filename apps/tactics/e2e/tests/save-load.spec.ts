@@ -2,8 +2,6 @@
  * F34 — save-load.spec.ts
  * §13.8 Core E2E Test Specifications · §4.11 Save/Load Persistence
  *
- * Part of #526. Implements issue #527; menu-restore relaunch leg from #823.
- *
  * Verifies the full save → close → relaunch → menu-load lifecycle:
  *   1. Launch a single-player (pass-and-play) match.
  *   2. Play exactly 3 turns via GamePage actions to advance the simulation tick.
@@ -33,7 +31,7 @@
  *          commitments are dropped and the simulation diverges).
  *
  * The cross-match rejection branch (loading this save into a DIFFERENT live
- * match) is covered at unit level in electron/main/index.test.ts (#823); the
+ * match) is covered at unit level in electron/main/index.test.ts; the
  * menu-driven UI flow (saves screen → waiting overlay) arrives with #826-#829.
  *
  * Module boundary: must NOT import from electron/main/, simulation/, or networking/.

@@ -6,7 +6,7 @@
  * and WsClientTransport.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T06 (issue #221)
+ * Task: F10 / T06
  */
 
 import { describe, it, expect, afterEach } from 'vitest';

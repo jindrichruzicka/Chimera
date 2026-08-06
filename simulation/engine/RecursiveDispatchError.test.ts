@@ -4,10 +4,10 @@
  * TDD tests for the dedicated RecursiveDispatchError module.
  *
  * Architecture reference: §4.7, §4.20
- * Task: F21 (issue #405)
+ * Task: F21
  *
  * Tests written FIRST (red) before RecursiveDispatchError.ts exists.
- * Acceptance criteria from issue #405:
+ * Acceptance criteria:
  *   1. MAX_NESTED_DISPATCH is exported as 16 from RecursiveDispatchError.ts.
  *   2. RecursiveDispatchError is an Error subclass.
  *   3. RecursiveDispatchError.code is 'RECURSIVE_DISPATCH'.

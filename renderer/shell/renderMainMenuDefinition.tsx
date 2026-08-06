@@ -5,7 +5,7 @@
 // Maps a GameMainMenuDefinition (or undefined) to <Button> components
 // with token-based layout. No hardcoded pixel/colour literals (Invariant #91).
 // All interactive actions use <Button> from renderer/components/ui/ (Invariant #92).
-// Must NOT import from games/* (Invariant #94).
+// Must NOT import from apps/* (Invariant #94).
 //
 // Architecture reference: §4.37 — Renderer Shell Pages UI Contract
 

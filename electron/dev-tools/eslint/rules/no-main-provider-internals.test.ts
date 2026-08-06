@@ -11,8 +11,8 @@
  * internals). The composition root electron/main/index.ts is the sole exempt
  * file — it wires the concrete provider into the DI graph (Invariant #38).
  *
- * Enforces Invariant #47 across the @chimera-engine/networking boundary (issue #769);
- * mirrors `chimera/no-main-games-import` (the games/* electron/main boundary).
+ * Enforces Invariant #47 across the @chimera-engine/networking boundary;
+ * mirrors `chimera/no-main-games-import` (the apps/* electron/main boundary).
  */
 
 import { RuleTester } from 'eslint';

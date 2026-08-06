@@ -325,7 +325,7 @@ describe('parseTacticsViewerStamina', () => {
         expect(parseTacticsViewerStamina(players, LOCAL_PLAYER)).toBeNull();
     });
 
-    it('returns null when stamina is masked to null or absent (non-owner / pre-#721 snapshot)', () => {
+    it('returns null when stamina is masked to null or absent (non-owner / legacy snapshot)', () => {
         const masked = projectedPlayers({
             [LOCAL_PLAYER]: { id: LOCAL_PLAYER, stamina: null } satisfies ProjectedPlayerFixture,
         });

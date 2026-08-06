@@ -4,7 +4,7 @@
  * Unit + integration tests for the host-side `RealtimeTicker`.
  *
  * Architecture reference: §4.2.1 — Rule 1 (Action-Driven Clock)
- * Task: issue #89 — Relocate `RealtimeTicker` out of `simulation/` and
+ * Task: Relocate `RealtimeTicker` out of `simulation/` and
  *                   fix `engine:tick` envelope construction.
  *
  * RealtimeTicker is a host-side wall-clock wrapper; it lives in

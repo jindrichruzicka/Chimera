@@ -19,7 +19,7 @@
  * is path-only, so perspective rows instead route directly to the player with
  * `?kind=perspective` (the route re-validates the path on open).
  *
- * Engine shell page: imports no `games/*` or `electron/` runtime modules
+ * Engine shell page: imports no `apps/*` or `electron/` runtime modules
  * (Invariants #94/#1). All buttons use `<Button>` (Invariant #92) and only
  * design tokens are used for styling (Invariant #91).
  */

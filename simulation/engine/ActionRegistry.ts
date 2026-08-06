@@ -132,7 +132,7 @@ const ENGINE_NAMESPACE = 'engine:' as const;
  *
  * Invariant: game code must ONLY call `register()`. The `registerEngineAction()`
  * method is reserved for the engine-internal EngineActions registration path
- * and must never be called from games/* or renderer/*.
+ * and must never be called from apps/* or renderer/*.
  */
 export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #definitions = new Map<string, ActionDefinition<object, TState>>();
@@ -158,7 +158,7 @@ export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      *
      * Each definition is routed through the SAME validation path as `register()`:
      * an `engine:`-prefixed type throws `NamespaceCollisionError` (Invariant #11),
-     * so games/extensions cannot register engine actions via the merge, and a true
+     * so games and extensions cannot register engine actions via the merge, and a true
      * duplicate type follows `register()`'s idempotent last-write-wins contract
      * (no error). This enables extension libraries to pre-register their shared
      * action definitions once instead of forcing adopters to re-register each.

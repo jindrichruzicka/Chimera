@@ -11,7 +11,7 @@
  * Rules:
  *  - Tests written first (red confirmed).
  *  - No real Electron IPC — stores driven via createPerfStore/createSettingsStore.
- *  - No imports from simulation/, electron/main/, ai/, or games/*.
+ *  - No imports from simulation/, electron/main/, ai/, or apps/*.
  *  - useInputAction is mocked so we can fire the toggle callback manually.
  */
 

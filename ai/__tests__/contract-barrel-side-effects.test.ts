@@ -1,8 +1,8 @@
 /**
  * ai/__tests__/contract-barrel-side-effects.test.ts
  *
- * Asserts the `@chimera-engine/ai` public root barrel is SIDE-EFFECT-FREE (issue #764,
- * AC: "Importing the barrel/`./engine` subpath is side-effect-free"): importing
+ * Asserts the `@chimera-engine/ai` public root barrel is SIDE-EFFECT-FREE
+ * (AC: "Importing the barrel/`./engine` subpath is side-effect-free"): importing
  * `@chimera-engine/ai` (the root `.` entry) must evaluate NO AI runtime module.
  *
  * The root barrel re-exports the agent-framework *contract types* only
@@ -14,8 +14,8 @@
  * reached through the `@chimera-engine/ai/engine` subpath, which is intentionally NOT
  * asserted side-effect-free.
  *
- * Mirrors `simulation/__tests__/contract-barrel-side-effects.test.ts` (F58,
- * issue #759). Uses esbuild (already a devDependency) to bundle the barrel with
+ * Mirrors `simulation/__tests__/contract-barrel-side-effects.test.ts` (F58).
+ * Uses esbuild (already a devDependency) to bundle the barrel with
  * tree-shaking and asserts the emitted code, stripped of comments and
  * whitespace, is empty.
  */
@@ -50,7 +50,7 @@ async function bundleAndStrip(entryRelativeToAi: string): Promise<string> {
         .replace(/\s+/g, '');
 }
 
-describe('@chimera-engine/ai contract barrel is side-effect-free (issue #764)', () => {
+describe('@chimera-engine/ai contract barrel is side-effect-free', () => {
     it('@chimera-engine/ai root barrel (.) evaluates no AI runtime module', async () => {
         expect(await bundleAndStrip('index.ts')).toBe('');
     });

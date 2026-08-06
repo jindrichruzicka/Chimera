@@ -12,7 +12,7 @@
  * Rules:
  *   - Reads settings from `useSettingsStore()` via narrow typed selectors only.
  *   - All writes go through `window.__chimera.settings` (update / reset).
- *   - Must NOT import from: electron/main/, simulation/, networking/, games/*.
+ *   - Must NOT import from: electron/main/, simulation/, networking/, apps/*.
  */
 
 import React from 'react';

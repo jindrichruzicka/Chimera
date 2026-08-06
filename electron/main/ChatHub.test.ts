@@ -8,7 +8,7 @@
  *
  * TDD: tests written before implementation — confirmed red.
  *
- * Task: F45 / T03 (issue #681)
+ * Task: F45 / T03
  */
 
 import { describe, expect, it } from 'vitest';

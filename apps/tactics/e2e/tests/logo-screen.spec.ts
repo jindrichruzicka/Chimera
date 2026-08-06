@@ -1,6 +1,6 @@
 /**
  * §4.37.15 logo-screen.spec.ts
- * Issue #858 — Write Playwright E2E coverage for the game logo screen
+ * Playwright E2E coverage for the game logo screen.
  * Part of: #852 F70 — Game Logo Screen
  *
  * The packaged-only boot gate (`app.isPackaged && resolveGameLogoScreen(manifest)`
@@ -71,7 +71,7 @@ async function freezeLogoVideoAutoAdvance(page: Page): Promise<void> {
     });
 }
 
-test.describe('Game logo screen (§4.37 / #858)', () => {
+test.describe('Game logo screen (§4.37)', () => {
     test('logo route mounts the brand video sourced from /chimera_logo.mp4', async ({
         mainWindow,
     }) => {

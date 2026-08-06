@@ -7,7 +7,9 @@
  * Architecture reference: §4.13
  *
  * Module boundary: workspace imports are simulation/, ai/ and own files only.
- * Must NOT import from renderer/, electron/, or other apps/ directories.
+ * Lint enforces the renderer half (`chimera/no-game-renderer-internals`)
+ * and the electron/networking half (the `no-restricted-imports` zone this path
+ * shares with a game's gameplay tree).
  */
 
 import { z } from 'zod';

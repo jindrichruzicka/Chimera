@@ -5,7 +5,7 @@
  * close, and event callbacks, plus exponential-backoff reconnect logic.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T04 (issue #219)
+ * Task: F10 / T04
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -78,7 +78,7 @@ describe('ServerConnection — connect', () => {
         ).rejects.toThrow();
     });
 
-    it('rejects with a JoinRejectedError carrying the structured reason on a gated JOIN (#688)', async () => {
+    it('rejects with a JoinRejectedError carrying the structured reason on a gated JOIN', async () => {
         const server = makeServer();
         await server.ready();
         server.setJoinGate(() => ({ admitted: false, reason: 'profile:NAMESPACE_COLLISION' }));
@@ -89,7 +89,7 @@ describe('ServerConnection — connect', () => {
         ).rejects.toMatchObject({ reason: 'profile:NAMESPACE_COLLISION' });
     });
 
-    it('exposes the structured reason via JoinRejectedError.reason (not by parsing message) (#688)', async () => {
+    it('exposes the structured reason via JoinRejectedError.reason (not by parsing message)', async () => {
         const server = makeServer();
         await server.ready();
         server.setJoinGate(() => ({ admitted: false, reason: 'profile:AVATAR_TOO_LARGE' }));
@@ -106,9 +106,9 @@ describe('ServerConnection — connect', () => {
     });
 });
 
-// ─── close() sends LEAVE (#687) ─────────────────────────────────────────────────
+// ─── close() sends LEAVE ─────────────────────────────────────────────────────
 
-describe('ServerConnection — close sends LEAVE (#687)', () => {
+describe('ServerConnection — close sends LEAVE', () => {
     it('an intentional close() makes the host report a "normal" (deliberate) disconnect', async () => {
         const server = makeServer();
         await server.ready();
@@ -439,9 +439,9 @@ describe('ServerConnection — PlayerId stable across reconnect (T03)', () => {
     });
 });
 
-// ─── F68/#821: saved-seat claims on JOIN ──────────────────────────────────────
+// ─── F68: saved-seat claims on JOIN ───────────────────────────────────────────
 
-describe('ServerConnection — saved-seat claims (F68/#821)', () => {
+describe('ServerConnection — saved-seat claims (F68)', () => {
     /** socketFactory seam that captures every outbound JOIN frame. */
     function makeCapturingConn(): {
         conn: ServerConnection;
@@ -506,7 +506,7 @@ describe('ServerConnection — saved-seat claims (F68/#821)', () => {
 
 // ─── #718: STUN/relay endpoint seam ───────────────────────────────────────────
 
-describe('ServerConnection — endpoint seam (#718)', () => {
+describe('ServerConnection — endpoint seam', () => {
     // AC1 (default == direct `new WebSocket`) is proven by the "connect" suite above,
     // which uses `new ServerConnection()` with no seam options and still WELCOMEs.
 

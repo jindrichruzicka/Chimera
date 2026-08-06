@@ -1,6 +1,6 @@
 // renderer/__tests__/fixtures/good-contract-import.fixture.ts
 //
-// ESLint import-boundary smoke-test fixture (issue #772).
+// ESLint import-boundary smoke-test fixture.
 //
 // The renderer's only @chimera-engine/* dependency is `@chimera-engine/simulation`, consumed
 // as type-only contracts (Invariant #1). Importing it from renderer/ must NOT

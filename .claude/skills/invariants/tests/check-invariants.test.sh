@@ -1145,6 +1145,158 @@ test_engine_namespace_in_ai_allowed() {
     fi
 }
 
+# Test 35b: a game constant defined in simulation/ → violation [invariant-107]
+# simulation/ absorbed the former shared/ package, so Invariant #107's guard
+# reaches it. Without this, pointing Check 12 at the dir is indistinguishable
+# from leaving the no-op leg it replaced.
+test_game_constant_token_in_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/foundation/Leak.ts" \
+        "export const TACTICS_MAX_STAMINA = 3;"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-107\]'; then
+            pass "TACTICS_ constant in simulation/ detected as [invariant-107]"
+        else
+            fail "simulation/ game constant detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "TACTICS_ constant in simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test 35c: a game action namespace in simulation/ → violation [invariant-107]
+test_game_namespace_token_in_simulation_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/foundation/Leak.ts" \
+        "export const ACTION = 'tactics:move_unit';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-107\]'; then
+            pass "'tactics:' namespace in simulation/ detected as [invariant-107]"
+        else
+            fail "simulation/ game namespace detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "'tactics:' namespace in simulation/ not detected (exit 0)"
+    fi
+}
+
+# Test 35d: the two suppressions the simulation/ leg needed → NOT flagged.
+# `node:` is a builtin specifier and `chimera:` the app's own IPC prefix; both
+# are live in simulation/ today, so a leg without them could not be enabled at
+# all — and a suppression that swallowed a real game namespace would pass 35c.
+test_builtin_and_app_namespaces_in_simulation_allowed() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/foundation/Ok.ts" \
+        "import { createHash } from 'node:crypto';
+export const CHANNEL = 'chimera:debug';
+export const use = createHash;"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "node: and chimera: namespaces in simulation/ not flagged"
+    else
+        fail "node:/chimera: namespaces in simulation/ wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 35e: a game namespace on the SAME LINE as a suppressed one → still flagged.
+# The suppression is per-token, not per-line: an object literal mapping channel
+# constants is the realistic carrier, and a line-scoped filter would drop it
+# whole. Test 35c cannot see this — it plants the namespace on its own line.
+test_game_namespace_beside_suppressed_prefix_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/foundation/Leak.ts" \
+        "export const CHANNELS = { debug: 'chimera:debug', move: 'tactics:move_unit' };"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-107\]'; then
+            pass "game namespace beside a suppressed prefix still detected"
+        else
+            fail "co-located game namespace detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "game namespace beside 'chimera:' not detected (suppression is line-scoped)"
+    fi
+}
+
+# Test 35f: built output is not scanned. Both guarded packages emit to dist/, so
+# without the exclusion a guarded source is reported twice — once as source, once
+# as its compiled copy.
+test_game_token_in_dist_not_scanned() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/dist/foundation/constants.js" \
+        "export const TACTICS_MAX_STAMINA = 3;"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "game constant under dist/ not scanned"
+    else
+        fail "dist/ output was scanned:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 35g: a quoted game namespace whose name merely ENDS in a suppressed word
+# ('myengine:') must still be flagged. The suppression pattern anchors on the
+# opening quote; without the anchor, gsub blanks the 'engine:cast_spell' tail
+# from inside the quotes and the token escapes.
+test_game_namespace_suffix_collision_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/foundation/Suffix.ts" \
+        "export const SPELL_ACTION = 'myengine:cast_spell';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-107\]'; then
+            pass "game namespace ending in a suppressed word still detected"
+        else
+            fail "suffix-collision namespace detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "quoted 'myengine:' namespace not detected (suppression lost its quote anchor)"
+    fi
+}
+
 # ─── Networking package (F60, issue #768) ──────────────────────────────────────
 
 # Test 36: import from renderer/ inside networking/ → violation [invariant-1]
@@ -2767,6 +2919,12 @@ test_game_constant_token_in_ai_detected
 test_game_namespace_token_in_ai_detected
 test_generic_game_namespace_in_ai_detected
 test_engine_namespace_in_ai_allowed
+test_game_constant_token_in_simulation_detected
+test_game_namespace_token_in_simulation_detected
+test_builtin_and_app_namespaces_in_simulation_allowed
+test_game_namespace_beside_suppressed_prefix_detected
+test_game_namespace_suffix_collision_detected
+test_game_token_in_dist_not_scanned
 test_renderer_import_in_networking_detected
 test_games_import_in_networking_detected
 test_non_provider_dir_under_networking_detected

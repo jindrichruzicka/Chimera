@@ -3,7 +3,7 @@
  *
  * Unit tests for InMemoryProfileRepository.
  * Architecture: §4.24 — Player Profiles & Directory
- * Task: F14-T03 (issue #340)
+ * Task: F14-T03
  *
  * TDD: tests written before implementation — confirmed red.
  */

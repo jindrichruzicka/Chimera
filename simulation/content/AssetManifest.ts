@@ -43,7 +43,7 @@ export type AssetManifestEntry<T extends AssetKind = AssetKind> = T extends Asse
 /**
  * Complete asset inventory for a game.
  *
- * Defined in `games/<name>/asset-manifest.ts` as a value of this type.
+ * Defined in `apps/<name>/asset-manifest.ts` as a value of this type.
  * The type itself is owned by `simulation/content/` — no Three.js or
  * renderer dependency is permitted here.
  *

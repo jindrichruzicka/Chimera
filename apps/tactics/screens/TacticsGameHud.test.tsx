@@ -145,10 +145,10 @@ const BUFFERED_MOVE: BufferedTacticsAction = {
     },
 };
 
-// The viewer's own stamina rides along on the projected player state at runtime
-// (#721). The generic `ObservedPlayerState` type is just `{ id }`, so tests cast
-// the richer projected shape into `players`, mirroring the board test's
-// `ProjectedUnitFixture` approach. `'absent'` models a pre-#721 snapshot with no
+// The viewer's own stamina rides along on the projected player state at
+// runtime. The generic `ObservedPlayerState` type is just `{ id }`, so tests
+// cast the richer projected shape into `players`, mirroring the board test's
+// `ProjectedUnitFixture` approach. `'absent'` models a legacy snapshot with no
 // stamina field; `null` models a masked (non-owner) entry.
 interface ProjectedPlayerFixture {
     readonly id: PlayerId;
@@ -735,7 +735,7 @@ describe('TacticsGameHud', () => {
     });
 });
 
-describe('save button (#825)', () => {
+describe('save button', () => {
     it('renders no save affordance when the saveGame capability is absent', () => {
         render(<TacticsGameHud {...makeHudProps()} />);
 

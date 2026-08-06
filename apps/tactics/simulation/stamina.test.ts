@@ -87,7 +87,7 @@ describe('readStamina', () => {
     // ── Commitment (simultaneous) mode: every seat refreshes on turn advance ──
     // Sequential refresh keys on `turnClock.activePlayerId`, but in commitment
     // mode all seats act in parallel and the active-seat marker is irrelevant,
-    // so a non-active seat must still refresh once a later turn begins (#730).
+    // so a non-active seat must still refresh once a later turn begins.
     it('commitment mode: refreshes a non-active seat on a later turnNumber', () => {
         const state = makeSnapshot({
             turnMode: 'commitment',

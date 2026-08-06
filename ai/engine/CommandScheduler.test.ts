@@ -5,7 +5,7 @@
  * and CommandSchedulerImpl concrete class.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Tasks: F23 (issue #418), F24 (issue #425)
+ * Tasks: F23, F24
  *
  * CommandProgress discriminated-union tests live in AICommand.test.ts.
  *

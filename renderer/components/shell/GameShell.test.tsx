@@ -974,7 +974,7 @@ function createAssetManagerStub(): AssetManager {
     };
 }
 
-describe('GameShell saveGame capability threading (#825)', () => {
+describe('GameShell saveGame capability threading', () => {
     // The capability deliberately departs from the *Disabled/handle* pair pattern:
     // absence of the `saveGame` prop IS the withholding mechanism (Invariant #25),
     // so these tests assert prop presence, never a disabled flag.

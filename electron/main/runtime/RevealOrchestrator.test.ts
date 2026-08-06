@@ -88,7 +88,7 @@ function orchestration(order: PlayerId[]): CommitmentTurnOrchestration {
     };
 }
 
-describe('runRevealSync (T9 / #729)', () => {
+describe('runRevealSync', () => {
     it('broadcasts reveals and applies revealed actions in resolveRevealOrder order', () => {
         const h = harness();
         runRevealSync({

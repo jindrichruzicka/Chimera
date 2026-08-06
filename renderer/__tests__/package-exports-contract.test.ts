@@ -2,14 +2,14 @@
  * renderer/__tests__/package-exports-contract.test.ts
  *
  * Locks the `@chimera-engine/renderer` package surface declared in `package.json`
- * (issue #772 — F61 surface contract; updated by #773 once the dist/ build landed):
+ * (F61 surface contract; updated once the dist/ build landed):
  *
  *   - the public `exports` entry points are the three component barrels
  *     `./components/ui`, `./components/chat`, and `./components/r3f` (the
  *     GameCanvas root + useModelAnimation) plus the game-registration seam
  *     `./game` (#784 — the runtime injection point a consumer app populates via
  *     `registerRendererGame`) — no `.` barrel (there is intentionally no
- *     `renderer/index.ts`) and no deep internal subpath (Invariant #96, AC #2);
+ *     `renderer/index.ts`) and no deep internal subpath (Invariant #96);
  *   - #773 emitted the dist/ build, so each barrel's `types` AND `default`
  *     conditions now both point at the built `dist/` artifact (the #772 bridge
  *     where `types` pointed at in-tree source is gone);
@@ -19,7 +19,7 @@
  *     `useTranslate()` (F71);
  *   - a `./styles/*.css` entry ships the design-token stylesheet so a consumer
  *     can `import '@chimera-engine/renderer/styles/tokens.css'` to load the `--ch-*`
- *     tokens the barrel components reference at `:root` (#773);
+ *     tokens the barrel components reference at `:root`;
  *   - `@chimera-engine/simulation` is the only `@chimera-engine/*` dependency (Invariant #1);
  *     `@chimera-engine/ai` / `@chimera-engine/networking` / `@chimera-engine/electron` are NOT
  *     dependencies;
@@ -51,7 +51,7 @@ const manifest = JSON.parse(
     readFileSync(resolve(__dirname, '../package.json'), 'utf8'),
 ) as RendererManifest;
 
-describe('@chimera-engine/renderer package surface (issue #772)', () => {
+describe('@chimera-engine/renderer package surface', () => {
     it('is an ES module shipping the dist/ build', () => {
         expect(manifest.type).toBe('module');
         expect(manifest.files).toContain('dist');

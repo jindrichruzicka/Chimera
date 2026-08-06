@@ -99,7 +99,7 @@ const nextConfig: NextConfig = {
             // The alias is the one knob that binds the game-agnostic renderer
             // bundle to a concrete game; `apps/tactics/renderer/register.ts`'s
             // import side effect calls `registerRendererGame(...)`. The specifier
-            // is deliberately NOT a `@chimera-engine/<pkg>` / `apps/*` / `games/*` token
+            // is deliberately NOT a `@chimera-engine/<pkg>` / `apps/*` token
             // (those are forbidden in renderer source by the boundary lint).
             'chimera-game-registration': path.join(root, 'apps/tactics/renderer/register.ts'),
         };

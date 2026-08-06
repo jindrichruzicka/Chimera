@@ -14,7 +14,7 @@
 //   #1  — Only PlayerSnapshot (never GameSnapshot) is consumed here.
 //   #48 — GameShell is game-agnostic; this route delegates game-specific
 //          registry resolution to renderer/game/rendererGameRegistry.
-//   #80 — GameShell never imports from games/*; the registry is passed as data.
+//   #80 — GameShell never imports from apps/*; the registry is passed as data.
 //   #88 — GameShell wraps every screen in React.Suspense (see GameShell.tsx).
 
 import React, { useEffect } from 'react';

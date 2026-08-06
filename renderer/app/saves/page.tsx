@@ -18,7 +18,7 @@
  *         SaveSlotMeta from saveStore, never raw SaveFile or GameSnapshot.
  *   #4 — The renderer reads state; all writes go through `window.__chimera`.
  *   #74 — Toast titles are static literals carrying no save metadata.
- *   #80/#94 — Engine shell page: no `games/*` or `apps/*` imports; the active
+ *   #80/#94 — Engine shell page: no `apps/*` imports; the active
  *         game comes from the `?gameId=` URL param.
  *   #91/#96 — Tokens-only CSS module; UI primitives via the components barrel.
  */

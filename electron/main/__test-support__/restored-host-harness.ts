@@ -2,7 +2,7 @@
  * electron/main/__test-support__/restored-host-harness.ts
  *
  * In-process composition harness for the F68 restore-protocol integration
- * tests (#827). Composes the REAL restore stack — `LobbyManager` over an
+ * tests. Composes the REAL restore stack — `LobbyManager` over an
  * injected `MultiplayerProvider`, `SessionRuntime`, `SessionRestoreCoordinator`,
  * `SaveManager` over `InMemorySaveRepository`, the real engine pipeline,
  * projector, and AI agents — around a mirror of the composition-root glue in
@@ -140,7 +140,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
     const { contribution } = options;
     const gameId = contribution.gameId;
 
-    // mirrors electron/main/index.ts::main() registry seeding (#827)
+    // mirrors electron/main/index.ts::main() registry seeding
     const gameRegistry = new ActionRegistry();
     registerEngineActions(gameRegistry);
     wireDefaultSceneActions(gameRegistry);
@@ -162,21 +162,21 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
         | ((slots: readonly LobbyAgentSlot[]) => readonly PlayerId[])
         | null = null;
     let syncLiveAgentSlots: ((slots: readonly LobbyAgentSlot[]) => void) | null = null;
-    /** AI-removal host-ledger reconcile seam (#838) — assigned in `onSessionHosted`. */
+    /** AI-removal host-ledger reconcile seam — assigned in `onSessionHosted`. */
     let removeAiSeat: ((slotIndex: number) => void) | null = null;
     let seatRestoredRoster: ((seats: readonly SaveSeat[]) => Promise<void>) | null = null;
     /** In-session same-match restore agent-rebuild seam — assigned in `onSessionHosted`. */
     let rebuildAgentsAgainstRestoredSnapshot: (() => void) | null = null;
-    /** Return-to-lobby (#737) host-local reset seam — assigned in `onSessionHosted`. */
+    /** Return-to-lobby host-local reset seam — assigned in `onSessionHosted`. */
     let resetActiveSessionToLobby: (() => void) | null = null;
-    /** Start-suppression gate for an in-flight restore (F68 #823). */
+    /** Start-suppression gate for an in-flight restore. */
     let restoreSeatingActive = false;
 
     const lobbyManager = new LobbyManager(options.provider, logger, {
         resolveLobbySetup: (requestedGameId) =>
             requestedGameId === gameId ? options.lobbySetup : undefined,
 
-        // mirrors electron/main/index.ts::onSessionHosted (#827); omissions in
+        // mirrors electron/main/index.ts::onSessionHosted; omissions in
         // the module header.
         onSessionHosted: (transport: HostTransport, metadata) => {
             const agentManager = new AgentManager({ logger });
@@ -259,7 +259,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 hostViewerId: metadata.hostId,
             });
 
-            // mirrors index.ts::getSessionManifest (F68 #820)
+            // mirrors index.ts::getSessionManifest
             const getSessionManifest = (): SaveSessionManifest | null => {
                 if (currentMatchId === null) {
                     return null;
@@ -429,7 +429,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 return assignedSlotIndexes.size;
             };
 
-            // mirrors index.ts::tryStartGame — the restore start gate (F68 #823),
+            // mirrors index.ts::tryStartGame — the restore start gate,
             // instrumented with the ordered `game-start` event.
             const tryStartGame = (): void => {
                 if (restoreSeatingActive) {
@@ -453,7 +453,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 broadcasterRef.current?.broadcast(snapshot, viewerId);
             };
 
-            // mirrors index.ts::handleHostedLocalSeatAdded (F68 #823)
+            // mirrors index.ts::handleHostedLocalSeatAdded
             handleHostedLocalSeatAdded = (entry): void => {
                 if (activePlayers.has(entry.playerId)) {
                     return;
@@ -478,7 +478,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 return aiSlots.map((slot) => slot.playerId);
             };
 
-            // mirrors index.ts::syncLiveAgentSlots (#833) — keep the live AI
+            // mirrors index.ts::syncLiveAgentSlots — keep the live AI
             // roster in sync as `addAi()` mutates it during the lobby, so
             // `nextHumanSlotIndex` skips an added AI's slot when a human joins
             // after it. Guarded to the lobby phase: a restored session seats its
@@ -493,7 +493,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 currentAgentSlots = liveAgentSlots;
             };
 
-            // mirrors index.ts::seatRestoredRoster (F68 #823) — including the
+            // mirrors index.ts::seatRestoredRoster — including the
             // `finally` release of the start-suppression gate.
             seatRestoredRoster = async (seats): Promise<void> => {
                 try {
@@ -540,7 +540,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
             }
             tryStartGame();
 
-            // mirrors index.ts::repackLobbyLedger (#834/#838): re-pack HUMANS into
+            // mirrors index.ts::repackLobbyLedger: re-pack HUMANS into
             // contiguous human-kind slots, PINNING every AI entry at its slot, so
             // the ledger stays in step with LobbyManager's compacted roster. Shared
             // by `releaseLobbySeat` (human leave) and `removeAiSeat` (AI removal).
@@ -566,14 +566,14 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 }
             };
 
-            // mirrors index.ts::releaseLobbySeat (#834): free a departing lobby seat.
+            // mirrors index.ts::releaseLobbySeat: free a departing lobby seat.
             const releaseLobbySeat = (pid: PlayerId): void => {
                 playerSlotIndexById.delete(pid);
                 registeredPlayers.delete(pid); // a lobby rejoin is a fresh join, not a reconnect
                 repackLobbyLedger();
             };
 
-            // mirrors index.ts::removeAiSeat (#838): reconcile the ledger when an
+            // mirrors index.ts::removeAiSeat: reconcile the ledger when an
             // AI is removed from the lobby roster (removeAi / join-overflow auto-
             // remove). Drop the removed AI's synthetic seat if seated, re-pack
             // humans into the freed slot, and rebuild agents to drop its agent.
@@ -631,7 +631,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
             });
             const unsubLeft = transport.onPlayerLeft((pid) => {
                 activePlayers.delete(pid);
-                // A lobby-phase leave frees + re-packs the slot ledger (#834); an
+                // A lobby-phase leave frees + re-packs the slot ledger; an
                 // in-match disconnect retains the seat for reconnect/restore, and
                 // a mid-restore leave is left to the coordinator.
                 if (
@@ -682,7 +682,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
             handleHostedLocalSeatAdded?.(entry);
         },
 
-        // mirrors electron/main/index.ts::onLobbyStateChanged (#833) — feed the
+        // mirrors electron/main/index.ts::onLobbyStateChanged — feed the
         // live lobby roster to the hosted session so a human joining after
         // `addAi()` skips the AI's slot. The harness has no renderer windows, so
         // it drops production's `LOBBY_UPDATE_CHANNEL` broadcast + E2E auto-start.
@@ -690,13 +690,13 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
             syncLiveAgentSlots?.(state.agentSlots ?? []);
         },
 
-        // mirrors electron/main/index.ts::onAiSlotRemoved (#838) — reconcile the
+        // mirrors electron/main/index.ts::onAiSlotRemoved — reconcile the
         // host slot ledger when an AI leaves the roster (removeAi / auto-remove).
         onAiSlotRemoved: (slotIndex) => {
             removeAiSeat?.(slotIndex);
         },
 
-        // mirrors electron/main/index.ts::onGameStartRequested (#827) — the
+        // mirrors electron/main/index.ts::onGameStartRequested — the
         // E2E first-player override is fixed to its 'host' default.
         onGameStartRequested: (state) => {
             const sessionRuntime = activeSession;
@@ -735,7 +735,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
             saveInitialTurnMemento?.(firstPlayer);
         },
 
-        // mirrors electron/main/index.ts::onReturnToLobbyRequested (#737) —
+        // mirrors electron/main/index.ts::onReturnToLobbyRequested —
         // dispatch `engine:return_to_lobby` (phase → lobby, matchId preserved)
         // then run the host-local slot-ledger reset. Same `applyAction` primitive
         // as `onGameStartRequested`; `currentMatchId` is left intact so a capture
@@ -766,7 +766,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
         currentMatchId = file.session.matchId;
     };
 
-    // mirrors electron/main/index.ts coordinator wiring (F68 #823/#826).
+    // mirrors electron/main/index.ts coordinator wiring.
     const sessionRestoreCoordinator = new SessionRestoreCoordinator({
         logger,
         ports: {
@@ -863,9 +863,9 @@ export function buildRestoreClientHarness(
                 unsubReveal();
             };
         },
-        // mirrors the #822 resolveJoinClaims wiring in electron/main/index.ts:
+        // mirrors the resolveJoinClaims wiring in electron/main/index.ts:
         // `undefined` (never `[]`) when no ticket matches, so a fresh client
-        // keeps the host's claimless join-order fallback available (#821).
+        // keeps the host's claimless join-order fallback available.
         resolveJoinClaims: async (): Promise<readonly SeatClaim[] | undefined> => {
             const tickets = await store.claims();
             const relevant = tickets.filter((ticket) => ticket.gameId === options.gameId);

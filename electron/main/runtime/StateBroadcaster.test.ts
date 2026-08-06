@@ -7,7 +7,7 @@
  * It must have zero imports from networking/provider/local/ or ws.
  *
  * Architecture: §4.6, §4.14 — StateProjector / StateBroadcaster
- * Task: F11-T02 (issue #239), issue #436
+ * Task: F11-T02
  *
  * Invariants covered:
  *   #3  — StateBroadcaster sends only PlayerSnapshot to HostTransport.

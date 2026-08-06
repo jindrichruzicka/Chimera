@@ -683,7 +683,7 @@ describe('rewriteAppPackageForStandalone', () => {
         expect(out.scripts['dev:mp']).toBe('cross-env CHIMERA_DEV_HARNESS=1 chimera-dev-mp');
     });
 
-    it('rewrites @chimera-engine/* workspace deps declared in devDependencies (#817 template shape)', () => {
+    it('rewrites @chimera-engine/* workspace deps declared in devDependencies (blank-template shape)', () => {
         // The blank template declares the engine packages under devDependencies (they are
         // esbuild-inlined at build time and must stay out of electron-builder's prod tree).
         // A surviving `workspace:*` in any section makes a standalone `npm install` reject the

@@ -1,5 +1,5 @@
 /**
- * Hardware-cursor E2E coverage for the no-declaration path (F69 #850).
+ * Hardware-cursor E2E coverage for the no-declaration path.
  *
  * Boots a bare route directly (`initialRoute: '/settings'`, no gameId, no
  * direct-game role) so no game shell ever registers and the cursor injector

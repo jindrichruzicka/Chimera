@@ -6,7 +6,6 @@
  * Unit tests for the SavesPage load/delete browser (replay-browser pattern).
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #824
  *
  * Invariant #1: GameSnapshot never leaves the main process — page reads only
  *   SaveSlotMeta from saveStore, never raw SaveFile or GameSnapshot.

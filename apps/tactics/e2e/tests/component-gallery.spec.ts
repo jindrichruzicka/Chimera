@@ -16,7 +16,7 @@
  * Invariants honoured:
  *   #86 — UI components must reference --ch-* tokens for all visual attributes.
  *   #93 — No game token override CSS imported.
- *   #94 — No games/* imports.
+ *   #94 — No apps/* imports.
  */
 
 import { test, expect } from '../fixtures/electron.fixture';

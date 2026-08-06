@@ -14,7 +14,7 @@
  *                            AIPlayerAgent, HumanPlayerAgent
  *
  * Only the game-agnostic framework is reachable from this package (Invariant
- * #106): game-specific AI policies live in the consumer's `games/<name>/ai/`,
+ * #106): game-specific AI policies live in the consumer's `apps/<name>/ai/`,
  * never inside `@chimera-engine/ai`.
  *
  * Asserted side-effect-free by

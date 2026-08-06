@@ -3,7 +3,7 @@
  *
  * ESLint smoke test for the provider-internal containment boundary that keeps
  * main-process orchestration depending on the `@chimera-engine/networking` public barrel
- * interfaces only (Invariant #47, issue #769).
+ * interfaces only (Invariant #47).
  *
  * Runs ESLint programmatically against two fixtures and asserts the
  * `chimera/no-main-provider-internals` rule fires on a provider-internal import
@@ -11,7 +11,7 @@
  * boundary is enforced by the linter and wired into eslint.config.mjs for
  * electron/main — not merely correct in the rule's own unit test (RuleTester).
  *
- * Mirrors `networking/__tests__/eslint-import-boundary.test.ts` (#768) and the
+ * Mirrors `networking/__tests__/eslint-import-boundary.test.ts` and the
  * ai/ + simulation/ boundary smoke tests.
  */
 

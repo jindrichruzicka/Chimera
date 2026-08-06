@@ -5,7 +5,7 @@
  * message bus to the WsHostTransport callback sets.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T03 (issue #218), issue #333
+ * Task: F10 / T03
  */
 
 import { describe, it, expect } from 'vitest';

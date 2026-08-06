@@ -4,11 +4,9 @@
  * renderer/state/gameStore.test.ts
  *
  * Unit tests for the gameStore Zustand store.
- * Covers SnapshotStore and PredictionStore behaviours as required by §4.4 and
- * acceptance criteria for issue #368.
+ * Covers SnapshotStore and PredictionStore behaviours as required by §4.4.
  *
  * Architecture: §4.4 — Renderer State Stores
- * Task: issue #368
  *
  * Rules:
  *  - No real Electron IPC — all tests use the `createGameStore()` factory.
@@ -288,7 +286,7 @@ describe('gameStore.applyReveal()', () => {
     });
 });
 
-// ── gameStore.reset() (issue #741) ────────────────────────────────────────────
+// ── gameStore.reset() ────────────────────────────────────────────────────────
 
 describe('gameStore.reset()', () => {
     const reveal = (id: string): CommitmentReveal => ({

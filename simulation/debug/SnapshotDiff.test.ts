@@ -5,10 +5,10 @@
  * GameSnapshots backing the Debug Inspector Diff View.
  *
  * Architecture reference: §4.12 (runtime-debug-layer.md)
- * Task: F47 / T2 (issue #691)
+ * Task: F47 / T2
  *
  * Tests are written FIRST (red) before SnapshotDiff.ts exists.
- * They express the acceptance criteria from issue #691 and the §10.1 test
+ * They express the acceptance criteria from and the §10.1 test
  * scenario: "Identical → empty; added entity → one `added` entry; changed
  * HP → one `changed` entry with before/after."
  */

@@ -7,7 +7,6 @@
  * Verifies the initial list() fetch and the onSlotUpdate push subscription.
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #373
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

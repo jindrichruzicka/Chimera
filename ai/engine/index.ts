@@ -8,7 +8,7 @@
  * evaluates the AI runtime modules.
  *
  * Everything here is game-agnostic (Invariant #106): game-specific AI policies
- * live in the consumer's `games/<name>/ai/`, never inside `@chimera-engine/ai`.
+ * live in the consumer's `apps/<name>/ai/`, never inside `@chimera-engine/ai`.
  */
 
 // ─── Framework runtime (classes) ──────────────────────────────────────────────

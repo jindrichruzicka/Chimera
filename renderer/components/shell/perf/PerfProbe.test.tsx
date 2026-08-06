@@ -10,7 +10,7 @@
  *  - Tests written first (red confirmed).
  *  - Mock @react-three/fiber; no real WebGL context required.
  *  - No DOM output assertions; the component returns null.
- *  - No imports from simulation/, electron/, ai/, or games/*.
+ *  - No imports from simulation/, electron/, ai/, or apps/*.
  */
 
 import { cleanup, render } from '@testing-library/react';

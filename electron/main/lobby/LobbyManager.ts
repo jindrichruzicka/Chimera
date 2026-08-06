@@ -11,7 +11,6 @@
  * Invariants upheld:
  *   #1  — Only PlayerSnapshot crosses transport boundaries; this module never
  *          references GameSnapshot.
- *   #2  — No import from networking/provider/local/, renderer/, or electron/.
  *   #67 — Constructed with an injected Logger child; no console.* calls.
  */
 
@@ -130,7 +129,7 @@ export interface LobbyManagerOptions {
      * `undefined` when the game declares none. Injected from the
      * composition root (`electron/main/index.ts`) so the manager can seed
      * default match settings and per-player attributes without importing
-     * `games/*` directly (Invariant #2). When omitted — or when it returns
+     * `apps/*` directly. When omitted — or when it returns
      * `undefined` — all seeding no-ops and behavior stays backward-compatible.
      */
     readonly resolveLobbySetup?: (gameId: string) => GameLobbySetup | undefined;

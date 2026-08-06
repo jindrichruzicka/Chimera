@@ -14,7 +14,7 @@ import type {
 } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // Stub the game renderer loader so the player page does not pull in real
-// games/* screen modules under test.
+// apps/* screen modules under test.
 vi.mock('../../../game/rendererGameRegistry', () => ({
     loadRendererGame: vi.fn(() => Promise.resolve({ registry: { screens: {} } })),
 }));

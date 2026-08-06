@@ -16,7 +16,7 @@ import {
     readTacticsTurnMode,
 } from './constants.js';
 
-describe('readTacticsTurnMode (T6 / #726 — commitment battle-mode toggle)', () => {
+describe('readTacticsTurnMode (commitment battle-mode toggle)', () => {
     it('defaults to sequential when match settings are absent', () => {
         expect(readTacticsTurnMode(undefined)).toBe('sequential');
         expect(TACTICS_DEFAULT_TURN_MODE).toBe('sequential');

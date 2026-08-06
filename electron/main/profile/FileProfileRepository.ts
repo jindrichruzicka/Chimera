@@ -18,7 +18,6 @@
  * Architecture reference: §4.24
  *
  * Invariants upheld:
- *   #2  — zero imports from renderer/, games/*, or any DOM API.
  *   #60 — Persists only the local machine's profiles. Remote clients'
  *         profiles never reach this class.
  */

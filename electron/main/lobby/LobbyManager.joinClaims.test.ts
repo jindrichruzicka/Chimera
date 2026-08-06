@@ -1,10 +1,10 @@
 /**
  * electron/main/lobby/LobbyManager.joinClaims.test.ts
  *
- * Unit tests for the `resolveJoinClaims` LobbyManager option (F68 #822):
+ * Unit tests for the `resolveJoinClaims` LobbyManager option:
  * joinLobby merges composition-root-supplied seat claims into the params it
  * hands the provider — so a returning client presents its remembered seat on
- * a restored session (#821) — without ever overriding caller-supplied claims,
+ * a restored session — without ever overriding caller-supplied claims,
  * and a resolver failure degrades to a claimless join instead of blocking it.
  *
  * Uses InMemoryMultiplayerProvider so no real network or WebSocket is involved.
@@ -61,7 +61,7 @@ async function hostAndJoin(
     return { joins };
 }
 
-describe('LobbyManager.joinLobby — resolveJoinClaims (#822)', () => {
+describe('LobbyManager.joinLobby — resolveJoinClaims', () => {
     it('merges resolved claims into the params handed to the provider', async () => {
         const claims: readonly SeatClaim[] = [{ matchId: 'match-a', playerId: 'p-alice' }];
 

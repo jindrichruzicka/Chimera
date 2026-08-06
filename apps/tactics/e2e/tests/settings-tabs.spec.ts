@@ -1,5 +1,5 @@
 /**
- * Settings tabs E2E coverage for issue #631.
+ * Settings tabs E2E coverage.
  *
  * Verifies the engine-default tab surface, tab navigation, tactics override
  * tabs, value persistence across renderer reload, and reset-to-defaults flow.

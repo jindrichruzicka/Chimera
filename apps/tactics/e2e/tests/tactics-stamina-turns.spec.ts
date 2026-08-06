@@ -1,7 +1,7 @@
 /**
  * tactics-stamina-turns.spec.ts
  *
- * Issue #730 (F54). E2E for turn-gating + stamina in the default SEQUENTIAL
+ * (F54). E2E for turn-gating + stamina in the default SEQUENTIAL
  * tactics turn mode:
  *   - the off-turn player's board is non-interactive (a move is rejected);
  *   - the turn-status badge reflects whose turn it is;

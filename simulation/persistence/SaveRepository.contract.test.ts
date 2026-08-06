@@ -2,7 +2,7 @@
  * simulation/persistence/SaveRepository.contract.test.ts
  *
  * Shared SaveRepository contract test suite. Runs the same behavioural
- * tests against every SaveRepository implementation (issue #122, §4.11).
+ * tests against every SaveRepository implementation (§4.11).
  *
  * TDD cycle: this file is written first. All tests must be RED before
  * the source files exist.
@@ -12,7 +12,6 @@
  * via the exported `runSaveRepositoryContractTests` helper.
  *
  * Invariants upheld:
- *   #2 — simulation/ is side-effect-free; no FS or Electron imports here.
  *   #41 — InMemorySaveRepository passes the identical contract suite as
  *           FileSaveRepository.
  */

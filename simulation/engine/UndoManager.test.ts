@@ -5,10 +5,10 @@
  * InMemoryActionHistory, and UndoNotAllowedError.
  *
  * Architecture reference: §4.5, §7
- * Task: F16 (issue #359)
+ * Task: F16
  *
  * Tests written FIRST (red) before UndoManager.ts exists.
- * They express all acceptance criteria from issue #359:
+ * They express all acceptance criteria:
  *
  *   1. canUndo() returns false when policy allowUndo: false or no memento stored.
  *   2. undo(playerId, 1) replays history minus last 1 entry and returns

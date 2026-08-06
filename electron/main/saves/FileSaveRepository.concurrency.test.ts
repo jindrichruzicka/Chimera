@@ -2,7 +2,7 @@
  * electron/main/saves/FileSaveRepository.concurrency.test.ts
  *
  * Verifies that FileSaveRepository.list() caps concurrent FS calls to
- * LIST_CONCURRENCY (issue #139 — WARN-9).
+ * LIST_CONCURRENCY.
  *
  * `vi.mock` is automatically hoisted above all imports by vitest so the
  * factory runs before FileSaveRepository imports 'fs/promises'.
@@ -92,7 +92,7 @@ function makeEntries(count: number): string[] {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('FileSaveRepository — list() concurrency cap (issue #139)', () => {
+describe('FileSaveRepository — list() concurrency cap', () => {
     beforeEach(() => {
         resetCounters();
         vi.mocked(fsMocked.readdir).mockResolvedValue(makeEntries(200) as never);

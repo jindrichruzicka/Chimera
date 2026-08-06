@@ -1,6 +1,6 @@
 // electron/preload/__tests__/fixtures/good-contract-import.fixture.ts
 //
-// ESLint import-boundary smoke-test fixture (issue #777, F62) — the allowed control.
+// ESLint import-boundary smoke-test fixture (F62) — the allowed control.
 //
 // Importing the @chimera-engine/simulation contract surface (here the settings schema)
 // from a preload module is the SANCTIONED path: @chimera-engine/simulation is the

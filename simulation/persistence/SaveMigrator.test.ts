@@ -2,13 +2,10 @@
  * simulation/persistence/SaveMigrator.test.ts
  *
  * Tests for SaveMigrator, SaveMigration, SaveNotFoundError, and
- * SaveSchemaTooNewError (issue #121, §4.11).
+ * SaveSchemaTooNewError (§4.11).
  *
  * TDD cycle: these tests are written first — the source files do not yet
  * exist. All tests must be RED before implementation starts.
- *
- * Invariants upheld:
- *   #2 — simulation/ is side-effect-free; no FS or Electron imports here.
  */
 
 import { describe, expect, it } from 'vitest';

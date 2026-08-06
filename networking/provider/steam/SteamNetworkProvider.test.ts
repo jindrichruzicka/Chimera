@@ -12,7 +12,7 @@
  *   6. isBrowsable() returns true
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider
- * Task: F09 / T3 (issue #203)
+ * Task: F09 / T3
  */
 
 import { describe, it, expect } from 'vitest';

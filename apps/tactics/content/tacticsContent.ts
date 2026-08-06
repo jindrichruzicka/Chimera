@@ -14,7 +14,9 @@
  *      a game with no content (or a not-yet-loaded fetch) degrades to defaults.
  *
  * Module boundary (§3): workspace imports are simulation/, ai/ and own files
- * only. Must NOT import from renderer/, electron/, or other apps/ directories.
+ * only. Lint enforces the renderer half (`chimera/no-game-renderer-internals`)
+ * and the electron/networking half (the `no-restricted-imports` zone this path
+ * shares with a game's gameplay tree).
  * Safe to import from both `electron/main` (descriptor composition) and the
  * tactics renderer surfaces (prop interpretation).
  */

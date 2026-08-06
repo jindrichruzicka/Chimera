@@ -12,7 +12,6 @@
  * are exported and before the overflow cap exists in InMemoryActionHistory.
  *
  * Invariants:
- *   #2  — simulation/ has zero imports from renderer/, electron/, games/*, DOM
  *   #43 — No Math.random() or Date.now() — pure data operations only
  *   #45 — ActionHistory bounded by MAX_ACTION_HISTORY_ENTRIES=10_000;
  *          overflow evicts oldest AND emits 'action-history:overflow' warn log

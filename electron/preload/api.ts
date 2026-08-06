@@ -8,12 +8,22 @@
 // The full type surface of `window.__chimera` lives in
 // `electron/preload/api-types.ts`; this module owns only the runtime wiring.
 //
-// Every namespace factory accepts a narrow port interface so they remain
-// unit-testable without a real Electron module. Electron's real
+// Electron's real
 // `ipcRenderer` has a wider, historically-typed signature (event arg,
 // `any[]` rest) than our ports declare. We adapt it once, here, via a
 // small universal `IpcRendererPort` shape that is structurally assignable
 // to each namespace's port type.
+//
+// WHERE CHANNEL NAMES LIVE — the one statement of it, for all of `apis/`.
+// Every channel name an `apis/<n>-api.ts` module uses is declared in that
+// module rather than imported from `simulation/foundation/` — except the
+// `chimera:debug*` channels, which `system-api.ts` imports from the contract
+// package (its header carries the why). A channel name is an internal
+// preload↔main protocol detail: the main-process handler module imports
+// these same constants, so the strings are guaranteed to match on both
+// sides. Keeping them out of the contract
+// package also keeps that package free of a transport concern it has no other
+// reason to know about.
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ChimeraAPI } from './api-types.js';
@@ -65,10 +75,9 @@ const port: IpcRendererPort = {
 };
 
 /**
- * Compose the full {@link ChimeraAPI} from the five namespace factories. Each
- * factory owns its own channel constants (invariant 5); this file's only job
- * is to wire them onto the single shared port and hand the result to
- * `contextBridge`.
+ * Compose the full {@link ChimeraAPI} from the namespace factories. This
+ * file's only job is to wire them onto the single shared port and hand the
+ * result to `contextBridge`.
  */
 const api: ChimeraAPI = {
     game: createGameApi(port),

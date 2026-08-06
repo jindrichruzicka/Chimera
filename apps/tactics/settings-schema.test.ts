@@ -3,7 +3,7 @@
  *
  * TDD tests for TacticsSettings and tacticsSettingsSchema.
  *
- * Architecture reference: §F07/T7 (issue #153), §4.13
+ * Architecture reference: §F07/T7, §4.13
  */
 
 import { describe, it, expect } from 'vitest';
@@ -117,7 +117,7 @@ describe('tacticsSettingsSchema — SettingsMerger smoke test', () => {
     });
 });
 
-// NOTE (F62 #777): the former "SettingsManager round-trip" block was removed when
+// NOTE: the former "SettingsManager round-trip" block was removed when
 // @chimera-engine/electron gained its curated `exports` map. SettingsManager is an
 // electron-main internal (electron/main/settings/SettingsManager.ts) and is not a
 // reachable package subpath (Invariant #5) — a game's tests must not reach across

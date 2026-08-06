@@ -7,7 +7,7 @@
  *   Math.random(), Date.now(), performance.now() must be blocked by ESLint
  *   inside simulation/ and ai/ — not just by convention.
  *
- * Task: F04 / T5 (issue #45)
+ * Task: F04 / T5
  *
  * These tests run ESLint programmatically against known-bad and known-good
  * fixture files to confirm the `no-restricted-syntax` rule fires exactly

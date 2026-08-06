@@ -1,10 +1,10 @@
 /**
  * tactics-ai.spec.ts
  *
- * Issue #730 (F54). E2E for AI players in the Tactics lobby and in a match:
+ * (F54). E2E for AI players in the Tactics lobby and in a match:
  *   - "Add AI" is disabled once the lobby is full (humans + AI === max seats);
  *   - an added AI appears in the AI sub-list with its badge;
- *   - a human join that would overflow auto-removes an AI to make room (#724);
+ *   - a human join that would overflow auto-removes an AI to make room;
  *   - a hosted match seats a lobby-added AI, and the host-side AI drive plays the
  *     AI's whole turn so control returns to the host — in both sequential and
  *     simultaneous (commitment) turn modes.
@@ -41,7 +41,7 @@ test.describe('Tactics AI players', () => {
         await expect(hostLobby.addAiButton()).toBeDisabled();
 
         // A human joining would overflow (2 humans + 3 AI > 4) → the host drops one
-        // AI to seat the human (#724). Both humans end up seated, AI count drops to 2.
+        // AI to seat the human. Both humans end up seated, AI count drops to 2.
         const code = await hostLobby.lobbyCode();
         await clientLobby.joinLobby(code);
         await hostLobby.waitForPlayerCount(2);

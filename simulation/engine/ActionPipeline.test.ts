@@ -4,10 +4,10 @@
  * TDD tests for ActionPipeline (7-stage) and StateReducer.
  *
  * Architecture reference: §4.7
- * Task: F03 / T5 (issue #28)
+ * Task: F03 / T5
  *
  * Tests are written FIRST (red) before ActionPipeline.ts exists.
- * They express all acceptance criteria from issue #28:
+ * They express all acceptance criteria:
  *
  *   1. All 7 stages execute in documented fixed order.
  *   2. StaleActionError thrown when envelope tick ≠ snapshot tick.
@@ -877,7 +877,7 @@ describe('ActionPipeline constructor', () => {
 
 // ─── ContentDatabase forwarding ────────────────────────────────────────────────
 
-describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
+describe('ActionPipeline — ContentDatabase forwarding', () => {
     it('ctx.db is undefined in validate() when no db is provided to the constructor', () => {
         const capturedCtxValues: ReduceContext['db'][] = [];
         const spyDef: ActionDefinition<Record<string, never>> = {
@@ -976,7 +976,7 @@ describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
     });
 });
 
-// ─── Stage 7 — PipelineContext wiring (issue #353, F15-hardening) ────────────
+// ─── Stage 7 — PipelineContext wiring (F15-hardening) ────────────────────────
 
 describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
     const PID2 = toPlayerId('p2');
@@ -1517,7 +1517,7 @@ describe('ActionPipeline — Stage 6: history record for normal actions', () => 
     });
 });
 
-// ─── Stage 7 — undoMeta injection into broadcast snapshots (issue #361) ───────
+// ─── Stage 7 — undoMeta injection into broadcast snapshots ───────────────────
 
 // ─── Post-Stage-5 — turn lifecycle: engine:end_turn clears undo history ──────
 
@@ -1714,11 +1714,11 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
     });
 });
 
-// ─── Issue #36 — hoist dispatch closure; reuse ReduceContext per pipeline ────
+// ─── Hoist dispatch closure; reuse ReduceContext per pipeline ────────────────
 
-describe('ActionPipeline — issue #36: hoist dispatch closure and reuse ReduceContext', () => {
+describe('ActionPipeline: hoist dispatch closure and reuse ReduceContext', () => {
     /**
-     * Acceptance criteria from issue #36:
+     * Acceptance criteria:
      *   1. No new `dispatch` closure is created per `process()` call.
      *   2. No new `ReduceContext` object is created per `process()` call.
      *   3. ctx.rng is correctly re-seeded before each call (correctness guard).

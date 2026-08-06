@@ -20,7 +20,7 @@
  * across any process boundary.
  *
  * Architecture: §10.1
- * Module boundary: must NOT import from renderer/, electron/, networking/, or games/.
+ * Module boundary: must NOT import from renderer/, electron/, networking/, or apps/.
  */
 
 import {
@@ -231,7 +231,7 @@ export interface ArbitrarySnapshotWithHiddenEntity {
  * invariant.
  *
  * Architecture: §10.1
- * Module boundary: must NOT import from renderer/, electron/, networking/, or games/.
+ * Module boundary: must NOT import from renderer/, electron/, networking/, or apps/.
  */
 export function arbitraryGameSnapshotWithHiddenEntity(): Arbitrary<ArbitrarySnapshotWithHiddenEntity> {
     const twoPlayerIds = uniqueArray(arbitraryPlayerId(), { minLength: 2, maxLength: 2 });
@@ -358,7 +358,7 @@ export interface ArbitrarySnapshotWithCommittedEntity {
  * entities with random non-committed visibility scopes are placed at `e1`…`e7`.
  *
  * Architecture: §10.1
- * Module boundary: must NOT import from renderer/, electron/, networking/, or games/.
+ * Module boundary: must NOT import from renderer/, electron/, networking/, or apps/.
  */
 export function arbitraryGameSnapshotWithCommittedEntity(): Arbitrary<ArbitrarySnapshotWithCommittedEntity> {
     const twoPlayerIds = uniqueArray(arbitraryPlayerId(), { minLength: 2, maxLength: 2 });

@@ -7,7 +7,7 @@
  * which turns the per-game contributions injected at bootstrap into the lookup
  * maps the host (`index.ts`) consumes.
  *
- * Any games/* coupling lives in the consumer app composition root
+ * Any apps/* coupling lives in the consumer app composition root
  * `apps/tactics/electron/main.ts`, not here. That root constructs each game's
  * `MainGameContribution` from `@chimera-engine/<game>/*` and injects it into
  * `main(contributions)` at runtime — so this file, and the rest of

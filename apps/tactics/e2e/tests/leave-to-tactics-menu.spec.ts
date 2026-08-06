@@ -60,7 +60,7 @@ test.describe('leave match → lobby → leave lobby returns to the tactics menu
         await readyAndStart(hostLobby, clientLobby, hostWindow, clientWindow);
         await expect(new GamePage(hostWindow).canvas).toBeVisible({ timeout: NAV_TIMEOUT_MS });
 
-        // 4. Host leaves the match → returns to the lobby (#736).
+        // 4. Host leaves the match → returns to the lobby.
         await hostInGameMenu.openViaEscape();
         await hostInGameMenu.confirmLeave();
         await expect(hostLobby.lobbyScreen).toBeVisible({ timeout: NAV_TIMEOUT_MS });

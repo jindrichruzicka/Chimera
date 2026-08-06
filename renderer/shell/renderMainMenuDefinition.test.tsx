@@ -9,7 +9,7 @@
 // Invariants upheld:
 //   #91 — no hardcoded colour/spacing/radius literals; all layout values use var(--ch-*)
 //   #92 — all interactive actions use <Button> from renderer/components/ui/
-//   #94 — no games/* import from shell page components
+//   #94 — no apps/* import from shell page components
 //
 // Tests written first (TDD — red confirmed before implementation existed).
 

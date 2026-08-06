@@ -6,7 +6,7 @@
  * Dependency injection via InMemoryProfileRepository — no real filesystem.
  * TDD: tests written before implementation — confirmed red.
  *
- * Task: F14-T-342 (issue #342)
+ * Task: F14-T-342
  */
 
 import { describe, expect, it } from 'vitest';

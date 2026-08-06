@@ -10,8 +10,8 @@
 // tactics actions/entities/stamina to build a representative mid-match board),
 // so `electron/main` stays free of game-specific test coupling for packaged
 // builds. It uses `performance.now`, which is ESLint-banned in `simulation/**`,
-// `ai/**`, and `games/*/actions/**` (Invariant #43) — but NOT under
-// `games/*/__tests__/`, where a perf measurement is the sanctioned exception.
+// `ai/**`, and `apps/*/actions/**` (Invariant #43) — but NOT under
+// `apps/*/__tests__/`, where a perf measurement is the sanctioned exception.
 //
 // The benchmark drives the SAME `ActionPipeline.process()` that the live host
 // (`HostSessionPipeline.ts`) and `ReplayPlayer` both call (Invariants #42/#70:
@@ -73,7 +73,7 @@ const SEATS: readonly PlayerId[] = [
 /**
  * Effectively-unbounded per-seat stamina pool for the benchmark. The move_unit
  * run hammers one seat's unit ~12k times within a single turn — far past the
- * 3-per-turn cap (#721) — so we seed an ample budget to isolate the heaviest
+ * 3-per-turn cap — so we seed an ample budget to isolate the heaviest
  * reducer's cost from the stamina gate (which has its own unit tests). With no
  * `turnClock` there is no turn-start refresh; current simply never reaches 0
  * across the run. engine:tick/heap runs don't spend stamina, so this is inert

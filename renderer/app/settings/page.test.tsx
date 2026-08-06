@@ -6,7 +6,6 @@
  * Unit tests for the SettingsPage component.
  *
  * Architecture reference: §4.13 — Settings System
- * Task: issue #393
  *
  * Invariant #36: Settings are never read by the simulation core — the page
  *   only reads from `settingsStore`, never dispatches into `ActionPipeline`.
@@ -230,9 +229,9 @@ afterEach(() => {
     useSettingsStore.setState({ settings: {}, activeGameId: null });
 });
 
-// ── AC #1 — Declarative tab layout rendered ──────────────────────────────────
+// ── Declarative tab layout rendered ──────────────────────────────────────────
 
-describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
+describe('SettingsPage — tabbed definition rendering', () => {
     it('omits the redundant page title and keeps settings value captions', async () => {
         await renderSettingsPage();
 
@@ -306,7 +305,7 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
         expect(await screen.findByRole('combobox', { name: 'Language' })).toBeTruthy();
     });
 
-    describe('gameplay.language field → LanguageSelector (#868)', () => {
+    describe('gameplay.language field → LanguageSelector', () => {
         it('renders the declared languages as the Language selector when the game declares ≥2', async () => {
             await renderSettingsPageAndOpenTab('Gameplay');
 
@@ -631,9 +630,9 @@ describe('SettingsPage — token-driven engine strings', () => {
     });
 });
 
-// ── AC #2 — Volume slider dispatches update ───────────────────────────────────
+// ── Volume slider dispatches update ──────────────────────────────────────────
 
-describe('SettingsPage — master volume slider (AC #2)', () => {
+describe('SettingsPage — master volume slider', () => {
     it('marks the master volume input for settings page objects', async () => {
         await renderSettingsPage();
         expect(screen.getByTestId('master-volume')).toBeTruthy();
@@ -688,9 +687,9 @@ describe('SettingsPage — master volume slider (AC #2)', () => {
     });
 });
 
-// ── AC #3 — Reset to defaults button ─────────────────────────────────────────
+// ── Reset to defaults button ─────────────────────────────────────────────────
 
-describe('SettingsPage — reset to defaults (AC #3)', () => {
+describe('SettingsPage — reset to defaults', () => {
     it('marks the reset button for settings page objects', async () => {
         await renderSettingsPage();
         expect(screen.getByTestId('reset-to-defaults')).toBeTruthy();
@@ -832,9 +831,9 @@ describe('SettingsPage — Escape behaviour', () => {
     });
 });
 
-// ── AC #4 — Live update on onChange push ─────────────────────────────────────
+// ── Live update on onChange push ─────────────────────────────────────────────
 
-describe('SettingsPage — onChange push updates form without unmounting (AC #4)', () => {
+describe('SettingsPage — onChange push updates form without unmounting', () => {
     it('updates the masterVolume slider when _applySettings is called', async () => {
         await renderSettingsPage();
 
@@ -870,7 +869,7 @@ describe('SettingsPage — onChange push updates form without unmounting (AC #4)
     });
 });
 
-// ── AC #5 — Engine-wide settings (activeGameId === null) ──────────────────────
+// ── Engine-wide settings (activeGameId === null) ─────────────────────────────
 //
 // Invariant #36: When no game is active, settings updates are dispatched against
 // the reserved '__engine__' gameId. This allows engine-wide settings to be
@@ -878,7 +877,7 @@ describe('SettingsPage — onChange push updates form without unmounting (AC #4)
 //
 // Confirming '__engine__' is an accepted reserved id end-to-end (WARN-3).
 
-describe('SettingsPage — engine-wide settings when activeGameId is null (AC #5)', () => {
+describe('SettingsPage — engine-wide settings when activeGameId is null', () => {
     it('renders form controls even when activeGameId is null', async () => {
         useSettingsStore.setState({
             settings: { __engine__: makeSettings() },
@@ -974,9 +973,9 @@ async function renderWithInputManager(inputManager: InputManager): Promise<void>
     await renderSettingsPageAndOpenTab('Controls');
 }
 
-// ── AC #6 — Controls rebind panel renders game actions only ───────────────────
+// ── Controls rebind panel renders game actions only ──────────────────────────
 
-describe('SettingsPage — controls rebind panel (AC #6)', () => {
+describe('SettingsPage — controls rebind panel', () => {
     it('renders descriptions for game actions and hides engine actions', async () => {
         await renderWithInputManager(makeInputManagerDouble());
         expect(screen.getByText('End current turn')).toBeTruthy();
@@ -1084,9 +1083,9 @@ describe('SettingsPage — controls rebind panel (AC #6)', () => {
     });
 });
 
-// ── AC #7 — Capture mode: listening for a new key ────────────────────────────
+// ── Capture mode: listening for a new key ────────────────────────────────────
 
-describe('SettingsPage — rebind capture mode (AC #7)', () => {
+describe('SettingsPage — rebind capture mode', () => {
     it('pressing Edit enters capture mode — shows "Press a key…" status', async () => {
         await renderWithInputManager(makeInputManagerDouble());
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
@@ -1195,9 +1194,9 @@ describe('SettingsPage — rebind capture mode (AC #7)', () => {
     });
 });
 
-// ── AC #8 — Conflict message and resolution ───────────────────────────────────
+// ── Conflict message and resolution ──────────────────────────────────────────
 
-describe('SettingsPage — conflict handling (AC #8)', () => {
+describe('SettingsPage — conflict handling', () => {
     it('shows conflict message when rebind returns a conflict result', async () => {
         const conflictRebind = vi.fn().mockResolvedValue({
             ok: false,
@@ -1311,9 +1310,9 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
     });
 });
 
-// ── AC #9 — Per-action reset ──────────────────────────────────────────────────
+// ── Per-action reset ─────────────────────────────────────────────────────────
 
-describe('SettingsPage — per-action reset (AC #9)', () => {
+describe('SettingsPage — per-action reset', () => {
     it('clicking Reset for an action calls inputManager.resetBinding() with the correct id', async () => {
         const mockResetBinding = vi.fn().mockResolvedValue(undefined);
         await renderWithInputManager(makeInputManagerDouble({ resetBinding: mockResetBinding }));

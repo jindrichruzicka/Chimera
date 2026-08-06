@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { GAME_TOKENS } from './tokens.js';
 
 /**
- * Guards that the blank template ships the minimal smoke harness (#800): a co-located
+ * Guards that the blank template ships the minimal smoke harness: a co-located
  * unit smoke (manifest descriptor + the one stub screen renders) and exactly one e2e
  * boot-smoke spec, plus the tokenised test config a generated app needs so `pnpm test`
  * and `pnpm test:e2e` are green the moment a game is scaffolded.
@@ -69,7 +69,7 @@ describe('blank template smoke harness', () => {
         expect(buildMain).toContain('sourcemap: true');
     });
 
-    // The Invariant #27 packaged-bundle gate (#902): a scaffolded game's
+    // The Invariant #27 packaged-bundle gate: a scaffolded game's
     // `build-main.ts` and `electron-builder.yml` are adopter-editable, so the
     // template ships its own `verify:packaged-bundle` — a THIN driver over the
     // engine-exported helper (`@chimera-engine/electron/packaged-bundle`), never
@@ -161,7 +161,7 @@ describe('blank template smoke harness', () => {
         expect(scenario.seats[1]?.profile).toBe('p2.json');
     });
 
-    it('ships the electron-builder packaging script + deps in the template package.json (#814)', async () => {
+    it('ships the electron-builder packaging script + deps in the template package.json', async () => {
         const pkg = JSON.parse(await read('package.json')) as {
             scripts: Record<string, string>;
             devDependencies?: Record<string, string>;
@@ -173,7 +173,7 @@ describe('blank template smoke harness', () => {
         expect(pkg.devDependencies?.['electron']).toBeDefined();
     });
 
-    // Bundle-trim contract (#817), mirrored from apps/tactics/electron-builder.test.ts. The
+    // Bundle-trim contract, mirrored from apps/tactics/electron-builder.test.ts. The
     // app's `build:app` esbuild-INLINES every @chimera-engine/* package into dist/electron/main.js
     // + dist/preload/api.js, and electron-builder ALWAYS ships the production `dependencies` tree
     // (a `!node_modules` glob does NOT exclude it — #813). So declaring the engine packages as
@@ -200,7 +200,7 @@ describe('blank template smoke harness', () => {
         },
     );
 
-    it('ships a tokenised electron-builder packaging config mirroring apps/tactics (#814)', async () => {
+    it('ships a tokenised electron-builder packaging config mirroring apps/tactics', async () => {
         const yml = await read('electron-builder.yml');
         // Identity fields are tokenised so each scaffolded game gets its own app identity.
         expect(yml).toContain('appId: com.chimera.__game_kebab__');
@@ -268,13 +268,13 @@ describe('blank template smoke harness', () => {
         ).rejects.toThrow();
     });
 
-    it('declares a per-game icon override in the manifest, resolvable under the asset dir (#814)', async () => {
+    it('declares a per-game icon override in the manifest, resolvable under the asset dir', async () => {
         const manifest = await read('manifest.ts');
         // Renderer-relative path the F67 resolver maps to apps/<gameId>/assets/icons/icon.png.
         expect(manifest).toContain("icon: 'icons/icon.png'");
     });
 
-    it('documents the F69 cursor declaration as a commented-out example, shipping no textures (#849)', async () => {
+    it('documents the F69 cursor declaration as a commented-out example, shipping no textures', async () => {
         const manifest = await read('manifest.ts');
         // The example stays commented out: absent `cursor` ⇒ the plain system cursor,
         // so a fresh scaffold boots unchanged until the game opts in with its own art.
@@ -286,7 +286,7 @@ describe('blank template smoke harness', () => {
         await expect(readdir(path.join(blankTemplateDir, 'assets', 'cursors'))).rejects.toThrow();
     });
 
-    it('forwards the manifest cursor declaration through the shell loader (#849)', async () => {
+    it('forwards the manifest cursor declaration through the shell loader', async () => {
         // The injector reads `LoadedRendererGameShell.cursor`, not the manifest —
         // without this verbatim forward (mirroring the model game's loaders),
         // uncommenting the manifest example would never reach the renderer.
@@ -294,23 +294,23 @@ describe('blank template smoke harness', () => {
         expect(loaders).toContain('cursor: __gameCamel__Manifest.cursor');
     });
 
-    it('declares the engine default logo screen as an ACTIVE manifest field (#857)', async () => {
+    it('declares the engine default logo screen as an ACTIVE manifest field', async () => {
         const manifest = await read('manifest.ts');
-        // Active, not a commented-out example like cursor (#849): every scaffolded
+        // Active, not a commented-out example like cursor: every scaffolded
         // game boots Chimera-branded out of the box; a game opts out by deleting
         // the field (or points the route at its own custom page).
         expect(manifest).toContain("logoScreen: { route: '/logo-screen' }");
         expect(manifest).not.toContain('// logoScreen');
     });
 
-    it('re-exports the engine logo-screen page at the declared route (#857)', async () => {
+    it('re-exports the engine logo-screen page at the declared route', async () => {
         const page = await read('renderer/app/logo-screen/page.tsx');
         expect(page).toContain(
             "export { default } from '@chimera-engine/renderer/shell/logo-screen/page';",
         );
     });
 
-    it('ships the committed engine brand video under renderer/public (#857)', async () => {
+    it('ships the committed engine brand video under renderer/public', async () => {
         // Next serves each host's own public/, so the template commits its own
         // copy (same pattern as chimera-logo-compact.png). A scaffolded game
         // replacing it with its own media owns that asset (Invariant #97).

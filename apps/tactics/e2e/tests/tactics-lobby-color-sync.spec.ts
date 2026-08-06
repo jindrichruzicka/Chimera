@@ -1,7 +1,7 @@
 /**
  * tactics-lobby-color-sync.spec.ts
  *
- * Issue #711 (part of #702 — Customizable Lobby; Architecture §13.8 / §4.37).
+ * (part of #702 — Customizable Lobby; Architecture §13.8 / §4.37).
  *
  * Proves the customizable Tactics lobby syncs end-to-end (F53, owner-authored
  * player colour):

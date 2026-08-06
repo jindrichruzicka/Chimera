@@ -564,7 +564,7 @@ describe('DefaultStateProjector.project()', () => {
         });
     });
 
-    describe('matchId passthrough (host-minted match identity, #820)', () => {
+    describe('matchId passthrough (host-minted match identity)', () => {
         it('matchId is passed through verbatim and identical for every viewer', () => {
             const projector = new DefaultStateProjector(fogRules);
             const snapshot = makeSnapshot({ matchId: 'match-uuid-1' });

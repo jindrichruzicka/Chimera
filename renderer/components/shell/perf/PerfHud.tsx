@@ -14,7 +14,7 @@
  *  - 'use client' — renderer component.
  *  - Named export only (§coding-standards §8.3).
  *  - useInputAction must be called before any conditional return (React hooks rules).
- *  - No imports from simulation/, electron/main/, ai/, or games/* (module boundary §3).
+ *  - No imports from simulation/, electron/main/, ai/, or apps/* (module boundary §3).
  *  - All visual values use var(--ch-*) design tokens (invariants #86, #91).
  */
 

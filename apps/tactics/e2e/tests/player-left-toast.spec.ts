@@ -12,7 +12,7 @@
  * transient on-screen toast, which auto-dismisses after 6s and would race the
  * test. The toast rendering itself is covered by the PlayerLeftToastBridge unit
  * test. A lobby-phase leave (no toast) is covered by the main-side gate plus the
- * existing host/client leave E2E (#743).
+ * existing host/client leave E2E.
  *
  * Base fixture: direct-game.fixture bootstraps both windows directly into a
  * started Tactics match (no lobby UI), so this starts in-match — this spec

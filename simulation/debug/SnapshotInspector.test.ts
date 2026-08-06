@@ -6,10 +6,10 @@
  * Debug Inspector panels.
  *
  * Architecture reference: §4.12 (runtime-debug-layer.md)
- * Task: F47 / T3 (issue #692)
+ * Task: F47 / T3
  *
  * Tests are written FIRST (red) before SnapshotInspector.ts exists. They
- * express the acceptance criteria from issue #692 and the §10.1 scenario:
+ * express the acceptance criteria from and the §10.1 scenario:
  * "In-buffer snapshot returned directly; outside-buffer reconstructed via
  * memento+replay; `diff()` entries correct."
  *

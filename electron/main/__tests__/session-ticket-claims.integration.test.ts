@@ -99,7 +99,7 @@ function makeClient(
     return { manager, joins };
 }
 
-describe('session-ticket claims loop (#822)', () => {
+describe('session-ticket claims loop', () => {
     it('a client that received a matchId-carrying snapshot presents that claim on its next join', async () => {
         const provider = new InMemoryMultiplayerProvider();
         let hostTransport: HostTransport | null = null;
@@ -117,7 +117,7 @@ describe('session-ticket claims loop (#822)', () => {
         await client.manager.joinLobby({ address: hostInfo.sessionId });
         expect(client.joins[0] !== undefined && 'claims' in client.joins[0]).toBe(false);
 
-        // Host sends the client a snapshot carrying the match identity (#820).
+        // Host sends the client a snapshot carrying the match identity.
         const seat = client.manager.getLocalPlayerId();
         expect(seat).not.toBeNull();
         expect(hostTransport).not.toBeNull();

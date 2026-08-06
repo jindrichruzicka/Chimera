@@ -4,7 +4,7 @@
  * Integration tests for the full undo/redo subsystem:
  * ActionPipeline + InMemoryUndoManager + InMemoryActionHistory wired together.
  *
- * Acceptance criteria (issue #362):
+ * Acceptance criteria:
  *   1. Dispatch 3 actions → engine:undo twice → snapshot tick equals state after 1st action
  *   2. engine:redo after double-undo restores state correctly
  *   3. undoMeta.canUndo is true before undo and false after undo history is exhausted
@@ -15,7 +15,6 @@
  * Tests written FIRST (red); implementation in UndoManager.ts.
  *
  * Invariants:
- *   #2  — No imports from renderer/, electron/, games/*, DOM
  *   #43 — No Math.random() or Date.now() — countingReplay is deterministic
  *   #7  — engine:undo/redo enter the pipeline normally via Stage 3 intercept
  */

@@ -5,7 +5,7 @@
  * Tests written first (RED before implementation).
  *
  * Architecture reference: §4.28
- * Task: F44 / T1 (issue #655)
+ * Task: F44 / T1
  *
  * Invariants upheld:
  *   #1  — simulation/ has zero runtime deps on React, DOM, or networking

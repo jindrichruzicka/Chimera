@@ -4,10 +4,10 @@
  * TDD tests for EngineActions reserved action definitions.
  *
  * Architecture reference: §4.2, §4.7
- * Task: F03 / T4 (issue #27)
+ * Task: F03 / T4
  *
  * These tests are written FIRST against the not-yet-existing module.
- * They express the acceptance criteria from the issue:
+ * They express the acceptance criteria:
  *   - engine:tick and engine:end_turn exist with correct type strings
  *   - Both have valid type guards (parsePayload) and stub reducers
  *   - registerEngineActions() registers both without throwing NamespaceCollisionError
@@ -839,7 +839,7 @@ describe('engine:start_game definition', () => {
         expect(snapshot.players).toEqual({});
     });
 
-    // ─── host-authored lobby setup passthrough (#705) ────────────────────────
+    // ─── host-authored lobby setup passthrough ───────────────────────────────
 
     it('parsePayload parses a well-formed host-authored setup', () => {
         expect(
@@ -922,7 +922,7 @@ describe('engine:start_game definition', () => {
         expect(frozen).not.toHaveProperty('setup');
     });
 
-    // ─── host-minted match identity passthrough (#820) ───────────────────────
+    // ─── host-minted match identity passthrough ──────────────────────────────
 
     it('parsePayload parses a well-formed matchId', () => {
         expect(
@@ -1120,7 +1120,7 @@ describe('engine:return_to_lobby definition', () => {
         expect(next.setup).toEqual(setup);
     });
 
-    it('reduce preserves the matchId so post-abandon saves still correlate to the match (#820)', () => {
+    it('reduce preserves the matchId so post-abandon saves still correlate to the match', () => {
         const snapshot = makePlayingSnapshot();
         const next = definition().reduce(snapshot, {}, hostId, stubCtx);
 
@@ -1709,7 +1709,7 @@ describe('individual engine action definition named exports', () => {
     });
 });
 
-// ─── registerEngineActions — generic TState constraint (issue #38) ─────────────
+// ─── registerEngineActions — generic TState constraint ───────────────────────
 
 /**
  * Concrete snapshot subtype used only in the type-level test below.
@@ -1719,7 +1719,7 @@ interface ConcreteSnapshot extends BaseGameSnapshot {
     readonly extra: number;
 }
 
-describe('registerEngineActions — generic TState constraint (issue #38)', () => {
+describe('registerEngineActions — generic TState constraint', () => {
     it('accepts an ActionRegistry<ConcreteSnapshot> without a cast (compile-time)', () => {
         // This is a compile-time assertion: if the function signature is not generic,
         // TypeScript would fail to compile this call.

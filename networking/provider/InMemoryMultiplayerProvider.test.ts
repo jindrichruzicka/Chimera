@@ -3,7 +3,7 @@
  *
  * Written first (red) per TDD mandate — InMemoryMultiplayerProvider.ts does not exist yet.
  *
- * Verifies all acceptance criteria from issue #204:
+ * Verifies all acceptance criteria:
  *   1. InMemoryMultiplayerProvider satisfies MultiplayerProvider structurally
  *   2. Host can send a snapshot via sendSnapshot() and client receives it
  *   3. Client can send an action via sendAction() and host receives it
@@ -14,7 +14,7 @@
  *   8. disconnect() on joined session fires onPlayerLeft on host
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider
- * Task: F09 / T4 (issue #204)
+ * Task: F09 / T4
  */
 
 import { describe, it, expect, vi } from 'vitest';

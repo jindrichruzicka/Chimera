@@ -17,7 +17,7 @@
  * Invariants upheld:
  *   #1  — SNAPSHOT / LOBBY_STATE carry PlayerSnapshot, not GameSnapshot.
  *         GameSnapshot never leaves the host process.
- *   #2  — This module has zero runtime imports from electron/, renderer/,
+ *   This module has zero runtime imports from electron/, renderer/,
  *         or any DOM API. Import-type-only from simulation/ and networking/.
  */
 

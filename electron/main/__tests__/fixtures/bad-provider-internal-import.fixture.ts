@@ -1,6 +1,6 @@
 // electron/main/__tests__/fixtures/bad-provider-internal-import.fixture.ts
 //
-// ESLint import-boundary smoke-test fixture (issue #769).
+// ESLint import-boundary smoke-test fixture.
 //
 // Main-process orchestration (electron/main) must import @chimera-engine/networking
 // through the public barrel interfaces ONLY (MultiplayerProvider / HostTransport

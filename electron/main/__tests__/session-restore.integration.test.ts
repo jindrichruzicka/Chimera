@@ -1,7 +1,7 @@
 /**
  * electron/main/__tests__/session-restore.integration.test.ts
  *
- * Host-level integration tests for the F68 restore protocol (#827): save a
+ * Host-level integration tests for the F68 restore protocol: save a
  * mixed-roster multiplayer game, menu-load it through the
  * `SessionRestoreCoordinator`, and prove the full reconnect sequence over the
  * REAL components — `LobbyManager` + `InMemoryMultiplayerProvider` (shared
@@ -17,7 +17,7 @@
  * by the mocked #823/#826 suites in `index.test.ts`; these tests prove the
  * end-to-end behavior.
  *
- * Scenarios (issue #827):
+ * Scenarios:
  *   S1 — full protocol: save (host + 1 remote + 1 AI) → restore → claimed
  *        rejoin reclaims the exact PlayerId → onGameStart only after the last
  *        human seat fills → tick/stamina/setup/matchId intact.
@@ -197,7 +197,7 @@ function commitAction(
     };
 }
 
-describe('session restore protocol (F68 / #827) — integration', () => {
+describe('session restore protocol (F68) — integration', () => {
     it('S1: full protocol — save (host + remote + AI), restore, claimed rejoin, deferred start, state intact', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
@@ -219,7 +219,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await flushProviderEvents();
         await host.lobbyManager.startGame();
         // Let the started-game broadcast reach A so its session ticket records
-        // the match identity (#822) for the later claimed rejoin.
+        // the match identity for the later claimed rejoin.
         await flushProviderEvents();
 
         const runtime = host.activeRuntime();
@@ -254,7 +254,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await flushProviderEvents();
         expect(host.activeRuntime()).toBeNull();
 
-        // ── Menu-load restore (#823) ───────────────────────────────────────────
+        // ── Menu-load restore ────────────────────────────────────────────────
         const restoreMark = host.events().length;
         const loaded = await host.saveManager.restoreFromSave(QUALIFIED_SLOT);
         await host.coordinator.restoreSession(loaded);
@@ -277,7 +277,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await flushProviderEvents();
 
         // The exact saved PlayerId is reclaimed through the shared
-        // resolveRestoredSeat claims match (#821/#822).
+        // resolveRestoredSeat claims match.
         expect(clientA.joins.at(-1)?.claims).toStrictEqual([{ matchId, playerId: String(seatA) }]);
         expect(clientA.manager.getLocalPlayerId()).toBe(seatA);
         expect(host.coordinator.status()).toStrictEqual({ state: 'complete', matchId });
@@ -296,7 +296,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         expect(startEvents[0]).toStrictEqual({ kind: 'game-start', tick: savedTick });
 
         // Restored state intact: tick, stamina, setup (colors + match
-        // settings), and the stable match identity (#820/#101).
+        // settings), and the stable match identity.
         const restored = host.activeRuntime()!.getSnapshot();
         expect(restored.tick).toBe(savedTick);
         expect(restored.matchId).toBe(matchId);
@@ -323,7 +323,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1c: AI added via addAi() AFTER a remote joins gets a non-colliding slot, so the mixed save restores (#832)', async () => {
+    it('S1c: AI added via addAi() AFTER a remote joins gets a non-colliding slot, so the mixed save restores', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -363,7 +363,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         const savedTick = runtime!.getSnapshot().tick;
 
         // ── Save: the remote must stay `control: 'remote'` and every slotIndex
-        // must be unique (acceptance criteria #1/#2). ───────────────────────────
+        // must be unique. ─────────────────────────────────────────────────────
         const file = runtime!.captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
         await host.saveManager.save(file);
         expect(file.session.seats).toStrictEqual([
@@ -377,7 +377,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await flushProviderEvents();
 
         // ── Restore: the save is accepted (no duplicate-slotIndex rejection) and
-        // completes once the remote reclaims its seat (acceptance criterion #3). ─
+        // completes once the remote reclaims its seat. ────────────────────────
         const loaded = await host.saveManager.restoreFromSave(QUALIFIED_SLOT);
         await host.coordinator.restoreSession(loaded);
 
@@ -398,7 +398,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1d: a remote joining AFTER addAi() skips the AI slot, so the reverse-ordering mixed save restores (#833)', async () => {
+    it('S1d: a remote joining AFTER addAi() skips the AI slot, so the reverse-ordering mixed save restores', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -442,7 +442,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         const savedTick = runtime!.getSnapshot().tick;
 
         // ── Save: the remote must stay `control: 'remote'` at its OWN slot 2 and
-        // every slotIndex must be unique (acceptance criteria #1/#2). ──────────
+        // every slotIndex must be unique. ─────────────────────────────────────
         const file = runtime!.captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
         await host.saveManager.save(file);
         expect(file.session.seats).toStrictEqual([
@@ -456,7 +456,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await flushProviderEvents();
 
         // ── Restore: the save is accepted (no duplicate-slotIndex rejection) and
-        // completes once the remote reclaims its seat (acceptance criterion #3). ─
+        // completes once the remote reclaims its seat. ────────────────────────
         const loaded = await host.saveManager.restoreFromSave(QUALIFIED_SLOT);
         await host.coordinator.restoreSession(loaded);
 
@@ -473,7 +473,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         expect(host.coordinator.status()).toStrictEqual({ state: 'complete', matchId });
         expect(host.activeRuntime()!.getSnapshot().tick).toBe(savedTick);
 
-        // Pin the lobby-phase guard on `syncLiveAgentSlots` (#833): the restored
+        // Pin the lobby-phase guard on `syncLiveAgentSlots`: the restored
         // AI roster is seated from the SAVED seats (the lobby's own agentSlots
         // stay empty), and the remote's reconnect above fired an
         // `onLobbyStateChanged` with an empty `agentSlots` at in-game phase.
@@ -494,7 +494,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1i: an AI added BEFORE a human join gets a non-colliding slot above the human, so the mixed save restores (#836)', async () => {
+    it('S1i: an AI added BEFORE a human join gets a non-colliding slot above the human, so the mixed save restores', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -581,7 +581,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1e: a lobby leave frees + re-packs the host slot ledger so a later join stays contiguous, with no stale seat (#834)', async () => {
+    it('S1e: a lobby leave frees + re-packs the host slot ledger so a later join stays contiguous, with no stale seat', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -677,7 +677,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1f: after a lobby leave, addAi() no longer collides with a stranded human seat (#834)', async () => {
+    it('S1f: after a lobby leave, addAi() no longer collides with a stranded human seat', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -732,7 +732,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1g: an in-match disconnect RETAINS its seat in the ledger (no #821 reconnect regression) (#834)', async () => {
+    it('S1g: an in-match disconnect RETAINS its seat in the ledger (no reconnect regression)', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -756,7 +756,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
 
         // The match is under way; the remote drops. The lobby-phase release must
         // NOT fire — the seat is retained so the remote can reconnect / the save
-        // can be restored (#821/#823). The `phase === lobby` guard is what keeps
+        // can be restored. The `phase === lobby` guard is what keeps
         // this an in-match disconnect rather than a lobby leave.
         await clientA.manager.closeLobby();
         await flushProviderEvents();
@@ -770,7 +770,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1h: a lobby leave keeps an AI seat pinned at its slot, re-packing only the humans (#834, review BLOCK-1)', async () => {
+    it('S1h: a lobby leave keeps an AI seat pinned at its slot, re-packing only the humans', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -826,12 +826,12 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1j: a return-to-lobby (#737) then a lobby leave keeps the AI seat pinned at its slot (#834 WARN-1 / #837)', async () => {
+    it('S1j: a return-to-lobby then a lobby leave keeps the AI seat pinned at its slot', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
         // ── host + one remote + an AI at slot 2 → start the match → RETURN TO
-        // LOBBY (#737). `resetActiveSessionToLobby` re-registers the AI into the
+        // LOBBY. `resetActiveSessionToLobby` re-registers the AI into the
         // host ledger and `engine:return_to_lobby` leaves phase 'lobby'. The
         // remote then leaves that returned lobby: `releaseLobbySeat` must PIN the
         // retained AI at slot 2 — the #834 BLOCK-1 fix exercised via the
@@ -893,7 +893,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1k: removeAi of a host-time AI drops its stale ledger seat, so a later join fills the freed slot (#838)', async () => {
+    it('S1k: removeAi of a host-time AI drops its stale ledger seat, so a later join fills the freed slot', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -936,7 +936,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1l: removeAi of a low AI re-packs a human that sat above it, so a later addAi does not collide (#838)', async () => {
+    it('S1l: removeAi of a low AI re-packs a human that sat above it, so a later addAi does not collide', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -984,7 +984,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1m: removeAi after a return-to-lobby (#737) drops the retained AI seat, with no stale seat (#838)', async () => {
+    it('S1m: removeAi after a return-to-lobby drops the retained AI seat, with no stale seat', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -1032,7 +1032,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1n: an overflowing human join auto-removes a host-time AI and drops its ledger seat (#838)', async () => {
+    it('S1n: an overflowing human join auto-removes a host-time AI and drops its ledger seat', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);
 
@@ -1117,7 +1117,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S1o: an honest AI seated after the checkpoint is SEEDED from the projection, never the raw checkpoint (#887, Invariant #17)', async () => {
+    it('S1o: an honest AI seated after the checkpoint is SEEDED from the projection, never the raw checkpoint (Invariant #17)', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const seeds: { readonly pid: PlayerId; readonly snapshot: PlayerSnapshot }[] = [];
         const host = buildHost(provider, recordingContribution(seeds));
@@ -1561,7 +1561,7 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
-    it('S6: in-session same-match restore rebuilds the AI agents, re-seeding them from the restored checkpoint (#907)', async () => {
+    it('S6: in-session same-match restore rebuilds the AI agents, re-seeding them from the restored checkpoint', async () => {
         const provider = new InMemoryMultiplayerProvider();
         // The AI carries retained host-local state (command scheduler + state
         // machine inside the real tactics policy); `recordingContribution`

@@ -4,12 +4,11 @@
 // Tests for the component-gallery route.
 //
 // Architecture reference: §4.35 — UI Design System, §4.37 — Shell Pages UI Contract
-// Task: issue #607
 //
 // Invariants checked:
 //   #91 — No hardcoded colour/spacing/radius values in inline style props.
 //   #93 — No game token override CSS imported.
-//   #94 — No games/* imports.
+//   #94 — No apps/* imports.
 //
 // Gate: `notFound()` called in production outside E2E mode.
 
@@ -77,9 +76,9 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-// ── AC #1 — Root container ────────────────────────────────────────────────────
+// ── Root container ───────────────────────────────────────────────────────────
 
-describe('ComponentGalleryClient — root container (AC #1)', () => {
+describe('ComponentGalleryClient — root container', () => {
     it('renders the gallery root with data-testid="component-gallery"', () => {
         renderGallery();
         expect(screen.getByTestId('component-gallery')).toBeTruthy();
@@ -107,9 +106,9 @@ describe('ComponentGalleryClient — viewport-filling tabs', () => {
     });
 });
 
-// ── AC #2 — All category tabs ──────────────────────────────────────────────────
+// ── All category tabs ────────────────────────────────────────────────────────
 
-describe('ComponentGalleryClient — category tabs present (AC #2)', () => {
+describe('ComponentGalleryClient — category tabs present', () => {
     it('renders an Actions tab', () => {
         renderGallery();
         expect(screen.getByRole('tab', { name: /actions/i })).toBeTruthy();
@@ -146,9 +145,9 @@ describe('ComponentGalleryClient — category tabs present (AC #2)', () => {
     });
 });
 
-// ── AC #3 — Default tab panel is visible ──────────────────────────────────────
+// ── Default tab panel is visible ─────────────────────────────────────────────
 
-describe('ComponentGalleryClient — default tab (AC #3)', () => {
+describe('ComponentGalleryClient — default tab', () => {
     it('shows the Actions panel by default', () => {
         renderGallery();
         const actionsTab = screen.getByRole('tab', { name: /actions/i });
@@ -156,9 +155,9 @@ describe('ComponentGalleryClient — default tab (AC #3)', () => {
     });
 });
 
-// ── AC #4 — Tab switching works ───────────────────────────────────────────────
+// ── Tab switching works ──────────────────────────────────────────────────────
 
-describe('ComponentGalleryClient — tab switching (AC #4)', () => {
+describe('ComponentGalleryClient — tab switching', () => {
     it('selects the Forms tab when clicked', () => {
         renderGallery();
         const formsTab = screen.getByRole('tab', { name: /forms/i });
@@ -176,9 +175,9 @@ describe('ComponentGalleryClient — tab switching (AC #4)', () => {
     });
 });
 
-// ── AC #5 — Modal open/close within Overlays panel ───────────────────────────
+// ── Modal open/close within Overlays panel ───────────────────────────────────
 
-describe('ComponentGalleryClient — modal interaction (AC #5)', () => {
+describe('ComponentGalleryClient — modal interaction', () => {
     beforeEach(() => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /overlays/i }));
@@ -197,9 +196,9 @@ describe('ComponentGalleryClient — modal interaction (AC #5)', () => {
     });
 });
 
-// ── AC #5b — ToggleButton interaction in Actions panel ──────────────────────
+// ── ToggleButton interaction in Actions panel ────────────────────────────────
 
-describe('ComponentGalleryClient — ToggleButton interaction (AC #5b)', () => {
+describe('ComponentGalleryClient — ToggleButton interaction', () => {
     it('toggles the ToggleButton when clicked', () => {
         renderGallery();
         const btn = screen.getByRole('button', { name: /toggle me/i });
@@ -209,9 +208,9 @@ describe('ComponentGalleryClient — ToggleButton interaction (AC #5b)', () => {
     });
 });
 
-// ── AC #6 — Toggle state in Forms panel ──────────────────────────────────────
+// ── Toggle state in Forms panel ──────────────────────────────────────────────
 
-describe('ComponentGalleryClient — toggle interaction (AC #6)', () => {
+describe('ComponentGalleryClient — toggle interaction', () => {
     it('flips the example Toggle when clicked', () => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
@@ -222,9 +221,9 @@ describe('ComponentGalleryClient — toggle interaction (AC #6)', () => {
     });
 });
 
-// ── AC #6b — Select in Forms panel ──────────────────────────────────────────
+// ── Select in Forms panel ────────────────────────────────────────────────────
 
-describe('ComponentGalleryClient — Select present in Forms panel (AC #6b)', () => {
+describe('ComponentGalleryClient — Select present in Forms panel', () => {
     it('renders a Select combobox in the Forms tab', () => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
@@ -295,9 +294,9 @@ describe('ComponentGalleryClient — Escape returns to the main menu', () => {
     });
 });
 
-// ── AC #7 — Server page gate (notFound) — isGalleryEnabled unit + page integration ─
+// ── Server page gate (notFound) — isGalleryEnabled unit + page integration ─
 
-describe('ComponentGalleryPage server wrapper — gate (AC #7)', () => {
+describe('ComponentGalleryPage server wrapper — gate', () => {
     it('calls notFound() when ComponentGalleryPage renders in the packaged production build', () => {
         vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '1');
 
@@ -345,9 +344,9 @@ describe('ComponentGalleryPage server wrapper — gate (AC #7)', () => {
     });
 });
 
-// ── AC #8 (issue #608) — Actions panel stable test IDs and data-ch-* attributes ───────────────
+// ── Actions panel stable test IDs and data-ch-* attributes ───────────────────
 
-describe('ComponentGalleryClient — Actions section test IDs (issue #608)', () => {
+describe('ComponentGalleryClient — Actions section test IDs', () => {
     it('renders the actions section with data-testid="component-gallery-actions"', () => {
         renderGallery();
         expect(screen.getByTestId('component-gallery-actions')).toBeTruthy();
@@ -428,9 +427,9 @@ describe('ComponentGalleryClient — Iconography block (Actions tab)', () => {
     });
 });
 
-// ── AC #8b (issue #608) — Overlays section stable test IDs ──────────────────
+// ── Overlays section stable test IDs ─────────────────────────────────────────
 
-describe('ComponentGalleryClient — Overlays section test IDs (issue #608)', () => {
+describe('ComponentGalleryClient — Overlays section test IDs', () => {
     beforeEach(() => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /overlays/i }));
@@ -485,9 +484,9 @@ describe('ComponentGalleryClient — Overlays section test IDs (issue #608)', ()
     });
 });
 
-// ── Issue #609 — Containers / Forms / Feedback / Typography panels ─────────────
+// ── Containers / Forms / Feedback / Typography panels ────────────────────────
 
-describe('ComponentGalleryClient — Containers section (issue #609)', () => {
+describe('ComponentGalleryClient — Containers section', () => {
     it('renders the containers section with data-testid="component-gallery-containers"', () => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /containers/i }));
@@ -534,7 +533,7 @@ describe('ComponentGalleryClient — Containers section (issue #609)', () => {
     });
 });
 
-describe('ComponentGalleryClient — Forms section (issue #609)', () => {
+describe('ComponentGalleryClient — Forms section', () => {
     beforeEach(() => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
@@ -597,7 +596,7 @@ describe('ComponentGalleryClient — Forms section (issue #609)', () => {
     });
 });
 
-describe('ComponentGalleryClient — Feedback section (issue #609)', () => {
+describe('ComponentGalleryClient — Feedback section', () => {
     it('renders the feedback section with data-testid="component-gallery-feedback"', () => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /feedback/i }));
@@ -627,7 +626,7 @@ describe('ComponentGalleryClient — Feedback section (issue #609)', () => {
     });
 });
 
-// ── Issue #648 — ToastPanel live notification stack ─────────────────────────
+// ── ToastPanel live notification stack ───────────────────────────────────────
 
 const TOAST_TEST_IDS = [
     '00000000-0000-4000-8000-000000000648',
@@ -643,7 +642,7 @@ const TOAST_BUTTON_CASES = [
     ['Error toast', 'error'],
 ] as const;
 
-describe('ComponentGalleryClient — ToastPanel (issue #648)', () => {
+describe('ComponentGalleryClient — ToastPanel', () => {
     beforeEach(() => {
         let nextIdIndex = 0;
         vi.stubGlobal('crypto', {
@@ -708,7 +707,7 @@ describe('ComponentGalleryClient — ToastPanel (issue #648)', () => {
     });
 });
 
-describe('ComponentGalleryClient — Typography section (issue #609)', () => {
+describe('ComponentGalleryClient — Typography section', () => {
     beforeEach(() => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /typography/i }));
@@ -754,9 +753,9 @@ describe('ComponentGalleryClient — Typography section (issue #609)', () => {
     });
 });
 
-// ── Issue #610 — Tab panels revealed on switch ────────────────────────────────
+// ── Tab panels revealed on switch ────────────────────────────────────────────
 
-describe('ComponentGalleryClient — tab panels revealed on switch (AC #610)', () => {
+describe('ComponentGalleryClient — tab panels revealed on switch', () => {
     it('Actions tab reveals the actions panel', () => {
         renderGallery();
         // Switch away first to make the reveal explicit
@@ -802,9 +801,9 @@ describe('ComponentGalleryClient — tab panels revealed on switch (AC #610)', (
     });
 });
 
-// ── Issue #610 — Form-control state updates ───────────────────────────────────
+// ── Form-control state updates ───────────────────────────────────────────────
 
-describe('ComponentGalleryClient — Slider state update (AC #610)', () => {
+describe('ComponentGalleryClient — Slider state update', () => {
     beforeEach(() => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
@@ -817,7 +816,7 @@ describe('ComponentGalleryClient — Slider state update (AC #610)', () => {
     });
 });
 
-describe('ComponentGalleryClient — NumberInput state update (AC #610)', () => {
+describe('ComponentGalleryClient — NumberInput state update', () => {
     beforeEach(() => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
@@ -831,7 +830,7 @@ describe('ComponentGalleryClient — NumberInput state update (AC #610)', () => 
     });
 });
 
-describe('ComponentGalleryClient — Select state update (AC #610)', () => {
+describe('ComponentGalleryClient — Select state update', () => {
     beforeEach(() => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /forms/i }));

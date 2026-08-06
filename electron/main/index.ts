@@ -1802,7 +1802,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
         // Inject the game lobby-setup resolver from the composition-root registry
         // so the manager can seed host-authored defaults without importing
-        // `games/*` (Invariant #2). Empty registry → no-op seeding.
+        // `apps/*`. Empty registry → no-op seeding.
         resolveLobbySetup,
         // Present this client's remembered seats as JOIN claims.
         // `undefined` when no ticket matches the hosted game — a fresh client

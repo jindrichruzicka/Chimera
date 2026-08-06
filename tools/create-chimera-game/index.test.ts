@@ -121,7 +121,7 @@ describe('scaffoldGame', () => {
             ].join('\n'),
         );
         // The build + e2e tsconfigs carry monorepo-relative refs/paths (workspace-correct); the
-        // standalone emit must neutralise them (#816). JSONC with comments — emitted verbatim then
+        // standalone emit must neutralise them. JSONC with comments — emitted verbatim then
         // rewritten by string-splice.
         await write(
             'templates/blank/tsconfig.build.json',
@@ -480,7 +480,7 @@ describe('scaffoldGame', () => {
                 await readFile(path.join(outputRoot, 'tsconfig.json'), 'utf8'),
             );
             expect(rootTsconfig.compilerOptions.strict).toBe(true);
-            // The standalone root carries the per-game packaging flow too (#814).
+            // The standalone root carries the per-game packaging flow too.
             expect(rootPkg.scripts.package).toContain(
                 'pnpm --filter @chimera-engine/my-game run package',
             );
@@ -543,7 +543,7 @@ describe('scaffoldGame', () => {
             );
             expect(JSON.stringify(appPkg)).not.toContain('workspace:*');
 
-            // The app's build/e2e tsconfigs no longer reference monorepo sibling packages (#816):
+            // The app's build/e2e tsconfigs no longer reference monorepo sibling packages:
             // `tsc` / Playwright resolve the engine from node_modules instead.
             const appTsconfigBuild = await readFile(
                 path.join(result.appDir, 'tsconfig.build.json'),

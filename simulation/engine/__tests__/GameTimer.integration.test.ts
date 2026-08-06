@@ -94,7 +94,7 @@ describe('GameTimer integration — re-entrant dispatch depth guard', () => {
                 ctx,
             ) {
                 // Attempt to call ctx.dispatch() from a game reducer —
-                // this now throws ForbiddenDispatchError (issue #35, Invariant #89).
+                // this now throws ForbiddenDispatchError (Invariant #89).
                 if (isReduceContext(ctx) && ctx.dispatch !== undefined) {
                     const envelope = makeEnvelope('game:recursive_self_dispatch', playerId);
                     return ctx.dispatch(state, envelope);

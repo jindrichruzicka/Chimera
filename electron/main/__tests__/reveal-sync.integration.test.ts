@@ -204,7 +204,7 @@ function revealedPlayers(sent: readonly WireCommitmentReveal[]): PlayerId[] {
     return sent.map((r) => (r.value as { playerId: PlayerId }).playerId);
 }
 
-describe('reveal-sync orchestration (T9 / #729) — integration', () => {
+describe('reveal-sync orchestration — integration', () => {
     it('AC1: reveals are grouped-by-player with attack-committed groups first', () => {
         // hp 2 so the attack does not end the match — both groups reveal.
         const h = buildHarness('commitment', 2);
@@ -306,7 +306,7 @@ describe('reveal-sync orchestration (T9 / #729) — integration', () => {
         expect(commitmentResult).toEqual(sequentialResult);
     });
 
-    it('#730: the completing commit auto-advances the turn AND reveals — no explicit End Turn', () => {
+    it('the completing commit auto-advances the turn AND reveals — no explicit End Turn', () => {
         // The player's single "End Turn" = commit is the only confirmation a turn
         // needs: the second commit completes the set, so the host auto-end-turns and
         // reveals. (The engine `mayEndTurn` any-seat authority is unit-tested in
@@ -327,7 +327,7 @@ describe('reveal-sync orchestration (T9 / #729) — integration', () => {
         expect(h.runtime.getSnapshot().turnNumber).toBe(turnBefore + 1);
     });
 
-    it('#730: two commitment turns in a row — markers expire and stamina refreshes for all', () => {
+    it('two commitment turns in a row — markers expire and stamina refreshes for all', () => {
         const h = buildHarness('commitment', 6);
         // Turn 1: P1 spends ALL THREE stamina (three moves), ending at (2,2); P2
         // commits one move so the turn can complete.

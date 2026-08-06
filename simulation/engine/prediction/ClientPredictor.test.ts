@@ -5,14 +5,14 @@
  * exist yet.
  *
  * Architecture reference: §6 — simulation/prediction/ · Client Prediction
- * Task: F17 (issue #366)
+ * Task: F17
  *
- * Acceptance criteria (from issue #366):
+ * Acceptance criteria:
  *   ✓ applyOptimistic() returns the correctly mutated PlayerSnapshot for a
  *     predictable: true action
  *   ✓ applyOptimistic() throws NonPredictableActionError for a predictable: false
  *     / absent action
- *   ✓ No imports from renderer/, electron/, games/*, or any DOM API
+ *   ✓ No imports from renderer/, electron/, apps/*, or any DOM API
  *   ✓ pnpm typecheck exits 0 on the new file
  *
  * Invariants upheld:

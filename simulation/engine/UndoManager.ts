@@ -15,7 +15,6 @@
  *   - `clearUndoHistory()` is called on `engine:end_turn` (crossTurnUndo default).
  *
  * Invariants upheld:
- *   #2  — simulation/ has zero imports from renderer/, electron/, games/*, DOM.
  *   #7  — engine:undo and engine:redo enter the pipeline normally via Stage 3
  *          (intercept). There is no side-door undo execution path.
  *   #43 — replay callback must not call Math.random or Date.now; this is the

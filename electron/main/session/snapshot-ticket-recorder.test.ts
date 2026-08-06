@@ -1,7 +1,7 @@
 /**
  * electron/main/session/snapshot-ticket-recorder.test.ts
  *
- * Unit tests for createSnapshotTicketRecorder (F68 #822): records a session
+ * Unit tests for createSnapshotTicketRecorder: records a session
  * ticket from the first matchId-carrying client snapshot, dedupes repeats,
  * re-records on match/seat change, and never lets a store failure escape
  * into the live snapshot egress path.

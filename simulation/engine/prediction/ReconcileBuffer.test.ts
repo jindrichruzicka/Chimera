@@ -5,9 +5,9 @@
  * not exist yet.
  *
  * Architecture reference: §6 — simulation/prediction/ · Client Prediction
- * Task: F18 (issue #367)
+ * Task: F18
  *
- * Acceptance criteria (from issue #367):
+ * Acceptance criteria:
  *   ✓ reconcile() returns authoritative snapshot when buffer is empty
  *   ✓ reconcile() replays one unconfirmed action (tick > snapshot.tick) and
  *     returns the predicted snapshot
@@ -16,7 +16,7 @@
  *   ✓ clear() empties the buffer; subsequent reconcile() returns snapshot
  *     unchanged
  *   ✓ pendingCount reflects accurate queue depth after enqueue/reconcile/clear
- *   ✓ No imports from renderer/, electron/, games/*, or any DOM API
+ *   ✓ No imports from renderer/, electron/, apps/*, or any DOM API
  *   ✓ pnpm typecheck exits 0 on the new file
  *
  * Invariants upheld:

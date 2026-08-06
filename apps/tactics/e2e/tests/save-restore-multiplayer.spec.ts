@@ -1,5 +1,5 @@
 /**
- * F68 — save-restore-multiplayer.spec.ts (issue #830)
+ * F68 — save-restore-multiplayer.spec.ts
  * §13 E2E Testing (Playwright) · §4.11 Save/Load & Persistence · §4.14 Multiplayer Provider
  *
  * Covers the multiplayer save → restore lifecycle across two Electron
@@ -37,7 +37,7 @@
  *      save again (the missing client parks it in waiting), and Cancel
  *      dismisses the overlay, unwinds the hosted session (board unmounts),
  *      shows the "Restore cancelled" toast, and lands the host back on the
- *      /saves screen with ?gameId preserved (#842).
+ *      /saves screen with ?gameId preserved.
  *   9. Abort coverage — Escape, in the SAME host instance: the post-cancel
  *      /saves screen is live (no #843 snapshot-cache bounce back to the dead
  *      /game), so the next load starts right from it; Escape aborts through
@@ -438,7 +438,7 @@ test.describe('Save / restore — multiplayer', () => {
         // 8. Abort coverage — Cancel. With the client gone again, re-loading
         //    the save parks in waiting; Cancel dismisses the overlay, unwinds
         //    the hosted session (the restored board unmounts), toasts, and
-        //    lands the host back on /saves with ?gameId preserved (#842).
+        //    lands the host back on /saves with ?gameId preserved.
         await expect
             .poll(() => connectedPlayerIds(hostWindow), { timeout: NAV_TIMEOUT_MS })
             .not.toContain(clientId);

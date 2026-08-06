@@ -1,7 +1,7 @@
 /**
  * tactics-commitment.spec.ts
  *
- * Issue #730 (F54) — the HEADLINE spec. Drives the commitment-scheme battle mode
+ * (F54) — the HEADLINE spec. Drives the commitment-scheme battle mode
  * end-to-end across a real host+client match:
  *   - the host enables the Battle Setup toggle; it syncs to the client (read-only)
  *     and is carried into the match as `setup.matchSettings.turnMode='commitment'`;

@@ -1,7 +1,7 @@
 /**
  * Unit tests for simulation/projection/CommitmentScheme.ts.
  *
- * Written first (TDD red) per issue #439.
+ * Written first (TDD red) per
  */
 
 import { createHash } from 'node:crypto';

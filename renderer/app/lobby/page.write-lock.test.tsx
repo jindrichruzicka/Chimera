@@ -15,7 +15,7 @@ vi.mock('next/navigation', () => ({
 
 // The lobby page resolves the active game's shell via the registry; stub it with
 // an empty shell so these write-lock tests exercise the engine-default panel and
-// never trigger a real `games/*` dynamic import.
+// never trigger a real `apps/*` dynamic import.
 vi.mock('../../game/rendererGameRegistry', () => ({
     loadRendererGameShell: () => Promise.resolve({}),
 }));

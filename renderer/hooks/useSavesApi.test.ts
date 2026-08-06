@@ -6,7 +6,6 @@
  * Unit tests for the useSavesApi hook and getSavesBridge factory.
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #374 (WARN-1 address)
  */
 
 import { renderHook } from '@testing-library/react';

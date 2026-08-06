@@ -5,7 +5,7 @@
  * `AgentManager` (its production `AgentCoordinator` implementation).
  *
  * Relocated from `electron/main/runtime/SimulationHost.test.ts` when the host
- * moved into `@chimera-engine/simulation/host` (issue #760, feature F58). The host
+ * moved into `@chimera-engine/simulation/host` (feature F58). The host
  * itself can no longer live with a test that imports `@chimera-engine/ai`
  * (`simulation/**` is the zero-dependency leaf), so the real-collaborator
  * assertions live here in `ai/`, where importing both the host and the
@@ -286,7 +286,7 @@ describe('SimulationHost.registerAgent', () => {
 // Callers (electron/main/index.ts onSessionHosted) must honour this ordering so
 // AI agents receive onGameStart before any tick events.
 //
-// Acceptance criterion: Issue #416 — "Unit tests for SimulationHost cover the
+// Acceptance criterion: "Unit tests for SimulationHost cover the
 // ordering: register agents → call onGameStart → begin tick loop".
 
 describe('SimulationHost ordering contract: register → onGameStart → afterTick', () => {

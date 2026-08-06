@@ -7,7 +7,7 @@
  *   - Client joins via the host-issued lobby code (joinLobby())
  *   - Both windows show playerList with two entries (waitForPlayerCount(2))
  *   - Both windows expose data-status="connected"
- *   - Leave Lobby: host and client scenarios (issue #487)
+ *   - Leave Lobby: host and client scenarios
  *
  * Invariant #6: Network messages are validated before touching the simulation —
  * the lobby join flow must complete the full WebSocket handshake.

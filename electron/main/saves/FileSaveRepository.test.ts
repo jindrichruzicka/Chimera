@@ -149,7 +149,7 @@ describe('FileSaveRepository — integration', () => {
     });
 });
 
-// ── Path traversal hardening tests (BLOCK-1 / issue #128) ────────────────────
+// ── Path traversal hardening tests ───────────────────────────────────────────
 
 describe('FileSaveRepository — path traversal hardening', () => {
     let tmpDir: string;
@@ -226,7 +226,7 @@ describe('FileSaveRepository — path traversal hardening', () => {
     });
 });
 
-// ── Integrity checksum tests (issue #134) ─────────────────────────────────────
+// ── Integrity checksum tests ─────────────────────────────────────────────────
 
 describe('FileSaveRepository — integrity checksum', () => {
     let tmpDir: string;
@@ -318,7 +318,7 @@ describe('FileSaveRepository — integrity checksum', () => {
         await expect(repo.load('tactics/autosave')).resolves.toMatchObject(file);
     });
 
-    it('a v5 save with a valid stored checksum still verifies after the v5→v6 session backfill (#820)', async () => {
+    it('a v5 save with a valid stored checksum still verifies after the v5→v6 session backfill', async () => {
         const repo = makeRepo(tmpDir);
 
         // Build the exact on-disk v5 shape: no `session`, schemaVersion 5, and a

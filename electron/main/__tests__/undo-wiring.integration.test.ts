@@ -17,7 +17,6 @@
  * `electron/main/runtime/HostSessionPipeline.ts`.
  *
  * Invariants verified:
- *   #2  — No imports from renderer/, games/*, DOM APIs
  *   #7  — engine:undo enters the pipeline via Stage 3 intercept when wired
  *   #43 — replay callback is pure (no Math.random(), no Date.now())
  */

@@ -4,7 +4,7 @@
  * Unit tests for AgentManager — tick fan-out coordinator.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F22 (issue #413)
+ * Task: F22
  *
  * Invariants upheld:
  *   #17 — AgentManager.tickAll() calls projector.project() for each agent;

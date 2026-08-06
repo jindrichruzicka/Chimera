@@ -7,7 +7,6 @@
  * Uses jsdom environment (no real Electron IPC).
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #373
  *
  * Invariant #1: GameSnapshot never leaves the main process — saveStore holds
  * only SaveSlotMeta (metadata), never GameSnapshot or SaveFile content.
@@ -248,7 +247,7 @@ describe('saveStore.dismissRestore()', () => {
     });
 });
 
-describe('saveStore — restore-abort exit marker (#842)', () => {
+describe('saveStore — restore-abort exit marker', () => {
     it('initialises with restoreAbortPending: false', () => {
         const store = createSaveStore();
         expect(store.getState().restoreAbortPending).toBe(false);

@@ -12,7 +12,7 @@
  * All hooks are pure and game-owned: the host passes them generic engine values
  * (`ActionEnvelope`, `BaseGameSnapshot`, `StagedReveals`) and the game narrows
  * the opaque `value` to its own shape. Keeping this interface in `simulation/`
- * (importable by both `games/*` and `electron/main`) avoids a `games → electron`
+ * (importable by both `apps/*` and `electron/main`) avoids a `games → electron`
  * import while letting the host stay game-agnostic.
  *
  * Architecture: §4.6/§8 — State Projection · docs/security-trust/tactics-commitment-battle-mode.md

@@ -1,5 +1,5 @@
 /**
- * Hardware-cursor placeholder-overwrite contract (F69 #848).
+ * Hardware-cursor placeholder-overwrite contract.
  *
  * The committed cursor PNGs are deliberate placeholders: the contract is
  * that overwriting one with different art — with ZERO code change — changes

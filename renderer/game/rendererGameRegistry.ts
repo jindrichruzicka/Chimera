@@ -23,7 +23,7 @@ import { applyGameCursorOverrides } from './gameCursorStyles';
 /**
  * A game's contributed UI translations, forwarded verbatim through the renderer
  * shell registration. This is the boundary-safe path for a game's per-locale
- * bundles to reach the {@link I18nProvider}: no `renderer/` → `games/*`/`apps/*`
+ * bundles to reach the {@link I18nProvider}: no `renderer/` → `apps/*`
  * static import (Invariants #80/#94) — the data enters only as registration
  * payload, exactly like {@link LoadedRendererGameShell.cursor}.
  *
@@ -50,7 +50,7 @@ export interface LoadedRendererGameShell {
      * Optional game-provided lobby screen. When present, the lobby page renders
      * it in place of the engine-default `ActiveLobbyPanel`, passing the
      * {@link GameLobbyScreenProps} contract. Loaded via this registry only — the
-     * lobby page never imports `games/*` directly (Invariant #94).
+     * lobby page never imports `apps/*` directly (Invariant #94).
      */
     readonly LobbyScreen?: ComponentType<GameLobbyScreenProps>;
     readonly fonts?: readonly GameFontFace[];

@@ -6,7 +6,7 @@
  *
  * TDD: tests written before implementation — confirmed red.
  *
- * Task: F45 / T02 (issue #680)
+ * Task: F45 / T02
  *
  * The relay is pure policy + routing: it consumes an injected clock (`now`) and
  * a fake `teamOf` resolver, reads connected players from a real PlayerDirectory,

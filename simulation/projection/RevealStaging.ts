@@ -20,7 +20,6 @@
  *
  * Invariants upheld:
  *   #1 — simulation/ has zero runtime dependencies on React, DOM, or networking.
- *   #2 — pure store; the host stays game-agnostic (no games/* dependency).
  */
 
 import type { PlayerId } from '../engine/types.js';

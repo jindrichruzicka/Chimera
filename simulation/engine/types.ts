@@ -243,8 +243,8 @@ export interface BaseGameSnapshot {
      * distinct from `PlayerSnapshot.commitments` (the separately-projected envelope
      * hash map peers see). The player's actual buffered actions are NEVER stored
      * here either — they stay host-local in the reveal-staging store (Invariants
-     * #3/#8). Integer values only (#42/#44). Absent for games/turn modes that do
-     * not use commitments.
+     * #3/#8). Integer values only (#42/#44). Absent for games or turn modes that
+     * do not use commitments.
      */
     readonly committedTurns?: Readonly<Record<PlayerId, number>>;
 }

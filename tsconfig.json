@@ -75,6 +75,7 @@
         // sibling game that does not exist).
         "apps/*/simulation/__tests__/fixtures/**",
         "apps/*/ai/__tests__/fixtures/**",
+        "apps/*/content/__tests__/fixtures/**",
         // Each app's SOURCE is type-checked here (its .ts are co-included so the
         // composition root apps/<game>/electron/main.ts resolves @chimera-engine/<game>),
         // but its tsc -b dist/ emit must be excluded or the emitted .d.ts

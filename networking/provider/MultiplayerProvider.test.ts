@@ -10,10 +10,10 @@
  *   2. Objects satisfying each interface can be constructed (structural compatibility)
  *   3. SideChannelMessage discriminated union is exhaustive and correct
  *   4. Invariant #2: no simulation/ import required for networking to work
- *   5. BrowsableProvider and isBrowsable() narrowing helper (T2 / issue #202)
+ *   5. BrowsableProvider and isBrowsable() narrowing helper (T2)
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider
- * Task: F09 / T1 (issue #201), T2 (issue #202)
+ * Task: F09 / T1, T2
  */
 
 import { describe, it, expect } from 'vitest';

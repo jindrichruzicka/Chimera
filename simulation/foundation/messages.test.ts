@@ -105,7 +105,7 @@ describe('simulation/foundation/messages — ClientMessage', () => {
         expect(msg.type).toBe('LEAVE');
     });
 
-    it('SPECTATE_TARGET_UPDATE message carries the followed target player id (#876)', () => {
+    it('SPECTATE_TARGET_UPDATE message carries the followed target player id', () => {
         const msg: ClientMessage = { type: 'SPECTATE_TARGET_UPDATE', targetPlayerId: 'p2' };
         expect(msg.type).toBe('SPECTATE_TARGET_UPDATE');
         expect(msg.targetPlayerId).toBe('p2');
@@ -126,7 +126,7 @@ describe('simulation/foundation/messages — ServerMessage', () => {
         expect(msg.type).toBe('WELCOME');
     });
 
-    it('WELCOME message may declare the joiner handshake role (#876)', () => {
+    it('WELCOME message may declare the joiner handshake role', () => {
         const msg: ServerMessage = {
             type: 'WELCOME',
             playerId: toPlayerId('p1'),
@@ -252,7 +252,7 @@ describe('simulation/foundation/messages — isClientMessage type guard', () => 
         expect(isClientMessage({ type: 'LEAVE' })).toBe(true);
     });
 
-    it('returns true for SPECTATE_TARGET_UPDATE (#876)', () => {
+    it('returns true for SPECTATE_TARGET_UPDATE', () => {
         expect(isClientMessage({ type: 'SPECTATE_TARGET_UPDATE', targetPlayerId: 'p2' })).toBe(
             true,
         );

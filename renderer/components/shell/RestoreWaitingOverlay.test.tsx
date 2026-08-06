@@ -6,7 +6,6 @@
  * Unit tests for the RestoreWaitingOverlay shell component.
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #828
  */
 
 import '@testing-library/jest-dom/vitest';
@@ -186,7 +185,7 @@ describe('RestoreWaitingOverlay — abort path', () => {
         expect(queue[0]).toMatchObject({ severity: 'info', title: 'Restore cancelled' });
     });
 
-    it('Cancel raises the abort-exit marker so the game page routes the host off the dead /game (#842)', () => {
+    it('Cancel raises the abort-exit marker so the game page routes the host off the dead /game', () => {
         render(<RestoreWaitingOverlay />);
 
         act(() => {

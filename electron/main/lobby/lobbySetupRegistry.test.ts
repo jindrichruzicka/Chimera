@@ -23,7 +23,7 @@ const SAMPLE_CONTENT: GameContent = {
 
 // A generic descriptor + injected builder map. The package names no game: the
 // concrete builder arrives from the consumer composition root via
-// `MainGameContribution.lobbySetup`, derived by the host into this map (#789).
+// `MainGameContribution.lobbySetup`, derived by the host into this map.
 const SAMPLE_SETUP: GameLobbySetup = {
     maxPlayers: 4,
     matchSettingsDefaults: {},

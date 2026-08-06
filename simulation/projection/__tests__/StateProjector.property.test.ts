@@ -29,7 +29,7 @@
  *
  * Invariants: #8, #17
  * Architecture: §10.1
- * Module boundary: must NOT import from renderer/, electron/, networking/, or games/.
+ * Module boundary: must NOT import from renderer/, electron/, networking/, or apps/.
  */
 
 import { assert, property } from 'fast-check';
@@ -288,7 +288,7 @@ describe('fog-of-war (targeted, T03): known-invisible entity is key-absent from 
                     }
 
                     // Defence in depth: also assert no owner-only marker fields
-                    // leaked onto any entity in this snapshot (AC #449).
+                    // leaked onto any entity in this snapshot.
                     assertNoLeakedFields(projected, viewerId, allPlayerIds);
                 }
             }),
@@ -429,9 +429,9 @@ describe('committed-scope invariant (F29/WARN-2): committed raw values appear on
     });
 });
 
-// ─── setup passthrough invariant (#705) ───────────────────────────────────────
+// ─── setup passthrough invariant ─────────────────────────────────────────────
 
-describe('setup passthrough (#705): host-authored lobby config crosses verbatim to every viewer', () => {
+describe('setup passthrough: host-authored lobby config crosses verbatim to every viewer', () => {
     /**
      * Property: when the full snapshot carries a `setup` (public host config),
      * `project()` emits the SAME object reference to every viewer — no masking,

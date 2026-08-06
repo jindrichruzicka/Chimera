@@ -10,7 +10,7 @@
  * function fake.
  *
  * Architecture reference: §4.11
- * Task: F18 / issue #372
+ * Task: F18 /
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';

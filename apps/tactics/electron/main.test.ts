@@ -50,14 +50,14 @@ describe('tactics composition root', () => {
         expect(tacticsContribution.manifest.realtime).toBe(false);
     });
 
-    it('contributes the tactics content schemas for the host content loader (#788)', () => {
+    it('contributes the tactics content schemas for the host content loader', () => {
         expect(tacticsContribution.contentSchemas).toBeDefined();
         expect(Object.keys(tacticsContribution.contentSchemas ?? {})).toEqual(
             expect.arrayContaining(['player-colors', 'board-colors']),
         );
     });
 
-    it('contributes a lobby-setup builder that builds the tactics GameLobbySetup (#789)', () => {
+    it('contributes a lobby-setup builder that builds the tactics GameLobbySetup', () => {
         const content: GameContent = {
             'player-colors': [
                 { id: 'blue', name: 'Blue', hex: '#2563eb', order: 0 },
@@ -106,7 +106,7 @@ describe('tactics composition root', () => {
         ).toBe(chosen);
     });
 
-    it('contributes a tactics AI state that emits tactics actions (issue #725)', () => {
+    it('contributes a tactics AI state that emits tactics actions', () => {
         const ai = toPlayerId('ai-x');
         const enemy = toPlayerId('enemy-x');
         const myUnit = entityId('u-ai');

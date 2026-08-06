@@ -13,7 +13,6 @@
  *     written to `ProfileRepository` (invariant #60).
  *
  * Invariants upheld:
- *   #2  — zero imports from renderer/, games/*, or any DOM API.
  *   #60 — Remote clients' profiles never reach ProfileRepository.
  *   #61 — PlayerDirectory trusts its callers to only pass sanitised profiles.
  */

@@ -6,7 +6,7 @@
  * Electron launch; no game module imports.
  *
  * Invariant #93: no game token override CSS imported here.
- * Invariant #94: no games/* imports.
+ * Invariant #94: no apps/* imports.
  */
 
 import { describe, expect, it } from 'vitest';

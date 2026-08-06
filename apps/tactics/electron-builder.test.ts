@@ -3,8 +3,8 @@ import path from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-// Locks the contract of the apps/tactics electron-builder packaging config (issue #813,
-// M9 / F67 — the repo's first distributable-app build config). Like the release/e2e
+// Locks the contract of the apps/tactics electron-builder packaging config
+// (M9 / F67 — the repo's first distributable-app build config). Like the release/e2e
 // workflow tests, it reads the YAML as text and asserts shape rather than parsing it
 // (the repo intentionally carries no YAML-parser dependency). This is the executable
 // record of the packaging contract: the path-math layout the host's resolveRuntimePaths
@@ -26,7 +26,7 @@ describe('apps/tactics electron-builder.yml packaging config', () => {
 
     // #814 tokenisation seam: app-identity fields each on their own top-level line so the
     // blank-template mirror can swap them without touching the rest of the config.
-    it('declares isolated appId and productName identity fields (tokenisation seam, #814)', () => {
+    it('declares isolated appId and productName identity fields (tokenisation seam)', () => {
         expect(content).toMatch(/^appId:\s*\S+/m);
         expect(content).toMatch(/^productName:\s*\S+/m);
     });
@@ -124,7 +124,7 @@ describe('apps/tactics electron-builder.yml packaging config', () => {
     });
 });
 
-// Bundle-trim contract (issue #817): electron-builder ALWAYS ships the production
+// Bundle-trim contract: electron-builder ALWAYS ships the production
 // `dependencies` tree (a `files: !node_modules/**` glob does NOT exclude it, as #813
 // discovered). But `build:app` esbuild-bundles the `@chimera-engine/*` engine code straight
 // into dist/electron/main.js + dist/preload/api.js, so at runtime the packaged app needs
@@ -133,7 +133,7 @@ describe('apps/tactics electron-builder.yml packaging config', () => {
 // so electron-builder collects nothing to copy. They stay in `devDependencies` so the pnpm
 // workspace symlinks (esbuild resolution, `tsc -b` references, the build-time icon file set)
 // still resolve. This guard locks the trim without running a multi-minute package.
-describe('apps/tactics package.json — bundle-trim contract (#817)', () => {
+describe('apps/tactics package.json — bundle-trim contract', () => {
     const ENGINE_PACKAGES = [
         '@chimera-engine/simulation',
         '@chimera-engine/ai',

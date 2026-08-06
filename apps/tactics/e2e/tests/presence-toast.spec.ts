@@ -48,7 +48,7 @@ async function rosterIds(page: Page): Promise<readonly string[]> {
     });
 }
 
-test.describe('Opponent presence (#687)', () => {
+test.describe('Opponent presence', () => {
     test('host emits a "disconnected" presence event when the opponent client drops', async ({
         clientApp,
         clientWindow,

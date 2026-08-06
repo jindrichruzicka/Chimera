@@ -378,29 +378,49 @@ if [[ -d ai ]]; then
 fi
 
 # ─── Check 12: no game-specific tokens in game-agnostic packages (inv 107) ────
-# ai/ (and shared/, when present) are game-agnostic — they must not DEFINE
-# per-game gameplay tokens (issue #765):
+# ai/ and simulation/ are game-agnostic — they must not DEFINE per-game
+# gameplay tokens:
 #   * per-game constants — <GAME>_* (e.g. TACTICS_MAX_STAMINA); and
 #   * per-game action-string namespaces — '<gameId>:*' (e.g. 'tactics:move_unit').
-# The reserved engine: namespace (Invariant #11) is the ONLY namespace allowed
-# to cross the package cut, so it is excluded below.
+# The reserved engine: namespace (Invariant #11) is never a game namespace, so
+# it is suppressed below — alongside two more non-game prefixes explained in
+# the simulation/ paragraph further down.
 #
 # The action-namespace half is generic: any quoted '<gameId>:<action>' literal
 # whose namespace is not engine: is flagged, so a second game needs no edit
 # here. The constant half stays keyed to known game prefixes (TACTICS_) — there
 # is no false-positive-free way to detect "a game's constant" generically — so
-# extend the alternation as games are added. shared/ was absorbed into
-# @chimera-engine/simulation (#758) and is currently a no-op; it is kept for parity
-# with the invariant text should the directory reappear.
-# networking/ is game-agnostic too but is intentionally NOT guarded here (#768):
+# extend the alternation as games are added.
+#
+# The guarded dirs are the two game-agnostic packages the invariant names.
+# `simulation/` absorbed the former `shared/` package, so it inherited that
+# half of the guard; reaching it needed two suppressions, both for literals the
+# heuristic cannot tell from a `<gameId>:` namespace:
+#   * `node:` — builtin import specifiers (`node:crypto`). The same class that
+#     keeps networking/ out, below.
+#   * `chimera:` — the app's own preload↔main IPC channel prefix
+#     (`chimera:debug`), sibling to the reserved `engine:` namespace.
+# `dist/` is excluded because both packages build there and a compiled copy of a
+# guarded source would report the same literal twice.
+#
+# networking/ is game-agnostic too but is intentionally NOT guarded here:
 # the transport layer legitimately contains colon-namespaced NON-game literals —
-# `node:` builtin import specifiers and `host:port`-style address formats — that
-# this heuristic cannot distinguish from a `<gameId>:<action>` namespace, so
-# adding it produces false positives. Its game-agnosticism is enforced
-# structurally by Check 14 (containment) and the import-direction Checks 2/3/4.
+# `node:` builtin import specifiers and `host:port`-style address formats. The
+# `host:port` half has no suppression that would not also hide a real game
+# namespace, so the dir stays out. Its game-agnosticism is enforced structurally
+# by Check 14 (containment) and the import-direction Checks 2/3/4.
 # False-positive suppression mirrors check_grep (comments/tests/fixtures/node_modules).
 GAME_TOKEN_RE="(TACTICS_|['\"][a-z][a-z0-9_]*:[a-z])"
-for token_guard_dir in ai shared; do
+# Namespaces that are NOT a game: the reserved engine: cut (Invariant #11), the
+# app's own chimera: IPC prefix, and node: builtin specifiers. Suppressed
+# per-TOKEN, never per-line — a line-scoped filter would drop
+# `{ debug: 'chimera:debug', move: 'tactics:move_unit' }` whole, and an object
+# literal mapping channel constants is exactly the shape these packages hold.
+# The opening-quote anchor is load-bearing: without it, a quoted game namespace
+# whose name merely ends in a suppressed word ('myengine:') has its tail blanked
+# from inside the quotes and escapes detection.
+ENGINE_NAMESPACE_ALT="engine|chimera|node"
+for token_guard_dir in ai simulation; do
     [[ -d "${token_guard_dir}" ]] || continue
     while IFS= read -r match; do
         violation "107" "${match}"
@@ -408,10 +428,11 @@ for token_guard_dir in ai shared; do
         grep -rnE \
             --include="*.ts" --include="*.tsx" --include="*.js" \
             --exclude="*.test.ts" --exclude="*.test.tsx" \
-            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" --exclude-dir="dist" \
             "${GAME_TOKEN_RE}" "${token_guard_dir}" 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
-        | grep -vE "['\"]engine:" \
+        | awk -v sup="['\"](${ENGINE_NAMESPACE_ALT}):" -v tok="${GAME_TOKEN_RE}" \
+            '{ probe = $0; gsub(sup "[a-zA-Z0-9_:./-]*", "", probe); if (probe ~ tok) print }' \
         || true
     )
 done

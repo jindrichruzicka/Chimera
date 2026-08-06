@@ -5,10 +5,10 @@
  * snapshots backing the Debug Inspector timeline.
  *
  * Architecture reference: §4.12 (runtime-debug-layer.md)
- * Task: F47 / T1 (issue #690)
+ * Task: F47 / T1
  *
  * Tests are written FIRST (red) before SnapshotRingBuffer.ts exists.
- * They express the acceptance criteria from issue #690 and the §10.1 test
+ * They express the acceptance criteria from and the §10.1 test
  * scenario: "250 entries into capacity-200 buffer; last 200 retrievable;
  * onRecord callback fires."
  *

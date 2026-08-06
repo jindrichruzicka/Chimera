@@ -1,7 +1,7 @@
 /**
  * electron/main/saves/CompressedSaveSerializer.test.ts
  *
- * Tests for the async CompressedSaveSerializer (issue #137, §4.11).
+ * Tests for the async CompressedSaveSerializer (§4.11).
  *
  * TDD cycle: written first — RED before the source file exists.
  *

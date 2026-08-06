@@ -1,9 +1,8 @@
 /**
- * electron/main/crash-reporter.safeSerialise.test.ts
+ * electron/main/logging/crash-reporter.safeSerialise.test.ts
  *
- * Unit tests for the safeSerialiseSnapshot helper (Acceptance Criteria from
- * issue #184 — WARN-7: Guard crash dump snapshot serialisation against
- * circular refs and oversized payloads).
+ * Unit tests for the safeSerialiseSnapshot helper: guard crash dump snapshot
+ * serialisation against circular refs and oversized payloads.
  *
  * safeSerialiseSnapshot is a pure function with no I/O; tests need no mocks.
  */

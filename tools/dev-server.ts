@@ -7,8 +7,6 @@
  * Architecture reference: §4.32 — Development Multiplayer Harness
  *
  * Invariants upheld:
- *   #2  — Lives in `tools/`; does NOT import from `renderer/`, `simulation/`,
- *          `ai/`, or any `games/` module.
  *   #77 — Harness flag guard is enforced by electron/main/index.ts at startup.
  *
  * Usage (not invoked directly; imported by the watch script or tested):

@@ -2,12 +2,12 @@
  * simulation/engine/__tests__/eslint-import-boundary.test.ts
  *
  * ESLint smoke test for the module-import boundary that makes
- * `@chimera-engine/simulation` the zero-dependency engine leaf (Invariant #1, issue #759).
+ * `@chimera-engine/simulation` the zero-dependency engine leaf (Invariant #1).
  *
  * Runs ESLint programmatically against a fixture that imports a sibling
  * workspace package (`@chimera-engine/networking`) from simulation/ and asserts the
  * `no-restricted-imports` rule fires. This proves the boundary is enforced by
- * the linter, not merely by convention — the AC for issue #759:
+ * the linter, not merely by convention — the acceptance criterion:
  *   "Import-boundary ESLint rule fails on a forbidden cross-boundary import."
  */
 

@@ -1,6 +1,6 @@
 // tools/verify-scaffold.test.ts
 //
-// Unit tests for the `verify:scaffold` scaffold-and-smoke gate (issue #801, F65).
+// Unit tests for the `verify:scaffold` scaffold-and-smoke gate (F65).
 //
 // Exercises the gate-owned pure wiring — buildPnpmOverrides, the applyTarballOverrides layer
 // (which forces the published standalone manifest's @chimera-engine/* edges onto the packed tarballs),
@@ -517,7 +517,7 @@ describe('rewriteAppChimeraDeps', () => {
         expect(JSON.stringify(rewritten)).not.toContain('workspace:*');
     });
 
-    it('rewrites @chimera-engine deps declared in devDependencies too (#817 template shape)', () => {
+    it('rewrites @chimera-engine deps declared in devDependencies too (blank-template shape)', () => {
         // The blank template carries the engine packages in devDependencies (build-time-inlined,
         // kept out of electron-builder's prod tree). The gate must still resolve them onto tarballs
         // there, or the surviving workspace:* makes pnpm install reject the scaffolded app.
@@ -619,7 +619,7 @@ describe('verifyScaffold', () => {
         const e2e = calls.find((c) => c.args.includes('test:e2e'));
         expect(e2e?.args).toEqual(['--filter', PROBE_GAME.pkg, 'test:e2e']);
 
-        // Production build (#816): the app's `build` (tsc, proves the standalone refs rewrite) and
+        // Production build: the app's `build` (tsc, proves the standalone refs rewrite) and
         // `build:app` (esbuild bundles), then the package step: a Next renderer export + an unsigned
         // electron-builder `--dir` bundle, all run from the standalone root by --filter.
         const prodBuild = calls.find(
@@ -648,7 +648,7 @@ describe('verifyScaffold', () => {
         // The bundle lands under <app>/release.
         expect(files.has(path.join(tmpRoot, 'apps', PROBE_GAME.kebab, 'release'))).toBe(true);
 
-        // The generated app's own Invariant #27 gate (#902): the engine-exported
+        // The generated app's own Invariant #27 gate: the engine-exported
         // packaged-bundle guard, run through the app's `verify:packaged-bundle`
         // script so a broken TEMPLATE gate fails the engine's own CI rather than
         // a downstream adopter's packaging run.

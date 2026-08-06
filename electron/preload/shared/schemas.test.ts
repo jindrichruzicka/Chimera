@@ -96,7 +96,7 @@ describe('LobbyInfoSchema', () => {
     });
 });
 
-describe('LobbyStateSchema — player role (spectator, #876)', () => {
+describe('LobbyStateSchema — player role (spectator)', () => {
     const info = { sessionId: 'S1', hostId: 'P1', gameId: 'tactics' };
 
     it('preserves a spectator role across the IPC boundary (not stripped)', () => {

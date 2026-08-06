@@ -5,7 +5,6 @@
  * ActionPipeline with a real ActionRegistry populated by registerEngineActions().
  *
  * Architecture reference: §4.7
- * Task: issue #354
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';

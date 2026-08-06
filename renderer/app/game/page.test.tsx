@@ -6,7 +6,7 @@
 // Tests written first — confirmed RED before game/page.tsx was created.
 //
 // Architecture reference: §4.33–§4.34 — GameScreenRegistry, GameShell
-// Task: issue #494 — Extract match UI into renderer/app/game/page.tsx
+// Task: Extract match UI into renderer/app/game/page.tsx
 //
 // Invariants upheld:
 //   #1  — Only PlayerSnapshot (never GameSnapshot) enters the store mock.
@@ -386,7 +386,7 @@ describe('GamePage — redirect', () => {
     });
 });
 
-describe('GamePage — client leave-to-main-menu (#741)', () => {
+describe('GamePage — client leave-to-main-menu', () => {
     it('routes /game → /main-menu when the leaving-intent flag is set', () => {
         mockLeavingToMainMenu = true;
         mockSnapshot = null;
@@ -443,7 +443,7 @@ describe('GamePage — client leave-to-main-menu (#741)', () => {
     });
 });
 
-describe('GamePage — restore-abort exit to /saves (#842)', () => {
+describe('GamePage — restore-abort exit to /saves', () => {
     it('routes /game → /saves when the abort marker is set', () => {
         mockRestoreAbortPending = true;
         mockSnapshot = makeSnapshot();
@@ -910,7 +910,7 @@ describe('GamePage — post-game summary navigation', () => {
     });
 });
 
-describe('GamePage — in-game save (#825)', () => {
+describe('GamePage — in-game save', () => {
     function makeSaveSlotMeta(): Record<string, unknown> {
         return {
             slotId: 'slot-1',

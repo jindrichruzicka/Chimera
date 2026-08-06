@@ -1063,7 +1063,7 @@ describe('registerSavesHandlers', () => {
         expect(stub.handled.has(SAVES_RESTORE_STATUS_CHANNEL)).toBe(false);
     });
 
-    describe('cancel-restore (#826)', () => {
+    describe('cancel-restore', () => {
         it('registers chimera:saves:cancel-restore delegating to the injected cancelRestore', async () => {
             const stub = makeSavesIpcMainStub();
             const cancelRestore = vi.fn(() => Promise.resolve());

@@ -2,7 +2,7 @@
  * simulation/content/ContentLoader.integration.test.ts
  *
  * End-to-end round-trip test for ContentLoader + ContentDatabase against the
- * real apps/tactics/data/ directory (issue #103, §12 M1 checklist).
+ * real apps/tactics/data/ directory (§12 M1 checklist).
  *
  * Invariants upheld:
  *   #14 — content is loaded and validated before the tick loop starts.
@@ -22,7 +22,7 @@ import { createContentLoader } from './ContentLoader';
 // location-independent when run from any working directory.
 const TACTICS_DATA_DIR = path.resolve(__dirname, '../../apps/tactics/data');
 
-describe('ContentLoader — apps/tactics/data/ round-trip (issue #103)', () => {
+describe('ContentLoader — apps/tactics/data/ round-trip', () => {
     it('loads player-colors from the tactics data directory', async () => {
         const loader = createContentLoader();
         const db = await loader.load([{ type: 'directory', path: TACTICS_DATA_DIR }]);

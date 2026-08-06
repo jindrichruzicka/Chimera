@@ -25,7 +25,7 @@
  * the Tabs flex-fill it, the active tabpanel takes the remaining height,
  * and each panel's own scroll region stretches to the window bottom.
  *
- * Engine shell page: imports no `games/*` or `electron/` runtime modules
+ * Engine shell page: imports no `apps/*` or `electron/` runtime modules
  * (Invariants #94/#1); design tokens only (Invariant #91).
  */
 
