@@ -15,6 +15,7 @@
  *   - `chimera/no-shell-games-import` (Invariants #93, #94)
  *   - `chimera/no-main-games-import` (main-process game boundary)
  *   - `chimera/no-main-provider-internals` (main-process networking provider boundary, Invariant #47)
+ *   - `chimera/no-dynamic-games-import` (the `import()` position of the per-zone game bans, Invariant #1)
  *
  * Exported NAMED, with no default: consumers compose against
  * `{ chimeraPlugin }`, so the export shape is API. Getting it wrong is loud
@@ -36,6 +37,7 @@ import noUnknownTokenOverrides from './rules/no-unknown-token-overrides.js';
 import noShellGamesImport from './rules/no-shell-games-import.js';
 import noMainGamesImport from './rules/no-main-games-import.js';
 import noMainProviderInternals from './rules/no-main-provider-internals.js';
+import noDynamicGamesImport from './rules/no-dynamic-games-import.js';
 
 export const chimeraPlugin = {
     rules: {
@@ -47,6 +49,7 @@ export const chimeraPlugin = {
         'no-shell-games-import': noShellGamesImport,
         'no-main-games-import': noMainGamesImport,
         'no-main-provider-internals': noMainProviderInternals,
+        'no-dynamic-games-import': noDynamicGamesImport,
     },
 } as const;
 

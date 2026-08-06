@@ -24,8 +24,8 @@ else — no recommended sets, no parser options, no global `ignores`. Five rules
 `no-fromfloat-in-simulation` on `simulation/**` and `ai/**`, `no-hardcoded-design-values`
 on `screens/**` and its CSS modules, `no-unknown-token-overrides` on
 `styles/tokens-override.css`, and `no-game-renderer-internals` and `no-raw-r3f-canvas`
-across the app. The three
-engine-internal boundary rules do not, and the reasons are recorded per rule.
+across the app. The withheld rules do not, and the reasons are recorded per rule in
+`curated-rules.ts`.
 
 `silenceOnCss` matters, and passing the base twice is not redundancy. Two of the curated
 rules fire on CSS, which needs the `@eslint/css` language — and a flat config resolves

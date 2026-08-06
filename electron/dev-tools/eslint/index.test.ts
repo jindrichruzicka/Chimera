@@ -11,17 +11,19 @@
  * locked here:
  *
  *   - the plugin is reachable at its new home as a NAMED `chimeraPlugin`, and
- *     carries all eight rules. Its consumers compose against
+ *     carries all nine rules. Its consumers compose against
  *     `{ chimeraPlugin }`, so the export shape is API;
  *   - the plugin's rule set and the curated manifest cover EXACTLY each other.
  *     The manifest's own test can only assert a hardcoded count; here the
- *     plugin is a sibling module, so a ninth rule added to one and not the
+ *     plugin is a sibling module, so a tenth rule added to one and not the
  *     other reds instead of being silently ungoverned;
  *   - no rule module derives a path from its own location any more. That is
  *     what a move re-aims: a walk-up anchored at the old home pointed at the
  *     repo root and would now point inside `electron/`, and from a published
  *     `dist/` at nothing a consumer has — a wrong file rather than an obvious
- *     absence.
+ *     absence. The scan covers the shared modules the rules import as well as
+ *     `rules/` itself: they are rule implementation, and a walk-up would
+ *     re-aim identically from there.
  */
 
 import { Linter } from 'eslint';
@@ -57,10 +59,24 @@ const EXPECTED_RULE_NAMES = [
     'no-shell-games-import',
     'no-main-games-import',
     'no-main-provider-internals',
+    'no-dynamic-games-import',
 ] as const;
 
+/**
+ * The plugin's own surface, as opposed to rule implementation. Everything else
+ * beside the index is a shared helper the rules import — they live outside
+ * `rules/` because that directory's contract is "every non-suite module here IS
+ * a rule", but they are rule implementation for every other purpose, including
+ * the module-location ban below.
+ */
+const PLUGIN_SURFACE_MODULES: ReadonlySet<string> = new Set([
+    'index.ts',
+    'preset.ts',
+    'curated-rules.ts',
+]);
+
 describe('chimeraPlugin', () => {
-    it('is a named export carrying all eight rules', () => {
+    it('is a named export carrying all nine rules', () => {
         expect(Object.keys(chimeraPlugin.rules).sort()).toEqual([...EXPECTED_RULE_NAMES].sort());
     });
 
@@ -109,11 +125,30 @@ describe('chimeraPlugin', () => {
     });
 });
 
-/** The rule modules, excluding their suites. */
+/** A production `.ts` module — not a suite. */
+function isSourceModule(name: string): boolean {
+    return name.endsWith('.ts') && !name.endsWith('.test.ts');
+}
+
+/**
+ * Every rule-implementation module, as a path relative to this directory:
+ * `rules/` minus its suites, plus every shared helper beside the index.
+ *
+ * BOTH halves are read off disk. A hand-written list of the shared modules
+ * would leave a third helper silently unscanned, and dropping an entry from it
+ * would be invisible — the filter is on the ENTRY's own name so a module added
+ * later is in scope by default rather than by remembering to add it.
+ */
 function ruleSourceNames(): readonly string[] {
-    return readdirSync(resolve(__dirname, 'rules')).filter(
-        (name) => name.endsWith('.ts') && !name.endsWith('.test.ts'),
+    const inRulesDir = readdirSync(resolve(__dirname, 'rules'))
+        .filter(isSourceModule)
+        .map((name) => `rules/${name}`);
+
+    const sharedHelpers = readdirSync(__dirname).filter(
+        (name) => isSourceModule(name) && !PLUGIN_SURFACE_MODULES.has(name),
     );
+
+    return [...inRulesDir, ...sharedHelpers];
 }
 
 /**
@@ -161,12 +196,36 @@ describe('relocated rule modules', () => {
     const rulesDir = resolve(__dirname, 'rules');
 
     it('live beside the plugin index at its new home', () => {
+        // Also the `rules/` contract itself: every non-suite module in there IS
+        // a registered rule, which is why the shared classifiers sit one level
+        // up instead. A helper placed here would read as a rule the plugin
+        // forgot to register, and reds this.
         const modules = readdirSync(rulesDir)
-            .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+            .filter(isSourceModule)
             .map((name) => name.replace(/\.ts$/u, ''))
             .sort();
 
         expect(modules).toEqual([...EXPECTED_RULE_NAMES].sort());
+    });
+
+    it('scan a set that covers rules/ and every shared helper beside the index', () => {
+        // Without this, the module-location ban below could go quiet by
+        // scanning nothing: an empty derived list makes `offenders` empty for
+        // the wrong reason. Both halves are named, so a helper that stopped
+        // being scanned — or a `rules/` glob that stopped matching — is visible
+        // here rather than as a silently weaker guard.
+        const scanned = ruleSourceNames();
+
+        expect(scanned).toEqual(
+            expect.arrayContaining(['rules/no-dynamic-games-import.ts', 'game-path.ts']),
+        );
+        expect(scanned.filter((name) => !name.startsWith('rules/')).sort()).toEqual([
+            'dynamic-specifier.ts',
+            'game-path.ts',
+        ]);
+        expect(scanned.filter((name) => name.startsWith('rules/'))).toHaveLength(
+            EXPECTED_RULE_NAMES.length,
+        );
     });
 
     it('are indexed by a plugin module that names its own new home', () => {
@@ -200,7 +259,7 @@ describe('relocated rule modules', () => {
         // scan the fix for that false positive is to reword the prose, which
         // is precisely the wrong incentive.
         const offenders = ruleSourceNames().flatMap((name) =>
-            moduleLocationReadsIn(resolve(rulesDir, name)).map((expr) => `${name}: ${expr}`),
+            moduleLocationReadsIn(resolve(__dirname, name)).map((expr) => `${name}: ${expr}`),
         );
 
         expect(offenders).toEqual([]);

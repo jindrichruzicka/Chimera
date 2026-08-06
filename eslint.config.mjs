@@ -39,9 +39,21 @@ const typescriptEslintRulesOff = Object.fromEntries(
  *     (see docs/coding-standards.md §3).
  *   - Determinism guard via `no-restricted-syntax` scoped to simulation/ai paths
  *     (see docs/coding-standards.md §7, §1.2).
- *   - The eight `chimera/*` architecture rules, loaded as compiled JS from
+ *   - The nine `chimera/*` architecture rules, loaded as compiled JS from
  *     `@chimera-engine/electron/eslint` — the same artifact a standalone game
  *     composes through `standaloneLintConfig()` (see §3, §4.32).
+ *
+ * A note on `no-restricted-imports`, which most of the boundary work rests on:
+ * which specifier positions it visits — and which it does not — is stated in
+ * `tools/eslint-dynamic-games-import-zone.test.ts`, which pins the one that
+ * matters here (`import()`, which it never visits). The consequence
+ * here is that every zone below whose group names a game also declares
+ * `chimera/no-dynamic-games-import`, whose classifier is
+ * `electron/dev-tools/eslint/game-path.ts` rather than the group beside it, so
+ * neither guard subsumes the other. The sibling-package specifiers in those
+ * groups (`renderer/*`, `networking/*`, `electron/*`, `@chimera-engine/ai`, …)
+ * stay static-only, deliberately: a game dependency is the boundary these zones
+ * exist to hold, and widening the dynamic arm past it is its own change.
  */
 export default tseslint.config(
     {
@@ -58,14 +70,17 @@ export default tseslint.config(
             // electron-builder app-bundle output (#813): apps/<game>/release — generated installers/bundles.
             'apps/*/release/**',
             '**/*.d.ts',
-            // Fixture files used by ESLint smoke tests; they intentionally violate lint rules.
+            // Fixture files used by the ESLint smoke tests, which lint them
+            // explicitly with `--no-ignore`. Most violate a rule on purpose;
+            // some are the negative control that must not.
             'simulation/engine/__tests__/fixtures/**',
             'ai/engine/__tests__/fixtures/**',
             'networking/__tests__/fixtures/**',
             'electron/main/__tests__/fixtures/**',
             'electron/preload/__tests__/fixtures/**',
             'renderer/__tests__/fixtures/**',
-            // Per-game determinism/fromFloat zone fixtures.
+            // Per-game gameplay lint fixtures — determinism, fromFloat, and the
+            // import boundaries in both specifier positions.
             'apps/*/simulation/__tests__/fixtures/**',
             'apps/*/ai/__tests__/fixtures/**',
             // Playwright output directories — generated artefacts, not source.
@@ -221,7 +236,10 @@ export default tseslint.config(
             'apps/*/simulation/**/*.{ts,tsx}',
             'apps/*/ai/**/*.{ts,tsx}',
         ],
+        plugins: { chimera: chimeraPlugin },
         rules: {
+            // The `import()` position of the game ban — see the file header.
+            'chimera/no-dynamic-games-import': 'error',
             'no-restricted-imports': [
                 'error',
                 {
@@ -263,7 +281,10 @@ export default tseslint.config(
     // internal (Invariant #47). See issue #768.
     {
         files: ['networking/**/*.{ts,tsx}'],
+        plugins: { chimera: chimeraPlugin },
         rules: {
+            // The `import()` position of the game ban — see the file header.
+            'chimera/no-dynamic-games-import': 'error',
             'no-restricted-imports': [
                 'error',
                 {
@@ -306,7 +327,10 @@ export default tseslint.config(
     // purpose — a type-only back-edge in a test still makes the leaf non-pure.
     {
         files: ['simulation/**/*.{ts,tsx}'],
+        plugins: { chimera: chimeraPlugin },
         rules: {
+            // The `import()` position of the game ban — see the file header.
+            'chimera/no-dynamic-games-import': 'error',
             'no-restricted-imports': [
                 'error',
                 {
@@ -364,7 +388,16 @@ export default tseslint.config(
     // `exports` map publishes. See coding-standards.md §3.
     {
         files: ['renderer/**/*.{ts,tsx}'],
+        plugins: { chimera: chimeraPlugin },
         rules: {
+            // The `import()` position of the game ban — see the file header.
+            // Wherever `chimera/no-shell-games-import`'s zone intersects this
+            // one, both rules RESOLVE at error severity on the same file (the
+            // zone suite's reach check pins that on a shell page). Left
+            // overlapping on purpose: carving out the intersection would copy
+            // that rule's zone globs into a second place, and a drifting
+            // exclusion list is worse than a second accurate message.
+            'chimera/no-dynamic-games-import': 'error',
             'no-restricted-imports': [
                 'error',
                 {
@@ -417,7 +450,10 @@ export default tseslint.config(
     // See coding-standards.md §3, issue #777.
     {
         files: ['electron/preload/**/*.{ts,tsx}'],
+        plugins: { chimera: chimeraPlugin },
         rules: {
+            // The `import()` position of the game ban — see the file header.
+            'chimera/no-dynamic-games-import': 'error',
             'no-restricted-imports': [
                 'error',
                 {
@@ -553,8 +589,8 @@ export default tseslint.config(
     // each consumer composition root (`apps/*/electron/main.ts`, which calls
     // `main()`) — including a `--workspace` scaffold, which lands in `apps/`.
     // A STANDALONE scaffold is not covered and cannot be from here: it has its
-    // own flat config, composing the engine's curated preset, which carries the
-    // four games-side rules and not this engine-internal zone.
+    // own flat config, composing the engine's curated preset (`curated-rules.ts`),
+    // which carries the games-side rules and not this engine-internal zone.
     //
     // Two neighbours are deliberately out, as a scope call rather than because
     // enforcement is impossible there. The preload layer would in fact ratchet

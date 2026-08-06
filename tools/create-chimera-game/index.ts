@@ -62,15 +62,15 @@ const DEFAULT_TEMPLATE = 'blank';
  * `eslint.config.mjs` exists because a standalone game has no root config above
  * it. Inside the monorepo there is one, and it is the stricter of the two: on an
  * `apps/<kebab>` tree it adds the `no-restricted-syntax` determinism guard
- * (Invariant #43), the `no-restricted-imports` boundaries, `no-console` on the
+ * (Invariant #43), the `no-restricted-imports` boundaries and the
+ * `chimera/no-dynamic-games-import` arm beside them, `no-console` on the
  * composition root (Invariant #67) and the type-checked TypeScript set, on top
  * of the same five curated rules. Emitting this file there would SHADOW all of
  * that: flat config resolves the nearest config and does not merge, and
  * `pnpm -r lint` runs `eslint .` from inside each package.
  *
- * (The three engine-internal `chimera/*` rules are NOT among the losses — every
- * zone they carry is anchored at an engine path, so they reach no game file
- * either way.)
+ * (Which `chimera/*` rules the preset withholds, and why each,
+ * `electron/dev-tools/eslint/curated-rules.ts` records as data.)
  */
 const STANDALONE_ONLY_TEMPLATE_FILES = new Set(['eslint.config.mjs']);
 

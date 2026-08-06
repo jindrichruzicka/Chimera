@@ -1,6 +1,6 @@
 # `chimera` ESLint rules + the standalone preset
 
-The eight `chimera/*` rules are the executable half of the architecture invariants. Without
+The nine `chimera/*` rules are the executable half of the architecture invariants. Without
 them, §3's module boundaries and §4.35's design-token discipline are prose that reviewers
 have to remember.
 
@@ -12,7 +12,7 @@ a plugin object and never spawns anything.
 import { chimeraPlugin, standaloneLintConfig } from '@chimera-engine/electron/eslint';
 ```
 
-`chimeraPlugin` is the plugin object, carrying all eight rules. The monorepo's own root
+`chimeraPlugin` is the plugin object, carrying all nine rules. The monorepo's own root
 config registers it directly, per rule and per zone. `standaloneLintConfig()` is the
 games-facing half: the five rules that apply to game code, already mapped onto a game's own
 directories.
@@ -21,7 +21,7 @@ directories.
 
 ## What a game gets, and what it does not
 
-Five rules travel with a game. Three stay behind.
+Five rules travel with a game. Four stay behind.
 
 | Rule                         | Invariant | Where it fires in a game                                           |
 | ---------------------------- | --------- | ------------------------------------------------------------------ |
@@ -31,10 +31,11 @@ Five rules travel with a game. Three stay behind.
 | `no-game-renderer-internals` | #96       | the whole app                                                      |
 | `no-raw-r3f-canvas`          | #127      | the whole app                                                      |
 
-The withheld three — `no-shell-games-import`, `no-main-games-import`,
-`no-main-provider-internals` — guard boundaries internal to the engine. §4.32 records the
-per-rule reasoning, and `curated-rules.ts` records it as data, so a rule dropped by accident
-is distinguishable from one withheld on purpose.
+The withheld four — `no-shell-games-import`, `no-main-games-import`,
+`no-main-provider-internals`, `no-dynamic-games-import` — split two and two: the `no-main-*`
+pair would guard nothing on a game tree, and the other two would guard the wrong thing,
+because a game names itself. §4.32 walks through them, and `curated-rules.ts` records each as
+data, so a rule dropped by accident is distinguishable from one withheld on purpose.
 
 Two facts the rule ids do not carry, and both are load-bearing:
 

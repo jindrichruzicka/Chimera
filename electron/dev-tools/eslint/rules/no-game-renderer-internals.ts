@@ -15,10 +15,16 @@
  * composition root (`apps/<name>/renderer/*.{ts,tsx}`), which registers the
  * game's renderer contribution into the host through the seam.
  *
+ * Four specifier positions carry the same permissions: `import`,
+ * `export … from`, `export * from`, and dynamic `import('…')`. The dynamic one
+ * matters most here: code-splitting a heavy screen is the ordinary reason a
+ * game reaches for `import()`.
+ *
  * Architecture reference: §3 Module Boundaries, §4.35 UI Design System
  */
 
 import type { Rule } from 'eslint';
+import { dynamicSpecifier, type DynamicSource } from '../dynamic-specifier.js';
 
 function normalizePath(value: string): string {
     return value.replace(/\\/gu, '/');
@@ -307,6 +313,12 @@ const rule: Rule.RuleModule = {
             ImportDeclaration(node: Rule.Node) {
                 const declaration = node as Rule.Node & { source: { value: string } };
                 checkImport(node, declaration.source.value);
+            },
+
+            ImportExpression(node: Rule.Node) {
+                const expression = node as Rule.Node & { source: DynamicSource };
+                const source = dynamicSpecifier(expression.source);
+                if (typeof source === 'string') checkImport(node, source);
             },
         };
     },

@@ -147,6 +147,14 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
             filename: 'renderer/app/game/page.tsx',
             code: `const m = import(\`../../../apps/\${gameId}/screens/index.js\`);`,
         },
+        // A non-STRING literal specifier. Unreachable from typechecked TS, but it
+        // is what separates `typeof source === 'string'` from a mere defined-check:
+        // under the looser test the classifier is handed a number and crashes on
+        // `.replace`, so the rule dies instead of ignoring it.
+        {
+            filename: 'renderer/app/game/page.tsx',
+            code: `const m = import(5);`,
+        },
     ],
 
     // ── Invalid — rule must fire ─────────────────────────────────────────────
@@ -287,8 +295,7 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
         // `@chimera-engine/` specifier, so the classifier must recognise an
         // `apps/` path segment in its own right. Each specifier position is
         // pinned separately: the renderer's stock `no-restricted-imports` zone
-        // reaches the static ones but not a dynamic `import()`, so this rule is
-        // the only guard standing behind the lazy form.
+        // reaches the static ones but not a dynamic `import()`.
         {
             filename: 'renderer/app/main-menu/page.tsx',
             code: `import { registry } from '../../../apps/tactics/screens/index.js';`,

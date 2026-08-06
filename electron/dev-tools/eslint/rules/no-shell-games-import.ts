@@ -19,11 +19,12 @@
  *
  * A "game path" is any of the three ways a game can be named: an `apps/`
  * segment (its on-disk home), a legacy `games/` segment, or a non-engine
- * `@chimera-engine/<pkg>` specifier. Each is matched in four specifier
- * positions: `import`, `export … from`, `export * from`, and dynamic
- * `import('…')`. The rule visits `ImportExpression` itself rather than leaning
- * on the stock `no-restricted-imports` zones, which do not inspect dynamic
- * `import()` at all — that is what makes a lazy game load reachable here.
+ * `@chimera-engine/<pkg>` specifier — the classification shared with its
+ * siblings in `../game-path.ts`. Each is matched in four specifier positions:
+ * `import`, `export … from`, `export * from`, and dynamic `import('…')`. The
+ * rule visits `ImportExpression` itself rather than leaning on the stock
+ * `no-restricted-imports` zones, which do not inspect dynamic `import()` at all
+ * — that is what makes a lazy game load reachable here.
  * `import x = require('…')` is not visited; it is banned repo-wide by
  * `@typescript-eslint/no-require-imports`.
  *
@@ -32,6 +33,8 @@
  */
 
 import type { Rule } from 'eslint';
+import { isGamesImport, isTokensOverrideImport } from '../game-path.js';
+import { dynamicSpecifier, type DynamicSource } from '../dynamic-specifier.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,87 +66,6 @@ function isGameShellHost(filename: string): boolean {
     return /(?:^|\/)renderer\/components\/shell\/(?:GameShell|InGameMenuHost)\.(?:ts|tsx|js|jsx|mjs)$/u.test(
         n,
     );
-}
-
-/**
- * Engine packages — game-agnostic, importable by shell pages. Every other
- * `@chimera-engine/*` package is a game (e.g. `@chimera-engine/tactics`) and is forbidden.
- */
-const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
-    'simulation',
-    'ai',
-    'networking',
-    'renderer',
-    'electron',
-]);
-
-/**
- * A path that enters the game-app tree by name: an `apps/` or `games/` path
- * SEGMENT, leading or embedded (`apps/…`, `../../apps/…`). `apps/` is a game's
- * on-disk home; `games/` is the legacy home, matched so the old form stays
- * rejected. Anchored at BOTH ends, so neither a prefix lookalike
- * (`…/webapps/…`) nor a suffix one (`…/gamestate.js`) is read as a game.
- */
-const GAME_PATH_SEGMENT_RE = /(?:^|\/)(?:apps|games)\//u;
-
-/**
- * Returns true if `source` is an import from a game (rather than an engine
- * package):
- *   - a relative/bare `apps/*` or `games/*` path (`apps/…`, `…/apps/…`), or
- *   - a `@chimera-engine/<pkg>` package whose `<pkg>` is NOT an engine package
- *     (e.g. `@chimera-engine/tactics`).
- *
- * Detecting games by the engine allowlist — rather than a directory substring
- * alone — keeps the guard correct for games that are first-class
- * `@chimera-engine/<game>` packages; the path arm keeps it correct for the same
- * game reached by its on-disk `apps/<name>/` location, which carries no scoped
- * specifier at all.
- */
-function isGamesImport(source: string): boolean {
-    const n = source.replace(/\\/gu, '/');
-    if (GAME_PATH_SEGMENT_RE.test(n)) {
-        return true;
-    }
-    const scoped = /^@chimera-engine\/([^/]+)/u.exec(n);
-    if (scoped === null) {
-        return false;
-    }
-    const pkg = scoped[1];
-    return pkg !== undefined && !ENGINE_PACKAGES.has(pkg);
-}
-
-/**
- * Returns true if `source` references a game's `styles/tokens-override.css` —
- * by any of the three ways a game is named (see `isGamesImport`).
- */
-function isTokensOverrideImport(source: string): boolean {
-    const n = source.replace(/\\/gu, '/');
-    return /(?:^|\/)styles\/tokens-override\.css$/u.test(n) && isGamesImport(n);
-}
-
-/** The `source` of a dynamic `import()`, as ESLint's untyped AST exposes it. */
-interface DynamicSource {
-    type: string;
-    value?: unknown;
-    quasis?: readonly { value: { cooked?: string | null } }[];
-    expressions?: readonly unknown[];
-}
-
-/**
- * The single module a dynamic `import()` specifier names, when it names one: a
- * string literal, or a template with no substitutions — which is exactly as
- * resolvable, so leaving it out would let one swapped quote character walk a
- * game past the guard. A specifier assembled at runtime resolves to no one
- * module and yields `undefined`; there is nothing to classify.
- */
-function dynamicSpecifier(source: DynamicSource): unknown {
-    if (source.type === 'Literal') {
-        return source.value;
-    }
-    if (source.type === 'TemplateLiteral' && source.expressions?.length === 0) {
-        return source.quasis?.[0]?.value.cooked ?? undefined;
-    }
-    return undefined;
 }
 
 // ── Rule ─────────────────────────────────────────────────────────────────────

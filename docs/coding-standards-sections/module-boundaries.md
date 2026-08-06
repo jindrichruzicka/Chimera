@@ -29,7 +29,7 @@ These boundaries are hard constraints. Violations are **BLOCK** findings at revi
 ## ESLint Enforcement
 
 - `no-restricted-syntax` — blocks `Math.random`, `Date.now` and `performance.now` inside `simulation/`, `ai/` and each game's `actions/`, `simulation/` and `ai/`.
-- `no-restricted-imports` — blocks `simulation/` from importing `renderer/` or `apps/*`.
+- `no-restricted-imports` — blocks `simulation/` from importing `renderer/` or `apps/*`. Which specifier positions it visits is stated in `tools/eslint-dynamic-games-import-zone.test.ts`, which pins the `import()` one.
 - `chimera/no-fromfloat-in-simulation` — blocks `FixedPoint.fromFloat()` inside hot simulation paths (Invariant #76).
 - `chimera/no-game-renderer-internals` — the executable form of Invariant #96, which states per file group what a games package may reach in renderer. Everything outside those groups is blocked.
 - `chimera/no-raw-r3f-canvas` — the ESLint arm of Invariant #127: a game surface must not obtain the `Canvas` binding from `@react-three/fiber`; `GameCanvas` is the only canvas root a game mounts. Name-based, so `useFrame`/`useThree`/type-only imports from the same specifier stay legal.
@@ -38,6 +38,7 @@ These boundaries are hard constraints. Violations are **BLOCK** findings at revi
 - `chimera/no-shell-games-import` — blocks the engine shell pages and `GameShell`/`InGameMenuHost` from importing any game path (Invariants #80, #93, #94).
 - `chimera/no-main-games-import` — keeps `electron/main` orchestration agnostic of which game exists (the `electron/main/` boundary-table row above; game wiring enters only at a consumer app's composition root such as `apps/<name>/electron/main.ts`).
 - `chimera/no-main-provider-internals` — keeps `electron/main` orchestration agnostic of which networking provider is wired (Invariant #47).
+- `chimera/no-dynamic-games-import` — covers the `import()` position of the game ban, in every zone whose `no-restricted-imports` group names a game (Invariant #1). Declared beside the static ban rather than scoped from inside: this rule has no path predicate of its own.
 
 Any `// eslint-disable` bypass requires a `@chimera-review: <reason>` comment on the preceding line. Only one of these rules enforces that itself: `chimera/no-fromfloat-in-simulation` reports a bare disable of itself as a second error. Everywhere else the requirement is a review obligation with no automated check — nothing greps for unaccompanied disables.
 
@@ -51,9 +52,8 @@ config loads that same compiled plugin, so there is one implementation rather th
 Those five are the ones that bind GAME code: `no-fromfloat-in-simulation`,
 `no-hardcoded-design-values`, `no-unknown-token-overrides`, `no-game-renderer-internals`
 and `no-raw-r3f-canvas`.
-The three that guard the engine's own internals stay here — `curated-rules.ts` records the
-per-rule reason, as data, so a rule dropped by accident is distinguishable from one withheld
-on purpose.
+The other four stay here — `curated-rules.ts` records the per-rule reason, as data, so a rule
+dropped by accident is distinguishable from one withheld on purpose.
 
 The first two bullets above are **monorepo-only**, and deliberately so — they are stock
 ESLint rules configured against this repo's paths, not `chimera/*` rules the preset can

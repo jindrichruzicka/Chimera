@@ -77,7 +77,7 @@ chimera/
 │   │       └── dev-fixture-loader.ts     # Seed-profile + scenario loading, atomic announce write
 │   ├── dev-tools/                   # Development-time tooling published from @chimera-engine/electron — as bins, as subpath exports, or both — so standalone games run what the monorepo runs
 │   │   ├── dev-harness/             # `chimera-dev-mp` bin + harness library (spawn planning, announce handshake); see §4.32
-│   │   ├── eslint/                  # The eight `chimera/*` lint rules, published at the `@chimera-engine/electron/eslint` SUBPATH (never a bin — a flat config imports it, nothing spawns it): `chimeraPlugin` for the monorepo's own root config, and `standaloneLintConfig()`, the curated five-rule overlay a scaffolded game composes (§4.32)
+│   │   ├── eslint/                  # The nine `chimera/*` lint rules, published at the `@chimera-engine/electron/eslint` SUBPATH (never a bin — a flat config imports it, nothing spawns it): `chimeraPlugin` for the monorepo's own root config, and `standaloneLintConfig()`, the curated five-rule overlay a scaffolded game composes (§4.32)
 │   │   ├── fetch-google-fonts/      # `chimera-fetch-fonts` bin — dev-time Google Fonts downloader; writes committed self-hosted .woff2 files (satisfies Invariant #97; `validate-assets` enforces it)
 │   │   ├── generate-icons/          # `chimera-generate-icons` bin — derives the .icns/.ico + loose PNG set, and the `chimera.png` window-icon fallback, from one square master; sharp is an OPTIONAL peer loaded on demand (§4.32)
 │   │   └── validate-assets/         # CI: the AssetRef/GameFontFace/cue-sheet build gate — enforces Invariants #22/#52/#97/#125; see §4.10

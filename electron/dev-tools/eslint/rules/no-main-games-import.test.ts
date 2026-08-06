@@ -90,6 +90,14 @@ ruleTester.run('chimera/no-main-games-import', rule, {
             filename: 'electron/main/index.ts',
             code: `const m = import(gamePath);`,
         },
+        // A non-STRING literal specifier. Unreachable from typechecked TS, but it
+        // is what separates `typeof source === 'string'` from a mere defined-check:
+        // under the looser test the classifier is handed a number and crashes on
+        // `.replace`, so the rule dies instead of ignoring it.
+        {
+            filename: 'electron/main/index.ts',
+            code: `const m = import(5);`,
+        },
         // Re-export with no source must not crash the source guard.
         {
             filename: 'electron/main/index.ts',

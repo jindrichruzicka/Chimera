@@ -74,6 +74,20 @@ ruleTester.run('chimera/no-main-provider-internals', rule, {
             filename: 'electron/main/lobby/LobbyManager.ts',
             code: `const m = import(providerPath);`,
         },
+        // A template WITH a substitution is the same case: it names no one module.
+        {
+            filename: 'electron/main/lobby/LobbyManager.ts',
+            code: 'const m = import(`@chimera-engine/networking/provider/${kind}/index.js`);',
+        },
+        // A non-STRING literal specifier. Unreachable from typechecked TS, but
+        // it is what separates `typeof source === 'string'` from a mere
+        // defined-check: under the looser test `isProviderInternalImport` is
+        // handed a number and crashes on `.replace`, so the rule dies instead of
+        // ignoring it.
+        {
+            filename: 'electron/main/lobby/LobbyManager.ts',
+            code: `const m = import(5);`,
+        },
         // Re-export with no source must not crash the source guard.
         {
             filename: 'electron/main/lobby/LobbyManager.ts',
@@ -117,6 +131,14 @@ ruleTester.run('chimera/no-main-provider-internals', rule, {
         {
             filename: 'electron/main/lobby/LobbyManager.ts',
             code: `const m = import('@chimera-engine/networking/provider/local/LocalWebSocketProvider.js');`,
+            errors: [{ messageId: 'mainProviderInternals' }],
+        },
+        // The same specifier written as a no-substitution TEMPLATE. It resolves
+        // to exactly the same module, so one swapped quote character must not
+        // walk a concrete provider past the boundary.
+        {
+            filename: 'electron/main/lobby/LobbyManager.ts',
+            code: 'const m = import(`@chimera-engine/networking/provider/local/LocalWebSocketProvider.js`);',
             errors: [{ messageId: 'mainProviderInternals' }],
         },
         // Re-export from a provider internal.

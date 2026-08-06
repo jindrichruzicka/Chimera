@@ -24,13 +24,14 @@
  * Glob-based `no-restricted-imports` is unreliable for deep `provider/*` paths
  * and cannot express the composition-root allowlist, so this rule classifies the
  * import source directly. It matches four specifier positions: `import`,
- * `export … from`, `export * from`, and dynamic `import('…')` with a
- * string-literal specifier — so the boundary cannot be bypassed by a lazy load.
- * Unlike its game-import siblings it does NOT read a no-substitution template
- * specifier, so `import(\`…/provider/local/…\`)` walks past it.
+ * `export … from`, `export * from`, and dynamic `import('…')` — the last read
+ * through the shared `../dynamic-specifier.ts`, so a quoted specifier and a
+ * no-substitution template are treated alike here exactly as they are in the
+ * game-import siblings.
  */
 
 import type { Rule } from 'eslint';
+import { dynamicSpecifier, type DynamicSource } from '../dynamic-specifier.js';
 
 function normalize(path: string): string {
     return path.replace(/\\/gu, '/');
@@ -118,13 +119,9 @@ const rule: Rule.RuleModule = {
             ImportDeclaration: checkStaticSource,
             ExportNamedDeclaration: checkStaticSource,
             ExportAllDeclaration: checkStaticSource,
-            // Dynamic `import('…')` — flag only string-literal specifiers; a
-            // computed specifier cannot be statically resolved to a provider path.
             ImportExpression(node: Rule.Node) {
-                const n = node as Rule.Node & { source: { type: string; value?: unknown } };
-                if (n.source.type === 'Literal') {
-                    check(node, n.source.value);
-                }
+                const n = node as Rule.Node & { source: DynamicSource };
+                check(node, dynamicSpecifier(n.source));
             },
         };
     },

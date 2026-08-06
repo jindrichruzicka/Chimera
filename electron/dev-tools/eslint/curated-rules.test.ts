@@ -10,7 +10,7 @@
  * value, not that the constant parses:
  *
  *   - membership is EXACT in both directions, and each withheld rule carries a
- *     reason that names the engine zone it guards;
+ *     reason that names what it guards;
  *   - the zone globs, which mirror the monorepo's games-side blocks translated
  *     to app-root-relative form (§4.32 argues each one);
  *   - the fromFloat OFF arm on the simulation/ai test globs;
@@ -37,12 +37,14 @@ function allZones(rule: CuratedLintRule): readonly string[] {
 }
 
 /**
- * Each withheld rule, with the engine zone its recorded reason must name and a
- * token unique to what that rule guards. The zone alone cannot tell the two
- * `no-main-*` reasons apart — they share `electron/main/` — and those two are
- * the pair most likely to be copy-pasted onto each other.
+ * Each withheld rule, with what its recorded reason must name as the thing it
+ * guards, plus a token unique to that rule. "Withheld" is the only property the
+ * four share: three name a directory, and one names a property of the flat
+ * config, because its scope is not a directory at all. The zone alone cannot
+ * tell the two `no-main-*` reasons apart — they share `electron/main/` — and
+ * those two are the pair most likely to be copy-pasted onto each other.
  */
-const ENGINE_INTERNAL_RULES = [
+const WITHHELD_RULES = [
     {
         ruleId: 'chimera/no-shell-games-import',
         guardedZone: 'renderer/app/',
@@ -58,6 +60,16 @@ const ENGINE_INTERNAL_RULES = [
         guardedZone: 'electron/main/',
         distinguishingToken: 'networking barrel',
     },
+    {
+        // The only withheld rule with no path predicate: its zone is not a
+        // directory but a property of the config, so that property is what its
+        // reason has to name. Stated without a count or a list, because the
+        // set of such zones lives in eslint.config.mjs and is pinned there by
+        // tools/eslint-dynamic-games-import-zone.test.ts.
+        ruleId: 'chimera/no-dynamic-games-import',
+        guardedZone: 'every zone whose no-restricted-imports group names a game',
+        distinguishingToken: 'import() position',
+    },
 ] as const;
 
 describe('STANDALONE_LINT_RULES', () => {
@@ -71,9 +83,9 @@ describe('STANDALONE_LINT_RULES', () => {
         ]);
     });
 
-    it('omits every engine-internal boundary rule', () => {
+    it('omits every withheld boundary rule', () => {
         const curated = STANDALONE_LINT_RULES.map((rule) => rule.ruleId);
-        for (const { ruleId } of ENGINE_INTERNAL_RULES) {
+        for (const { ruleId } of WITHHELD_RULES) {
             expect(curated).not.toContain(ruleId);
         }
     });
@@ -157,21 +169,21 @@ describe('STANDALONE_LINT_RULES', () => {
 });
 
 describe('STANDALONE_LINT_EXCLUSIONS', () => {
-    it('records each engine-internal boundary rule left out', () => {
+    it('records each withheld boundary rule left out', () => {
         expect(STANDALONE_LINT_EXCLUSIONS.map((exclusion) => exclusion.ruleId)).toEqual(
-            ENGINE_INTERNAL_RULES.map((rule) => rule.ruleId),
+            WITHHELD_RULES.map((rule) => rule.ruleId),
         );
     });
 
-    it('names the engine zone each withheld rule actually guards', () => {
-        for (const { ruleId, guardedZone } of ENGINE_INTERNAL_RULES) {
+    it('names what each withheld rule actually guards', () => {
+        for (const { ruleId, guardedZone } of WITHHELD_RULES) {
             const exclusion = STANDALONE_LINT_EXCLUSIONS.find((entry) => entry.ruleId === ruleId);
             expect(exclusion?.reason, ruleId).toContain(guardedZone);
         }
     });
 
     it('gives each withheld rule a reason only that rule could carry', () => {
-        for (const { ruleId, distinguishingToken } of ENGINE_INTERNAL_RULES) {
+        for (const { ruleId, distinguishingToken } of WITHHELD_RULES) {
             const owner = STANDALONE_LINT_EXCLUSIONS.find((entry) => entry.ruleId === ruleId);
             expect(owner?.reason, ruleId).toContain(distinguishingToken);
 
@@ -187,11 +199,11 @@ describe('STANDALONE_LINT_EXCLUSIONS', () => {
         }
     });
 
-    it('partitions all eight plugin rules between curated and excluded', () => {
+    it('partitions all nine plugin rules between curated and excluded', () => {
         const curated = STANDALONE_LINT_RULES.map((rule) => rule.ruleId);
         const excluded = STANDALONE_LINT_EXCLUSIONS.map((exclusion) => exclusion.ruleId);
 
-        expect(new Set([...curated, ...excluded]).size).toBe(8);
+        expect(new Set([...curated, ...excluded]).size).toBe(9);
         for (const ruleId of excluded) {
             expect(curated).not.toContain(ruleId);
         }

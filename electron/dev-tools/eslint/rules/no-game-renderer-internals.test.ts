@@ -184,8 +184,68 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             filename: 'apps/tactics/screens/TacticsBoard.tsx',
             code: `import { useModelInstance } from '@chimera-engine/renderer/assets/index.ts';`,
         },
+        // ── Dynamic import() — the same permissions as the static position ──
+        // A public barrel stays permitted when it is code-split rather than
+        // imported eagerly; lazy-loading a heavy screen is the ordinary reason
+        // a game reaches for import() at all.
+        {
+            filename: 'apps/tactics/screens/TacticsBoard.tsx',
+            code: `const ui = await import('@chimera-engine/renderer/components/ui');`,
+        },
+        {
+            filename: 'apps/tactics/renderer/register.ts',
+            code: `const seam = await import('@chimera-engine/renderer/game');`,
+        },
+        // A non-renderer specifier is out of this rule's scope in every position.
+        {
+            filename: 'apps/tactics/screens/TacticsBoard.tsx',
+            code: `const sim = await import('@chimera-engine/simulation/engine/index.js');`,
+        },
+        // A specifier assembled at runtime names no one module.
+        {
+            filename: 'apps/tactics/screens/TacticsBoard.tsx',
+            code: `const mod = await import(specifier);`,
+        },
+        {
+            filename: 'apps/tactics/screens/TacticsBoard.tsx',
+            code: 'const mod = await import(`@chimera-engine/renderer/state/${name}.js`);',
+        },
+        // A non-STRING literal specifier. Unreachable from typechecked TS, but
+        // it is what separates `typeof source === 'string'` from a mere
+        // defined-check: under the looser test `checkImport` is handed a number
+        // and crashes on `.replace`, so the rule dies instead of ignoring it.
+        {
+            filename: 'apps/tactics/screens/TacticsBoard.tsx',
+            code: `const mod = await import(5);`,
+        },
     ],
     invalid: [
+        // ── Dynamic import() — Invariant #96 holds in this position too ─────
+        // The bash Check 17 covers part of this ground: it scans
+        // `apps/*/{screens,shell}` for a QUOTED renderer specifier, so it sees
+        // neither the template form nor the non-surface file below.
+        {
+            filename: 'apps/tactics/screens/TacticsDebugPanel.tsx',
+            code: `const store = await import('@chimera-engine/renderer/state/gameStore.js');`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            filename: 'apps/tactics/screens/TacticsGameHud.tsx',
+            code: `const button = await import('@chimera-engine/renderer/components/ui/Button.js');`,
+            errors: [{ messageId: 'gameRendererUiDeepImport' }],
+        },
+        // A non-surface file inside a game may not reach renderer at all.
+        {
+            filename: 'apps/tactics/simulation/rules.ts',
+            code: `const ui = await import('@chimera-engine/renderer/components/ui');`,
+            errors: [{ messageId: 'gameRendererImportOutsideSurface' }],
+        },
+        // A no-substitution template resolves to exactly one module.
+        {
+            filename: 'apps/tactics/screens/TacticsDebugPanel.tsx',
+            code: 'const store = await import(`@chimera-engine/renderer/state/gameStore.js`);',
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
         {
             // The shell surface is for the app's Next host route tree only — the
             // composition root must still reach the game via the public seam, not shell/*.

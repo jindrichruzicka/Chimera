@@ -20,16 +20,19 @@
  * and the renderer's single-composition-point pattern (rendererGameRegistry.ts).
  *
  * Glob-based `no-restricted-imports` is unreliable for deep game paths, so this
- * rule classifies the import source directly (as no-shell-games-import does):
- * any relative/bare `apps/*` or `games/*` path, or any `@chimera-engine/<pkg>`
- * package that is not on the engine allowlist (i.e. a game such as
- * `@chimera-engine/tactics`). It matches four specifier positions — `import`,
- * `export … from`, `export * from`, and dynamic `import('…')` — so the boundary
- * cannot be bypassed by a lazy load; no-shell-games-import's header records why
- * the dynamic one has to be visited here rather than delegated.
+ * rule classifies the import source directly (as no-shell-games-import does),
+ * through the shared classifier in `../game-path.ts`: any relative/bare
+ * `apps/*` or `games/*` path, or any `@chimera-engine/<pkg>` package that is
+ * not on the engine allowlist (i.e. a game such as `@chimera-engine/tactics`).
+ * It matches four specifier positions — `import`, `export … from`,
+ * `export * from`, and dynamic `import('…')` — so the boundary cannot be
+ * bypassed by a lazy load; no-shell-games-import's header records why the
+ * dynamic one has to be visited here rather than delegated.
  */
 
 import type { Rule } from 'eslint';
+import { isGamesImport } from '../game-path.js';
+import { dynamicSpecifier, type DynamicSource } from '../dynamic-specifier.js';
 
 function normalize(filename: string): string {
     return filename.replace(/\\/gu, '/');
@@ -47,74 +50,6 @@ function isGuardedMainFile(filename: string): boolean {
         return false;
     }
     return !/\.test\.tsx?$/u.test(n);
-}
-
-/**
- * Engine packages — game-agnostic, always importable by the host. Every other
- * `@chimera-engine/*` package is a game (e.g. `@chimera-engine/tactics`) and is forbidden.
- */
-const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
-    'simulation',
-    'ai',
-    'networking',
-    'renderer',
-    'electron',
-]);
-
-/**
- * A path that enters the game-app tree by name: an `apps/` or `games/` path
- * SEGMENT, leading or embedded (`apps/…`, `../../apps/…`). `apps/` is a game's
- * on-disk home; `games/` is the legacy home, matched so the old form stays
- * rejected. Anchored at BOTH ends, so neither a prefix lookalike
- * (`…/webapps/…`) nor a suffix one (`…/gamestate.js`) is read as a game.
- */
-const GAME_PATH_SEGMENT_RE = /(?:^|\/)(?:apps|games)\//u;
-
-/**
- * True if `source` imports from a game (rather than an engine package):
- *   - a relative/bare `apps/*` or `games/*` path (`apps/…`, `…/apps/…`), or
- *   - a `@chimera-engine/<pkg>` package whose `<pkg>` is NOT an engine package
- *     (e.g. `@chimera-engine/tactics`).
- *
- * Detecting games by the engine allowlist — rather than a directory substring
- * alone — keeps the guard correct for games that are first-class
- * `@chimera-engine/<game>` packages; the path arm keeps it correct for the same
- * game reached by its on-disk `apps/<name>/` location, which carries no scoped
- * specifier at all.
- */
-function isGamesImport(source: string): boolean {
-    const n = source.replace(/\\/gu, '/');
-    if (GAME_PATH_SEGMENT_RE.test(n)) {
-        return true;
-    }
-    const scoped = /^@chimera-engine\/([^/]+)/u.exec(n);
-    if (scoped === null) {
-        return false;
-    }
-    const pkg = scoped[1];
-    return pkg !== undefined && !ENGINE_PACKAGES.has(pkg);
-}
-
-/** The `source` of a dynamic `import()`, as ESLint's untyped AST exposes it. */
-interface DynamicSource {
-    type: string;
-    value?: unknown;
-    quasis?: readonly { value: { cooked?: string | null } }[];
-    expressions?: readonly unknown[];
-}
-
-/**
- * The single module a dynamic `import()` specifier names, when it names one.
- * The reason each arm is here lives on the twin in `no-shell-games-import.ts`.
- */
-function dynamicSpecifier(source: DynamicSource): unknown {
-    if (source.type === 'Literal') {
-        return source.value;
-    }
-    if (source.type === 'TemplateLiteral' && source.expressions?.length === 0) {
-        return source.quasis?.[0]?.value.cooked ?? undefined;
-    }
-    return undefined;
 }
 
 const rule: Rule.RuleModule = {

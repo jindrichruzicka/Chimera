@@ -19,7 +19,7 @@
  *     plugin somewhere else and registering THAT is what actually decides which
  *     rules run; an import nothing references is decoration;
  *   - the retired tree is GONE from disk. A config repointed while the old
- *     directory survives leaves a second, unreferenced copy of seven rules for
+ *     directory survives leaves a second, unreferenced copy of the rules for
  *     the next reader to edit;
  *   - NOTHING TRACKED still names the retired path. Enumerated from the git
  *     index rather than a hand-listed set of files, because an allowlist's

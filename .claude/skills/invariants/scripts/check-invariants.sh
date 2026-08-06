@@ -88,11 +88,11 @@ check_grep() {
 # whose `<pkg>` is not on the engine allowlist. The first two by a path SEGMENT
 # anchored at both ends — `(^|/)(apps|games)/` — so neither a prefix lookalike
 # (`…/webapps/…`) nor a suffix one (`…/gamestate.js`) is read as a game. Both
-# arms match the ESLint classifiers in
-# electron/dev-tools/eslint/rules/no-{shell,main}-games-import.ts verbatim,
-# including the scoped arm's anchor at the opening quote: a specifier reaching a
-# game through a vendored `…/node_modules/@chimera-engine/<game>` path is
-# therefore not matched here either.
+# arms match the shared ESLint classifier in
+# electron/dev-tools/eslint/game-path.ts verbatim, including the scoped arm's
+# anchor at the opening quote: a specifier reaching a game through a vendored
+# `…/node_modules/@chimera-engine/<game>` path is therefore not matched here
+# either.
 #
 # Three specifier positions are matched — `… from '…'`, a side-effect
 # `import '…'`, and a dynamic `import('…')` — because a lazy or

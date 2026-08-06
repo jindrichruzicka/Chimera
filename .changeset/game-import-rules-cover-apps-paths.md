@@ -13,8 +13,8 @@ own `no-restricted-imports` zone; for an `electron/main` module reaching
 `../../apps/<game>/…` nothing blocked it at all. A **dynamic**
 `import('../../apps/<game>/…')` was blocked nowhere on either surface, because stock
 `no-restricted-imports` does not inspect `import()` expressions. Both rules already
-visited `ImportExpression`, so widening the specifier classifier each of them carries
-closes the static and dynamic forms together, alongside a side-effect `import '…'`,
+visited `ImportExpression`, so widening the specifier classifier they read closes the
+static and dynamic forms together, alongside a side-effect `import '…'`,
 `export … from` and `export * from`.
 
 A dynamic `import()` whose specifier is a no-substitution template literal is now

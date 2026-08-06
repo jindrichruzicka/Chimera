@@ -1,7 +1,7 @@
 /**
  * electron/dev-tools/eslint/curated-rules.ts
  *
- * The curated standalone lint rule set — which of the eight Chimera lint rules
+ * The curated standalone lint rule set — which of the nine Chimera lint rules
  * a game gets once it leaves the monorepo, at what severity, on which of its
  * own zones. The reasoning behind each verdict lives in §4.32; this file is the
  * machine-readable form of it.
@@ -132,7 +132,7 @@ export const STANDALONE_LINT_RULES: readonly CuratedLintRule[] = [
 ];
 
 /**
- * The three rules withheld, each with the reason. Recorded as data, not merely
+ * The four rules withheld, each with the reason. Recorded as data, not merely
  * omitted, so a rule dropped by accident is distinguishable from one withheld
  * on purpose.
  */
@@ -150,5 +150,10 @@ export const STANDALONE_LINT_EXCLUSIONS: readonly CuratedLintExclusion[] = [
         // Invariant #47.
         ruleId: 'chimera/no-main-provider-internals',
         reason: "Keeps engine main-process orchestration behind the public networking barrel. Withheld for the same two reasons as its sibling: the predicate requires an electron/main/ DIRECTORY segment a game's flat electron/main.ts never has, and that file is the composition root where wiring a concrete provider is the point.",
+    },
+    {
+        // Invariant #1 (enforcement coverage).
+        ruleId: 'chimera/no-dynamic-games-import',
+        reason: 'Holds the dynamic import() position of the game ban in every zone whose no-restricted-imports group names a game. Withheld because it is the only rule here with no path predicate of its own — the declaring zone IS its scope — and it classifies a game by NAME: any non-engine @chimera-engine/* package. A scaffolded game IS one (@chimera-engine/<game-kebab>) and self-imports through that specifier, so a game that code-splits one of those self-imports would be reported for lazily loading itself, the exact inverse of the boundary the rule holds in the engine.',
     },
 ];

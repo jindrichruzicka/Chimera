@@ -65,11 +65,14 @@
         "simulation/engine/__tests__/fixtures/**",
         "ai/engine/__tests__/fixtures/**",
         "networking/__tests__/fixtures/**",
-        // Per-game determinism/fromFloat lint fixtures deliberately import a deep
-        // @chimera-engine/simulation/engine/* specifier (no such exports subpath) to trip
-        // the fromFloat rule, so they cannot type-resolve. Like the engine/networking
-        // fixtures above they stay out of the typechecked program — this mirrors the
-        // eslint.config.mjs global-ignore that keeps `pnpm lint` off the same dirs.
+        // Per-game gameplay lint fixtures, not program source. Excluded as
+        // DIRECTORIES, like the engine/networking fixture
+        // dirs above and mirroring the eslint.config.mjs global-ignore that keeps
+        // `pnpm lint` off the same paths — which is also why the exclusion needs no
+        // per-file property. Some of them could not be typechecked anyway: they name
+        // a specifier that deliberately does not resolve (a deep
+        // @chimera-engine/simulation/engine/* path with no such exports subpath, or a
+        // sibling game that does not exist).
         "apps/*/simulation/__tests__/fixtures/**",
         "apps/*/ai/__tests__/fixtures/**",
         // Each app's SOURCE is type-checked here (its .ts are co-included so the
