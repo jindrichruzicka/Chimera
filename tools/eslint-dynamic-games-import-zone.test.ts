@@ -662,10 +662,21 @@ describe('dynamic-import zone — static and dynamic positions both covered', ()
             // because the positions do, and the suite stays green either way.
             expect(specifierOf(STATIC_FIXTURE)).toBe(specifierOf(DYNAMIC_FIXTURE));
 
-            const staticIds = ruleIdsOf(runEslint(STATIC_FIXTURE));
+            const staticMessages = runEslint(STATIC_FIXTURE);
+            const staticIds = ruleIdsOf(staticMessages);
             const dynamicIds = ruleIdsOf(runEslint(DYNAMIC_FIXTURE));
 
             expect(staticIds).toContain(STATIC_RULE);
+            // …reported by the group that names a GAME, which the rule id alone
+            // no longer shows. The fixture's specifier is four levels up, and
+            // the simulation zone now also repeats the repo-wide `../../../*`
+            // group, so this file draws two `no-restricted-imports` reports and
+            // the id would still be here with every game pattern deleted.
+            expect(
+                staticMessages
+                    .filter((message) => message.ruleId === STATIC_RULE)
+                    .map((message) => message.message),
+            ).toContainEqual(expect.stringContaining('game apps (apps/*)'));
             expect(dynamicIds).toContain(DYNAMIC_RULE);
             // Neither guard subsumes the other, asserted in both directions —
             // the docblock's one claim about their relation, and the pair that

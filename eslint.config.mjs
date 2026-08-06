@@ -165,8 +165,18 @@ export default tseslint.config(
             ],
 
             // Module boundaries — docs/coding-standards.md §3.
-            // The patterns reference directories that will exist as the engine
-            // lands; until then they are inert (no matching imports yet).
+            //
+            // Flat config resolves one value per rule, last matching block wins,
+            // and pattern arrays are never merged — so a block below that
+            // re-declares `no-restricted-imports` WITH options and does not
+            // repeat this group drops it. Severity alone is the exception: a
+            // block supplying only `'off'`/`'error'` keeps the options already
+            // resolved, which is how the e2e suite turns this group off rather
+            // than replacing it (pinned in the test named next).
+            // `tools/eslint-deep-relative-import-ban.test.ts` enumerates every
+            // block that sets the rule and holds each to a stated disposition —
+            // repeats the group, or `renderer/**`, or the e2e suite's `'off'` —
+            // so a block added later reds until it is classified there.
             'no-restricted-imports': [
                 'error',
                 {
@@ -278,6 +288,12 @@ export default tseslint.config(
                             message:
                                 'ai/ and per-game code must not import from networking, renderer, electron, or game-app aliases. See coding-standards.md §3.',
                         },
+                        // Repeated from the base block above.
+                        {
+                            group: ['../../../*'],
+                            message:
+                                'Do not reach across package boundaries with deep relative paths. Use @chimera-engine/* aliases.',
+                        },
                     ],
                 },
             ],
@@ -302,9 +318,9 @@ export default tseslint.config(
     //   settings-schema.ts — ALREADY covered, by the ai/game zone above (its
     //   `files` list ends with `apps/*/settings-schema.{ts,tsx}`, which is also
     //   one level deep). Flat config resolves ONE value per rule, last block
-    //   wins, so matching that file here would REPLACE its 14-pattern group
-    //   with this 2-pattern one — silently un-banning networking, the game
-    //   aliases and the relative-path forms, while `pnpm lint` stayed green
+    //   wins, so matching that file here would REPLACE its group with this
+    //   block's — silently un-banning networking, the game aliases and the
+    //   relative-path forms, while `pnpm lint` stayed green
     //   because `chimera/no-game-renderer-internals` still caught the renderer
     //   half. Leaving it to the zone above loses nothing: that group already
     //   bans `@chimera-engine/electron` and `@chimera-engine/electron/*`.
@@ -376,6 +392,12 @@ export default tseslint.config(
                             message:
                                 'networking/ must not import from ai, renderer, electron, or game apps (apps/*) — @chimera-engine/simulation is its only @chimera-engine/* dependency. The barrel exposes provider/transport interfaces only; concrete providers stay internal (Invariant #47). See coding-standards.md §3.',
                         },
+                        // Repeated from the base block above.
+                        {
+                            group: ['../../../*'],
+                            message:
+                                'Do not reach across package boundaries with deep relative paths. Use @chimera-engine/* aliases.',
+                        },
                     ],
                 },
             ],
@@ -424,6 +446,12 @@ export default tseslint.config(
                             message:
                                 '@chimera-engine/simulation is the zero-dependency engine leaf — it must not import from ai, networking, renderer, electron, or game apps (apps/*). Keep contracts in @chimera-engine/simulation/foundation; only the reserved engine: namespace crosses cuts (Invariant #107).',
                         },
+                        // Repeated from the base block above.
+                        {
+                            group: ['../../../*'],
+                            message:
+                                'Do not reach across package boundaries with deep relative paths. Use @chimera-engine/* aliases.',
+                        },
                     ],
                 },
             ],
@@ -445,12 +473,21 @@ export default tseslint.config(
     // by `chimera/no-game-renderer-internals` (Invariant #96), which enumerates
     // it — restating the set here has gone stale once already.
     //
-    // Mirrors the leaf-package zones above; like them it omits the global
-    // deep-relative ban, because renderer's own
-    // deeply nested files legitimately reach package-internal modules with
-    // relative paths — renderer code must not self-import through its public
+    // This zone declares the rule at `'error'` WITHOUT the base block's
+    // `../../../*` group, and the leaf zones above are no precedent for it —
+    // they repeat it and lint clean. Renderer cannot: its own deeply nested
+    // files reach package-internal modules three levels up
+    // (`app/replays/player/page.tsx` → `../../../i18n/useTranslate`), and
+    // renderer code must not self-import through its public
     // `@chimera-engine/renderer/*` alias, which resolves only what renderer's
-    // `exports` map publishes. See coding-standards.md §3.
+    // `exports` map publishes. The pattern cannot separate those from an escape:
+    // the specifier is identical either way, and only the depth of the importing
+    // file — which `no-restricted-imports` never sees — decides which it is. The
+    // property the group would have held is measured instead, in
+    // `tools/eslint-deep-relative-import-ban.test.ts`: every deep-relative
+    // specifier in renderer source, outside the globally lint-ignored fixtures,
+    // is resolved against the package root and asserted to land inside it.
+    // See coding-standards.md §3.
     {
         files: ['renderer/**/*.{ts,tsx}'],
         plugins: { chimera: chimeraPlugin },
@@ -549,6 +586,12 @@ export default tseslint.config(
                             ],
                             message:
                                 'electron/preload is the sole renderer-facing surface and depends on @chimera-engine/simulation contracts only. It must not import the ai/networking runtime, the renderer UI library, a game package, or electron/main internals. See coding-standards.md §3.',
+                        },
+                        // Repeated from the base block above.
+                        {
+                            group: ['../../../*'],
+                            message:
+                                'Do not reach across package boundaries with deep relative paths. Use @chimera-engine/* aliases.',
                         },
                     ],
                 },

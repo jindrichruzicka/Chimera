@@ -5,15 +5,16 @@
  * (`apps/<game>/*.ts`, one level deep).
  *
  * Three zones can match a file there, and flat config resolves ONE value per
- * rule — last block wins, patterns are REPLACED rather than merged. So a zone
- * added for one file silently rewrites the boundary for every sibling its glob
+ * rule — last block wins, and a block re-declaring the rule WITH options
+ * REPLACES the patterns rather than merging them. So a zone added for one file
+ * silently rewrites the boundary for every sibling its glob
  * also happens to match, and nothing observable changes: `pnpm lint` stays green
  * because the imports that would now be legal are simply not written yet.
  *
  * That is not hypothetical. Adding the electron ban below cost this tree its
  * `../../../*` ban at the app root once, and then — one glob over — the entire
- * 14-pattern ai/game group on `settings-schema.ts`. Both were invisible to a
- * lint run and visible only to `--print-config`. Hence this file: the resolved
+ * ai/game group on `settings-schema.ts`. Both were invisible to a lint run and
+ * visible only to `--print-config`. Hence this file: the resolved
  * patterns are data, so they are asserted as data.
  *
  * What each probe stands for:
@@ -23,9 +24,9 @@
  *                       import here reaches the renderer bundle.
  *   manifest.ts         the same zone, a file the electron edge has nothing to
  *                       do with — so the ban is the zone's, not one file's.
- *   settings-schema.ts  matched by the ai/game zone FIRST. Its 14-pattern group
- *                       already bans electron, so this zone must leave it alone;
- *                       matching it would trade 14 patterns for 2.
+ *   settings-schema.ts  matched by the ai/game zone FIRST. Its group already
+ *                       bans electron, so this zone must leave it alone;
+ *                       matching it would trade that group for this one.
  *   asset-manifest.test.ts  the file the electron edge exists for — the readers
  *                       at `@chimera-engine/electron/test-support` are dev-time
  *                       only, so a test must NOT carry the ban.
@@ -197,8 +198,8 @@ describe('app-root no-restricted-imports zones', () => {
         async () => {
             // The second regression: `apps/*/settings-schema.{ts,tsx}` is also one
             // level deep, so an `apps/*/*.ts` zone matches it and would trade its
-            // 14-pattern group for a 2-pattern one. Containment, not equality, so
-            // a ban ADDED to that zone later does not red this.
+            // group for this zone's. Containment, not equality, so a ban ADDED to
+            // that zone later does not red this.
             const { patterns, severity } = await resolveRestrictedImports(PROBES.settingsSchema);
             expect(severity).toBe(2);
             for (const banned of AI_GAME_GROUP) {
