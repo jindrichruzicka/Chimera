@@ -254,6 +254,9 @@ importers:
       '@react-three/fiber':
         specifier: ^9
         version: 9.6.1(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(three@0.184.0)
+      '@types/three':
+        specifier: '*'
+        version: 0.184.1
       next:
         specifier: ^15
         version: 15.5.15(@playwright/test@1.59.1)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
