@@ -56,7 +56,9 @@ apps/my-game/
 ├── simulation/          # game rules, actions, and state — pure & deterministic, no DOM/IPC
 ├── ai/                  # AI brains that play your game — same purity rules as simulation/
 ├── screens/             # React components for your game's UI
+├── scene/               # 3D scene components & camera work (Three.js / React Three Fiber)
 ├── content/             # schemas for the kinds of content your game loads
+├── data/                # JSON game content your game loads
 ├── renderer/            # Next.js shell wiring for your game
 ├── electron/            # desktop entry point & composition root
 ├── e2e/                 # Playwright end-to-end tests
@@ -65,7 +67,7 @@ apps/my-game/
 └── settings-schema.ts   # your game's settings schema (zod)
 ```
 
-Start in `simulation/` (what your game **is**) and `screens/` (what it **looks like**); add
+Start in `simulation/` (what your game **is**) and `screens/` (what it **looks like**); reach for
 `data/` for JSON game content and `scene/` for 3D scene work as you grow. The engine handles
 the rest.
 
