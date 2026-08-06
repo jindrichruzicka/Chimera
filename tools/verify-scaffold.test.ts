@@ -277,6 +277,14 @@ function makeFakeRun(
                 path.join(appDir, 'renderer', 'register.ts'),
                 'registerRendererGame(contribution);\n',
             );
+            // The asset manifest the validate-assets arm plants into. Seeded with
+            // the empty `entries` literal the real template ships, because the
+            // arm REWRITES that literal — a fixture without it would exercise the
+            // arm's own guard instead of the plant.
+            files.set(
+                path.join(appDir, 'asset-manifest.ts'),
+                `export const probeAssetManifest = {\n    gameId: '${PROBE_GAME.kebab}',\n    entries: [],\n};\n`,
+            );
         }
         // Install links the published bins into the app's own node_modules/.bin
         // (how the bare `chimera-fetch-fonts` in the app script resolves).
@@ -1073,11 +1081,13 @@ describe('verifyScaffold', () => {
         const result = await verifyScaffold(makeDeps(run, fs));
 
         expect(result.ok).toBe(true);
-        // TWO runs of the same script — the second is the whole point. One run
-        // proves only that the bin exits 0, which a bin that scanned nothing
-        // also does.
+        // THREE runs of the same script — the clean one proves only that the bin
+        // exits 0, which a bin that scanned nothing also does. The other two are
+        // the point: one plants a valid manifest entry and requires the checked
+        // count to MOVE (otherwise `Checked 0` is indistinguishable from never
+        // finding the manifest), one plants a broken ref and requires a FAILURE.
         const validateRuns = calls.filter((c) => c.args.includes('validate:assets'));
-        expect(validateRuns).toHaveLength(2);
+        expect(validateRuns).toHaveLength(3);
         // Run from the PROJECT ROOT via --filter, which is what puts the
         // script's cwd at the app package and makes its `../..` the root.
         for (const call of validateRuns) {
@@ -1095,6 +1105,112 @@ describe('verifyScaffold', () => {
         // so this is the only way to see the cleanup happened at all; without
         // it the arm could leave the probe behind and nothing would notice.
         expect(removed).toContain(brokenRef);
+
+        // The manifest plant restores the file byte-for-byte and removes the
+        // probe asset. A gate that dirtied the scaffold it just validated would
+        // make every later arm read a tree no consumer will ever have.
+        const manifestPath = path.join(appDir, 'asset-manifest.ts');
+        expect(files.get(manifestPath)).toContain('entries: [],');
+        expect(files.get(manifestPath)).not.toContain('verify-scaffold-probe.png');
+        expect(removed).toContain(
+            path.join(appDir, 'assets', 'textures', 'verify-scaffold-probe.png'),
+        );
+    });
+
+    it('reports validate-assets when the scaffold ships no asset-manifest.ts at all', async () => {
+        // The basename is the discovery key: a manifest under any other name is
+        // not a manifest that fails to validate, it is one the tool never opens —
+        // and the clean run's `Checked 0` looks identical either way.
+        const { fs, files } = makeFakeFs();
+        const appDir = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {
+            if (args[0] === 'install') files.delete(path.join(appDir, 'asset-manifest.ts'));
+            return undefined;
+        });
+        const logged: string[] = [];
+
+        const result = await verifyScaffold(makeDeps(run, fs, { log: (m) => logged.push(m) }));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+        // The step alone would also be reported by the broken-ref plant below it;
+        // the message is what says WHICH half of the arm bit.
+        expect(logged.join('\n')).toMatch(/scaffolded no asset-manifest\.ts/u);
+    });
+
+    it('reports validate-assets when the planted-entry run FAILS, even though it counted refs', async () => {
+        // `Checked 1` and exit 0 are separate claims. A planted entry whose ref
+        // resolved into the wrong directory reports the count and then fails on
+        // the missing file — so a count assertion alone would accept the exact
+        // resolution bug the plant exists to rule out.
+        const { fs, files } = makeFakeFs();
+        const appDir = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {
+            if (!args.includes('validate:assets')) return undefined;
+            const manifest = files.get(path.join(appDir, 'asset-manifest.ts')) ?? '';
+            if (!manifest.includes('verify-scaffold-probe.png')) return undefined;
+            return {
+                status: 1,
+                stdout: '[validate-assets] Checked 1 asset refs; all files exist.\n',
+                stderr: '',
+            };
+        });
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+    });
+
+    it('reports validate-assets when the scaffolded manifest has no plantable entries literal', async () => {
+        // The arm rewrites `entries: [...],` by pattern. If the template's shape
+        // changed, the replace is a silent no-op and the run reports `Checked 0` —
+        // failing with "the shipped manifest is not the one the tool reads", which
+        // sends the reader after a discovery bug that is not there. This guard is
+        // what makes the real cause the reported one.
+        const { fs, files } = makeFakeFs();
+        const appDir = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {
+            if (args[0] === 'install') {
+                files.set(
+                    path.join(appDir, 'asset-manifest.ts'),
+                    'export const probeAssetManifest = { gameId: "x", entries: buildEntries() };\n',
+                );
+            }
+            return undefined;
+        });
+        const logged: string[] = [];
+
+        const result = await verifyScaffold(makeDeps(run, fs, { log: (m) => logged.push(m) }));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+        expect(logged.join('\n')).toMatch(/no longer exposes an entries array/u);
+    });
+
+    it('reports validate-assets when the planted entry does not move the checked count', async () => {
+        // The non-vacuity assertion itself. A tool that exits 0 while reporting
+        // `Checked 0` WITH a valid entry declared has not read the manifest —
+        // the exact failure the clean run cannot distinguish.
+        const { fs, files } = makeFakeFs();
+        const appDir = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
+        const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {
+            if (!args.includes('validate:assets')) return undefined;
+            const manifest = files.get(path.join(appDir, 'asset-manifest.ts')) ?? '';
+            if (!manifest.includes('verify-scaffold-probe.png')) return undefined;
+            return {
+                status: 0,
+                stdout: '[validate-assets] Checked 0 asset refs; all files exist.\n',
+                stderr: '',
+            };
+        });
+        const logged: string[] = [];
+
+        const result = await verifyScaffold(makeDeps(run, fs, { log: (m) => logged.push(m) }));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('validate-assets');
+        expect(logged.join('\n')).toMatch(/reported no checked refs/u);
     });
 
     it('reports validate-assets when the app script is not the exact ../.. invocation', async () => {

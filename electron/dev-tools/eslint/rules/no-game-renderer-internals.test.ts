@@ -365,6 +365,18 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             errors: [{ messageId: 'gameRendererImportOutsideSurface' }],
         },
         {
+            // scene/ is NOT a renderer surface, whatever the extension. A game's
+            // in-Canvas r3f primitives live there and build on three /
+            // @react-three/fiber directly; the screen that owns the <GameCanvas>
+            // is the surface that may reach the engine's barrels. The scaffold
+            // ships an empty scene/ and its README states this boundary, so the
+            // exclusion is now load-bearing documentation rather than an
+            // accident of the surface list.
+            filename: 'apps/demo/scene/DemoUnitPrimitive.tsx',
+            code: `import { GameCanvas } from '@chimera-engine/renderer/components/r3f';`,
+            errors: [{ messageId: 'gameRendererImportOutsideSurface' }],
+        },
+        {
             // shell .tsx file importing a renderer internal (not the barrel)
             filename: 'apps/tactics/shell/TacticsShellSidebar.tsx',
             code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,

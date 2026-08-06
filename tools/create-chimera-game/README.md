@@ -112,23 +112,41 @@ The blank template follows the canonical game-app structure (mirroring `apps/tac
 apps/<kebab>/
 ├── simulation/            # deterministic gameplay — actions.ts, constants.ts, visibility-rules.ts;
 │                          #   pure (no DOM/IPC), covered by the apps/*/simulation ESLint zones
+├── ai/                    # EMPTY (.gitkeep) — per-game agent policies; in the
+│                          #   no-fromfloat-in-simulation zone alongside simulation/
 ├── content/               # content-collection definitions for the Content DB
+├── data/                  # EMPTY (.gitkeep) — JSON rows the Content DB loads, as data/<collection>/*.json
 ├── screens/               # game React UI (playfield screen + registry)
+├── scene/                 # EMPTY (.gitkeep) — in-Canvas react-three-fiber primitives
+│                          #   (see the note below on what may be imported here)
 ├── renderer/              # per-app Next.js app + register.ts registration seam
 ├── electron/              # Electron main composition root + build-main.ts bundler
+├── dev/                   # starter harness fixtures — profiles/ and scenarios/
 ├── e2e/                   # Playwright boot-smoke suite
 ├── shell/                 # renderer shell declarations — fonts.ts gameFonts stub (empty until fetched)
 ├── assets/                # game-owned binary assets (icon; fonts/ for self-hosted .woff2 — Invariant #97)
 ├── styles/                # tokens-override.css — redefine any `--ch-*` the engine declares
 ├── eslint.config.mjs      # STANDALONE ONLY — this game's flat config, composing the engine's architecture rules
 ├── manifest.ts            # GameManifest (registration surface, stays at the root)
+├── asset-manifest.ts      # AssetManifest — empty, already wired through renderer/loaders.ts;
+│                          #   the basename chimera-validate-assets discovers, so keep it
 ├── settings-schema.ts     # zod settings schema extending EngineSettings
+├── manifest.test.ts       # co-located tests for the two root manifests
+├── asset-manifest.test.ts #   (loops over entries, so they grow with the game)
 └── package.json / tsconfig*.json / electron-builder.yml
 ```
 
 Grow a game inside this shape: new deterministic gameplay modules go under `simulation/`
-(subsystem subdirectories are fine), UI under `screens/`/`scene/`/`shell/`, JSON content under
-`data/`.
+(subsystem subdirectories are fine), agent policies under `ai/`, UI under
+`screens/`/`scene/`/`shell/`, JSON content under `data/`. `ai/`, `data/` and `scene/` ship
+empty, held open by a `.gitkeep`, so the first file you add is already inside the zone that
+guards it — an `ai/` policy is in the `no-fromfloat-in-simulation` zone from its first line.
+
+One boundary is worth knowing before you use `scene/`: a module there may not import from
+`@chimera-engine/renderer` at all (Invariant #96). Scene modules build on `three` and
+`@react-three/fiber` directly, and the screen that owns the `<GameCanvas>` renders them as its
+children — so the `<GameCanvas>` itself, and anything else from the engine's renderer barrels,
+belongs in that screen rather than in `scene/`.
 
 ### The architecture guardrails
 
@@ -144,6 +162,7 @@ them:
 | `no-hardcoded-design-values` | colour and size literals in `screens/` — use `var(--ch-*)` so themes reach them |
 | `no-unknown-token-overrides` | redefining a `--ch-*` the engine does not declare — it would theme nothing      |
 | `no-game-renderer-internals` | reaching past the renderer's public barrels into its internals                  |
+| `no-raw-r3f-canvas`          | mounting a raw `<Canvas>` — a game's canvas root is `<GameCanvas>`              |
 
 Test files under `simulation/` and `ai/` are exempt from the first: building fixed-point
 values with `fromFloat()` in a fixture is fine, since the invariant is about hot paths.

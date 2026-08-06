@@ -25,7 +25,7 @@ import { __GAME_CONSTANT___GAME_ID } from '@chimera-engine/__game_kebab__/simula
  *   - `contentSchemas` — per-collection Zod schemas (validates `data/<collection>`
  *     at startup). Import `__GAME_CONSTANT___CONTENT_SCHEMAS` from
  *     `@chimera-engine/__game_kebab__/content/__gameCamel__Content.js` and set it here
- *     once you add a content collection + its `data/` directory.
+ *     once you add a content collection under the shipped `data/` directory.
  *   - `lobbySetup` — a customizable-lobby descriptor.
  *   - `createAIState` — an AI policy for hosted AI seats.
  *   - `commitment` / `resolveIsMyTurn` — simultaneous (commit-then-sync) turns.

@@ -35,6 +35,10 @@
             "types": "./dist/dev-tools/eslint/index.d.ts",
             "default": "./dist/dev-tools/eslint/index.js"
         },
+        "./test-support": {
+            "types": "./dist/dev-tools/test-support/index.d.ts",
+            "default": "./dist/dev-tools/test-support/index.js"
+        },
         "./preload/api": {
             "types": "./dist/preload/api.d.ts",
             "default": "./dist/preload/api.js"

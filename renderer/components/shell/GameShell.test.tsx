@@ -398,6 +398,33 @@ describe('GameShell page object locators', () => {
         expect(screen.getByTestId('game-canvas').textContent).toContain('Registry playfield');
     });
 
+    it('gives the screen host a positioned box with a minimum-height floor', () => {
+        // Both halves are contract a game screen depends on, and neither is
+        // obvious from the markup:
+        //
+        // `position: relative` makes this section the containing block a screen's
+        // `position: absolute; inset: 0` scene host resolves against. Without it
+        // the host would resolve against the viewport and cover the HUD below.
+        //
+        // `minHeight` is the floor a screen COLLAPSES ONTO when it asks for a
+        // percentage height — the `div.chimera-scene-router` between this section
+        // and the screen carries no styles, so `block-size: 100%` resolves to
+        // auto. That failure (a scene rendered into a short strip rather than a
+        // missing one) is why the scene-host rule is spelled `inset: 0`, and the
+        // GameCanvas JSDoc plus the scaffold template both cite this element for
+        // it — so it is asserted here rather than described in three places.
+        render(
+            <GameShell tick={0} canUndo={false} canRedo={false} isGameOver={false}>
+                <div>Playfield slot</div>
+            </GameShell>,
+        );
+
+        const host = screen.getByTestId('game-canvas');
+
+        expect(host.style.position).toBe('relative');
+        expect(host.style.minHeight).toBe('calc(var(--ch-space-md) * 20)');
+    });
+
     it('renders the §13.6 game HUD locator surface', () => {
         render(
             <GameShell tick={42} canUndo={true} canRedo={false} isGameOver={true}>

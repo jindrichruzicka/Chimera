@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { GROWTH_DIRECTORIES } from './__test-support__/template-contract.js';
 import { GAME_TOKENS } from './tokens.js';
 
 /**
@@ -335,6 +336,32 @@ describe('blank template smoke harness', () => {
         );
     });
 
+    // The three canonical game directories tactics grew into that carry no
+    // day-one file. Shipping them empty costs nothing at build time — a
+    // directory holding only `.gitkeep` is invisible to eslint and to tsc,
+    // which select by extension — and it puts an author's first AI policy,
+    // colour palette or scene primitive in the place the guards already
+    // expect. They cannot be inferred from the copier: it emits FILES, so an
+    // empty directory would simply not exist in a scaffolded game.
+    //
+    // Each is a distinct contract:
+    //   ai/     per-game agent policies. Both lint modes already reach it: the
+    //           standalone preset zones `chimera/no-fromfloat-in-simulation`
+    //           over `ai/**`, and a --workspace game additionally inherits the
+    //           monorepo's apps/*/ai determinism and boundary zones.
+    //   data/   JSON rows the Content DB loads. `content/` declares the
+    //           collections; `data/<collection>/*.json` holds their payloads.
+    //   scene/  in-Canvas react-three-fiber primitives, rendered as children
+    //           of the GameCanvas the playfield screen owns (Invariant #127).
+    it('ships the three canonical growth directories, held by .gitkeep', async () => {
+        for (const dir of GROWTH_DIRECTORIES) {
+            await expect(
+                readdir(path.join(blankTemplateDir, dir)),
+                `${dir}/ must ship, held open by a .gitkeep`,
+            ).resolves.toContain('.gitkeep');
+        }
+    });
+
     it('ships an empty gameFonts stub on the type-only shell contract', async () => {
         const fonts = await read('shell/fonts.ts');
         expect(fonts).toContain(
@@ -347,6 +374,41 @@ describe('blank template smoke harness', () => {
         const loaders = await read('renderer/loaders.ts');
         expect(loaders).toContain("import { gameFonts } from '../shell/fonts.js';");
         expect(loaders).toContain('fonts: gameFonts');
+    });
+
+    it('ships an empty asset manifest at the basename the validator discovers', async () => {
+        // `chimera-validate-assets` finds a game's manifest by BASENAME —
+        // `asset-manifest.ts` and nothing else. A differently-named file is not a
+        // manifest that fails to validate, it is a manifest the gate never sees.
+        const manifest = await read('asset-manifest.ts');
+        expect(manifest).toContain(
+            "import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';",
+        );
+        expect(manifest).toContain('export const __gameCamel__AssetManifest: AssetManifest = {');
+        expect(manifest).toContain('gameId: __GAME_CONSTANT___GAME_ID,');
+        // Empty, but a real array literal: the commented worked example beside it
+        // is what an author uncomments, so the shape has to be the one that works.
+        expect(manifest).toMatch(/entries:\s*\[[\s\n]*(?:\/\/[^\n]*\n\s*)*\],/u);
+    });
+
+    it('forwards the asset manifest through the game loader', async () => {
+        // The forward is the whole point of shipping the manifest: the field is
+        // OPTIONAL on `LoadedRendererGame`, so omitting it is silent at every
+        // gate and fails only at runtime, on the first load, as
+        // `UnknownAssetManifestEntryError`.
+        const loaders = await read('renderer/loaders.ts');
+        expect(loaders).toContain("import('../asset-manifest.js')");
+        expect(loaders).toContain('assetManifest: assetManifestModule.__gameCamel__AssetManifest');
+    });
+
+    it('ships a manifest test that grows with the manifest rather than pinning it empty', async () => {
+        // An `expect(entries).toHaveLength(0)` would red the moment an author
+        // followed the manifest's own instructions. The per-entry checks are
+        // loops, so they cost nothing empty and start working at the first asset.
+        const test = await read('asset-manifest.test.ts');
+        expect(test).toContain("from '@chimera-engine/electron/test-support'");
+        expect(test).toContain('for (const entry of __gameCamel__AssetManifest.entries)');
+        expect(test).not.toMatch(/toHaveLength\(0\)|entries\)\.toEqual\(\[\]\)/u);
     });
 
     it('wires an app-level fetch:fonts script naming the bin with an explicit --out-dir', async () => {
@@ -507,7 +569,10 @@ describe('blank template smoke harness', () => {
     it('names no model game in any smoke file (tokens only)', async () => {
         const files = [
             'manifest.test.ts',
+            'asset-manifest.ts',
+            'asset-manifest.test.ts',
             'screens/__GamePascal__Playfield.test.tsx',
+            'screens/__GamePascal__Playfield.module.css',
             'e2e/tests/boot-smoke.spec.ts',
             'e2e/fixtures/electron.fixture.ts',
             'e2e/fixtures/inherit-env.ts',
@@ -685,6 +750,21 @@ describe('blank template lint guardrails', () => {
         expect(playfield).toContain("className={styles['playfield']}");
         expect(stylesheet).toMatch(/^\.playfield\s*\{/mu);
     });
+
+    it('roots the screen in a full-bleed scene host', async () => {
+        // Why absolute positioning is the load-bearing part is written out once,
+        // in the stylesheet this asserts on — the file a scaffolded game's author
+        // actually opens. Both halves are pinned here: the rule, and the screen
+        // ROOT carrying it (an in-flow wrapper above it would restore the
+        // auto-height link the rule exists to skip).
+        const playfield = await read('screens/__GamePascal__Playfield.tsx');
+        const stylesheet = await read('screens/__GamePascal__Playfield.module.css');
+
+        expect(stylesheet).toMatch(/^\.sceneHost\s*\{/mu);
+        expect(stylesheet).toMatch(/^\.sceneHost\s*\{[^}]*\bposition:\s*absolute;/mu);
+        expect(stylesheet).toMatch(/^\.sceneHost\s*\{[^}]*\binset:\s*0;/mu);
+        expect(playfield).toMatch(/return \(\s*<div className=\{styles\['sceneHost'\]\}>/u);
+    });
 });
 
 /**
@@ -794,6 +874,138 @@ describe('blank template, whole-tree properties', () => {
         }
     });
 });
+
+/**
+ * The scaffold README's two ENUMERATIONS, kept in step with what they describe.
+ *
+ * Both are the kind of prose that reads as authoritative and rots silently: the
+ * guardrail table had already drifted to four of the preset's five rules before
+ * anyone noticed, and the layout tree omitted three directories the template
+ * ships. Neither drift breaks a build, and both mislead exactly the reader who
+ * has no other source — someone who scaffolded a game and has only this file.
+ *
+ * The rule ids are read out of `curated-rules.ts` as TEXT rather than imported.
+ * `@chimera-engine/electron/eslint` does not re-export the list, and importing
+ * the built subpath would make a documentation test depend on `dist/` being
+ * fresh; parsing the source is what `tools/root-eslint-config.test.ts` already
+ * does for this same subtree. Each extraction therefore asserts it FOUND
+ * something first — a regex that silently matches nothing would turn both of
+ * these into tests that pass by looking at an empty set.
+ */
+describe('scaffold README enumerations', () => {
+    const readmePath = path.resolve(import.meta.dirname, 'README.md');
+    const curatedRulesPath = path.resolve(
+        import.meta.dirname,
+        '../../electron/dev-tools/eslint/curated-rules.ts',
+    );
+
+    /** `ruleId`s inside one exported array — the file has two, and they mean opposite things. */
+    const ruleIdsIn = (source: string, exportName: string): readonly string[] => {
+        const start = source.indexOf(`export const ${exportName}`);
+        expect(start, `${exportName} not found in curated-rules.ts`).toBeGreaterThan(-1);
+        const next = source.indexOf('\nexport const ', start + 1);
+        const block = source.slice(start, next === -1 ? undefined : next);
+        return [...block.matchAll(/ruleId:\s*'chimera\/([a-z0-9-]+)'/gu)].map((m) => m[1] ?? '');
+    };
+
+    it('names every curated lint rule in the guardrail table, and no withheld one', async () => {
+        const curated = await readFile(curatedRulesPath, 'utf8');
+        const shipped = ruleIdsIn(curated, 'STANDALONE_LINT_RULES');
+        const withheld = ruleIdsIn(curated, 'STANDALONE_LINT_EXCLUSIONS');
+
+        // Floors: a renamed `ruleId` key, or a slice that silently landed on the
+        // wrong array, would otherwise leave both loops iterating nothing.
+        expect(shipped.length, 'no shipped ruleIds parsed').toBeGreaterThan(3);
+        expect(withheld.length, 'no withheld ruleIds parsed').toBeGreaterThan(0);
+        expect(shipped).not.toEqual(expect.arrayContaining([...withheld]));
+
+        // Match the TABLE, not the file. Prose elsewhere in this README names
+        // rules legitimately, so a whole-file `toContain` reports a present row
+        // for a rule whose row was deleted, and a whole-file `not.toContain`
+        // would red a README that merely EXPLAINS why a rule is withheld. Both
+        // directions need the row set, not the document.
+        const readme = await readFile(readmePath, 'utf8');
+        const sectionStart = readme.indexOf('### The architecture guardrails');
+        expect(sectionStart, 'guardrail section heading not found').toBeGreaterThan(-1);
+        const after = readme.indexOf('\n### ', sectionStart + 1);
+        const section = readme.slice(sectionStart, after === -1 ? undefined : after);
+        const rows = new Set(
+            [...section.matchAll(/^\|\s*`([a-z0-9-]+)`/gmu)].map((m) => m[1] ?? ''),
+        );
+        expect(rows.size, 'no rule rows parsed out of the guardrail table').toBeGreaterThan(3);
+
+        for (const id of shipped) {
+            expect([...rows], `the guardrail table omits ${id}`).toContain(id);
+        }
+        // The other half, and the reason the two arrays must not be conflated:
+        // an exclusion is a rule the preset deliberately does NOT ship, so
+        // giving it a row would be a stronger claim than the engine makes.
+        for (const id of withheld) {
+            expect(
+                [...rows],
+                `the guardrail table promises ${id}, which the preset withholds`,
+            ).not.toContain(id);
+        }
+    });
+
+    it('lists exactly the template top-level entries in the emitted-layout tree', async () => {
+        const readme = await readFile(readmePath, 'utf8');
+        const layout = /## Emitted app layout[\s\S]*?```\n([\s\S]*?)```/u.exec(readme)?.[1];
+        expect(layout, 'could not locate the Emitted app layout code fence').toBeDefined();
+
+        // Rows look like `├── name/   # comment` or a final `└── a / b / c`
+        // covering several root files at once. Continuation rows start with `│`
+        // and carry no name. The name runs to the first `#`, whatever the
+        // column alignment — keying on run-length would make this test a
+        // whitespace assertion wearing a contents assertion's name.
+        const documented = new Set<string>();
+        for (const row of (layout ?? '').split('\n')) {
+            const named = /^[├└]──\s+([^#]+)/u.exec(row);
+            if (!named) continue;
+            for (const part of (named[1] ?? '').split(' / ')) {
+                const name = part.trim().replace(/\/$/u, '');
+                if (name !== '') documented.add(name);
+            }
+        }
+        expect(documented.size, 'no rows parsed out of the layout tree').toBeGreaterThan(10);
+
+        // `node_modules/` is a local install artifact — gitignored, in the
+        // copier's SKIP_DIRS, and never emitted — so it is correctly absent.
+        const actual = (await readdir(blankTemplateDir)).filter((name) => name !== 'node_modules');
+        const globs = [...documented].filter((name) => name.includes('*'));
+        const literals = new Set([...documented].filter((name) => !name.includes('*')));
+        // A glob row is the one shape that can disarm the "ships but
+        // undocumented" direction wholesale: broaden `tsconfig*.json` to `*` and
+        // every actual entry is covered, so that loop passes vacuously while the
+        // other direction still looks healthy. Pinning the set means widening
+        // one has to be a deliberate edit here, not a side effect there.
+        expect(globs, 'the layout tree grew a glob row').toEqual(['tsconfig*.json']);
+
+        for (const name of actual) {
+            const covered =
+                literals.has(name) ||
+                globs.some((glob) =>
+                    new RegExp(`^${glob.split('*').map(escapeForRegExp).join('.*')}$`, 'u').test(
+                        name,
+                    ),
+                );
+            expect(covered, `the template ships ${name}, which the README tree does not list`).toBe(
+                true,
+            );
+        }
+        for (const name of literals) {
+            expect(
+                actual,
+                `the README tree lists ${name}, which the template does not ship`,
+            ).toContain(name);
+        }
+    });
+});
+
+/** Escape a literal fragment for embedding in a `RegExp` source string. */
+function escapeForRegExp(literal: string): string {
+    return literal.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
 
 /** Every file under `dir`, as paths relative to it, skipping nothing. */
 async function collectTemplateFiles(dir: string, prefix = ''): Promise<string[]> {

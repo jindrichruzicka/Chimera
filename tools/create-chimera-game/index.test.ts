@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { GROWTH_DIRECTORIES } from './__test-support__/template-contract';
 import { resolveTemplatesRoot, scaffoldGame } from './index';
 import { InvalidGameNameError } from './normalize';
 import { findLeftoverTokens } from './tokens';
@@ -13,6 +14,7 @@ import { findLeftoverTokens } from './tokens';
  * The `pnpm install` side effect lives only in the CLI-entry guard (VITEST-excluded), so these
  * tests never spawn a real install and stay hermetic.
  */
+
 describe('resolveTemplatesRoot', () => {
     it('returns the package-relative templates dir when running from the source layout', () => {
         // Source run: tools/create-chimera-game/index.ts → ./templates is a sibling.
@@ -80,6 +82,13 @@ describe('scaffoldGame', () => {
         // Committed-asset-dir convention: an EMPTY dotfile, the shape most at
         // risk of being dropped by a copy-pipeline filter.
         await write('templates/blank/assets/fonts/.gitkeep', '');
+        // The growth directories the real template ships empty. Seeded here so
+        // the copier is graded on carrying a directory whose ONLY member is a
+        // dotfile — the shape a SKIP_DIRS entry, or any name-based filter, would
+        // erase without erroring.
+        for (const dir of GROWTH_DIRECTORIES) {
+            await write(`templates/blank/${dir}/.gitkeep`, '');
+        }
         await write(
             'templates/blank/content/__gameCamel__Content.ts',
             [
@@ -91,6 +100,21 @@ describe('scaffoldGame', () => {
         await write(
             'templates/blank/screens/__GamePascal__Playfield.tsx',
             "import styles from './__GamePascal__Playfield.module.css';\nexport function __GamePascal__Playfield() { return styles; }",
+        );
+        // A ROOT-level file whose basename is load-bearing: `chimera-validate-assets`
+        // discovers a game's manifest by the exact name `asset-manifest.ts`, so a
+        // copy pipeline that renamed or dropped it would leave the scaffolded game
+        // with an inventory nothing reads — and the gate silently checking zero refs.
+        await write(
+            'templates/blank/asset-manifest.ts',
+            [
+                "// __Game Title__'s asset manifest.",
+                "import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';",
+                'export const __gameCamel__AssetManifest = {',
+                '    gameId: __GAME_CONSTANT___GAME_ID,',
+                '    entries: [],',
+                '};',
+            ].join('\n'),
         );
         // Present in the FIXTURE because a copy pipeline that skipped
         // `*.module.css` would be invisible otherwise — nothing else in this
@@ -241,6 +265,13 @@ describe('scaffoldGame', () => {
         expect(playfieldCss).toContain('.playfield');
         expect(playfieldCss).toContain('My Game');
 
+        // The asset manifest, at the basename the validator discovers, with its
+        // export substituted. A game whose manifest lands under any other name is
+        // one the build gate never opens.
+        const assetManifest = await readFile(path.join(result.appDir, 'asset-manifest.ts'), 'utf8');
+        expect(assetManifest).toContain('myGameAssetManifest');
+        expect(assetManifest).toContain('MY_GAME_GAME_ID');
+
         // The architecture-lint guardrails (§4.32). Asserted on the EMITTED app,
         // not the template tree: the template shipping them proves nothing if
         // the copy skips a `styles/` directory, and that is silent — a
@@ -276,6 +307,20 @@ describe('scaffoldGame', () => {
         await expect(
             readFile(path.join(result.appDir, 'assets', 'fonts', '.gitkeep'), 'utf8'),
         ).resolves.toBe('');
+
+        // …and so must a directory whose only member IS that dotfile. The
+        // template ships ai/, data/ and scene/ empty so an author's first file
+        // lands somewhere the guards already reach; a copier that skipped them
+        // would emit a game silently missing three directories, which reads as
+        // "the convention was never wired" rather than as a copy bug. Naming
+        // each one is what makes a SKIP_DIRS entry — the cheapest way to lose
+        // exactly one of them — a failure here.
+        for (const dir of GROWTH_DIRECTORIES) {
+            await expect(
+                readFile(path.join(result.appDir, dir, '.gitkeep'), 'utf8'),
+                `${dir}/.gitkeep must survive the copy`,
+            ).resolves.toBe('');
+        }
     });
 
     it('does not copy the template node_modules and leaves no token markers behind', async () => {
@@ -455,6 +500,12 @@ describe('scaffoldGame', () => {
                     'utf8',
                 ),
             ).toContain('My Game');
+            // Per mode like its siblings: the copy plan is mode-filtered, and a
+            // standalone game runs `validate:assets` through the published bin,
+            // so a manifest missing HERE is the mode where it matters most.
+            expect(await readFile(path.join(result.appDir, 'asset-manifest.ts'), 'utf8')).toContain(
+                'myGameAssetManifest',
+            );
 
             // The standalone project root is emitted.
             for (const file of [

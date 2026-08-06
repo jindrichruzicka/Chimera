@@ -16,6 +16,39 @@
  * engine-declared names.
  */
 
+/*
+ * The scene host: this screen's full-bleed root, and where a `<GameCanvas>` goes
+ * when you add one.
+ *
+ * The engine states this once, in `camera-system.md` §4.22 "Sizing the wrapper".
+ * It is restated in full here on purpose — this file ships into a generated game
+ * that has no copy of the engine's docs, and the rule below looks arbitrary
+ * enough to "clean up" without it.
+ *
+ * `position: absolute; inset: 0` is load-bearing, not decoration. The engine
+ * mounts this screen inside `div.chimera-scene-router`, which carries no styles
+ * and so has an AUTO block size. A percentage height against an auto-height
+ * parent resolves to auto, so the obvious `block-size: 100%` collapses onto the
+ * host section's own `minHeight` floor — a short strip at the top of a
+ * full-screen window, with no error and no warning. Absolute positioning skips
+ * the auto-height div and resolves against the positioned host above it, whose
+ * used height is the stretched grid row.
+ *
+ * The size has to live on this element rather than on the canvas: r3f pins
+ * position and size as INLINE styles on its own wrapper div, so a class handed to
+ * `<GameCanvas>` can never re-place or re-size it — that class carries chrome
+ * only. And a zero-height wrapper never mounts the scene at all: r3f renders the
+ * canvas children only once it has measured a non-zero box, so the failure is a
+ * scene that silently never loads rather than one that looks wrong.
+ */
+.sceneHost {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+}
+
 .playfield {
     display: grid;
     gap: var(--ch-space-md);

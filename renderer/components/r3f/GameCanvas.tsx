@@ -71,8 +71,14 @@ export type GameCanvasProps = Readonly<{
     /**
      * Forwarded to the r3f wrapper `<div>` for canvas chrome. r3f pins
      * position and size as inline styles on that div, so placement and the
-     * explicit size live on a game-owned wrapper element — and a zero-height
-     * wrapper never mounts the scene.
+     * explicit size live on a game-owned wrapper element — this class can
+     * never re-place or re-size the canvas.
+     *
+     * For a full-window scene that wrapper is the screen's ROOT element and
+     * wants `position: absolute; inset: 0`. Sizing it any other way fails
+     * quietly in one of two ways — camera-system.md §4.22 "Sizing the wrapper"
+     * is where both are written out, and `GameShell.test.tsx` pins the host
+     * geometry they turn on.
      */
     className?: string;
     /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */

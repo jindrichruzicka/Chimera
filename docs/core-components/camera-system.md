@@ -41,6 +41,17 @@ A game needing a second view — a minimap, a unit preview — mounts a second `
 - **Every** role mounts `FrameRateLimiter` and takes `frameloop={useEngineFrameloop()}`: each canvas is paced by the `display.targetFps` cap.
 - Placement and size are the game's: r3f pins `position`/`width`/`height` as inline styles on its wrapper div, so the corner anchor and the explicit size live on a game-owned wrapper element, and the curated `className` prop carries canvas chrome (a zero-height wrapper never mounts the scene).
 
+### Sizing the wrapper — for every role, not just overlays
+
+The wrapper rule above is not an overlay detail; the **main** canvas needs it too, and gets it wrong more quietly. A screen mounts inside `div.chimera-scene-router`, which carries no styles and therefore has an auto block size, under a host `<section>` whose only sizing is `position: relative` plus a `minHeight` floor. So:
+
+- `block-size: 100%` on the screen resolves against an auto-height parent → auto → the box collapses onto that floor. The scene renders into a short strip at the top of a full-screen window, with no error and no warning. This is the common failure, and it looks like a broken camera rather than a broken layout.
+- A wrapper that reaches zero height fails differently and more visibly-in-hindsight: r3f renders canvas children only after measuring a non-zero box, so the scene never mounts and assets never load.
+
+The reliable spelling for a full-window scene is `position: absolute; inset: 0` on the screen's **root** element — it takes the box out of flow, skipping the auto-height div, and resolves against the positioned host section. Any in-flow element between the two re-introduces the auto-height link. `inset: 0` alone is sufficient: adding `inline-size`/`block-size: 100%` is over-constrained (the used size is identical) and turns any later `padding` on the same element into overflow, since this repo sets no `box-sizing` reset.
+
+The host geometry all of this turns on — `position: relative` plus the `minHeight` floor on the screen host `<section>` — is pinned by `renderer/components/shell/GameShell.test.tsx`. This section is the canonical statement, and it has exactly one deliberate full restatement: `tools/create-chimera-game/templates/blank/screens/__GamePascal__Playfield.module.css`, which ships into generated games that have no copy of these docs. Edit the two together.
+
 ---
 
 ## GameCanvas Camera Prop
@@ -109,8 +120,14 @@ export type GameCanvasProps = Readonly<{
     /**
      * Forwarded to the r3f wrapper `<div>` for canvas chrome. r3f pins
      * position and size as inline styles on that div, so placement and the
-     * explicit size live on a game-owned wrapper element — and a zero-height
-     * wrapper never mounts the scene.
+     * explicit size live on a game-owned wrapper element — this class can
+     * never re-place or re-size the canvas.
+     *
+     * For a full-window scene that wrapper is the screen's ROOT element and
+     * wants `position: absolute; inset: 0`. Sizing it any other way fails
+     * quietly in one of two ways — camera-system.md §4.22 "Sizing the wrapper"
+     * is where both are written out, and `GameShell.test.tsx` pins the host
+     * geometry they turn on.
      */
     className?: string;
     /** Forwarded to the r3f `<Canvas>` `onPointerMissed` (deselect-on-empty-click). */

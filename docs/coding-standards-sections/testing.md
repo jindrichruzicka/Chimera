@@ -75,3 +75,24 @@ Unit tests must never touch the real filesystem, real network, or real Electron 
 - `InMemorySaveRepository` instead of `FileSaveRepository`
 - `InMemoryMultiplayerProvider` instead of `LocalWebSocketProvider`
 - In-process builder helpers from `<package>/__test-support__/`
+
+What the rule protects is determinism: a test must not depend on filesystem state it
+does not control — a path another test wrote, a developer's home directory, whatever a
+previous run left behind. In bounds, for example:
+
+- **Reading a committed file whose content IS the subject.** A repository file is an
+  input as fixed as a string literal, and reading it is the only way to assert anything
+  about it — an asset's bytes against what its manifest claims
+  (`apps/tactics/asset-manifest.test.ts`), a template file against what the scaffold
+  promises to emit (`tools/create-chimera-game/blank-template-smoke.test.ts`). Binary
+  artifacts are the sharp case: a `.wav` or `.glb` cannot be reviewed in a diff, so what
+  it contains is knowable only by parsing it, and prose about it rots silently.
+  `@chimera-engine/electron/test-support` ships those readers so a game does not
+  hand-roll a container parser.
+- **Creating fixtures the test itself owns, under the OS temp directory.** A `mkdtemp`
+  root is private to the run, so nothing leaks between tests — the established pattern in
+  `electron/main/saves/FileSaveRepository.test.ts` and
+  `electron/dev-tools/validate-assets/index.test.ts`, among others.
+
+Out of bounds either way: real network, real Electron IPC, and writing anywhere under the
+repository itself.

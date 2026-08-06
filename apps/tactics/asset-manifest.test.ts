@@ -2,7 +2,7 @@
  * apps/tactics/asset-manifest.test.ts
  *
  * Tactics is the reference adopter of the cue-sheet authoring surface (§4.25).
- * Two things are worth pinning here, and neither is pinned anywhere else.
+ * Three things are worth pinning here.
  *
  * First, the sheet is authored through `audioClipEntry` (Invariant #124's sanctioned
  * builder) rather than a hand-written `metadata` key, and `validate-assets`
@@ -19,86 +19,45 @@
  * synthesised with every partial an integer multiple of `1 / (loopEnd - loopStart)`
  * precisely so this holds, and a regenerated or re-encoded clip that broke it would
  * otherwise only be audible.
+ *
+ * Third, `showcase-rig.glb` is a binary: it cannot be diffed or grepped, so what the
+ * model-showcase screen says ABOUT it — the unlit extension it relies on to need no
+ * lights, the `top` bone it poses BY NAME, the embedded buffer and absent textures
+ * that make it self-contained, the quad extents its camera frustum is sized to hold
+ * — is checkable only by parsing the container. That is done at the bottom of this
+ * file; see the docblock there for what the model-instances e2e already covers and
+ * what it does not.
+ *
+ * The readers themselves are the engine's published ones
+ * (`@chimera-engine/electron/test-support`): the parsing is what is easy to get
+ * subtly wrong, and a game's copy of it would drift from the games it is supposed
+ * to represent.
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+    assetPathForRef,
+    readGlbDocument,
+    readWavFacts,
+} from '@chimera-engine/electron/test-support';
 
-import { tacticsAssetManifest, tacticsAudioRefs, tacticsMusicCues } from './asset-manifest.js';
+import {
+    tacticsAssetManifest,
+    tacticsAudioRefs,
+    tacticsModelRefs,
+    tacticsMusicCues,
+} from './asset-manifest.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const here = dirname(fileURLToPath(import.meta.url));
 
-interface WavFacts {
-    readonly sampleRate: number;
-    readonly channels: number;
-    readonly bitsPerSample: number;
-    readonly frames: number;
-    readonly durationSeconds: number;
-    readonly sampleAt: (frameIndex: number) => number;
-}
-
-/**
- * Read the facts a cue sheet makes claims about straight out of the RIFF header,
- * walking the chunk list rather than assuming the canonical 44-byte layout (a
- * re-encode may insert `LIST`/`fact` chunks ahead of `data`).
- */
-function readWav(relativePath: string): WavFacts {
-    const bytes = readFileSync(resolve(__dirname, relativePath));
-    expect(bytes.toString('ascii', 0, 4)).toBe('RIFF');
-    expect(bytes.toString('ascii', 8, 12)).toBe('WAVE');
-
-    let offset = 12;
-    let fmt: { sampleRate: number; channels: number; bitsPerSample: number } | undefined;
-    let dataOffset: number | undefined;
-    let dataLength: number | undefined;
-
-    while (offset + 8 <= bytes.length) {
-        const id = bytes.toString('ascii', offset, offset + 4);
-        const size = bytes.readUInt32LE(offset + 4);
-        if (id === 'fmt ') {
-            fmt = {
-                channels: bytes.readUInt16LE(offset + 10),
-                sampleRate: bytes.readUInt32LE(offset + 12),
-                bitsPerSample: bytes.readUInt16LE(offset + 22),
-            };
-        }
-        if (id === 'data') {
-            dataOffset = offset + 8;
-            dataLength = size;
-        }
-        offset += 8 + size + (size % 2); // chunks are word-aligned
-    }
-
-    expect(fmt).toBeDefined();
-    expect(dataOffset).toBeDefined();
-    expect(dataLength).toBeDefined();
-    const { sampleRate, channels, bitsPerSample } = fmt!;
-    const bytesPerFrame = (channels * bitsPerSample) / 8;
-    const frames = dataLength! / bytesPerFrame;
-
-    return {
-        sampleRate,
-        channels,
-        bitsPerSample,
-        frames,
-        durationSeconds: frames / sampleRate,
-        sampleAt: (frameIndex) => bytes.readInt16LE(dataOffset! + frameIndex * bytesPerFrame),
-    };
-}
+/** Resolve a ref the same way the runtime resolver does, from the ref itself. */
+const readWav = (ref: string) => readWavFacts(assetPathForRef(here, ref));
 
 const MUSIC_CLIPS = [
-    {
-        name: 'calm',
-        ref: tacticsAudioRefs.ambienceCalm,
-        file: 'assets/audio/music/ambience-calm.wav',
-    },
-    {
-        name: 'tense',
-        ref: tacticsAudioRefs.ambienceTense,
-        file: 'assets/audio/music/ambience-tense.wav',
-    },
+    { name: 'calm', ref: tacticsAudioRefs.ambienceCalm },
+    { name: 'tense', ref: tacticsAudioRefs.ambienceTense },
 ] as const;
 
 describe('Tactics asset manifest — cue-sheet adoption', () => {
@@ -134,8 +93,8 @@ describe('Tactics asset manifest — cue-sheet adoption', () => {
 
     it.each(MUSIC_CLIPS)(
         "the $name sheet's durationSeconds is the real length of the file on disk",
-        ({ file }) => {
-            const wav = readWav(file);
+        ({ ref }) => {
+            const wav = readWav(ref);
             // The gate compares cues against the AUTHORED duration; only this compares
             // the authored duration against the ASSET. Exact, not approximate: the clip
             // is synthesised to a whole number of frames at this length.
@@ -143,8 +102,8 @@ describe('Tactics asset manifest — cue-sheet adoption', () => {
         },
     );
 
-    it.each(MUSIC_CLIPS)('the $name cues land on whole sample frames', ({ file }) => {
-        const wav = readWav(file);
+    it.each(MUSIC_CLIPS)('the $name cues land on whole sample frames', ({ ref }) => {
+        const wav = readWav(ref);
         for (const seconds of [
             tacticsMusicCues.intro,
             tacticsMusicCues.loopStart,
@@ -155,8 +114,8 @@ describe('Tactics asset manifest — cue-sheet adoption', () => {
         }
     });
 
-    it.each(MUSIC_CLIPS)('the $name loop region wraps without a discontinuity', ({ file }) => {
-        const wav = readWav(file);
+    it.each(MUSIC_CLIPS)('the $name loop region wraps without a discontinuity', ({ ref }) => {
+        const wav = readWav(ref);
         // `sampleAt` reads 16-bit LE and the tolerance below is stated in 16-bit LSBs;
         // both are silently wrong for any other encoding.
         expect(wav.bitsPerSample).toBe(16);
@@ -186,5 +145,78 @@ describe('Tactics asset manifest — cue-sheet adoption', () => {
         expect(loopEnd).toBeGreaterThan(loopStart);
         expect(outro).toBeGreaterThanOrEqual(loopEnd);
         expect(durationSeconds).toBeGreaterThanOrEqual(outro);
+    });
+});
+
+/**
+ * The showcase rig, read out of its own container.
+ *
+ * Each assertion below restates a claim some OTHER file makes in prose:
+ * `TacticsModelShowcaseScreen` mounts no lights and says the material is unlit;
+ * `TacticsModelShowcase` looks a bone up by the name `top`; the manifest calls the
+ * file self-contained; the showcase camera's frustum is sized to the quads'
+ * authored extents.
+ *
+ * These are not the only thing standing between a bad re-export and a merge:
+ * `e2e/tests/model-instances.spec.ts` reddens on several of them too — a renamed
+ * bone reports `NaN` for the pose, a lit material renders black in an unlit scene,
+ * and a buffer that grew a `uri` fails to fetch and surfaces as a model error. It
+ * gets there by launching Electron and comparing a pixel or an attribute, which
+ * says the frame is wrong without saying why. These read the fact off the bytes,
+ * and name it.
+ */
+describe('Tactics asset manifest — the showcase rig container', () => {
+    const rig = () => readGlbDocument(assetPathForRef(here, tacticsModelRefs.showcaseRig));
+
+    it('declares the unlit extension the showcase screen mounts no lights for', () => {
+        // GLTFLoader maps KHR_materials_unlit to MeshBasicMaterial. Lose the
+        // extension and the quads become lit — in a scene with no light, black.
+        expect(rig().extensionsUsed).toContain('KHR_materials_unlit');
+    });
+
+    it('carries the bone the showcase poses BY NAME', () => {
+        // `getObjectByName('top')` returns undefined on a rename, and the pose is
+        // then simply skipped: the e2e reads a bone rotation that never changed.
+        expect(rig().nodes?.map((node) => node.name)).toContain('top');
+    });
+
+    it('embeds its buffer and references no texture', () => {
+        // A `uri` on a buffer, or any image, is a SECOND file to resolve over
+        // `chimera://` — one the manifest does not declare and validate-assets
+        // therefore never checks for existence.
+        const document = rig();
+        expect(document.buffers ?? []).not.toHaveLength(0);
+        for (const buffer of document.buffers ?? []) {
+            expect(buffer.uri).toBeUndefined();
+        }
+        expect(document.images ?? []).toHaveLength(0);
+        expect(document.textures ?? []).toHaveLength(0);
+    });
+
+    it('authors the quads at the extents the showcase camera is sized for', () => {
+        // TacticsModelShowcaseScreen states the extents as "x ±0.45, y 0→1.4" and
+        // sizes SHOWCASE_CAMERA's frustum (±2.4 × ±1.5, centred at y 0.7) to hold
+        // both instances plus the posed one's swing. A rig re-exported at another
+        // scale would render off-frame or hairline-small with nothing else red.
+        const document = rig();
+        const positionAccessors = (document.meshes ?? [])
+            .flatMap((mesh) => mesh.primitives)
+            .map((primitive) => primitive.attributes['POSITION'])
+            .filter((index): index is number => index !== undefined)
+            .map((index) => document.accessors?.[index]);
+
+        expect(positionAccessors).not.toHaveLength(0);
+        for (const accessor of positionAccessors) {
+            // glTF POSITION accessors are required to carry min/max, so their
+            // absence is itself a malformed rig rather than a skipped assertion.
+            expect(accessor?.min).toBeDefined();
+            expect(accessor?.max).toBeDefined();
+            const [minX, minY] = accessor?.min ?? [];
+            const [maxX, maxY] = accessor?.max ?? [];
+            expect(Math.abs(minX ?? 0)).toBeCloseTo(0.45, 5);
+            expect(maxX).toBeCloseTo(0.45, 5);
+            expect(minY).toBeCloseTo(0, 5);
+            expect(maxY).toBeCloseTo(1.4, 5);
+        }
     });
 });

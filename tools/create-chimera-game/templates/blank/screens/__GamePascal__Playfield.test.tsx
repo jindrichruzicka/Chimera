@@ -18,4 +18,15 @@ describe('__GamePascal__Playfield', () => {
 
         expect(screen.getByText('__Game Title__')).toBeInTheDocument();
     });
+
+    it('makes the scene host the screen root', () => {
+        // The full-bleed rule only reaches the host section if it is on the
+        // OUTERMOST element: any in-flow wrapper between them re-introduces the
+        // auto-height link the absolute positioning exists to skip, and a canvas
+        // mounted inside collapses to a strip. jsdom computes no layout, so the
+        // element identity is the only part of that this can assert.
+        const { container } = render(<__GamePascal__Playfield />);
+
+        expect(container.firstElementChild?.className).toContain('sceneHost');
+    });
 });

@@ -360,7 +360,8 @@ of them because it lives at `apps/<kebab>`, which makes that layout part of the 
 One known gap, inherited rather than introduced: a game's `shell/` contributions are renderer
 surfaces under Invariant #96, but `no-hardcoded-design-values` reaches only `screens/` — on
 both sides of the boundary. Widening it is a change to the engine's own semantics, not to this
-relocation.
+relocation. The same is true of a game's `scene/`: the rule's zone set is `screens/` only, as
+`curated-rules.ts` records.
 
 ---
 

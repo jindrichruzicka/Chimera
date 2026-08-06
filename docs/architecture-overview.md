@@ -220,11 +220,17 @@ function PlayfieldScreen() {
   const snapshot = useGameStore(s => s.snapshot);   // §4.4 PlayerSnapshot
   if (!snapshot) return null;
   return (
-    <GameCanvas camera="top-down">
-      {Object.values(snapshot.entities).map(e =>
-        <Entity key={e.id} entity={e}/>
-      )}
-    </GameCanvas>
+    // The game-owned scene host, and the screen's ROOT element. The size cannot
+    // live on the canvas — r3f pins position/size as inline styles on its own
+    // wrapper div — and sizing this element any other way fails quietly; see
+    // core-components/camera-system.md §4.22 "Sizing the wrapper".
+    <div style={{ position: 'absolute', inset: 0 }}>
+      <GameCanvas camera="top-down">
+        {Object.values(snapshot.entities).map(e =>
+          <Entity key={e.id} entity={e}/>
+        )}
+      </GameCanvas>
+    </div>
   );
 }
 ```

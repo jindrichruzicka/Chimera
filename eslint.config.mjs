@@ -284,6 +284,59 @@ export default tseslint.config(
         },
     },
 
+    // Most of the app ROOT (`apps/<game>/*.ts`, one level deep) is covered by no
+    // import zone at all, and one root file now legitimately reaches for
+    // `@chimera-engine/electron`: `asset-manifest.test.ts`, for the published
+    // asset-fact readers at `@chimera-engine/electron/test-support` (§3).
+    //
+    // That edge is DEV-TIME ONLY, and the distinction is load-bearing rather than
+    // stylistic: `asset-manifest.ts` sits beside its test and is imported by
+    // `renderer/loaders.ts`, so the same import one file over would pull the
+    // main-process package into the renderer bundle. Tests are exempted below;
+    // production root files are not, which is what makes "test only" mechanical.
+    //
+    // TWO exemptions, and the second is the subtle one:
+    //
+    //   *.test.ts — the files the electron edge exists for.
+    //
+    //   settings-schema.ts — ALREADY covered, by the ai/game zone above (its
+    //   `files` list ends with `apps/*/settings-schema.{ts,tsx}`, which is also
+    //   one level deep). Flat config resolves ONE value per rule, last block
+    //   wins, so matching that file here would REPLACE its 14-pattern group
+    //   with this 2-pattern one — silently un-banning networking, the game
+    //   aliases and the relative-path forms, while `pnpm lint` stayed green
+    //   because `chimera/no-game-renderer-internals` still caught the renderer
+    //   half. Leaving it to the zone above loses nothing: that group already
+    //   bans `@chimera-engine/electron` and `@chimera-engine/electron/*`.
+    //
+    // For the same last-block-wins reason the base block's `../../../*` group is
+    // REPEATED below rather than inherited. `eslint-app-root-import-zone.test.ts`
+    // pins the resolved patterns per file, because none of this is visible to a
+    // lint run — only to `--print-config`.
+    {
+        files: ['apps/*/*.{ts,tsx}'],
+        ignores: ['apps/*/*.test.{ts,tsx}', 'apps/*/settings-schema.{ts,tsx}'],
+        rules: {
+            'no-restricted-imports': [
+                'error',
+                {
+                    patterns: [
+                        {
+                            group: ['@chimera-engine/electron', '@chimera-engine/electron/*'],
+                            message:
+                                "A game's production code must not import @chimera-engine/electron — it is the main-process package, and an app-root module reaches the renderer bundle. The test-support readers are for *.test.ts only. See coding-standards.md §3.",
+                        },
+                        {
+                            group: ['../../../*'],
+                            message:
+                                'Do not reach across package boundaries with deep relative paths. Use @chimera-engine/* aliases.',
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+
     // `@chimera-engine/networking` depends on `@chimera-engine/simulation` ONLY (+ the
     // third-party `ws`) (Invariant #1): it must not import the AI/UI/host/game
     // layers. Now that the package is consumed through its `exports` map, the

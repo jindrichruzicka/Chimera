@@ -163,6 +163,37 @@ export const PROBE_FONT_FILE = 'VerifyProbe-Regular.woff2';
  */
 export const PROBE_BROKEN_REF_FILE = 'verify-scaffold-broken-ref.json';
 
+/**
+ * The manifest-read plant (arm step (c2)) — a DECLARED entry the clean scaffold
+ * does not have.
+ *
+ * A blank template declares no assets, so the clean run reports `Checked 0`,
+ * which is byte-identical to what a tree with NO manifest reports: the tool
+ * discovers manifests by basename and simply finds none. Every assertion about
+ * the shipped `asset-manifest.ts` would therefore stay green if the file were
+ * renamed, emptied of its export, or dropped from the copy plan entirely.
+ *
+ * Planting one valid entry and requiring the count to move off zero is what
+ * makes the arm read the file: it proves discovery at the exact basename, that
+ * `entries` is a literal the tool can walk, and that the ref's first segment
+ * resolves to the app's own `assets/` dir. Restored in a `finally`, like the
+ * broken-ref plant below.
+ *
+ * The planted file's CONTENT is deliberately a text placeholder, not a real PNG:
+ * the tool resolves each declared ref to a path and calls `access(F_OK)` on it,
+ * and never opens an asset (Invariant #52 is membership-only). Writing decoded
+ * PNG bytes would additionally be unsound here — the injected `writeFile` takes a
+ * string and encodes UTF-8, which mangles every byte above 0x7f.
+ */
+export const PROBE_MANIFEST_ENTRY_REL = path.join('textures', 'verify-scaffold-probe.png');
+
+/** Stand-in bytes for the planted ref — see {@link PROBE_MANIFEST_ENTRY_REL}. */
+export const PROBE_MANIFEST_ASSET_CONTENT =
+    'verify-scaffold manifest-read probe; validate-assets checks membership, never pixels.\n';
+
+/** The empty `entries: []` literal the plant rewrites, and the arm requires to exist. */
+export const PROBE_EMPTY_ENTRIES_PATTERN = /entries:\s*\[[\s\S]*?\],/u;
+
 /** The exact app-level script the blank template must ship. */
 export const PROBE_VALIDATE_ASSETS_SCRIPT = 'chimera-validate-assets ../..';
 
@@ -241,8 +272,9 @@ export const PROBE_LINT_PLANTS = [
  * `e2e/**` works; the shape test pins this one) — the e2e tsconfig maps
  * `@chimera-engine/renderer/*` straight onto `dist/`, bypassing the exports
  * map, so an e2e file can type-resolve an import game source can never
- * write. Nothing mounts it, and no model, manifest, or Canvas enters the
- * blank template.
+ * write. Nothing mounts it, and no model or Canvas enters the blank template.
+ * (An asset MANIFEST does — an empty one, wired through the renderer loaders —
+ * but it declares no asset and mounts nothing.)
  */
 export const PROBE_SEAM_PLANT = {
     rel: path.join('screens', 'VerifyScaffoldSeamProbe.tsx'),
@@ -823,6 +855,50 @@ async function runValidateAssetsArm(
     // clean scaffold genuinely reports 0.
     if (!/Checked \d+ asset refs/u.test(cleanOutput)) {
         fail('ran on the clean scaffold without reporting a checked-ref count');
+    }
+
+    // (c2) The manifest-read half. `Checked 0` above is exactly what a tree with
+    //      NO manifest reports, so nothing so far distinguishes "read the
+    //      shipped asset-manifest.ts and it was empty" from "never found it".
+    //      Plant ONE valid entry and require the count to move. See
+    //      PROBE_MANIFEST_ENTRY_REL for what each half of that proves.
+    deps.log('planting a valid manifest entry — this run must PASS with a non-zero checked count…');
+    const manifestPath = path.join(appDir, 'asset-manifest.ts');
+    if (!(await deps.fs.exists(manifestPath))) {
+        fail(
+            'scaffolded no asset-manifest.ts — chimera-validate-assets discovers it by that exact basename',
+        );
+    }
+    const manifestSource = await deps.fs.readFile(manifestPath);
+    if (!PROBE_EMPTY_ENTRIES_PATTERN.test(manifestSource)) {
+        fail(
+            'the scaffolded asset-manifest.ts no longer exposes an entries array this gate can plant into — if the shape changed deliberately, update PROBE_EMPTY_ENTRIES_PATTERN',
+        );
+    }
+    const probeRef = `${PROBE_GAME.kebab}/${PROBE_MANIFEST_ENTRY_REL.split(path.sep).join('/')}`;
+    const probePngPath = path.join(appDir, 'assets', PROBE_MANIFEST_ENTRY_REL);
+    await deps.fs.mkdir(path.dirname(probePngPath));
+    await deps.fs.writeFile(probePngPath, PROBE_MANIFEST_ASSET_CONTENT);
+    await deps.fs.writeFile(
+        manifestPath,
+        manifestSource.replace(
+            PROBE_EMPTY_ENTRIES_PATTERN,
+            `entries: [{ ref: '${probeRef}', kind: 'texture', priority: 'deferred' }],`,
+        ),
+    );
+    let plantedManifest: RunResult;
+    try {
+        plantedManifest = validate();
+    } finally {
+        await deps.fs.writeFile(manifestPath, manifestSource);
+        await deps.fs.rm(probePngPath);
+    }
+    assertStepOk('validate-assets', plantedManifest);
+    const plantedOutput = `${plantedManifest.stdout}${plantedManifest.stderr}`;
+    if (!/Checked [1-9]\d* asset refs/u.test(plantedOutput)) {
+        fail(
+            `reported no checked refs with a valid entry planted in ${manifestPath} — the shipped manifest is not the one the tool reads`,
+        );
     }
 
     // (d) Non-vacuity. Plant a content ref to an asset that does not exist and

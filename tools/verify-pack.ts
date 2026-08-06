@@ -133,6 +133,10 @@ export const PROBE_SUBPATHS = [
     // every scaffolded game's `verify:packaged-bundle` gate resolves it from the packed
     // artifact, so a dropped `exports`/`files` entry would strand the guard downstream.
     '@chimera-engine/electron/packaged-bundle',
+    // The asset-fact readers a game's own `asset-manifest.test.ts` imports (§4.32) —
+    // shipped in the template, so a dropped entry breaks the unit suite of every
+    // scaffolded game on its first run.
+    '@chimera-engine/electron/test-support',
 ] as const;
 
 // ── Result + step-error types ────────────────────────────────────────────────

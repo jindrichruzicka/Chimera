@@ -9,10 +9,20 @@ import type { LoadedRendererGame, LoadedRendererGameShell } from '@chimera-engin
 import { __gameCamel__Manifest } from '../manifest.js';
 import { gameFonts } from '../shell/fonts.js';
 
+// `assetManifest` is OPTIONAL on `LoadedRendererGame`, and that is the trap this
+// forward exists to close: a game that omits it compiles, typechecks, lints and
+// passes `validate:assets` clean, then rejects every asset load at runtime with
+// `UnknownAssetManifestEntryError` — the manager resolves refs against the
+// inventory it was handed, and it was handed none. Forwarded from the start so
+// the first entry added to `asset-manifest.ts` simply works.
 export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGame> {
-    const screenModule = await import('../screens/index.js');
+    const [screenModule, assetManifestModule] = await Promise.all([
+        import('../screens/index.js'),
+        import('../asset-manifest.js'),
+    ]);
     return {
         registry: screenModule.__GamePascal__GameScreenRegistry,
+        assetManifest: assetManifestModule.__gameCamel__AssetManifest,
     };
 }
 

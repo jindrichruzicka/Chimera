@@ -97,6 +97,17 @@ const EXPECTED_EXPORTS = {
         types: './dist/dev-tools/eslint/index.d.ts',
         default: './dist/dev-tools/eslint/index.js',
     },
+    // Asset-fact readers a GAME's unit tests import (§4.32 dev-tools). Published
+    // for the same reason as the lint rules beside it: a game that left the
+    // monorepo otherwise has to hand-roll a RIFF/glTF container parser to assert
+    // anything about its own binary assets, and `chimera-validate-assets` checks
+    // only that a declared ref EXISTS. Framework-free by construction — an
+    // `import 'vitest'` here would be an undeclared runtime dependency in a
+    // published `.js` and fail `verify:publish`'s depcheck.
+    './test-support': {
+        types: './dist/dev-tools/test-support/index.d.ts',
+        default: './dist/dev-tools/test-support/index.js',
+    },
     // The Invariant #27 packaged-bundle guard (§4.12, #902): the single home of
     // the debug-bundle marker set and the self-validating verification, consumed
     // by the monorepo's verify:packaged-bundle driver and by every scaffolded
