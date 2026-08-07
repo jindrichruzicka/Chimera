@@ -1,6 +1,6 @@
 ---
 title: 'Chimera Coding Standards — §16 Code Comments'
-description: 'How to write code comments in the Chimera engine: comment the why, not the what; keep them minimal; no issue or review-finding references.'
+description: 'How to write code comments in the Chimera engine: comment the why, not the what; keep them minimal; no issue or review-finding references; scaffold templates additionally drop invariant and doc-section references.'
 tags: [comments, documentation, why-not-what, coding-standards]
 ---
 
@@ -50,13 +50,29 @@ For acceptance criteria, carry the criterion **text** instead of its number: `(A
 
 The `@chimera-review:` and `@ts-expect-error:` tags required by [§1 TypeScript](typescript.md) are the sole sanctioned exception — they state a reason and carry no issue/finding id. Neither is grepped by CI: `@ts-expect-error` needs its description because `@typescript-eslint/ban-ts-comment` demands one, and `@chimera-review:` is checked only where `chimera/no-fromfloat-in-simulation` requires it as a companion to a disable of that rule.
 
-## 16.5 Style
+## 16.5 Scaffold templates: also drop invariant and doc-section refs
+
+Applies **only** to files under `tools/create-chimera-game/templates/`. Everywhere else in the engine, `Invariant #nn` and `§n.n` doc-section references are encouraged — they point a reader at something the repo actually contains.
+
+A template file does not ship into this repo. It is copied verbatim into an adopter's own project, which has no `architecture-invariants.md`, no `docs/`, and its own numbering if it keeps invariants at all. There, `Invariant #96` is either unresolvable or resolves to a rule that is not the one meant. So in template files these are forbidden too:
+
+| Forbidden in templates | Instead                                                                   |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `Invariant #nn`        | State the rule in the sentence, or name the lint rule that enforces it    |
+| `§n.n`, `<doc>.md`     | State the constraint in full — the adopter has no copy of the doc to open |
+| Engine milestones      | Drop; `M9 / F67` names nothing an adopter can look up (already §16.4)     |
+
+The number is never the point — the rule is. `// Invariant #87: every screen registered here must be wrapped in React.lazy` becomes `// Every screen registered here must be wrapped in React.lazy` and loses nothing.
+
+Do not redirect a dropped reference at a different guard unless you have checked that guard's scope. Swapping a dangling reference for a wrong one is worse than deleting it.
+
+## 16.6 Style
 
 - One idea per comment; prefer a single line. Reserve block/JSDoc comments for public API surface and genuinely intricate algorithms.
 - Write for the next engineer, plainly. No hedging, no filler, no restating the ticket.
 - Keep the comment next to what it explains, and update it when that code changes — a stale comment is worse than none.
 
-## 16.6 Examples
+## 16.7 Examples
 
 ```ts
 // BAD — restates the code

@@ -36,7 +36,7 @@ export function load__GamePascal__RendererGameShell(): Promise<LoadedRendererGam
         // seam turns it into `--ch-cursor-*` token overrides. Undeclared (the
         // manifest example commented out) ⇒ undefined ⇒ strict no-op.
         cursor: __gameCamel__Manifest.cursor,
-        // Self-hosted font faces (Invariant #97), empty until the app's
+        // Self-hosted font faces, empty until the app's
         // `fetch:fonts` script populates shell/fonts.ts.
         fonts: gameFonts,
         // Game-contributed UI icon glyphs, keyed `game.<gameId>.<name>`. Author

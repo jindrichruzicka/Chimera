@@ -11,9 +11,9 @@
  * `--remote-debugging-port=0`, which Node reports as `bad option`. A GUI
  * Electron launch must never inherit it, so it is removed unconditionally.
  *
- * Strips CHIMERA_DEBUG: the §4.12 environment matrix (Invariant #27) requires
- * E2E runs to never enter the runtime debug layer, so a debug flag exported by
- * the developer's shell must not leak into the launched app.
+ * Strips CHIMERA_DEBUG: E2E runs must never enter the runtime debug layer, so a
+ * debug flag exported by the developer's shell must not leak into the launched
+ * app.
  */
 
 const STRIPPED_ENV_KEYS: ReadonlySet<string> = new Set(['ELECTRON_RUN_AS_NODE', 'CHIMERA_DEBUG']);

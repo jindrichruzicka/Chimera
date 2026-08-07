@@ -8,7 +8,7 @@
  * `screens/` exist to stop.
  *
  * Only tokens the engine ALREADY declares may be redefined here
- * (`chimera/no-unknown-token-overrides`, Invariant #85). Inventing a new
+ * (`chimera/no-unknown-token-overrides`). Inventing a new
  * `--ch-*` name in this file is an error: nothing in the engine would read it,
  * so it would look like theming and do nothing. Define game-local variables in
  * your own `*.module.css` instead.

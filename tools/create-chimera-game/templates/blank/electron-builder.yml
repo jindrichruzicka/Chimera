@@ -1,5 +1,5 @@
 # __Game Title__ — Electron app packaging config (scaffolded from the create-chimera-game
-# blank template; the reference app's config established this layout in M9 / F67, #813).
+# blank template).
 #
 # Produces a MINIMAL, UNSIGNED local app bundle on the host platform, branded with THIS
 # game's own icon + app identity. The identity fields below (appId, productName) and the
@@ -9,14 +9,13 @@
 # unsigned (mac `identity: null`).
 #
 # This config lives in the consumer app, never in @chimera-engine/electron, which stays
-# game-agnostic (Invariants #94/#106/#107). It must not embed the debug-mode env flag
-# (Invariant #27 — the invariants gate scans this file for it).
+# game-agnostic. It must not embed the debug-mode env flag.
 
 appId: com.chimera.__game_kebab__
 productName: __GamePascal__
 
-# The app's own branding icon — a single committed PNG under the game's asset directory
-# (Invariant #97). electron-builder generates the platform formats (.icns / .ico) from it,
+# The app's own branding icon — a single committed PNG under the game's asset
+# directory. electron-builder generates the platform formats (.icns / .ico) from it,
 # so one file drives the whole installer set. The SAME PNG is the runtime window/dock icon
 # (manifest `icon`, resolved to apps/__game_kebab__/assets/icons/icon.png), so replacing
 # assets/icons/icon.png rebrands the bundle AND the running window in one step.

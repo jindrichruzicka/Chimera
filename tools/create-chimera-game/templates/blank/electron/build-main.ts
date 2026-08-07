@@ -40,7 +40,7 @@ export const VERIFY_PACK_NODE_MODULES_ENV = 'CHIMERA_VERIFY_PACK_NODE_MODULES';
 export const PACKAGED_BUILD_ENV = 'CHIMERA_PACKAGED_BUILD';
 
 /**
- * esbuild `define` for the app bundles (§4.12, Invariant #27).
+ * esbuild `define` for the app bundles.
  *
  * In a packaged build, bake the production identity so
  * `IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production'`
@@ -113,7 +113,8 @@ export type BuildFn = (spec: BundleSpec) => void;
  * leaving them to the caller is what lets the guarded set drift.
  *
  * `define` is the sole link between {@link computePackagedDefine} and the
- * emitted bytes — Invariant #27 rests on it reaching esbuild. `sourcemap` is
+ * emitted bytes — keeping the debug layer out of a distributable rests on it
+ * reaching esbuild. `sourcemap` is
  * load-bearing too, in a way it does not look: switched to `'inline'` it would
  * embed the original TypeScript — debug sources included — inside the shipped
  * `main.js`, where the external `.map` files never travel.
@@ -253,7 +254,7 @@ export function appBundleOutfiles(appDir: string): BundleOutfiles {
  * source (`<root>/electron/preload/debug-api.ts`); a scaffolded game copies this
  * file verbatim but has no host source, so `fileExists` returns false and the
  * debug bundle is skipped — matching `@chimera-engine/electron/preload/debug-api`
- * being a private, non-public export (Invariant #27). Without this, `build:app`
+ * being a private, non-public export. Without this, `build:app`
  * emitted only `api.js` and never `debug-api.js`, so a dev launch's F9 opened an
  * Inspector window whose preload bridge could not load (the e2e `global-setup`
  * already builds the same entry into `.e2e-build`, which is why e2e stayed green).
@@ -293,7 +294,7 @@ export interface PlanBundlesOptions {
     /**
      * The Inspector-window debug preload entry. Absent ⇒ no debug bundle (the
      * portable production default; `@chimera-engine/electron/preload/debug-api` is not a
-     * public export — Invariant #27 — so only the monorepo dev/e2e build, which has
+     * public export, so only the monorepo dev/e2e build, which has
      * the host source, supplies it).
      */
     readonly debugPreloadEntry?: string;

@@ -1,5 +1,5 @@
 // __Game Title__'s match initialization. Game-core (no renderer/electron
-// imports — Invariant #1): the host calls `resolve__GamePascal__FirstPlayer` at
+// imports): the host calls `resolve__GamePascal__FirstPlayer` at
 // composition time to seat the starting player for a new match.
 
 import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';

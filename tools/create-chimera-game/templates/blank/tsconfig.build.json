@@ -9,7 +9,7 @@
     // LAYER 3: a consumer APP — it depends on everything and nothing depends on it.
     // It therefore sits ABOVE @chimera-engine/electron (layer 2), not beside it. References
     // mirror its composite workspace deps (simulation, ai, renderer, electron), so
-    // `tsc --build` orders the graph (Invariant #1). The @chimera-engine/electron reference
+    // `tsc --build` orders the graph. The @chimera-engine/electron reference
     // mirrors the package dep introduced by the app's Electron composition root
     // (electron/main.ts); that composition root is EXCLUDED from this composite's
     // emit (it is bundled by `build:app` / electron/build-main.ts and type-checked by

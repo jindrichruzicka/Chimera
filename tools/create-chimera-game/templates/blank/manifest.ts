@@ -12,7 +12,7 @@ import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
  * optional `tickRateMs`.
  *
  * `icon` is a renderer-relative path under this game's own asset directory
- * (`assets/`, Invariant #97). The resolver maps it to
+ * (`assets/`). The resolver maps it to
  * `apps/__game_kebab__/assets/icons/icon.png` for the window/dock icon, and the
  * electron-builder config reuses the same PNG for the distributable bundle icon —
  * replace `assets/icons/icon.png` with your own art to rebrand both at once.
@@ -20,7 +20,7 @@ import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
  * `cursor` (optional) re-textures the hardware mouse cursor. It maps the
  * engine's cursor roles — `default` | `pointer` | `disabled`, mirroring the
  * `--ch-cursor-*` token family — to images under this game's own asset
- * directory (`assets/`, Invariant #97), resolved by the renderer through the
+ * directory (`assets/`), resolved by the renderer through the
  * game-asset protocol. Absent ⇒ the plain system cursor. `hotspot` is the
  * click point in image pixels from the texture's top-left; omit it for (0, 0).
  *

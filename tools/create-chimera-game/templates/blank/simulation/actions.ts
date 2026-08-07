@@ -1,7 +1,7 @@
 // __Game Title__'s action registry + game definition. The host calls
 // `register__GamePascal__Actions` once at startup to register this game's
 // reducers and lifecycle hooks into the shared engine `ActionRegistry`. This
-// module is game-core (no renderer/electron imports — Invariant #1).
+// module is game-core (no renderer/electron imports).
 
 import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import type {
@@ -22,7 +22,7 @@ export type { __GamePascal__PingPayload } from './action-types.js';
  * A trivial example action so the registry is non-empty and the dispatch path is
  * wired end-to-end: `validate` always passes and `reduce` returns the snapshot
  * unchanged. Replace it with your game's real reducers (`validate` + `reduce`
- * must stay pure — Invariant #43).
+ * must stay pure).
  */
 const __gameCamel__PingDefinition: ActionDefinition<__GamePascal__PingPayload, BaseGameSnapshot> = {
     type: __GAME_CONSTANT___PING_ACTION,

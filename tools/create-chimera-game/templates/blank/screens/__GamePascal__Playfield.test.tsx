@@ -7,9 +7,9 @@ import { describe, expect, it } from 'vitest';
 
 import __GamePascal__Playfield from './__GamePascal__Playfield.js';
 
-// Screen render smoke — proves the one required game screen (Invariant #81) mounts.
+// Screen render smoke — proves the one required game screen mounts.
 // The playfield renders through the renderer's public component barrels only
-// (@chimera-engine/renderer/components/ui), so this exercises the Invariant #96 boundary.
+// (@chimera-engine/renderer/components/ui), so this exercises that boundary.
 // It surfaces the game's display name once, as the panel title. Replace with
 // assertions on your real playfield as it grows.
 describe('__GamePascal__Playfield', () => {

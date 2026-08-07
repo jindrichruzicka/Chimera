@@ -6,7 +6,7 @@
  * would look right until someone themed the game, and then quietly stop
  * matching.
  *
- * `chimera/no-hardcoded-design-values` (Invariants #86/#91) catches some of that
+ * `chimera/no-hardcoded-design-values` catches some of that
  * in this file — see the rule for exactly what. It is a backstop, not the
  * contract: plenty of ways to write a literal here lint clean and are still the
  * wrong thing to write.
@@ -20,10 +20,8 @@
  * The scene host: this screen's full-bleed root, and where a `<GameCanvas>` goes
  * when you add one.
  *
- * The engine states this once, in `camera-system.md` §4.22 "Sizing the wrapper".
- * It is restated in full here on purpose — this file ships into a generated game
- * that has no copy of the engine's docs, and the rule below looks arbitrary
- * enough to "clean up" without it.
+ * The rule below is spelled out in full on purpose. It looks arbitrary enough to
+ * "clean up", and once it is gone nothing here tells you why it mattered.
  *
  * `position: absolute; inset: 0` is load-bearing, not decoration. The engine
  * mounts this screen inside `div.chimera-scene-router`, which carries no styles

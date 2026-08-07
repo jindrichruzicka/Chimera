@@ -19,7 +19,7 @@ import { buildAppBundles } from '../electron/build-main';
  * no tsconfig-paths support at runtime). The preload is resolved from `@chimera-engine/electron`'s
  * package `exports` (the way a consumer reaches it), mirroring the app's own
  * `electron/build-main.ts` CLI. No debug preload is bundled: `@chimera-engine/electron/preload/debug-api`
- * is not a public export (Invariant #27).
+ * is not a public export.
  */
 export default function globalSetup(): void {
     // apps/<game>/e2e → app dir is one up, repo root two up. .e2e-build stays at the repo root.

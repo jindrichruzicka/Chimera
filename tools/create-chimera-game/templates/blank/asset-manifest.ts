@@ -12,8 +12,8 @@
 //
 // THE REF GRAMMAR. A ref is `'<gameId>/<path under this game's assets/ dir>'`.
 // `'__game_kebab__/textures/banner.png'` resolves to
-// `assets/textures/banner.png` beside this file (Invariant #97 — a game's assets
-// are its own, never the engine's). The FIRST SEGMENT of the ref string is what
+// `assets/textures/banner.png` beside this file (a game's assets are its own,
+// never the engine's). The FIRST SEGMENT of the ref string is what
 // resolves; the `gameId` field below is not consulted for it, so the two must
 // agree or `validate:assets` will look for your files under another game's
 // directory.

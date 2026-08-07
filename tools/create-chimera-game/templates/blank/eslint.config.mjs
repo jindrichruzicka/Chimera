@@ -9,10 +9,9 @@ import { standaloneLintConfig } from '@chimera-engine/electron/eslint';
  *
  * The Chimera half is an OVERLAY: `standaloneLintConfig()` contributes the
  * engine's architecture rules mapped onto this app's directories — `fromFloat()`
- * out of `simulation/` and `ai/` (Invariant #76), design values through
- * `var(--ch-*)` tokens in `screens/` (Invariants #86/#91), only declared tokens
- * in `styles/tokens-override.css` (Invariant #85), and the renderer's public
- * barrels only (Invariant #96). Everything else below is yours to change.
+ * out of `simulation/` and `ai/`, design values through `var(--ch-*)` tokens in
+ * `screens/`, only declared tokens in `styles/tokens-override.css`, and the
+ * renderer's public barrels only. Everything else below is yours to change.
  *
  * Two things are worth knowing before you edit it:
  *
@@ -57,7 +56,7 @@ export default [
         //   renderer/out     `distDir` in renderer/next.config.ts
         //   e2e/playwright-*  `reporter` in e2e/playwright.config.ts
         //   e2e/test-results  Playwright's default outputDir
-        //   .dev-userdata    per-instance dirs from `dev:mp` (Invariant #78)
+        //   .dev-userdata    per-instance dirs from `dev:mp`
         // A companion test pairs the config-declared entries against those
         // configs and names the rest as literals, because the cost of missing one
         // is not subtle: a single Playwright HTML report is a 400 KB bundled

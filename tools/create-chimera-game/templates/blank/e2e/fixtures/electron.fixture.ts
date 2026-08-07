@@ -140,8 +140,8 @@ function attachRendererConsoleCapture(page: Page, entries: RendererConsoleEntry[
  * Sets CHIMERA_E2E=1, NODE_ENV=test, CHIMERA_PORT=7778, and the E2E path overrides in
  * the child process env. Teardown calls app.close() unconditionally.
  *
- * Invariant 5:  window.__chimera is exposed only through preload/api.ts.
- * Invariant 27: CHIMERA_E2E must never appear in production packaging — set here only.
+ * window.__chimera is exposed only through preload/api.ts, and CHIMERA_E2E must never
+ * appear in production packaging — it is set here only.
  */
 export const test = base.extend<ElectronFixtures>({
     // eslint-disable-next-line no-empty-pattern

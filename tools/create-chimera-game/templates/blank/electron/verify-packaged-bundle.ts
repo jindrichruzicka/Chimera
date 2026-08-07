@@ -1,5 +1,5 @@
 // The app-OWNED `verify:packaged-bundle` gate — this game's thin driver for the
-// engine's packaged-bundle guard (§4.12, Invariant #27), run as
+// engine's packaged-bundle guard, run as
 // `pnpm verify:packaged-bundle` from the app (or by `--filter` from the project
 // root). It asserts the Runtime Debug Layer is ABSENT from the bundles a REAL
 // packaging build of THIS app emits, and that `electron-builder.yml`'s `files:`
