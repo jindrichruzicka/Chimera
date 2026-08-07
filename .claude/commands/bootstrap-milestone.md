@@ -5,6 +5,6 @@ argument-hint: '<milestone-designator>'
 
 Given milestone designator `$1`:
 
-Load [GitHub skill](../skills/github/SKILL.md) and follow [bootstrap-milestone](../skills/github/bootstrap-milestone/SKILL.md). The skill is the source of truth for commands, approval pause, labels, templates, and verification.
+Load [GitHub skill](../skills/github/SKILL.md) and follow [bootstrap-milestone](../skills/github/bootstrap-milestone/SKILL.md) — the source of truth for commands, approval pause, labels, templates, and verification.
 
 Report milestone URL, feature count, task count, and any deferred items.

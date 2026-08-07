@@ -6,7 +6,7 @@ argument-hint: 'Issue number or URL (e.g. 42 or https://github.com/jindrichruzic
 
 # Fetch Issue Skill
 
-Fetch one issue with body, labels, milestone, assignees, comments, and URL. This skill is read-only and must not mutate GitHub state.
+Fetches one issue with body, labels, milestone, assignees, comments, and URL. Read-only — must not mutate GitHub state.
 
 ## Run
 
@@ -25,9 +25,9 @@ bash .claude/skills/github/fetch-issue/scripts/fetch-issue.sh https://github.com
 
 ## Planner Usage
 
-- Use this before planning when the user provides an issue number or issue URL.
-- Treat the fetched issue body and comments as task context; extract acceptance criteria, labels, linked docs, and open questions.
-- If the issue URL points to another repository, the script uses that URL's owner/repo instead of `GH_REPO`.
+- Run before planning when the user provides an issue number or URL.
+- Treat body and comments as task context; extract acceptance criteria, labels, linked docs, open questions.
+- If the URL points to another repository, the script uses that URL's owner/repo instead of `GH_REPO`.
 - Do not run mutating `gh` commands from this skill.
 
 ## Errors

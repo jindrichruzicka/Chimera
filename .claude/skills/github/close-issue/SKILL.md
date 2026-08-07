@@ -1,6 +1,6 @@
 ---
 name: close-issue
-description: 'Close a GitHub issue after the corresponding branch has been merged to main. Validates that the merge script exited successfully, then closes the issue with the merge commit reference. Use when: completing a task issue, closing a bug fix, marking an issue as resolved after merge.'
+description: 'Close a GitHub issue after its branch merged to main (merge script exited 0), citing the merge commit. Use when: closing a task or bug issue post-merge.'
 argument-hint: 'Issue number (e.g. 42)'
 ---
 

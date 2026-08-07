@@ -11,17 +11,17 @@ Repo: `jindrichruzicka/Chimera`. Set once per session: `export GH_REPO=jindrichr
 
 ## Sub-Skills
 
-| Sub-skill           | Use when                                     | Load                           |
-| ------------------- | -------------------------------------------- | ------------------------------ |
-| create-milestone    | Setting up M1/M2/…                           | `create-milestone/SKILL.md`    |
-| create-labels       | Ensuring labels exist before creating issues | `create-labels/SKILL.md`       |
-| create-issue        | Creating feature/task/bug issues             | `create-issue/SKILL.md`        |
-| fetch-issue         | Fetching one issue by number or URL          | `fetch-issue/SKILL.md`         |
-| bootstrap-milestone | Setting up full milestone from scratch       | `bootstrap-milestone/SKILL.md` |
-| close-issue         | Closing a task issue after merge             | `close-issue/SKILL.md`         |
-| list-issues         | Querying issues                              | `list-issues/SKILL.md`         |
-| create-release      | Cutting a versioned release                  | `create-release/SKILL.md`      |
-| publish-packages    | Publishing @chimera-engine/\* to npm         | `publish-packages/SKILL.md`    |
+| Sub-skill           | Use when                          | Load                           |
+| ------------------- | --------------------------------- | ------------------------------ |
+| create-milestone    | Setting up M1/M2/…                | `create-milestone/SKILL.md`    |
+| create-labels       | Labels must exist before issues   | `create-labels/SKILL.md`       |
+| create-issue        | Creating feature/task/bug issues  | `create-issue/SKILL.md`        |
+| fetch-issue         | Fetching one issue by number/URL  | `fetch-issue/SKILL.md`         |
+| bootstrap-milestone | Full milestone setup from scratch | `bootstrap-milestone/SKILL.md` |
+| close-issue         | Closing a task issue after merge  | `close-issue/SKILL.md`         |
+| list-issues         | Querying issues                   | `list-issues/SKILL.md`         |
+| create-release      | Cutting a versioned release       | `create-release/SKILL.md`      |
+| publish-packages    | Publishing @chimera-engine/\* npm | `publish-packages/SKILL.md`    |
 
 Templates: `assets/feature-template.md`, `assets/task-template.md`, `assets/release-template.md`. Labels: `references/labels.md`.
 
@@ -29,8 +29,7 @@ Templates: `assets/feature-template.md`, `assets/task-template.md`, `assets/rele
 
 ## Notes
 
-- **Always use sub-skills** — they contain the validated procedures.
-- **Sub-skills are independent**.
+- **Always use sub-skills** — they contain the validated procedures. Sub-skills are independent.
 - **Milestone number ≠ label** — resolve numeric ID before creating issues.
 
 ### Closing an issue (quick path)
@@ -39,7 +38,7 @@ Templates: `assets/feature-template.md`, `assets/task-template.md`, `assets/rele
 gh issue close <N> --repo $GH_REPO --comment "Implemented in $(git rev-parse --short HEAD) on main."
 ```
 
-**Parent-feature exception**: if the task belongs to a parent `feature` issue, do NOT close the parent — only the review task closes it.
+**Parent-feature exception**: do NOT close a task's parent `feature` issue — only the review task closes it.
 
 ---
 

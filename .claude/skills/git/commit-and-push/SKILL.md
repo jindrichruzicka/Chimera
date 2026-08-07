@@ -1,6 +1,6 @@
 ---
 name: commit-and-push
-description: 'Smart commit + push for the Chimera feature-branch workflow. Checks if on a feature/fix/refactor branch, then: if the branch already has commits ahead of main → creates a fixup! commit targeting the first branch commit and pushes; if no prior commits exist → creates a normal first commit using the supplied message and pushes. Use when: saving progress on a feature branch, adding incremental changes to an in-progress branch, performing any commit + push on a topic branch.'
+description: 'Commit + push on a Chimera feature/fix/refactor branch: first branch commit uses the supplied conventional message; later commits become fixup! to it automatically. Use when: any commit + push on a topic branch.'
 argument-hint: 'git commit message flags for first commit (e.g. -m "feat(x): subject" -m "Body.")'
 ---
 
@@ -27,25 +27,19 @@ bash .claude/skills/git/commit-and-push/scripts/commit-and-push.sh \
     -m "Body: what was done and why; tests written first."
 ```
 
-Subsequent commits (no message needed):
+Subsequent commits (message args ignored — the `fixup!` subject is derived automatically):
 
 ```bash
 bash .claude/skills/git/commit-and-push/scripts/commit-and-push.sh
 ```
 
-## Steps
+Steps: validate branch prefix → validate index non-empty → `git fetch origin main` for an accurate ahead count → 0 ahead ⇒ normal commit, ≥1 ⇒ `--fixup <oldest-branch-sha>` → push (sets upstream on first push).
 
-1. Validate branch prefix.
-2. Validate index non-empty.
-3. `git fetch origin main` for accurate ahead count.
-4. Count commits ahead of `main`:
-    - 0 → run `git commit` with provided args.
-    - ≥1 → find oldest branch commit (first), run `git commit --fixup <sha>`.
-5. `git push origin <branch>` (sets upstream on first push).
+Recovery: push fails (remote diverged) → resolve, re-run — the commit is local, so the re-run skips the commit step. Land the branch with the merge skill.
 
 ## First Commit Format
 
-Required by merge skill:
+Required by the merge skill:
 
 ```
 feat(module): concise description
@@ -55,10 +49,7 @@ feat(module): concise description
 - All tests pass.
 ```
 
-## Notes
+## The body is reviewed prose
 
-- The commit body is reviewed prose: write it as claims that survive re-measurement. Scope sweep results ("0 under <classes>", never a bare 0), and state sweep and inventory results only as the final tree shows them.
-- Message args ignored for fixup commits (subject derived automatically).
-- `git fetch origin main` runs first to avoid stale counts.
-- Push fails (remote diverged): resolve, re-run; commit is local — re-run skips commit step.
-- Use merge skill to land branch.
+- Write claims that survive re-measurement, from the FINAL tree only. Scope sweep results ("0 under <classes>", never a bare 0); state gate results as measured at this tree.
+- A `fixup!` can never amend the first commit's message. A false sentence there converges only by `git reset --soft <merge-base>` + re-commit + force-push — so keep the body free of coverage claims, magnitudes, and mechanisms you have not measured.

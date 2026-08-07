@@ -5,20 +5,13 @@ argument-hint: '<issue-number>'
 
 Given issue number `$1`:
 
-## Procedure
+1. Load the issue with `gh issue view $1 --repo jindrichruzicka/Chimera --json number,title,body,labels,state,milestone,url`; extract acceptance criteria, touched docs, invariants. Issue rationale is a claim, not an authority — measure any library/tooling fact it asserts before repeating it.
+2. Load and follow [create-branch](../skills/git/create-branch/SKILL.md), [TDD](../skills/tdd/SKILL.md), [commit-and-push](../skills/git/commit-and-push/SKILL.md).
+3. Load the touched area's docs: [architecture overview](../../docs/architecture-overview.md), [module boundaries](../../docs/executive-architecture/module-boundaries-file-tree.md), [coding standards](../../docs/coding-standards.md).
+4. Implement red → green → refactor, scoped to the issue; update docs only when behaviour, APIs, commands, or workflows change.
+5. Focused tests first, then the gate required by risk; default full gate `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`. If the change touches rendering, e2e page objects, or Electron wiring, also run `pnpm test:e2e` yourself — no review gate runs it for you.
+6. Stage only intentional files; run the commit/push skill (first commit: conventional subject + body mentioning red confirmation; later commits: `fixup!`).
 
-1. Load the issue with `gh issue view $1 --repo jindrichruzicka/Chimera --json number,title,body,labels,state,milestone,url` and extract acceptance criteria, touched docs, and invariants.
-2. Load and follow [create-branch](../skills/git/create-branch/SKILL.md), [TDD](../skills/tdd/SKILL.md), and [commit-and-push](../skills/git/commit-and-push/SKILL.md).
-3. Load the source docs for the touched area from [architecture overview](../../docs/architecture-overview.md), [module boundaries](../../docs/executive-architecture/module-boundaries-file-tree.md), and [coding standards](../../docs/coding-standards.md).
-4. Implement strictly red -> green -> refactor. Keep the change scoped to the issue and update docs only when behavior, APIs, commands, or workflows change.
-5. Run the focused tests first, then the gate required by risk; default full gate is `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`.
-6. Stage only intentional files and run the commit/push skill. If this is the first branch commit, pass a conventional `-m` subject plus body that mentions red confirmation; otherwise let the skill create a `fixup!` commit.
-
-Report back with:
-
-- Branch name and HEAD commit SHA
-- Which acceptance criteria were addressed
-- Tests/gates run
-- Any open questions or known gaps
+Report: branch + HEAD SHA, criteria addressed, tests/gates run, open questions or gaps.
 
 Do **not** merge. Use `/implement-issue-merge $1` to merge after review.

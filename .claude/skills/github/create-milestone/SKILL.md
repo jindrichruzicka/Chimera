@@ -30,10 +30,10 @@ gh api repos/$GH_REPO/milestones --jq '.[] | select(.title | contains("M1")) | "
 
 ## Milestone ↔ version (locked `1.X.Y`, from `1.0.0`)
 
-A milestone defines the shared **compatibility line** `X`: it releases as **`1.X.0`** across the whole first-party set (every `@chimera-engine/*` package + `create-chimera-game`), and its `X` may contain breaking changes. See [`docs/versioning-policy.md`](../../../../docs/versioning-policy.md).
+A milestone defines the shared **compatibility line** `X`: it releases as **`1.X.0`** across every `@chimera-engine/*` package + `create-chimera-game`, and its `X` may contain breaking changes. See [`docs/versioning-policy.md`](../../../../docs/versioning-policy.md).
 
-- **M10** → `1.0.0` (first public release). The next coordinated milestone → `1.1.0`, then `1.2.0`, …
-- Between-milestone package updates are **patches** (`1.X.Y`), shipped via `/publish-packages`, not new milestones.
+- **M10** → `1.0.0` (first public release); next coordinated milestone → `1.1.0`, then `1.2.0`, …
+- Between-milestone package updates are **patches** (`1.X.Y`) via `/publish-packages`, not new milestones.
 - Legacy (retired at `1.0.0`): `M1`→`0.1.0` … `M9`→`0.9.0`, independent per-package semver.
 
 Reflect the target version in the milestone description (e.g. "First public 1.0.0 release …").

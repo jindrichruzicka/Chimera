@@ -12,6 +12,6 @@ description: 'Use when branching, committing, pushing, or merging. How: run the 
 | commit-and-push | Commit + push (auto-detects first vs fixup) | `bash .claude/skills/git/commit-and-push/scripts/commit-and-push.sh` |
 | merge           | Validate + land branch onto `main`          | `bash .claude/skills/git/merge/scripts/check-and-merge.sh`           |
 
-Sub-skill files: [`pull-latest/SKILL.md`](./pull-latest/SKILL.md) · [`create-branch/SKILL.md`](./create-branch/SKILL.md) · [`commit-and-push/SKILL.md`](./commit-and-push/SKILL.md) · [`merge/SKILL.md`](./merge/SKILL.md).
+Docs: [pull-latest](./pull-latest/SKILL.md) · [create-branch](./create-branch/SKILL.md) · [commit-and-push](./commit-and-push/SKILL.md) · [merge](./merge/SKILL.md).
 
-For new git operations not covered, ask the user before proceeding ad-hoc.
+For git operations not covered, ask the user before proceeding ad-hoc.

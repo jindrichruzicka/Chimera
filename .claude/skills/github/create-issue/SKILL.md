@@ -1,6 +1,6 @@
 ---
 name: create-issue
-description: 'Create a GitHub issue (feature, task, or bug) for the Chimera project. Validates issue type, applies correct labels, assigns to milestone, and uses the appropriate template. Use when: creating a new feature issue from architecture, creating task issues under a feature, creating bug reports, decomposing features into tasks.'
+description: 'Create a Chimera GitHub issue (feature, task, or bug) with the right template, labels, and milestone. Use when: creating feature/task/bug issues or decomposing a feature into tasks.'
 argument-hint: 'Issue type and details (e.g. "task #42 Implement X" or "feature §4.1 Save/Note")'
 ---
 

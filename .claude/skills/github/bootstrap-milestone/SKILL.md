@@ -6,7 +6,7 @@ argument-hint: 'Milestone identifier (e.g. "M1" or "M2")'
 
 # Bootstrap Milestone Skill
 
-Creates a full milestone backlog from the architecture: milestone → labels → feature issues → task issues, in dependency order.
+Order: milestone → labels → feature issues → task issues.
 
 ## Procedure
 

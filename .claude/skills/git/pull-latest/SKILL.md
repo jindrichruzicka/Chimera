@@ -1,11 +1,9 @@
 ---
 name: pull-latest
-description: 'Update local main branch with the latest changes from origin. Fetches remote updates, checks out main, and performs a fast-forward-only pull. Use when: starting a new task and wanting the latest main, before creating a new branch, before merging a branch, syncing local main with remote.'
+description: 'Sync local main with origin via fast-forward-only pull. Use when: before creating a branch, before merging, or whenever local main may be behind.'
 ---
 
 # Pull Latest Skill
-
-Update local `main` with `origin/main` via safe fast-forward-only pull.
 
 ## Run
 
@@ -34,9 +32,4 @@ bash .claude/skills/git/pull-latest/scripts/pull-latest.sh
 | Network error on fetch            | Abort: check network                                |
 | No `origin` remote                | Abort: configure with `git remote add origin <url>` |
 
-## Used By
-
-- create-branch: before creating a new branch
-- merge: before rebasing onto main
-
-Can be run standalone.
+Used by create-branch (before creating a branch) and merge (before rebasing onto main); can run standalone.
