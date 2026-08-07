@@ -192,4 +192,18 @@ describe('TacticsModelShowcaseScreen', () => {
             pointerEvents: 'none',
         });
     });
+
+    it('renders the status element positioned and AFTER the GameCanvas', () => {
+        // Positioned and after the canvas, both — camera-system.md §4.22
+        // "Canvas-fit rules".
+        render(<TacticsModelShowcaseScreen />);
+
+        const screenRoot = screen.getByTestId('tactics-model-showcase');
+        const order = [...screenRoot.children].map((child) => child.getAttribute('data-testid'));
+
+        expect(order).toEqual(['tactics-showcase-r3f-canvas', 'tactics-model-showcase-status']);
+        expect(screen.getByTestId('tactics-model-showcase-status')).toHaveStyle({
+            position: 'absolute',
+        });
+    });
 });

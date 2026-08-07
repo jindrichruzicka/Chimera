@@ -9,8 +9,10 @@ export const TACTICS_CAMERA_UP = [0, 0, 1] as const;
 // Orthographic frustum, centred on the board centre (1, 0) via TACTICS_CAMERA_POSITION.
 // Widened ~1.25× from the board-exact 6×4 framing so units at the seat 2–3 corner
 // start positions (TACTICS_START_POSITIONS) clear the viewport edge instead of being
-// half-clipped, while preserving the 3:2 aspect so units stay circular (the manual
-// camera is not aspect-corrected). tacticsCamera.test.ts guards the corner clearance.
+// half-clipped, keeping the 3:2 aspect of that framing. GameCanvas's default
+// `letterbox` fit (§4.22) renders this frustum into a 3:2 rect on any window
+// shape, pillarboxed on a wider one — the frustum ratio decides what is framed,
+// never what shape a pixel is. tacticsCamera.test.ts guards the corner clearance.
 export const TACTICS_CAMERA_BOUNDS = {
     left: -3.75,
     right: 3.75,

@@ -18,7 +18,10 @@
 //       <GameCanvas camera="top-down">{/* your scene */}</GameCanvas>
 //   </div>
 //
-// with 2D UI layered over it as siblings, exactly as the panel is here.
+// with 2D UI layered over it as siblings. Each such sibling must be POSITIONED
+// and written AFTER the canvas, both: the engine frame the canvas sits in is a
+// positioned element with no z-index, and it can carry an opaque backdrop. The
+// panel below is a sibling of no canvas, so it needs neither yet.
 
 import React from 'react';
 import { Caption, Panel } from '@chimera-engine/renderer/components/ui';

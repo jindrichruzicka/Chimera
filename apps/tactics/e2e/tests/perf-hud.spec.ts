@@ -25,9 +25,15 @@
  */
 
 import { test, expect } from '../fixtures/direct-game.fixture';
-import { GamePage } from '../pages/GamePage';
+import { TACTICS_CAMERA_BOUNDS } from '@chimera-engine/tactics/scene/tacticsCamera.js';
+import { GamePage, TACTICS_CANVAS_ASPECT_TOLERANCE } from '../pages/GamePage';
 
 const GAME_ID = 'tactics';
+
+/** The minimap canvas shares the board camera's frustum, so it shares its aspect. */
+const MINIMAP_CAMERA_ASPECT =
+    (TACTICS_CAMERA_BOUNDS.right - TACTICS_CAMERA_BOUNDS.left) /
+    (TACTICS_CAMERA_BOUNDS.top - TACTICS_CAMERA_BOUNDS.bottom);
 
 // This spec only exercises the host window; no client process is needed.
 test.use({ passAndPlay: true });
@@ -75,14 +81,22 @@ test.describe('Performance HUD', () => {
         // mounted through the public GameCanvas root.
         await expect(game.canvas.locator('canvas')).toHaveCount(2);
 
-        // The minimap sits INSIDE the board's bottom-right quadrant with a
-        // real extent — not merely "visible somewhere at some size".
+        // The minimap sits INSIDE the bottom-right quadrant of the board SCENE
+        // with a real extent — not merely "visible somewhere at some size".
+        //
+        // The GameShell canvas host section, not the board canvas: the minimap
+        // is corner-anchored to the board scene root, which fills that section,
+        // while the board canvas is the rect GameCanvas's letterbox fit produces
+        // inside it (§4.22) — so on a window wider than the board's 3:2 frustum
+        // the overlay reaches over the pillarbox bar. That is the documented
+        // consequence of the fit policy, and comparing against the canvas would
+        // assert the opposite.
         const minimap = hostWindow.getByTestId('tactics-minimap');
         await expect(minimap).toBeVisible();
-        const board = await game.tacticsCanvas.boundingBox();
+        const board = await game.canvas.boundingBox();
         const box = await minimap.boundingBox();
         if (board === null || box === null) {
-            throw new Error('Expected both the board canvas and the minimap to lay out');
+            throw new Error('Expected both the board scene and the minimap to lay out');
         }
         expect(box.width).toBeGreaterThan(0);
         expect(box.height).toBeGreaterThan(0);
@@ -92,6 +106,24 @@ test.describe('Performance HUD', () => {
         expect(box.y + box.height).toBeLessThanOrEqual(board.y + board.height + 1);
         // Readout only: the overlay must not swallow bottom-right board clicks.
         await expect(minimap).toHaveCSS('pointer-events', 'none');
+
+        // The minimap wrapper is exactly the minimap camera's aspect, so the fit
+        // policy pins nothing on it — which means the r3f wrapper keeps sizing
+        // itself, and the engine fit frame must not change how. Its `className`
+        // adds a border, and a wrapper the frame could re-size loses that
+        // border's width, squashing the frustum onto a narrower canvas. jsdom
+        // computes no layout, so the resulting ASPECT can only be measured here;
+        // the frame's own style keys are pinned in GameCanvas.test.tsx.
+        const minimapCanvas = await minimap.locator('canvas').boundingBox();
+        if (minimapCanvas === null) {
+            throw new Error('Expected the minimap canvas to lay out');
+        }
+        // The same relative bound the board's grid-click gate uses: one property
+        // ("a canvas carries its camera's aspect"), one number.
+        expect(
+            Math.abs(minimapCanvas.width / minimapCanvas.height - MINIMAP_CAMERA_ASPECT) /
+                MINIMAP_CAMERA_ASPECT,
+        ).toBeLessThanOrEqual(TACTICS_CANVAS_ASPECT_TOLERANCE);
 
         // The perf HUD still publishes live metrics with the overlay mounted
         // (probe exclusivity per role is pinned at unit level, not re-derived

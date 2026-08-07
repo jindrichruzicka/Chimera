@@ -57,6 +57,9 @@ const boardSceneStyle: React.CSSProperties = {
  * recent revealed turn here — non-interactive and corner-anchored so it never
  * occludes board clicks (cf. the chat drawer). The authoritative snapshot
  * remains the source of truth for unit positions; this is the playback hook.
+ *
+ * It is positioned and rendered AFTER the `<GameCanvas>` — camera-system.md
+ * §4.22 "Canvas-fit rules".
  */
 const revealOverlayStyle: React.CSSProperties = {
     position: 'absolute',
@@ -76,11 +79,13 @@ const boardFallbackStyle: React.CSSProperties = {
 };
 
 // Declarative engine camera (§4.22): fixed 3:2 world-unit frustum, Z-up board
-// plane. GameCanvas derives `manual` from the explicit frustum, so R3F never
-// aspect-corrects it (see the TACTICS_CAMERA_BOUNDS comment). Module-level so
-// GameCanvas's reference-compared memo keeps one camera per mount. The e2e
-// pixel projection mirrors these numbers — TACTICS_CANVAS_WORLD_BOUNDS in
-// e2e/pages/GamePage.ts; the GamePage sync guards go red if they drift.
+// plane. GameCanvas derives `manual` from the explicit frustum, and reconciles
+// it with the canvas through the default `letterbox` fit — the board is
+// pillarboxed on a window wider than 3:2 (see the TACTICS_CAMERA_BOUNDS
+// comment). Module-level so GameCanvas's reference-compared memo keeps one
+// camera per mount. The e2e pixel projection mirrors these numbers —
+// TACTICS_CANVAS_WORLD_BOUNDS in e2e/pages/GamePage.ts; the GamePage sync
+// guards go red if they drift.
 const TACTICS_GAME_CANVAS_CAMERA = {
     mode: 'orthographic',
     position: TACTICS_CAMERA_POSITION,
@@ -269,19 +274,6 @@ export function TacticsDemoBoard({
 
     return (
         <div aria-label={t(BOARD_KEYS.ariaLabel)} style={boardSceneStyle}>
-            {revealedTurn !== null && (
-                <div
-                    data-testid="tactics-reveal"
-                    data-player={revealedTurn.playerId}
-                    data-has-attack={String(bufferHasAttack(revealedTurn.actions))}
-                    style={revealOverlayStyle}
-                >
-                    {t(BOARD_KEYS.revealed, {
-                        player: revealedTurn.playerId,
-                        actions: revealedTurn.actions.map((action) => action.type).join(', '),
-                    })}
-                </div>
-            )}
             <GameCanvas camera={TACTICS_GAME_CANVAS_CAMERA}>
                 <ambientLight intensity={0.65} />
                 <directionalLight intensity={0.9} position={[3, 6, 4]} />
@@ -304,6 +296,19 @@ export function TacticsDemoBoard({
                     />
                 ))}
             </GameCanvas>
+            {revealedTurn !== null && (
+                <div
+                    data-testid="tactics-reveal"
+                    data-player={revealedTurn.playerId}
+                    data-has-attack={String(bufferHasAttack(revealedTurn.actions))}
+                    style={revealOverlayStyle}
+                >
+                    {t(BOARD_KEYS.revealed, {
+                        player: revealedTurn.playerId,
+                        actions: revealedTurn.actions.map((action) => action.type).join(', '),
+                    })}
+                </div>
+            )}
             <div className={styles['minimap']} data-testid="tactics-minimap">
                 <GameCanvas
                     role="overlay"

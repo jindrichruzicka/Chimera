@@ -32,6 +32,8 @@ interface KeyboardDownFailure {
 
 interface BuildPageDoubleOptions {
     readonly canvasBox?: LocatorBox | null;
+    /** Served to successive `boundingBox()` calls; a read past the end is no box. */
+    readonly canvasBoxes?: readonly (LocatorBox | null)[];
     /** Served as PNG-encoded `locator.screenshot()` results, in call order. */
     readonly canvasRgbaFrames?: readonly CanvasRgbaFrame[];
     readonly canvasScreenshots?: readonly Buffer[];
@@ -84,10 +86,20 @@ const buildPageDouble = (
                   height: 400,
               }
             : options.canvasBox;
+    let boundingBoxCalls = 0;
+    const nextCanvasBox = (): LocatorBox | null => {
+        const boxes = options.canvasBoxes;
+        if (boxes === undefined) {
+            return canvasBox;
+        }
+        const next = boxes[boundingBoxCalls] ?? null;
+        boundingBoxCalls += 1;
+        return next;
+    };
 
     const createLocator = (testId: string): Locator => {
         const locatorLike = {
-            boundingBox: async (): Promise<LocatorBox | null> => canvasBox,
+            boundingBox: async (): Promise<LocatorBox | null> => nextCanvasBox(),
             click: async (options?: {
                 readonly position?: unknown;
                 readonly modifiers?: unknown;
@@ -785,9 +797,85 @@ describe('GamePage', () => {
         expect(clickCalls).toEqual([]);
     });
 
-    it('rejects tactics grid clicks when the WebGL canvas has no visible box', async () => {
+    it('drives a frame and re-reads the canvas box until the letterbox fit has sized it', async () => {
+        // r3f sizes its canvas from a ResizeObserver notification delivered in a
+        // rendering step, and a window sitting behind another runs none until a
+        // frame is asked for — so the first read is the intrinsic 300x150
+        // `<canvas>` default, which spans none of the frustum.
+        const { page, clickCalls, waitForFunctionCalls } = buildPageDouble(
+            '0',
+            makeProjectedSnapshot({ localX: 0 }),
+            {
+                canvasBoxes: [
+                    { x: 10, y: 20, width: 300, height: 150 },
+                    { x: 10, y: 20, width: 300, height: 150 },
+                    { x: 10, y: 20, width: 600, height: 400 },
+                ],
+            },
+        );
+        const gamePage = new GamePage(page);
+
+        await gamePage.clickTacticsGridPoint({ x: 0, y: 0 });
+
+        // Two driven frames — a single-attempt budget would give up on the first
+        // slow configure — and the click projected into the fitted box.
+        expect(waitForFunctionCalls).toHaveLength(2);
+        expect(clickCalls).toEqual([{ position: { x: 390, y: 220 } }]);
+    });
+
+    it.each([
+        // 600x397 is 1.5113 — 0.0076 off 1.5 relative, where a real fitted rect
+        // lands whenever layout rounds.
+        ['carrying sub-pixel dust', { x: 10, y: 20, width: 600, height: 397 }, 390, 218.5],
+        // 1560/1024 is 1.5234375, exactly 1/64 off 1.5 relative — the accepted
+        // boundary itself, which a power-of-two tolerance makes representable.
+        // Its absolute deviation is 0.0234, past the same number read that way,
+        // so this row is also what makes the tolerance the RELATIVE reading.
+        ['sitting exactly on the tolerance', { x: 10, y: 20, width: 1560, height: 1024 }, 998, 532],
+    ])(
+        'accepts a fitted box %s on the frustum aspect',
+        async (_label, canvasBox, expectedX, expectedY) => {
+            const { page, clickCalls } = buildPageDouble(
+                '0',
+                makeProjectedSnapshot({ localX: 0 }),
+                { canvasBox },
+            );
+            const gamePage = new GamePage(page);
+
+            await gamePage.clickTacticsGridPoint({ x: 0, y: 0 });
+
+            expect(clickCalls).toEqual([{ position: { x: expectedX, y: expectedY } }]);
+        },
+    );
+
+    it.each([
+        ['is a different shape entirely', { x: 10, y: 20, width: 600, height: 300 }],
+        // 1.538 against 1.5 — 2.6% off.
+        ['misses the frustum aspect by a few percent', { x: 10, y: 20, width: 600, height: 390 }],
+    ])('rejects tactics grid clicks when the canvas box %s', async (_label, canvasBox) => {
+        // GameCanvas letterboxes a manual camera in the DOM, so the canvas
+        // ELEMENT is the fitted rect and carries the frustum's 3:2 aspect. A box
+        // of any other shape means the projection below would map onto pixels the
+        // frustum does not span — a wrong-tile click, silently.
         const { page, clickCalls } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
-            canvasBox: null,
+            canvasBox,
+        });
+        const gamePage = new GamePage(page);
+
+        await expect(gamePage.clickTacticsGridPoint({ x: 0, y: 0 })).rejects.toThrow(
+            'does not match the tactics camera frustum aspect',
+        );
+
+        expect(clickCalls).toEqual([]);
+    });
+
+    it.each([
+        ['reports no box at all', null],
+        // A collapsed box is not an aspect problem, and must not be reported as one.
+        ['has collapsed on one axis', { x: 10, y: 20, width: 600, height: 0 }],
+    ])('rejects tactics grid clicks when the WebGL canvas %s', async (_label, canvasBox) => {
+        const { page, clickCalls } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            canvasBox,
         });
         const gamePage = new GamePage(page);
 

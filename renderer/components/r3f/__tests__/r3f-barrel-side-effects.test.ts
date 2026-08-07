@@ -31,6 +31,7 @@ import type {
     CameraMode,
     CameraPreset,
     CameraConfig,
+    CameraFit,
     PerspectiveCameraConfig,
     OrthographicCameraConfig,
     OrthographicFrustum,
@@ -44,6 +45,7 @@ interface BarrelTypeSurface {
     readonly mode: CameraMode;
     readonly preset: CameraPreset;
     readonly config: CameraConfig;
+    readonly fit: CameraFit;
     readonly perspective: PerspectiveCameraConfig;
     readonly orthographic: OrthographicCameraConfig;
     readonly frustum: OrthographicFrustum;
@@ -107,7 +109,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         expect(Object.keys(r3fBarrel).sort()).toEqual(['GameCanvas', 'useModelAnimation']);
     });
 
-    it('pulls in exactly eleven modules — two stores, the log bridge, and no clone seam', async () => {
+    it('pulls in exactly twelve modules — two stores, the log bridge, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The two
@@ -119,7 +121,9 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // bridge rather than console (Invariant #67).
         // useModelAnimation imports ModelInstance TYPE-ONLY, so no assets/
         // module — and no SkeletonUtils — appears; the clone seam ships from the
-        // assets barrel.
+        // assets barrel. cameraFit is GameCanvas's own fit-policy geometry, and
+        // being pure arithmetic it adds no edge of its own — no store, no
+        // bridge, no external package.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
             'logging/rendererLogger.ts',
@@ -127,6 +131,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'perf/perfStore.ts',
             'r3f/FrameRateLimiter.tsx',
             'r3f/GameCanvas.tsx',
+            'r3f/cameraFit.ts',
             'r3f/index.ts',
             'r3f/mainCanvasRegistry.ts',
             'r3f/selectTargetFps.ts',

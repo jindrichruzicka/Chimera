@@ -29,13 +29,15 @@ export function TacticsModelShowcaseScreen(): React.ReactElement {
 
     return (
         <div data-testid="tactics-model-showcase" style={screenStyle}>
-            <TacticsModelShowcaseStatus reportA={reportA} reportB={reportB} />
             {/* No lights: showcase-rig.glb declares KHR_materials_unlit, which
                 GLTFLoader maps to MeshBasicMaterial — nothing in this scene is
                 lit, so a light could not change a pixel. */}
             <GameCanvas camera={SHOWCASE_CAMERA}>
                 <TacticsModelShowcase onReportA={setReportA} onReportB={setReportB} />
             </GameCanvas>
+            {/* Positioned, and after the canvas — camera-system.md §4.22
+                "Canvas-fit rules". */}
+            <TacticsModelShowcaseStatus reportA={reportA} reportB={reportB} />
         </div>
     );
 }

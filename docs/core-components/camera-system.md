@@ -1,6 +1,6 @@
 ---
 title: 'Camera System'
-description: 'CameraMode/CameraPreset types, the GameCanvas declarative camera prop (presets, explicit configs, up vector, manual-projection rules), preset defaults table, CameraController interface, CameraAnimationCancelled error, useCamera() hook, camera state ownership rules, and the render-loop pacing that applies the display.targetFps frame-rate cap.'
+description: 'CameraMode/CameraPreset/CameraFit types, the GameCanvas declarative camera prop (presets, explicit configs, up vector, manual-projection and canvas-fit rules), preset defaults table, CameraController interface, CameraAnimationCancelled error, useCamera() hook, camera state ownership rules, and the render-loop pacing that applies the display.targetFps frame-rate cap.'
 tags: [camera, r3f, animation, renderer, three-js]
 ---
 
@@ -39,7 +39,7 @@ A game needing a second view — a minimap, a unit preview — mounts a second `
 
 - `role="main"` (the default) mounts `PerfProbe`, so the perf HUD measures the main scene; an `'overlay'` mounts no probe (§4.16). Two concurrently-mounted mains are reported by name (`DuplicateMainGameCanvasError`) through the renderer logger — logged, not thrown, deferred one frame and cancelled if the pair resolves first, so a same-frame handover never false-fires.
 - **Every** role mounts `FrameRateLimiter` and takes `frameloop={useEngineFrameloop()}`: each canvas is paced by the `display.targetFps` cap.
-- Placement and size are the game's: r3f pins `position`/`width`/`height` as inline styles on its wrapper div, so the corner anchor and the explicit size live on a game-owned wrapper element, and the curated `className` prop carries canvas chrome (a zero-height wrapper never mounts the scene).
+- Placement and size are the game's: the corner anchor and the explicit size live on a game-owned wrapper element, and the curated `className` prop carries canvas chrome (a zero-height wrapper never mounts the scene). What pins the canvas box inside that wrapper is "Canvas-fit rules" below.
 
 ### Sizing the wrapper — for every role, not just overlays
 
@@ -59,12 +59,21 @@ The host geometry all of this turns on — `position: relative` plus the `minHei
 `GameCanvas` takes a single declarative `camera` prop: a named preset string, or a fully explicit config object. The game never constructs a three.js camera itself.
 
 ```typescript
-// renderer/components/r3f/GameCanvas.tsx (all types re-exported from the r3f barrel)
+// renderer/components/r3f/GameCanvas.tsx, plus CameraFit from its sibling
+// cameraFit.ts (all types re-exported from the r3f barrel)
 
 export type CameraMode = 'perspective' | 'orthographic';
 export type CameraPreset = 'isometric' | 'top-down' | 'side-scrolling' | 'free';
 
 export type Vector3Tuple = readonly [x: number, y: number, z: number];
+
+/**
+ * What happens when the canvas aspect diverges from the camera's own aspect
+ * (ortho: `(right - left) / (top - bottom)`; perspective: the pinned `aspect`).
+ * Only meaningful for a `manual` camera — a responsive perspective camera has
+ * no divergence to resolve. See "Canvas-fit rules" below.
+ */
+export type CameraFit = 'letterbox' | 'expand' | 'stretch';
 
 /**
  * World-unit orthographic view volume. An explicit frustum always marks the
@@ -91,6 +100,9 @@ export type PerspectiveCameraConfig = Readonly<{
     /** Pins the aspect ratio and marks the camera `manual`; omit to let R3F
      *  maintain the aspect on resize (the default and usual choice). */
     aspect?: number;
+    /** How a diverging canvas aspect is resolved; default `'letterbox'`.
+     *  Inert without a pinned `aspect`. */
+    fit?: CameraFit;
 }>;
 
 export type OrthographicCameraConfig = Readonly<{
@@ -99,6 +111,10 @@ export type OrthographicCameraConfig = Readonly<{
     lookAt: Vector3Tuple;
     up?: Vector3Tuple; // default [0, 1, 0]; applied before lookAt
     frustum: OrthographicFrustum;
+    /** How a diverging canvas aspect is resolved; default `'letterbox'`.
+     *  Overriding the ortho aspect means writing the frustum ratio you want —
+     *  that ratio IS the camera's aspect, so there is no separate field. */
+    fit?: CameraFit;
 }>;
 
 export type CameraConfig = PerspectiveCameraConfig | OrthographicCameraConfig;
@@ -121,7 +137,9 @@ export type GameCanvasProps = Readonly<{
      * Forwarded to the r3f wrapper `<div>` for canvas chrome. r3f pins
      * position and size as inline styles on that div, so placement and the
      * explicit size live on a game-owned wrapper element — this class can
-     * never re-place or re-size the canvas.
+     * never re-place or re-size the canvas. Once a `letterbox` fit pins a box,
+     * that div IS the fitted box, so chrome (border, radius) follows the
+     * visible canvas rather than the bars.
      *
      * For a full-window scene that wrapper is the screen's ROOT element and
      * wants `position: absolute; inset: 0`. Sizing it any other way fails
@@ -139,19 +157,54 @@ export type GameCanvasProps = Readonly<{
 
 Each preset carries its documented projection mode — `camera="isometric"` always yields an orthographic camera. A game wanting a preset viewpoint in the other mode writes the explicit config instead.
 
-| Preset           | Mode         | Initial position | Look-at     | Frustum / fov              |
-| ---------------- | ------------ | ---------------- | ----------- | -------------------------- |
-| `isometric`      | orthographic | `(10, 10, 10)`   | `(0, 0, 0)` | `±10 × ±10` (manual)       |
-| `top-down`       | orthographic | `(0, 20, 0)`     | `(0, 0, 0)` | `±10 × ±10` (manual)       |
-| `side-scrolling` | perspective  | `(0, 5, 15)`     | `(0, 5, 0)` | fov 50 (responsive aspect) |
-| `free`           | perspective  | `(0, 5, 10)`     | `(0, 0, 0)` | fov 50 (responsive aspect) |
+| Preset           | Mode         | Initial position | Look-at     | Frustum / fov                 |
+| ---------------- | ------------ | ---------------- | ----------- | ----------------------------- |
+| `isometric`      | orthographic | `(10, 10, 10)`   | `(0, 0, 0)` | `±10 × ±6.25` (manual, 16:10) |
+| `top-down`       | orthographic | `(0, 20, 0)`     | `(0, 0, 0)` | `±10 × ±6.25` (manual, 16:10) |
+| `side-scrolling` | perspective  | `(0, 5, 15)`     | `(0, 5, 0)` | fov 50 (responsive aspect)    |
+| `free`           | perspective  | `(0, 5, 10)`     | `(0, 0, 0)` | fov 50 (responsive aspect)    |
+
+Every preset takes the default `fit: 'letterbox'`. The preset frusta are 16:10 because a preset is authored blind to the player's monitor — the ratio picks what is framed, and the fit policy is what keeps it undistorted on a display of another shape.
 
 ### Manual-projection rules
 
 `manual` is derived from the config, never passed:
 
-- **Orthographic** (preset or explicit) ⇒ always `manual`. An author frustum is in world units; R3F's resize handler would otherwise replace it with pixel half-extents. Trade-off: a manual frustum is not aspect-corrected — content stretches if the canvas aspect diverges from the frustum aspect, so pick a frustum matching the intended canvas shape.
+- **Orthographic** (preset or explicit) ⇒ always `manual`. An author frustum is in world units; R3F's resize handler would otherwise replace it with pixel half-extents (1 world unit = 1 pixel), discarding the world framing entirely.
 - **Perspective** ⇒ `manual` only when `aspect` is pinned; otherwise R3F keeps the aspect correct on every resize (what you almost always want).
+
+### Canvas-fit rules
+
+`manual` also opts the camera out of R3F's only aspect hook — `updateCamera()` opens with `if (camera.manual) return`. A manual camera therefore projects at an aspect of its own (ortho: `(right - left) / (top - bottom)`; perspective: the pinned `aspect`) which three maps onto the whole GL viewport, one axis independently of the other. `fit` is what resolves the divergence:
+
+| `fit`                | Frustum        | Canvas             | Trade-off                                                      |
+| -------------------- | -------------- | ------------------ | -------------------------------------------------------------- |
+| `'letterbox'` (dflt) | authored       | fitted rect + bars | exact framing everywhere; bars on a mismatched canvas          |
+| `'expand'`           | grown, centred | fills              | no bars; authored bounds become a **minimum**, not the framing |
+| `'stretch'`          | authored       | fills              | distorts wherever the aspects diverge                          |
+
+- **`'letterbox'`** renders the authored frustum at its exact aspect, centred, with the remainder painted `--ch-color-scrim`: pillarbox (side bars) on a canvas wider than the camera, letterbox (top/bottom bars) on a taller one. The one policy under which an authored world framing means exactly one thing on every display.
+    - Nothing is pinned and nothing is painted when the fit would leave a remainder under half a CSS pixel — a canvas that already has the camera's shape (the tactics minimap is one) keeps sizing itself, exactly as it did before the policy existed.
+- **`'expand'`** grows the frustum on its short axis until it matches the canvas, about the frustum's own centre — a wider monitor sees _more_ world. For a perspective camera the vertical `fov` is widened only on a canvas **taller** than the pinned aspect, since the aspect alone already grows the horizontal axis.
+- **`'stretch'`** is the named escape hatch for the behaviour that predates the policy. Nothing is reconciled.
+
+A responsive perspective camera (no pinned `aspect`) has no divergence to resolve: `fit` is inert on it, and it stays non-`manual`.
+
+**The letterbox is a DOM box, not a GL viewport.** `GameCanvas` renders an engine-owned frame that declares no layout mode of its own and, when there is a remainder, pins the r3f `<Canvas>` inside it at the fitted size — out of flow (`position: absolute; inset: 0`), centred by auto margins. In r3f 9.6.1, `state.size` is measured on a 100%/100% inner div inside that wrapper and the canvas element is sized from it, so both are exactly the box the engine pinned. This is load-bearing: r3f derives pointer NDC from `state.size` — a `gl.setViewport()`/`setScissor()` letterbox would leave `state.size` describing the full canvas while rendering covered only the inner rect, so every raycast and click would land on the wrong world point, and `useThree().viewport`, DPR maths and r3f's own `gl.setSize()` on resize would all disagree with what is on screen. The DOM route keeps `size`, `viewport`, picking and DPR coherent for free.
+
+Two details of that pinning are load-bearing:
+
+- **Out of flow.** The engine frame declares no layout mode of its own, and the pinned canvas leaves flow entirely, so nothing the frame does can re-size it. `perf-hud.spec.ts` pins the tactics minimap canvas's aspect in a real browser, which is the only place layout is computed.
+- **The pinned size is the content box.** A `className` that adds a border grows the wrapper's border box outward and leaves the content box — the one r3f measures `state.size` on — at the fitted size. ("Sizing the wrapper" above says why a border grows outward here.)
+
+Consequences worth knowing:
+
+- An overlay a game lays over its own full-bleed wrapper **sits over the bars**, not beside them — but only if it is **positioned and rendered after** the `<GameCanvas>`, because the frame the scrim sits on is itself a positioned element with `z-index: auto`. The tactics board's reveal readout and the model showcase's status element satisfy both halves, pinned by `TacticsDemoBoard.test.tsx` and `TacticsModelShowcaseScreen.test.tsx`.
+- The frame is inert to the pointer, so a click on a bar is not absorbed by the engine box — it reaches whatever the game has behind it.
+- r3f 9.6.1 connects its pointer listeners to its own wrapper, which under a fit is the fitted box, so a bar click reaches nothing r3f is listening on: `onPointerMissed` fires over the canvas only.
+- Every role letterboxes, `'overlay'` included: an overlay canvas whose wrapper aspect diverges from its camera's gets bars and a scrim exactly as a main one does.
+- Where there are bars the scrim also sits **behind** the canvas, which r3f leaves transparent: a letterboxed scene's backdrop is the scrim rather than whatever showed through before. A game wanting another backdrop sets a scene background.
+- The "Sizing the wrapper" rules above are unchanged: the game still owns the outer box; the engine frame lives inside it.
 
 ### Preset example
 
@@ -184,6 +237,10 @@ const BOARD_CAMERA = {
 } as const satisfies OrthographicCameraConfig;
 
 <GameCanvas camera={BOARD_CAMERA}>…</GameCanvas>
+
+// Same framing as a guaranteed MINIMUM instead: no bars, and a wider window
+// shows more of the world around it.
+const OPEN_WORLD_CAMERA = { ...BOARD_CAMERA, fit: 'expand' } as const satisfies OrthographicCameraConfig;
 ```
 
 > **Stability note:** if the `camera` config object is constructed inline (`camera={{ mode: … }}`), a new three.js camera is recreated on every render because the internal `useMemo` compares by reference. Hoist the config to a module-level constant (as above) or `useMemo` it in the parent component.

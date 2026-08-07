@@ -20,6 +20,7 @@ import {
     TACTICS_REVEAL_TILE_ACTION,
 } from '@chimera-engine/tactics/simulation/constants.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
+import type { CommitmentId } from '@chimera-engine/simulation/foundation/commitment-contract.js';
 import { I18nProvider } from '@chimera-engine/renderer/i18n';
 import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
@@ -317,6 +318,35 @@ describe('TacticsDemoBoard', () => {
             up: [0, 0, 1],
             frustum: { left: -3.75, right: 3.75, top: 2.5, bottom: -2.5, near: 0.1, far: 100 },
         });
+    });
+
+    it('renders every positioned overlay AFTER the board GameCanvas', () => {
+        // Positioned and after the canvas, both — camera-system.md §4.22
+        // "Canvas-fit rules". jsdom computes no paint, but it does hold the two
+        // facts that decide it.
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ commitment: true })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+                reveal={{
+                    id: 'reveal-1' as CommitmentId,
+                    nonce: 'nonce-1',
+                    value: { playerId: 'p2', turnNumber: 1, actions: [] },
+                }}
+            />,
+        );
+
+        // The GameCanvas stand-in above renders one div, so its parent is the
+        // board scene root the overlays are siblings in.
+        const scene = screen.getByTestId('tactics-r3f-canvas').parentElement;
+        if (!scene) {
+            throw new Error('Expected the board scene to wrap the board GameCanvas');
+        }
+        const order = [...scene.children].map((child) => child.getAttribute('data-testid'));
+
+        expect(order).toEqual(['tactics-r3f-canvas', 'tactics-reveal', 'tactics-minimap']);
+        expect(screen.getByTestId('tactics-reveal')).toHaveStyle({ position: 'absolute' });
     });
 
     it('mounts exactly two GameCanvas roots — the default-role board and the overlay minimap', () => {

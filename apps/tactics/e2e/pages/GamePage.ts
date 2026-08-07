@@ -67,6 +67,26 @@ export const TACTICS_CANVAS_WORLD_BOUNDS = {
     bottom: -2.5,
 } as const;
 
+// The aspect the frustum projects at, and therefore the aspect of the canvas
+// ELEMENT: GameCanvas's default `letterbox` fit (§4.22) sizes the r3f wrapper —
+// and with it the canvas — to exactly this ratio, painting the remainder of the
+// game's wrapper as bars. The projection below maps the world bounds onto that
+// canvas box, so it is only meaningful while the two agree; a divergence means
+// the fit policy stopped applying and every projected click would land on the
+// wrong tile. Relative, because a fitted rect can carry sub-pixel dust.
+const TACTICS_CANVAS_ASPECT =
+    (TACTICS_CANVAS_WORLD_BOUNDS.right - TACTICS_CANVAS_WORLD_BOUNDS.left) /
+    (TACTICS_CANVAS_WORLD_BOUNDS.top - TACTICS_CANVAS_WORLD_BOUNDS.bottom);
+// A power-of-two fraction (1/64), so a box sitting exactly on the accepted
+// boundary is representable and the boundary itself can be pinned. Any value in
+// this neighbourhood works — a fitted rect's dust is a fraction of a percent,
+// and a wrong-tile click is tens of percent off.
+export const TACTICS_CANVAS_ASPECT_TOLERANCE = 0.015625;
+// The budget only has to outlast a slow CI runner's first configure; each
+// attempt costs one `waitForCanvasFrame`. See `fittedTacticsCanvasBox` for what
+// it waits on.
+const TACTICS_FITTED_CANVAS_FRAME_ATTEMPTS = 10;
+
 // The playable board-plane extents (TacticsGroundPlane: 6×4 centred on (1, 0)), distinct
 // from the now-wider camera frustum. Generated move targets are tested against these so they
 // stay on the board, away from the canvas margin the frustum now shows beyond the edge.
@@ -556,16 +576,52 @@ export class GamePage {
         return this.sceneRouter.getAttribute('data-active-screen-key');
     }
 
-    public async clickTacticsGridPoint(
-        grid: TacticsGridPoint,
-        options: TacticsGridClickOptions = {},
-    ): Promise<void> {
-        const box = await this.tacticsCanvas.boundingBox();
+    /**
+     * The board canvas's box once GameCanvas's letterbox fit has sized it.
+     *
+     * r3f sizes its canvas from a ResizeObserver notification, which is
+     * delivered inside a rendering step — and an Electron window sitting behind
+     * another runs no rendering step until something asks for a frame. Until
+     * then the element reports the intrinsic `300x150` `<canvas>` default, which
+     * spans none of the frustum, so projecting into it clicks a tile at random.
+     * Driving a `waitForCanvasFrame` per attempt is what unsticks it; the aspect
+     * check is what tells a not-yet-configured canvas from a configured one.
+     */
+    private async fittedTacticsCanvasBox(): Promise<{
+        readonly x: number;
+        readonly y: number;
+        readonly width: number;
+        readonly height: number;
+    }> {
+        let box = await this.tacticsCanvas.boundingBox();
+        for (
+            let attempt = 0;
+            attempt < TACTICS_FITTED_CANVAS_FRAME_ATTEMPTS && !isFittedTacticsCanvasBox(box);
+            attempt += 1
+        ) {
+            await waitForCanvasFrame(this.page);
+            box = await this.tacticsCanvas.boundingBox();
+        }
+
         if (box === null || box.width <= 0 || box.height <= 0) {
             throw new Error(
                 'Tactics WebGL canvas is not visible; cannot click tactics grid point.',
             );
         }
+        if (!isFittedTacticsCanvasBox(box)) {
+            throw new Error(
+                `Tactics canvas box ${box.width}x${box.height} does not match the tactics camera frustum aspect ${TACTICS_CANVAS_ASPECT}; the letterbox fit is not applying and grid clicks would land on the wrong tile.`,
+            );
+        }
+
+        return box;
+    }
+
+    public async clickTacticsGridPoint(
+        grid: TacticsGridPoint,
+        options: TacticsGridClickOptions = {},
+    ): Promise<void> {
+        const box = await this.fittedTacticsCanvasBox();
 
         const position = projectGridPointToCanvasPosition(grid, box);
         if (!isCanvasPositionInsideBox(position, box)) {
@@ -875,14 +931,31 @@ function isSameGridPoint(first: TacticsGridPoint, second: TacticsGridPoint): boo
     return first.x === second.x && first.y === second.y;
 }
 
+/** Whether `box` is the rect GameCanvas's letterbox fit produces for this camera. */
+function isFittedTacticsCanvasBox(
+    box: { readonly width: number; readonly height: number } | null,
+): boolean {
+    if (box === null || box.width <= 0 || box.height <= 0) {
+        return false;
+    }
+
+    return (
+        Math.abs(box.width / box.height - TACTICS_CANVAS_ASPECT) / TACTICS_CANVAS_ASPECT <=
+        TACTICS_CANVAS_ASPECT_TOLERANCE
+    );
+}
+
 function projectGridPointToCanvasPosition(
     grid: TacticsGridPoint,
     box: { readonly width: number; readonly height: number },
 ): { readonly x: number; readonly y: number } {
     const { left, right, top, bottom } = TACTICS_CANVAS_WORLD_BOUNDS;
-    // Multiply before dividing: the frustum range (7.5 × 5) makes a divide-first
-    // ratio non-terminating in binary (e.g. 2.75 / 7.5), so grid points that land on exact
-    // pixels would otherwise carry float dust and fail the deep-equality assertions.
+    // `box` is the canvas ELEMENT's box, which under the letterbox fit IS the
+    // fitted rect the frustum spans — the caller has already rejected any box of
+    // another shape. Multiply before dividing: the frustum range (7.5 × 5) makes
+    // a divide-first ratio non-terminating in binary (e.g. 2.75 / 7.5), so grid
+    // points that land on exact pixels would otherwise carry float dust and fail
+    // the deep-equality assertions.
     return {
         x: ((right - grid.x) * box.width) / (right - left),
         y: ((top - grid.y) * box.height) / (top - bottom),

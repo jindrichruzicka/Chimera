@@ -22,6 +22,7 @@ export type {
     CameraMode,
     CameraPreset,
     CameraConfig,
+    CameraFit,
     PerspectiveCameraConfig,
     OrthographicCameraConfig,
     OrthographicFrustum,
