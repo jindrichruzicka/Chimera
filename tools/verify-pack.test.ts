@@ -123,9 +123,11 @@ function makeDeps(run: RunFn, fs: FsLike, extra: Partial<VerifyPackDeps> = {}): 
 }
 
 /**
- * The eight exports keys the packed renderer manifest ships today. The real gate
+ * The exports keys the packed renderer manifest ships today. The real gate
  * derives coverage from the manifest inside the installed tarball, so drift here
  * surfaces at `verify:pack` — this suite exercises the derivation, not the manifest.
+ * The no-gap case below is only as strong as this mirror: a key missing here is a
+ * key that case never asks `PROBE_SUBPATHS` to cover.
  */
 const RENDERER_EXPORTS: Readonly<Record<string, unknown>> = {
     './components/ui': { default: './dist/components/ui/index.js' },
@@ -133,6 +135,8 @@ const RENDERER_EXPORTS: Readonly<Record<string, unknown>> = {
     './components/r3f': { default: './dist/components/r3f/index.js' },
     './i18n': { default: './dist/i18n/index.js' },
     './audio': { default: './dist/audio/index.js' },
+    './assets': { default: './dist/assets/index.js' },
+    './input': { default: './dist/input/index.js' },
     './game': { default: './dist/game/rendererGameRegistry.js' },
     './shell/*': { default: './dist/app/*.js' },
     './styles/*.css': './dist/styles/*.css',

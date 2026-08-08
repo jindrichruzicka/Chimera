@@ -41,6 +41,10 @@
             "types": "./dist/assets/index.d.ts",
             "default": "./dist/assets/index.js"
         },
+        "./input": {
+            "types": "./dist/input/index.d.ts",
+            "default": "./dist/input/index.js"
+        },
         "./game": {
             "types": "./dist/game/rendererGameRegistry.d.ts",
             "default": "./dist/game/rendererGameRegistry.js"

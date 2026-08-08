@@ -3,14 +3,11 @@
  *
  * ESLint rule: `chimera/no-game-renderer-internals`
  *
- * Allows game-owned renderer surfaces to consume the public renderer surface —
- * the UI primitive barrel (`@chimera-engine/renderer/components/ui`), the chat barrel
- * (`@chimera-engine/renderer/components/chat`), the in-Canvas component barrel
- * (`@chimera-engine/renderer/components/r3f`), the game-registration seam
- * (`@chimera-engine/renderer/game`), the i18n runtime barrel
- * (`@chimera-engine/renderer/i18n`), and the audio barrel
- * (`@chimera-engine/renderer/audio`) — while blocking all other renderer internals
- * from games packages. Game renderer surfaces are the React screens/shell
+ * Allows game-owned renderer surfaces to consume the public renderer barrels
+ * while blocking all other renderer internals from games packages. Which
+ * barrels those are is decided by the disjunction in `checkImport` and the
+ * per-barrel predicates it ORs; Invariant #96 is the prose authority. Game
+ * renderer surfaces are the React screens/shell
  * components (`apps/<name>/{screens,shell}/*.{jsx,tsx}`) and the renderer
  * composition root (`apps/<name>/renderer/*.{ts,tsx}`), which registers the
  * game's renderer contribution into the host through the seam.
@@ -204,6 +201,20 @@ function isPublicAssetsBarrelImport(source: string): boolean {
     );
 }
 
+// The engine input barrel (§4.26): `useInputAction`, `useInputManager`, the
+// `InputManagerProvider`, and the action/event types a game needs to SUBSCRIBE
+// to the rebindable actions it declares. Curated: the manager factory, the
+// action registry and the key-binding repository stay internal, so
+// `input/InputManager.js` is a violation exactly as `assets/AssetManager.js` is.
+function isPublicInputBarrelImport(source: string): boolean {
+    return (
+        source === '@chimera-engine/renderer/input' ||
+        source === '@chimera-engine/renderer/input/index' ||
+        source === '@chimera-engine/renderer/input/index.ts' ||
+        source === '@chimera-engine/renderer/input/index.js'
+    );
+}
+
 // The engine GUI shell surface: the public `@chimera-engine/renderer/shell/*`
 // route + layout exports a consumer app's OWN Next host re-exports so the app owns its
 // renderer GUI while the game-agnostic shell ships from the package, plus the shell
@@ -233,13 +244,13 @@ const rule: Rule.RuleModule = {
         type: 'problem',
         docs: {
             description:
-                'Allow games to import only the public renderer barrels (components/ui, components/chat, components/r3f, game, i18n, audio, assets) from renderer code.',
+                'Allow games to import only the public renderer barrels (components/ui, components/chat, components/r3f, game, i18n, audio, assets, input) from renderer code.',
         },
         messages: {
             gameRendererImportOutsideSurface:
                 'Only game renderer surfaces under apps/<name>/screens/*.tsx, apps/<name>/shell/*.tsx, or apps/<name>/renderer/*.{ts,tsx} may import from the renderer package.',
             gameRendererInternalImport:
-                'Game renderer surfaces may import only the public @chimera-engine/renderer/components/ui, @chimera-engine/renderer/components/chat, @chimera-engine/renderer/components/r3f, @chimera-engine/renderer/game, @chimera-engine/renderer/i18n, @chimera-engine/renderer/audio, or @chimera-engine/renderer/assets barrels from renderer code. Renderer internals are forbidden in game-app packages.',
+                'Game renderer surfaces may import only the public @chimera-engine/renderer/components/ui, @chimera-engine/renderer/components/chat, @chimera-engine/renderer/components/r3f, @chimera-engine/renderer/game, @chimera-engine/renderer/i18n, @chimera-engine/renderer/audio, @chimera-engine/renderer/assets, or @chimera-engine/renderer/input barrels from renderer code. Renderer internals are forbidden in game-app packages.',
             gameRendererUiDeepImport:
                 'Game renderer surfaces must import UI primitives from the public @chimera-engine/renderer/components/ui barrel, not individual renderer component files.',
         },
@@ -279,7 +290,8 @@ const rule: Rule.RuleModule = {
                 isPublicGameSeamImport(source) ||
                 isPublicI18nBarrelImport(source) ||
                 isPublicAudioBarrelImport(source) ||
-                isPublicAssetsBarrelImport(source)
+                isPublicAssetsBarrelImport(source) ||
+                isPublicInputBarrelImport(source)
             ) {
                 return;
             }

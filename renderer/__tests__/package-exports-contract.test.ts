@@ -4,22 +4,13 @@
  * Locks the `@chimera-engine/renderer` package surface declared in `package.json`
  * (F61 surface contract; updated once the dist/ build landed):
  *
- *   - the public `exports` entry points are the three component barrels
- *     `./components/ui`, `./components/chat`, and `./components/r3f` (the
- *     GameCanvas root + useModelAnimation) plus the game-registration seam
- *     `./game` (#784 — the runtime injection point a consumer app populates via
- *     `registerRendererGame`) — no `.` barrel (there is intentionally no
- *     `renderer/index.ts`) and no deep internal subpath (Invariant #96);
+ *   - which entry points exist is asserted by the sorted key list and the per-key
+ *     `toEqual` blocks below; this header enumerates none of them;
+ *   - there is no `.` barrel (there is intentionally no `renderer/index.ts`) and
+ *     no deep internal subpath (Invariant #96);
  *   - #773 emitted the dist/ build, so each barrel's `types` AND `default`
  *     conditions now both point at the built `dist/` artifact (the #772 bridge
  *     where `types` pointed at in-tree source is gone);
- *   - an `./i18n` entry ships the engine i18n runtime barrel (I18nProvider +
- *     useTranslate + the engine token catalogue) so a consumer game and its tests
- *     can mount the provider once engine components read their copy through
- *     `useTranslate()` (F71);
- *   - a `./styles/*.css` entry ships the design-token stylesheet so a consumer
- *     can `import '@chimera-engine/renderer/styles/tokens.css'` to load the `--ch-*`
- *     tokens the barrel components reference at `:root`;
  *   - `@chimera-engine/simulation` is the only `@chimera-engine/*` dependency (Invariant #1);
  *     `@chimera-engine/ai` / `@chimera-engine/networking` / `@chimera-engine/electron` are NOT
  *     dependencies;
@@ -69,6 +60,7 @@ describe('@chimera-engine/renderer package surface', () => {
             './components/ui',
             './game',
             './i18n',
+            './input',
             './shell/*',
             './styles/*.css',
         ]);
@@ -122,6 +114,16 @@ describe('@chimera-engine/renderer package surface', () => {
             default: './dist/assets/index.js',
         });
 
+        // The input barrel (§4.26) is the reachability half of the rebindable
+        // action seam: a game declares an action, the engine registers it and
+        // Settings > Controls rebinds it, but without this entry the game has
+        // no legal route to `useInputAction` and the key it rebound does
+        // nothing.
+        expect(exportsMap['./input']).toEqual({
+            types: './dist/input/index.d.ts',
+            default: './dist/input/index.js',
+        });
+
         // F65 Phase 2c: the engine GUI shell (every route under app/) ships from dist
         // so a consumer app's thin per-app Next host re-exports each route from
         // `@chimera-engine/renderer/shell/<route>` (resolving every shared singleton through
@@ -134,10 +136,8 @@ describe('@chimera-engine/renderer package surface', () => {
         // The styles subpath ships the design-token stylesheet from dist/.
         expect(exportsMap['./styles/*.css']).toBe('./dist/styles/*.css');
 
-        // No `.` barrel and no deep internal component subpath leaks internals;
-        // the only non-component entry points are the game seam, the i18n runtime
-        // barrel, the audio barrel, the shell route wildcard, and the curated
-        // styles asset wildcard.
+        // No `.` barrel, and the closed disjunction below is what keeps a deep
+        // internal subpath from being added silently.
         expect(exportsMap['.']).toBeUndefined();
         for (const key of Object.keys(exportsMap)) {
             expect(
@@ -148,6 +148,7 @@ describe('@chimera-engine/renderer package surface', () => {
                     key === './i18n' ||
                     key === './audio' ||
                     key === './assets' ||
+                    key === './input' ||
                     key === './shell/*' ||
                     key === './styles/*.css',
             ).toBe(true);

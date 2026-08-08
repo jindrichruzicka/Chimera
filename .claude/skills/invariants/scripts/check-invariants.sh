@@ -540,10 +540,8 @@ done
 # ─── Check 17: game renderer surfaces use only the public renderer barrels (inv 96)
 # A game's React surfaces — apps/<name>/screens/*.tsx and apps/<name>/shell/*.tsx —
 # may reach the shared library ONLY through the public barrels
-# @chimera-engine/renderer/components/{ui,chat,r3f} and the top-level
-# @chimera-engine/renderer/{i18n,game,audio} (the i18n runtime, the
-# game-registration seam, and the audio hooks) — the six public surfaces
-# chimera/no-game-renderer-internals sanctions.
+# chimera/no-game-renderer-internals sanctions. RENDERER_BARREL_RE below is what
+# this check accepts; Invariant #96 is the prose authority.
 # Every other @chimera-engine/renderer/* specifier
 # (stores, IPC bridges, shell/, hooks, asset managers, stylesheets, or a deep
 # component-file path behind any barrel) is a renderer internal and is forbidden.
@@ -554,14 +552,13 @@ done
 # by the ESLint rule alone — matched through the package specifier across the cut
 # (issue #774). The
 # barrel allow-list is tail-anchored to the closing quote so `.../ui` and
-# `.../ui/index.js` pass while `.../ui/Button.js` is flagged; note i18n, game,
-# audio and assets are TOP-LEVEL subpaths (@chimera-engine/renderer/{i18n,game,audio,assets}),
-# NOT under components/ — and the tail anchor is what keeps `audio/AudioManager.js`
-# and `assets/AssetManager.js` flagged while the bare barrels and their
-# index.js forms pass. Bare
+# `.../ui/index.js` pass while `.../ui/Button.js` is flagged. RENDERER_BARREL_RE
+# below is also where the components/ vs TOP-LEVEL split is spelled out, and the
+# tail anchor is what keeps a deep file behind ANY of those barrels flagged while
+# the bare barrel and its index.js form pass. Bare
 # `renderer/` paths are intentionally NOT matched: a game's own renderer/ helper
 # (apps/<name>/renderer/*) is not a boundary crossing.
-RENDERER_BARREL_RE="@chimera-engine/renderer/(components/(ui|chat|r3f)|i18n|game|audio|assets)(/index(\.(ts|js))?)?['\"]"
+RENDERER_BARREL_RE="@chimera-engine/renderer/(components/(ui|chat|r3f)|i18n|game|audio|assets|input)(/index(\.(ts|js))?)?['\"]"
 GAME_SURFACE_DIRS=()
 for surface_dir in apps/*/screens apps/*/shell; do
     [[ -d "${surface_dir}" ]] && GAME_SURFACE_DIRS+=("${surface_dir}")

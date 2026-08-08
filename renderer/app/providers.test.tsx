@@ -2,6 +2,9 @@
 
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +19,8 @@ import type { InputAction } from '../input/InputAction.js';
 import type { InputManager } from '../input/InputManager.js';
 import { useInputManager } from '../input/InputManagerContext.js';
 import { Providers } from './providers';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const providerMocks = vi.hoisted(() => {
     const delegatingAssetManager = {
@@ -311,6 +316,21 @@ function InputManagerProbe(): React.ReactElement {
 }
 
 describe('Providers — InputManager lifecycle', () => {
+    it('publishes the manager through the public InputManagerProvider, not the raw context', () => {
+        // Structural on purpose. Both spellings mount the SAME context object,
+        // so every behavioural assertion in this file — including the identity
+        // probe below — passes either way; measured, reverting the app root to
+        // `<InputManagerContext.Provider>` leaves all 14 of them green. What
+        // would be lost is the reason the component exists: it is published on
+        // `@chimera-engine/renderer/input` for a game's own tests to mount, and
+        // a provider the engine itself does not use is a provider nothing keeps
+        // honest.
+        const source = readFileSync(resolve(__dirname, 'providers.tsx'), 'utf8');
+
+        expect(source).toContain('<InputManagerProvider inputManager={inputManager}>');
+        expect(source).not.toContain('InputManagerContext.Provider');
+    });
+
     it('seeds the InputActionRegistry with engine-owned actions only', () => {
         render(
             <Providers>

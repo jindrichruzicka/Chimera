@@ -14,7 +14,7 @@ import { createInputManager } from '../input/InputManager.js';
 import { createInputActionRegistry } from '../input/InputActionRegistry.js';
 import { InputActionRegistryContext } from '../input/InputActionRegistryContext.js';
 import { createKeyBindingRepository } from '../input/KeyBindingRepository.js';
-import { InputManagerContext } from '../input/InputManagerContext.js';
+import { InputManagerProvider } from '../input/InputManagerProvider.js';
 import { DeviceInfoProvider, type DeviceInfoSystemApi } from '../device/DeviceInfoProvider.js';
 import { EscapeStackProvider } from '../components/shell/EscapeStack.js';
 
@@ -115,9 +115,9 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
                 <AssetManagerProvider assetManager={delegatingAssetManager}>
                     <AudioManagerProvider audioManager={audioManager}>
                         <InputActionRegistryContext.Provider value={inputRegistry}>
-                            <InputManagerContext.Provider value={inputManager}>
+                            <InputManagerProvider inputManager={inputManager}>
                                 <EscapeStackProvider>{children}</EscapeStackProvider>
-                            </InputManagerContext.Provider>
+                            </InputManagerProvider>
                         </InputActionRegistryContext.Provider>
                     </AudioManagerProvider>
                 </AssetManagerProvider>

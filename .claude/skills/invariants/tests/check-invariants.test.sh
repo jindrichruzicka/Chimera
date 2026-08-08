@@ -2233,8 +2233,10 @@ test_engine_packages_in_shell_page_pass() {
 
 # Test: game surface importing the r3f, i18n, and game public barrels → NOT flagged
 # ui/chat/r3f (under components/) plus the TOP-LEVEL i18n runtime and the game-
-# registration seam @chimera-engine/renderer/game are five of the six public surfaces that
+# registration seam @chimera-engine/renderer/game are public surfaces
 # chimera/no-game-renderer-internals sanctions; Check 17's allowlist mirrors them.
+# How many there are in total is stated by RENDERER_BARREL_RE and by Invariant #96,
+# never here.
 # The game-seam fixture sits in a scanned surface dir on purpose, so it exercises
 # the RENDERER_BARREL_RE allowlist rather than an unscanned dir.
 test_r3f_i18n_game_barrels_in_game_surface_pass() {
@@ -2261,8 +2263,8 @@ test_r3f_i18n_game_barrels_in_game_surface_pass() {
 }
 
 # Test: the public audio barrel in a game surface → clean.
-# The sixth public barrel — the subpath that makes useSound / useMusicTrack and
-# the cue/fade/crossfade verbs reachable by a game at all.
+# The subpath that makes useSound / useMusicTrack and the cue/fade/crossfade
+# verbs reachable by a game at all.
 test_audio_barrel_in_game_surface_passes() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
@@ -2307,6 +2309,108 @@ test_audio_internal_in_game_surface_detected() {
         fi
     else
         fail "deep import behind the audio barrel not detected (exit 0)"
+    fi
+}
+
+# Test: the public assets barrel in a game surface → clean.
+# The assets barrel landed with RENDERER_BARREL_RE updated and no fixture, so
+# dropping `assets` from the alternation was invisible to this harness. It shares
+# the catch-set with every other barrel here, which is exactly why it needs its
+# own case: a shared tail anchor is not a per-barrel pin.
+test_assets_barrel_in_game_surface_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/screens/TacticsBoard.tsx" \
+        "import { useAsset } from '@chimera-engine/renderer/assets';"
+    plant_file "${tmp}" "apps/tactics/shell/TacticsShellHud.tsx" \
+        "import { useAssetManager } from '@chimera-engine/renderer/assets/index.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "public assets barrel in a game surface not flagged"
+    else
+        fail "public assets barrel in a game surface wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test: a deep import BEHIND the assets barrel in a game surface → violation
+# [invariant-96]. The negative control paired with the case above.
+test_assets_internal_in_game_surface_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/screens/TacticsBoard.tsx" \
+        "import { createAssetManager } from '@chimera-engine/renderer/assets/AssetManager.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-96\]'; then
+            pass "deep import behind the assets barrel detected as [invariant-96]"
+        else
+            fail "assets deep import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "deep import behind the assets barrel not detected (exit 0)"
+    fi
+}
+
+# Test: the public input barrel in a game surface → clean.
+# The subpath that lets a game SUBSCRIBE to the rebindable actions it already
+# declares (§4.26): without it a player rebinds the key and nothing happens.
+test_input_barrel_in_game_surface_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/screens/TacticsMenu.tsx" \
+        "import { useInputAction } from '@chimera-engine/renderer/input';"
+    plant_file "${tmp}" "apps/tactics/shell/TacticsShellHud.tsx" \
+        "import { useInputManager } from '@chimera-engine/renderer/input/index.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "public input barrel in a game surface not flagged"
+    else
+        fail "public input barrel in a game surface wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test: a deep import BEHIND the input barrel in a game surface → violation
+# [invariant-96]. The negative control on the barrel above: opening the subpath
+# must not open the subtree. `InputManager.js` is the file that matters — it
+# holds the manager FACTORY, which stays internal (§4.26).
+test_input_internal_in_game_surface_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "apps/tactics/screens/TacticsMenu.tsx" \
+        "import { createInputManager } from '@chimera-engine/renderer/input/InputManager.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-96\]'; then
+            pass "deep import behind the input barrel detected as [invariant-96]"
+        else
+            fail "input deep import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "deep import behind the input barrel not detected (exit 0)"
     fi
 }
 
@@ -2964,6 +3068,10 @@ test_engine_packages_in_shell_page_pass
 test_r3f_i18n_game_barrels_in_game_surface_pass
 test_audio_barrel_in_game_surface_passes
 test_audio_internal_in_game_surface_detected
+test_assets_barrel_in_game_surface_passes
+test_assets_internal_in_game_surface_detected
+test_input_barrel_in_game_surface_passes
+test_input_internal_in_game_surface_detected
 test_renderer_audio_import_in_cue_sheet_detected
 test_renderer_audio_barrel_in_cue_sheet_detected
 test_build_output_dir_not_scanned

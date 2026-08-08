@@ -277,7 +277,7 @@ except the 8 architectural principles honestly marked doc-only.
 ## Checker firing proof
 
 Phase-C proof that the guards actually trip. The checker self-test harness
-(`check-invariants.test.sh`, **134 cases**) plants synthetic violations in repo-shaped fixture
+(`check-invariants.test.sh`; run it for the live case count) plants synthetic violations in repo-shaped fixture
 roots and asserts each Check both **fires** on a violation and **stays clean** on valid code
 (negative controls). It exercises the full Check 1–32 range, including the hardening
 additions/repairs:
@@ -302,6 +302,16 @@ additions/repairs:
   turns the relative-path case green — and the package-specifier case needs **both** Check 2 and
   Check 13 falsified at once, since either alone still catches it. That redundancy is recorded in
   the fixture rather than left as a single-guard claim it would not survive.
+- **Input and assets barrels (Check 17, #1008, 4 new cases):** the same pair twice, for
+  `@chimera-engine/renderer/input` and `@chimera-engine/renderer/assets` — the bare barrel and
+  its `/index.js` form pass from a game surface, while `input/InputManager.js` and
+  `assets/AssetManager.js` behind them are flagged `[invariant-96]`. The `assets` pair closes a
+  gap that shipped with that barrel and is the one that killed a live mutant: dropping `assets`
+  from `RENDERER_BARREL_RE` passed the whole suite at `e1fa43de` and fails one case here. The
+  ESLint half was killed by its own mutant: writing the games-side predicate as a `startsWith`
+  prefix instead of the four exact spellings makes the rule ACCEPT
+  `@chimera-engine/renderer/input/useInputAction.js`, so the pre-existing `invalid` case for
+  that specifier — which expects a report — is the one that fails.
 
 ## Cross-cutting sanity
 
@@ -348,4 +358,4 @@ Each guard-repair shipped a test that fails without its fix:
 - [Architecture Invariants](architecture-invariants.md) — the 127 numbered rules.
 - [Module Boundaries](module-boundaries-file-tree.md) — the file tree these boundary checks defend.
 - Checker: `.claude/skills/invariants/scripts/check-invariants.sh` (Checks 1–32) and its self-test
-  `.claude/skills/invariants/tests/check-invariants.test.sh` (134 cases).
+  `.claude/skills/invariants/tests/check-invariants.test.sh`.

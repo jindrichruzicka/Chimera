@@ -7,9 +7,14 @@
  * Architecture reference: §3 Module Boundaries, §4.35 UI Design System
  */
 
-import { RuleTester } from 'eslint';
-import { describe, it } from 'vitest';
+import { Linter, RuleTester } from 'eslint';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
 import rule from './no-game-renderer-internals.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 RuleTester.describe = describe;
 RuleTester.it = it;
@@ -183,6 +188,28 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         {
             filename: 'apps/tactics/screens/TacticsBoard.tsx',
             code: `import { useModelInstance } from '@chimera-engine/renderer/assets/index.ts';`,
+        },
+        {
+            // The public input barrel (§4.26) — the subpath that lets a game
+            // SUBSCRIBE to the rebindable actions it already declares:
+            // useInputAction, useInputManager, the InputManagerProvider, and
+            // the action/event types.
+            filename: 'apps/tactics/screens/TacticsMenu.tsx',
+            code: `import { useInputAction } from '@chimera-engine/renderer/input';`,
+        },
+        {
+            filename: 'apps/tactics/shell/TacticsShellHud.tsx',
+            code: `import { useInputManager } from '@chimera-engine/renderer/input/index.js';`,
+        },
+        {
+            // Extensionless and .ts forms of the same barrel, matching its
+            // sibling predicates — a game surface may name any of the four spellings.
+            filename: 'apps/tactics/renderer/register.ts',
+            code: `import { InputManagerProvider } from '@chimera-engine/renderer/input/index';`,
+        },
+        {
+            filename: 'apps/tactics/screens/TacticsGameHud.tsx',
+            code: `import { useInputAction } from '@chimera-engine/renderer/input/index.ts';`,
         },
         // ── Dynamic import() — the same permissions as the static position ──
         // A public barrel stays permitted when it is code-split rather than
@@ -428,4 +455,115 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
     ],
+});
+
+// ─── The two prose enumerations, derived rather than restated ─────────────────
+//
+// `meta.docs.description` and the `gameRendererInternalImport` message both
+// spell the barrel set out, because a developer who hits the rule has only the
+// message to go on. Nothing else asserts either string, so both can silently
+// come to name a set the predicates no longer accept. These cases derive the
+// accepted set by RUNNING the rule over one import per candidate barrel and
+// compare the two strings against that, so the rule cannot disagree with itself.
+describe('chimera/no-game-renderer-internals — barrel enumerations in prose', () => {
+    // The candidate set is read from the package manifest rather than typed
+    // here: a barrel this file forgot to list would otherwise be a barrel the
+    // comparison never asks about. Wildcard keys (`./shell/*`, `./styles/*.css`)
+    // are excluded — they are not barrels and the rule handles `shell/*` under
+    // its own file-scoped carve-out.
+    const manifest = JSON.parse(
+        readFileSync(resolve(__dirname, '../../../../renderer/package.json'), 'utf8'),
+    ) as { exports?: Record<string, unknown> };
+    const candidates = Object.keys(manifest.exports ?? {})
+        .filter((key) => !key.includes('*'))
+        .map((key) => `@chimera-engine/renderer/${key.slice('./'.length)}`);
+
+    /** Every candidate the rule lets through from a plain game screen. */
+    function acceptedBarrels(): readonly string[] {
+        const linter = new Linter();
+        return candidates.filter((specifier) => {
+            const messages = linter.verify(
+                `import x from '${specifier}';`,
+                [
+                    {
+                        // Flat config matches on `files`; without it every
+                        // verify() returns "No matching configuration found"
+                        // and the probe reads as "nothing is accepted".
+                        files: ['**/*.tsx'],
+                        languageOptions: { ecmaVersion: 2022, sourceType: 'module' },
+                        plugins: { chimera: { rules: { 'no-game-renderer-internals': rule } } },
+                        rules: { 'chimera/no-game-renderer-internals': 'error' },
+                    },
+                ],
+                'apps/tactics/screens/TacticsBoard.tsx',
+            );
+            return messages.length === 0;
+        });
+    }
+
+    it('accepts the barrels the manifest ships, and only those', () => {
+        // Fails in BOTH directions: a barrel that stops being accepted, and a
+        // manifest key that was never meant to be a game-surface barrel.
+        expect([...acceptedBarrels()].sort()).toEqual([
+            '@chimera-engine/renderer/assets',
+            '@chimera-engine/renderer/audio',
+            '@chimera-engine/renderer/components/chat',
+            '@chimera-engine/renderer/components/r3f',
+            '@chimera-engine/renderer/components/ui',
+            '@chimera-engine/renderer/game',
+            '@chimera-engine/renderer/i18n',
+            '@chimera-engine/renderer/input',
+        ]);
+    });
+
+    it('names exactly the accepted barrels in the message a developer actually reads', () => {
+        // Read the SPECIFIER LIST, not the whole string, and compare it as a set
+        // — the same shape as the description case below and for the same
+        // reason. A `toContain` per accepted barrel only fails when the message
+        // drops one; it says nothing about a barrel the message names and the
+        // predicates reject, which is the half that sends a developer to import
+        // something the rule will flag.
+        const message = rule.meta?.messages?.['gameRendererInternalImport'] ?? '';
+        const listed = /only the public (.*?) barrels from renderer code\./u
+            .exec(message)?.[1]
+            ?.split(',')
+            .map((entry) => entry.trim().replace(/^or\s+/u, ''));
+
+        expect(listed, message).toBeDefined();
+        expect([...(listed ?? [])].sort()).toEqual([...acceptedBarrels()].sort());
+    });
+
+    it('names exactly the accepted barrels in meta.docs.description', () => {
+        // Read the PARENTHESISED list, not the sentence. A bare `toContain`
+        // over the whole string is hollow for short entries: the description
+        // opens "Allow games to import only…", so `toContain('game')` is
+        // satisfied by the word "games" and dropping the `game` barrel from the
+        // list goes unnoticed.
+        const description = rule.meta?.docs?.description ?? '';
+        const listed = /\(([^)]*)\)/u
+            .exec(description)?.[1]
+            ?.split(',')
+            .map((entry) => entry.trim());
+
+        expect(listed, description).toBeDefined();
+        expect([...(listed ?? [])].sort()).toEqual(
+            acceptedBarrels()
+                .map((specifier) => specifier.slice('@chimera-engine/renderer/'.length))
+                .sort(),
+        );
+    });
+
+    it('names no barrel the rule rejects', () => {
+        // The other half: an enumeration may not out-run the predicates either.
+        // `assets/AssetManager` stands for any deep path behind a barrel.
+        for (const rejected of [
+            '@chimera-engine/renderer/hooks',
+            '@chimera-engine/renderer/state',
+            '@chimera-engine/renderer/assets/AssetManager',
+        ]) {
+            expect(rule.meta?.messages?.['gameRendererInternalImport'] ?? '').not.toContain(
+                rejected,
+            );
+        }
+    });
 });

@@ -136,6 +136,73 @@ Key bindings are stored in `settings.controls.bindings: GameBindingSchema<Engine
 
 ---
 
+## Reachability From a Game (`@chimera-engine/renderer/input`)
+
+A game surface reaches the shared renderer library only through its public barrels
+(Invariant #96). The one for this section is `@chimera-engine/renderer/input`, and it
+re-exports:
+
+| Symbol                      | Kind  | Why a game needs it                                                         |
+| --------------------------- | ----- | --------------------------------------------------------------------------- |
+| `useInputAction`            | value | run a callback when a declared action fires                                 |
+| `useInputManager`           | value | hold the manager, for the held-key recipe below                             |
+| `InputManagerProvider`      | value | what a game's own component tests mount to satisfy the hooks                |
+| `InputManagerProviderProps` | type  | the provider's props                                                        |
+| `InputAction`               | type  | annotate the action table a game hands to `LoadedRendererGame.inputActions` |
+| `InputActionId`             | type  | name an id outside an inline literal                                        |
+| `InputEvent`                | type  | the callback payload, needed by any handler extracted out of JSX            |
+| `InputManager`              | type  | the return type of `useInputManager`                                        |
+
+**What stays internal, and why.** The eight names above are the whole re-export list —
+`renderer/input/__tests__/input-barrel-side-effects.test.ts` pins it as a closed set — so
+`createInputManager`, `createInputActionRegistry`, `createKeyBindingRepository`, the
+registry and repository interfaces, the context objects, `KeyBinding`, `EngineBindings`,
+`RebindResult` and the input error classes stay behind it. The reasons: the manager is an
+app-lifetime singleton (see Lifecycle Ownership
+above), and a second one attaches a second pair of window `keydown`/`keyup` listeners and
+double-dispatches every action. Registration is engine-side and already complete:
+`GameShell` registers whatever the game declared. Bindings are settings (Invariant #66),
+and rebinding stays with the engine settings page.
+
+That last point is prose, not a mechanism. Exporting `useInputManager` hands a game the
+manager object, so **every** member on the `InputManager` interface is reachable —
+lifecycle (`start`, `stop`), dispatch scoping (`setActiveCategory`, `pollGamepad`) and
+binding writes (`rebind`, `resetBinding`) alike — and nothing prevents a game from calling
+any of them. A game calls none: it subscribes with `useInputAction` and reads
+`isPressed`. This is the same prose-only arrangement Invariant #64 uses for
+`AudioManager.dispose()`.
+
+**Dispatch fires on key DOWN and key UP.** A handler that should run once per press has
+to guard on the event:
+
+```typescript
+useInputAction('game:jump', (event) => {
+    if (!event.pressed) return;
+    // …
+});
+```
+
+**Held keys are polled, not subscribed.** `InputManager.isPressed(id)` is a membership
+test that publishes no event and notifies nothing when the pressed set changes, so there
+is no held-key hook. Hold the manager and poll it from the game's own frame loop:
+
+```typescript
+const manager = useInputManager();
+useFrame(() => {
+    if (manager.isPressed('game:move-left')) {
+        // …
+    }
+});
+```
+
+`useFrame` comes from `@react-three/fiber` (a renderer peer dependency, not a renderer
+barrel) and requires the calling component to be inside the game's `<GameCanvas>`.
+
+**Dispatching back needs nothing from this barrel** — a screen already receives
+`sendAction` on `GameScreenProps`. The barrel is subscribe-only.
+
+---
+
 ## Invariants
 
 | #   | Rule                                                                                                                                                                                                                          |

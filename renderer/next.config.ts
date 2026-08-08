@@ -92,6 +92,23 @@ const nextConfig: NextConfig = {
             '@chimera-engine/renderer/components/ui': path.join(root, 'renderer/components/ui'),
             '@chimera-engine/renderer/components/chat': path.join(root, 'renderer/components/chat'),
             '@chimera-engine/renderer/game': path.join(root, 'renderer/game/rendererGameRegistry'),
+            // Measured, not reasoned. This preview was built with a tactics
+            // shell surface calling `useInputManager()` through the public
+            // `@chimera-engine/renderer/input` barrel and loaded in a browser:
+            // without the `input` line below the call threw `useInputManager()
+            // must be used within the app root (inside <Providers>).` —
+            // `providers.tsx` publishes the manager through the source copy of
+            // `InputManagerContext` while the game surface reads the dist copy —
+            // and with it the same probe resolved the manager. Reaching that
+            // probe at all needed the `i18n` line: without it the shell surface
+            // threw `useI18n/useTranslate must be used within I18nProvider`
+            // first, from the same duplication. `audio` and `assets` ship
+            // module-level contexts too and are still absent; neither was
+            // measured here and neither is asserted either way. Treat this list
+            // as the barrels measured or reasoned to need it so far, not as a
+            // complete one.
+            '@chimera-engine/renderer/i18n': path.join(root, 'renderer/i18n'),
+            '@chimera-engine/renderer/input': path.join(root, 'renderer/input'),
             // `renderer/**` source must name no game. The renderer pulls in
             // the active game's renderer contribution through this synthetic,
             // build-selected specifier — the renderer twin of how `package.json`

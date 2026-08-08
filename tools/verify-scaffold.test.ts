@@ -788,18 +788,32 @@ describe('verifyScaffold', () => {
         expect(importedSpecifiers).toEqual([
             '@chimera-engine/renderer/assets',
             '@chimera-engine/renderer/components/r3f',
+            '@chimera-engine/renderer/input',
             '@chimera-engine/simulation/content/AssetRef.js',
         ]);
+        // Every symbol is pinned in a form its own usage sites cannot satisfy:
+        // the trailing comma of a multi-symbol import block, or the braces of a
+        // single-symbol one. A bare name is satisfied by the plant's own usage
+        // sites — deleting `useAssetManager,` from the import block leaves
+        // `const manager = useAssetManager();` matching, and a bare
+        // `useModelAnimation` is matched by `const mixer =
+        // useModelAnimation(instance);` — so a bare-name pin lets the import
+        // drop and only the full tsc arm notices. The type re-exports have that
+        // problem twice over: 'ModelInstance' alone is a substring of
+        // 'useModelInstance', and 'InputAction' of 'useInputAction'.
         for (const symbol of [
-            'useAsset',
-            'useAssetManager',
-            'AssetManagerProvider',
-            'useModelInstance',
-            // The TYPE re-export is a distinct barrel surface: substring
-            // matching on 'ModelInstance' alone is satisfied by
-            // 'useModelInstance', so pin the import form textually.
-            'type ModelInstance',
-            'useModelAnimation',
+            'useAsset,',
+            'useAssetManager,',
+            'AssetManagerProvider,',
+            'useModelInstance,',
+            'type ModelInstance,',
+            '{ useModelAnimation }',
+            'InputManagerProvider,',
+            'useInputAction,',
+            'useInputManager,',
+            'type InputAction,',
+            'type InputActionId,',
+            'type InputEvent,',
         ]) {
             expect(PROBE_SEAM_PLANT.source).toContain(symbol);
         }

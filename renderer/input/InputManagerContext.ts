@@ -9,9 +9,11 @@
  * Invariant #65: InputManager is renderer-only. Never imported by
  *                simulation/ or ai/.
  *
- * Lifecycle owner: renderer/app/providers.tsx creates the InputManager,
- * calls start() inside a useEffect, stop() in the cleanup, and provides
- * the instance via InputManagerContext.Provider.
+ * Lifecycle owner: renderer/app/providers.tsx creates the InputManager and
+ * calls start() inside a useEffect, stop() in the cleanup. It publishes the
+ * instance through <InputManagerProvider>, the component the public
+ * `@chimera-engine/renderer/input` barrel ships; this context object itself
+ * stays internal.
  */
 
 import { createContext, useContext } from 'react';

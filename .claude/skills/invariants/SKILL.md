@@ -42,7 +42,7 @@ Both tiers must pass before landing on `main`:
 - **#48/80** `GameShell.tsx`/`InGameMenuHost.tsx` stay game-agnostic: the same game specifier as Check 10, in `renderer/components/shell/{GameShell,InGameMenuHost}.tsx` (Check 7)
 - **#87** Game screens barrel `React.lazy`-wraps every screen: static same-dir `from './…'` value import (type-only excluded) in the screens barrel `index.ts(x)` (Check 22)
 - **#94** Engine shell pages import no game: the same game specifier as Check 10, in `renderer/app/*/` (every page dir, incl. logo-screen) and `renderer/game/` (Check 16)
-- **#96** Game renderer surfaces use only the public renderer barrels: non-barrel `@chimera-engine/renderer/*` in `apps/*/{screens,shell}/*.tsx`; barrels: ui/chat/r3f (components/) + i18n/game/audio (top-level) (Check 17)
+- **#96** Game renderer surfaces use only the public renderer barrels: non-barrel `@chimera-engine/renderer/*` in `apps/*/{screens,shell}/*.tsx`; barrels: ui/chat/r3f (components/) + i18n/game/audio/assets/input (top-level) (Check 17)
 - **#97** Game fonts local — no external font URLs: `fonts\.gstatic\.com`/`fonts\.googleapis\.com`/`url\(['"]?https?://` in `apps/*/{shell,styles,screens,assets}`, incl. `.css` (Check 24)
 - **#100** Game lobby/shell surfaces perform no privileged lobby writes: `LobbyManager|lobbyStore|__chimera.*\.lobby` in `apps/*/{shell,screens}` (Check 23)
 - **#106** `ai/` is the game-agnostic framework only (containment): non-`engine`/`__tests__`/`dist` dir or non-`index.ts` `.ts`/`.tsx` file under `ai/` (Check 11)

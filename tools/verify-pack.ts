@@ -117,6 +117,11 @@ export const PROBE_SUBPATHS = [
     // `useModelInstance` only through this barrel (Invariant #96), so a
     // dropped export would strand every asset-rendering game.
     '@chimera-engine/renderer/assets',
+    // The input hooks (§4.26). A game surface may reach `useInputAction` /
+    // `useInputManager` only through this barrel (Invariant #96), so a dropped
+    // export leaves every action a game declares — registered, displayed and
+    // rebindable in Settings > Controls — with no subscriber it can write.
+    '@chimera-engine/renderer/input',
     // A consumer app's per-app Next host re-exports the engine shell from
     // `@chimera-engine/renderer/shell/*`; probe a representative route + the root layout
     // so a missing `dist/app/*` entry in the packed artifact fails the gate.
