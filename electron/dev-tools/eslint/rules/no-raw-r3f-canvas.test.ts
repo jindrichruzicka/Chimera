@@ -29,13 +29,13 @@ const ruleTester = new RuleTester({
 ruleTester.run('chimera/no-raw-r3f-canvas', rule, {
     valid: [
         {
-            // The legitimate scene imports that share the banned binding's
+            // The legitimate in-Canvas imports that share the banned binding's
             // specifier — the whole reason the rule is name-based.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import { useFrame, useThree } from '@react-three/fiber';`,
         },
         {
-            filename: 'apps/tactics/scene/TacticsUnitPrimitive.tsx',
+            filename: 'apps/tactics/components/TacticsUnitPrimitive.tsx',
             code: `import type { ThreeEvent } from '@react-three/fiber';`,
         },
         {
@@ -52,12 +52,12 @@ ruleTester.run('chimera/no-raw-r3f-canvas', rule, {
             // A namespace import whose members never include Canvas passes —
             // this is the false positive that rules out core
             // no-restricted-imports.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nexport function useTick(cb) { fiber.useFrame(cb); }`,
         },
         {
             // Namespace JSX member other than Canvas.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nexport const S = () => <fiber.mesh />;`,
         },
         {
@@ -114,7 +114,7 @@ ruleTester.run('chimera/no-raw-r3f-canvas', rule, {
         },
         {
             // Destructuring anything else off the namespace stays legal.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nconst { useFrame } = fiber;\nexport { useFrame };`,
         },
     ],
@@ -132,7 +132,7 @@ ruleTester.run('chimera/no-raw-r3f-canvas', rule, {
         },
         {
             // Mixed import: exactly one error, on the Canvas specifier.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import { useFrame, Canvas } from '@react-three/fiber';`,
             errors: [{ messageId: 'rawCanvasImport' }],
         },
@@ -144,19 +144,19 @@ ruleTester.run('chimera/no-raw-r3f-canvas', rule, {
         },
         {
             // Namespace member access in expression position.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nconst Root = fiber.Canvas;\nexport { Root };`,
             errors: [{ messageId: 'rawCanvasMember' }],
         },
         {
             // Computed member access with a literal name.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nconst Root = fiber['Canvas'];\nexport { Root };`,
             errors: [{ messageId: 'rawCanvasMember' }],
         },
         {
             // JSX namespace member: one report per element, not one per tag.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nexport const S = () => <fiber.Canvas><fiber.mesh /></fiber.Canvas>;`,
             errors: [{ messageId: 'rawCanvasMember' }],
         },
@@ -197,29 +197,29 @@ ruleTester.run('chimera/no-raw-r3f-canvas', rule, {
         {
             // A reach textually above the import is valid ESM (import
             // bindings are hoisted) and must still be caught.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `export const Root = fiber.Canvas;\nimport * as fiber from '@react-three/fiber';`,
             errors: [{ messageId: 'rawCanvasMember' }],
         },
         {
             // The static namespace destructure.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nconst { Canvas } = fiber;\nexport { Canvas };`,
             errors: [{ messageId: 'rawCanvasMember' }],
         },
         {
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nconst { Canvas: Root } = fiber;\nexport { Root };`,
             errors: [{ messageId: 'rawCanvasMember' }],
         },
         {
             // String and computed-literal destructure keys are the same reach.
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nconst { 'Canvas': Root } = fiber;\nexport { Root };`,
             errors: [{ messageId: 'rawCanvasMember' }],
         },
         {
-            filename: 'apps/tactics/scene/TacticsScene.tsx',
+            filename: 'apps/tactics/components/TacticsScene.tsx',
             code: `import * as fiber from '@react-three/fiber';\nconst { ['Canvas']: Root } = fiber;\nexport { Root };`,
             errors: [{ messageId: 'rawCanvasMember' }],
         },

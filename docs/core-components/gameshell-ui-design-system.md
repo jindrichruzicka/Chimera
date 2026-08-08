@@ -319,9 +319,10 @@ import { useAsset, useModelInstance } from '@chimera-engine/renderer/assets';
 import { useInputAction, useInputManager } from '@chimera-engine/renderer/input';
 ```
 
-This allowance applies only to React components under `apps/<name>/screens/*.tsx`,
-React shell contributions under `apps/<name>/shell/*.tsx`, and the renderer
-composition root `apps/<name>/renderer/*.{ts,tsx}`. Game actions,
+This allowance applies only to React components under `apps/<name>/screens/*.tsx`
+and `apps/<name>/components/*.tsx`, React shell contributions under
+`apps/<name>/shell/*.tsx`, and the renderer composition root
+`apps/<name>/renderer/*.{ts,tsx}`. Game actions,
 state, projection, AI, content, and non-React shell definition files must not
 import renderer code. Game renderer surfaces also must not import renderer stores,
 IPC bridges, `renderer/hooks/`, stylesheets, `components/shell/`, or an

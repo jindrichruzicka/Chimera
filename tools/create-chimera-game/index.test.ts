@@ -309,7 +309,7 @@ describe('scaffoldGame', () => {
         ).resolves.toBe('');
 
         // …and so must a directory whose only member IS that dotfile. The
-        // template ships ai/, data/ and scene/ empty so an author's first file
+        // template ships ai/, data/ and components/ empty so an author's first file
         // lands somewhere the guards already reach; a copier that skipped them
         // would emit a game silently missing three directories, which reads as
         // "the convention was never wired" rather than as a copy bug. Naming

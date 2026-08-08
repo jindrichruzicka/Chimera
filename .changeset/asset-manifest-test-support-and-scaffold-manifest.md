@@ -60,22 +60,23 @@ entry into the scaffolded manifest and requires the count to move — proving di
 the exact basename, that `entries` is a literal the tool can walk, and that the ref
 resolves into the app's own asset directory.
 
-**The scaffold ships `ai/`, `data/` and `scene/`, held open by a `.gitkeep`.** These are three
+**The scaffold ships `ai/`, `data/` and `components/`, held open by a `.gitkeep`.** These are three
 of the canonical game directories `apps/tactics` grew into that previously carried no day-one
 file, so a scaffolded game simply did not have them — the copier emits files, and an empty
 directory is not a file. Shipping them costs nothing at build time (a directory holding only
 `.gitkeep` is invisible to ESLint and to `tsc`, which select by extension) and it puts an
-author's first agent policy, content payload or scene primitive where the guards already
+author's first agent policy, content payload or reusable component where the guards already
 expect it: an `ai/` module is inside the `chimera/no-fromfloat-in-simulation` zone from its
 first line — in both scaffold modes — rather than after someone notices the directory should
 have existed. (A `--workspace` game inherits more than that from the monorepo's root config;
 the standalone preset is the narrower of the two, and `curated-rules.ts` records which
 `chimera/*` rules it withholds, with a reason per rule.)
 
-`scene/` carries one boundary worth stating, now documented in the scaffold README: a module
-there may not import from `@chimera-engine/renderer` at all (Invariant #96). Scene modules
-build on `three` / `@react-three/fiber` directly, and the screen that owns the `<GameCanvas>`
-renders them as its children.
+`components/` carries one split worth stating, now documented in the scaffold README:
+`screens/` holds only what the screen registry names, and everything those screens are built
+from — shared React, shared hooks and stores, and the in-Canvas `three` / `@react-three/fiber`
+primitives — goes in `components/`. The `<GameCanvas>` itself stays in the screen, which
+renders the primitives as its children.
 
 **The scaffolded playfield is now a full-bleed scene host.** `position: absolute; inset: 0`
 on the screen's root element, which is where a `<GameCanvas>` goes. This fixes a real

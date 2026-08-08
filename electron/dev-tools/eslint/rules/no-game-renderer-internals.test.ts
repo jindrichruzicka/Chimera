@@ -43,6 +43,19 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `import { Panel } from '@chimera-engine/renderer/components/ui/index.js';`,
         },
         {
+            // components/ is a renderer surface: it holds the game's reusable
+            // React, DOM and in-Canvas alike, and a shared component that plays
+            // a cue needs the audio barrel exactly as a screen does.
+            filename: 'apps/tactics/components/TacticsAmbience.tsx',
+            code: `import { useMusicTrack } from '@chimera-engine/renderer/audio';`,
+        },
+        {
+            // …and the r3f barrel from the same directory, which is where the
+            // in-Canvas primitives now live.
+            filename: 'apps/tactics/components/TacticsUnitPrimitive.tsx',
+            code: `import { useModelAnimation } from '@chimera-engine/renderer/components/r3f';`,
+        },
+        {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
             code: `import { Button } from '@chimera-engine/renderer/components/ui/index.ts';`,
         },
@@ -249,8 +262,8 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
     invalid: [
         // ── Dynamic import() — Invariant #96 holds in this position too ─────
         // The bash Check 17 covers part of this ground: it scans
-        // `apps/*/{screens,shell}` for a QUOTED renderer specifier, so it sees
-        // neither the template form nor the non-surface file below.
+        // `apps/*/{screens,components,shell}` for a QUOTED renderer specifier, so it
+        // sees neither the template form nor the non-surface file below.
         {
             filename: 'apps/tactics/screens/TacticsDebugPanel.tsx',
             code: `const store = await import('@chimera-engine/renderer/state/gameStore.js');`,
@@ -392,14 +405,20 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             errors: [{ messageId: 'gameRendererImportOutsideSurface' }],
         },
         {
-            // scene/ is NOT a renderer surface, whatever the extension. A game's
-            // in-Canvas r3f primitives live there and build on three /
-            // @react-three/fiber directly; the screen that owns the <GameCanvas>
-            // is the surface that may reach the engine's barrels. The scaffold
-            // ships an empty scene/ and its README states this boundary, so the
-            // exclusion is now load-bearing documentation rather than an
-            // accident of the surface list.
-            filename: 'apps/demo/scene/DemoUnitPrimitive.tsx',
+            // The extension gate holds on components/ as it does on screens/:
+            // a plain-.ts module there is a helper, not a React surface, and
+            // stays off the barrels. This is the pair to the components/*.tsx
+            // valid cases above — without it, "components/ is a surface" would
+            // read as "everything under components/ is".
+            filename: 'apps/demo/components/useDemoBuffer.ts',
+            code: `import { useAudioManager } from '@chimera-engine/renderer/audio';`,
+            errors: [{ messageId: 'gameRendererImportOutsideSurface' }],
+        },
+        {
+            // A game directory that is NOT a surface stays blocked whatever the
+            // extension — the surface list is three named directories plus the
+            // composition root, not "any .tsx under apps/".
+            filename: 'apps/demo/lib/DemoUnitPrimitive.tsx',
             code: `import { GameCanvas } from '@chimera-engine/renderer/components/r3f';`,
             errors: [{ messageId: 'gameRendererImportOutsideSurface' }],
         },

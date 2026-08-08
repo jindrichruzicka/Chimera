@@ -7,10 +7,10 @@
  * while blocking all other renderer internals from games packages. Which
  * barrels those are is decided by the disjunction in `checkImport` and the
  * per-barrel predicates it ORs; Invariant #96 is the prose authority. Game
- * renderer surfaces are the React screens/shell
- * components (`apps/<name>/{screens,shell}/*.{jsx,tsx}`) and the renderer
- * composition root (`apps/<name>/renderer/*.{ts,tsx}`), which registers the
- * game's renderer contribution into the host through the seam.
+ * renderer surfaces are the React screen, component and shell
+ * modules (`apps/<name>/{screens,components,shell}/*.{jsx,tsx}`) and the
+ * renderer composition root (`apps/<name>/renderer/*.{ts,tsx}`), which
+ * registers the game's renderer contribution into the host through the seam.
  *
  * Four specifier positions carry the same permissions: `import`,
  * `export … from`, `export * from`, and dynamic `import('…')`. The dynamic one
@@ -71,11 +71,17 @@ function isGameFile(filename: string): boolean {
 
 function isGameRendererSurface(filename: string): boolean {
     const normalized = normalizePath(filename);
-    // A game's renderer-facing surfaces: the React screens/shell components
-    // (.jsx/.tsx) and the renderer composition root under apps/<name>/renderer/
-    // (.ts/.tsx — register.ts/loaders.ts), which wires the game's renderer
-    // contribution into the @chimera-engine/renderer host through the public game seam.
-    return /(?:^|\/)apps\/[^/]+\/(?:(?:screens|shell)\/.*\.(?:jsx|tsx)|renderer\/.*\.(?:ts|tsx))$/u.test(
+    // A game's renderer-facing surfaces: the React screen, component and shell
+    // modules (.jsx/.tsx) and the renderer composition root under
+    // apps/<name>/renderer/ (.ts/.tsx — register.ts/loaders.ts), which wires the
+    // game's renderer contribution into the @chimera-engine/renderer host through
+    // the public game seam. `components/` is a surface for the same reason
+    // `screens/` is: it holds the game's reusable React — DOM components, the
+    // in-Canvas r3f primitives, and the hooks two screens share — and a
+    // component that plays a cue or reads a model needs the audio/assets
+    // barrels exactly as a screen does. The extension gate is what keeps a
+    // plain-.ts helper in any of the three out (translations/ excepted below).
+    return /(?:^|\/)apps\/[^/]+\/(?:(?:screens|components|shell)\/.*\.(?:jsx|tsx)|renderer\/.*\.(?:ts|tsx))$/u.test(
         normalized,
     );
 }
@@ -248,7 +254,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             gameRendererImportOutsideSurface:
-                'Only game renderer surfaces under apps/<name>/screens/*.tsx, apps/<name>/shell/*.tsx, or apps/<name>/renderer/*.{ts,tsx} may import from the renderer package.',
+                'Only game renderer surfaces under apps/<name>/screens/*.tsx, apps/<name>/components/*.tsx, apps/<name>/shell/*.tsx, or apps/<name>/renderer/*.{ts,tsx} may import from the renderer package.',
             gameRendererInternalImport:
                 'Game renderer surfaces may import only the public @chimera-engine/renderer/components/ui, @chimera-engine/renderer/components/chat, @chimera-engine/renderer/components/r3f, @chimera-engine/renderer/game, @chimera-engine/renderer/i18n, @chimera-engine/renderer/audio, @chimera-engine/renderer/assets, or @chimera-engine/renderer/input barrels from renderer code. Renderer internals are forbidden in game-app packages.',
             gameRendererUiDeepImport:

@@ -22,16 +22,16 @@ import {
     parseTacticsAllSeatsCommitted,
     parseTacticsSeatCommitted,
     parseTacticsViewerStamina,
-} from '../scene/tacticsSceneModel.js';
+} from '../components/tacticsSceneModel.js';
 import { applyBuffer } from '../simulation/commitment/buffer.js';
-import { TacticsAmbience } from './TacticsAmbience.js';
+import { TacticsAmbience } from '../components/TacticsAmbience.js';
 import { readStamina } from '../simulation/stamina.js';
 import {
     selectBuffer,
     selectCommittedLatch,
     toOptimisticBase,
     useCommitmentBuffer,
-} from './useCommitmentBuffer.js';
+} from '../components/useCommitmentBuffer.js';
 import styles from './TacticsGameHud.module.css';
 
 /** The turn lamp's state — drives the dot/label colour via `data-state`. */

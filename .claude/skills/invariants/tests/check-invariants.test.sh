@@ -1675,7 +1675,7 @@ test_clean_game_surface_passes() {
 # ─── Relocated per-game gameplay code (apps/<game>/, F63) ───────────────────────
 # The per-game gameplay dirs apps/<game>/{simulation,ai} carry the same
 # determinism/boundary invariants as the engine simulation/ ai/ packages, and the
-# renderer surfaces apps/<game>/{screens,shell,scene,renderer} carry the
+# renderer surfaces apps/<game>/{screens,components,shell,renderer} carry the
 # GameSnapshot-containment and public-barrel invariants. These fixtures prove the
 # checks bind on the relocated dirs, not just the engine packages.
 
@@ -2800,7 +2800,7 @@ test_raw_canvas_import_in_game_screen_detected() {
 
 test_raw_canvas_alias_import_detected() {
     local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
-    plant_file "${tmp}" "apps/tactics/scene/TacticsBoardScene.tsx" \
+    plant_file "${tmp}" "apps/tactics/components/TacticsBoardScene.tsx" \
         "import { useFrame, Canvas as Root } from '@react-three/fiber';"
     expect_violation "${tmp}" "127" "Check 32: aliased Canvas import in a game scene"
 }
@@ -2838,12 +2838,12 @@ test_raw_canvas_beside_inline_type_sibling_detected() {
 }
 
 # The invariant claims the arms scan the WHOLE apps/<name>/ tree — pin a
-# directory outside the screens/scene pair the other fixtures use.
+# directory outside the screens/components pair the other fixtures use.
 test_raw_canvas_in_shell_dir_detected() {
     local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
     plant_file "${tmp}" "apps/tactics/shell/TacticsHudOverlay.tsx" \
         "import { Canvas } from '@react-three/fiber';"
-    expect_violation "${tmp}" "127" "Check 32: raw Canvas import outside screens/scene (shell/)"
+    expect_violation "${tmp}" "127" "Check 32: raw Canvas import outside screens/components (shell/)"
 }
 
 test_raw_canvas_string_named_import_detected() {
@@ -2862,7 +2862,7 @@ test_raw_canvas_reexport_detected() {
 
 test_useframe_only_fiber_import_passes() {
     local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
-    plant_file "${tmp}" "apps/tactics/scene/TacticsUnitPrimitive.tsx" \
+    plant_file "${tmp}" "apps/tactics/components/TacticsUnitPrimitive.tsx" \
         "import { useFrame, useThree } from '@react-three/fiber';"
     expect_clean "${tmp}" "Check 32: the legitimate scene hooks from the same specifier"
 }
@@ -2904,7 +2904,7 @@ test_gamecanvas_name_from_fiber_specifier_passes() {
 # import line itself names no Canvas binding, so this check stays silent.
 test_namespace_fiber_import_passes() {
     local tmp; tmp=$(mktemp -d -t chimera-inv-test-XXXXXX); trap 'rm -rf "${tmp}"' RETURN
-    plant_file "${tmp}" "apps/tactics/scene/TacticsScene.tsx" \
+    plant_file "${tmp}" "apps/tactics/components/TacticsScene.tsx" \
         "import * as fiber from '@react-three/fiber';"
     expect_clean "${tmp}" "Check 32: a bare namespace import (member access is the ESLint arm)"
 }

@@ -14,9 +14,9 @@ import { TacticsModelShowcaseScreen } from './TacticsModelShowcaseScreen';
 
 const gameCanvasCalls = vi.hoisted((): { readonly camera: unknown }[] => []);
 
-// The screen owns the ref resolution: `scene/` may not import the renderer
-// barrels (Invariant #96), so the hook calls live here and the outcome is
-// handed to the scene component as props.
+// The screen owns the ref resolution: the hook calls live here and the outcome
+// is handed to the R3F component as props, which is why that component's own
+// suite needs no asset provider.
 vi.mock('@chimera-engine/renderer/assets', () => ({
     useModelInstance: vi.fn(),
 }));
@@ -61,7 +61,7 @@ const showcaseInstanceProps = vi.hoisted(
     (): { readonly instanceA: unknown; readonly instanceB: unknown }[] => [],
 );
 
-vi.mock('../scene/TacticsModelShowcase.js', () => ({
+vi.mock('../components/TacticsModelShowcase.js', () => ({
     // The scene component renders `<primitive>`, which only an R3F reconciler
     // understands; this suite exercises the SCREEN in jsdom, and the scene
     // component has its own co-located test plus the model-instances e2e.

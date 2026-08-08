@@ -19,7 +19,7 @@ import {
     type TacticsGridPoint,
     type TacticsSceneUnit,
     type TacticsSelectionIntent,
-} from '../scene/tacticsSceneModel.js';
+} from '../components/tacticsSceneModel.js';
 import { tacticsGridCoordinate } from '../simulation/actions.js';
 import { applyBuffer } from '../simulation/commitment/buffer.js';
 import { bufferHasAttack, type BufferedTacticsAction } from '../simulation/commitment/contract.js';
@@ -29,10 +29,10 @@ import {
     TACTICS_CAMERA_LOOK_AT,
     TACTICS_CAMERA_POSITION,
     TACTICS_CAMERA_UP,
-} from '../scene/tacticsCamera.js';
-import { TacticsGroundPlane } from '../scene/TacticsGroundPlane.js';
-import { TacticsMinimap } from '../scene/TacticsMinimap.js';
-import { TacticsUnitPrimitive } from '../scene/TacticsUnitPrimitive.js';
+} from '../components/tacticsCamera.js';
+import { TacticsGroundPlane } from '../components/TacticsGroundPlane.js';
+import { TacticsMinimap } from '../components/TacticsMinimap.js';
+import { TacticsUnitPrimitive } from '../components/TacticsUnitPrimitive.js';
 import styles from './TacticsDemoBoard.module.css';
 import { parseRevealedTurn } from '../simulation/commitment/revealView.js';
 import {
@@ -40,7 +40,7 @@ import {
     selectCommittedLatch,
     toOptimisticBase,
     useCommitmentBuffer,
-} from './useCommitmentBuffer.js';
+} from '../components/useCommitmentBuffer.js';
 import { BOARD_KEYS } from '../shell/translations/keys.js';
 
 const boardSceneStyle: React.CSSProperties = {

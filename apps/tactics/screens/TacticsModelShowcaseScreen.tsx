@@ -9,7 +9,7 @@ import {
     TacticsModelShowcase,
     type TacticsModelShowcaseInstance,
     type TacticsModelShowcaseReport,
-} from '../scene/TacticsModelShowcase.js';
+} from '../components/TacticsModelShowcase.js';
 
 /**
  * The model-seam test screen (§4.10), reachable only at `/model-showcase/`.
@@ -29,10 +29,11 @@ import {
  * (`<GameAssetSession>`), which is what makes `useModelInstance` resolve here
  * with no `GameShell` above it.
  *
- * The ref is resolved HERE rather than inside the scene component because the
- * renderer barrels are legal on `screens/` and forbidden on `scene/`
- * (Invariant #96). Two calls, one per mounted quad: that is what gives each
- * mount its own `SkeletonUtils` clone, which is the seam's whole claim.
+ * The ref is resolved HERE rather than inside the R3F component: this screen
+ * is the one thing on the route with the asset session above it, and keeping
+ * `TacticsModelShowcase` prop-driven is what lets its own test render it with
+ * no provider. Two calls, one per mounted quad: that is what gives each mount
+ * its own `SkeletonUtils` clone, which is the seam's whole claim.
  */
 export function TacticsModelShowcaseScreen(): React.ReactElement {
     const [reportA, setReportA] = useState<TacticsModelShowcaseReport | null>(null);

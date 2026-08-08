@@ -55,8 +55,9 @@ Everything you write lives in one app folder:
 apps/my-game/
 ├── simulation/          # game rules, actions, and state — pure & deterministic, no DOM/IPC
 ├── ai/                  # AI brains that play your game — same purity rules as simulation/
-├── screens/             # React components for your game's UI
-├── scene/               # 3D scene components & camera work (Three.js / React Three Fiber)
+├── screens/             # the screens your game registers: playfield, HUD, in-game menu…
+├── components/          # everything reusable those screens are built from — shared React,
+│                        #   shared hooks, and 3D work (Three.js / React Three Fiber)
 ├── content/             # schemas for the kinds of content your game loads
 ├── data/                # JSON game content your game loads
 ├── renderer/            # Next.js shell wiring for your game
@@ -68,8 +69,9 @@ apps/my-game/
 ```
 
 Start in `simulation/` (what your game **is**) and `screens/` (what it **looks like**); reach for
-`data/` for JSON game content and `scene/` for 3D scene work as you grow. The engine handles
-the rest.
+`data/` for JSON game content and `components/` as you grow — the moment a second screen needs
+the same piece, whether that piece is a React panel, a hook, or a mesh, it moves there. The
+engine handles the rest.
 
 ## Why Chimera
 

@@ -29,7 +29,7 @@ import {
     tacticsRevealTileDefinition,
 } from './actions.js';
 import { buildInitialTacticsEntities } from './entities.js';
-import { parseTacticsSceneUnits } from '../scene/tacticsSceneModel.js';
+import { parseTacticsSceneUnits } from '../components/tacticsSceneModel.js';
 import type { TacticsSnapshot, TacticsStaminaEntry } from './stamina.js';
 import { tacticsVisibilityRules } from './visibility-rules.js';
 

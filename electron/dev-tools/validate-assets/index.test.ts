@@ -2472,12 +2472,16 @@ describe('on-demand load detection — useModelInstance and the Invariant #96 su
             await writeFile(absPath, '');
         };
         await plant('apps/tactics/screens/board.tsx');
+        await plant('apps/tactics/components/UnitPrimitive.tsx');
         await plant('apps/tactics/shell/UnitPortrait.tsx');
         await plant('apps/tactics/renderer/loaders.ts');
         // NOT scanned: a nested renderer/ dir below the surface position — the
         // widened segments are anchored to apps/<name>/<surface>, never matched
         // as bare path segments.
         await plant('apps/tactics/lib/renderer/util.ts');
+        // …and the same for `components`, which is the likeliest of the anchored
+        // names to recur at depth inside a game.
+        await plant('apps/tactics/lib/components/util.ts');
         // NOT scanned: the walked roots are apps/ and simulation/scene/, so an
         // engine-shaped tree like renderer/components/shell/ is never walked —
         // and the anchor keeps 'shell'/'renderer' from ever matching as bare
@@ -2500,6 +2504,7 @@ describe('on-demand load detection — useModelInstance and the Invariant #96 su
         );
 
         expect(files).toEqual([
+            'apps/tactics/components/UnitPrimitive.tsx',
             'apps/tactics/renderer/loaders.ts',
             'apps/tactics/screens/board.tsx',
             'apps/tactics/shell/UnitPortrait.tsx',

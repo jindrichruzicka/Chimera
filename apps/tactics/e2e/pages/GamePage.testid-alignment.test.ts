@@ -47,7 +47,7 @@ describe('GamePage POM — testid alignment with renderer', () => {
                 'utf-8',
             ),
             readFileSync(
-                path.join(workspaceRoot, 'apps/tactics/screens/TacticsAmbience.tsx'),
+                path.join(workspaceRoot, 'apps/tactics/components/TacticsAmbience.tsx'),
                 'utf-8',
             ),
             readFileSync(

@@ -24,7 +24,7 @@ import type { CommitmentId } from '@chimera-engine/simulation/foundation/commitm
 import { I18nProvider } from '@chimera-engine/renderer/i18n';
 import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
-import { useCommitmentBuffer } from './useCommitmentBuffer';
+import { useCommitmentBuffer } from '../components/useCommitmentBuffer';
 
 // The board renders its fallback aria-labels + the reveal overlay through
 // useTranslate() (throws outside a provider). Wrap every render in the English
@@ -114,7 +114,7 @@ const minimapCalls = vi.hoisted(
     }[] => [],
 );
 
-vi.mock('../scene/TacticsMinimap.js', () => ({
+vi.mock('../components/TacticsMinimap.js', () => ({
     TacticsMinimap: ({
         units,
         boardColor,
@@ -129,7 +129,7 @@ vi.mock('../scene/TacticsMinimap.js', () => ({
     },
 }));
 
-vi.mock('../scene/TacticsGroundPlane.js', () => ({
+vi.mock('../components/TacticsGroundPlane.js', () => ({
     TacticsGroundPlane: ({
         color,
         onSelectGridPoint,
@@ -161,7 +161,7 @@ vi.mock('../scene/TacticsGroundPlane.js', () => ({
 
 const unitPrimitiveUnits = vi.hoisted((): { readonly id: string }[] => []);
 
-vi.mock('../scene/TacticsUnitPrimitive.js', () => ({
+vi.mock('../components/TacticsUnitPrimitive.js', () => ({
     TacticsUnitPrimitive: ({
         unit,
         color,

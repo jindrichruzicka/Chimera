@@ -116,9 +116,9 @@ apps/<kebab>/
 │                          #   no-fromfloat-in-simulation zone alongside simulation/
 ├── content/               # content-collection definitions for the Content DB
 ├── data/                  # EMPTY (.gitkeep) — JSON rows the Content DB loads, as data/<collection>/*.json
-├── screens/               # game React UI (playfield screen + registry)
-├── scene/                 # EMPTY (.gitkeep) — in-Canvas react-three-fiber primitives
-│                          #   (see the note below on what may be imported here)
+├── screens/               # the screens the registry names (playfield screen + registry)
+├── components/            # EMPTY (.gitkeep) — every reusable piece those screens are built
+│                          #   from: shared React, shared hooks, in-Canvas r3f primitives
 ├── renderer/              # per-app Next.js app + register.ts registration seam
 ├── electron/              # Electron main composition root + build-main.ts, your bundler driver
 ├── dev/                   # starter harness fixtures — profiles/ and scenarios/
@@ -138,15 +138,24 @@ apps/<kebab>/
 
 Grow a game inside this shape: new deterministic gameplay modules go under `simulation/`
 (subsystem subdirectories are fine), agent policies under `ai/`, UI under
-`screens/`/`scene/`/`shell/`, JSON content under `data/`. `ai/`, `data/` and `scene/` ship
-empty, held open by a `.gitkeep`, so the first file you add is already inside the zone that
+`screens/`/`components/`/`shell/`, JSON content under `data/`. `ai/`, `data/` and `components/`
+ship empty, held open by a `.gitkeep`, so the first file you add is already inside the zone that
 guards it — an `ai/` policy is in the `no-fromfloat-in-simulation` zone from its first line.
 
-One boundary is worth knowing before you use `scene/`: a module there may not import from
-`@chimera-engine/renderer` at all (Invariant #96). Scene modules build on `three` and
-`@react-three/fiber` directly, and the screen that owns the `<GameCanvas>` renders them as its
-children — so the `<GameCanvas>` itself, and anything else from the engine's renderer barrels,
-belongs in that screen rather than in `scene/`.
+The `screens/` ↔ `components/` split is worth getting right early, because it is the one that
+decides where most of your files end up. `screens/` holds only what the screen registry names —
+the playfield, the HUD, the in-game menu, the post-game summary. Everything those screens are
+built from goes in `components/`, whatever it renders into: a shared React panel, a hook or
+store two screens have to agree on, and the `three` / `@react-three/fiber` primitives a screen
+renders as children of its `<GameCanvas>`. Both directories are renderer surfaces, so a
+component may reach the engine's public renderer barrels exactly as a screen can —
+`chimera/no-game-renderer-internals` allows `.tsx` under `screens/`, `components/` and `shell/`
+and blocks the rest of the app, including a plain `.ts` helper in those same directories.
+
+The `<GameCanvas>` itself stays in the screen. A screen owns its canvas root, and the
+primitives underneath it are its children — which also means a component that takes its
+resolved model or its ambience track as a prop needs no engine provider above it and renders
+in a plain test.
 
 ### The architecture guardrails
 
@@ -166,6 +175,12 @@ them:
 
 Test files under `simulation/` and `ai/` are exempt from the first: building fixed-point
 values with `fromFloat()` in a fixture is fine, since the invariant is about hot paths.
+
+Read the second row's zone literally — it is `screens/` only, and `components/` is deliberately
+outside it. A `three` material colour is not a CSS value: nothing in the render path resolves
+`var(--ch-*)` for it, so the rule cannot ask an in-Canvas colour for a token the way it asks a
+stylesheet. The consequence is worth knowing when you put a DOM component in `components/`: its
+literals are not checked, and keeping them on tokens is on you.
 
 `styles/tokens-override.css` is where you theme the game. Redefine any token the engine
 declares and the whole UI follows — the shell, the built-in screens, and your own components

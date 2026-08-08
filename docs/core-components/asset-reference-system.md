@@ -368,7 +368,7 @@ keep asset-manager receivers named accordingly.
 > **Invariant #22** — All `AssetRef` strings must pass this validation before merge. A data object referencing a non-existent file is a CI-blocking error.
 
 The on-demand arm (Invariant #52) additionally AST-scans every Invariant #96 game surface —
-`apps/<name>/screens/`, `apps/<name>/shell/`, and `apps/<name>/renderer/` — plus engine scene
+`apps/<name>/screens/`, `apps/<name>/components/`, `apps/<name>/shell/`, and `apps/<name>/renderer/` — plus engine scene
 descriptors for `useAsset(...)` / `useModelInstance(...)` calls and `<receiver>.load(...)` /
 `<receiver>.get(...)` calls, and requires each statically-resolvable ref to be a member of the
 workspace-wide declared-ref union (a manifest entry, a scene's `requiredAssets`, content data

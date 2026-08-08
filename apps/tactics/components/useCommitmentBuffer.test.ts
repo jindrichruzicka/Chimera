@@ -1,4 +1,4 @@
-// apps/tactics/screens/useCommitmentBuffer.test.ts
+// apps/tactics/components/useCommitmentBuffer.test.ts
 //
 // Unit tests for the renderer-side commitment buffer store (F54 / #730). The
 // store shares the per-turn local action buffer between the board (which appends

@@ -30,7 +30,7 @@ import { tacticsIcons } from '../shell/icons.js';
 import { tacticsBundleCs } from '../shell/translations/cs.js';
 import { tacticsBundleEn } from '../shell/translations/en.js';
 import { TacticsGameHud } from './TacticsGameHud';
-import { useCommitmentBuffer } from './useCommitmentBuffer';
+import { useCommitmentBuffer } from '../components/useCommitmentBuffer';
 import styles from './TacticsGameHud.module.css';
 import css from './TacticsGameHud.module.css?raw';
 

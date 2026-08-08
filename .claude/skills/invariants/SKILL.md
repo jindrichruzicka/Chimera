@@ -30,7 +30,7 @@ Both tiers must pass before landing on `main`:
 - **#1** `simulation/` is the zero-dependency foundation leaf: `from '@chimera-engine/(ai|networking|renderer|electron)'` in `simulation/` (Check 13)
 - **#2** Reducers pure — no side-effect APIs: `Math\.random|Date\.now|performance\.now` in `simulation/`/`ai/`/`apps/*/{simulation,ai}`
 - **#2** `electron/main` core imports no game (no module exempt): a game specifier — an `apps/`/`games/` path segment or a non-engine `@chimera-engine/*` — in any position (`from`, side-effect `import`, `import()`) in `electron/main/` (Check 10)
-- **#3** `GameSnapshot` stays in main: `GameSnapshot` in `electron/preload/`, `renderer/`, or `apps/*/{screens,shell,scene,renderer}`
+- **#3** `GameSnapshot` stays in main: `GameSnapshot` in `electron/preload/`, `renderer/`, or `apps/*/{screens,components,shell,renderer}`
 - **#11** Games must not register the reserved `engine:` type namespace: `type:['"]engine:` literal in `apps/*/{simulation,ai}` (Check 20)
 - **#27** `CHIMERA_DEBUG` never set by packaging config: `CHIMERA_DEBUG` in `package.json` / electron-builder / forge configs
 - **#27** `IS_DEBUG_MODE` keeps define-replaceable shape: dot-access `process.env.CHIMERA_DEBUG === '1'` and `process.env.NODE_ENV !== 'production'` pinned in `simulation/foundation/constants.ts`. The verbatim copy in the debug gate (`electron/main/index.ts`) needs a parser and is pinned by `tools/packaged-build-flag.test.ts` + the real-bundle assertion in `apps/tactics/electron/__tests__/packaged-bundle-content.test.ts`
@@ -42,8 +42,8 @@ Both tiers must pass before landing on `main`:
 - **#48/80** `GameShell.tsx`/`InGameMenuHost.tsx` stay game-agnostic: the same game specifier as Check 10, in `renderer/components/shell/{GameShell,InGameMenuHost}.tsx` (Check 7)
 - **#87** Game screens barrel `React.lazy`-wraps every screen: static same-dir `from './…'` value import (type-only excluded) in the screens barrel `index.ts(x)` (Check 22)
 - **#94** Engine shell pages import no game: the same game specifier as Check 10, in `renderer/app/*/` (every page dir, incl. logo-screen) and `renderer/game/` (Check 16)
-- **#96** Game renderer surfaces use only the public renderer barrels: non-barrel `@chimera-engine/renderer/*` in `apps/*/{screens,shell}/*.tsx`; barrels: ui/chat/r3f (components/) + i18n/game/audio/assets/input (top-level) (Check 17)
-- **#97** Game fonts local — no external font URLs: `fonts\.gstatic\.com`/`fonts\.googleapis\.com`/`url\(['"]?https?://` in `apps/*/{shell,styles,screens,assets}`, incl. `.css` (Check 24)
+- **#96** Game renderer surfaces use only the public renderer barrels: non-barrel `@chimera-engine/renderer/*` in `apps/*/{screens,components,shell}/*.tsx`; barrels: ui/chat/r3f (components/) + i18n/game/audio/assets/input (top-level) (Check 17)
+- **#97** Game fonts local — no external font URLs: `fonts\.gstatic\.com`/`fonts\.googleapis\.com`/`url\(['"]?https?://` in `apps/*/{shell,styles,screens,components,assets}`, incl. `.css` (Check 24)
 - **#100** Game lobby/shell surfaces perform no privileged lobby writes: `LobbyManager|lobbyStore|__chimera.*\.lobby` in `apps/*/{shell,screens}` (Check 23)
 - **#106** `ai/` is the game-agnostic framework only (containment): non-`engine`/`__tests__`/`dist` dir or non-`index.ts` `.ts`/`.tsx` file under `ai/` (Check 11)
 - **#107** `ai/`/`simulation/` define no game tokens: `TACTICS_` constant or `'<gameId>:'` namespace (≠ `engine:`/`chimera:`/`node:`) in `ai/`/`simulation/`, `dist/` excluded (Check 12)

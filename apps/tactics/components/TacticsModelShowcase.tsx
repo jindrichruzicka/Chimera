@@ -19,11 +19,11 @@ export interface TacticsModelShowcaseReport {
 /**
  * A resolved model instance, flattened to what the scene needs.
  *
- * The screen owns the `useModelInstance` call and hands the outcome down: the
- * renderer barrels are legal on `screens/` and forbidden on `scene/`
- * (Invariant #96), so a scene file cannot resolve a ref itself. `root` is null
- * while the load is in flight or has failed; `errorName` is '' unless it did
- * fail.
+ * The screen owns the `useModelInstance` call and hands the outcome down, so
+ * this component resolves nothing itself and mounts with no asset provider
+ * above it — which is what lets its co-located test render it directly.
+ * `root` is null while the load is in flight or has failed; `errorName` is ''
+ * unless it did fail.
  */
 export interface TacticsModelShowcaseInstance {
     readonly root: Object3D | null;

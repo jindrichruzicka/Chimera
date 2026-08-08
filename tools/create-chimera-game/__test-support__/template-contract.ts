@@ -21,8 +21,8 @@
  * `.gitkeep` (git cannot track an empty directory, and the copier emits files,
  * so without one they would simply not exist in a scaffolded game).
  *
- * They exist so an author's first agent policy, content payload or scene
- * primitive lands where the guards already reach, rather than after someone
+ * They exist so an author's first agent policy, content payload or reusable
+ * component lands where the guards already reach, rather than after someone
  * notices the directory should have been there.
  */
-export const GROWTH_DIRECTORIES = ['ai', 'data', 'scene'] as const;
+export const GROWTH_DIRECTORIES = ['ai', 'data', 'components'] as const;

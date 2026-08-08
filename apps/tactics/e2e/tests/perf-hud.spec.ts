@@ -25,7 +25,7 @@
  */
 
 import { test, expect } from '../fixtures/direct-game.fixture';
-import { TACTICS_CAMERA_BOUNDS } from '@chimera-engine/tactics/scene/tacticsCamera.js';
+import { TACTICS_CAMERA_BOUNDS } from '@chimera-engine/tactics/components/tacticsCamera.js';
 import { GamePage, TACTICS_CANVAS_ASPECT_TOLERANCE } from '../pages/GamePage';
 
 const GAME_ID = 'tactics';

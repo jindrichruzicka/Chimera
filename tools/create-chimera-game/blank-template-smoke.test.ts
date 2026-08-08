@@ -356,7 +356,7 @@ describe('blank template smoke harness', () => {
     // day-one file. Shipping them empty costs nothing at build time — a
     // directory holding only `.gitkeep` is invisible to eslint and to tsc,
     // which select by extension — and it puts an author's first AI policy,
-    // colour palette or scene primitive in the place the guards already
+    // colour palette or reusable component in the place the guards already
     // expect. They cannot be inferred from the copier: it emits FILES, so an
     // empty directory would simply not exist in a scaffolded game.
     //
@@ -367,8 +367,13 @@ describe('blank template smoke harness', () => {
     //           monorepo's apps/*/ai determinism and boundary zones.
     //   data/   JSON rows the Content DB loads. `content/` declares the
     //           collections; `data/<collection>/*.json` holds their payloads.
-    //   scene/  in-Canvas react-three-fiber primitives, rendered as children
-    //           of the GameCanvas the playfield screen owns (Invariant #127).
+    //   components/
+    //           every reusable piece of the game's UI, whether it renders to
+    //           the DOM or inside the Canvas: shared React components, the
+    //           hooks and stores two screens have to agree on, and the
+    //           react-three-fiber primitives the playfield screen renders as
+    //           children of its GameCanvas (Invariant #127). `screens/` keeps
+    //           only what the screen registry names.
     it('ships the three canonical growth directories, held by .gitkeep', async () => {
         for (const dir of GROWTH_DIRECTORIES) {
             await expect(

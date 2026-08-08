@@ -160,10 +160,10 @@ check_grep "1" \
 # ─── Check 6: GameSnapshot must not appear in preload, renderer, or game surfaces ──
 # Invariant 3: GameSnapshot never leaves the main process. Scans the engine
 # renderer AND the per-game renderer-process surfaces
-# apps/<game>/{screens,shell,scene,renderer}.
+# apps/<game>/{screens,components,shell,renderer}.
 check_grep "3" \
     'GameSnapshot' \
-    electron/preload renderer apps/*/screens apps/*/shell apps/*/scene apps/*/renderer
+    electron/preload renderer apps/*/screens apps/*/components apps/*/shell apps/*/renderer
 
 # ─── Check 7: GameShell / InGameMenuHost must not import a game (inv 48 & 80) ─
 # These engine-renderer shell components stay game-agnostic; the
@@ -538,7 +538,7 @@ for shell_page_dir in renderer/app/*/ renderer/game; do
 done
 
 # ─── Check 17: game renderer surfaces use only the public renderer barrels (inv 96)
-# A game's React surfaces — apps/<name>/screens/*.tsx and apps/<name>/shell/*.tsx —
+# A game's React surfaces — apps/<name>/{screens,components,shell}/*.tsx —
 # may reach the shared library ONLY through the public barrels
 # chimera/no-game-renderer-internals sanctions. RENDERER_BARREL_RE below is what
 # this check accepts; Invariant #96 is the prose authority.
@@ -547,10 +547,10 @@ done
 # component-file path behind any barrel) is a renderer internal and is forbidden.
 # Mirrors the ESLint rule chimera/no-game-renderer-internals, which remains the
 # comprehensive authority (it also guards non-surface game files and relative
-# renderer paths); this review-gate check guards the two REACT surface dirs of the
-# three the invariant names — the composition root apps/<name>/renderer/* is covered
-# by the ESLint rule alone — matched through the package specifier across the cut
-# (issue #774). The
+# renderer paths); this review-gate check guards the three REACT surface dirs of
+# the four the invariant names — the composition root apps/<name>/renderer/* is
+# covered by the ESLint rule alone — matched through the package specifier across
+# the cut (issue #774). The
 # barrel allow-list is tail-anchored to the closing quote so `.../ui` and
 # `.../ui/index.js` pass while `.../ui/Button.js` is flagged. RENDERER_BARREL_RE
 # below is also where the components/ vs TOP-LEVEL split is spelled out, and the
@@ -560,7 +560,7 @@ done
 # (apps/<name>/renderer/*) is not a boundary crossing.
 RENDERER_BARREL_RE="@chimera-engine/renderer/(components/(ui|chat|r3f)|i18n|game|audio|assets|input)(/index(\.(ts|js))?)?['\"]"
 GAME_SURFACE_DIRS=()
-for surface_dir in apps/*/screens apps/*/shell; do
+for surface_dir in apps/*/screens apps/*/components apps/*/shell; do
     [[ -d "${surface_dir}" ]] && GAME_SURFACE_DIRS+=("${surface_dir}")
 done
 if [[ ${#GAME_SURFACE_DIRS[@]} -gt 0 ]]; then
@@ -709,19 +709,19 @@ done
 # A game's lobby/shell/screen surfaces must not write the IPC-mirrored lobbyStore,
 # call LobbyManager, or reach the lobby through the debug bridge; they receive
 # setMatchSetting/setPlayerAttribute as props and call those engine-provided
-# setters (Invariant #100). Scans apps/<game>/{shell,screens} for a LobbyManager
-# or lobbyStore reference, or a `__chimera.….lobby` access. The legitimate
-# `__chimera.replay` reads (the replay export bridge) do not match, and the
-# engine-provided useLobbyApi() hook is deliberately not flagged.
+# setters (Invariant #100). Scans apps/<game>/{shell,screens,components} for a
+# LobbyManager or lobbyStore reference, or a `__chimera.….lobby` access. The
+# legitimate `__chimera.replay` reads (the replay export bridge) do not match, and
+# the engine-provided useLobbyApi() hook is deliberately not flagged.
 check_grep "100" \
     'LobbyManager|lobbyStore|__chimera.*\.lobby' \
-    apps/*/shell apps/*/screens
+    apps/*/shell apps/*/screens apps/*/components
 
 # ─── Check 24: game fonts are local — no external font URLs (invariant 97) ────
 # Game-owned fonts must be committed to the game package and referenced by local
 # game-asset paths; GameFontFace.src must not be an external URL and runtime font
 # loading must not fetch Google Fonts CSS or fonts.gstatic.com files (Invariant
-# #97). Scans a game's shell/styles/screens/assets surfaces — INCLUDING .css — for
+# #97). Scans a game's shell/styles/screens/components/assets surfaces — INCLUDING .css — for
 # a fonts.gstatic.com / fonts.googleapis.com reference or a `url(https://…)` in a
 # stylesheet. Local `src: 'game-id/fonts/…woff2'` relative paths (the sanctioned
 # form) do not match.
@@ -738,7 +738,7 @@ check_grep "100" \
 # grep, because `https://` itself contains `//`; keep any font-URL provenance note
 # on its own full-line comment.
 FONT_DIRS=()
-for font_dir in apps/*/shell apps/*/styles apps/*/screens apps/*/assets; do
+for font_dir in apps/*/shell apps/*/styles apps/*/screens apps/*/components apps/*/assets; do
     [[ -d "${font_dir}" ]] && FONT_DIRS+=("${font_dir}")
 done
 if [[ ${#FONT_DIRS[@]} -gt 0 ]]; then
