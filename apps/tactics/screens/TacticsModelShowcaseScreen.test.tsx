@@ -3,12 +3,29 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
 
+import { useModelInstance } from '@chimera-engine/renderer/assets';
+import type { ModelInstance } from '@chimera-engine/renderer/assets';
+
+import { tacticsModelRefs } from '../asset-manifest.js';
 import { TacticsModelShowcaseScreen } from './TacticsModelShowcaseScreen';
 
 const gameCanvasCalls = vi.hoisted((): { readonly camera: unknown }[] => []);
+
+// The screen owns the ref resolution: `scene/` may not import the renderer
+// barrels (Invariant #96), so the hook calls live here and the outcome is
+// handed to the scene component as props.
+vi.mock('@chimera-engine/renderer/assets', () => ({
+    useModelInstance: vi.fn(),
+}));
+
+const useModelInstanceMock = vi.mocked(useModelInstance);
+
+function stubInstance(uuid: string): ModelInstance {
+    return { root: { uuid }, clips: [] } as unknown as ModelInstance;
+}
 
 // Mocks ONLY GameCanvas: the engine mounts PerfProbe and FrameRateLimiter
 // itself, so a re-added import of either resolves `undefined` and reds every
@@ -39,14 +56,23 @@ const showcaseMockReports = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('./TacticsModelShowcase.js', () => ({
-    // The real showcase reaches useModelInstance → useAssetManager, which
-    // throws outside a provider; this suite exercises the SCREEN, and the
-    // showcase has its own co-located test plus the model-instances e2e.
+/** What the screen handed the scene component on the last render. */
+const showcaseInstanceProps = vi.hoisted(
+    (): { readonly instanceA: unknown; readonly instanceB: unknown }[] => [],
+);
+
+vi.mock('../scene/TacticsModelShowcase.js', () => ({
+    // The scene component renders `<primitive>`, which only an R3F reconciler
+    // understands; this suite exercises the SCREEN in jsdom, and the scene
+    // component has its own co-located test plus the model-instances e2e.
     TacticsModelShowcase: ({
+        instanceA,
+        instanceB,
         onReportA,
         onReportB,
     }: {
+        readonly instanceA: unknown;
+        readonly instanceB: unknown;
         readonly onReportA: (report: {
             rootUuid: string;
             topBonePoseZ: number;
@@ -58,6 +84,7 @@ vi.mock('./TacticsModelShowcase.js', () => ({
             errorName: string;
         }) => void;
     }) => {
+        showcaseInstanceProps.push({ instanceA, instanceB });
         React.useEffect(() => {
             onReportA(showcaseMockReports.a);
             if (showcaseMockReports.reportBEnabled) {
@@ -68,10 +95,74 @@ vi.mock('./TacticsModelShowcase.js', () => ({
     },
 }));
 
+beforeEach(() => {
+    useModelInstanceMock.mockReturnValue({ instance: null, loading: true, error: null });
+});
+
 afterEach(() => {
     cleanup();
+    vi.clearAllMocks();
     gameCanvasCalls.length = 0;
+    showcaseInstanceProps.length = 0;
     showcaseMockReports.resetToClean();
+});
+
+describe('TacticsModelShowcaseScreen — model resolution', () => {
+    it('resolves the single showcase ref TWICE per render, one call per mounted instance', () => {
+        // Two calls PER RENDER, not two in total: the reports land in screen
+        // state, so the screen renders again after mount. One call whose result
+        // was reused for both quads would hand the SAME root to A and B,
+        // collapsing the two uuids the e2e compares — and that mutant shows up
+        // here as one call per render rather than two.
+        render(<TacticsModelShowcaseScreen />);
+
+        const renderCount = showcaseInstanceProps.length;
+        expect(renderCount).toBeGreaterThanOrEqual(1);
+        expect(useModelInstanceMock).toHaveBeenCalledTimes(renderCount * 2);
+        for (const call of useModelInstanceMock.mock.calls) {
+            expect(call[0]).toBe(tacticsModelRefs.showcaseRig);
+        }
+    });
+
+    it('hands each resolved root down to the scene component, A then B', () => {
+        useModelInstanceMock
+            .mockReturnValueOnce({ instance: stubInstance('uuid-a'), loading: false, error: null })
+            .mockReturnValueOnce({ instance: stubInstance('uuid-b'), loading: false, error: null });
+
+        render(<TacticsModelShowcaseScreen />);
+
+        expect(showcaseInstanceProps[0]).toEqual({
+            instanceA: { root: { uuid: 'uuid-a' }, errorName: '' },
+            instanceB: { root: { uuid: 'uuid-b' }, errorName: '' },
+        });
+    });
+
+    it('forwards a per-instance load failure as that instance errorName', () => {
+        // B fails, A does not: a screen that collapsed the two error slots into
+        // one would report A's clean '' for both and lose the failure the status
+        // element exists to surface.
+        const error = new Error('undeclared');
+        error.name = 'UnknownAssetManifestEntryError';
+        useModelInstanceMock
+            .mockReturnValueOnce({ instance: stubInstance('uuid-a'), loading: false, error: null })
+            .mockReturnValueOnce({ instance: null, loading: false, error });
+
+        render(<TacticsModelShowcaseScreen />);
+
+        expect(showcaseInstanceProps[0]).toEqual({
+            instanceA: { root: { uuid: 'uuid-a' }, errorName: '' },
+            instanceB: { root: null, errorName: 'UnknownAssetManifestEntryError' },
+        });
+    });
+
+    it('reports a still-loading instance as a null root with no error', () => {
+        render(<TacticsModelShowcaseScreen />);
+
+        expect(showcaseInstanceProps[0]).toEqual({
+            instanceA: { root: null, errorName: '' },
+            instanceB: { root: null, errorName: '' },
+        });
+    });
 });
 
 describe('TacticsModelShowcaseScreen', () => {

@@ -2,67 +2,57 @@
 
 import { cleanup, render } from '@testing-library/react';
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { Object3D } from 'three';
 
-import type { ModelInstance } from '@chimera-engine/renderer/assets';
-import { useModelInstance } from '@chimera-engine/renderer/assets';
-
-import { tacticsModelRefs } from '../asset-manifest.js';
 import {
     SHOWCASE_POSE_RADIANS,
     TacticsModelShowcase,
+    type TacticsModelShowcaseInstance,
     type TacticsModelShowcaseReport,
 } from './TacticsModelShowcase.js';
-
-vi.mock('@chimera-engine/renderer/assets', () => ({
-    useModelInstance: vi.fn(),
-}));
-
-const useModelInstanceMock = vi.mocked(useModelInstance);
 
 interface StubBone {
     readonly name: string;
     readonly rotation: { z: number };
 }
 
-function createStubInstance(uuid: string): { instance: ModelInstance; topBone: StubBone } {
+/**
+ * A scene-graph root double. The component reads exactly `uuid` and
+ * `getObjectByName`, so the stub carries those and nothing else — mounting a
+ * real `Object3D` here would test three.js.
+ */
+function createStubRoot(uuid: string): { root: Object3D; topBone: StubBone } {
     const topBone: StubBone = { name: 'top', rotation: { z: 0 } };
     const root = {
         uuid,
         getObjectByName: (name: string) => (name === 'top' ? topBone : undefined),
     };
-    return { instance: { root, clips: [] } as unknown as ModelInstance, topBone };
+    return { root: root as unknown as Object3D, topBone };
 }
 
-beforeEach(() => {
-    vi.clearAllMocks();
-});
+const LOADING: TacticsModelShowcaseInstance = { root: null, errorName: '' };
 
 afterEach(() => {
     cleanup();
 });
 
 describe('TacticsModelShowcase', () => {
-    it('mounts two instances of the single showcase ref, poses only A, and reports both', () => {
-        const stubA = createStubInstance('uuid-a');
-        const stubB = createStubInstance('uuid-b');
-        useModelInstanceMock
-            .mockReturnValueOnce({ instance: stubA.instance, loading: false, error: null })
-            .mockReturnValueOnce({ instance: stubB.instance, loading: false, error: null });
+    it('poses only A, and reports both', () => {
+        const stubA = createStubRoot('uuid-a');
+        const stubB = createStubRoot('uuid-b');
         const reportsA: TacticsModelShowcaseReport[] = [];
         const reportsB: TacticsModelShowcaseReport[] = [];
 
         render(
             <TacticsModelShowcase
+                instanceA={{ root: stubA.root, errorName: '' }}
+                instanceB={{ root: stubB.root, errorName: '' }}
                 onReportA={(report) => reportsA.push(report)}
                 onReportB={(report) => reportsB.push(report)}
             />,
         );
 
-        expect(useModelInstanceMock).toHaveBeenCalledTimes(2);
-        for (const call of useModelInstanceMock.mock.calls) {
-            expect(call[0]).toBe(tacticsModelRefs.showcaseRig);
-        }
         expect(reportsA).toEqual([
             { rootUuid: 'uuid-a', topBonePoseZ: SHOWCASE_POSE_RADIANS, errorName: '' },
         ]);
@@ -79,14 +69,16 @@ describe('TacticsModelShowcase', () => {
         // A x∈[-1.8,-0.65] and B x∈[0.65,1.55] — disjoint, and both inside the
         // screen camera's left/right ±2.4 frustum. Collapsing the two onto one
         // spot still satisfies the e2e magenta-pixel floor, so only this pins it.
-        const stubA = createStubInstance('uuid-a');
-        const stubB = createStubInstance('uuid-b');
-        useModelInstanceMock
-            .mockReturnValueOnce({ instance: stubA.instance, loading: false, error: null })
-            .mockReturnValueOnce({ instance: stubB.instance, loading: false, error: null });
+        const stubA = createStubRoot('uuid-a');
+        const stubB = createStubRoot('uuid-b');
 
         const { container } = render(
-            <TacticsModelShowcase onReportA={() => {}} onReportB={() => {}} />,
+            <TacticsModelShowcase
+                instanceA={{ root: stubA.root, errorName: '' }}
+                instanceB={{ root: stubB.root, errorName: '' }}
+                onReportA={() => {}}
+                onReportB={() => {}}
+            />,
         );
 
         const positions = Array.from(container.querySelectorAll('primitive')).map((node) =>
@@ -96,13 +88,16 @@ describe('TacticsModelShowcase', () => {
     });
 
     it('surfaces a load failure as the report errorName instead of throwing', () => {
-        const error = new Error('undeclared');
-        error.name = 'UnknownAssetManifestEntryError';
-        useModelInstanceMock.mockReturnValue({ instance: null, loading: false, error });
+        const failed: TacticsModelShowcaseInstance = {
+            root: null,
+            errorName: 'UnknownAssetManifestEntryError',
+        };
         const reportsA: TacticsModelShowcaseReport[] = [];
 
         render(
             <TacticsModelShowcase
+                instanceA={failed}
+                instanceB={failed}
                 onReportA={(report) => reportsA.push(report)}
                 onReportB={() => {}}
             />,
@@ -113,11 +108,12 @@ describe('TacticsModelShowcase', () => {
     });
 
     it('renders nothing and reports nothing while both instances are still loading', () => {
-        useModelInstanceMock.mockReturnValue({ instance: null, loading: true, error: null });
         const reportsA: TacticsModelShowcaseReport[] = [];
 
         const { container } = render(
             <TacticsModelShowcase
+                instanceA={LOADING}
+                instanceB={LOADING}
                 onReportA={(report) => reportsA.push(report)}
                 onReportB={() => {}}
             />,

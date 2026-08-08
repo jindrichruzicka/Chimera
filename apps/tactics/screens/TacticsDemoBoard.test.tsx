@@ -473,11 +473,10 @@ describe('TacticsDemoBoard', () => {
         // magenta quads back into every board pixel-count and board-click
         // spec's frame — the exact pollution the route exists to prevent.
         // Only the status element is asserted, because that is all this suite
-        // can see: this file mocks no showcase module, so re-adding
-        // <TacticsModelShowcase> resolves the REAL one and reds every render
-        // test here with `useAssetManager must be used inside
-        // AssetManagerContext.Provider` (measured) — loud, but not this
-        // assertion's doing.
+        // can see: the quads mount as `<primitive>`, which this jsdom suite
+        // renders as an unrecognized tag rather than as geometry, while the
+        // status element is plain DOM the showcase SCREEN renders beside the
+        // canvas.
         render(
             <TacticsDemoBoard
                 snapshot={makeSnapshot()}

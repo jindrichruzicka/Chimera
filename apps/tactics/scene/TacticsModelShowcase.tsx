@@ -1,10 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useModelInstance } from '@chimera-engine/renderer/assets';
 import type { Object3D } from 'three';
-
-import { tacticsModelRefs } from '../asset-manifest.js';
 
 /**
  * One showcase instance's observable state, reported to
@@ -19,7 +16,23 @@ export interface TacticsModelShowcaseReport {
     readonly errorName: string;
 }
 
+/**
+ * A resolved model instance, flattened to what the scene needs.
+ *
+ * The screen owns the `useModelInstance` call and hands the outcome down: the
+ * renderer barrels are legal on `screens/` and forbidden on `scene/`
+ * (Invariant #96), so a scene file cannot resolve a ref itself. `root` is null
+ * while the load is in flight or has failed; `errorName` is '' unless it did
+ * fail.
+ */
+export interface TacticsModelShowcaseInstance {
+    readonly root: Object3D | null;
+    readonly errorName: string;
+}
+
 export interface TacticsModelShowcaseProps {
+    readonly instanceA: TacticsModelShowcaseInstance;
+    readonly instanceB: TacticsModelShowcaseInstance;
     readonly onReportA: (report: TacticsModelShowcaseReport) => void;
     readonly onReportB: (report: TacticsModelShowcaseReport) => void;
 }
@@ -42,51 +55,52 @@ function findPosedBone(root: Object3D): Object3D | undefined {
     return root.getObjectByName(POSED_BONE_NAME);
 }
 
-interface ShowcaseModelProps {
+interface ShowcaseModelProps extends TacticsModelShowcaseInstance {
     readonly position: readonly [number, number, number];
     readonly poseTopBone: boolean;
     readonly onReport: (report: TacticsModelShowcaseReport) => void;
 }
 
 function ShowcaseModel({
+    root,
+    errorName,
     position,
     poseTopBone,
     onReport,
 }: ShowcaseModelProps): React.ReactElement | null {
-    const { instance, error } = useModelInstance(tacticsModelRefs.showcaseRig);
-
     React.useEffect(() => {
-        if (error !== null) {
-            onReport({ rootUuid: '', topBonePoseZ: Number.NaN, errorName: error.name });
+        if (errorName !== '') {
+            onReport({ rootUuid: '', topBonePoseZ: Number.NaN, errorName });
             return;
         }
-        if (instance === null) {
+        if (root === null) {
             return;
         }
-        const posedBone = findPosedBone(instance.root);
+        const posedBone = findPosedBone(root);
         if (poseTopBone && posedBone !== undefined) {
             posedBone.rotation.z = SHOWCASE_POSE_RADIANS;
         }
         onReport({
-            rootUuid: instance.root.uuid,
+            rootUuid: root.uuid,
             topBonePoseZ: posedBone?.rotation.z ?? Number.NaN,
             errorName: '',
         });
-    }, [instance, error, poseTopBone, onReport]);
+    }, [root, errorName, poseTopBone, onReport]);
 
-    if (instance === null) {
+    if (root === null) {
         return null;
     }
-    return <primitive object={instance.root} position={position} />;
+    return <primitive object={root} position={position} />;
 }
 
 /**
  * Model-seam adoption surface (§4.10): TWO instances of ONE `gltf-model` ref,
  * mounted in the `/model-showcase/` route's canvas — a test-only screen no
  * in-app navigation reaches, so this geometry is in no gameplay frame. This is
- * the runtime proof of the model seam — the cached gltf loads over
- * `chimera://` through the webpack async chunk, and each mount receives its
- * own `SkeletonUtils` clone.
+ * the scene half of the runtime proof of the model seam; the screen resolves
+ * the ref twice (the cached gltf loads over `chimera://` through the webpack
+ * async chunk, and each call receives its own `SkeletonUtils` clone) and this
+ * mounts, poses and reports what it is given.
  *
  * A is posed, B is not, and B reads its own bone AFTER A's pose runs: both
  * instances resolve from the same in-flight load, so their publish commits
@@ -97,13 +111,27 @@ function ShowcaseModel({
  * read.
  */
 export function TacticsModelShowcase({
+    instanceA,
+    instanceB,
     onReportA,
     onReportB,
 }: TacticsModelShowcaseProps): React.ReactElement {
     return (
         <>
-            <ShowcaseModel position={MODEL_A_POSITION} poseTopBone={true} onReport={onReportA} />
-            <ShowcaseModel position={MODEL_B_POSITION} poseTopBone={false} onReport={onReportB} />
+            <ShowcaseModel
+                root={instanceA.root}
+                errorName={instanceA.errorName}
+                position={MODEL_A_POSITION}
+                poseTopBone={true}
+                onReport={onReportA}
+            />
+            <ShowcaseModel
+                root={instanceB.root}
+                errorName={instanceB.errorName}
+                position={MODEL_B_POSITION}
+                poseTopBone={false}
+                onReport={onReportB}
+            />
         </>
     );
 }

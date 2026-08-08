@@ -2,8 +2,14 @@
 
 import React, { useState } from 'react';
 import { GameCanvas, type OrthographicCameraConfig } from '@chimera-engine/renderer/components/r3f';
+import { useModelInstance, type UseModelInstanceState } from '@chimera-engine/renderer/assets';
 
-import { TacticsModelShowcase, type TacticsModelShowcaseReport } from './TacticsModelShowcase.js';
+import { tacticsModelRefs } from '../asset-manifest.js';
+import {
+    TacticsModelShowcase,
+    type TacticsModelShowcaseInstance,
+    type TacticsModelShowcaseReport,
+} from '../scene/TacticsModelShowcase.js';
 
 /**
  * The model-seam test screen (§4.10), reachable only at `/model-showcase/`.
@@ -22,10 +28,17 @@ import { TacticsModelShowcase, type TacticsModelShowcaseReport } from './Tactics
  * needs neither. Its asset session is opened by the route
  * (`<GameAssetSession>`), which is what makes `useModelInstance` resolve here
  * with no `GameShell` above it.
+ *
+ * The ref is resolved HERE rather than inside the scene component because the
+ * renderer barrels are legal on `screens/` and forbidden on `scene/`
+ * (Invariant #96). Two calls, one per mounted quad: that is what gives each
+ * mount its own `SkeletonUtils` clone, which is the seam's whole claim.
  */
 export function TacticsModelShowcaseScreen(): React.ReactElement {
     const [reportA, setReportA] = useState<TacticsModelShowcaseReport | null>(null);
     const [reportB, setReportB] = useState<TacticsModelShowcaseReport | null>(null);
+    const modelA = useModelInstance(tacticsModelRefs.showcaseRig);
+    const modelB = useModelInstance(tacticsModelRefs.showcaseRig);
 
     return (
         <div data-testid="tactics-model-showcase" style={screenStyle}>
@@ -33,13 +46,32 @@ export function TacticsModelShowcaseScreen(): React.ReactElement {
                 GLTFLoader maps to MeshBasicMaterial — nothing in this scene is
                 lit, so a light could not change a pixel. */}
             <GameCanvas camera={SHOWCASE_CAMERA}>
-                <TacticsModelShowcase onReportA={setReportA} onReportB={setReportB} />
+                <TacticsModelShowcase
+                    instanceA={toShowcaseInstance(modelA)}
+                    instanceB={toShowcaseInstance(modelB)}
+                    onReportA={setReportA}
+                    onReportB={setReportB}
+                />
             </GameCanvas>
             {/* Positioned, and after the canvas — camera-system.md §4.22
                 "Canvas-fit rules". */}
             <TacticsModelShowcaseStatus reportA={reportA} reportB={reportB} />
         </div>
     );
+}
+
+/**
+ * Flatten one hook result to what the scene component takes.
+ *
+ * `loading` is dropped rather than forwarded: a null root already means "not
+ * mountable yet", and the scene has nothing to draw differently for a load in
+ * flight versus one that failed — the error name is what it reports.
+ */
+function toShowcaseInstance(state: UseModelInstanceState): TacticsModelShowcaseInstance {
+    return {
+        root: state.instance?.root ?? null,
+        errorName: state.error?.name ?? '',
+    };
 }
 
 /**
