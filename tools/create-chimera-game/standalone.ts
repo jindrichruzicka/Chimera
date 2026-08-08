@@ -671,7 +671,8 @@ export interface StandaloneAppRewriteParams {
  *   2. prefix `build:app` + `test:e2e` with `cross-env CHIMERA_VERIFY_PACK_NODE_MODULES=<value>` so
  *      the app's Electron bundler resolves `@chimera-engine/electron`'s host/preload from `node_modules`
  *      (there is no monorepo `electron/` source to alias). The script's semantics are unchanged
- *      otherwise; build-main.ts itself is NOT modified (it is byte-shared with apps/tactics).
+ *      otherwise; build-main.ts itself is NOT modified (it carries no path arithmetic to rewrite —
+ *      it derives appDir/root from __dirname, and the plan it drives lives in the engine).
  *
  * Pure: parses + reserializes the manifest; idempotent on the env injection (skips if already set).
  */
@@ -746,22 +747,26 @@ export function rewriteAppTsconfigBuildForStandalone(rawTsconfig: string): strin
  * Neutralise the scaffolded app's `e2e/tsconfig.json` `paths` for a STANDALONE run.
  *
  * The Playwright runner resolves bare `@chimera-engine/*` specifiers via tsconfig `paths` (it has no
- * vite/webpack alias hook). In the monorepo those map onto each engine package's built `dist`
- * (`simulation/dist/*`, …) — repo-root directories that do not exist standalone. Installed
- * standalone, the engine packages live in the app's own `node_modules`, so the runner resolves them
- * by ordinary node-resolution from `apps/<game>/e2e/`; the monorepo dist mappings must go. The
- * game's OWN path (`@chimera-engine/<game>` glob → `apps/<game>` glob) is already standalone-valid
- * (the app source lives at the standalone root's `apps/` dir) and is kept, alongside `baseUrl` +
- * comments.
+ * vite/webpack alias hook). In the monorepo those map onto engine package directories under the repo
+ * ROOT — `simulation/dist/*`, `electron/build-main/index.ts` — none of which exist standalone.
+ * Installed standalone, the engine packages live in the app's own `node_modules`, so the runner
+ * resolves them by ordinary node-resolution from `apps/<game>/e2e/`; the monorepo mappings must go.
+ * The game's OWN path (`@chimera-engine/<game>` glob → `apps/<game>` glob) is already
+ * standalone-valid (the app source lives at the standalone root's `apps/` dir) and is kept,
+ * alongside `baseUrl` + comments.
  *
- * Pure regex splice. Each engine entry's target is a monorepo `dist` path, so we drop every
- * `@chimera-engine` line whose target array contains `dist`; the game entry's target (`apps/<game>`)
- * carries no `dist`, so it survives — and it is the last entry (no trailing comma), so the object
- * stays valid JSONC. Idempotent: once the `dist` entries are gone, a re-run matches nothing.
+ * Pure regex splice, keyed on where the TARGET points. Every engine entry resolves to a repo-root
+ * package directory; the game entry is the only one under `apps/`, so we drop every
+ * `@chimera-engine` line whose target array does not name `apps/`. Keying on the target's `dist`
+ * segment instead would be a proxy for the same thing that has already broken once: the
+ * `build-main` entry points at engine SOURCE, carries no `dist`, and a `dist`-keyed rule leaves it
+ * behind in an adopter's project pointing at a tree that is not there. The surviving game entry is
+ * last (no trailing comma), so the object stays valid JSONC. Idempotent: once the engine entries
+ * are gone, a re-run matches nothing.
  */
 export function rewriteE2eTsconfigForStandalone(rawTsconfig: string): string {
     return rawTsconfig.replace(
-        /^[ \t]*"@chimera-engine\/[^"]*"\s*:\s*\[[^\]]*dist[^\]]*\],?\n/gm,
+        /^[ \t]*"@chimera-engine\/[^"]*"\s*:\s*\[(?![^\]]*apps\/)[^\]]*\],?\n/gm,
         '',
     );
 }

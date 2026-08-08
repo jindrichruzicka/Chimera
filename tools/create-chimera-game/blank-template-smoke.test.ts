@@ -58,16 +58,32 @@ describe('blank template smoke harness', () => {
         );
     });
 
-    // The template's build:app bundler is byte-shared with apps/tactics but has no co-located
-    // unit test (the tested copy lives in apps/tactics). These source-level guards cover the two
-    // dev-debugging seams the VITEST-gated CLI entry can't unit-test: the standalone F9 fix
-    // (bundle the packed debug-api.js sibling so the Inspector window loads) and main-process
-    // source maps (so `pnpm start:debug` + the "Debug <Game>" launch config bind breakpoints).
-    it('ships the F9 debug-preload fallback + main-process source maps in the build:app bundler', async () => {
+    // The template's `build:app` is a THIN DRIVER over the engine-exported bundle plan
+    // (`@chimera-engine/electron/build-main`) — the same engine-owns-the-logic /
+    // app-owns-the-paths split as the verify:packaged-bundle gate below. The plan itself is
+    // unit-tested in the engine (`electron/build-main/bundle-plan.test.ts`), including the
+    // external-sourcemap contract and both debug-preload resolution routes. What CANNOT be
+    // tested there is what this driver injects, because the CLI entry is VITEST-gated: these
+    // pins cover it.
+    it('drives the engine bundle plan rather than carrying its own', async () => {
         const buildMain = await read('electron/build-main.ts');
-        expect(buildMain).toContain('resolveInstalledDebugPreloadEntry');
+        expect(buildMain).toContain("from '@chimera-engine/electron/build-main'");
+        expect(buildMain).toContain('buildAppBundles(');
+        // esbuild is reached ONLY through the engine's factory. A hand-spelled
+        // `buildSync({ … })` here would put the whole option set — the production
+        // `define` included — outside everything the engine's assertions execute.
+        expect(buildMain).toContain('createEsbuildBuild(');
+        expect(buildMain).toContain('runBuild: buildSync');
+    });
+
+    // The two dev-debugging seams the VITEST-gated CLI entry can't unit-test, both of which
+    // are DRIVER-owned by design: the plan is handed the probe and the source-tree lookup
+    // rather than resolving either itself, so that a build which wants no debug bundle can
+    // withhold them. A plan that resolved either on its own could not be told to stop.
+    it('injects both debug-preload resolution signals into the plan (F9 in a standalone game)', async () => {
+        const buildMain = await read('electron/build-main.ts');
+        expect(buildMain).toContain('resolveDevDebugPreloadEntry(');
         expect(buildMain).toContain('fileExists: existsSync');
-        expect(buildMain).toContain('sourcemap: true');
     });
 
     // The Invariant #27 packaged-bundle gate: a scaffolded game's
@@ -580,6 +596,7 @@ describe('blank template smoke harness', () => {
             'e2e/playwright.config.ts',
             'e2e/tsconfig.json',
             'electron-builder.yml',
+            'electron/build-main.ts',
             'electron/verify-packaged-bundle.ts',
             'shell/fonts.ts',
             'renderer/loaders.ts',

@@ -8,9 +8,16 @@ import { buildAppBundles, VERIFY_PACK_NODE_MODULES_ENV } from '../electron/build
 
 /**
  * Re-exported for the e2e side's drift guard (global-setup.test.ts): the literal
- * MUST equal the one `tools/verify-pack.ts` passes. Its single declaration lives in
- * the app-owned bundler (`apps/tactics/electron/build-main.ts`); both `build:app`
- * and this setup share it, so the esbuild alias / nodePaths logic cannot drift.
+ * MUST equal the one `tools/verify-pack.ts` passes, which spells it under its own
+ * name — global-setup.test.ts asserts this side, tools/verify-pack.test.ts the
+ * other. It reaches this file — as everything else here does — through the app's
+ * own `build:app` driver, which `build:app` runs too, so the esbuild alias /
+ * nodePaths logic cannot drift.
+ *
+ * The driver is one door into the plan per app, not a bootstrap mechanism: the
+ * driver imports the engine subpath itself, so what makes this module LOAD before
+ * `electron/dist` exists is the exact-key mapping in `e2e/tsconfig.json`, nothing
+ * about the route taken here.
  */
 export { VERIFY_PACK_NODE_MODULES_ENV };
 
@@ -43,7 +50,7 @@ export function resolveE2eAssetCopy(root: string, e2eBuildRoot: string): E2eAsse
  * Playwright global setup — runs once before all E2E tests.
  *  1. Compiles the renderer bundle so tests can load the real UI.
  *  2. Bundles the Electron main + host preload (+ Inspector debug preload) via the
- *     app-owned {@link buildAppBundles} — the SAME bundler `build:app` runs in
+ *     engine-owned {@link buildAppBundles} — the SAME plan `build:app` runs in
  *     production — into the `.e2e-build/` layout the launch fixture loads.
  *
  * `@chimera-engine/*` path aliases are resolved by `buildAppBundles` (the Electron process

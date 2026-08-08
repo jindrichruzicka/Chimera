@@ -22,6 +22,26 @@
             "@chimera-engine/networking/*": ["networking/dist/*"],
             "@chimera-engine/renderer/*": ["renderer/dist/*"],
             "@chimera-engine/electron/*": ["electron/dist/*"],
+            // BOOTSTRAP ORDER, not a preference. global-setup imports the app's
+            // build:app driver, which imports the engine bundle plan — and
+            // global-setup is what RUNS `pnpm build:packages`, so on a clean
+            // checkout `electron/dist` does not exist yet when the runner
+            // resolves this import. The module would fail to load and the
+            // bootstrap it contains would never run. Root `pnpm test:e2e`
+            // masks this by prefixing build:packages; a `.vscode` Playwright
+            // launch does not. Pointing this ONE subpath at source is what makes
+            // both entry points work from a bare checkout.
+            //
+            // An exact key beats the `@chimera-engine/electron/*` wildcard above
+            // (Playwright resolves by longest key prefix). It does move the suite
+            // off the built plan and onto the source one, so a stale
+            // `electron/dist` makes the two disagree — benignly, because the plan
+            // is pure derivation over its arguments, and because global-setup
+            // rebuilds that dist on every run anyway. What it does NOT touch is
+            // how the emitted bundle resolves @chimera-engine/*: that is
+            // esbuild's alias/nodePaths, which verify:pack redirects
+            // independently of this file.
+            "@chimera-engine/electron/build-main": ["electron/build-main/index.ts"],
             "@chimera-engine/tactics/*": ["apps/tactics/*"]
         }
     }

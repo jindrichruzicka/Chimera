@@ -9,6 +9,7 @@
 // real pnpm, npm, playwright, electron, or filesystem is touched.
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -300,6 +301,70 @@ describe('buildProbeScript', () => {
         const script = buildProbeScript();
         expect(script).toContain('createRequire');
         expect(script).toContain('require.resolve');
+    });
+});
+
+// ── PROBE_SUBPATHS coverage of what a scaffolded game actually resolves ──────
+
+describe("PROBE_SUBPATHS covers what a scaffolded game's ELECTRON BUILD imports", () => {
+    // `missingProbeSubpaths` derives completeness from the packed RENDERER
+    // manifest only (Invariant #96), which is deliberate — electron's exports
+    // map also carries dev-only and types-only entries outside that surface. The
+    // consequence is that an electron entry can be deleted from the list and
+    // nothing notices, which is how the `build-main` probe would silently stop
+    // guarding the subpath a scaffolded game's `build:app` dies without.
+    //
+    // Scope is exactly what the title says and no more: static `from '…'`
+    // specifiers under the template's `electron/` tree, whatever they turn out to
+    // be. Those run before anything else in a scaffolded game and fail with an
+    // unhelpful `ERR_PACKAGE_PATH_NOT_EXPORTED` if the surface is broken. The template
+    // reaches other engine subpaths elsewhere (`./eslint` from its flat config,
+    // `./test-support` from a unit test, `./preload/api` through a
+    // `createRequire` string); those are covered by `verify:scaffold`, which
+    // installs the packed tarballs and runs the generated app's real scripts. No
+    // attempt is made to unify the two — this one is cheap and runs on every
+    // commit, that one is the end-to-end truth.
+    const TEMPLATE_ELECTRON_DIR = path.resolve(
+        import.meta.dirname,
+        'create-chimera-game/templates/blank/electron',
+    );
+
+    /** Every `.ts` under `dir`. */
+    const templateSources = (dir: string): string[] =>
+        readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) return templateSources(full);
+            return entry.name.endsWith('.ts') ? [full] : [];
+        });
+
+    const requiredSubpaths = (): string[] => {
+        const found = new Set<string>();
+        for (const file of templateSources(TEMPLATE_ELECTRON_DIR)) {
+            const source = readFileSync(file, 'utf8');
+            for (const match of source.matchAll(/from '(@chimera-engine\/electron\/[^']+)'/gu)) {
+                if (match[1] !== undefined) found.add(match[1]);
+            }
+        }
+        return [...found].sort();
+    };
+
+    it('reads a non-empty required set out of the template (guards the derivation)', () => {
+        // A template whose Electron sources stopped importing the engine — or a
+        // pattern that stopped matching — would make the case below vacuous.
+        expect(requiredSubpaths()).toContain('@chimera-engine/electron/build-main');
+    });
+
+    it('probes every one of them from the packed artifact', () => {
+        const missing = requiredSubpaths().filter(
+            (subpath) => !(PROBE_SUBPATHS as readonly string[]).includes(subpath),
+        );
+        expect(
+            missing,
+            "a scaffolded game's Electron build imports these from @chimera-engine/electron, " +
+                'but verify:pack never resolves them from the packed tarball — a dropped ' +
+                'exports/files entry would surface as ERR_PACKAGE_PATH_NOT_EXPORTED in an ' +
+                "adopter's build:app",
+        ).toEqual([]);
     });
 });
 

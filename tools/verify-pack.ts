@@ -37,7 +37,8 @@
  * Invariants upheld:
  *   #1  — the acyclic, inward package DAG survives packaging (npm resolves the tarball
  *         graph in dependency order); validated end-to-end against the real artifact.
- *   #2  — lives in `tools/`; imports only node builtins — never a package or app module.
+ *   #2  — lives in `tools/`; imports no package or app module (node builtins and the
+ *         side-effect-free `verify-shared` only).
  *   #47 — orchestration resolves ONLY through each package's public `exports`, never an
  *         internal subpath (no `workspace:*` symlink fallback inside the throwaway).
  *   #96 — `PROBE_SUBPATHS` completeness is derived from the `exports` map of the
@@ -133,6 +134,11 @@ export const PROBE_SUBPATHS = [
     // every scaffolded game's `verify:packaged-bundle` gate resolves it from the packed
     // artifact, so a dropped `exports`/`files` entry would strand the guard downstream.
     '@chimera-engine/electron/packaged-bundle',
+    // The Electron bundle plan behind every consumer's `build:app`. Probed for the same
+    // reason as its sibling above, and NOT covered by this gate's own E2E arm:
+    // CHIMERA_VERIFY_PACK_NODE_MODULES redirects esbuild's nodePaths and the createRequire
+    // base, never the module loader, so that arm never resolves this from the tarball.
+    '@chimera-engine/electron/build-main',
     // The asset-fact readers a game's own `asset-manifest.test.ts` imports (§4.32) —
     // shipped in the template, so a dropped entry breaks the unit suite of every
     // scaffolded game on its first run.

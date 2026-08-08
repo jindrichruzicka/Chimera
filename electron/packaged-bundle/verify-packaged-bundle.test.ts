@@ -32,6 +32,7 @@ import {
     type PackagedBundleOutfiles,
     type VerifyPackagedBundleIo,
 } from './verify-packaged-bundle.js';
+import type { BundleOutfiles } from '../build-main/bundle-plan.js';
 import {
     ALL_DEBUG_GRAPH_MARKERS,
     DEBUG_BRIDGE_GLOBAL,
@@ -185,7 +186,10 @@ const OUTFILES: PackagedBundleOutfiles = {
     preload: path.join(APP_DIR, 'dist/preload/api.js'),
     debugPreload: path.join(APP_DIR, 'dist/preload/debug-api.js'),
 };
-const YML_OPTIONS = { appDir: APP_DIR, outfiles: OUTFILES };
+// `extraShipped` is required on the type, so the no-extras case states it —
+// which is the intended reading pressure: a gate that omits the field is not
+// a gate with no extra bundles, it is a gate that never considered them.
+const YML_OPTIONS = { appDir: APP_DIR, outfiles: OUTFILES, extraShipped: [] };
 
 /** The clean, template-shaped allowlist: the two shipped bundles by name. */
 const CLEAN_YML = [
@@ -247,6 +251,40 @@ describe('electronBuilderControlGaps (the allowlist predicates’ own negative c
         expect(gaps.join('\n')).toContain('files-ships-debug-preload');
         expect(gaps.join('\n')).toContain('files-missing:dist/electron/main.js');
         expect(gaps.join('\n')).toContain('files-missing:dist/preload/api.js');
+        expect(gaps.join('\n')).toContain('files-unexpected:dist/**');
+        expect(gaps.join('\n')).toContain('files-unexpected:dist/preload/debug-api.js');
+    });
+
+    // `files-ships-debug-preload` is a disjunction — the app's own debugPreload
+    // PATH, or the bare `debug-api` substring — and the default fixture fires
+    // both, because `OUTFILES.debugPreload` ends in `debug-api.js`. A case that
+    // fires both measures neither disjunct: either one alone still rejects it. So
+    // there is one case per half, each built so the other half cannot fire.
+    it('rejects an entry naming the app’s OWN debug preload, whatever it is called', () => {
+        // The path half. It carries the load for any app that renamed its
+        // Inspector preload: `outfiles` arrives from the adopter-editable driver,
+        // so the substring half is blind to `inspector.js`.
+        const renamed = 'dist/preload/inspector.js';
+        expect(renamed).not.toContain('debug-api');
+        const options = {
+            appDir: APP_DIR,
+            outfiles: { ...OUTFILES, debugPreload: path.join(APP_DIR, renamed) },
+            extraShipped: [],
+        };
+        expect(
+            electronBuilderDistFailures(`${CLEAN_YML}  - ${renamed}\n`, options).map(
+                (f) => f.check,
+            ),
+        ).toContain('files-ships-debug-preload');
+    });
+
+    it('rejects a debug artifact adjacent to the plan, under a path the plan does not name', () => {
+        // The substring half. The entry must NOT contain the outfile path, or the
+        // path half catches it and this proves nothing — `debug-api.js.map` does,
+        // which is the trap. A different extension does not.
+        const entry = 'dist/preload/debug-api.cjs';
+        expect(entry.includes('dist/preload/debug-api.js')).toBe(false);
+        expect(ymlChecks(`${CLEAN_YML}  - ${entry}\n`)).toContain('files-ships-debug-preload');
     });
 });
 
@@ -432,5 +470,245 @@ describe('verifyPackagedBundle', () => {
         const world = makeWorld({ yml: undefined });
         expect(run(world)).toBe(false);
         expect(world.errors.join('\n')).toContain('electron-builder');
+    });
+
+    it('fails via the negative control when the dev restore emitted NO main bundle', () => {
+        // The control's own precondition. Every other gap is derived from reading
+        // the dev main; with no main to read there is nothing to derive, so an
+        // early return that yielded no gaps would report a healthy control while
+        // having examined nothing — the vacuous-pass shape the whole per-predicate
+        // design exists to avoid.
+        const world = makeWorld({
+            onDevBuild: (files) => {
+                files.set(OUTFILES.preload, PAD);
+            },
+        });
+        expect(run(world)).toBe(false);
+        expect(world.errors.join('\n')).toContain('no main bundle');
+    });
+});
+
+// ── Extra shipped bundles (the plan's `extraBundles` escape hatch) ───────────
+//
+// `AppBundlePlanOverrides.extraBundles` lets an app plan a fourth bundle (a
+// utility-process worker, a second preload). Without a matching declaration
+// here the two halves contradict each other: the allowlist check rejects any
+// `dist/` entry outside the plan, so an app that shipped an extra bundle would
+// fail its own gate for doing exactly what the plan sanctioned — and the extra
+// bundle's CONTENT would go unscanned, which is the half that actually matters.
+
+describe('extraShipped', () => {
+    const WORKER = path.join(APP_DIR, 'dist/electron/worker.js');
+    const WORKER_YML = CLEAN_YML.replace(
+        '  - dist/preload/api.js\n',
+        '  - dist/preload/api.js\n  - dist/electron/worker.js\n',
+    );
+    const WITH_WORKER = { ...YML_OPTIONS, extraShipped: [WORKER] };
+
+    it('accepts a declared extra bundle in the files allowlist', () => {
+        expect(electronBuilderDistFailures(WORKER_YML, WITH_WORKER)).toEqual([]);
+    });
+
+    it('still rejects it when it is NOT declared (the default stays strict)', () => {
+        expect(electronBuilderDistFailures(WORKER_YML, YML_OPTIONS).map((f) => f.check)).toContain(
+            'files-unexpected:dist/electron/worker.js',
+        );
+    });
+
+    it('requires a declared extra bundle to be NAMED in the allowlist', () => {
+        // Declaring it to the gate is not the same as shipping it: an app whose
+        // plan emits the bundle but whose `files:` omits it ships a broken app.
+        expect(electronBuilderDistFailures(CLEAN_YML, WITH_WORKER).map((f) => f.check)).toContain(
+            'files-missing:dist/electron/worker.js',
+        );
+    });
+
+    it('extends the allowlist negative control to the declared extra', () => {
+        expect(electronBuilderControlGaps(WITH_WORKER)).toEqual([]);
+        const gaps = electronBuilderControlGaps(WITH_WORKER, () => []).join('\n');
+        expect(gaps).toContain('files-missing:dist/electron/worker.js');
+    });
+
+    it('threads the declaration all the way through the runner (a clean extra bundle PASSES)', () => {
+        // The end-to-end case, and the only one that can fail when `extraShipped`
+        // stops reaching a step: every other case here asserts `=== false`, which
+        // an unwired option satisfies by accident. Re-spelling `options` as
+        // `{ appDir, outfiles }` at either call site — the exact defect the
+        // orchestration comments warn about — makes the worker an unexpected
+        // `dist/` entry and reds this, and only this.
+        const world = makeWorld({
+            yml: WORKER_YML,
+            onPackagedBuild: (files) => {
+                files.set(OUTFILES.main, PACKAGED_SHAPED_MAIN);
+                files.set(OUTFILES.preload, PAD);
+                files.set(WORKER, PAD);
+            },
+            onDevBuild: (files) => {
+                files.set(OUTFILES.main, DEV_SHAPED_MAIN);
+                files.set(OUTFILES.preload, PAD);
+                files.set(OUTFILES.debugPreload, PAD + DEBUG_BRIDGE_GLOBAL);
+                files.set(WORKER, PAD);
+            },
+        });
+        expect(
+            verifyPackagedBundle(
+                { appDir: APP_DIR, outfiles: OUTFILES, extraShipped: [WORKER] },
+                world.io,
+            ),
+        ).toBe(true);
+        expect(world.errors).toEqual([]);
+    });
+
+    it('SCANS an extra bundle whose basename is exactly the reserved label', () => {
+        // The one input that separates selecting the debug preload by PATH from
+        // selecting it by LABEL. Extras are labelled by basename, so an extra at
+        // `…/debugPreload` carries the label the old comparison tested for — and
+        // a label comparison would assume it absent, silently exempting a shipped
+        // bundle from every content predicate. Nothing else in this file
+        // distinguishes the two comparisons: `debug-tools.js` passes either way.
+        const RESERVED_NAME = path.join(APP_DIR, 'dist/electron/debugPreload');
+        const marker = ALL_DEBUG_GRAPH_MARKERS[0] ?? '';
+        const yml = CLEAN_YML.replace(
+            '  - dist/preload/api.js\n',
+            '  - dist/preload/api.js\n  - dist/electron/debugPreload\n',
+        );
+        const world = makeWorld({
+            yml,
+            onPackagedBuild: (files) => {
+                files.set(OUTFILES.main, PACKAGED_SHAPED_MAIN);
+                files.set(OUTFILES.preload, PAD);
+                files.set(RESERVED_NAME, PAD + marker);
+            },
+        });
+        expect(
+            verifyPackagedBundle(
+                { appDir: APP_DIR, outfiles: OUTFILES, extraShipped: [RESERVED_NAME] },
+                world.io,
+            ),
+        ).toBe(false);
+        expect(world.errors.join('\n')).toContain(marker);
+        expect(world.errors.join('\n')).not.toContain('was emitted by a packaged build');
+    });
+
+    it('SCANS an extra bundle whose own name mentions debug, rather than asserting it absent', () => {
+        // The two roles this loop assigns are opposites: a shipped bundle is READ
+        // and must be clean; the debug preload must not EXIST. Labels stopped
+        // being a closed set when apps gained extra bundles, so selecting the
+        // second role by name would let `debug-tools.js` be assumed absent —
+        // silently exempting a shipped file from every content predicate. It is
+        // selected by path instead, and this is the case that says so.
+        const DEBUG_TOOLS = path.join(APP_DIR, 'dist/electron/debug-tools.js');
+        const marker = ALL_DEBUG_GRAPH_MARKERS[0] ?? '';
+        const yml = CLEAN_YML.replace(
+            '  - dist/preload/api.js\n',
+            '  - dist/preload/api.js\n  - dist/electron/debug-tools.js\n',
+        );
+        const world = makeWorld({
+            yml,
+            onPackagedBuild: (files) => {
+                files.set(OUTFILES.main, PACKAGED_SHAPED_MAIN);
+                files.set(OUTFILES.preload, PAD);
+                files.set(DEBUG_TOOLS, PAD + marker);
+            },
+        });
+        expect(
+            verifyPackagedBundle(
+                { appDir: APP_DIR, outfiles: OUTFILES, extraShipped: [DEBUG_TOOLS] },
+                world.io,
+            ),
+        ).toBe(false);
+        // Rejected for CARRYING the marker — not for existing.
+        expect(world.errors.join('\n')).toContain(marker);
+        expect(world.errors.join('\n')).not.toContain('was emitted by a packaged build');
+    });
+
+    it('reports an extra bundle under its own basename', () => {
+        // The label is what a failure names. Collapsed to the full path it still
+        // "works", and the report turns into an absolute path nobody can scan.
+        const world = makeWorld({
+            yml: WORKER_YML,
+            onPackagedBuild: (files) => {
+                files.set(OUTFILES.main, PACKAGED_SHAPED_MAIN);
+                files.set(OUTFILES.preload, PAD);
+                files.set(WORKER, 'too short');
+            },
+        });
+        verifyPackagedBundle(
+            { appDir: APP_DIR, outfiles: OUTFILES, extraShipped: [WORKER] },
+            world.io,
+        );
+        expect(world.errors.join('\n')).toContain('worker.js bundle');
+        expect(world.errors.join('\n')).not.toContain(`${APP_DIR}${path.sep}dist`);
+    });
+
+    it('SCANS a declared extra bundle for the debug layer', () => {
+        const marker = ALL_DEBUG_GRAPH_MARKERS[0] ?? '';
+        const world = makeWorld({
+            yml: WORKER_YML,
+            onPackagedBuild: (files) => {
+                files.set(OUTFILES.main, PACKAGED_SHAPED_MAIN);
+                files.set(OUTFILES.preload, PAD);
+                files.set(WORKER, PAD + marker);
+            },
+        });
+        expect(
+            verifyPackagedBundle(
+                { appDir: APP_DIR, outfiles: OUTFILES, extraShipped: [WORKER] },
+                world.io,
+            ),
+        ).toBe(false);
+        expect(world.errors.join('\n')).toContain(marker);
+    });
+
+    it('fails closed when a declared extra bundle was not emitted', () => {
+        const world = makeWorld({
+            yml: WORKER_YML,
+            onPackagedBuild: (files) => {
+                files.set(OUTFILES.main, PACKAGED_SHAPED_MAIN);
+                files.set(OUTFILES.preload, PAD);
+            },
+        });
+        expect(
+            verifyPackagedBundle(
+                { appDir: APP_DIR, outfiles: OUTFILES, extraShipped: [WORKER] },
+                world.io,
+            ),
+        ).toBe(false);
+        expect(world.errors.join('\n')).toContain('not emitted');
+    });
+
+    it('clears a declared extra bundle (and its map) before each build', () => {
+        const world = makeWorld({
+            yml: WORKER_YML,
+            onPackagedBuild: (files) => {
+                files.set(OUTFILES.main, PACKAGED_SHAPED_MAIN);
+                files.set(OUTFILES.preload, PAD);
+                files.set(WORKER, PAD);
+            },
+            onDevBuild: (files) => {
+                files.set(OUTFILES.main, DEV_SHAPED_MAIN);
+                files.set(OUTFILES.preload, PAD);
+                files.set(OUTFILES.debugPreload, PAD + DEBUG_BRIDGE_GLOBAL);
+                files.set(WORKER, PAD);
+            },
+        });
+        verifyPackagedBundle(
+            { appDir: APP_DIR, outfiles: OUTFILES, extraShipped: [WORKER] },
+            world.io,
+        );
+        expect(world.calls.filter((c) => c === `rm:${WORKER}`)).toHaveLength(2);
+        expect(world.calls.filter((c) => c === `rm:${WORKER}.map`)).toHaveLength(2);
+    });
+});
+
+describe('the outfile map is the plan’s, not a second declaration', () => {
+    it('is the same type the bundle plan derives', () => {
+        // A structural re-declaration is not a contract: the two drift the day
+        // one gains a field. These two assignments fail to COMPILE if the alias
+        // is ever replaced by a copy that diverges — `pnpm typecheck` is the
+        // assertion, this body just pins the direction both ways.
+        const fromPlan: BundleOutfiles = OUTFILES;
+        const fromGate: PackagedBundleOutfiles = fromPlan;
+        expect(fromGate).toBe(OUTFILES);
     });
 });

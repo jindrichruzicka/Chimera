@@ -1,11 +1,14 @@
 // apps/tactics/e2e/global-setup.test.ts
 //
 // The pure @chimera-engine/* esbuild resolution helpers (computeEsbuildAlias /
-// computeNodePaths) now live in the app-owned bundler and are unit-tested by
-// apps/tactics/electron/build-main.test.ts — global-setup delegates bundling to
-// `buildAppBundles`, so the only thing left to guard on the e2e side is that the
-// verify:pack env-var literal it re-exports matches the one tools/verify-pack.ts
-// passes (it must not drift across the e2e ↔ tools boundary).
+// computeNodePaths) live in the engine bundle plan and are unit-tested by
+// electron/build-main/bundle-plan.test.ts — global-setup delegates bundling to
+// `buildAppBundles`. What is guarded here is the verify:pack env-var literal
+// this module re-exports — it must equal the one tools/verify-pack.ts passes, and
+// must not drift across the e2e ↔ tools boundary — and the asset copy the bundled
+// main's icon resolution depends on. That the module still LOADS on a clean
+// checkout is guarded for BOTH consumer trees at once by
+// tools/e2e-bootstrap-resolution.test.ts.
 
 import path from 'path';
 
@@ -33,7 +36,7 @@ describe('resolveE2eAssetCopy', () => {
         // The e2e bundle's main lives at <e2eBuildRoot>/electron/main/index.js, and
         // resolveAppIcon's default icon is <mainDir>/../../assets/icons/chimera.png.
         // The copy destination MUST equal that ../../assets root or the default icon
-        // 404s and (pre-fix #2) dock.setIcon throws, blocking window creation.
+        // 404s and dock.setIcon throws, blocking window creation.
         const mainDir = path.join(e2eBuildRoot, 'electron', 'main');
         const iconRootFromBundledMain = path.resolve(mainDir, '..', '..', 'assets');
         expect(resolveE2eAssetCopy(root, e2eBuildRoot).to).toBe(iconRootFromBundledMain);

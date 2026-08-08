@@ -5,8 +5,8 @@
 // host ships no game-specific code; the game enters only here, at runtime.
 //
 // The `@chimera-engine/__game_kebab__/*` self-imports resolve to this app's own source:
-// the app-owned bundler (electron/build-main.ts) aliases `@chimera-engine/<game>` (read
-// from package.json `name`) onto the app directory.
+// this app's `build:app` bundler driver (electron/build-main.ts) aliases
+// `@chimera-engine/<game>` (read from package.json `name`) onto the app directory.
 
 import { main, type MainGameContribution } from '@chimera-engine/electron/main';
 

@@ -116,6 +116,16 @@ const EXPECTED_EXPORTS = {
         types: './dist/packaged-bundle/index.d.ts',
         default: './dist/packaged-bundle/index.js',
     },
+    // The Electron bundle plan behind every consumer app's `build:app` (§4.12).
+    // Same split as `./packaged-bundle` beside it: the plan (the packaging
+    // define Invariant #27 rests on, the alias derivation, the bundle list) is
+    // engine code driven by a thin, adopter-editable driver in each app, so a
+    // scaffolded game must be able to resolve it from the published surface —
+    // otherwise every adopter's copy freezes at scaffold time.
+    './build-main': {
+        types: './dist/build-main/index.d.ts',
+        default: './dist/build-main/index.js',
+    },
 } as const;
 
 describe('@chimera-engine/electron package surface', () => {

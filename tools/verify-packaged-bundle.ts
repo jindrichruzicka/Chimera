@@ -16,11 +16,20 @@
  * not: the repo paths and the real build invocation (§3 dependency direction —
  * the engine package never imports from `tools/` or an app).
  *
- * The driver deliberately imports data, not bundling logic, from the app: the
- * outfile map `appBundleOutfiles` and the packaging env var name, both from the
- * app's own build plan — the gate tracks the plan, never restates it. The path
- * coupling fails CLOSED: outputs are deleted before each build, so a diverged
- * map finds no file and fails loudly rather than reading a stale one.
+ * The driver imports data, not bundling logic: the outfile map
+ * `appBundleOutfiles` and the packaging env var name, both from
+ * `@chimera-engine/electron/build-main` — the same plan the app's own
+ * `build:app` driver runs, so this restates nothing. The path coupling fails
+ * CLOSED: outputs are deleted before each build, so a diverged map finds no
+ * file and fails loudly rather than reading a stale one.
+ *
+ * Reaching the plan through the ENGINE rather than through
+ * `apps/tactics/electron/build-main.ts` is what keeps `tools/` off an `apps/`
+ * import (§3 dependency direction). The app driver is free to pass its own
+ * `outfiles` — a scaffolded game's gate therefore imports from `./build-main.js`,
+ * whose re-export tracks whatever that game's driver does. This one can take the
+ * engine default only because the reference app takes it too, which
+ * `tools/verify-packaged-bundle.test.ts` pins on the driver's source.
  *
  * ⚠️ SIDE EFFECT: `build:app` writes the same `apps/<game>/dist` path a dev
  * launch runs from, so a packaged build leaves the F9 Inspector dead until the
@@ -40,9 +49,8 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { appBundleOutfiles, PACKAGED_BUILD_ENV } from '@chimera-engine/electron/build-main';
 import { verifyPackagedBundle } from '@chimera-engine/electron/packaged-bundle';
-
-import { appBundleOutfiles, PACKAGED_BUILD_ENV } from '../apps/tactics/electron/build-main.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const APP_DIR = path.join(ROOT, 'apps/tactics');

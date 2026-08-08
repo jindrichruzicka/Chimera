@@ -11,15 +11,22 @@ import { buildAppBundles } from '../electron/build-main';
  *  1. Builds the engine packages, then this app's OWN Next host
  *     (apps/<game>/renderer → apps/<game>/renderer/out), which the launch fixture
  *     points CHIMERA_E2E_RENDERER_ENTRY at.
- *  2. Bundles the Electron main + host preload via the app-owned {@link buildAppBundles}
- *     — the SAME bundler `build:app` runs in production — into the `.e2e-build/` layout
- *     the launch fixture loads.
+ *  2. Bundles the Electron main + host preload via {@link buildAppBundles} — the SAME
+ *     bundle plan `build:app` runs in production, reached through this app's own
+ *     `electron/build-main.ts` driver — into the `.e2e-build/` layout the launch
+ *     fixture loads.
  *
  * `@chimera-engine/*` path aliases are resolved by `buildAppBundles` (the Electron process has
  * no tsconfig-paths support at runtime). The preload is resolved from `@chimera-engine/electron`'s
  * package `exports` (the way a consumer reaches it), mirroring the app's own
  * `electron/build-main.ts` CLI. No debug preload is bundled: `@chimera-engine/electron/preload/debug-api`
  * is not a public export.
+ *
+ * The import above goes through `../electron/build-main` rather than straight to
+ * `@chimera-engine/electron/build-main` so that this app has ONE door into the bundle
+ * plan — the same one `build:app` uses. Keep it that way if you edit this file: the
+ * driver re-exports what this setup needs, and an app that customises its build through
+ * the driver gets those customisations here for free.
  */
 export default function globalSetup(): void {
     // apps/<game>/e2e → app dir is one up, repo root two up. .e2e-build stays at the repo root.

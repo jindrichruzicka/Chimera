@@ -18,7 +18,7 @@
 // the startup guard stands between a shipped binary and the Inspector. These
 // tests make that omission fail loudly instead.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -29,24 +29,24 @@ import { buildStandaloneRootManifest } from './create-chimera-game/standalone.js
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * The marker, duplicated as a LITERAL rather than imported from
- * `apps/tactics/electron/build-main.ts` — matching the convention its sibling
- * `VERIFY_PACK_NODE_MODULES_ENV` documents ("duplicated as a literal (not
- * imported) to keep the app off the `tools/` import boundary; both sides assert
- * it in tests").
+ * The marker, duplicated as a LITERAL rather than imported from the engine
+ * bundle plan — matching the convention its sibling `VERIFY_PACK_NODE_MODULES_ENV`
+ * documents ("duplicated as a literal (not imported) to keep the gate on node
+ * builtins only; both sides assert it in tests").
  *
  * The distinction is IMPORT boundary, not file access: this suite still READS
- * both build-main copies below to assert parity, which creates no module-graph
- * edge from `tools/` into an app. The parity block asserts both copies declare
- * exactly this value, so the duplication cannot drift.
+ * the plan and both drivers below, which creates no module-graph edge from
+ * `tools/`. The block below asserts the plan declares exactly this value, so the
+ * duplication cannot drift.
  */
 const PACKAGED_BUILD_ENV = 'CHIMERA_PACKAGED_BUILD';
 
+const TEMPLATE_DIR = path.join(ROOT, 'tools/create-chimera-game/templates/blank');
 const APP_BUILD_MAIN = path.join(ROOT, 'apps/tactics/electron/build-main.ts');
-const TEMPLATE_BUILD_MAIN = path.join(
-    ROOT,
-    'tools/create-chimera-game/templates/blank/electron/build-main.ts',
-);
+const TEMPLATE_BUILD_MAIN = path.join(TEMPLATE_DIR, 'electron/build-main.ts');
+/** The engine-owned plan the two drivers above run, and its public barrel. */
+const ENGINE_BUNDLE_PLAN = path.join(ROOT, 'electron/build-main/bundle-plan.ts');
+const ENGINE_BUNDLE_PLAN_BARREL = path.join(ROOT, 'electron/build-main/index.ts');
 
 const read = (file: string): string => readFileSync(file, 'utf8');
 
@@ -82,6 +82,32 @@ const setsFlag = (command: string): boolean =>
 
 /** Marker present anywhere in the script, regardless of which segment. */
 const mentionsFlag = (command: string): boolean => command.includes(`${PACKAGED_BUILD_ENV}=1`);
+
+const parse = (file: string): ts.SourceFile =>
+    ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true);
+
+function walk(node: ts.Node, visit: (n: ts.Node) => void): void {
+    visit(node);
+    node.forEachChild((child) => walk(child, visit));
+}
+
+/**
+ * Names the engine barrel publishes — read from the barrel rather than listed
+ * here, so a symbol added to the plan is covered the day it lands. Two blocks
+ * below derive from this: the repo-wide single-declaration census, and the
+ * driver-thinness ratchet.
+ */
+function enginePlanExports(): Set<string> {
+    const names = new Set<string>();
+    walk(parse(ENGINE_BUNDLE_PLAN_BARREL), (node) => {
+        if (ts.isExportDeclaration(node) && node.exportClause !== undefined) {
+            if (ts.isNamedExports(node.exportClause)) {
+                for (const element of node.exportClause.elements) names.add(element.name.text);
+            }
+        }
+    });
+    return names;
+}
 
 describe('packaged-build marker — monorepo root scripts', () => {
     it('has packaging scripts that bundle the app (guards the filter itself)', () => {
@@ -223,11 +249,148 @@ describe('packaged-build marker — scaffolded WORKSPACE script', () => {
     });
 });
 
-describe('build-main.ts app/template parity', () => {
-    // The app's bundler is copied near-verbatim into the scaffolding template.
-    // They differ ONLY in comments (the template names no game), so the CODE
-    // must stay identical — a divergence would silently disarm the define for
-    // every scaffolded game while this repo's own suite stayed green.
+describe('the packaging define, in its single home', () => {
+    // The define moved into the engine (`@chimera-engine/electron/build-main`)
+    // so one fix reaches every consumer app INCLUDING scaffolded games, whose
+    // copy of a duplicated plan would freeze at scaffold time. These pins
+    // followed it: they are about the define, not about which file holds it.
+
+    it('declares the marker literal in the engine plan', () => {
+        // Assembled from parts so this scanner's own source never matches itself.
+        const declaration = [
+            'export',
+            'const',
+            `PACKAGED_BUILD_ENV = '${PACKAGED_BUILD_ENV}'`,
+        ].join(' ');
+        expect(read(ENGINE_BUNDLE_PLAN)).toContain(declaration);
+    });
+
+    // "Single home" is the whole justification for the move, and membership
+    // cannot establish it: `toContain` on the engine file says the plan declares
+    // its symbols, never that nothing else does. A second EXPORTED declaration
+    // outside the two drivers — an engine module, a tool, a fixture — is exactly
+    // the multi-copy drift the move exists to end, and the driver ratchet below
+    // sees only the drivers.
+    //
+    // Exported, not any: a module-local redefinition is invisible here, and
+    // deliberately so — this very file declares an unexported
+    // `PACKAGED_BUILD_ENV` literal on purpose (see its docblock above), so a
+    // walk that counted unexported declarations would red on the census itself.
+    // What the move is about is the surface other modules can reach.
+    //
+    // The census is repo-wide and derived from the barrel, so a symbol the plan
+    // gains is covered the day it lands. It reads files without importing them,
+    // which creates no module-graph edge from `tools/`.
+    it('exports every plan symbol from exactly one file repo-wide', () => {
+        const SKIP_DIRS = new Set([
+            'node_modules',
+            'dist',
+            'out',
+            '.next',
+            '.git',
+            '.e2e-build',
+            '.dev-userdata',
+            'release',
+            'coverage',
+        ]);
+
+        const sources = (dir: string): string[] =>
+            readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) return SKIP_DIRS.has(entry.name) ? [] : sources(full);
+                return /\.tsx?$/.test(entry.name) ? [full] : [];
+            });
+
+        /** Names a file declares at its top level WITH an `export` modifier. */
+        const exportedDeclarations = (file: string): Set<string> => {
+            const names = new Set<string>();
+            for (const statement of parse(file).statements) {
+                const isExported =
+                    ts.canHaveModifiers(statement) &&
+                    ts
+                        .getModifiers(statement)
+                        ?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ===
+                        true;
+                if (!isExported) continue;
+                if (ts.isVariableStatement(statement)) {
+                    for (const declaration of statement.declarationList.declarations) {
+                        if (ts.isIdentifier(declaration.name)) names.add(declaration.name.text);
+                    }
+                    continue;
+                }
+                if (
+                    (ts.isFunctionDeclaration(statement) ||
+                        ts.isClassDeclaration(statement) ||
+                        ts.isInterfaceDeclaration(statement) ||
+                        ts.isTypeAliasDeclaration(statement) ||
+                        ts.isEnumDeclaration(statement)) &&
+                    statement.name !== undefined
+                ) {
+                    names.add(statement.name.text);
+                }
+            }
+            return names;
+        };
+
+        const planSymbols = [...enginePlanExports()];
+        // Floors, STRUCTURAL rather than magnitude — the same reason the driver
+        // ratchet below names its symbols instead of counting them. A census
+        // narrowed to one package, or one that stopped descending into
+        // `templates/` (the shipped adopter copy this whole move exists to
+        // protect), clears any file count generous enough to survive a refactor.
+        // So the floor names one file from each tree the census must govern.
+        expect(planSymbols).toContain('computePackagedDefine');
+        const files = sources(ROOT).map((file) => path.relative(ROOT, file));
+        for (const governed of [
+            'electron/build-main/bundle-plan.ts',
+            'apps/tactics/electron/build-main.ts',
+            'tools/create-chimera-game/templates/blank/electron/build-main.ts',
+            'tools/verify-packaged-bundle.ts',
+        ]) {
+            expect(files, `the census no longer reaches ${governed}`).toContain(governed);
+        }
+
+        const declaredIn = new Map<string, string[]>();
+        for (const file of files) {
+            const exported = exportedDeclarations(path.join(ROOT, file));
+            for (const symbol of planSymbols) {
+                if (exported.has(symbol)) {
+                    declaredIn.set(symbol, [...(declaredIn.get(symbol) ?? []), file]);
+                }
+            }
+        }
+
+        const home = path.relative(ROOT, ENGINE_BUNDLE_PLAN);
+        const offenders = planSymbols
+            .map((symbol) => [symbol, declaredIn.get(symbol) ?? []] as const)
+            .filter(([, where]) => where.length !== 1 || where[0] !== home)
+            .map(([symbol, where]) => `${symbol}: ${where.join(', ') || '(declared nowhere)'}`);
+
+        expect(
+            offenders,
+            `every symbol the plan publishes must be EXPORTED from ${home} and nowhere else. A ` +
+                'second exported declaration is the multi-copy drift this move exists to end — ' +
+                'the weaker copy stops receiving fixes and nothing else in the repo can see it.',
+        ).toEqual([]);
+    });
+
+    it('defines BOTH IS_DEBUG_MODE reads', () => {
+        // Defining only NODE_ENV leaves `process.env.CHIMERA_DEBUG === '1' && false`,
+        // which esbuild cannot fold to a literal — so the gate would stay LIVE.
+        const source = read(ENGINE_BUNDLE_PLAN);
+        expect(source).toContain(`'process.env.NODE_ENV': '"production"'`);
+        expect(source).toContain(`'process.env.CHIMERA_DEBUG': '""'`);
+    });
+});
+
+describe('the build:app drivers stay thin', () => {
+    // Each consumer app runs a THIN driver over the engine plan: it owns the
+    // app's paths, its module resolution and esbuild, and nothing else. Two
+    // properties keep that honest, and neither is a line count — a driver that
+    // regrew a copy of `computePackagedDefine` would fork the definition with
+    // every other assertion in this file still green, which is exactly the
+    // failure the move exists to prevent.
+
     const stripComments = (source: string): string =>
         source
             .split('\n')
@@ -236,23 +399,179 @@ describe('build-main.ts app/template parity', () => {
             .filter((line) => line.length > 0)
             .join('\n');
 
-    it('both copies declare the same marker literal', () => {
-        for (const file of [APP_BUILD_MAIN, TEMPLATE_BUILD_MAIN]) {
-            expect(read(file)).toContain(`PACKAGED_BUILD_ENV = '${PACKAGED_BUILD_ENV}'`);
+    /**
+     * Every name a file DECLARES, at ANY depth — functions, classes, consts,
+     * interfaces, type aliases, enums. Re-export clauses are deliberately not
+     * declarations: forwarding a name is the driver's job, defining one is not.
+     *
+     * The walk must reach any depth, not just `sourceFile.statements`. Every
+     * executable line of a thin driver sits inside its `if (…isDirectRun())`
+     * CLI block, so a top-level-only scan cannot see the one region where a
+     * copied-back plan function would actually live — it would report a clean
+     * driver while `computePackagedDefine` was redefined three lines into the
+     * block.
+     */
+    function declaredNames(file: string): Set<string> {
+        const names = new Set<string>();
+        walk(parse(file), (node) => {
+            if (
+                ts.isFunctionDeclaration(node) ||
+                ts.isClassDeclaration(node) ||
+                ts.isInterfaceDeclaration(node) ||
+                ts.isTypeAliasDeclaration(node) ||
+                ts.isEnumDeclaration(node)
+            ) {
+                if (node.name !== undefined) names.add(node.name.text);
+            }
+            // Covers `const x = …` and `function`-valued consts alike; a
+            // destructuring pattern binds no single name worth comparing.
+            if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+                names.add(node.name.text);
+            }
+        });
+        return names;
+    }
+
+    /** Names a file re-exports (`export { … }`, with or without a `from`). */
+    function reexportedNames(file: string): Set<string> {
+        const names = new Set<string>();
+        walk(parse(file), (node) => {
+            if (
+                ts.isExportDeclaration(node) &&
+                node.exportClause !== undefined &&
+                ts.isNamedExports(node.exportClause)
+            ) {
+                for (const element of node.exportClause.elements) names.add(element.name.text);
+            }
+        });
+        return names;
+    }
+
+    /**
+     * Named bindings `file` imports from its app's build-main DRIVER — a
+     * RELATIVE specifier, never the engine subpath.
+     *
+     * The distinction is what gives the floor below anything to detect. Matching
+     * the engine subpath too would make "imports from the driver" unfalsifiable:
+     * a consumer repointed straight at the engine would still be counted, and
+     * the pairing would go on reporting a surface nobody takes.
+     */
+    function namesImportedFromDriver(file: string): string[] {
+        const names: string[] = [];
+        walk(parse(file), (node) => {
+            if (
+                !ts.isImportDeclaration(node) ||
+                !ts.isStringLiteralLike(node.moduleSpecifier) ||
+                !node.moduleSpecifier.text.startsWith('.') ||
+                !/\/build-main(\.js)?$/.test(node.moduleSpecifier.text)
+            ) {
+                return;
+            }
+            const bindings = node.importClause?.namedBindings;
+            if (bindings !== undefined && ts.isNamedImports(bindings)) {
+                for (const element of bindings.elements) {
+                    names.push((element.propertyName ?? element.name).text);
+                }
+            }
+        });
+        return names;
+    }
+
+    it.each([
+        ['app', APP_BUILD_MAIN],
+        ['template', TEMPLATE_BUILD_MAIN],
+    ])('the %s driver declares no plan symbol of its own', (_label, file) => {
+        const plan = enginePlanExports();
+        const declared = declaredNames(file);
+
+        // Floors: a barrel that parsed to nothing, or a driver that declared
+        // nothing at all, would make the intersection below empty for the wrong
+        // reason. The driver legitimately declares `isDirectRun`.
+        //
+        // NAMED, not counted. A `size > N` floor cancels against the very defect
+        // this derivation is exposed to: names dropped from the barrel stop being
+        // guarded here, and a count generous enough to survive a refactor is
+        // generous enough to hide several. These are the symbols a driver copying
+        // the plan back would copy — if one of them is no longer in the set, this
+        // check is not the check its name claims.
+        for (const symbol of [
+            'computePackagedDefine',
+            'isPackagedBuild',
+            'planBundles',
+            'buildAppBundles',
+            'esbuildBundleOptions',
+            'computeEsbuildAlias',
+            'appBundleOutfiles',
+        ]) {
+            expect(plan, `the engine barrel no longer exports ${symbol}`).toContain(symbol);
         }
+        expect(declared.size, 'no declarations parsed out of the driver').toBeGreaterThan(0);
+
+        const forked = [...declared].filter((name) => plan.has(name));
+        expect(
+            forked,
+            `${path.basename(file)} declares plan symbols the engine already owns. A driver that ` +
+                'regrows the plan forks the definition silently — the copy stops receiving engine ' +
+                'fixes, and in a scaffolded game nothing here can ever see it again.',
+        ).toEqual([]);
     });
 
-    it('both copies define BOTH IS_DEBUG_MODE reads', () => {
-        // Defining only NODE_ENV leaves `process.env.CHIMERA_DEBUG === '1' && false`,
-        // which esbuild cannot fold to a literal — so the gate would stay LIVE.
-        for (const file of [APP_BUILD_MAIN, TEMPLATE_BUILD_MAIN]) {
-            const source = read(file);
-            expect(source).toContain(`'process.env.NODE_ENV': '"production"'`);
-            expect(source).toContain(`'process.env.CHIMERA_DEBUG': '""'`);
-        }
-    });
+    // These consumers take the plan through their app's driver, which makes the
+    // driver's re-export list load-bearing. Derived from their own import lists
+    // rather than restated here, so it cannot drift from what they need.
+    // (Whether any of them can LOAD before an engine dist exists is a separate
+    // property, measured by tools/e2e-bootstrap-resolution.test.ts.)
+    const CONSUMERS: readonly [label: string, driver: string, consumer: string][] = [
+        [
+            'app e2e global-setup',
+            APP_BUILD_MAIN,
+            path.join(ROOT, 'apps/tactics/e2e/global-setup.ts'),
+        ],
+        [
+            'app packaged-bundle-content test',
+            APP_BUILD_MAIN,
+            path.join(ROOT, 'apps/tactics/electron/__tests__/packaged-bundle-content.test.ts'),
+        ],
+        [
+            'template e2e global-setup',
+            TEMPLATE_BUILD_MAIN,
+            path.join(TEMPLATE_DIR, 'e2e/global-setup.ts'),
+        ],
+        [
+            'template verify:packaged-bundle gate',
+            TEMPLATE_BUILD_MAIN,
+            path.join(TEMPLATE_DIR, 'electron/verify-packaged-bundle.ts'),
+        ],
+    ];
 
-    it('the two files are code-identical once comments are stripped', () => {
+    it.each(CONSUMERS)(
+        'the driver re-exports everything the %s imports from it',
+        (_label, driver, consumer) => {
+            const required = namesImportedFromDriver(consumer);
+            // Floor: a consumer that stopped importing from the driver would make
+            // this pass while proving nothing about the driver's surface.
+            expect(
+                required.length,
+                `${path.relative(ROOT, consumer)} imports nothing from its build-main driver — ` +
+                    'either it was repointed straight at the engine subpath, which routes around ' +
+                    "the app's own driver, or this pairing is stale",
+            ).toBeGreaterThan(0);
+
+            const reexported = reexportedNames(driver);
+            for (const name of required) {
+                expect(
+                    [...reexported],
+                    `${path.relative(ROOT, driver)} must re-export ${name} — ` +
+                        `${path.relative(ROOT, consumer)} imports it from there`,
+                ).toContain(name);
+            }
+        },
+    );
+
+    it('the two drivers are code-identical once comments are stripped', () => {
+        // They differ only in prose (the template names no game and carries no
+        // engine doc references). Divergence in the CODE would mean a scaffolded
+        // game runs a bundler this repo never exercises.
         expect(stripComments(read(TEMPLATE_BUILD_MAIN))).toBe(stripComments(read(APP_BUILD_MAIN)));
     });
 });

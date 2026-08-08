@@ -62,6 +62,10 @@
         "./packaged-bundle": {
             "types": "./dist/packaged-bundle/index.d.ts",
             "default": "./dist/packaged-bundle/index.js"
+        },
+        "./build-main": {
+            "types": "./dist/build-main/index.d.ts",
+            "default": "./dist/build-main/index.js"
         }
     },
     "files": [

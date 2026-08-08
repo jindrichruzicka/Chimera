@@ -27,10 +27,12 @@
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 import { describe, it, expect } from 'vitest';
 
 const workspaceRoot = path.resolve(import.meta.dirname, '..');
 const driverPath = path.join(workspaceRoot, 'tools/verify-packaged-bundle.ts');
+const appBuildMainPath = path.join(workspaceRoot, 'apps/tactics/electron/build-main.ts');
 const engineMarkersPath = 'electron/packaged-bundle/debug-bundle-markers.ts';
 
 /** Build-output and dependency dirs — generated copies of the source are expected there. */
@@ -90,17 +92,93 @@ describe('verify:packaged-bundle thin driver (Invariant #27, single-definition c
         }
     });
 
-    it('points the helper at the app bundle plan and the real packaging invocation', () => {
+    it('points the helper at the engine bundle plan and the real packaging invocation', () => {
         const source = readFileSync(driverPath, 'utf8');
         // The gate tracks the plan, never restates it: the outfile map comes from
-        // the app's own build-main, and the build is the same `--filter <app>
-        // build:app` segment the packaging scripts run, keyed by the same env var.
-        expect(source).toContain("from '../apps/tactics/electron/build-main.js'");
+        // the engine plan the app's own build:app driver runs, and the build is
+        // the same `--filter <app> build:app` segment the packaging scripts run,
+        // keyed by the same env var.
+        expect(source).toContain("from '@chimera-engine/electron/build-main'");
         expect(source).toContain('appBundleOutfiles(');
         expect(source).toContain("'build:app'");
-        // The packaging env var arrives by IMPORT from the app's build plan, not
-        // as a restated literal that could drift from what build-main reads.
+        // The packaging env var arrives by IMPORT from the plan, not as a
+        // restated literal that could drift from what the bundler reads.
         expect(source).toContain('PACKAGED_BUILD_ENV');
+    });
+
+    it('imports nothing from apps/ (§3 dependency direction)', () => {
+        // Reading the plan through the engine subpath rather than through
+        // `apps/tactics/electron/build-main.js` is what keeps `tools/` off an
+        // app import — the same rule its sibling `tools/verify-pack.ts` holds
+        // itself to.
+        const source = readFileSync(driverPath, 'utf8');
+        expect(source).not.toMatch(/from '[^']*\bapps\//u);
+    });
+
+    it("takes the engine default only because the app's driver does too", () => {
+        // The cost of the import above: this gate no longer reads the APP's
+        // outfile map, so it is right only while the app driver passes none of
+        // its own. A scaffolded game's gate has no such luxury and imports from
+        // `./build-main.js`, whose re-export tracks that game's driver.
+        //
+        // AST, not a substring: the property could arrive through a spread, and
+        // an opaque spread is exactly the shape that would hide it — so the walk
+        // reports one rather than quietly stepping over it.
+        const source = readFileSync(appBuildMainPath, 'utf8');
+        const parsed = ts.createSourceFile(appBuildMainPath, source, ts.ScriptTarget.Latest, true);
+
+        let call: ts.CallExpression | undefined;
+        const findCall = (node: ts.Node): void => {
+            if (
+                ts.isCallExpression(node) &&
+                ts.isIdentifier(node.expression) &&
+                node.expression.text === 'buildAppBundles'
+            ) {
+                call = node;
+            }
+            ts.forEachChild(node, findCall);
+        };
+        findCall(parsed);
+        expect(call, 'no buildAppBundles(…) call found in the app driver').toBeDefined();
+
+        const argument = call?.arguments[0];
+        expect(argument !== undefined && ts.isObjectLiteralExpression(argument)).toBe(true);
+
+        const assigned: string[] = [];
+        const opaqueSpreads: string[] = [];
+        const collect = (node: ts.Node): void => {
+            if (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) {
+                assigned.push(node.name.getText());
+            }
+            if (ts.isSpreadAssignment(node)) {
+                // A spread is auditable only when its members are inline object
+                // literals — which this same walk then descends into. Anything
+                // else (a variable, a call) could carry any key at all.
+                let spreadsInlineObject = false;
+                const findObject = (inner: ts.Node): void => {
+                    if (ts.isObjectLiteralExpression(inner)) spreadsInlineObject = true;
+                    ts.forEachChild(inner, findObject);
+                };
+                findObject(node.expression);
+                if (!spreadsInlineObject) opaqueSpreads.push(node.expression.getText());
+            }
+            ts.forEachChild(node, collect);
+        };
+        if (argument !== undefined) collect(argument);
+
+        expect(opaqueSpreads, 'an opaque spread could smuggle any option past this check').toEqual(
+            [],
+        );
+        // Floor: a collector that found nothing would pass while checking nothing.
+        expect(assigned).toContain('build');
+        for (const forbidden of ['outfiles', 'overrides']) {
+            expect(
+                assigned,
+                `the app driver passes "${forbidden}" — its plan no longer matches the engine ` +
+                    'default this gate reads, so the gate is now checking the wrong files. Import ' +
+                    "the app's own map here, or drop the override.",
+            ).not.toContain(forbidden);
+        }
     });
 
     it('remains reachable from the pinned root script', () => {

@@ -1,4 +1,9 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
+import { normalizeGameName } from './normalize';
+import { substituteTokens } from './tokens';
 import {
     buildStandaloneGitignore,
     buildStandaloneLauncherScript,
@@ -827,33 +832,44 @@ describe('rewriteAppTsconfigBuildForStandalone', () => {
 });
 
 describe('rewriteE2eTsconfigForStandalone', () => {
-    // Mirrors the blank template's e2e/tsconfig.json: a comment block, baseUrl, and the
-    // monorepo-relative engine `paths` plus the standalone-valid game path (last, no comma).
-    const raw = `{
-    // Playwright-runner resolution shim ONLY.
-    "extends": "../../../tsconfig.json",
-    "compilerOptions": {
-        "baseUrl": "../../..",
-        "paths": {
-            "@chimera-engine/simulation/*": ["simulation/dist/*"],
-            "@chimera-engine/ai/*": ["ai/dist/*"],
-            "@chimera-engine/networking": ["networking/dist/index.d.ts"],
-            "@chimera-engine/networking/*": ["networking/dist/*"],
-            "@chimera-engine/renderer/*": ["renderer/dist/*"],
-            "@chimera-engine/electron/*": ["electron/dist/*"],
-            "@chimera-engine/verify-scaffold-probe/*": ["apps/verify-scaffold-probe/*"]
-        }
-    }
-}
-`;
+    // Driven by the REAL template file, substituted, rather than by a hand-written
+    // mirror of it. A mirror grades the mirror: it went on passing when the
+    // template grew an engine mapping whose target carries no `dist`, which is
+    // precisely the entry the old `dist`-keyed rule left behind in an adopter's
+    // project. Reading the shipped file means a mapping added there is covered
+    // the day it lands.
+    const raw = substituteTokens(
+        readFileSync(
+            path.resolve(import.meta.dirname, 'templates/blank/e2e/tsconfig.json'),
+            'utf8',
+        ),
+        normalizeGameName('verify-scaffold-probe'),
+    );
 
-    it('drops the monorepo engine paths (the dist mappings)', () => {
-        const out = rewriteE2eTsconfigForStandalone(raw);
-        for (const pkg of ['simulation', 'ai', 'networking', 'renderer', 'electron']) {
-            expect(out).not.toContain(`${pkg}/dist`);
-        }
-        // No monorepo `*/dist/*` path target survives.
-        expect(out).not.toContain('dist/*');
+    /** The `paths` keys surviving the rewrite, read from the result as JSONC. */
+    const survivingKeys = (output: string): string[] => {
+        const stripped = output.replace(/^\s*\/\/.*$/gm, '');
+        const parsed = JSON.parse(stripped) as {
+            compilerOptions?: { paths?: Record<string, string[]> };
+        };
+        return Object.keys(parsed.compilerOptions?.paths ?? {});
+    };
+
+    it('is rewriting a real fixture that carries engine and game mappings (guards the input)', () => {
+        // A template whose paths were emptied would make every case below pass
+        // by describing nothing.
+        const keys = survivingKeys(raw);
+        expect(keys.length).toBeGreaterThan(3);
+        expect(keys).toContain('@chimera-engine/verify-scaffold-probe/*');
+    });
+
+    it('drops EVERY monorepo engine path, including targets that carry no dist', () => {
+        const surviving = survivingKeys(rewriteE2eTsconfigForStandalone(raw));
+        // The whole engine set goes: standalone, those repo-root directories do
+        // not exist, and the runner must fall through to node_modules.
+        expect(
+            surviving.filter((key) => !key.startsWith('@chimera-engine/verify-scaffold-probe')),
+        ).toEqual([]);
     });
 
     it('keeps the standalone-valid game path + baseUrl + comments', () => {
@@ -872,6 +888,36 @@ describe('rewriteE2eTsconfigForStandalone', () => {
         const once = rewriteE2eTsconfigForStandalone(raw);
         const twice = rewriteE2eTsconfigForStandalone(once);
         expect(twice).toBe(once);
+    });
+
+    it('carries no comment INSIDE the paths block, which the rewrite would orphan', () => {
+        // The rewrite deletes mapping LINES and keeps every comment. Prose sitting
+        // between two mappings therefore outlives the mapping it explains, and
+        // ships into an adopter's project — the copy most of them read, since
+        // standalone is the CLI default — describing an entry that is not there.
+        // It has happened once already, to the `build-main` entry.
+        //
+        // Structural, not a search for prose that mentions a removed key: what a
+        // comment is ABOUT is not decidable, and the version that shipped never
+        // named its key at all ("this ONE subpath"). The enforceable rule is the
+        // region — per-entry prose belongs in the header, above `extends`, which
+        // the rewrite does not touch.
+        const pathsBlock = /"paths"\s*:\s*\{([\s\S]*?)\n {8}\}/u.exec(raw)?.[1];
+        expect(pathsBlock, 'could not locate the paths block').toBeDefined();
+        // Floor: a regex that matched an empty block would pass while reading nothing.
+        expect(
+            (pathsBlock ?? '').split('\n').filter((l) => l.includes('@chimera-engine/')).length,
+        ).toBeGreaterThan(3);
+
+        const comments = (pathsBlock ?? '')
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.startsWith('//'));
+        expect(
+            comments,
+            'a comment inside `paths` is orphaned the moment the standalone rewrite strips the ' +
+                'engine mappings around it — move it into the header block above `extends`',
+        ).toEqual([]);
     });
 });
 

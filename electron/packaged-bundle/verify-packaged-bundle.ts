@@ -46,6 +46,7 @@
 
 import path from 'node:path';
 
+import type { BundleOutfiles } from '../build-main/bundle-plan.js';
 import {
     ALL_DEBUG_GRAPH_MARKERS,
     DEBUG_BRIDGE_GLOBAL,
@@ -55,17 +56,17 @@ import {
 } from './debug-bundle-markers.js';
 
 /**
- * The consumer app's bundle output paths — the same shape its `build-main.ts`
- * derives its plan from (`appBundleOutfiles`). Drivers pass the app's OWN map
- * so the gate tracks the plan rather than restating it; the path coupling fails
- * CLOSED, because outputs are deleted before each build and a diverged map
- * finds no file rather than reading a stale one.
+ * The consumer app's bundle output paths — literally the map the bundle plan
+ * derives (`appBundleOutfiles`), aliased rather than re-declared: a structurally
+ * identical copy is not a contract, it is a second declaration that drifts the
+ * day one side gains a field. The name is kept because it is the published one.
+ *
+ * Drivers pass the app's OWN map so the gate tracks the plan rather than
+ * restating it; the path coupling fails CLOSED, because outputs are deleted
+ * before each build and a diverged map finds no file rather than reading a
+ * stale one.
  */
-export interface PackagedBundleOutfiles {
-    readonly main: string;
-    readonly preload: string;
-    readonly debugPreload: string;
-}
+export type PackagedBundleOutfiles = BundleOutfiles;
 
 export interface Failure {
     readonly bundle: string;
@@ -194,10 +195,36 @@ export function devRejectionGaps(dev: {
 
 // ── electron-builder `files:` allowlist ─────────────────────────────────────
 
+/**
+ * The app's full planned FILE SET: every path its `build:app` emits, and the dir
+ * they are relative to.
+ *
+ * `extraShipped` is REQUIRED here, and that is the point — but the guarantee is
+ * INTERNAL, so read it precisely. It stops one step of the runner from being
+ * handed a re-spelled `{ appDir, outfiles }` while the others get the full set:
+ * that subset does not compile at any call site below, present or future, where
+ * optional it would be silent in the dangerous direction (an extra bundle that
+ * goes unscanned and is then rejected from the app's own allowlist).
+ *
+ * A DRIVER still omits it freely — {@link VerifyPackagedBundleOptions} keeps it
+ * optional, both shipped drivers pass nothing, and `verifyPackagedBundle`
+ * normalizes to `[]` at exactly one line. Nothing here can tell an app that
+ * forgot to declare its extra bundle from an app that has none; that is what the
+ * `files-unexpected` check is for, and it fails closed.
+ */
 export interface ElectronBuilderCheckOptions {
     /** Absolute app dir the outfile paths are relative to. */
     readonly appDir: string;
     readonly outfiles: PackagedBundleOutfiles;
+    /**
+     * Absolute outfiles of any EXTRA bundles the app's plan emits and ships
+     * (`AppBundlePlanOverrides.extraBundles`). Declared, they are treated exactly
+     * like main/preload: required in the `files:` allowlist, and scanned for the
+     * debug layer. Empty, an unrecognised `dist/` entry is rejected as
+     * unexpected — the right default, since one no plan accounts for is
+     * indistinguishable from a widened allowlist.
+     */
+    readonly extraShipped: readonly string[];
 }
 
 /** An outfile path as it appears in the app's `files:` allowlist (POSIX, app-relative). */
@@ -205,9 +232,16 @@ function distEntry(options: ElectronBuilderCheckOptions, file: string): string {
     return path.relative(options.appDir, file).split(path.sep).join('/');
 }
 
+/** Every allowlist entry the app's plan says a distributable carries. */
+function shippedDistEntries(options: ElectronBuilderCheckOptions): string[] {
+    return [options.outfiles.main, options.outfiles.preload, ...options.extraShipped].map((file) =>
+        distEntry(options, file),
+    );
+}
+
 /**
  * The allowlist predicates: the app's electron-builder `files:` list must name
- * the two shipped bundles individually and nothing else under `dist/`.
+ * every bundle the plan says ships, individually, and nothing else under `dist/`.
  *
  * "Not built" is the stronger guarantee for the debug preload — a packaged
  * `build:app` emits none — but the allowlist is the second, adopter-editable
@@ -221,10 +255,7 @@ export function electronBuilderDistFailures(
     options: ElectronBuilderCheckOptions,
 ): Failure[] {
     const failures: Failure[] = [];
-    const shipped = [
-        distEntry(options, options.outfiles.main),
-        distEntry(options, options.outfiles.preload),
-    ];
+    const shipped = shippedDistEntries(options);
     const debugPreload = distEntry(options, options.outfiles.debugPreload);
 
     // Any wildcard under dist/ re-opens the allowlist to unplanned artifacts —
@@ -275,7 +306,7 @@ export function electronBuilderDistFailures(
 /**
  * The allowlist predicates' own negative control, run inline on every gate run
  * (mirroring {@link devRejectionGaps} for the bundle predicates): a synthetic
- * WIDENED config — `dist/**` plus the debug preload by name, the two shipped
+ * WIDENED config — `dist/**` plus the debug preload by name, the shipped
  * entries dropped — must be rejected by every allowlist check, per check. A
  * predicate rewritten to return nothing fails the gate on the same run.
  *
@@ -289,18 +320,20 @@ export function electronBuilderControlGaps(
         checkOptions: ElectronBuilderCheckOptions,
     ) => Failure[] = electronBuilderDistFailures,
 ): string[] {
-    const widened = [
-        'files:',
-        '  - dist/**',
-        `  - ${distEntry(options, options.outfiles.debugPreload)}`,
-        '',
-    ].join('\n');
+    // The two lines the widened config lists. Neither is part of the plan, so
+    // each must also come back as `files-unexpected` — that family is a quarter
+    // of the predicate set and was previously outside the control, which made
+    // "rejected by every allowlist check" one check short of true.
+    const unplanned = ['dist/**', distEntry(options, options.outfiles.debugPreload)];
+    const widened = ['files:', ...unplanned.map((entry) => `  - ${entry}`), ''].join('\n');
     const fired = new Set(check(widened, options).map((f) => f.check));
     const required = [
         'files-dist-glob',
         'files-ships-debug-preload',
-        `files-missing:${distEntry(options, options.outfiles.main)}`,
-        `files-missing:${distEntry(options, options.outfiles.preload)}`,
+        // Every entry the plan says ships — including any declared extra, or the
+        // hatch would widen the allowlist check without widening its control.
+        ...shippedDistEntries(options).map((entry) => `files-missing:${entry}`),
+        ...unplanned.map((entry) => `files-unexpected:${entry}`),
     ];
     return required
         .filter((id) => !fired.has(id))
@@ -332,20 +365,28 @@ export interface VerifyPackagedBundleOptions {
     readonly appDir: string;
     /** The app's own bundle plan output map — see {@link PackagedBundleOutfiles}. */
     readonly outfiles: PackagedBundleOutfiles;
+    /** @see ElectronBuilderCheckOptions.extraShipped */
+    readonly extraShipped?: readonly string[];
     /** Override for the packaging config path; default `<appDir>/electron-builder.yml`. */
     readonly electronBuilderConfig?: string;
 }
 
 /**
- * Typed enumeration of the plan's outfiles. Keying off the real object keeps a
- * field added to the outfile map flowing through here automatically.
+ * Typed enumeration of the plan's outfiles, plus any declared extra bundle.
+ * Keying off the real object keeps a field added to the outfile map flowing
+ * through here automatically; the extras arrive by path, so they are labelled
+ * by their basename.
  */
 function outfileEntries(
-    outfiles: PackagedBundleOutfiles,
-): readonly (readonly [keyof PackagedBundleOutfiles, string])[] {
-    return (Object.keys(outfiles) as readonly (keyof PackagedBundleOutfiles)[]).map(
-        (label) => [label, outfiles[label]] as const,
-    );
+    planned: ElectronBuilderCheckOptions,
+): readonly (readonly [string, string])[] {
+    const { outfiles } = planned;
+    return [
+        ...(Object.keys(outfiles) as readonly (keyof PackagedBundleOutfiles)[]).map(
+            (label) => [label, outfiles[label]] as const,
+        ),
+        ...planned.extraShipped.map((file) => [path.basename(file), file] as const),
+    ];
 }
 
 /**
@@ -357,8 +398,11 @@ function outfileEntries(
  * checks above keep it that way. It is only this gate's reasoning that
  * staleness corrupts.)
  */
-function clearBundleOutputs(outfiles: PackagedBundleOutfiles, io: VerifyPackagedBundleIo): void {
-    for (const [, file] of outfileEntries(outfiles)) {
+function clearBundleOutputs(
+    planned: ElectronBuilderCheckOptions,
+    io: VerifyPackagedBundleIo,
+): void {
+    for (const [, file] of outfileEntries(planned)) {
         io.removeFile(file);
         io.removeFile(`${file}.map`);
     }
@@ -366,15 +410,21 @@ function clearBundleOutputs(outfiles: PackagedBundleOutfiles, io: VerifyPackaged
 
 /** The packaged assertions, over every bundle the plan says a build emits. */
 function checkPackagedOutput(
-    options: VerifyPackagedBundleOptions,
+    planned: ElectronBuilderCheckOptions,
+    electronBuilderConfig: string | undefined,
     io: VerifyPackagedBundleIo,
 ): Failure[] {
     const failures: Failure[] = [];
 
     // Every planned outfile except the debug preload ships, so every one is
     // scanned — a bundle added to the plan later is covered here automatically.
-    for (const [label, file] of outfileEntries(options.outfiles)) {
-        if (label === 'debugPreload') {
+    //
+    // The debug preload is selected by its PATH, not by its label. Labels stopped
+    // being a closed set when apps gained extra bundles, and a name match flips a
+    // shipped bundle from SCANNED to asserted-absent — the direction that stops
+    // the gate reading bytes at all.
+    for (const [label, file] of outfileEntries(planned)) {
+        if (file === planned.outfiles.debugPreload) {
             if (io.fileExists(file)) {
                 failures.push({
                     bundle: label,
@@ -395,16 +445,15 @@ function checkPackagedOutput(
         failures.push(...checkBundleText(label, io.readFile(file)));
     }
 
-    if (io.fileExists(options.outfiles.main)) {
-        const folded = foldedGateFailure(io.readFile(options.outfiles.main));
+    if (io.fileExists(planned.outfiles.main)) {
+        const folded = foldedGateFailure(io.readFile(planned.outfiles.main));
         if (folded !== undefined) failures.push(folded);
     }
 
     // The adopter-editable second layer: the packaging config's `files:`
     // allowlist. Fails closed on a missing config — a gate that silently skips
     // this check on a renamed file is not guarding it.
-    const configPath =
-        options.electronBuilderConfig ?? path.join(options.appDir, 'electron-builder.yml');
+    const configPath = electronBuilderConfig ?? path.join(planned.appDir, 'electron-builder.yml');
     if (!io.fileExists(configPath)) {
         failures.push({
             bundle: 'electron-builder.yml',
@@ -412,17 +461,18 @@ function checkPackagedOutput(
             problem: `no packaging config found at ${configPath}`,
         });
     } else {
-        failures.push(
-            ...electronBuilderDistFailures(io.readFile(configPath), {
-                appDir: options.appDir,
-                outfiles: options.outfiles,
-            }),
-        );
+        failures.push(...electronBuilderDistFailures(io.readFile(configPath), planned));
     }
     return failures;
 }
 
-/** Read the restored dev outputs and run the gap analysis over them. */
+/**
+ * Read the restored dev outputs and run the gap analysis over them.
+ *
+ * Scoped to the three planned outfiles on purpose: the control's argument is
+ * that a DEV build carries the whole debug layer, which is a claim about the
+ * engine's own main bundle and Inspector preload.
+ */
 function checkDevControl(outfiles: PackagedBundleOutfiles, io: VerifyPackagedBundleIo): string[] {
     if (!io.fileExists(outfiles.main)) {
         return ['the dev restore build emitted no main bundle'];
@@ -456,12 +506,19 @@ export function verifyPackagedBundle(
     io: VerifyPackagedBundleIo,
 ): boolean {
     let failed = false;
+    // Normalized ONCE, here, and threaded from now on: a re-spelled subset at any
+    // of the call sites below does not compile.
+    const planned: ElectronBuilderCheckOptions = {
+        appDir: options.appDir,
+        outfiles: options.outfiles,
+        extraShipped: options.extraShipped ?? [],
+    };
     try {
         io.log('building the app exactly as the packaging scripts do…');
-        clearBundleOutputs(options.outfiles, io);
+        clearBundleOutputs(planned, io);
         io.buildApp(true);
 
-        const failures = checkPackagedOutput(options, io);
+        const failures = checkPackagedOutput(planned, options.electronBuilderConfig, io);
         if (failures.length > 0) {
             io.error('the packaged bundles still carry the debug layer:');
             report(failures, io);
@@ -478,12 +535,12 @@ export function verifyPackagedBundle(
         // the F9 Inspector with no error message — and use the restored build as
         // the negative control while it is here.
         io.log('restoring the dev bundle (doubles as the negative control)…');
-        clearBundleOutputs(options.outfiles, io);
+        clearBundleOutputs(planned, io);
         io.buildApp(false);
 
         const gaps = [
-            ...checkDevControl(options.outfiles, io),
-            ...electronBuilderControlGaps({ appDir: options.appDir, outfiles: options.outfiles }),
+            ...checkDevControl(planned.outfiles, io),
+            ...electronBuilderControlGaps(planned),
         ];
         if (gaps.length > 0) {
             io.error('NEGATIVE CONTROL FAILED — a known-bad input was not rejected:');

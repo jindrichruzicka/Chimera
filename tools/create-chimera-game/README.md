@@ -120,7 +120,7 @@ apps/<kebab>/
 ├── scene/                 # EMPTY (.gitkeep) — in-Canvas react-three-fiber primitives
 │                          #   (see the note below on what may be imported here)
 ├── renderer/              # per-app Next.js app + register.ts registration seam
-├── electron/              # Electron main composition root + build-main.ts bundler
+├── electron/              # Electron main composition root + build-main.ts, your bundler driver
 ├── dev/                   # starter harness fixtures — profiles/ and scenarios/
 ├── e2e/                   # Playwright boot-smoke suite
 ├── shell/                 # renderer shell declarations — fonts.ts gameFonts stub (empty until fetched)

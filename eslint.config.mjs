@@ -708,9 +708,13 @@ export default tseslint.config(
     // different logging story, and extending the ban there is its own change.
     // `apps/*/electron/build-main.ts` and the app-level verify scripts are the
     // genuine exclusion: Node build tooling that never runs in the app, whose
-    // console output IS its interface. Sinks that write to stdout/stderr
-    // (`createStdoutSink`, `createStderrSink`) are transport, not `console.*`,
-    // and are unaffected.
+    // console output IS its interface. That stays true after the bundle PLAN
+    // moved into `electron/build-main/` — the plan takes an injected `log`
+    // callback and calls `console.*` nowhere, so the one `[build:app]`
+    // `console.log` is still in the app-side driver this zone excludes, and the
+    // engine module needs no exemption either: this zone globs `electron/main/**`,
+    // never `electron/build-main/**`. Sinks that write to stdout/stderr (`createStdoutSink`,
+    // `createStderrSink`) are transport, not `console.*`, and are unaffected.
     {
         files: ['electron/main/**/*.{ts,tsx}', 'apps/*/electron/main.ts'],
         rules: {

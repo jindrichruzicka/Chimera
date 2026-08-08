@@ -9,27 +9,33 @@ import {
     computeNodePaths,
     computeEsbuildAlias,
     appBundleOutfiles,
+    esbuildBundleOptions,
     planBundles,
     buildAppBundles,
+    createEsbuildBuild,
     resolveDevDebugPreloadEntry,
     resolveInstalledDebugPreloadEntry,
     type BuildFn,
     type BundleSpec,
-} from './build-main.js';
+    type EsbuildBundleOptions,
+} from './bundle-plan.js';
 
 /**
- * apps/tactics/electron/build-main.test.ts
+ * electron/build-main/bundle-plan.test.ts
  *
- * Unit guard for the app-owned Electron bundler (Seam 1, F65). The bundler is
- * self-contained inside the app (no `tools/` import) so it travels with the
- * scaffolding template. These tests exercise the PURE config derivation —
- * alias map, output paths, and the bundle plan — with esbuild + disk injected,
- * so the suite spawns nothing and touches no real files.
+ * Unit guard for the engine-owned Electron bundle plan (§4.12, Invariant #27).
+ * These tests exercise the PURE derivation — the packaging define, alias map,
+ * output paths, and the bundle plan — with esbuild + disk injected by the
+ * caller, so the suite spawns nothing and touches no real files.
+ *
+ * The fixtures name no game: the plan reads the app's `@chimera-engine/<game>`
+ * alias key out of the app's own `package.json`, and the engine package must
+ * work identically for the monorepo reference app and every scaffolded game.
  */
 
 const ROOT = '/repo';
-const APP_DIR = path.join(ROOT, 'apps/tactics');
-const GAME_PKG = '@chimera-engine/tactics';
+const APP_DIR = path.join(ROOT, 'apps/example');
+const GAME_PKG = '@chimera-engine/example';
 
 describe('computeNodePaths', () => {
     it('is empty when the verify:pack env var is unset (everyday workspace resolution)', () => {
@@ -80,6 +86,39 @@ describe('computeEsbuildAlias', () => {
         // not a packed engine artifact).
         expect(alias[GAME_PKG]).toBe(APP_DIR);
     });
+
+    // ── The adopter alias escape hatch ───────────────────────────────────────
+    it('merges an alias override OVER the derived map', () => {
+        const alias = computeEsbuildAlias(
+            {},
+            { ...opts, aliasOverrides: { 'some-cjs-only-dep': '/repo/shims/dep.ts' } },
+        );
+        expect(alias['some-cjs-only-dep']).toBe('/repo/shims/dep.ts');
+        // …without disturbing what the plan derived.
+        expect(alias[GAME_PKG]).toBe(APP_DIR);
+        expect(alias['@chimera-engine/electron/main']).toBe(
+            path.join(ROOT, 'electron/main/index.ts'),
+        );
+    });
+
+    it('lets an override replace the host main alias (the point of the hatch)', () => {
+        const alias = computeEsbuildAlias(
+            {},
+            { ...opts, aliasOverrides: { '@chimera-engine/electron/main': '/elsewhere/main.ts' } },
+        );
+        expect(alias['@chimera-engine/electron/main']).toBe('/elsewhere/main.ts');
+    });
+
+    it('RESTORES the game-package key an override tried to take over', () => {
+        // The game alias is what makes the app's own source reachable from its
+        // composition root. Pointed anywhere else, `build:app` silently bundles a
+        // different game — so this key is the one the hatch may not have.
+        const alias = computeEsbuildAlias(
+            {},
+            { ...opts, aliasOverrides: { [GAME_PKG]: '/somewhere/else' } },
+        );
+        expect(alias[GAME_PKG]).toBe(APP_DIR);
+    });
 });
 
 describe('appBundleOutfiles', () => {
@@ -91,6 +130,95 @@ describe('appBundleOutfiles', () => {
     });
 });
 
+describe('esbuildBundleOptions', () => {
+    const spec: BundleSpec = {
+        label: 'main',
+        entry: path.join(APP_DIR, 'electron/main.ts'),
+        outfile: path.join(APP_DIR, 'dist/electron/main.js'),
+        external: ['electron', 'node:*'],
+        alias: { [GAME_PKG]: APP_DIR },
+        nodePaths: [],
+        define: {},
+    };
+
+    it('emits EXTERNAL source maps, never inline', () => {
+        // `sourcemap: true` is load-bearing in a way it does not look: switched to
+        // `'inline'` it embeds the original TypeScript — debug sources included —
+        // inside the shipped `main.js`, where the external `.map` files never
+        // travel, and base64 hides every marker the packaged-bundle gate scans for.
+        expect(esbuildBundleOptions(spec).sourcemap).toBe(true);
+    });
+
+    it('carries the spec through verbatim, so nothing is derived twice', () => {
+        const options = esbuildBundleOptions(spec);
+        expect(options.entryPoints).toEqual([spec.entry]);
+        expect(options.outfile).toBe(spec.outfile);
+        expect(options.external).toEqual([...spec.external]);
+        expect(options.alias).toEqual({ ...spec.alias });
+        expect(options.nodePaths).toEqual([...spec.nodePaths]);
+        expect(options.define).toEqual({ ...spec.define });
+    });
+
+    it('threads the packaging define into the options esbuild actually receives', () => {
+        // The sole link between computePackagedDefine and the emitted bytes.
+        const define = { 'process.env.NODE_ENV': '"production"' };
+        expect(esbuildBundleOptions({ ...spec, define }).define).toEqual(define);
+    });
+});
+
+describe('createEsbuildBuild', () => {
+    // The factory every driver's CLI reaches esbuild through, and the reason the
+    // real-bundle assertions can EXECUTE the shipped invocation instead of
+    // reading it. Both injected dependencies are covered: `runBuild` is the whole
+    // point, and `ensureDir` is the one that fails silently — esbuild creates no
+    // parent directory, so dropping it turns `build:app` into an ENOENT the unit
+    // surface never sees, because every other test injects a no-op `BuildFn`.
+    const spec: BundleSpec = {
+        label: 'main',
+        entry: path.join(APP_DIR, 'electron/main.ts'),
+        outfile: path.join(APP_DIR, 'dist/electron/main.js'),
+        external: ['electron', 'node:*'],
+        alias: {},
+        nodePaths: [],
+        define: { 'process.env.NODE_ENV': '"production"' },
+    };
+
+    function capture() {
+        const dirs: string[] = [];
+        const options: EsbuildBundleOptions[] = [];
+        const build = createEsbuildBuild({
+            runBuild: (received) => options.push(received),
+            ensureDir: (dir) => dirs.push(dir),
+        });
+        return { build, dirs, options };
+    }
+
+    it('ensures the outfile’s PARENT directory before running the bundler', () => {
+        const { build, dirs } = capture();
+        build(spec);
+        expect(dirs).toEqual([path.join(APP_DIR, 'dist/electron')]);
+    });
+
+    it('hands the bundler exactly the option set esbuildBundleOptions derives', () => {
+        // Equality with the derivation, not a restatement of it: an option added
+        // there must arrive here without this case being edited, which is what
+        // makes "the assertions execute the shipped invocation" true.
+        const { build, options } = capture();
+        build(spec);
+        expect(options).toEqual([esbuildBundleOptions(spec)]);
+    });
+
+    it('runs one bundle per call, in ensure-then-build order', () => {
+        const order: string[] = [];
+        const build = createEsbuildBuild({
+            runBuild: () => order.push('build'),
+            ensureDir: () => order.push('ensureDir'),
+        });
+        build(spec);
+        expect(order).toEqual(['ensureDir', 'build']);
+    });
+});
+
 describe('computePackagedDefine', () => {
     // Invariant #27 / §4.12: a PACKAGED bundle bakes the production identity so
     // IS_DEBUG_MODE constant-folds to the literal `false`, leaving the debug
@@ -99,11 +227,11 @@ describe('computePackagedDefine', () => {
     // electron/main/index.ts inlines this expression rather than testing the
     // imported constant, so esbuild can fold it locally and prune the dynamic
     // imports behind it. That graph-absence is asserted against a real bundle in
-    // __tests__/packaged-bundle-content.test.ts; these cases cover only the
-    // define's derivation.
+    // the reference app's packaged-bundle-content.test.ts; these cases cover only
+    // the define's derivation.
     // Dev `build:app` and the e2e global-setups must NOT get the define — they
-    // share this bundler, and baking production there would silently kill the
-    // F9 Inspector.
+    // share this plan, and baking production there would silently kill the F9
+    // Inspector.
 
     it('bakes BOTH IS_DEBUG_MODE reads when the packaged-build flag is set', () => {
         // Defining only NODE_ENV leaves `process.env.CHIMERA_DEBUG === '1' && false`,
@@ -204,7 +332,7 @@ describe('planBundles', () => {
     });
 
     it('threads the alias + nodePaths onto every bundle spec', () => {
-        const alias = { '@chimera-engine/tactics': APP_DIR };
+        const alias = { [GAME_PKG]: APP_DIR };
         const nodePaths = ['/tmp/nm'];
         const specs = planBundles({ ...base, alias, nodePaths });
         for (const spec of specs) {
@@ -240,6 +368,141 @@ describe('planBundles', () => {
         expect(specs.find((s) => s.label === 'preload')?.outfile).toBe(outfiles.preload);
         expect(specs.find((s) => s.label === 'debug-preload')?.outfile).toBe(outfiles.debugPreload);
     });
+
+    // ── The adopter external/extra-bundle escape hatch ────────────────────────
+    describe('external overrides', () => {
+        it('APPENDS to a label’s externals rather than replacing them', () => {
+            // `electron` and `node:*` are not preferences: bundling either breaks
+            // the emitted main. A hatch that replaced them would look like it
+            // worked until the app failed to launch.
+            const specs = planBundles({
+                ...base,
+                external: { main: ['better-sqlite3'], preload: ['some-native-addon'] },
+            });
+            expect(specs.find((s) => s.label === 'main')?.external).toEqual([
+                'electron',
+                'node:*',
+                'better-sqlite3',
+            ]);
+            expect(specs.find((s) => s.label === 'preload')?.external).toEqual([
+                'electron',
+                'some-native-addon',
+            ]);
+        });
+
+        it('appends to the debug-preload too — every planned label is wired', () => {
+            // One case per fork. `main` and `preload` above would both pass while
+            // this third lookup was dropped entirely: the case below asserts the
+            // debug-preload's externals only for a build with NO override, which
+            // an unwired fork satisfies exactly.
+            const specs = planBundles({
+                ...base,
+                debugPreloadEntry: path.join(ROOT, 'electron/preload/debug-api.ts'),
+                external: { 'debug-preload': ['some-native-addon'] },
+            });
+            expect(specs.find((s) => s.label === 'debug-preload')?.external).toEqual([
+                'electron',
+                'some-native-addon',
+            ]);
+        });
+
+        it('leaves a label with no override untouched', () => {
+            const specs = planBundles({
+                ...base,
+                debugPreloadEntry: path.join(ROOT, 'electron/preload/debug-api.ts'),
+                external: { main: ['better-sqlite3'] },
+            });
+            expect(specs.find((s) => s.label === 'preload')?.external).toEqual(['electron']);
+            expect(specs.find((s) => s.label === 'debug-preload')?.external).toEqual(['electron']);
+        });
+
+        it('does not duplicate an entry the base list already carries', () => {
+            const specs = planBundles({ ...base, external: { main: ['electron', 'node:*'] } });
+            expect(specs.find((s) => s.label === 'main')?.external).toEqual(['electron', 'node:*']);
+        });
+
+        it('rejects a misspelt planned label at COMPILE time', () => {
+            // The map is keyed to the closed PlannedBundleLabel precisely so this
+            // is an error. Keyed to the widened BundleLabel it would type-check,
+            // append nothing, and no runtime check would ever notice — the whole
+            // hatch silently no-ops on one transposed character.
+            //
+            // `tsc --noEmit -p electron/tsconfig.json` is the assertion; the
+            // runtime body only proves the well-spelled twin still works, so a
+            // hatch deleted outright cannot pass this by erroring on both.
+            const specs = planBundles({
+                ...base,
+                // @ts-expect-error — 'preloadd' is not a PlannedBundleLabel
+                external: { preloadd: ['x'] },
+            });
+            expect(specs.find((s) => s.label === 'preload')?.external).toEqual(['electron']);
+            expect(
+                planBundles({ ...base, external: { preload: ['x'] } }).find(
+                    (s) => s.label === 'preload',
+                )?.external,
+            ).toEqual(['electron', 'x']);
+        });
+    });
+
+    describe('mainEntry override', () => {
+        it('is what the plan bundles as main', () => {
+            const specs = planBundles({ ...base, mainEntry: '/repo/apps/example/src/boot.ts' });
+            expect(specs.find((s) => s.label === 'main')?.entry).toBe(
+                '/repo/apps/example/src/boot.ts',
+            );
+        });
+    });
+
+    describe('extraBundles', () => {
+        it('plans each extra bundle alongside main + preload, with the shared alias/nodePaths/define', () => {
+            const alias = { [GAME_PKG]: APP_DIR };
+            const nodePaths = ['/tmp/nm'];
+            const define = { 'process.env.NODE_ENV': '"production"' };
+            const specs = planBundles({
+                ...base,
+                alias,
+                nodePaths,
+                define,
+                extraBundles: [
+                    {
+                        label: 'worker',
+                        entry: path.join(APP_DIR, 'electron/worker.ts'),
+                        outfile: path.join(APP_DIR, 'dist/electron/worker.js'),
+                    },
+                ],
+            });
+            expect(specs.map((s) => s.label)).toEqual(['main', 'preload', 'worker']);
+            const worker = specs.find((s) => s.label === 'worker');
+            expect(worker?.entry).toBe(path.join(APP_DIR, 'electron/worker.ts'));
+            expect(worker?.outfile).toBe(path.join(APP_DIR, 'dist/electron/worker.js'));
+            expect(worker?.alias).toBe(alias);
+            expect(worker?.nodePaths).toBe(nodePaths);
+            expect(worker?.define).toBe(define);
+        });
+
+        it('externalises electron by default and appends the extra bundle’s own externals', () => {
+            // An extra bundle's externals ride on its own declaration rather than
+            // in a map keyed by its label: its label is an arbitrary string, so a
+            // keyed lookup could never be spell-checked and a typo would silently
+            // apply nothing.
+            const specs = planBundles({
+                ...base,
+                extraBundles: [
+                    { label: 'worker', entry: '/e.ts', outfile: '/o.js', external: ['node:*'] },
+                    { label: 'second-preload', entry: '/p.ts', outfile: '/p.js' },
+                ],
+            });
+            expect(specs.find((s) => s.label === 'worker')?.external).toEqual([
+                'electron',
+                'node:*',
+            ]);
+            expect(specs.find((s) => s.label === 'second-preload')?.external).toEqual(['electron']);
+        });
+
+        it('plans none by default, so the default three-bundle plan is unchanged', () => {
+            expect(planBundles(base).map((s) => s.label)).toEqual(['main', 'preload']);
+        });
+    });
 });
 
 describe('resolveDevDebugPreloadEntry', () => {
@@ -248,7 +511,7 @@ describe('resolveDevDebugPreloadEntry', () => {
         expect(entry).toBe(path.join(ROOT, 'electron/preload/debug-api.ts'));
     });
 
-    it('returns undefined when the host source is absent (a scaffolded game copies this verbatim)', () => {
+    it('returns undefined when the host source is absent (a scaffolded game has none)', () => {
         expect(resolveDevDebugPreloadEntry(ROOT, () => false)).toBeUndefined();
     });
 
@@ -326,6 +589,19 @@ describe('buildAppBundles', () => {
         );
     });
 
+    it('throws when the app package.json declares no name (the alias key has no source)', () => {
+        const { deps } = makeDeps({});
+        expect(() => buildAppBundles({ ...deps, readJson: () => ({}) })).toThrow(/"name"/);
+    });
+
+    it('bundles the app composition root by default', () => {
+        const { built, deps } = makeDeps({});
+        buildAppBundles(deps);
+        expect(built.find((s) => s.label === 'main')?.entry).toBe(
+            path.join(APP_DIR, 'electron/main.ts'),
+        );
+    });
+
     it('in verify:pack mode drops the electron/main alias and resolves the preload from the tarball', () => {
         const nm = '/tmp/consumer/node_modules';
         const { built, deps } = makeDeps({ [VERIFY_PACK_NODE_MODULES_ENV]: nm });
@@ -335,6 +611,17 @@ describe('buildAppBundles', () => {
         expect(preload?.alias['@chimera-engine/electron/main']).toBeUndefined();
         // preload entry was resolved from the consumer (verify:pack) require root.
         expect(deps.resolvePreload).toHaveBeenCalledWith(nm);
+    });
+
+    it('resolves a RELATIVE verify:pack node_modules against the app dir', () => {
+        // A standalone app's scripts inject `CHIMERA_VERIFY_PACK_NODE_MODULES=node_modules`
+        // — the only value a portable npm script can set — but esbuild's nodePaths
+        // and resolvePreload's createRequire both need an absolute path.
+        const { built, deps } = makeDeps({ [VERIFY_PACK_NODE_MODULES_ENV]: 'node_modules' });
+        buildAppBundles(deps);
+        const expected = path.join(APP_DIR, 'node_modules');
+        expect(built.find((s) => s.label === 'main')?.nodePaths).toEqual([expected]);
+        expect(deps.resolvePreload).toHaveBeenCalledWith(expected);
     });
 
     it('bakes the production define into every bundle when the packaged-build flag is set', () => {
@@ -382,6 +669,17 @@ describe('buildAppBundles', () => {
         const debug = built.find((s) => s.label === 'debug-preload');
         expect(debug?.outfile).toBe(outfiles.debugPreload);
         expect(debug?.entry).toBe(path.join(ROOT, 'electron/preload/debug-api.ts'));
+    });
+
+    it('logs one line per planned bundle through the injected sink', () => {
+        // The plan never calls `console.*` — a published engine module has no
+        // business owning a consumer's build output format.
+        const messages: string[] = [];
+        const { deps } = makeDeps({});
+        buildAppBundles({ ...deps, log: (message) => messages.push(message) });
+        expect(messages).toHaveLength(2);
+        expect(messages[0]).toContain('main');
+        expect(messages[1]).toContain('preload');
     });
 
     // Standalone F9 fix: a scaffolded game supplies NO source debug entry, and its build:app
@@ -457,6 +755,42 @@ describe('buildAppBundles', () => {
             });
             buildAppBundles({ ...deps, fileExists: () => true });
             expect(built.map((s) => s.label)).toEqual(['main', 'preload']);
+        });
+    });
+
+    // ── The plan overrides, threaded end-to-end ──────────────────────────────
+    describe('plan overrides', () => {
+        it('threads mainEntry / alias / external / extraBundles through to the specs', () => {
+            const { built, deps } = makeDeps({});
+            buildAppBundles({
+                ...deps,
+                overrides: {
+                    mainEntry: path.join(APP_DIR, 'src/boot.ts'),
+                    alias: { 'some-dep': '/shims/dep.ts' },
+                    external: { main: ['better-sqlite3'] },
+                    extraBundles: [
+                        {
+                            label: 'worker',
+                            entry: path.join(APP_DIR, 'electron/worker.ts'),
+                            outfile: path.join(APP_DIR, 'dist/electron/worker.js'),
+                        },
+                    ],
+                },
+            });
+            const main = built.find((s) => s.label === 'main');
+            expect(main?.entry).toBe(path.join(APP_DIR, 'src/boot.ts'));
+            expect(main?.alias['some-dep']).toBe('/shims/dep.ts');
+            expect(main?.alias[GAME_PKG]).toBe(APP_DIR);
+            expect(main?.external).toEqual(['electron', 'node:*', 'better-sqlite3']);
+            expect(built.map((s) => s.label)).toEqual(['main', 'preload', 'worker']);
+        });
+
+        it('changes nothing when absent', () => {
+            const { built: withOut, deps: depsA } = makeDeps({});
+            buildAppBundles(depsA);
+            const { built: withEmpty, deps: depsB } = makeDeps({});
+            buildAppBundles({ ...depsB, overrides: {} });
+            expect(withEmpty).toEqual(withOut);
         });
     });
 });

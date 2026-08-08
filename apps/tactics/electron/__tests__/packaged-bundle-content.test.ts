@@ -3,18 +3,22 @@
  *
  * Proves the Runtime Debug Layer LEAVES the packaged bundles (§4.12).
  *
- * Every other build-main test injects a no-op `BuildFn` and asserts on the
- * `BundleSpec` objects — deliberately, so the suite spawns nothing. That cannot
- * answer the question this file exists for, which is about esbuild's OUTPUT and
- * not about its configuration: whether folding the debug gate to `if (false)`
- * actually prunes the dynamic-import records behind it. So this one runs a real
- * bundle, following the precedent in `simulation/__tests__/contract-barrel-side-effects.test.ts`
- * (real esbuild, `write: false`, assert the emitted text).
+ * The engine's own plan suite (`electron/build-main/bundle-plan.test.ts`) injects
+ * a no-op `BuildFn` and asserts on the `BundleSpec` objects — deliberately, so
+ * that suite spawns nothing. That cannot answer the question this file exists
+ * for, which is about esbuild's OUTPUT and not about its configuration: whether
+ * folding the debug gate to `if (false)` actually prunes the dynamic-import
+ * records behind it. So this one runs a real bundle, following the precedent in
+ * `simulation/__tests__/contract-barrel-side-effects.test.ts` (real esbuild,
+ * `write: false`, assert the emitted text).
  *
- * It drives the production `buildAppBundles` rather than re-deriving a config,
- * so the assertion cannot pass against a bundle plan the shipped build does not
- * use. Nothing is written to disk — important, because `build:app` writes the
- * same `apps/tactics/dist` path a dev launch runs from.
+ * It stays HERE rather than following the plan into `electron/`: it bundles a
+ * real app (`APP_DIR = apps/tactics`), and moving it would give the engine
+ * package's suite its first dependency on the reference app. It reaches the plan
+ * through this app's own `build:app` driver, which re-exports it — so the
+ * assertion runs against exactly what the shipped build runs, driver included.
+ * Nothing is written to disk — important, because `build:app` writes the same
+ * `apps/tactics/dist` path a dev launch runs from.
  *
  * Requires the workspace packages to be BUILT (`pnpm build:packages`): the debug
  * graph is reached through the built `@chimera-engine/simulation` dist, which is
