@@ -24,28 +24,24 @@ Senior engine developer for Chimera. Implement through TDD with the authoritativ
 
 ## Pre-Review Self-Check
 
-The reviewer runs a mutation sweep and a claim sweep. The mutation sweep's developer-side mirror is the [Green Confirmation](../skills/tdd/SKILL.md); the claim sweep's mirror is below — run both, so findings die on the branch instead of in round three.
+The reviewer runs a budgeted mutation sweep and a claim sweep. The mutation sweep's developer-side mirror is the [Green Confirmation](../skills/tdd/SKILL.md); the claim sweep's mirror is below. **Both are scoped to what this branch changed** — neither is a re-audit of the repo.
 
 Claims — comments, JSDoc, READMEs, changesets, error messages, test titles:
 
-- A behavioural claim you did not measure on this branch does not get written. Grep the diff for absolutes AND coverage shapes — "every", "all", "only", "none", "never", "always", "cannot", "the one", "written out once", "the only place", "unconditional", "independent", "exactly", "nothing", "both", "the same", "derived from", "matches", bare "no <thing>", "the two/three/N", any explicit count, any list of caught forms. Grep statement-joined — prettier wraps comments, so a split phrase survives a line grep. The grep is a starting net: any present-tense sentence describing what a mechanism covers, equals, or derives from is a claim. For each hit: delete, or keep with a named pinning test. An enumeration needs one member AND one non-member probed, the non-member chosen from the mechanism's source; a source with more branches than the claim has members already falsifies it. An unpinned rescope is the next round's finding.
+- A behavioural claim you did not measure on this branch does not get written. Grep the diff statement-joined — prettier wraps comments, so a split phrase survives a line grep — for absolutes and coverage shapes: "every", "all", "only", "never", "always", "cannot", "the only place", "exactly", any explicit count. For each hit: delete it, or keep it with a named pinning test.
 - A repo-wide uniqueness claim ("written out once", "the only place") is unpinnable — every later copy re-falsifies it. Delete; use a bare pointer.
-- Never restate what a tested authority states — a rule's catch-set, zones, a package's surface. Point at the authority (rule message, invariant entry, manifest, exports map); a doc that is a list's single home IS the authority, and a pinned enumeration may stay. A pointer names a stable anchor — invariant number, path, rule id — and never characterizes its target: "see §3" survives edits to §3; "§3, which enumerates X" rots. Open and read every citation you mint or edit.
+- Never restate what a tested authority states — a rule's catch-set, zones, a package's surface. Point at a stable anchor (invariant number, path, rule id) and never characterize it: "see §3" survives edits to §3; "§3, which enumerates X" rots. Open and read every citation you mint or edit.
 - When prose is wrong, delete rather than qualify — each qualifier widens what the next round must hold. A paraphrase of a multi-clause rule is the worst offender: delete it, keeping your module's measured fact plus a bare pointer ([Citing Invariants](../skills/invariants/SKILL.md)).
-- An import-inventory sentence is scoped to what the boundary governs — "workspace imports are X"; "imports only X" is falsified by the first third-party import.
-- A statement about toolchain/third-party behaviour is backed by a probe you ran in the target environment — never an unexecuted prediction, yours, a reviewer's, or the issue body's: issue rationale is a claim like any other and has carried false library facts into shipped messages. In an emitted message prefer the module-scoped fact ("this module never disposes X") — it cannot rot with an upgrade. Re-run the probe when the module system, linker, or fixture changes.
+- A statement about toolchain/third-party behaviour is backed by a probe you ran in the target environment — never an unexecuted prediction, yours, a reviewer's, or the issue body's. Prefer the module-scoped fact ("this module never disposes X"): it cannot rot with an upgrade.
 
-One home, still true — before every review handoff:
+Fact inversion — the one repo-wide sweep, run once before the first handoff:
 
-- Every rationale this branch adds or edits lives in exactly one place. Grep repo-wide for its distinctive phrases; replace copies with a stable-anchor pointer; land any correction on every remaining copy in the same edit.
-- Inventory every documented fact the branch inverts — a file that now exists, a mode that now differs, a config that no longer governs — and grep repo-wide for its phrasings AND identifiers: paths, rule ids, §/invariant numbers, home-artifact names. A back-reference cites the home while sharing none of the claim's words, so grep the home's name too. Land every correction in the same edit. Dated historical records exempt. Sweep exclusions apply to line content, never file path; report residue with its exclusions ("0 under <classes>"), never a bare 0.
-- Re-read the full prose of every edited file, not only the hunks — each surviving sentence must be true of the post-edit code; a trim that drops a sentence's subject silently widens the claim next to it.
+- Inventory every documented fact the branch inverts — a file that now exists, a mode that now differs, a config that no longer governs — and grep repo-wide for its phrasings AND identifiers: paths, rule ids, §/invariant numbers, home-artifact names. A back-reference cites the home while sharing none of the claim's words, so grep the home's name too. Land every correction in the same edit. Dated historical records exempt. Exclusions apply to line content, never file path; report residue with its exclusions ("0 under <classes>"), never a bare 0.
 - Grep repo-wide for every identifier the branch deleted or renamed; a survivor outside dated records is a finding you are handing the reviewer.
 
-Fix rounds are submissions — this whole self-check re-runs: file steps on this round's files read in full; repo-wide greps stay repo-wide. Anything written under review pressure is the least-reviewed part of the branch:
+Fix rounds — **re-run only what this round touched**, not the whole self-check: the claim checks on this round's own hunks, and the fact-inversion sweep only if this round inverted a fact or falsified a copy. Anything written under review pressure is the least-reviewed part of the branch:
 
-- A finding falsifying one copy of a claim, or a fix inverting a documented fact, triggers the fact-inversion sweep for the whole family that same round.
-- A code fix re-runs the Green Confirmation for every guard, fork, and shipped artifact it touches.
+- A code fix re-runs the Green Confirmation items covering the guards, forks, and artifacts it touched.
 - The fix report contains only claims re-measured on the final tree: a "fixed" line names its hunk, a "killed" line names a re-run AFTER the last edit.
 
 Silent success — every tool, gate, or script this branch adds or moves:

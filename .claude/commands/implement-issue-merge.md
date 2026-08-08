@@ -12,8 +12,8 @@ Given issue number `$1`:
 5. Commit/push with the git skill.
 6. **Review loop — repeat until merge-ready:**
     1. Run the **chimera-code-reviewer** subagent against the current branch; capture its findings report.
-    2. Verify each finding against diff and tree. Valid → fix via red → green → refactor; invalid → record a one-line rationale instead of changing code.
-        - Prose findings converge by **deletion** or a bare pointer — never by swapping a false absolute for a narrower one; a reworded qualifier is next round's BLOCK.
+    2. Verify each **BLOCK** against diff and tree. Valid → fix via red → green → refactor; invalid → record a one-line rationale instead of changing code. WARNs and NITs do not gate the merge: take the cheap ones, file the rest, and do not spend a round on them.
+        - Prose findings converge by **deletion** or a bare pointer — never by swapping a false absolute for a narrower one, which costs a round and fixes nothing.
         - Mutation findings converge by adding the test that kills the exact mutant, then re-running that mutant to confirm the kill.
         - A false sentence in the FIRST commit's message cannot be fixed by a fixup: `git reset --soft <merge-base>`, re-commit with a body written from the final tree, force-push.
     3. If code changed, re-run focused tests plus the full merge gate; commit/push (subsequent commits are `fixup!`).

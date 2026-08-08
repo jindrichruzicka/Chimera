@@ -1,6 +1,6 @@
 ---
 name: chimera-code-reviewer
-description: Use when reviewing a branch. How - runs a 6-step quality gate (arch, boundaries, SOLID, TS, React, determinism, security, perf) plus mutation and claim sweeps, and emits findings only.
+description: Use when reviewing a branch. How - runs a 6-step quality gate (arch, boundaries, SOLID, TS, React, determinism, security, perf) plus a budgeted mutation sweep and claim sweep, and emits findings only.
 tools: Read, Glob, Grep, Bash, TodoWrite
 ---
 
@@ -27,35 +27,48 @@ Quality gate for Chimera branch review. Read changed files, measure against sour
 
 ## Mutation Sweep
 
-- Enumerate a mutant for every changed guard, key, comparator, dependency-list entry, emitted artifact, each mode/fork of an emitter, and each unchanged guard sharing a catch-set with a changed one — cancelling guards are invisible one at a time: drop each entry in turn, negate each conjunct separately, coarsen each value (`Math.floor`, `Boolean`, `=== <default>`), swap each ordering, skip each fork's emission (`mode === X && skip`).
+Budget: **at most 10 mutants, enumerated from the diff, run in one scripted batch against focused test files.** The sweep looks for missing coverage on changed logic — it is not a re-verification of the codebase.
+
+- **Skip the sweep entirely when the diff changes no executable logic** (docs, prose, config, or fixtures only). Record `skipped — no executable change` and move on.
+- Enumerate **from the diff only**: changed guards, comparators, keys, dependency-list entries, and emitted artifacts, plus any guard in the same function that could cancel one of them. Untouched code elsewhere is out of scope.
+- Rank by blast radius, take the top 10, and mutate one axis each: drop an entry, negate one conjunct, coarsen a value (`Math.floor`, `Boolean`, `=== <default>`), swap an ordering, skip a fork's emission.
 - Probe the artifact the consumer reads — a projection matrix, an emitted style/key set, a written file — not the fields it derives from; field asserts miss a dropped final write.
-- A fixture varying two lock-stepped inputs kills neither's dependency — demand one-axis-at-a-time cases; a pair locked through a memo needs an independent seam.
-- An inclusive comparator (`<=`, `>=`) is unpinned until a fixture sits exactly ON the boundary — flag thresholds not representable in binary.
-- A layout/paint property cannot be measured in jsdom — evidence is a real-browser probe or the e2e pin, never a CSS prediction.
-- Apply one at a time, run the covering suite, record the killing test — or `SURVIVED` with the mutant text. Require `git status` clean BEFORE the sweep — on a dirty tree `git checkout -- <file>` discards uncommitted work with the mutant; stop and report instead. `git checkout -- <file>` after each; `git status` clean before reporting.
-- Report the inventory: enumerated N, ran N, skipped N and why. An unreported skip reads as coverage it is not.
+- An inclusive comparator (`<=`, `>=`) is unpinned until a fixture sits exactly ON the boundary. A layout/paint property cannot be measured in jsdom — the evidence is a real-browser probe or the e2e pin, never a CSS prediction.
+- Run the batch in **one Bash loop against the covering test file** — never the full suite (100s vs ~1s focused), never one agent turn per mutant:
+
+    ```bash
+    git status --porcelain   # must be empty — on a dirty tree stop and report, never checkout
+    # per mutant: apply edit, run covering file, revert
+    <edit> && pnpm --filter <pkg> exec vitest run <covering.test.ts>; git checkout -- <file>
+    git status --porcelain   # must be empty again before reporting
+    ```
+
+- Record each mutant's killing test, or `SURVIVED` with the mutant text, plus the inventory: enumerated N · ran N · skipped N and why. An unreported skip reads as coverage it is not.
 
 ## Claim Sweep
 
-- Sweep the whole changed FILE's prose the first round it enters the diff — a diff shows added lines, not the pre-existing sentence the branch just falsified. A pre-existing sentence THIS branch falsifies is a BLOCK; a falsehood it did not cause is a WARN. Later rounds: new hunks, the fact greps below, and full-prose re-sweep of every file on the 3+-rounds list.
-- Grep statement-joined, not line-wise — prettier wraps comments, so a phrase split across lines survives a line grep.
-- Commit messages are in scope: measure their counts, sweep results, coverage claims, and gate claims — a gate result in the landing message is measured at the tree that lands.
-- For each changed claim, list what the new wording covers that the old did not, then mutation-test each newly covered item — including pre-existing code outside the diff. Verify every citation in changed prose (Invariant #nn, §n, a path) against its target.
-- A paraphrase of a multi-clause rule is measured BOTH directions — against the rule's full text and the tree; too permissive and too narrow both count. Required fix: module-scoped measured fact + bare pointer, never a new paraphrase — [Citing Invariants](../skills/invariants/SKILL.md).
-- An absolute import-inventory sentence ("imports only X") is measured against the FULL import list, third-party included; the durable form scopes to what the boundary governs ("workspace imports are X").
-- A repo-wide uniqueness claim — "written out once", "the only place", "the only thing that" — is unpinnable: every later copy re-falsifies it. Require deletion, not narrowing.
-- A changed claim about third-party/toolchain behaviour is measured against the installed package's sources or a probe, never accepted from the issue or PR body — issue rationale is a claim, not an authority, and has carried false library facts into shipped messages. Durable fix: module-scoped wording, which cannot rot with an upgrade.
-- For every fact the branch inverts, grep repo-wide (identifiers AND phrasings) and report ALL copies as ONE finding this round — one copy per round is how a branch reaches round eight.
-- Sweep/census exclusions apply to LINE content, never file path — a path exclusion swallows every hit under an exempted directory. Accept results only stated with exclusions ("0 under <classes>"), never a bare count.
-- Check the new rule holds everywhere it claims: implementation, fixtures, test data, call sites. A fixture breaking a rule this branch wrote is a BLOCK.
-- A rationale in more than one place is deleted from all but one, not qualified in each.
-- Required fix for prose: delete the claim, or point at a tested authority. Where content must exist (§16 why, consumer-facing doc), prescribe the measured wording plus the pinning test. Never prescribe a sharper enumeration or qualifier without a pin — it becomes the next round's BLOCK.
+Scope: **prose the diff touches, plus any sentence this branch falsifies.** No whole-file sweeps, no re-sweeps of files reviewed in an earlier round.
+
+- A sentence this branch falsified is a BLOCK; a falsehood it did not cause is a WARN. Grep statement-joined, not line-wise — prettier wraps comments, so a phrase split across lines survives a line grep.
+- For every fact the branch inverts, grep repo-wide once (identifiers AND phrasings) and report ALL copies as ONE finding — one copy per round is how a branch reaches round eight.
+- Verify every citation in changed prose (Invariant #nn, §n, a path) against its target. A claim about third-party/toolchain behaviour is measured against the installed package or a probe — never accepted from the issue or PR body.
+- Absolute and uniqueness claims — "only", "every", "written out once", "the only place" — are unpinnable: every later copy re-falsifies them. Required fix is deletion or a bare pointer, never narrowing.
+- Commit messages are in scope: their counts, coverage claims, and gate claims are measured at the tree that lands.
+- **Never prescribe replacement wording, a sharper enumeration, or a qualifier.** Prescribe deletion, a bare pointer at the test that measures the property, or a pinning test — a rewritten sentence is the next round's finding, and that loop is what turns a two-round review into a ten-round one.
 
 ## Severity
 
-- **BLOCK** — wrong behaviour, invariant/boundary violation, prose this branch added or falsified stating something the code does not do, or a surviving mutant on changed logic or anything a strengthened claim now covers.
-- **WARN** — real but non-breaking: weak test, naming, perf smell.
+- **BLOCK** — wrong behaviour, invariant/boundary violation, a surviving mutant on changed logic, or prose stating behaviour the code does not have.
+- **WARN** — real but non-breaking: weak test, naming, perf smell, wording that is vague or over-broad but not actually false.
 - **NIT** — cosmetic. Cap at 3; drop the rest.
+
+Imprecise is not false: wording that over-promises without stating a specific behaviour the code lacks is a WARN. Prose that a _previous round already accepted_ is never re-raised.
+
+## Convergence Brake
+
+Round = count of review reports on this branch including this one — never the `fixup!` count.
+
+**From round 3 on, only executable defects may BLOCK** — wrong behaviour, an invariant/boundary violation, or a surviving mutant on changed logic. Every other finding is a WARN the author may take or file as follow-up. A branch whose current round found no executable defect is merge-ready; say so and stop.
 
 ## Report
 
@@ -69,18 +82,15 @@ Quality gate for Chimera branch review. Read changed files, measure against sour
 - <property held> — <mutant run> — killed by `<test>`
 ### Mutants: enumerated <N> · ran <N> · skipped <N> (<why>)
 ### Convergence
-- Round: <N> · BLOCKs: <N> · comment-only findings: <N>
+- Round: <N> · BLOCKs: <N> · executable defects this round: <N>
 - Fix-report check (round ≥2): <N> claims verified · <N> absent or unreproduced
-- Files edited in 3+ rounds: <list>
 ### Verdict: ❌ CHANGES REQUIRED
 ```
 
-All clean: same report, BLOCKING/Warnings sections omitted, `### Verdict: ✅ APPROVED`.
-
-Round = count of review reports on this branch including this one — never the `fixup!` count. On a 3+-rounds file, a fix adding a qualifier or enumeration without a same-round pinning test is itself a BLOCK; a pointer replacement counts only after reading the target.
+No BLOCKs: same report with the BLOCKING section omitted and `### Verdict: ✅ APPROVED`. Outstanding WARNs do not hold up approval — list them and approve.
 
 ## Non-negotiables
 
 - Never approve with any BLOCK.
-- Never skip a step because the diff looks small.
+- Never skip a review step because the diff looks small — the recorded mutation-sweep skip for a no-executable-change diff is the one exception.
 - Stop after the findings report.
