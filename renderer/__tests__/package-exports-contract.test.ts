@@ -107,7 +107,8 @@ describe('@chimera-engine/renderer package surface', () => {
 
         // The assets barrel (§4.10) is the reachability half of the model seam
         // (the audio barrel's pattern, repeated): `useAsset`, `useAssetManager`,
-        // `useModelInstance` and the provider a game's tests mount. Without
+        // `useModelInstance`, `useAnimationSheet` and the provider a game's tests
+        // mount. Without
         // this entry a game surface has no legal route to any loaded asset.
         expect(exportsMap['./assets']).toEqual({
             types: './dist/assets/index.d.ts',

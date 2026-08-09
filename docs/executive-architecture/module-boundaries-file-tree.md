@@ -266,11 +266,14 @@ chimera/
 │   │   ├── chatStore.ts             # see §4.29
 │   │   └── toastStore.ts            # see §4.30
 │   ├── assets/                      # Asset loading layer; PUBLIC barrel: @chimera-engine/renderer/assets (curated: hooks + provider + asset/error types; files behind it stay internal)
-│   │   ├── index.ts                 # Public barrel (exports useAsset, useAssetManager, useModelInstance, AssetManagerProvider, error/asset types; remaining internals stay unexported)
+│   │   ├── index.ts                 # Public barrel (exports useAsset, useAssetManager, useModelInstance, useAnimationSheet, AssetManagerProvider, error/asset/sheet types; remaining internals stay unexported)
 │   │   ├── AssetManager.ts
 │   │   ├── AssetManagerProvider.tsx
 │   │   ├── AssetResolver.ts
 │   │   ├── AssetPreloader.ts
+│   │   ├── animationSheet.ts        # parseModel/SpriteAnimationMetadata — fail-soft readers of the animation sheet in AssetManifestEntry.metadata
+│   │   ├── spriteAtlas.ts           # parseSpriteAtlas — internal; measures atlas cells to raw flipY UVs
+│   │   ├── useAnimationSheet.ts     # Model sheet, memoised on metadata IDENTITY
 │   │   └── useAsset.ts
 │   ├── game/
 │   │   ├── rendererGameRegistry.ts  # Game shell/screen/asset registration bridge

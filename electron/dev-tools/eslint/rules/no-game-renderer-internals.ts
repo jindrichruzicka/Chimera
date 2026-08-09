@@ -194,10 +194,10 @@ function isPublicAudioBarrelImport(source: string): boolean {
     );
 }
 
-// The engine asset barrel (§4.10): `useAsset`, `useAssetManager`,
-// `useModelInstance`, the `AssetManagerProvider`, and the asset/error types a
-// game needs to read declared assets. Curated: every individual file behind
-// it (e.g. `assets/AssetManager.js`) stays internal.
+// The engine asset barrel (§4.10) — the hooks, provider and types a game needs
+// to read declared assets; `renderer/assets/index.ts` is the enumeration.
+// Curated: every individual file behind it (e.g. `assets/AssetManager.js`)
+// stays internal.
 function isPublicAssetsBarrelImport(source: string): boolean {
     return (
         source === '@chimera-engine/renderer/assets' ||

@@ -9,10 +9,10 @@ renderer internals with no entry in the `exports` map, and Invariant #96 allows 
 surface only a public barrel — so no game could obtain a loaded asset outside the engine's
 own tests.
 
-The barrel ships the three hooks (`useAsset`, `useAssetManager`, `useModelInstance`), an
-`AssetManagerProvider`, and the state/asset/error type surface those calls take, including
-the new `NoActiveGameSessionError` the delegating manager now rejects with when a load runs
-outside an active match; its own header is the index. `renderer/app/providers.tsx` now
+The barrel ships the consuming hooks, an `AssetManagerProvider`, and the state/asset/error
+type surface those calls take, including the new `NoActiveGameSessionError` the delegating
+manager now rejects with when a load runs outside an active match; its own header is the
+index of what it carries. `renderer/app/providers.tsx` now
 mounts the provider instead of the raw context, with no behaviour change. `@types/three`
 is declared as an optional peer because the barrel's `.d.ts` names three types.
 

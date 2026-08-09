@@ -586,6 +586,49 @@ describe('DefaultAssetManager', () => {
         expect(load).toHaveBeenCalledTimes(2);
     });
 
+    it('keeps cached assets across a re-registration whose sheet is rebuilt but deep-equal', async () => {
+        const ref = buildAssetRef<GLTFModelAsset>('tactics', 'models/warrior.glb');
+        const load = vi.fn<AssetLoader<GLTFModelAsset>['load']>(async () => ({
+            scene: { name: 'warrior' } as unknown as LoadedGltfAsset['scene'],
+            animations: [],
+        }));
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createSingleLoaderRegistry('gltf-model', load),
+        );
+        // Rebuilt per registration on purpose. A manifest assembled inside a
+        // React render allocates a fresh sheet every time, so only a STRUCTURAL
+        // comparison can see it as unchanged; `assetManifestEntryEquivalent`
+        // comparing metadata by identity — or refusing every pair outright —
+        // would evict the decoded model on each re-registration. Building the
+        // sheet as a module-scope constant instead would pass under all three.
+        const register = (): void => {
+            manager.registerManifest({
+                gameId: 'tactics',
+                entries: [
+                    {
+                        ref,
+                        kind: 'gltf-model',
+                        priority: 'deferred',
+                        metadata: {
+                            clips: {
+                                swing: { durationSeconds: 1, notifies: { woosh: { at: 0.25 } } },
+                            },
+                        },
+                    },
+                ],
+            });
+        };
+
+        register();
+        const first = await manager.load(ref);
+        register();
+
+        expect(await manager.load(ref)).toBe(first);
+        expect(load).toHaveBeenCalledTimes(1);
+        expect(manager.get(ref)).toBe(first);
+    });
+
     it('disposes cached assets that are evicted by manifest replacement', async () => {
         const removedRef = buildAssetRef<TextureAsset>('tactics', 'textures/removed.webp');
         const retainedRef = buildAssetRef<TextureAsset>('tactics', 'textures/retained.webp');

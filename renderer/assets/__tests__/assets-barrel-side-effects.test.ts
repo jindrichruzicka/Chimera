@@ -23,11 +23,11 @@
  *
  * Mechanism mirrors `renderer/audio/__tests__/audio-barrel-side-effects.test.ts`:
  * esbuild bundles the barrel with tree-shaking, and the test asserts over the
- * resolved inputs and external specifiers.
+ * resolved inputs and external specifiers. The analyzer itself lives in
+ * `assetsGraph.ts`, shared with the sheet readers' purity guard.
  */
 
 import { describe, it, expect } from 'vitest';
-import { build, type Plugin } from 'esbuild';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,11 +39,14 @@ import type {
     LoadedGltfAsset,
     LoadedSpriteSheetAsset,
     ModelInstance,
+    ParsedModelAnimationSheet,
     ResolvedAsset,
     UseAssetState,
     UseModelInstanceState,
 } from '../index';
 import type { GLTFModelAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+
+import { analyzeModule, importsRuntime } from './assetsGraph.js';
 
 /**
  * The barrel's TYPE surface, held by naming every member of it. Types leave no
@@ -59,51 +62,10 @@ interface BarrelTypeSurface {
     readonly resolved: ResolvedAsset;
     readonly assetState: UseAssetState<GLTFModelAsset>;
     readonly instanceState: UseModelInstanceState;
+    readonly animationSheet: ParsedModelAnimationSheet;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-/** Marks every bare specifier external so the bundle holds only in-repo source. */
-const externalizeBareImports: Plugin = {
-    name: 'externalize-bare-imports',
-    setup(b) {
-        // esbuild filters are Go RE2 regexes — the JS `u` flag is rejected.
-        b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, external: true }));
-        b.onResolve({ filter: /\.css$/ }, (args) => ({ path: args.path, external: true }));
-    },
-};
-
-async function analyzeBarrel(
-    entryAbsPath: string,
-): Promise<{ readonly inputs: readonly string[]; readonly externals: ReadonlySet<string> }> {
-    const result = await build({
-        entryPoints: [entryAbsPath],
-        bundle: true,
-        treeShaking: true,
-        write: false,
-        metafile: true,
-        format: 'esm',
-        platform: 'browser',
-        jsx: 'automatic',
-        logLevel: 'silent',
-        plugins: [externalizeBareImports],
-    });
-    const metafile = result.metafile;
-    const externals = new Set<string>();
-    for (const input of Object.values(metafile.inputs)) {
-        for (const imported of input.imports) {
-            if (imported.external) {
-                externals.add(imported.path);
-            }
-        }
-    }
-    return { inputs: Object.keys(metafile.inputs), externals };
-}
-
-/** A forbidden external is the named runtime or any of its subpaths. */
-function importsRuntime(externals: ReadonlySet<string>, name: string): boolean {
-    return [...externals].some((spec) => spec === name || spec.startsWith(`${name}/`));
-}
 
 describe('@chimera-engine/renderer/assets barrel', () => {
     it('exports exactly the documented public surface', () => {
@@ -118,21 +80,25 @@ describe('@chimera-engine/renderer/assets barrel', () => {
             'MalformedModelAssetError',
             'NoActiveGameSessionError',
             'UnknownAssetManifestEntryError',
+            'useAnimationSheet',
             'useAsset',
             'useAssetManager',
             'useModelInstance',
         ]);
     });
 
-    it('pulls in exactly nine asset-layer modules and no store', async () => {
-        const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
+    it('pulls in exactly eleven asset-layer modules and no store', async () => {
+        const { inputs, externals } = await analyzeModule('index.ts');
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why).
         // `AssetManager.ts` and `DelegatingAssetManager.ts` are in the graph
         // because the exported errors live in them; `AssetLoaderRegistry.ts`
         // rides in because `AssetManager.ts` builds its default loader
-        // registry from it. No `state/` store appears — this barrel, unlike
-        // `audio`, is import-inert at the store level.
+        // registry from it; `animationSheet.ts` because `useAnimationSheet.ts`
+        // calls its parser. `spriteAtlas.ts` is deliberately ABSENT: the sprite
+        // half of the sheet seam has no React binding yet and the barrel names
+        // none of it. No `state/` store appears — this barrel, unlike `audio`,
+        // is import-inert at the store level.
         // Compared on the last TWO path segments (CWD-independent — see the
         // audio sibling).
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
@@ -143,7 +109,9 @@ describe('@chimera-engine/renderer/assets barrel', () => {
             'assets/AssetManagerProvider.tsx',
             'assets/DelegatingAssetManager.ts',
             'assets/ModelInstance.ts',
+            'assets/animationSheet.ts',
             'assets/index.ts',
+            'assets/useAnimationSheet.ts',
             'assets/useAsset.ts',
             'assets/useModelInstance.ts',
         ]);
@@ -168,6 +136,7 @@ describe('@chimera-engine/renderer/assets barrel', () => {
             'AssetManagerProvider.tsx',
             'useModelInstance.ts',
             'ModelInstance.ts',
+            'useAnimationSheet.ts',
         ]) {
             const source = readFileSync(resolve(__dirname, '..', moduleFile), 'utf8');
             expect(source.split('\n')[0], moduleFile).toBe(`'use client';`);

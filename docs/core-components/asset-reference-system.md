@@ -279,7 +279,7 @@ export function useAsset<T extends AssetKind>(
 
 ### Example — Entity Component (engine-internal)
 
-`renderer/assets/` ships one public surface: the `@chimera-engine/renderer/assets` barrel (`./assets` in the package `exports`), which carries `useAsset`, `useAssetManager`, `useModelInstance`, the `AssetManagerProvider`, and the asset/error types they take. Every individual file behind the barrel (`AssetManager.ts`, `AssetResolver.ts`, …) remains a renderer internal game surfaces must not import (Invariant #96). The example below lives **inside `renderer/`** and uses relative imports.
+`renderer/assets/` ships one public surface: the `@chimera-engine/renderer/assets` barrel (`./assets` in the package `exports`), which carries `useAsset`, `useAssetManager`, `useModelInstance`, `useAnimationSheet`, the `AssetManagerProvider`, and the asset/error/parsed-sheet types they take. Every individual file behind the barrel (`AssetManager.ts`, `AssetResolver.ts`, …) remains a renderer internal game surfaces must not import (Invariant #96). The example below lives **inside `renderer/`** and uses relative imports.
 
 ```tsx
 // renderer/components/r3f/ — engine-internal example (not a shipped file)
@@ -422,4 +422,4 @@ mechanics and the `typescript` runtime dependency the AST crawl needs.
 - [Content Database](content-database-data-refs.md) — `DataRef<T>` for cross-collection data references
 - [Renderer Contexts](gameshell-ui-design-system.md) — `AssetManagerContext` injection in `GameShell`
 - [Module Boundaries](../executive-architecture/module-boundaries-file-tree.md) — `renderer/assets/` file tree
-- `@chimera-engine/renderer/assets` — the public barrel (Invariant #96) carrying `useAsset`, `useAssetManager`, `useModelInstance`, `AssetManagerProvider`, and the asset/error types they take
+- `@chimera-engine/renderer/assets` — the public barrel (Invariant #96) carrying `useAsset`, `useAssetManager`, `useModelInstance`, `useAnimationSheet`, `AssetManagerProvider`, and the asset/error/parsed-sheet types they take
