@@ -14,7 +14,7 @@
  *   - registry.has("engine:tick") returns true after registration
  */
 
-import { describe, it, expect, beforeEach, expectTypeOf } from 'vitest';
+import { describe, it, expect, beforeEach, expectTypeOf, vi } from 'vitest';
 import { ActionRegistry } from './ActionRegistry.js';
 import {
     EngineActions,
@@ -30,12 +30,15 @@ import {
     engineReturnToLobbyDefinition,
 } from './EngineActions.js';
 import { makeStubRng } from './__test-support__/stubs.js';
-import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
-import { entityId, playerId as toPlayerId, sceneId } from './types.js';
+import type { BaseGameSnapshot, PlayerId, ReduceContext, ValidationResult } from './types.js';
+import { entityId, isReduceContext, playerId as toPlayerId, sceneId } from './types.js';
 import type { GameTimer, TimerId, TimerRegistry } from './GameTimer.js';
+import { TimerManager } from './GameTimer.js';
 import type { AnimationWindowId, AnimationWindowRegistry } from './AnimationWindow.js';
+import { AnimationWindowManager } from './AnimationWindow.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
 import type { Logger } from '../foundation/logging.js';
+import { createContentDatabase } from '../content/index.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────────
 
@@ -1810,5 +1813,582 @@ describe('registerEngineActions — generic TState constraint', () => {
         expect(types).toContain('engine:undo');
         expect(types).toContain('engine:redo');
         expect(types).toContain('engine:sync_request');
+    });
+});
+
+// ─── engine:tick — the per-beat pass (F82) ────────────────────────────────────
+
+/**
+ * The beat pass composes the window ledger and the time-scale verbs into the
+ * one `engine:tick` reduce and hands the result to the game's `onBeat`.
+ *
+ * Properties pinned: `onBeat` runs exactly once per outer tick, after the fired
+ * child dispatches and after the window sweep; it sees that sweep's closures,
+ * and receives a context with no engine-internal field on it. The pass adds no
+ * `ctx.dispatch` call of its own.
+ *
+ * The order of `advanceTimeScale` and the sweep relative to EACH OTHER is not
+ * pinned here: the two write disjoint fields (`timeScale*` and
+ * `animationWindows`), and swapping them was measured to change no assertion
+ * in this file.
+ */
+describe('engine:tick — the per-beat pass (F82)', () => {
+    const OWNER = entityId('unit-1');
+    const WINDOW = 'sword-hit#1' as AnimationWindowId;
+
+    const makeBeatSnapshot = (overrides: Partial<BaseGameSnapshot> = {}): BaseGameSnapshot => ({
+        ...makeSnapshot(),
+        players: { [hostId]: { id: hostId } },
+        entities: { [OWNER]: { id: OWNER } },
+        ...overrides,
+    });
+
+    const openWindow = (remainingBeats: number): AnimationWindowRegistry => ({
+        [WINDOW]: { id: WINDOW, ownerId: OWNER, remainingBeats, payload: { damage: 12 } },
+    });
+
+    /** A context shaped like the pipeline's: every engine-internal field present. */
+    const makeEngineCtx = (overrides: Partial<ReduceContext> = {}): ReduceContext => ({
+        ...stubCtx,
+        dispatch: (state) => state,
+        ...overrides,
+    });
+
+    // ── The hook's calling contract ───────────────────────────────────────────
+
+    it('invokes ctx.beatReducer exactly once per outer tick', () => {
+        let calls = 0;
+        const ctx = makeEngineCtx({
+            beatReducer: (state) => {
+                calls += 1;
+                return state;
+            },
+        });
+
+        engineTickDefinition.reduce(makeBeatSnapshot(), { seed: 1 }, hostId, ctx);
+
+        expect(calls).toBe(1);
+    });
+
+    it('skips the beat reducer on a context that carries no dispatch', () => {
+        // The pass reaches `beatReducer` through `isReduceContext`, which tests
+        // for `dispatch`. A context with the hook and no `dispatch` therefore
+        // does not run it. `ActionPipeline` never builds one — it sets
+        // `dispatch` on every context — so this records the coupling rather
+        // than a reachable path, and it is what dropping the
+        // `isReduceContext(ctx)` conjunct would change.
+        let calls = 0;
+        const ctx = {
+            ...stubCtx,
+            beatReducer: (state: BaseGameSnapshot) => {
+                calls += 1;
+                return state;
+            },
+        };
+
+        engineTickDefinition.reduce(makeBeatSnapshot(), { seed: 1 }, hostId, ctx);
+
+        expect(calls).toBe(0);
+        // Control: the same hook on a context that DOES carry `dispatch` runs.
+        engineTickDefinition.reduce(
+            makeBeatSnapshot(),
+            { seed: 1 },
+            hostId,
+            makeEngineCtx({ beatReducer: ctx.beatReducer }),
+        );
+        expect(calls).toBe(1);
+    });
+
+    it('invokes ctx.beatReducer exactly once even when two timers fire child actions', () => {
+        let calls = 0;
+        const snapshot = makeBeatSnapshot({
+            timers: {
+                ['tmr-a' as TimerId]: makeTickTimer({
+                    id: 'tmr-a' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:a',
+                }),
+                ['tmr-b' as TimerId]: makeTickTimer({
+                    id: 'tmr-b' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:b',
+                }),
+            },
+        });
+        const ctx = makeEngineCtx({
+            beatReducer: (state) => {
+                calls += 1;
+                return state;
+            },
+        });
+
+        engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(calls).toBe(1);
+    });
+
+    it('hands the beat reducer a context carrying no engine-internal field', () => {
+        let beatCtxKeys: string[] = [];
+        const { logger } = makeCapturingLogger();
+        const ctx = makeEngineCtx({
+            logger,
+            beatReducer: (state, beatCtx) => {
+                beatCtxKeys = Object.keys(beatCtx).sort();
+                return state;
+            },
+        });
+
+        // The supplied context carries all three engine-internal fields, so a
+        // strip that misses any one of them shows up in the census below.
+        expect(Object.keys(ctx).sort()).toEqual(
+            ['beatReducer', 'dispatch', 'dispatchDepth', 'logger', 'rng'].sort(),
+        );
+
+        engineTickDefinition.reduce(makeBeatSnapshot(), { seed: 1 }, hostId, ctx);
+
+        expect(beatCtxKeys).toEqual(['dispatchDepth', 'rng']);
+    });
+
+    it("leaves 'dispatch' absent from the beat context, so isReduceContext refuses it", () => {
+        let hasDispatch: boolean | undefined;
+        let narrows: boolean | undefined;
+        const ctx = makeEngineCtx({
+            beatReducer: (state, beatCtx) => {
+                hasDispatch = 'dispatch' in beatCtx;
+                narrows = isReduceContext(beatCtx);
+                return state;
+            },
+        });
+
+        engineTickDefinition.reduce(makeBeatSnapshot(), { seed: 1 }, hostId, ctx);
+
+        expect(hasDispatch).toBe(false);
+        // The consequence: game code inside `onBeat` cannot narrow its way to
+        // `dispatch` (Invariant #89).
+        expect(narrows).toBe(false);
+    });
+
+    it('preserves EVERY game-facing field on the beat context', () => {
+        // Control for the strip above, over the whole `GameReduceContext`
+        // surface rather than a sample of it: the strip must remove the three
+        // engine-internal fields and nothing else, so a fourth key added to the
+        // destructuring is caught here whichever one it is.
+        const db = createContentDatabase([]);
+        const undoManager = { canUndo: () => true, canRedo: () => false };
+        const endTurnGuard = (): ValidationResult => ({ ok: true });
+        const endTurnAuthority = (): boolean => true;
+
+        let seen: Record<string, unknown> = {};
+        const ctx = makeEngineCtx({
+            dispatchDepth: 4,
+            db,
+            undoManager,
+            endTurnGuard,
+            endTurnAuthority,
+            beatReducer: (state, beatCtx) => {
+                seen = beatCtx as unknown as Record<string, unknown>;
+                return state;
+            },
+        });
+
+        engineTickDefinition.reduce(makeBeatSnapshot(), { seed: 1 }, hostId, ctx);
+
+        expect(Object.keys(seen).sort()).toEqual(
+            [
+                'db',
+                'dispatchDepth',
+                'endTurnAuthority',
+                'endTurnGuard',
+                'rng',
+                'undoManager',
+            ].sort(),
+        );
+        // Same values, not merely same keys.
+        expect(seen['rng']).toBe(ctx.rng);
+        expect(seen['dispatchDepth']).toBe(4);
+        expect(seen['db']).toBe(db);
+        expect(seen['undoManager']).toBe(undoManager);
+        expect(seen['endTurnGuard']).toBe(endTurnGuard);
+        expect(seen['endTurnAuthority']).toBe(endTurnAuthority);
+    });
+
+    // ── Where the hook sits in the pass ───────────────────────────────────────
+
+    it('runs the beat reducer AFTER the window sweep', () => {
+        let seenRemaining: number | undefined;
+        const snapshot = makeBeatSnapshot({ animationWindows: openWindow(3) });
+        const ctx = makeEngineCtx({
+            beatReducer: (state) => {
+                seenRemaining = state.animationWindows?.[WINDOW]?.remainingBeats;
+                return state;
+            },
+        });
+
+        engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(seenRemaining).toBe(2);
+    });
+
+    it('runs the beat reducer AFTER the fired child dispatches', () => {
+        let seenTick: number | undefined;
+        const snapshot = makeBeatSnapshot({
+            timers: {
+                ['tmr-a' as TimerId]: makeTickTimer({
+                    id: 'tmr-a' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:a',
+                }),
+            },
+        });
+        const ctx = makeEngineCtx({
+            // A child action that advances the clock.
+            dispatch: (state) => ({ ...state, tick: state.tick + 1 }),
+            beatReducer: (state) => {
+                seenTick = state.tick;
+                return state;
+            },
+        });
+
+        engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(seenTick).toBe(2);
+    });
+
+    it('runs the time-scale countdown BEFORE the beat reducer', () => {
+        let seenRestore: number | undefined;
+        const snapshot = makeBeatSnapshot({ timeScalePermille: 250, timeScaleRestoreBeats: 2 });
+        const ctx = makeEngineCtx({
+            beatReducer: (state) => {
+                seenRestore = state.timeScaleRestoreBeats;
+                return state;
+            },
+        });
+
+        engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(seenRestore).toBe(1);
+    });
+
+    it('hands the beat reducer the closures the sweep produced this beat', () => {
+        let seenClosed: readonly { id: string; reason: string }[] = [];
+        const snapshot = makeBeatSnapshot({ animationWindows: openWindow(0) });
+        const ctx = makeEngineCtx({
+            beatReducer: (state, _beatCtx, closed) => {
+                seenClosed = closed;
+                return state;
+            },
+        });
+
+        engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(seenClosed).toEqual([
+            { id: WINDOW, ownerId: OWNER, payload: { damage: 12 }, reason: 'expired' },
+        ]);
+    });
+
+    it('hands the beat reducer an empty closed list on a beat that closes nothing', () => {
+        // Control for the case above: `closed` is not a constant non-empty list.
+        let seenClosed: readonly unknown[] | undefined;
+        const snapshot = makeBeatSnapshot({ animationWindows: openWindow(3) });
+        const ctx = makeEngineCtx({
+            beatReducer: (state, _beatCtx, closed) => {
+                seenClosed = closed;
+                return state;
+            },
+        });
+
+        engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(seenClosed).toEqual([]);
+    });
+
+    it('adopts the state the beat reducer returns', () => {
+        const snapshot = makeBeatSnapshot({ animationWindows: openWindow(3) });
+        const ctx = makeEngineCtx({
+            // A game that cancelled the window closes it from inside the hook.
+            beatReducer: (state) => AnimationWindowManager.interrupt(state, WINDOW).next,
+        });
+
+        const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(next.animationWindows).toEqual({});
+    });
+
+    // ── The clocks are not each other ─────────────────────────────────────────
+
+    it('advances tick by 3 when two fired child actions each advance it, while an open window loses exactly one beat', () => {
+        // The pin that makes a `tick`-difference animation clock provably wrong:
+        // one beat passed, but `tick` moved by three.
+        const snapshot = makeBeatSnapshot({
+            animationWindows: openWindow(3),
+            timers: {
+                ['tmr-a' as TimerId]: makeTickTimer({
+                    id: 'tmr-a' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:a',
+                }),
+                ['tmr-b' as TimerId]: makeTickTimer({
+                    id: 'tmr-b' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:b',
+                }),
+            },
+        });
+        const ctx = makeEngineCtx({
+            dispatch: (state) => ({ ...state, tick: state.tick + 1 }),
+        });
+
+        const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(next.tick).toBe(3);
+        expect(next.animationWindows?.[WINDOW]?.remainingBeats).toBe(2);
+    });
+
+    it('advances tick by exactly 1 when no child action advances it', () => {
+        // Control for the case above: the +3 comes from the children, not from
+        // the beat pass adding increments of its own.
+        const snapshot = makeBeatSnapshot({
+            animationWindows: openWindow(3),
+            timeScalePermille: 250,
+            timeScaleRestoreBeats: 2,
+        });
+        const ctx = makeEngineCtx({ beatReducer: (state) => state });
+
+        expect(engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx).tick).toBe(1);
+    });
+
+    // ── The pass adds no dispatch of its own ──────────────────────────────────
+
+    it('calls ctx.dispatch for NO F82 path — a sweep and a restore are not actions', () => {
+        // F82 adds ZERO nested dispatch: this is what keeps a match with
+        // windows and dilation replayable without touching ReplayPlayer.
+        const dispatched: string[] = [];
+        const snapshot = makeBeatSnapshot({
+            animationWindows: openWindow(1),
+            timeScalePermille: 250,
+            timeScaleRestoreBeats: 1,
+        });
+        const ctx = makeEngineCtx({
+            dispatch: (state, action) => {
+                dispatched.push(action.type);
+                return state;
+            },
+            beatReducer: (state) => state,
+        });
+
+        engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        // The sweep closed a window and the dilation restored — neither is an
+        // action.
+        expect(dispatched).toEqual([]);
+    });
+
+    it('still dispatches the fired timer actions (control)', () => {
+        const dispatched: string[] = [];
+        const snapshot = makeBeatSnapshot({
+            animationWindows: openWindow(1),
+            timers: {
+                ['tmr-a' as TimerId]: makeTickTimer({
+                    id: 'tmr-a' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:a',
+                }),
+            },
+        });
+        const ctx = makeEngineCtx({
+            dispatch: (state, action) => {
+                dispatched.push(action.type);
+                return state;
+            },
+            beatReducer: (state) => state,
+        });
+
+        engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(dispatched).toEqual(['game:a']);
+    });
+
+    // ── TimerManager.advance stays a once-per-tick call (Invariant #55) ───────
+
+    it('calls TimerManager.advance exactly once even when the sweep closes and the dilation restores', () => {
+        const spy = vi.spyOn(TimerManager, 'advance');
+        try {
+            const snapshot = makeBeatSnapshot({
+                animationWindows: openWindow(0),
+                timeScalePermille: 250,
+                timeScaleRestoreBeats: 0,
+                timers: {
+                    ['tmr-a' as TimerId]: makeTickTimer({
+                        id: 'tmr-a' as TimerId,
+                        remainingTicks: 1,
+                        actionType: 'game:a',
+                    }),
+                },
+            });
+            const ctx = makeEngineCtx({ beatReducer: (state) => state });
+
+            const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+            expect(spy).toHaveBeenCalledTimes(1);
+            // The two F82 paths really did fire on this tick, so the count
+            // above is not measured over an idle beat.
+            expect(next.animationWindows).toEqual({});
+            expect(next.timeScalePermille).toBe(1000);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    // ── Zero-beat latency on an orphaned window ───────────────────────────────
+
+    it('closes a window whose owner a timer-fired child removed in the SAME tick', () => {
+        let seenClosed: readonly { reason: string }[] = [];
+        const snapshot = makeBeatSnapshot({
+            animationWindows: openWindow(3),
+            timers: {
+                ['tmr-kill' as TimerId]: makeTickTimer({
+                    id: 'tmr-kill' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:remove_unit',
+                }),
+            },
+        });
+        const ctx = makeEngineCtx({
+            // The fired child action removes the window's owner.
+            dispatch: (state) => ({ ...state, tick: state.tick + 1, entities: {} }),
+            beatReducer: (state, _beatCtx, closed) => {
+                seenClosed = closed;
+                return state;
+            },
+        });
+
+        const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        // One call, not two: the record is gone and the closure is reported in
+        // this beat's list.
+        expect(next.animationWindows).toEqual({});
+        expect(seenClosed).toEqual([
+            { id: WINDOW, ownerId: OWNER, payload: { damage: 12 }, reason: 'owner-gone' },
+        ]);
+    });
+
+    it('sweeps the registry a timer-fired child left behind, not the one the beat started with', () => {
+        // The registry axis of the same ordering: a child action that closed the
+        // window itself must not have it swept a second time, and the beat's
+        // closed list must not report it twice.
+        let seenClosed: readonly unknown[] | undefined;
+        const snapshot = makeBeatSnapshot({
+            animationWindows: openWindow(3),
+            timers: {
+                ['tmr-cancel' as TimerId]: makeTickTimer({
+                    id: 'tmr-cancel' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:cancel',
+                }),
+            },
+        });
+        const ctx = makeEngineCtx({
+            dispatch: (state) => ({
+                ...AnimationWindowManager.interrupt(state, WINDOW).next,
+                tick: state.tick + 1,
+            }),
+            beatReducer: (state, _beatCtx, closed) => {
+                seenClosed = closed;
+                return state;
+            },
+        });
+
+        const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(next.animationWindows).toEqual({});
+        expect(seenClosed).toEqual([]);
+    });
+
+    it('sweeps a window a timer-fired child OPENED in this same tick', () => {
+        // The sweep runs after the child dispatches, so a window a child opens
+        // for N beats is already at N-1 when the tick returns. This is the
+        // OPPOSITE convention to `GameTimer`, where a timer a child creates does
+        // not fire until the next `engine:tick` (§4.20) — the sweep has already
+        // run by then, whereas here it has not.
+        const snapshot = makeBeatSnapshot({
+            timers: {
+                ['tmr-open' as TimerId]: makeTickTimer({
+                    id: 'tmr-open' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:strike',
+                }),
+            },
+        });
+        const ctx = makeEngineCtx({
+            dispatch: (state) => ({
+                ...AnimationWindowManager.open(state, {
+                    id: WINDOW,
+                    ownerId: OWNER,
+                    durationBeats: 3,
+                }).next,
+                tick: state.tick + 1,
+            }),
+        });
+
+        const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(next.animationWindows?.[WINDOW]?.remainingBeats).toBe(2);
+    });
+
+    it('keeps a window whose owner is still live (control)', () => {
+        const snapshot = makeBeatSnapshot({
+            animationWindows: openWindow(3),
+            timers: {
+                ['tmr-keep' as TimerId]: makeTickTimer({
+                    id: 'tmr-keep' as TimerId,
+                    remainingTicks: 1,
+                    actionType: 'game:noop',
+                }),
+            },
+        });
+        const ctx = makeEngineCtx({ dispatch: (state) => ({ ...state, tick: state.tick + 1 }) });
+
+        const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, ctx);
+
+        expect(next.animationWindows?.[WINDOW]?.remainingBeats).toBe(2);
+    });
+
+    // ── A game using no F82 feature sees no delta ─────────────────────────────
+
+    it('leaves an F82-free tick identical to the clock advance alone', () => {
+        const snapshot = makeBeatSnapshot();
+        const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+
+        // Written as an inline literal rather than `{...snapshot, tick: 1}` so a
+        // stray field the pass adds cannot be spread into the expectation.
+        expect(next).toEqual({
+            tick: 1,
+            seed: 42,
+            players: { [hostId]: { id: hostId } },
+            entities: { [OWNER]: { id: OWNER } },
+            phase: 'waiting',
+            events: [],
+            turnNumber: 0,
+            timers: {},
+            gameResult: null,
+        });
+        // No new key at all — `toEqual` ignores a key whose value is undefined.
+        expect(Object.keys(next).sort()).toEqual(Object.keys(snapshot).sort());
+        // The timer registry is handed back by reference, as before F82.
+        expect(next.timers).toBe(snapshot.timers);
+    });
+
+    it('leaves an empty window registry as the same reference', () => {
+        // A game that has closed every window keeps an empty registry on the
+        // snapshot forever. The pass writes back whatever the sweep returned,
+        // so this is the sweep's own empty fast path reaching the snapshot: a
+        // pass that rebuilt the field instead would hand every later beat a
+        // fresh object.
+        const registry: AnimationWindowRegistry = {};
+        const snapshot = makeBeatSnapshot({ animationWindows: registry });
+
+        const next = engineTickDefinition.reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+
+        expect(next.animationWindows).toBe(registry);
     });
 });

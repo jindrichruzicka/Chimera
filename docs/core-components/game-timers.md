@@ -77,6 +77,11 @@ export const TimerManager = {
 
 ## engine:tick Reducer
 
+The timer half of the reducer, which is the part this document owns. It is an
+extract, not the whole body: `engine:tick` also advances `tick` before the
+dispatch loop and runs the per-beat pass after it (Invariant #128). Read
+`simulation/engine/EngineActions.ts` for the body itself.
+
 ```typescript
 // The engine:tick reducer calls advance() before game-defined logic
 const { next, fired } = TimerManager.advance(state.timers);
@@ -98,7 +103,6 @@ for (const { timerId, actionType, payload } of fired) {
         }
     }
 }
-return nextState;
 ```
 
 ---

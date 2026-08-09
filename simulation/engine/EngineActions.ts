@@ -35,8 +35,13 @@ import type {
 } from './types.js';
 import { entityId, gamePhase, isReduceContext, playerId, sceneId } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
+import type { ClosedAnimationWindow } from './AnimationWindow.js';
+import { AnimationWindowManager } from './AnimationWindow.js';
 import { TimerManager } from './GameTimer.js';
+import { advanceTimeScale } from './TimeScale.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
+
+const EMPTY_CLOSED: readonly ClosedAnimationWindow[] = Object.freeze([]);
 
 // ─── Payload types ────────────────────────────────────────────────────────────
 
@@ -320,6 +325,47 @@ export const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
                     }
                 }
             }
+        }
+
+        // ── The per-beat pass ───────────────────────────────────────────────
+        // One BEAT of the animation clock, run after the child dispatches so a
+        // window whose owner a fired action removed is swept in the same tick.
+        // Every step below is a pure call — the pass dispatches nothing, which
+        // is what keeps a match using F82 replayable with no ReplayPlayer
+        // change (Invariants #70/#71).
+        nextState = advanceTimeScale(nextState);
+
+        // A game that declares no window never carries the field, so it pays
+        // nothing here. Once the field exists the sweep runs every beat and
+        // `AnimationWindowManager.advance` handles the empty registry itself,
+        // handing back the same reference.
+        const windows = nextState.animationWindows;
+        let closedWindows: readonly ClosedAnimationWindow[] = EMPTY_CLOSED;
+        if (windows !== undefined) {
+            const liveEntityIds = new Set(Object.keys(nextState.entities) as EntityId[]);
+            const sweep = AnimationWindowManager.advance(windows, liveEntityIds);
+            closedWindows = sweep.closed;
+            nextState = { ...nextState, animationWindows: sweep.next };
+        }
+
+        // The game's per-beat hook runs last, so it sees the post-sweep state
+        // and this beat's closures. `dispatch`, `logger` and `beatReducer` are
+        // dropped from the context it receives: `#ctx` is a shared mutable
+        // singleton whose `dispatch` is the real dispatcher during
+        // `engine:tick`, and game code must not reach it (Invariant #89).
+        // `isReduceContext` tests for `dispatch`, so a context carrying a
+        // `beatReducer` and no `dispatch` skips the hook — pinned by
+        // `EngineActions.test.ts` › `skips the beat reducer on a context that
+        // carries no dispatch`. For how the pipeline's own context gets its
+        // `dispatch`, see `ActionPipeline.process()` stage 4.
+        if (isReduceContext(ctx) && ctx.beatReducer !== undefined) {
+            const {
+                dispatch: _dispatch,
+                logger: _logger,
+                beatReducer: _beatReducer,
+                ...beatCtx
+            } = ctx;
+            nextState = ctx.beatReducer(nextState, beatCtx, closedWindows);
         }
 
         return nextState;

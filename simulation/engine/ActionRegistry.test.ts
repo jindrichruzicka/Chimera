@@ -316,6 +316,35 @@ describe('ActionRegistry game definitions', () => {
         );
     });
 
+    it('registers a GameDefinition with a per-beat onBeat hook', () => {
+        // The registry's job only: store the hook and hand it back callable.
+        // What the ENGINE hands it — a context with no `dispatch` on it — is
+        // `engine:tick`'s contract and is pinned in `EngineActions.test.ts`;
+        // asserting it here would only measure the fixture this test built.
+        const seenClosedCounts: number[] = [];
+        const definition: GameDefinition<BaseGameSnapshot> = {
+            onBeat: (state, _ctx, closed) => {
+                seenClosedCounts.push(closed.length);
+                return state;
+            },
+        };
+
+        registry.registerGame('tactics', definition);
+
+        const state = {} as BaseGameSnapshot;
+        const ctx = { rng: makeStubRng(0.5), dispatchDepth: 0 };
+        expect(registry.resolveGame('tactics')?.onBeat?.(state, ctx, [])).toBe(state);
+        expect(seenClosedCounts).toEqual([0]);
+    });
+
+    it('leaves onBeat absent on a game that registers none', () => {
+        // Control: `onBeat` is additive — the optional-chain call sites in
+        // `ActionPipeline` see `undefined`, not a default no-op.
+        registry.registerGame('tactics', { buildInitialEntities: () => ({}) });
+
+        expect(registry.resolveGame('tactics')?.onBeat).toBeUndefined();
+    });
+
     it('keeps action definitions and game definitions in separate registries', () => {
         const definition: GameDefinition<BaseGameSnapshot> = {
             buildInitialEntities: () => ({}),

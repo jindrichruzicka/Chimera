@@ -19,7 +19,7 @@ import type { ContentDatabase } from '../content/index.js';
 export type { ContentDatabase } from '../content/index.js';
 import type { TimerRegistry } from './GameTimer.js';
 export type { TimerRegistry } from './GameTimer.js';
-import type { AnimationWindowRegistry } from './AnimationWindow.js';
+import type { AnimationWindowRegistry, ClosedAnimationWindow } from './AnimationWindow.js';
 export type { AnimationWindowRegistry } from './AnimationWindow.js';
 import type { Logger } from '../foundation/logging.js';
 import type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
@@ -572,6 +572,24 @@ export interface ReduceContext extends GameReduceContext {
      * engine-only action) accesses it after narrowing via `isReduceContext()`.
      */
     readonly logger?: Logger;
+    /**
+     * The active game's per-beat reducer, populated by `ActionPipeline` from
+     * `GameDefinition.onBeat` (Invariant #128). Absent for games that register none.
+     *
+     * `engine:tick` calls it once, last in the beat pass, after the window
+     * sweep — `closed` is that sweep's report. The context it is handed is
+     * rebuilt without the engine-internal fields, so `dispatch` is absent from
+     * it and `isReduceContext()` refuses to narrow it (Invariant #89).
+     *
+     * Engine-internal, like `dispatch` and `logger`: the game supplies the
+     * function through its `GameDefinition` and never reads this field back.
+     * `GameReduceContext`, the public ISP surface, does not carry it.
+     */
+    readonly beatReducer?: (
+        state: Readonly<BaseGameSnapshot>,
+        ctx: GameReduceContext,
+        closed: readonly ClosedAnimationWindow[],
+    ) => BaseGameSnapshot;
 }
 
 /**

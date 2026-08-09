@@ -10,9 +10,11 @@
  *   #3 — simulation/ is side-effect-free; no Node.js or Electron imports.
  */
 
+import type { ClosedAnimationWindow } from './AnimationWindow.js';
 import type {
     ActionDefinition,
     BaseGameSnapshot,
+    GameReduceContext,
     GameResult,
     GameSetupConfig,
     PlayerId,
@@ -65,6 +67,30 @@ export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapsh
      * populates from this hook.
      */
     readonly mayEndTurn?: (state: Readonly<TState>, playerId: PlayerId) => boolean;
+    /**
+     * Optional PURE per-beat reducer, called once by `engine:tick` at the end of
+     * the beat pass. Unlike a self-resetting interval `GameTimer`, it reaches
+     * the game without a nested dispatch.
+     *
+     * Receives the post-sweep state and `closed` — the windows
+     * `AnimationWindowManager.advance` closed on this beat, which is the one
+     * report a game needs to undo whatever opening the window turned on.
+     * Return the input reference to change nothing.
+     *
+     * `ctx` is a `GameReduceContext`, so `dispatch` is not reachable from here
+     * (Invariant #89) — a beat that must change state changes it by returning a
+     * new snapshot, never by dispatching.
+     *
+     * Reaches the engine ignorant of any specific game via
+     * `ReduceContext.beatReducer`, which `ActionPipeline` populates from this
+     * hook. That field is engine-internal, so unlike `canEndTurn`/`mayEndTurn`
+     * this adds nothing to the public `GameReduceContext` surface.
+     */
+    readonly onBeat?: (
+        state: Readonly<TState>,
+        ctx: GameReduceContext,
+        closed: readonly ClosedAnimationWindow[],
+    ) => TState;
 }
 
 // ─── Error classes ────────────────────────────────────────────────────────────

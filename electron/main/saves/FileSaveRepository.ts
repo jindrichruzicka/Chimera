@@ -48,7 +48,7 @@ export const LIST_CONCURRENCY = 16;
 
 /**
  * Thrown when a slot-ID component (gameId or slotName) fails the allowlist
- * validation that prevents path traversal (OWASP A01, Invariant #128).
+ * validation that prevents path traversal (OWASP A01).
  *
  * Allowed pattern: `^[a-z0-9][a-z0-9_-]{0,63}$`
  * — starts with a lowercase letter or digit

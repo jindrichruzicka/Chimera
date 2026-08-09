@@ -17,9 +17,11 @@
  */
 
 import type { Logger } from '../foundation/logging.js';
+import type { ClosedAnimationWindow } from './AnimationWindow.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
+    GameReduceContext,
     PipelineContext,
     PlayerId,
     ReduceContext,
@@ -255,6 +257,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             this.#gameId !== undefined ? this.#registry.resolveGame(this.#gameId) : undefined;
         const canEndTurn = resolvedGame?.canEndTurn;
         const mayEndTurn = resolvedGame?.mayEndTurn;
+        const onBeat = resolvedGame?.onBeat;
 
         this.#ctx = {
             rng: createRng(0, 0),
@@ -275,6 +278,15 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                 ? {
                       endTurnAuthority: (state: Readonly<BaseGameSnapshot>, playerId: PlayerId) =>
                           mayEndTurn(state as TState, playerId),
+                  }
+                : {}),
+            ...(onBeat !== undefined
+                ? {
+                      beatReducer: (
+                          state: Readonly<BaseGameSnapshot>,
+                          beatCtx: GameReduceContext,
+                          closed: readonly ClosedAnimationWindow[],
+                      ) => onBeat(state as TState, beatCtx, closed),
                   }
                 : {}),
         };

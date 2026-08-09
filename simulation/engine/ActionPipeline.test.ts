@@ -1928,3 +1928,196 @@ describe('ActionPipeline — ctx.dispatchDepth in ReduceContext', () => {
         expect(capturedValidateDepth).toBe(0);
     });
 });
+
+// ─── The per-beat hook wiring (F82) ──────────────────────────────────────────
+
+/**
+ * `ActionPipeline` resolves `GameDefinition.onBeat` once and exposes it on the
+ * engine-internal `ReduceContext.beatReducer`, in the same conditional-spread
+ * shape as `endTurnGuard`.
+ *
+ * Properties pinned: the field is absent for a game that registers no hook,
+ * the hook reaches `engine:tick` through the real pipeline, and what the hook
+ * returns decides between the tick-only and the full broadcast.
+ */
+describe('ActionPipeline — GameDefinition.onBeat wiring', () => {
+    const GAME_ID = 'beat-game';
+
+    const makeTickRegistry = (): ActionRegistry => {
+        const r = new ActionRegistry();
+        r.registerEngineAction(engineTickDefinition);
+        r.register(noopDef);
+        return r;
+    };
+
+    const makeTickSnapshot = (playerIds: readonly PlayerId[]): BaseGameSnapshot => ({
+        tick: 0,
+        seed: 1,
+        players: Object.fromEntries(playerIds.map((id) => [id, { id }])),
+        entities: {},
+        phase: 'test' as BaseGameSnapshot['phase'],
+        events: [],
+        turnNumber: 0,
+        timers: {},
+        gameResult: null,
+    });
+
+    it('populates ctx.beatReducer from the active game onBeat', () => {
+        const r = makeTickRegistry();
+        r.registerGame(GAME_ID, { onBeat: (state) => state });
+        let present: boolean | undefined;
+        r.register({
+            type: 'game:probe',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                present = 'beatReducer' in ctx;
+                return state;
+            },
+        });
+
+        const p = new ActionPipeline(r, { gameId: GAME_ID });
+        p.process(makeTickSnapshot([PID]), makeEnvelope(0, 'game:probe'));
+
+        expect(present).toBe(true);
+    });
+
+    it('leaves ctx.beatReducer absent for a game that registers no onBeat', () => {
+        // The conditional spread, not a present-but-undefined key: the same
+        // shape `endTurnGuard` uses (exactOptionalPropertyTypes).
+        const r = makeTickRegistry();
+        r.registerGame(GAME_ID, { buildInitialEntities: () => ({}) });
+        let present: boolean | undefined;
+        r.register({
+            type: 'game:probe',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                present = 'beatReducer' in ctx;
+                return state;
+            },
+        });
+
+        const p = new ActionPipeline(r, { gameId: GAME_ID });
+        p.process(makeTickSnapshot([PID]), makeEnvelope(0, 'game:probe'));
+
+        expect(present).toBe(false);
+    });
+
+    it('calls the game onBeat once per engine:tick processed through the pipeline', () => {
+        const calls: number[] = [];
+        const r = makeTickRegistry();
+        r.registerGame(GAME_ID, {
+            onBeat: (state) => {
+                calls.push(state.tick);
+                return state;
+            },
+        });
+
+        const p = new ActionPipeline(r, { gameId: GAME_ID });
+        const first = p.process(
+            makeTickSnapshot([PID]),
+            makeEnvelope(0, 'engine:tick', { seed: 1 }),
+        );
+        p.process(first, makeEnvelope(1, 'engine:tick', { seed: 1 }));
+
+        expect(calls).toEqual([1, 2]);
+    });
+
+    it('does not call the game onBeat for a non-tick action', () => {
+        // Control: the hook is the per-BEAT vehicle, not a per-action one.
+        let calls = 0;
+        const r = makeTickRegistry();
+        r.registerGame(GAME_ID, {
+            onBeat: (state) => {
+                calls += 1;
+                return state;
+            },
+        });
+
+        const p = new ActionPipeline(r, { gameId: GAME_ID });
+        p.process(makeTickSnapshot([PID]), makeEnvelope(0, 'game:noop'));
+
+        expect(calls).toBe(0);
+    });
+
+    // ── The measured broadcast cost of registering a hook ─────────────────────
+
+    it('keeps an idle engine:tick on the broadcastTick branch when onBeat returns the input reference', () => {
+        const r = makeTickRegistry();
+        r.registerGame(GAME_ID, { onBeat: (state) => state });
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const p = new ActionPipeline(r, {
+            gameId: GAME_ID,
+            context: { broadcast, broadcastTick },
+        });
+
+        p.process(makeTickSnapshot([PID]), makeEnvelope(0, 'engine:tick', { seed: 1 }));
+
+        expect(broadcast).not.toHaveBeenCalled();
+        expect(broadcastTick).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the broadcastTick branch when onBeat returns a fresh SHALLOW COPY', () => {
+        // Measured, and worth stating because the opposite is the natural
+        // guess: `#isClockOnlyTick` compares the snapshots FIELD BY FIELD, so a
+        // copy whose every field is the same reference is still clock-only. A
+        // hook that reallocates the snapshot without changing anything in it
+        // therefore costs nothing on the wire.
+        const r = makeTickRegistry();
+        r.registerGame(GAME_ID, { onBeat: (state) => ({ ...state }) });
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const p = new ActionPipeline(r, {
+            gameId: GAME_ID,
+            context: { broadcast, broadcastTick },
+        });
+
+        p.process(makeTickSnapshot([PID]), makeEnvelope(0, 'engine:tick', { seed: 1 }));
+
+        expect(broadcast).not.toHaveBeenCalled();
+        expect(broadcastTick).toHaveBeenCalledTimes(1);
+    });
+
+    it('flips an idle engine:tick to a full broadcast when onBeat changes a field', () => {
+        // The measured cost of the hook: what pays a full snapshot broadcast
+        // per player is a CHANGED FIELD, not a new snapshot reference.
+        const r = makeTickRegistry();
+        r.registerGame(GAME_ID, {
+            onBeat: (state) => ({ ...state, events: [{ type: 'game:beat' }] }),
+        });
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const p = new ActionPipeline(r, {
+            gameId: GAME_ID,
+            context: { broadcast, broadcastTick },
+        });
+
+        p.process(makeTickSnapshot([PID]), makeEnvelope(0, 'engine:tick', { seed: 1 }));
+
+        expect(broadcastTick).not.toHaveBeenCalled();
+        expect(broadcast).toHaveBeenCalledTimes(1);
+    });
+
+    it('flips to a full broadcast when onBeat adds a KEY the snapshot did not carry', () => {
+        // The other half of `#isClockOnlyTick`: it also compares key counts, so
+        // a hook that writes a new field is a full broadcast even though every
+        // pre-existing field is untouched.
+        const r = makeTickRegistry();
+        r.registerGame(GAME_ID, {
+            onBeat: (state) => ({ ...state, timeScalePermille: 250 }),
+        });
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const p = new ActionPipeline(r, {
+            gameId: GAME_ID,
+            context: { broadcast, broadcastTick },
+        });
+
+        p.process(makeTickSnapshot([PID]), makeEnvelope(0, 'engine:tick', { seed: 1 }));
+
+        expect(broadcastTick).not.toHaveBeenCalled();
+        expect(broadcast).toHaveBeenCalledTimes(1);
+    });
+});
