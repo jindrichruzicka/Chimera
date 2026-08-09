@@ -14,8 +14,11 @@ const workspaceRoot = import.meta.dirname;
 // responsive; by avoiding redundant cold transforms it is also *faster* on the
 // renderer suite. The bottleneck is one main thread, so the cap is a small
 // constant rather than core-scaled.
+// Cap at 2: on the 4-core CI runner the formula previously yielded 3 forks,
+// which still saturated the Vite main thread and caused the final birpc
+// `onTaskUpdate` call to time out after all tests had passed.
 const availableParallelism = os.availableParallelism?.() ?? os.cpus().length;
-const MAX_TEST_FORKS = Math.max(2, Math.min(4, availableParallelism - 1));
+const MAX_TEST_FORKS = Math.max(1, Math.min(2, availableParallelism - 1));
 
 const VIRTUAL_PREFIX = '\0chimera-raw-css:';
 const VIRTUAL_PREFIX_STRIPPED = 'chimera-raw-css:';
