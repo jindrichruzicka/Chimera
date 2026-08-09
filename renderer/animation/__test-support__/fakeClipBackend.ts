@@ -29,10 +29,10 @@ export interface FakeClipSpec {
     readonly loop?: AnimationLoopMode;
     /**
      * The phase a `'once'` clip stops and latches `ended` at. Defaults to 1, which
-     * is where a mesh mixer's finished action clamps. A sprite backend stops on
-     * the START of its last cell instead, so a `'once'` clip can genuinely end
-     * BELOW phase 1 — and a passage authored to run to the clip end is then still
-     * open when it does.
+     * is where a mesh mixer's finished action clamps and where the sprite backend
+     * clamps its own integrator. A backend that stopped BELOW phase 1 would leave
+     * a passage authored to run to the clip end still open when it ended, which is
+     * the scheduler's forced-unwind case; this knob is how that case is reached.
      */
     readonly endsAtPhase?: number;
 }

@@ -309,12 +309,14 @@ chimera/
 │   │   ├── TokenModeI18nProvider.tsx  # Store-connected wrapper (debug token-mode + active-game bundle)
 │   │   ├── useTranslate.ts          # useTranslate() — throws outside I18nProvider (#83)
 │   │   └── useActiveGameTranslations.ts  # Resolves active game's locale/languages/override bundle
-│   ├── animation/                    # Clip-sheet compile half and marker scheduling (F82); renderer-internal — no `exports` subpath
+│   ├── animation/                    # Clip-sheet compile half, marker scheduling and the clip backends (F82); renderer-internal — no `exports` subpath
 │   │   ├── ClipPosition.ts          # resolveClipPosition — fail-soft authored position → phase in [0, 1]
 │   │   ├── ClipTimeline.ts          # compileClipTimeline — sorted phase-denominated marks; warnings returned, not logged
-│   │   ├── ClipBackend.ts           # ClipBackend / ClipPlayback / PlayheadSample seam; supportsBlending narrows
+│   │   ├── ClipBackend.ts           # ClipBackend / ClipPlayback / PlayheadSample seam; supportsBlending narrows, checkedPlaybackSpeed / checkedLoopMode refuse
 │   │   ├── clipMarkerScheduler.ts   # Pure playhead → notify/passage/clip-end batches; sole producer of clip-end
-│   │   └── ClipPlayer.ts            # Speed stack, per-playback step bound, handler fan-out; getTimeScale and report injected
+│   │   ├── ClipPlayer.ts            # Speed stack, per-playback step bound, handler fan-out; getTimeScale and report injected
+│   │   ├── MeshClipBackend.ts       # ClipBackend + SupportsClipBlending over an INJECTED AnimationMixer; ended derived from state
+│   │   └── SpriteClipBackend.ts     # ClipBackend over an atlas run; writes uv into an injected geometry, never touches the shared Texture
 │   ├── shell/
 │   │   └── SettingsLanguageSelector.tsx  # Store-connected wrapper for the settings Language field (§4.39)
 │   ├── logging/

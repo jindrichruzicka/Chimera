@@ -22,8 +22,8 @@ The sheet types themselves — `AnimationClipName`, `AnimationMarkName`, `Animat
 mirroring `audio-cue-sheet.ts`: pure type declarations with zero runtime, asserted by an esbuild
 pin that the module bundles to the empty string. A `ClipPosition` is a normalized phase, an
 absolute `{ seconds }`, or a `{ frame }` index. `AnimationLoopMode` is `'once' | 'loop'` and
-deliberately has no ping-pong member — a reversing playhead inverts the phase-decrease test the
-marker sampler will depend on, so it is refused at the type level rather than clamped later.
+deliberately has no ping-pong member — nothing downstream models a reversing playhead, so it is
+refused at the type level rather than clamped later.
 
 `compileAnimationWindows(sheet, clipName, tickRateMs)` is the reason the visual span and the
 mechanical one are authored twice. A passage carries clip-relative `from`/`to` positions and,

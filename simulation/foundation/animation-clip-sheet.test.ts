@@ -72,8 +72,8 @@ describe('AnimationLoopMode', () => {
     });
 
     it('rejects ping-pong — a reversing playhead is refused, never clamped', () => {
-        // @ts-expect-error: 'ping-pong' inverts the phase-decrease test the
-        // marker sampler depends on and is not a supported loop mode.
+        // @ts-expect-error: 'ping-pong' is not a supported loop mode — nothing
+        // downstream models a reversing playhead.
         const mode: AnimationLoopMode = 'ping-pong';
         expect(mode).toBe('ping-pong');
     });

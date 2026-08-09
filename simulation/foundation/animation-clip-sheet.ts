@@ -58,9 +58,9 @@ export type AnimationWindowName = string;
  * - `'once'` — plays to the end and stops.
  * - `'loop'` — restarts from the beginning, forwards, indefinitely.
  *
- * There is deliberately no ping-pong mode: a reversing playhead inverts the
- * phase-decrease test the marker sampler uses to detect a wrap, which would
- * silently corrupt every mark boundary rather than fail visibly.
+ * There is deliberately no ping-pong mode: nothing downstream models a reversing
+ * playhead, and a mode the renderer cannot honour is refused at the type level
+ * rather than clamped into one of these two later.
  */
 export type AnimationLoopMode = 'once' | 'loop';
 

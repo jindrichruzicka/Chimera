@@ -1,10 +1,11 @@
 /**
  * renderer/animation/ClipBackend.test.ts
  *
- * Unit tests for the one piece of runtime code in the clip-backend seam:
- * `supportsBlending`. Everything else in `ClipBackend.ts` is an interface, held
- * by the conforming double below — a shape error there is a `pnpm typecheck`
- * failure, not an assertion failure, which is the only gate a type has.
+ * Unit tests for the runtime code in the clip-backend seam: the narrowing guard
+ * `supportsBlending` and the two refusals every implementation owes its callers.
+ * Everything else in `ClipBackend.ts` is an interface, held by the conforming
+ * double below — a shape error there is a `pnpm typecheck` failure, not an
+ * assertion failure, which is the only gate a type has.
  *
  * Feature reference: F82 — Animation System (clip sheets, marker scheduling,
  * beat-owned gameplay windows, time dilation),
@@ -20,7 +21,9 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { supportsBlending } from './ClipBackend.js';
+import type { AnimationLoopMode } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
+
+import { checkedLoopMode, checkedPlaybackSpeed, supportsBlending } from './ClipBackend.js';
 import type {
     ClipBackend,
     ClipPlayback,
@@ -86,4 +89,45 @@ describe('supportsBlending', () => {
         expect(backend.play('swing', options)).toBe(playback);
         expect(backend.play('swing', { loop: 'loop' })).toBeNull();
     });
+});
+
+describe('checkedPlaybackSpeed', () => {
+    it.each([0, 0.25, 1, 100, Number.MAX_VALUE])('accepts the usable multiplier %s', (value) => {
+        expect(checkedPlaybackSpeed(value, 'clip speed')).toBe(value);
+    });
+
+    it.each([-0.0001, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+        'refuses %s',
+        (value) => {
+            expect(() => checkedPlaybackSpeed(value, 'clip speed')).toThrow(RangeError);
+        },
+    );
+
+    it('never clamps a large multiplier, because the one ceiling is on the product', () => {
+        // A second ceiling here would be invisible behind `effectiveClipSpeed`'s
+        // and would silently change what a large clip speed times a small player
+        // speed comes to.
+        expect(checkedPlaybackSpeed(1e6, 'clip speed')).toBe(1e6);
+    });
+
+    it('names the layer that was written, so three of them are distinguishable', () => {
+        expect(() => checkedPlaybackSpeed(-1, 'player speed')).toThrow(/^player speed must be/u);
+        expect(() => checkedPlaybackSpeed(-1, 'clip speed')).toThrow(/^clip speed must be/u);
+    });
+});
+
+describe('checkedLoopMode', () => {
+    it.each(['once', 'loop'] as const)('accepts the authored mode %s', (mode) => {
+        expect(checkedLoopMode(mode)).toBe(mode);
+    });
+
+    it.each(['pingpong', 'PingPong', 'Once', '', 'repeat'])(
+        'refuses %s, which no backend maps',
+        (mode) => {
+            // Only reachable from unsound data — `AnimationLoopMode` spells two
+            // values — and a fall-through to a default would silently decide
+            // whether a clip ever ends.
+            expect(() => checkedLoopMode(mode as AnimationLoopMode)).toThrow(RangeError);
+        },
+    );
 });

@@ -3,8 +3,9 @@
  *
  * The seam between the animation layer and whatever actually moves pixels: a
  * three.js `AnimationMixer` driving a skinned mesh, or a sprite atlas stepping
- * through frame indices. Interfaces plus one narrowing guard — no implementation
- * lives here, which is what lets the compile half stay three.js-free.
+ * through frame indices. Interfaces, one narrowing guard and the two refusals
+ * every implementation owes its callers — no playback machinery lives here,
+ * which is what lets the compile half stay three.js-free.
  *
  * Feature reference: F82 — Animation System (clip sheets, marker scheduling,
  * beat-owned gameplay windows, time dilation),
@@ -43,7 +44,18 @@ export interface PlayheadSample {
      * report 1 would never fire it.
      */
     readonly phase: number;
-    /** How many times the clip has wrapped since it started. Distinguishes a loop from a seek. */
+    /**
+     * How many times the clip has wrapped since it started. Distinguishes a loop
+     * from a seek.
+     *
+     * Counts CYCLE BOUNDARIES CROSSED, and is never incremented by `ended`
+     * latching: a `'once'` clip cannot wrap, so its `cycle` stays 0 however far
+     * past its end it is advanced. A step worth several cycles counts several,
+     * and a step of exactly one clip length counts one even though it lands back
+     * on the phase it started from — the seated scheduler reads a loop out of
+     * this number, and a wrap it never heard about is a whole clip of marks
+     * silently dropped.
+     */
     readonly cycle: number;
     /** True once a `'once'` clip has reached its end and stopped advancing. */
     readonly ended: boolean;
@@ -113,4 +125,47 @@ export interface SupportsClipBlending extends ClipBackend {
  */
 export function supportsBlending(backend: ClipBackend): backend is SupportsClipBlending {
     return typeof (backend as Partial<SupportsClipBlending>).crossfadeTo === 'function';
+}
+
+/**
+ * Rule SPEED-NON-NEGATIVE: `value` if it is a usable multiplier, or a
+ * `RangeError`.
+ *
+ * A negative multiplier is REFUSED rather than clamped. Reverse playback would
+ * invert the phase-increase a wrap is read out of, so a sign error must fail
+ * where it is written rather than corrupt every mark boundary downstream. It
+ * never clamps upwards either — the one ceiling lives on the PRODUCT of the
+ * speed stack, and a second one per layer would be invisible behind it.
+ *
+ * It lives on the seam rather than in each implementation because the shared
+ * conformance suite asserts the refusal for the backends it runs against: two
+ * copies of the predicate could drift into two different contracts, both green.
+ *
+ * @param label  Names the layer in the message — a caller with three of them
+ *               needs to know which one it wrote.
+ */
+export function checkedPlaybackSpeed(value: number, label: string): number {
+    if (!Number.isFinite(value) || value < 0) {
+        throw new RangeError(
+            `${label} must be a finite number of at least 0, received ${value}; reverse playback is not supported`,
+        );
+    }
+    return value;
+}
+
+/**
+ * `mode` if it is a loop mode a backend can honour, or a `RangeError`.
+ *
+ * {@link AnimationLoopMode} spells `'once'` and `'loop'` and nothing else, so
+ * this only fires on unsound data — and falling through to a default there would
+ * silently decide whether a clip ever ends. {@link PlayheadSample} counts cycles
+ * and never signs them, so ping-pong is the mode that must stay unreachable.
+ */
+export function checkedLoopMode(mode: AnimationLoopMode): AnimationLoopMode {
+    if (mode !== 'once' && mode !== 'loop') {
+        throw new RangeError(
+            `animation loop mode must be 'once' or 'loop', received ${String(mode)}; ping-pong playback is not supported`,
+        );
+    }
+    return mode;
 }

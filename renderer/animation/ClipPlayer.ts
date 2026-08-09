@@ -48,10 +48,9 @@
  *    because a mark that fires every frame would otherwise fill a log with one
  *    fault.
  *
- * Rule SPEED-NON-NEGATIVE: a negative multiplier is REFUSED with a `RangeError`
- * rather than clamped. Reverse playback would invert the phase-increase the
- * scheduler reads a wrap out of, so a sign error must fail where it is written
- * rather than corrupt every mark boundary downstream.
+ * Rule SPEED-NON-NEGATIVE applies to both layers this class owns, through the
+ * seam's own `checkedPlaybackSpeed` — one definition of the refusal, shared with
+ * the backends that make it rather than restated here.
  */
 
 import type {
@@ -60,6 +59,7 @@ import type {
     AnimationMarkName,
 } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
 
+import { checkedPlaybackSpeed } from './ClipBackend.js';
 import type { ClipBackend, ClipPlayback, PlayheadSample } from './ClipBackend.js';
 import { compileClipTimeline } from './ClipTimeline.js';
 import type { ClipSheetSource, CompiledMark } from './ClipTimeline.js';
@@ -221,7 +221,7 @@ export class ClipPlayer {
         }
         // Refused before anything is started or replaced, so a bad speed leaves
         // the player exactly as it was.
-        const clipSpeed = checkedSpeed(request.speed ?? 1, 'clip speed');
+        const clipSpeed = checkedPlaybackSpeed(request.speed ?? 1, 'clip speed');
 
         const timeline = compileClipTimeline(
             request.sheet ?? null,
@@ -282,7 +282,7 @@ export class ClipPlayer {
      * @throws RangeError  when `speed` is negative or not finite.
      */
     setClipSpeed(clipName: AnimationClipName, speed: number): void {
-        const checked = checkedSpeed(speed, 'clip speed');
+        const checked = checkedPlaybackSpeed(speed, 'clip speed');
         const entry = this.#active.get(clipName);
         if (entry !== undefined) {
             entry.clipSpeed = checked;
@@ -295,7 +295,7 @@ export class ClipPlayer {
      * @throws RangeError  when `speed` is negative or not finite.
      */
     setPlayerSpeed(speed: number): void {
-        this.#playerSpeed = checkedSpeed(speed, 'player speed');
+        this.#playerSpeed = checkedPlaybackSpeed(speed, 'player speed');
     }
 
     /**
@@ -413,20 +413,6 @@ export class ClipPlayer {
 }
 
 // ─── internals ──────────────────────────────────────────────────────────────────
-
-/**
- * `value` if it is a usable multiplier, or a `RangeError`. Does NOT clamp: the
- * one ceiling lives on the product in {@link effectiveClipSpeed}, and a second
- * one here would be unobservable behind it.
- */
-function checkedSpeed(value: number, label: string): number {
-    if (!Number.isFinite(value) || value < 0) {
-        throw new RangeError(
-            `${label} must be a finite number of at least 0, received ${value}; reverse playback is not supported`,
-        );
-    }
-    return value;
-}
 
 /**
  * `state` seated at where the playhead actually is. Returns the state unchanged

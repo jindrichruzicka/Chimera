@@ -224,9 +224,8 @@ export function stepScheduler(
     if (next.ended) {
         // The ending sweep is the ordinary one, bounded by where the playhead
         // actually stopped rather than by a hard 1. A backend whose `'once'` clip
-        // stops below phase 1 — a sprite atlas ends on the START of its last cell
-        // — leaves a passage authored to the clip end still open, which is the
-        // case the forced unwind below is for.
+        // stops below phase 1 leaves a passage authored to the clip end still
+        // open, which is the case the forced unwind below is for.
         sweep(marks, span(state.lastPhase, false, next.phase, true), pass);
         unwind(pass, 'clip-ended');
         events.push({ kind: 'clip-end' });
