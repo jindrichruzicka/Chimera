@@ -1,0 +1,116 @@
+/**
+ * renderer/animation/ClipBackend.ts
+ *
+ * The seam between the animation layer and whatever actually moves pixels: a
+ * three.js `AnimationMixer` driving a skinned mesh, or a sprite atlas stepping
+ * through frame indices. Interfaces plus one narrowing guard — no implementation
+ * lives here, which is what lets the compile half stay three.js-free.
+ *
+ * Feature reference: F82 — Animation System (clip sheets, marker scheduling,
+ * beat-owned gameplay windows, time dilation),
+ * `docs/roadmap-sections/m10-first-public-release-v1.0.0.md`.
+ *
+ * Two shapes in here are deliberate and worth stating once.
+ *
+ * **`advance` is on the BACKEND, not on the playback.** One
+ * `AnimationMixer.update(delta)` advances every action that mixer owns; there is
+ * no per-action step. A `ClipPlayback.advance` would therefore have to either
+ * step every sibling playback too or throw — a method whose contract the mesh
+ * implementation cannot honour, which is the LSP violation this interface exists
+ * to not have. Per-clip pacing is expressed as speed instead, which composes.
+ *
+ * **Blending is a separate interface.** A mesh mixer crossfades between actions;
+ * a sprite atlas has nothing to interpolate. Putting `crossfadeTo` on the base
+ * interface would force the sprite backend to ship a method that throws, so it is
+ * an extension a caller narrows to via {@link supportsBlending}.
+ */
+
+import type {
+    AnimationClipName,
+    AnimationLoopMode,
+} from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
+
+/**
+ * Where a clip's playhead is, sampled once per frame. The scheduler's only input:
+ * it derives every `notify` / `passage-*` / `clip-end` emission from the movement
+ * between two consecutive samples.
+ */
+export interface PlayheadSample {
+    /**
+     * Normalized position in the clip, on the same scale as a compiled mark's
+     * phase — `compileClipTimeline` clamps into `[0, 1]` inclusive, so a mark
+     * authored past the end sits exactly at 1 and a sampler that could never
+     * report 1 would never fire it.
+     */
+    readonly phase: number;
+    /** How many times the clip has wrapped since it started. Distinguishes a loop from a seek. */
+    readonly cycle: number;
+    /** True once a `'once'` clip has reached its end and stopped advancing. */
+    readonly ended: boolean;
+}
+
+/** How a clip starts. Both fields default to whatever the backend's clip declares. */
+export interface ClipPlayOptions {
+    /** Overrides the sheet's authored loop mode. */
+    readonly loop?: AnimationLoopMode;
+    /**
+     * The initial speed multiplier. Present so a clip that starts dilated does not
+     * play its first frame at full speed and get corrected on the next one.
+     */
+    readonly speed?: number;
+}
+
+/** One clip in flight on a backend. */
+export interface ClipPlayback {
+    /** Which clip this playback drives; a backend may hold several at once. */
+    readonly clipName: AnimationClipName;
+    /** The playhead right now. Pure — sampling never advances anything. */
+    sample(): PlayheadSample;
+    /**
+     * Re-target the speed multiplier. Per-playback rather than folded into the
+     * backend's `advance` delta: the multiplicative speed stack resolves to one
+     * number per clip, and applying it to the shared delta would re-pace every
+     * other clip on the same mixer with it.
+     */
+    setSpeed(speed: number): void;
+    /** Release this playback. Idempotent. */
+    stop(): void;
+}
+
+/** A source of clips that can be played and advanced. */
+export interface ClipBackend {
+    /**
+     * The clip's real, loaded length, or `null` if the backend has no such clip.
+     * This is the third argument `compileClipTimeline` range-checks against.
+     */
+    getDurationSeconds(clipName: AnimationClipName): number | null;
+    /** Start a clip, or `null` if the backend has no such clip. Fail-soft; never throws. */
+    play(clipName: AnimationClipName, options?: ClipPlayOptions): ClipPlayback | null;
+    /** Advance every playback this backend owns by `deltaSeconds`. */
+    advance(deltaSeconds: number): void;
+    /** Release everything the backend owns. Idempotent. */
+    dispose(): void;
+}
+
+/** A backend that can blend between clips rather than cutting between them. */
+export interface SupportsClipBlending extends ClipBackend {
+    /**
+     * Start `clipName` while fading the current playback out across `fadeSeconds`.
+     * `null` on an absent clip, like {@link ClipBackend.play}.
+     */
+    crossfadeTo(
+        clipName: AnimationClipName,
+        fadeSeconds: number,
+        options?: ClipPlayOptions,
+    ): ClipPlayback | null;
+}
+
+/**
+ * Whether `backend` can blend. Tests that `crossfadeTo` is CALLABLE rather than
+ * merely present: a backend carrying `crossfadeTo: undefined` — which a spread
+ * over an optional field produces — would pass an `in` check and then throw at
+ * the call site.
+ */
+export function supportsBlending(backend: ClipBackend): backend is SupportsClipBlending {
+    return typeof (backend as Partial<SupportsClipBlending>).crossfadeTo === 'function';
+}
