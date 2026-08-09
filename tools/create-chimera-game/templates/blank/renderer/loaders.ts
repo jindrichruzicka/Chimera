@@ -23,6 +23,7 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
     return {
         registry: screenModule.__GamePascal__GameScreenRegistry,
         assetManifest: assetManifestModule.__gameCamel__AssetManifest,
+        inputActions: screenModule.__GamePascal__INPUT_ACTIONS,
     };
 }
 
