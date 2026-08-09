@@ -75,6 +75,10 @@ const SaveFileSchema = z.object({
         events: z.array(z.unknown()),
         turnNumber: z.number().int(),
         timers: z.record(z.string(), z.unknown()).optional(),
+        // Global time dilation in permille. Optional, so a save written before
+        // dilation existed parses unchanged and needs no migration. `.int()` is
+        // the save trust boundary for invariant #44.
+        timeScalePermille: z.number().int().optional(),
     }),
     deltaActions: z.array(z.unknown()),
     pendingCommitments: z.record(z.string(), WireCommitmentEnvelopeSchema),

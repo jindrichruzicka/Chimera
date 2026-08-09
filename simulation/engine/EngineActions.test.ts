@@ -33,6 +33,7 @@ import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
 import { entityId, playerId as toPlayerId, sceneId } from './types.js';
 import type { GameTimer, TimerId, TimerRegistry } from './GameTimer.js';
+import type { AnimationWindowId, AnimationWindowRegistry } from './AnimationWindow.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
 import type { Logger } from '../foundation/logging.js';
 
@@ -71,6 +72,26 @@ const makeTurnSnapshot = (activePlayerId: PlayerId, deadlineMs?: number): BaseGa
               },
           }),
 });
+
+/**
+ * The three match-scoped F82 fields, as a mid-match snapshot would carry them:
+ * an active dilation, a pending restore and one open beat window.
+ */
+const makeDilatedMatchState = (): Pick<
+    BaseGameSnapshot,
+    'timeScalePermille' | 'timeScaleRestoreBeats' | 'animationWindows'
+> => {
+    const windowId = 'sword-hit#1' as AnimationWindowId;
+    const animationWindows: AnimationWindowRegistry = {
+        [windowId]: {
+            id: windowId,
+            ownerId: entityId('unit-1'),
+            remainingBeats: 3,
+            payload: { damage: 12 },
+        },
+    };
+    return { timeScalePermille: 250, timeScaleRestoreBeats: 4, animationWindows };
+};
 
 // ─── EngineActions array ──────────────────────────────────────────────────────
 
@@ -1016,6 +1037,28 @@ describe('engine:start_game definition', () => {
         expect(next).not.toHaveProperty('someOtherGameField');
     });
 
+    it('reduce drops the match-scoped dilation and animation-window state', () => {
+        const snapshot = {
+            ...makeSnapshot(hostId),
+            ...makeDilatedMatchState(),
+        };
+
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId] },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next).not.toHaveProperty('timeScalePermille');
+        expect(next).not.toHaveProperty('timeScaleRestoreBeats');
+        expect(next).not.toHaveProperty('animationWindows');
+        // Opposite polarity, same reduce: an engine-owned field that IS carried
+        // forward still is, so the three assertions above are about the
+        // match-scoped list and not about the base spread having stopped working.
+        expect(next.hostPlayerId).toBe(hostId);
+    });
+
     it('reduce preserves the engine-owned BaseGameSnapshot fields it does not reset', () => {
         const snapshot = {
             ...makeSnapshot(hostId),
@@ -1150,6 +1193,24 @@ describe('engine:return_to_lobby definition', () => {
         const next = definition().reduce(snapshot, {}, hostId, stubCtx);
 
         expect(next).not.toHaveProperty('playerStamina');
+    });
+
+    it('reduce drops the match-scoped dilation and animation-window state', () => {
+        // A match abandoned mid-dilation must not leave the LOBBY running at
+        // quarter speed, nor leave a window open whose owning entity the same
+        // reduce is about to wipe.
+        const snapshot = {
+            ...makePlayingSnapshot(),
+            ...makeDilatedMatchState(),
+        };
+
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+
+        expect(next).not.toHaveProperty('timeScalePermille');
+        expect(next).not.toHaveProperty('timeScaleRestoreBeats');
+        expect(next).not.toHaveProperty('animationWindows');
+        // Opposite polarity, same reduce: the lobby roster still survives.
+        expect(next.hostPlayerId).toBe(hostId);
     });
 });
 

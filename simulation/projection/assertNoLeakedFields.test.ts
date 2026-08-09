@@ -226,4 +226,21 @@ describe('assertNoLeakedFields', () => {
 
         expectAssertionMessage(caught, 'hiddenPlan');
     });
+
+    it('passes a projection carrying the integer timeScalePermille (F82)', () => {
+        // The scanner walks every root field that is not `players`/`entities`,
+        // so a newly projected root field is newly scanned. A bare integer
+        // carries no `__visibility` marker and no owner id, so the scanner needs
+        // no change to accept it — this pins that, byte-unchanged.
+        const snapshot: TestGameSnapshot = { ...makeSnapshot(), timeScalePermille: 250 };
+        const projected = new DefaultStateProjector(visibilityRules).project(
+            snapshot,
+            HOST_PLAYER_ID,
+        );
+
+        // Not vacuous: the field really is on the object being scanned.
+        expect(projected.timeScalePermille).toBe(250);
+
+        expect(() => assertNoLeakedFields(projected, HOST_PLAYER_ID, ALL_PLAYER_IDS)).not.toThrow();
+    });
 });

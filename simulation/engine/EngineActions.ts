@@ -450,11 +450,32 @@ const BASE_SNAPSHOT_KEYS = [
     'committedTurns',
 ] as const satisfies readonly (keyof BaseGameSnapshot)[];
 
+// Engine-owned fields that are deliberately MATCH-SCOPED: they belong to one
+// match's runtime and are dropped at a match boundary rather than carried
+// forward, the same way a game's extension fields are. Dilation would otherwise
+// leave the lobby running at the abandoned match's speed, and an open window
+// would outlive the entity that owns it — `engine:return_to_lobby` wipes
+// `entities` in the same reduce.
+type MatchScopedSnapshotKey = 'timeScalePermille' | 'timeScaleRestoreBeats' | 'animationWindows';
+
+// Guard: every match-scoped name must be a real `BaseGameSnapshot` key. Without
+// this, a typo would name nothing and still satisfy the exhaustiveness guard
+// below, silently re-opening the drift the guard exists to prevent.
+const _matchScopedKeysAreRealKeys: MatchScopedSnapshotKey extends keyof BaseGameSnapshot
+    ? true
+    : never = true;
+void _matchScopedKeysAreRealKeys;
+
 // Exhaustiveness guard: resolves to `never` unless every `BaseGameSnapshot` key
-// is listed in `BASE_SNAPSHOT_KEYS`. Adding a field to the interface without
-// listing it here then fails to compile (`true` is not assignable to `never`),
-// so the allowlist can never silently drift and drop an engine-owned field.
-type UnlistedSnapshotKey = Exclude<keyof BaseGameSnapshot, (typeof BASE_SNAPSHOT_KEYS)[number]>;
+// is listed in `BASE_SNAPSHOT_KEYS` or named by `MatchScopedSnapshotKey`. Adding
+// a field to the interface without listing it in one of the two then fails to
+// compile (`true` is not assignable to `never`), so the allowlist can never
+// silently drift and drop an engine-owned field — dropping stays a decision that
+// has to be written down.
+type UnlistedSnapshotKey = Exclude<
+    keyof BaseGameSnapshot,
+    (typeof BASE_SNAPSHOT_KEYS)[number] | MatchScopedSnapshotKey
+>;
 const _allSnapshotKeysListed: UnlistedSnapshotKey extends never ? true : never = true;
 void _allSnapshotKeysListed;
 

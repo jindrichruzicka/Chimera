@@ -246,6 +246,13 @@ const PlayerSnapshot = z.object({
     // Host-minted stable match identity, projected verbatim like `setup`
     // (Invariant #101). Optional and backward-compatible.
     matchId: z.string().optional(),
+    // Global time dilation in permille, projected verbatim. This object is a
+    // plain `z.object` — an undeclared key is parsed away with `success: true`,
+    // and `validateSnapshotCrc` runs on the pre-zod bytes — so omitting this
+    // line would strip the field from every joined client's snapshot with a
+    // matching checksum and no error. `.int()` is the wire trust boundary for
+    // Invariant #44.
+    timeScalePermille: z.number().int().optional(),
     undoMeta: z.object({ canUndo: z.boolean(), canRedo: z.boolean() }),
     isMyTurn: z.boolean(),
 });

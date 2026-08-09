@@ -25,6 +25,7 @@ import type {
     PlayerId,
 } from '../engine/types.js';
 import { entityId, gamePhase, playerId } from '../engine/types.js';
+import type { AnimationWindowId, AnimationWindowRegistry } from '../engine/AnimationWindow.js';
 
 import type { PlayerSnapshot, StateProjector } from './StateProjector.js';
 import { DefaultStateProjector } from './StateProjector.js';
@@ -599,6 +600,68 @@ describe('DefaultStateProjector.project()', () => {
             const view = projector.project(snapshot, P1);
 
             expect('session' in view).toBe(false);
+        });
+    });
+
+    describe('timeScalePermille passthrough (F82 time dilation)', () => {
+        it('timeScalePermille is projected by value and identical for every viewer', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot({ timeScalePermille: 250 });
+
+            const viewP1 = projector.project(snapshot, P1);
+            const viewP2 = projector.project(snapshot, P2);
+
+            expect(viewP1.timeScalePermille).toBe(250);
+            expect(viewP2.timeScalePermille).toBe(250);
+        });
+
+        it('timeScalePermille is absent when the full state omits it', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot(); // no timeScalePermille
+
+            const view = projector.project(snapshot, P1);
+
+            // `Object.hasOwn` rather than a value check: an explicit
+            // `timeScalePermille: undefined` key would read the same as an
+            // absent one through `view.timeScalePermille`, and only the absent
+            // form satisfies `exactOptionalPropertyTypes`.
+            expect(Object.hasOwn(snapshot, 'timeScalePermille')).toBe(false);
+            expect(Object.hasOwn(view, 'timeScalePermille')).toBe(false);
+        });
+    });
+
+    describe('host-only dilation state never crosses projection (F82)', () => {
+        it('animationWindows and timeScaleRestoreBeats are absent from the projection', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const windowId = 'sword-hit#1' as AnimationWindowId;
+            const animationWindows: AnimationWindowRegistry = {
+                [windowId]: {
+                    id: windowId,
+                    ownerId: E1,
+                    remainingBeats: 3,
+                    payload: { damage: 12 },
+                },
+            };
+            const snapshot = makeSnapshot({
+                animationWindows,
+                timeScaleRestoreBeats: 4,
+                timeScalePermille: 250,
+            });
+
+            const view = projector.project(snapshot, P1);
+
+            // The source really does carry both host-only fields — otherwise
+            // the two absence assertions below would hold vacuously.
+            expect(snapshot.animationWindows).toBe(animationWindows);
+            expect(snapshot.timeScaleRestoreBeats).toBe(4);
+
+            expect(Object.hasOwn(view, 'animationWindows')).toBe(false);
+            expect(Object.hasOwn(view, 'timeScaleRestoreBeats')).toBe(false);
+
+            // Opposite polarity, same snapshot: the ONE projected dilation
+            // field does cross, so the two assertions above are about the
+            // allowlist and not about the projector dropping dilation wholesale.
+            expect(view.timeScalePermille).toBe(250);
         });
     });
 

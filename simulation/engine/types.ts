@@ -19,6 +19,8 @@ import type { ContentDatabase } from '../content/index.js';
 export type { ContentDatabase } from '../content/index.js';
 import type { TimerRegistry } from './GameTimer.js';
 export type { TimerRegistry } from './GameTimer.js';
+import type { AnimationWindowRegistry } from './AnimationWindow.js';
+export type { AnimationWindowRegistry } from './AnimationWindow.js';
 import type { Logger } from '../foundation/logging.js';
 import type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
 export type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
@@ -247,6 +249,43 @@ export interface BaseGameSnapshot {
      * do not use commitments.
      */
     readonly committedTurns?: Readonly<Record<PlayerId, number>>;
+    /**
+     * Global time dilation as ONE integer in permille: 1000 is real time, 250
+     * is quarter speed. Absent means real time — there is no `1000` sentinel to
+     * keep in sync, and `clampTimeScalePermille` in
+     * `simulation/foundation/time-scale.js` turns absent and out-of-range alike
+     * into a usable scale.
+     *
+     * The ONE dilation field that is PROJECTED: `StateProjector.project()`
+     * passes it through verbatim, the wire schema declares it and saves carry
+     * it. Always an integer (Invariants #42/#44), enforced at the wire and save
+     * trust boundaries by `z.number().int()`.
+     *
+     * Optional and backward-compatible: absent on every snapshot written before
+     * dilation existed, and on every game that never dilates.
+     *
+     * Feature F82, `docs/roadmap-sections/m10-first-public-release-v1.0.0.md`.
+     */
+    readonly timeScalePermille?: number;
+    /**
+     * Beats left until `timeScalePermille` returns to real time, or absent when
+     * no restore is pending.
+     *
+     * HOST-ONLY: not projected and not declared on the wire, so the current
+     * scale is the only dilation state a viewer is told — never the schedule
+     * that will change it. Always an integer (Invariants #42/#44).
+     */
+    readonly timeScaleRestoreBeats?: number;
+    /**
+     * Beat-owned gameplay windows currently open, keyed by window instance id.
+     *
+     * HOST-ONLY: `StateProjector.project()` uses an explicit field allowlist and
+     * does not project it (Invariants #1/#3).
+     *
+     * Optional and backward-compatible: absent on older fixtures/saves and on
+     * every game that opens no windows.
+     */
+    readonly animationWindows?: AnimationWindowRegistry;
 }
 
 // ─── Role-specific sub-context interfaces (§4.7, ISP) ────────────────────────

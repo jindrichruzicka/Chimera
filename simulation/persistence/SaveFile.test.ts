@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { JsonSaveSerializer, MAX_SAVE_SIZE_CHARS } from './JsonSaveSerializer.js';
-import { SaveParseError } from './SaveMigrator.js';
+import { CURRENT_SCHEMA_VERSION, createDefaultMigrator, SaveParseError } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
 import type { GamePhase, BaseGameSnapshot } from '../engine/types.js';
 import { playerId as toPlayerId } from '../engine/types.js';
@@ -719,5 +719,116 @@ describe('JsonSaveSerializer — GameTimer serialization', () => {
 
         expect(result.header.schemaVersion).toBe(1);
         expect(result.checkpoint).toBeDefined();
+    });
+});
+
+// ─── JsonSaveSerializer — checkpoint.timeScalePermille (F82 time dilation) ────
+
+describe('JsonSaveSerializer — checkpoint.timeScalePermille', () => {
+    it('round-trips the projected dilation field on the checkpoint', async () => {
+        const serializer = new JsonSaveSerializer();
+        const file = makeSaveFile({
+            checkpoint: {
+                tick: 5,
+                seed: 99,
+                players: {},
+                entities: {},
+                phase: 'playing' as GamePhase,
+                events: [],
+                turnNumber: 0,
+                timers: {},
+                gameResult: null,
+                timeScalePermille: 250,
+            },
+        });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect(result.checkpoint.timeScalePermille).toBe(250);
+    });
+
+    it('accepts a checkpoint that omits it — the field is optional', async () => {
+        const serializer = new JsonSaveSerializer();
+        const file = makeSaveFile();
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect(Object.hasOwn(result.checkpoint, 'timeScalePermille')).toBe(false);
+    });
+
+    // This is the mutation control for the `timeScalePermille` line in
+    // `SaveFileSchema`: deleting it reds THIS test and only this one. The
+    // round-trip above cannot see the schema at all — `deserialize` uses
+    // `safeParse` as a gate and returns the pre-zod `parsed` object, so a field
+    // the schema never declares still survives the round trip.
+    it('REFUSES a fractional permille at the checkpoint schema (Invariant #44)', async () => {
+        const serializer = new JsonSaveSerializer();
+        const raw = JSON.stringify({
+            header: {
+                schemaVersion: 6,
+                engineVersion: '0.1.0',
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                slotId: 'autosave',
+                savedAt: 1_700_000_000_000,
+                turnNumber: 1,
+                playerNames: [],
+            },
+            checkpoint: {
+                tick: 1,
+                seed: 42,
+                phase: 'playing',
+                players: {},
+                entities: {},
+                events: [],
+                turnNumber: 0,
+                timers: {},
+                timeScalePermille: 250.5,
+            },
+            deltaActions: [],
+            pendingCommitments: {},
+        });
+
+        await expect(serializer.deserialize(raw)).rejects.toThrow(SaveParseError);
+    });
+
+    it('needs no schema version bump and no new migration', () => {
+        // The field is OPTIONAL, so a save written before F82 parses unchanged:
+        // there is nothing for a migration to backfill.
+        expect(CURRENT_SCHEMA_VERSION).toBe(6);
+
+        const file = makeSaveFile({
+            header: { ...makeSaveFile().header, schemaVersion: CURRENT_SCHEMA_VERSION },
+            checkpoint: {
+                tick: 5,
+                seed: 99,
+                players: {},
+                entities: {},
+                phase: 'playing' as GamePhase,
+                events: [],
+                turnNumber: 0,
+                timers: {},
+                gameResult: null,
+                timeScalePermille: 250,
+            },
+        });
+
+        // Identity, not equality: `migrate()` returns its input by reference
+        // when no registered migration matches the file's version. Registering a
+        // v6→v7 step (and bumping CURRENT_SCHEMA_VERSION to match) would return
+        // a rebuilt object and red this line.
+        expect(createDefaultMigrator().migrate(file)).toBe(file);
+    });
+
+    it('a v5 save DOES get rebuilt by the same migrator (control)', () => {
+        // Opposite polarity for the identity assertion above: `migrate()` is
+        // capable of returning something other than its input, so the identity
+        // check is about there being no v6 migration and not about `migrate()`
+        // being a pass-through for every file.
+        const file = makeSaveFile({
+            header: { ...makeSaveFile().header, schemaVersion: 5 },
+        });
+
+        expect(createDefaultMigrator().migrate(file)).not.toBe(file);
     });
 });

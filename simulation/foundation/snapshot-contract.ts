@@ -78,6 +78,14 @@ export interface PlayerSnapshot {
      * like `setup` (Invariant #101). Optional and backward-compatible.
      */
     readonly matchId?: string;
+    /**
+     * Global time dilation in permille — 1000 is real time, 250 is quarter
+     * speed. The only dilation state that crosses a boundary: the host's
+     * restore countdown and its open window registry stay host-local
+     * (Invariant #1). Optional and backward-compatible; absent means real time.
+     * Declared identically on {@link WirePlayerSnapshot}.
+     */
+    readonly timeScalePermille?: number;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
     readonly isMyTurn: boolean;
 }
@@ -133,6 +141,12 @@ export interface WirePlayerSnapshot {
      * like `setup` (Invariant #101). Optional and backward-compatible.
      */
     readonly matchId?: string;
+    /**
+     * Global time dilation in permille, passed through projection verbatim like
+     * `setup`. Declared identically on {@link PlayerSnapshot}. Optional and
+     * backward-compatible; absent means real time.
+     */
+    readonly timeScalePermille?: number;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
     readonly isMyTurn: boolean;
 }

@@ -122,3 +122,12 @@ export {
 
 export type { TimerId, GameTimer, TimerRegistry, FiredTimerAction } from './GameTimer.js';
 export { TimerManager } from './GameTimer.js';
+
+export type {
+    AnimationWindowId,
+    AnimationWindowPayload,
+    AnimationWindowRecord,
+    AnimationWindowRegistry,
+    ClosedAnimationWindow,
+    WindowCloseReason,
+} from './AnimationWindow.js';

@@ -81,6 +81,13 @@ export interface PlayerSnapshot {
      * Optional: absent before the first `engine:start_game`.
      */
     readonly matchId?: string;
+    /**
+     * Global time dilation in permille — 1000 is real time, 250 is quarter
+     * speed. Passed through projection verbatim, like `setup` and `matchId`. The
+     * host-only `timeScaleRestoreBeats` and `animationWindows` are NOT projected
+     * (Invariant #1). Optional: absent means real time.
+     */
+    readonly timeScalePermille?: number;
 }
 
 export interface StateProjectorOptions<TState extends BaseGameSnapshot = BaseGameSnapshot> {
@@ -222,6 +229,9 @@ export class DefaultStateProjector<
                 : { sceneTransition: fullState.sceneTransition }),
             ...(fullState.setup === undefined ? {} : { setup: fullState.setup }),
             ...(fullState.matchId === undefined ? {} : { matchId: fullState.matchId }),
+            ...(fullState.timeScalePermille === undefined
+                ? {}
+                : { timeScalePermille: fullState.timeScalePermille }),
             players,
             entities,
             events,
