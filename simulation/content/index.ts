@@ -29,6 +29,29 @@ export {
 } from './audioManifest';
 
 export {
+    modelAnimationEntry,
+    spriteAnimationEntry,
+    type AnimationClipName,
+    type AnimationLoopMode,
+    type AnimationMarkName,
+    type AnimationNotify,
+    type AnimationPassage,
+    type AnimationTrackSheet,
+    type AnimationWindowName,
+    type ClipPosition,
+    type ModelAnimationMetadata,
+    type SpriteAnimationMetadata,
+    type SpriteClipDeclaration,
+} from './animationManifest';
+
+export {
+    AnimationWindowMismatchError,
+    beatsForRealSeconds,
+    compileAnimationWindows,
+    type CompiledAnimationWindow,
+} from './animationWindows';
+
+export {
     type ContentDatabase,
     type ContentCollection,
     ContentConflictError,
