@@ -300,8 +300,12 @@ import { Button, Card, Heading } from '@chimera-engine/renderer/components/ui/in
 import { ChatPanel } from '@chimera-engine/renderer/components/chat';
 
 // Tier 3 — the engine GameCanvas root (the only canvas root a game mounts,
-// Invariant #127) and its Canvas-bound hook (§4.16, §4.22):
-import { GameCanvas, useModelAnimation } from '@chimera-engine/renderer/components/r3f';
+// Invariant #127) and its Canvas-bound hooks (§4.16, §4.22):
+import {
+    GameCanvas,
+    useModelAnimation,
+    useClipPlayer,
+} from '@chimera-engine/renderer/components/r3f';
 
 // Tier 4 — the game-registration seam, called by the renderer composition root:
 import { registerRendererGame } from '@chimera-engine/renderer/game';

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LogsAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 import { createRecordingLogsApi } from './__test-support__/RecordingLogsApi.js';
-import { emitRendererError, installRendererLogger } from './rendererLogger.js';
+import { emitRendererError, installRendererLogger, readRendererLogsApi } from './rendererLogger.js';
 
 // jsdom provides window/PromiseRejectionEvent at runtime; these declarations
 // let the root tsconfig (no DOM lib) type-check this file.
@@ -338,5 +338,31 @@ describe('emitRendererError', () => {
         emitRendererError(logsApi, 'boom', new Error('x'), undefined, 'RootErrorBoundary');
 
         expect(logsApi.emitCalls[0]?.source.module).toBe('RootErrorBoundary');
+    });
+});
+
+describe('readRendererLogsApi', () => {
+    afterEach(() => {
+        delete (globalThis as Record<string, unknown>)['__chimera'];
+    });
+
+    it('sees a bridge installed AFTER this module was evaluated', () => {
+        // The property that makes this a function rather than a module-level
+        // const: the preload installs the bridge after the first renderer
+        // modules have already been imported, so a captured value would latch
+        // undefined for the life of the process. This module is imported at the
+        // top of this file, i.e. long before the assignment below.
+        expect(readRendererLogsApi()).toBeUndefined();
+
+        const logs = createRecordingLogsApi();
+        (globalThis as Record<string, unknown>)['__chimera'] = { logs };
+
+        expect(readRendererLogsApi()).toBe(logs);
+    });
+
+    it('answers undefined for a __chimera without a logs bridge', () => {
+        (globalThis as Record<string, unknown>)['__chimera'] = { game: {} };
+
+        expect(readRendererLogsApi()).toBeUndefined();
     });
 });

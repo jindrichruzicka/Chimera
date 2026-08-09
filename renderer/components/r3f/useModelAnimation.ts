@@ -1,16 +1,14 @@
 'use client';
 
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useState } from 'react';
-import { AnimationMixer } from 'three';
+import type { AnimationMixer } from 'three';
 
 import type { ModelInstance } from '../../assets/ModelInstance.js';
+import { useOwnedMixer } from './useOwnedMixer.js';
 
 /**
  * One `AnimationMixer` bound to a {@link ModelInstance}'s root, advanced every
- * frame from `useFrame` at the DEFAULT render priority and released with
- * `stopAllAction()` then `uncacheRoot()` (skipping `uncacheRoot` would leave
- * three's internal action cache holding the root). Returns the raw mixer —
+ * frame from `useFrame` at the DEFAULT render priority. Returns the raw mixer —
  * actions, crossfades, loop modes and completion events are the caller's to
  * drive — and `null` until the commit-phase effect has allocated it, or while
  * `instance` is `null`. Requires a `<Canvas>`.
@@ -27,29 +25,13 @@ import type { ModelInstance } from '../../assets/ModelInstance.js';
  * `invalidate()` is the caller's job. See `useEngineFrameloop.ts` for why demand
  * rendering reaches no engine canvas.
  *
- * The mixer is allocated in a commit-phase effect, never `useMemo`:
- * StrictMode double-invokes memo factories and discards one result, which
- * would orphan a mixer retaining the clone root with no `uncacheRoot` ever
- * running. Mixer state is renderer-local and never enters a `GameSnapshot`,
+ * Allocation and release are `useOwnedMixer.ts`, which records the commit-phase
+ * effect, the `stopAllAction()` → `uncacheRoot()` order, and why neither may be
+ * a `useMemo`. Mixer state is renderer-local and never enters a `GameSnapshot`,
  * store, IPC payload, save, or replay.
  */
 export function useModelAnimation(instance: ModelInstance | null): AnimationMixer | null {
-    const [mixer, setMixer] = useState<AnimationMixer | null>(null);
-
-    useEffect(() => {
-        if (instance === null) {
-            return undefined;
-        }
-        const allocatedMixer = new AnimationMixer(instance.root);
-        setMixer(allocatedMixer);
-        return () => {
-            // Release order matters: stop every action before dropping the
-            // root from three's action cache.
-            allocatedMixer.stopAllAction();
-            allocatedMixer.uncacheRoot(instance.root);
-            setMixer(null);
-        };
-    }, [instance]);
+    const mixer = useOwnedMixer(instance);
 
     // Registered unconditionally (rules of hooks: `instance` transitions
     // between null and non-null across renders of one mounted component) and

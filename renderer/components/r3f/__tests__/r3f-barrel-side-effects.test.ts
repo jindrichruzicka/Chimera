@@ -6,9 +6,10 @@
  * had none until `useModelAnimation` joined it.
  *
  * **What it drags in.** The graph reaches TWO stores (`perfStore` via
- * `PerfProbe`, `settingsStore` via `selectTargetFps`) and the renderer log
- * bridge (attribution recorded at the module-set assertion below) — recorded
- * decisions, not drift. `useModelAnimation`'s `ModelInstance` import is TYPE-ONLY, so
+ * `PerfProbe`, `settingsStore` via `selectTargetFps`), the renderer log bridge
+ * and part of `renderer/animation/` (attribution recorded at the module-set
+ * assertion below, which is the enumeration) — recorded decisions, not drift. Every
+ * `ModelInstance` import in this graph is TYPE-ONLY, so
  * the clone seam (and with it `SkeletonUtils`) is deliberately NOT in this
  * graph: the model machinery ships from the `assets` barrel, and this one
  * only animates an instance a caller already holds. What this test measures
@@ -38,6 +39,16 @@ import type {
     GameCanvasCamera,
     GameCanvasProps,
     Vector3Tuple,
+    UseClipPlayerOptions,
+    ClipPlayerHandle,
+    ClipMarkerHandlers,
+    MarkerEvent,
+    NotifyEvent,
+    PassageEvent,
+    PassageTickEvent,
+    PassageEndEvent,
+    PassageEndReason,
+    ClipEndEvent,
 } from '../index';
 
 /** The barrel's TYPE surface — see the audio sibling for why each is named. */
@@ -52,6 +63,21 @@ interface BarrelTypeSurface {
     readonly camera: GameCanvasCamera;
     readonly props: GameCanvasProps;
     readonly vector: Vector3Tuple;
+    // useClipPlayer's own signature: the options it takes, the handle it
+    // returns, and the handler surface a game writes against. The marker event
+    // types are named because a game that factors a handler out of the options
+    // literal has to annotate its parameter, and `renderer/animation/*` is not
+    // an importable subpath (Invariant #96).
+    readonly clipOptions: UseClipPlayerOptions;
+    readonly clipHandle: ClipPlayerHandle;
+    readonly clipHandlers: ClipMarkerHandlers;
+    readonly markerEvent: MarkerEvent;
+    readonly notify: NotifyEvent;
+    readonly passageStart: PassageEvent;
+    readonly passageTick: PassageTickEvent;
+    readonly passageEnd: PassageEndEvent;
+    readonly passageEndReason: PassageEndReason;
+    readonly clipEnd: ClipEndEvent;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -103,29 +129,46 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         const typeSurface: BarrelTypeSurface | undefined = undefined;
         expect(typeSurface).toBeUndefined();
 
-        // The runtime surface is the GameCanvas root plus the one Canvas-bound
-        // hook; the barrel header (index.ts) records why the wiring modules
-        // are not public.
-        expect(Object.keys(r3fBarrel).sort()).toEqual(['GameCanvas', 'useModelAnimation']);
+        // The runtime surface is the GameCanvas root plus the two Canvas-bound
+        // animation hooks; the barrel header (index.ts) records why the wiring
+        // modules are not public.
+        expect(Object.keys(r3fBarrel).sort()).toEqual([
+            'GameCanvas',
+            'useClipPlayer',
+            'useModelAnimation',
+        ]);
     });
 
-    it('pulls in exactly twelve modules — two stores, the log bridge, and no clone seam', async () => {
+    it('pulls in exactly twenty modules — two stores, the log bridge, the animation layer, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The two
         // store edges are real: PerfProbe publishes into perfStore, and both
         // FrameRateLimiter and useEngineFrameloop read settings.display.targetFps
         // through the one shared selectTargetFps module. rendererLogger is the
-        // third recorded edge: FrameRateLimiter reports a half-wired canvas and
-        // mainCanvasRegistry a duplicate role="main" pair through the log
-        // bridge rather than console (Invariant #67).
-        // useModelAnimation imports ModelInstance TYPE-ONLY, so no assets/
+        // third recorded edge: FrameRateLimiter reports a half-wired canvas,
+        // mainCanvasRegistry a duplicate role="main" pair, and useClipPlayer a
+        // clip-sheet authoring fault or a throwing game handler, all through the
+        // log bridge rather than console (Invariant #67).
+        // The six `animation/` modules are useClipPlayer's runtime layer: the
+        // player, the mesh backend and the compile half under them. They stay
+        // internal (Invariant #96) — reaching this graph is what a barrel EXPORT
+        // means, and none of them is an importable subpath. `SpriteClipBackend`
+        // is the seventh module in that directory and is deliberately absent:
+        // no React binding ships for the sprite half, so nothing here names it.
+        // Every ModelInstance import here is TYPE-ONLY, so no assets/
         // module — and no SkeletonUtils — appears; the clone seam ships from the
         // assets barrel. cameraFit is GameCanvas's own fit-policy geometry, and
         // being pure arithmetic it adds no edge of its own — no store, no
         // bridge, no external package.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
+            'animation/ClipBackend.ts',
+            'animation/ClipPlayer.ts',
+            'animation/ClipPosition.ts',
+            'animation/ClipTimeline.ts',
+            'animation/MeshClipBackend.ts',
+            'animation/clipMarkerScheduler.ts',
             'logging/rendererLogger.ts',
             'perf/PerfProbe.tsx',
             'perf/perfStore.ts',
@@ -135,8 +178,10 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/index.ts',
             'r3f/mainCanvasRegistry.ts',
             'r3f/selectTargetFps.ts',
+            'r3f/useClipPlayer.ts',
             'r3f/useEngineFrameloop.ts',
             'r3f/useModelAnimation.ts',
+            'r3f/useOwnedMixer.ts',
             'state/settingsStore.ts',
         ]);
 
@@ -173,6 +218,8 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             ['..', 'FrameRateLimiter.tsx'],
             ['..', 'useEngineFrameloop.ts'],
             ['..', 'useModelAnimation.ts'],
+            ['..', 'useOwnedMixer.ts'],
+            ['..', 'useClipPlayer.ts'],
             ['../../shell/perf', 'PerfProbe.tsx'],
         ] as const) {
             const source = readFileSync(resolve(__dirname, dir, moduleFile), 'utf8');

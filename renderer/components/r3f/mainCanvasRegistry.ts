@@ -19,7 +19,7 @@
  * caller.
  */
 
-import { emitRendererError } from '../../logging/rendererLogger.js';
+import { emitRendererError, readRendererLogsApi } from '../../logging/rendererLogger.js';
 
 /** Log module name, so the report is attributable rather than 'global'. */
 const LOG_MODULE = 'game-canvas';
@@ -36,15 +36,6 @@ class DuplicateMainGameCanvasError extends Error {
     }
 }
 
-/** The preload log bridge, absent until the preload has run (and in tests). */
-function readLogsApi(): Parameters<typeof emitRendererError>[0] {
-    return (
-        globalThis as Record<string, unknown> & {
-            __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-        }
-    ).__chimera?.logs;
-}
-
 let mainCount = 0;
 let pendingReportHandle: number | null = null;
 
@@ -59,7 +50,7 @@ export function registerMainCanvas(): () => void {
         pendingReportHandle = requestAnimationFrame(() => {
             pendingReportHandle = null;
             emitRendererError(
-                readLogsApi(),
+                readRendererLogsApi(),
                 '[GameCanvas] more than one role="main" canvas is mounted',
                 new DuplicateMainGameCanvasError(mainCount),
                 undefined,

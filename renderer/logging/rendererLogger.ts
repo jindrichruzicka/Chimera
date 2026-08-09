@@ -31,6 +31,26 @@ export interface RendererLogEmitter {
     emit(entry: LogEntry): void;
 }
 
+/**
+ * The preload log bridge, or `undefined` when there is none — before the
+ * preload has run, in a browser preview, and in every unit test that does not
+ * install one.
+ *
+ * Read at the CALL SITE rather than captured, because the bridge is installed
+ * after the first renderer modules have already been evaluated: a module-level
+ * `const logs = readRendererLogsApi()` would latch `undefined` for the life of
+ * the process. Lives here rather than beside a caller because an engine module
+ * reporting through the bridge with no React context above it has nowhere else
+ * to get one.
+ */
+export function readRendererLogsApi(): RendererLogEmitter | undefined {
+    return (
+        globalThis as Record<string, unknown> & {
+            __chimera?: { logs?: RendererLogEmitter };
+        }
+    ).__chimera?.logs;
+}
+
 // ── helpers ────────────────────────────────────────────────────────────────────
 
 // Field caps mirrored from the main-process `chimera:logs:emit` schema

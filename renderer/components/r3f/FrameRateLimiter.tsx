@@ -73,7 +73,7 @@
 import { useThree } from '@react-three/fiber';
 import type { RootState } from '@react-three/fiber';
 import React from 'react';
-import { emitRendererError } from '../../logging/rendererLogger.js';
+import { emitRendererError, readRendererLogsApi } from '../../logging/rendererLogger.js';
 import { useSettingsStore } from '../../state/settingsStore.js';
 import { selectTargetFps } from './selectTargetFps.js';
 
@@ -120,15 +120,6 @@ function selectClock(state: RootState): RootState['clock'] {
     return state.clock;
 }
 
-/** The preload log bridge, absent until the preload has run (and in tests). */
-function readLogsApi(): Parameters<typeof emitRendererError>[0] {
-    return (
-        globalThis as Record<string, unknown> & {
-            __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-        }
-    ).__chimera?.logs;
-}
-
 export function FrameRateLimiter(): null {
     const targetFps = useSettingsStore(selectTargetFps);
     const advance = useThree(selectAdvance);
@@ -153,7 +144,7 @@ export function FrameRateLimiter(): null {
         // collapses StrictMode's mount-unmount-mount into a single report.
         const handle = requestAnimationFrame(() => {
             emitRendererError(
-                readLogsApi(),
+                readRendererLogsApi(),
                 '[FrameRateLimiter] frame-rate cap is not wired to the canvas frameloop',
                 new FrameloopWiringError(targetFps, frameloop),
                 undefined,
