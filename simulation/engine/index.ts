@@ -128,6 +128,15 @@ export type {
     AnimationWindowPayload,
     AnimationWindowRecord,
     AnimationWindowRegistry,
+    AnimationWindowStateChange,
+    AnimationWindowSweep,
     ClosedAnimationWindow,
+    OpenAnimationWindowRequest,
     WindowCloseReason,
 } from './AnimationWindow.js';
+export { AnimationWindowManager } from './AnimationWindow.js';
+
+export type { TimeScaleRequest } from './TimeScale.js';
+// `advanceTimeScale` is deliberately not re-exported here: it is the per-beat
+// sweep.
+export { applyTimeScale, clearTimeScale } from './TimeScale.js';
