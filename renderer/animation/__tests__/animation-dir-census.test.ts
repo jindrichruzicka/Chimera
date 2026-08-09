@@ -21,53 +21,38 @@
  * lands rather than the day someone remembers to add a row. That is also why the
  * membership assertion below is a FLOOR and not a closed set: growth is the point.
  *
- * **Two channels.** A binding the module USES pulls the target in as a resolved
- * INPUT. A binding it imports and
- * never uses is elided by esbuild's TypeScript loader before the target is ever
- * resolved, so it reaches no input — but the import record survives on the
- * importer, marked external, carrying the specifier as written. `analyze()`
- * therefore resolves every relative external against its importer and hands the
- * verdict both. A used binding, a bare side-effect import and an unused binding
- * each have a control below.
- *
  * **What it does NOT say.** It speaks only about the reach into
- * `renderer/bridge/`. The framework-purity claim below is a separate,
- * deliberately FIXED list of the three modules this directory starts with — a
- * later module that ships a React hook is expected to import `react`, and folding
- * that claim into the enumerated set would make the census a tripwire for its own
- * successors.
+ * `renderer/bridge/`. The framework-purity claim is a separate, deliberately
+ * FIXED list and lives in `scheduler-purity.test.ts` — a later module that ships
+ * a React hook is expected to import `react`, and folding that claim into the
+ * enumerated set would make the census a tripwire for its own successors.
  *
- * Mechanism mirrors `renderer/input/__tests__/input-barrel-side-effects.test.ts`:
- * esbuild bundles each module and the test asserts over the resolved inputs and
- * the externalized specifiers.
+ * The analyzer and its two channels live in `animationGraph.ts`, shared with that
+ * purity guard.
  */
 
 import { describe, expect, it } from 'vitest';
-import { build, type Plugin } from 'esbuild';
 import { readdirSync } from 'node:fs';
-import { basename, dirname, extname, posix, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, extname, posix, resolve } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ANIMATION_DIR = resolve(__dirname, '..');
-const REPO_ROOT = resolve(__dirname, '..', '..', '..');
+import {
+    analyze,
+    ANIMATION_DIR,
+    ANIMATION_SUBTREE,
+    resolveRelativeSpecifier,
+} from './animationGraph.js';
 
-/** Modules this issue creates. The floor that stops the census passing vacuously. */
-const CANARIES = ['ClipBackend.ts', 'ClipPosition.ts', 'ClipTimeline.ts'] as const;
-
-/**
- * Modules the framework-purity claim covers. Spelled out again rather than
- * aliased to {@link CANARIES}: the two lists mean opposite things — the canaries
- * are a FLOOR meant to grow with the directory, this list is a CEILING meant not
- * to — and aliasing would let one edit move both.
- */
-const PURE_MODULES = ['ClipBackend.ts', 'ClipPosition.ts', 'ClipTimeline.ts'] as const;
+/** Modules the founding issues create. The floor that stops the census passing vacuously. */
+const CANARIES = [
+    'ClipBackend.ts',
+    'ClipPlayer.ts',
+    'ClipPosition.ts',
+    'ClipTimeline.ts',
+    'clipMarkerScheduler.ts',
+] as const;
 
 /** In-repo subtrees no module under `renderer/animation/` may reach. */
 const FORBIDDEN_SUBTREE = 'renderer/bridge/';
-
-/** The one subtree the founding modules' whole in-repo graph stays inside. */
-const ANIMATION_SUBTREE = 'renderer/animation/';
 
 // ─── enumeration ────────────────────────────────────────────────────────────────
 
@@ -107,9 +92,8 @@ const readDirFromDisk: ReadDir = (dir) =>
  *
  * Recursive by hand rather than through `readdirSync`'s `recursive` option so the
  * excluded directories are never descended into at all. `readDir` is a parameter
- * because the real tree holds no double under `__test-support__/` today, so the
- * exclusion it exercises would be untrippable — and therefore unpinnable —
- * against the directory as it actually is.
+ * so the exclusion can be exercised against a tree the case builds itself,
+ * independently of what the directory happens to hold.
  *
  * `dir` is opaque to the walker: it is only ever concatenated and handed straight
  * back to `readDir`, never interpreted, which is what lets the same function take
@@ -137,7 +121,7 @@ function enumerateCensusModules(
     return found.sort();
 }
 
-// ─── the predicates the assertions are named for ────────────────────────────────
+// ─── the predicate the assertions are named for ─────────────────────────────────
 
 /**
  * The inputs the census forbids: anything under `renderer/bridge/`, plus any
@@ -152,100 +136,6 @@ function censusViolations(inputs: readonly string[]): readonly string[] {
             input.startsWith(FORBIDDEN_SUBTREE) ||
             basename(input, extname(input)) === 'useSendAction',
     );
-}
-
-/** The paths that do NOT sit under `dirPrefix`. */
-function pathsOutside(paths: readonly string[], dirPrefix: string): readonly string[] {
-    return paths.filter((path) => !path.startsWith(dirPrefix));
-}
-
-/**
- * `specifier`, as written on the module at `importerPath`, resolved to a
- * repo-relative path — or `null` when it is not relative and so names a package
- * rather than a file in this repo.
- */
-function resolveRelativeSpecifier(importerPath: string, specifier: string): string | null {
-    if (!specifier.startsWith('.')) {
-        return null;
-    }
-    return posix.normalize(posix.join(posix.dirname(importerPath), specifier));
-}
-
-// ─── the analyzer ───────────────────────────────────────────────────────────────
-
-/** Marks every bare specifier external so the bundle holds only in-repo source. */
-const externalizeBareImports: Plugin = {
-    name: 'externalize-bare-imports',
-    setup(b) {
-        // esbuild filters are Go RE2 regexes — the JS `u` flag is rejected.
-        b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, external: true }));
-        b.onResolve({ filter: /\.css$/ }, (args) => ({ path: args.path, external: true }));
-    },
-};
-
-interface Analysis {
-    /** Files that entered the bundle — every USED import resolves into one. */
-    readonly inputs: readonly string[];
-    /** Specifiers esbuild recorded without resolving them into the bundle. */
-    readonly externals: readonly string[];
-    /**
-     * Every in-repo path the entry reaches on either channel: the inputs, plus
-     * each relative external resolved against the module that wrote it. This is
-     * what the boundary verdict is taken over.
-     */
-    readonly reached: readonly string[];
-}
-
-async function analyze(
-    entry: { readonly entryPoint: string } | { readonly source: string },
-): Promise<Analysis> {
-    const result = await build({
-        ...('entryPoint' in entry
-            ? { entryPoints: [entry.entryPoint] }
-            : {
-                  stdin: {
-                      contents: entry.source,
-                      resolveDir: ANIMATION_DIR,
-                      sourcefile: 'census-control.ts',
-                      loader: 'ts' as const,
-                  },
-              }),
-        bundle: true,
-        treeShaking: true,
-        write: false,
-        metafile: true,
-        format: 'esm',
-        platform: 'browser',
-        jsx: 'automatic',
-        logLevel: 'silent',
-        // Pins what the metafile's input paths are relative TO. Without it they
-        // follow the CWD vitest happened to run from — the repo root for a
-        // single-file run, the renderer package dir under `pnpm -r test` — and
-        // the `renderer/bridge/` prefix would silently stop matching in one of them.
-        absWorkingDir: REPO_ROOT,
-        plugins: [externalizeBareImports],
-    });
-    // esbuild reports POSIX-separated paths; normalize anyway so the prefixes
-    // above are the only spelling this file has to reason about.
-    const normalize = (path: string): string => path.split(sep).join('/');
-
-    const inputs = Object.keys(result.metafile.inputs).map(normalize);
-    const externals = new Set<string>();
-    const reached = new Set(inputs);
-    for (const [importerPath, input] of Object.entries(result.metafile.inputs)) {
-        for (const imported of input.imports) {
-            if (!imported.external) {
-                continue;
-            }
-            externals.add(imported.path);
-            const resolved = resolveRelativeSpecifier(normalize(importerPath), imported.path);
-            if (resolved !== null) {
-                reached.add(resolved);
-            }
-        }
-    }
-
-    return { inputs, externals: [...externals], reached: [...reached] };
 }
 
 // ─── the census ─────────────────────────────────────────────────────────────────
@@ -277,12 +167,11 @@ describe('renderer/animation directory census', () => {
         });
 
         it('descends ordinary subdirectories and never enters the excluded ones', () => {
-            // Against a synthetic tree, because the real directory holds no
-            // double under `__test-support__/` — so on disk the name filter
-            // already drops everything the directory exclusion would, and
-            // deleting the exclusion changes nothing observable. Both files
-            // planted below are ordinary module names: only the exclusion can
-            // drop them.
+            // Against a synthetic tree: both files planted under the excluded
+            // directories carry ordinary module names, so the name filter cannot
+            // drop them and only the directory exclusion can. Against the real
+            // tree the two filters overlap, and deleting the exclusion would
+            // change nothing observable there.
             const tree: Readonly<Record<string, readonly DirEntry[]>> = {
                 '/root': [
                     { name: 'ClipPosition.ts', directory: false },
@@ -292,14 +181,23 @@ describe('renderer/animation directory census', () => {
                     { name: '__test-support__', directory: true },
                 ],
                 '/root/backends': [{ name: 'MeshClipBackend.ts', directory: false }],
-                '/root/__tests__': [{ name: 'analysis.ts', directory: false }],
-                '/root/__test-support__': [{ name: 'FakeClipBackend.ts', directory: false }],
+                '/root/__tests__': [{ name: 'animationGraph.ts', directory: false }],
+                '/root/__test-support__': [{ name: 'fakeClipBackend.ts', directory: false }],
             };
 
             expect(enumerateCensusModules('/root', (dir) => tree[dir] ?? [])).toEqual([
                 'ClipPosition.ts',
                 'backends/MeshClipBackend.ts',
             ]);
+        });
+
+        it('does not enumerate the doubles and analyzers the real tree holds', () => {
+            // The same exclusion, now genuinely trippable on disk: both of these
+            // files exist, and both would otherwise be analysed as if they shipped.
+            const modules = enumerateCensusModules(ANIMATION_DIR);
+
+            expect(modules).not.toContain('__test-support__/fakeClipBackend.ts');
+            expect(modules).not.toContain('__tests__/animationGraph.ts');
         });
     });
 
@@ -331,26 +229,6 @@ describe('renderer/animation directory census', () => {
 
         it('reports nothing for a clean input list', () => {
             expect(censusViolations(['renderer/animation/ClipPosition.ts'])).toEqual([]);
-        });
-    });
-
-    describe('pathsOutside', () => {
-        it('keeps a prefix match at the path start only, with the separator required', () => {
-            expect(
-                pathsOutside(
-                    [
-                        'renderer/animation/ClipTimeline.ts',
-                        'renderer/animations/x.ts',
-                        'apps/x/renderer/animation/y.ts',
-                        'renderer/state/store.ts',
-                    ],
-                    ANIMATION_SUBTREE,
-                ),
-            ).toEqual([
-                'renderer/animations/x.ts',
-                'apps/x/renderer/animation/y.ts',
-                'renderer/state/store.ts',
-            ]);
         });
     });
 
@@ -463,39 +341,5 @@ describe('renderer/animation directory census', () => {
         });
 
         expect(censusViolations(reached)).toEqual([]);
-    });
-});
-
-describe('renderer/animation compile-half purity', () => {
-    it('reaches nothing outside this directory and depends on no package at all', async () => {
-        for (const modulePath of PURE_MODULES) {
-            const { externals, reached } = await analyze({
-                entryPoint: resolve(ANIMATION_DIR, modulePath),
-            });
-
-            // Positive control first: the analysis really saw this file.
-            expect(reached, modulePath).toContain(`${ANIMATION_SUBTREE}${modulePath}`);
-
-            // Both channels, each as a CLOSED set rather than a denylist of the
-            // names the issue happened to call out (`three`, `react`,
-            // `@react-three/fiber`, `renderer/logging|state|assets`). A denylist
-            // rejects only what whoever wrote it thought of; these three modules
-            // reach nothing outside their own directory and depend on no package,
-            // and the empty set says so about every name at once. Their only
-            // cross-package import is `import type`, which erases — which is
-            // exactly why the control below is needed.
-            expect(pathsOutside(reached, ANIMATION_SUBTREE), modulePath).toEqual([]);
-            expect(externals, modulePath).toEqual([]);
-        }
-    });
-
-    it('would report a framework import if one were there', async () => {
-        // The opposite-polarity control for the empty-set assertions above. It
-        // names `three` because that is the one the issue asks be shown unreached.
-        const { externals } = await analyze({
-            source: [`import { Vector3 } from 'three';`, `export const up = Vector3;`].join('\n'),
-        });
-
-        expect(externals).toEqual(['three']);
     });
 });

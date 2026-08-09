@@ -306,10 +306,12 @@ chimera/
 │   │   ├── TokenModeI18nProvider.tsx  # Store-connected wrapper (debug token-mode + active-game bundle)
 │   │   ├── useTranslate.ts          # useTranslate() — throws outside I18nProvider (#83)
 │   │   └── useActiveGameTranslations.ts  # Resolves active game's locale/languages/override bundle
-│   ├── animation/                    # Clip-sheet compile half (F82); renderer-internal — no `exports` subpath
+│   ├── animation/                    # Clip-sheet compile half and marker scheduling (F82); renderer-internal — no `exports` subpath
 │   │   ├── ClipPosition.ts          # resolveClipPosition — fail-soft authored position → phase in [0, 1]
 │   │   ├── ClipTimeline.ts          # compileClipTimeline — sorted phase-denominated marks; warnings returned, not logged
-│   │   └── ClipBackend.ts           # ClipBackend / ClipPlayback / PlayheadSample seam; supportsBlending narrows
+│   │   ├── ClipBackend.ts           # ClipBackend / ClipPlayback / PlayheadSample seam; supportsBlending narrows
+│   │   ├── clipMarkerScheduler.ts   # Pure playhead → notify/passage/clip-end batches; sole producer of clip-end
+│   │   └── ClipPlayer.ts            # Speed stack, per-playback step bound, handler fan-out; getTimeScale and report injected
 │   ├── shell/
 │   │   └── SettingsLanguageSelector.tsx  # Store-connected wrapper for the settings Language field (§4.39)
 │   ├── logging/
