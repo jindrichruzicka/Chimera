@@ -89,6 +89,49 @@ export interface GltfNamed {
     readonly name?: string;
 }
 
+/**
+ * One animation sampler: the keyframe curve a channel reads.
+ *
+ * `input` and `output` are ACCESSOR INDICES, and the clip's length lives at
+ * `accessors[input].max[0]` — the one place outside `POSITION` where the glTF
+ * spec requires an accessor to declare its bounds, and therefore the only way to
+ * learn how long a clip runs without decoding the buffer.
+ *
+ * Every field is optional, as everywhere else in this reader: `readGlbDocument`
+ * casts unvalidated JSON, so a required field would be a type-level lie for
+ * exactly the malformed container {@link MalformedAssetFileError} exists to make
+ * loud.
+ */
+export interface GltfAnimationSampler {
+    /** Accessor index of the keyframe times. */
+    readonly input?: number;
+    /** Accessor index of the keyframe values. */
+    readonly output?: number;
+    /** `'LINEAR'`, `'STEP'` or `'CUBICSPLINE'`; absent means the spec default, LINEAR. */
+    readonly interpolation?: string;
+}
+
+/** One animation channel: which sampler drives which node property. */
+export interface GltfAnimationChannel {
+    /** Index into the animation's own `samplers`. */
+    readonly sampler?: number;
+    /** The node and property the sampler animates. */
+    readonly target?: {
+        readonly node?: number;
+        readonly path?: string;
+    };
+}
+
+/**
+ * One animation. Its `name` is what `THREE.AnimationClip.name` becomes at load,
+ * which is the key a game's clip sheet marks and `useClipPlayer` plays — so a
+ * re-export that renamed a clip breaks the sheet with nothing else to notice.
+ */
+export interface GltfAnimation extends GltfNamed {
+    readonly channels?: readonly GltfAnimationChannel[];
+    readonly samplers?: readonly GltfAnimationSampler[];
+}
+
 /** The glTF JSON document carried by a `.glb`, narrowed to the asserted fields. */
 export interface GltfDocument {
     readonly asset: GltfAssetInfo;
@@ -99,7 +142,7 @@ export interface GltfDocument {
     readonly meshes?: readonly GltfMesh[];
     readonly materials?: readonly GltfMaterial[];
     readonly skins?: readonly GltfNamed[];
-    readonly animations?: readonly GltfNamed[];
+    readonly animations?: readonly GltfAnimation[];
     readonly accessors?: readonly GltfAccessor[];
     readonly buffers?: readonly GltfBuffer[];
     readonly images?: readonly GltfImage[];

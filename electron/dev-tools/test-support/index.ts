@@ -39,6 +39,9 @@ export { readWavFacts, type WavFacts } from './wavFacts.js';
 export {
     readGlbDocument,
     type GltfAccessor,
+    type GltfAnimation,
+    type GltfAnimationChannel,
+    type GltfAnimationSampler,
     type GltfAssetInfo,
     type GltfBuffer,
     type GltfDocument,

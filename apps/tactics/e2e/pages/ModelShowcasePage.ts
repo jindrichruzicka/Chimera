@@ -26,13 +26,32 @@ export class ModelShowcasePage {
      */
     readonly status: Locator;
 
+    /**
+     * The clip-player status element. Written IMPERATIVELY from the frame loop
+     * (§6.3 forbids `setState` there), so its attributes are ABSENT until the
+     * first frame writes them — their absence is itself the "nothing is running"
+     * signal.
+     *
+     * That is why {@link clipAttribute} answers `null` rather than throwing, and
+     * why a caller must poll it rather than reach for `.not.toHaveAttribute`:
+     * Playwright treats a MISSING attribute as a non-match, which under `.not`
+     * resolves immediately and waits for nothing.
+     */
+    readonly clipStatus: Locator;
+
     /** The R3F `<canvas>` the showcase renders into. */
     readonly canvas: Locator;
 
     public constructor(private readonly page: Page) {
         this.root = page.getByTestId('tactics-model-showcase');
         this.status = page.getByTestId('tactics-model-showcase-status');
+        this.clipStatus = page.getByTestId('tactics-model-showcase-clip-status');
         this.canvas = this.root.locator('canvas').first();
+    }
+
+    /** The current value of one clip-status data attribute, or `null` if unwritten. */
+    public async clipAttribute(name: string): Promise<string | null> {
+        return this.clipStatus.getAttribute(`data-${name}`);
     }
 
     public async goto(): Promise<void> {

@@ -199,7 +199,7 @@ Two details of that pinning are load-bearing:
 
 Consequences worth knowing:
 
-- An overlay a game lays over its own full-bleed wrapper **sits over the bars**, not beside them — but only if it is **positioned and rendered after** the `<GameCanvas>`, because the frame the scrim sits on is itself a positioned element with `z-index: auto`. The tactics board's reveal readout and the model showcase's status element satisfy both halves, pinned by `TacticsDemoBoard.test.tsx` and `TacticsModelShowcaseScreen.test.tsx`.
+- An overlay a game lays over its own full-bleed wrapper **sits over the bars**, not beside them — but only if it is **positioned and rendered after** the `<GameCanvas>`, because the frame the scrim sits on is itself a positioned element with `z-index: auto`. The tactics board's reveal readout and BOTH of the model showcase's status elements satisfy both halves, pinned by `TacticsDemoBoard.test.tsx` and `TacticsModelShowcaseScreen.test.tsx`.
 - The frame is inert to the pointer, so a click on a bar is not absorbed by the engine box — it reaches whatever the game has behind it.
 - r3f 9.6.1 connects its pointer listeners to its own wrapper, which under a fit is the fitted box, so a bar click reaches nothing r3f is listening on: `onPointerMissed` fires over the canvas only.
 - Every role letterboxes, `'overlay'` included: an overlay canvas whose wrapper aspect diverges from its camera's gets bars and a scrim exactly as a main one does.

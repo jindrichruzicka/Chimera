@@ -3,7 +3,7 @@
  *
  * Tactics' content adapter. It is the single place that knows tactics authors
  * its colours as the `player-colors` and `board-colors` collections and that
- * each item carries a `hex`. Two responsibilities:
+ * each item carries a `hex`. Three responsibilities:
  *
  *   1. `TACTICS_CONTENT_SCHEMAS` — the per-collection Zod schemas handed to the
  *      generic `ContentLoader` (in `electron/main`) so items are validated at
@@ -12,6 +12,13 @@
  *      transmitted `GameContent` (id + arbitrary fields) into the `TacticsPalette`
  *      the lobby and in-match scene consume. It tolerates missing collections so
  *      a game with no content (or a not-yet-loaded fetch) degrades to defaults.
+ *   3. Re-exporting `TACTICS_SHOWCASE_WINDOWS`, which is how the animation
+ *      clip-window verification reaches a path that always runs. The check is a
+ *      module-scope call in `tacticsAnimations.ts`, so it fires when that module
+ *      is EVALUATED — and this module is what `apps/tactics/electron/main.ts`
+ *      imports at Electron main startup. Re-exporting from here puts the
+ *      verification on that graph, which is what makes a mis-authored beat
+ *      window refuse the app rather than mis-time a marker at runtime.
  *
  * Module boundary (§3): workspace imports are simulation/, ai/ and own files
  * only. Lint enforces the renderer half (`chimera/no-game-renderer-internals`)
@@ -29,6 +36,11 @@ import type { LobbyFieldOption } from '@chimera-engine/simulation/foundation/gam
 import type { ZodType } from 'zod';
 import { ColorItemSchema } from './colorSchemas.js';
 import type { TacticsPalette } from '../lobby/lobby-setup.js';
+
+// Responsibility 3 (see the header): a VALUE re-export, not a type one. The
+// binding is what keeps the module on the evaluated graph — a bundler is free
+// to drop a module nothing names, and a dropped module runs no verification.
+export { TACTICS_SHOWCASE_WINDOWS } from './tacticsAnimations.js';
 
 /** Collection type (data subdirectory) holding the per-player unit colours. */
 export const PLAYER_COLORS_COLLECTION = 'player-colors';

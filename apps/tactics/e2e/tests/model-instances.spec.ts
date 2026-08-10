@@ -2,11 +2,13 @@
  * model-instances.spec.ts
  * §4.10 Asset Reference System → model seam adoption.
  *
- * The end-to-end proof that the GLTF runtime path works in the real runtime:
- * the `/model-showcase/` route mounts TWO `useModelInstance` components on ONE
- * `gltf-model` ref, and this spec runs against the static export served over
- * `chimera://` — the first code path ever to load the webpack async GLTFLoader
- * chunk (`__webpack_require__.e`) through the custom protocol.
+ * The end-to-end proof that the GLTF runtime path works in the real runtime.
+ * The `/model-showcase/` route mounts FOUR `useModelInstance` components across
+ * TWO `gltf-model` refs, in two pairs: the SEAM pair, two instances of the
+ * unanimated rig, and the CLIP-PLAYER pair, two instances of the animated one.
+ * This spec runs against the static export served over `chimera://` — the first
+ * code path ever to load the webpack async GLTFLoader chunk
+ * (`__webpack_require__.e`) through the custom protocol.
  *
  * The showcase lives on its own route, reached only from here (why:
  * `TacticsModelShowcaseScreen`).
@@ -26,14 +28,22 @@
  *   2. **The pixels the scene-graph facts cannot show.** The magenta pixel
  *      count proves the clones actually rasterize — the model decoded, the
  *      protocol served real bytes, and the unlit magenta quads are on screen.
+ *   3. **That a clip actually advances.** The second test polls a bone
+ *      rotation written from the frame loop, which the component suites cannot
+ *      reach: they build their own `AnimationClip`, so what they prove is the
+ *      wiring, not that the GENERATED container decodes into a playable clip.
  *
  * NOT covered here, deliberately: no harness in this repo launches an
  * electron-builder packaged app — packaging remains a manual gate item, and
  * that includes the route gate's 404 (its unit test covers the gate function
  * and the `notFound()` call). This spec exercises the `.e2e-build`
- * static-export layout only. No motion is awaited anywhere (the pose is
- * applied before the first report), so the occluded-window frozen-transition
- * hazard does not apply.
+ * static-export layout only.
+ *
+ * The FIRST test awaits no motion — the pose is applied before the first report
+ * — so the occluded-window frozen-transition hazard does not touch it. The
+ * second one does await motion, and cannot avoid it: an advancing clip is the
+ * property. An occluded window stalls the rAF chain and would time it out
+ * rather than pass it falsely, which is the direction that hazard fails in.
  */
 
 import { expect, test } from '../fixtures/electron.fixture';
@@ -76,5 +86,86 @@ test.describe('Tactics model seam adoption', () => {
         // And the clones are really on screen: the showcase quads are the only
         // geometry in this scene.
         await showcase.assertCanvasHasMagentaPrimitive();
+    });
+
+    test('plays a clip on one instance while the mixer-only twin stays still', async ({
+        mainWindow,
+        rendererConsole,
+    }) => {
+        // The clip-player half of the route (feature F82). The pair here is ONE
+        // animated ref resolved twice: one instance under `useClipPlayer`, one
+        // under plain `useModelAnimation`. Same model, same clip data, same
+        // frame loop — so a moving control bone could only come from a second
+        // mixer on one root (Rule ONE-MIXER-PER-ROOT), and a still played bone
+        // means the clip never advanced.
+        //
+        // Read off the DOM rather than off pixels: the swing is a LOOP, so two
+        // screenshots taken an unknown interval apart can legitimately show the
+        // same frame. The bone rotation cannot.
+        //
+        // Tactics is `realtime: false`, so no `engine:tick` is ever dispatched
+        // here: the clip free-runs off the frame clock. The simulation half of
+        // the feature — beat windows, dilation, `onBeat` — is NOT exercised by
+        // this spec.
+        test.slow();
+        const showcase = new ModelShowcasePage(mainWindow);
+
+        await showcase.goto();
+        await expect(showcase.canvas).toBeVisible({ timeout: 15_000 });
+
+        // The attributes are ABSENT until the first frame writes them, and the
+        // model load is on demand — so this waits for the absent→written
+        // transition, which is the long one.
+        //
+        // Written as a poll rather than `.not.toHaveAttribute(…, '')`: MEASURED
+        // in playwright-core's injected script, `to.have.attribute.value`
+        // answers `{received: null, matches: false}` for a MISSING attribute, so
+        // under `.not` that assertion resolves immediately while nothing has
+        // been written at all.
+        await expect
+            .poll(async () => showcase.clipAttribute('clip-played-bone-z'), { timeout: 15_000 })
+            .toMatch(/^-?\d+\.\d{4}$/u);
+
+        const firstSample = await showcase.clipAttribute('clip-played-bone-z');
+        // The control is under a mixer with no action: it must read as the rest
+        // pose, and reading it at all proves the attribute is being written.
+        expect(await showcase.clipAttribute('clip-control-bone-z')).toBe('0.0000');
+
+        // Two samples of the SAME attribute, taken across real frames. The clip
+        // is one second long and swings ±20°, so any two instants a few hundred
+        // milliseconds apart differ — except the two the swing passes through
+        // symmetrically, which is why this polls for a difference instead of
+        // sleeping once and comparing.
+        await expect
+            .poll(async () => showcase.clipAttribute('clip-played-bone-z'), { timeout: 10_000 })
+            .not.toBe(firstSample);
+
+        // The marks fired, and the passage closed for a PLAYHEAD reason rather
+        // than a teardown one — a passage that only ever closes as 'released'
+        // means the clip was torn down, not played through.
+        //
+        // 'reached-end', not 'looped', and that is a property of THIS sheet:
+        // MEASURED against the real scheduler, a passage closes as 'looped' only
+        // if it is still open at the wrap, and this one ends at phase 0.75. A
+        // sheet whose passage ran to the clip's end would report the other.
+        await expect
+            .poll(async () => Number(await showcase.clipAttribute('clip-notifies')), {
+                timeout: 10_000,
+            })
+            .toBeGreaterThan(0);
+        expect(await showcase.clipAttribute('clip-passage-end-reason')).toBe('reached-end');
+
+        // And the control never moved while all that happened.
+        expect(await showcase.clipAttribute('clip-control-bone-z')).toBe('0.0000');
+
+        // A duplicate mixer binding is REPORTED through the log bridge rather
+        // than thrown, so it would leave every assertion above green — and it
+        // reports one frame LATE, which is why this is read at the end rather
+        // than beside the first sample.
+        expect(
+            rendererConsole.filter((entry) =>
+                entry.text.includes('more than one animation hook is bound to one model root'),
+            ),
+        ).toEqual([]);
     });
 });

@@ -5,16 +5,24 @@ import type {
     GLTFModelAsset,
 } from '@chimera-engine/simulation/content/AssetRef.js';
 import { audioClipEntry } from '@chimera-engine/simulation/content/audioManifest.js';
+import { modelAnimationEntry } from '@chimera-engine/simulation/content/animationManifest.js';
 
 /**
- * The showcase rig (model seam adoption, §4.10): one self-contained `.glb` —
- * embedded buffer, no textures — holding a two-bone skinned quad with an
- * unlit magenta material. Both instances on the `/model-showcase/` test route
- * mount this ONE ref; independence comes from `useModelInstance`'s per-mount
- * clone. No gameplay screen mounts it.
+ * The showcase rigs (model seam adoption, §4.10): self-contained `.glb` files —
+ * embedded buffer, no textures — each holding a two-bone skinned quad with an
+ * unlit magenta material. No gameplay screen mounts either one.
+ *
+ * `showcaseRig` carries NO animation, which is what makes the pair a proof
+ * rather than a demo: it is mounted twice on the `/model-showcase/` test route
+ * to show that independence comes from `useModelInstance`'s per-mount clone.
+ * `showcaseRigAnimated` carries one clip, `wave`, and is the model the clip
+ * player drives. It is GENERATED — `tools/gen-showcase-animated-glb.ts`, gated
+ * by `pnpm verify:showcase-glb` — because a `.glb` cannot be reviewed, so the
+ * only honest way to state what it contains is a program that emits it.
  */
 export const tacticsModelRefs = {
     showcaseRig: 'tactics/models/showcase-rig.glb' as AssetRef<GLTFModelAsset>,
+    showcaseRigAnimated: 'tactics/models/showcase-rig-animated.glb' as AssetRef<GLTFModelAsset>,
 } as const;
 
 export const tacticsAudioRefs = {
@@ -53,6 +61,45 @@ export const tacticsMusicCues = {
     durationSeconds: 1.5,
 } as const;
 
+/**
+ * The `wave` clip's sheet values, mirrored out of the manifest entry below.
+ *
+ * A MIRROR, not the source, for the same reason `tacticsMusicCues` is one: the
+ * build gate reads the sheet as SYNTAX, so a `tacticsShowcaseClip.durationSeconds`
+ * reference is exactly as unreadable to it as a spread or a computed key. The
+ * entry must therefore carry bare numeric literals, and this constant is what
+ * makes that duplication safe — `asset-manifest.test.ts` checks the inline sheet,
+ * this mirror, and the committed `.glb` against each other, so a number changed
+ * in one place and not the others reds instead of desynchronising a marker from
+ * the motion it is meant to land on.
+ *
+ * The two halves of the passage are authored in DIFFERENT units on purpose:
+ * `from`/`to` are normalized phases (what the renderer plays) and `beatWindow`
+ * is beat integers (what the simulation would open). They are reconciled by
+ * `compileAnimationWindows` at content load — see `content/tacticsAnimations.ts`
+ * — never derived from one another, so the host's `tickRateMs` cannot silently
+ * resize the window.
+ */
+export const tacticsShowcaseClip = {
+    /** The clip name baked into the `.glb`, and the key `useClipPlayer` plays. */
+    name: 'wave',
+    /** The clip's real length, which the generated container's sampler input maxes at. */
+    durationSeconds: 1,
+    /** The notify's offset from the clip start — strictly inside the clip. */
+    notifySeconds: 0.5,
+    /** The passage span, as normalized phases of the clip. */
+    passageFromPhase: 0.25,
+    passageToPhase: 0.75,
+    /** The same span as beat integers, at the engine's default 50 ms beat. */
+    passageBeatWindow: [5, 15],
+    /** The gameplay window id the passage claims while it is open. */
+    windowName: 'showcase-swing',
+    /** The passage's own mark name — its key in the clip's `passages` record. */
+    passageName: 'swing',
+    /** The notify's own mark name. */
+    notifyName: 'crest',
+} as const;
+
 export const tacticsAssetManifest: AssetManifest = {
     gameId: 'tactics',
     entries: [
@@ -60,6 +107,30 @@ export const tacticsAssetManifest: AssetManifest = {
         // when the /model-showcase/ route mounts, not during scene preload —
         // no gameplay scene needs it.
         { ref: tacticsModelRefs.showcaseRig, kind: 'gltf-model', priority: 'deferred' },
+        // The animated twin, with its clip sheet inline — see
+        // `tacticsShowcaseClip` above for why the numbers are written out here
+        // rather than referenced.
+        modelAnimationEntry({
+            ref: tacticsModelRefs.showcaseRigAnimated,
+            priority: 'deferred',
+            metadata: {
+                clips: {
+                    wave: {
+                        durationSeconds: 1,
+                        loop: 'loop',
+                        notifies: { crest: { at: { seconds: 0.5 } } },
+                        passages: {
+                            swing: {
+                                from: 0.25,
+                                to: 0.75,
+                                beatWindow: [5, 15],
+                                window: 'showcase-swing',
+                            },
+                        },
+                    },
+                },
+            },
+        }),
         audioClipEntry({ ref: tacticsAudioRefs.step, priority: 'deferred' }),
         audioClipEntry({ ref: tacticsAudioRefs.swordHit, priority: 'deferred' }),
         audioClipEntry({ ref: tacticsAudioRefs.reveal, priority: 'deferred' }),

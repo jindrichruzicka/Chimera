@@ -1,10 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { GameCanvas, type OrthographicCameraConfig } from '@chimera-engine/renderer/components/r3f';
-import { useModelInstance, type UseModelInstanceState } from '@chimera-engine/renderer/assets';
+import {
+    useAnimationSheet,
+    useModelInstance,
+    type UseModelInstanceState,
+} from '@chimera-engine/renderer/assets';
 
-import { tacticsModelRefs } from '../asset-manifest.js';
+import { tacticsModelRefs, tacticsShowcaseClip } from '../asset-manifest.js';
+import { TacticsAnimatedShowcase } from '../components/TacticsAnimatedShowcase.js';
 import {
     TacticsModelShowcase,
     type TacticsModelShowcaseInstance,
@@ -41,9 +46,20 @@ export function TacticsModelShowcaseScreen(): React.ReactElement {
     const modelA = useModelInstance(tacticsModelRefs.showcaseRig);
     const modelB = useModelInstance(tacticsModelRefs.showcaseRig);
 
+    // The clip-player pair: one ref resolved twice, so the two drivers act on
+    // distinct clones (Rule ONE-MIXER-PER-ROOT — `TacticsAnimatedShowcase`).
+    const animatedPlayed = useModelInstance(tacticsModelRefs.showcaseRigAnimated);
+    const animatedControl = useModelInstance(tacticsModelRefs.showcaseRigAnimated);
+    // Resolved HERE, outside the canvas, for two reasons: the sheet is manifest
+    // data that needs no `<Canvas>`, and the hook MEMOISES what it parses — so
+    // the object handed to `useClipPlayer` is stable, where a parse inside the
+    // canvas component would restart the clip on every render.
+    const animationSheet = useAnimationSheet(tacticsModelRefs.showcaseRigAnimated);
+    const clipStatusRef = useRef<HTMLDivElement | null>(null);
+
     return (
         <div data-testid="tactics-model-showcase" style={screenStyle}>
-            {/* No lights: showcase-rig.glb declares KHR_materials_unlit, which
+            {/* No lights: both showcase rigs declare KHR_materials_unlit, which
                 GLTFLoader maps to MeshBasicMaterial — nothing in this scene is
                 lit, so a light could not change a pixel. */}
             <GameCanvas camera={SHOWCASE_CAMERA}>
@@ -53,10 +69,26 @@ export function TacticsModelShowcaseScreen(): React.ReactElement {
                     onReportA={setReportA}
                     onReportB={setReportB}
                 />
+                <TacticsAnimatedShowcase
+                    playedInstance={animatedPlayed.instance}
+                    controlInstance={animatedControl.instance}
+                    sheet={animationSheet?.sheet ?? null}
+                    clip={tacticsShowcaseClip.name}
+                    statusRef={clipStatusRef}
+                />
             </GameCanvas>
             {/* Positioned, and after the canvas — camera-system.md §4.22
                 "Canvas-fit rules". */}
             <TacticsModelShowcaseStatus reportA={reportA} reportB={reportB} />
+            {/* Written imperatively from the frame loop, never rendered from
+                state — see `TacticsAnimatedShowcase`'s header. Its attributes
+                are absent until the first frame writes them, which is itself
+                the "nothing is running" signal. */}
+            <div
+                data-testid="tactics-model-showcase-clip-status"
+                ref={clipStatusRef}
+                style={showcaseStatusStyle}
+            />
         </div>
     );
 }
@@ -94,18 +126,23 @@ const screenStyle: React.CSSProperties = {
 /**
  * The screen's own camera — it shares nothing with the board's (§4.22), which
  * looks down -Y at the XZ board plane. The quads are authored upright in the
- * XY plane facing +Z (x ±0.45, y 0→1.4 in `showcase-rig.glb`), so this looks
- * straight down -Z at them and needs no corrective rotation. The frustum is
- * sized to hold both quads plus the posed one's sideways swing, and centred on
- * the quads' mid-height. Module-level so GameCanvas's reference-compared memo
- * keeps one camera per mount.
+ * XY plane facing +Z (x ±0.45, y 0→1.4 in both rigs), so this looks straight
+ * down -Z at them and needs no corrective rotation. The frustum holds FOUR
+ * quads — the seam pair and the clip-player pair — plus the posed one's
+ * sideways swing, and is centred on the quads' mid-height. Module-level so
+ * GameCanvas's reference-compared memo keeps one camera per mount.
+ *
+ * Widened in BOTH axes when the clip-player pair arrived, and by the same
+ * factor: the authored aspect (1.6) is what the canvas-fit policy letterboxes
+ * against, so widening only the horizontal would have re-framed the whole scene
+ * rather than making room in it.
  */
 const SHOWCASE_CAMERA = {
     mode: 'orthographic',
     position: [0, 0.7, 6],
     lookAt: [0, 0.7, 0],
     up: [0, 1, 0],
-    frustum: { left: -2.4, right: 2.4, top: 1.5, bottom: -1.5, near: 0.1, far: 100 },
+    frustum: { left: -3.4, right: 3.4, top: 2.125, bottom: -2.125, near: 0.1, far: 100 },
 } as const satisfies OrthographicCameraConfig;
 
 // No visible content — the element exists only to carry data attributes, so

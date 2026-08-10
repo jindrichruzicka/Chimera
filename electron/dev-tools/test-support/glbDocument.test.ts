@@ -136,6 +136,63 @@ describe('readGlbDocument', () => {
         expect(document.buffers?.[0]?.uri).toBeUndefined();
     });
 
+    it('round-trips an animation with its channels and samplers', () => {
+        // The animation half of the surface. Reading it is what lets a game
+        // assert its clip sheet against the clip the container actually holds:
+        // the clip's NAME (the key `useClipPlayer` plays), the node a channel
+        // drives, and the sampler input whose accessor `max` is the clip's
+        // length. None of the three is knowable without opening the file.
+        const filePath = writeGlb('animated.glb', {
+            json: {
+                asset: { version: '2.0' },
+                nodes: [{ name: 'root' }, { name: 'top' }],
+                animations: [
+                    {
+                        name: 'wave',
+                        channels: [{ sampler: 0, target: { node: 1, path: 'rotation' } }],
+                        samplers: [{ input: 0, output: 1, interpolation: 'LINEAR' }],
+                    },
+                ],
+                accessors: [
+                    { count: 2, type: 'SCALAR', componentType: 5126, min: [0], max: [1] },
+                    { count: 2, type: 'VEC4', componentType: 5126 },
+                ],
+            },
+        });
+
+        const document = readGlbDocument(filePath);
+        const animation = document.animations?.[0];
+
+        expect(animation?.name).toBe('wave');
+        expect(animation?.channels).toEqual([
+            { sampler: 0, target: { node: 1, path: 'rotation' } },
+        ]);
+        expect(animation?.samplers).toEqual([{ input: 0, output: 1, interpolation: 'LINEAR' }]);
+        // The length read, spelled out: sampler input → accessor → max[0].
+        const input = animation?.samplers?.[0]?.input;
+        expect(document.accessors?.[input ?? -1]?.max?.[0]).toBe(1);
+    });
+
+    it('reads an animation with no samplers as undefined rather than throwing', () => {
+        // Every field on the animation types is OPTIONAL because the reader
+        // casts unvalidated JSON. A caller that maps over `samplers` on a
+        // malformed animation therefore gets `undefined` to handle, not a
+        // TypeError from inside the reader — which would name no file.
+        const filePath = writeGlb('animation-no-samplers.glb', {
+            json: {
+                asset: { version: '2.0' },
+                animations: [{ name: 'empty' }],
+            },
+        });
+
+        const animation = readGlbDocument(filePath).animations?.[0];
+
+        expect(animation?.name).toBe('empty');
+        expect(animation?.samplers).toBeUndefined();
+        expect(animation?.channels).toBeUndefined();
+        expect(() => animation?.samplers?.map((sampler) => sampler.input)).not.toThrow();
+    });
+
     it('rejects a file whose glTF magic is wrong', () => {
         const filePath = writeGlb('not-glb.glb', { magic: 0x12345678 });
 

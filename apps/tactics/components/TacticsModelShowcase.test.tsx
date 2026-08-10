@@ -65,10 +65,12 @@ describe('TacticsModelShowcase', () => {
     it('places the two quads apart, so the posed one cannot overlap the unposed one', () => {
         // Measured from showcase-rig.glb: each quad spans x ±0.45 about its
         // position and the `top` bone sits at y=0.7, so posing A by π/2 about
-        // z swings its upper half ~0.7 sideways. At x=∓1.1 that gives
-        // A x∈[-1.8,-0.65] and B x∈[0.65,1.55] — disjoint, and both inside the
-        // screen camera's left/right ±2.4 frustum. Collapsing the two onto one
-        // spot still satisfies the e2e magenta-pixel floor, so only this pins it.
+        // z swings its upper half ~0.7 sideways. At x=-2.55 and x=-0.85 that
+        // gives A x∈[-3.25,-2.1] and B x∈[-1.3,-0.4] — disjoint, and both
+        // inside the screen camera's left/right ±3.4 frustum. This pair holds
+        // the LEFT half of that frustum; the clip-player pair holds the right.
+        // Collapsing the two onto one spot still satisfies the e2e
+        // magenta-pixel floor, so only this pins it.
         const stubA = createStubRoot('uuid-a');
         const stubB = createStubRoot('uuid-b');
 
@@ -84,7 +86,7 @@ describe('TacticsModelShowcase', () => {
         const positions = Array.from(container.querySelectorAll('primitive')).map((node) =>
             node.getAttribute('position'),
         );
-        expect(positions).toEqual(['-1.1,0,0', '1.1,0,0']);
+        expect(positions).toEqual(['-2.55,0,0', '-0.85,0,0']);
     });
 
     it('surfaces a load failure as the report errorName instead of throwing', () => {

@@ -6,22 +6,40 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
 
-import { useModelInstance } from '@chimera-engine/renderer/assets';
+import { useAnimationSheet, useModelInstance } from '@chimera-engine/renderer/assets';
 import type { ModelInstance } from '@chimera-engine/renderer/assets';
 
-import { tacticsModelRefs } from '../asset-manifest.js';
+import { tacticsModelRefs, tacticsShowcaseClip } from '../asset-manifest.js';
 import { TacticsModelShowcaseScreen } from './TacticsModelShowcaseScreen';
 
 const gameCanvasCalls = vi.hoisted((): { readonly camera: unknown }[] => []);
 
-// The screen owns the ref resolution: the hook calls live here and the outcome
-// is handed to the R3F component as props, which is why that component's own
-// suite needs no asset provider.
+// The screen owns the ref resolution AND the sheet parse: both hook calls live
+// here and their outcomes are handed to the R3F components as props, which is
+// why those components' own suites need no asset provider. The sheet in
+// particular MUST be resolved here — `useAnimationSheet` memoises what it
+// parses, and a parse inside the canvas component would hand `useClipPlayer` a
+// fresh object every render and restart the clip on every frame.
 vi.mock('@chimera-engine/renderer/assets', () => ({
     useModelInstance: vi.fn(),
+    useAnimationSheet: vi.fn(),
 }));
 
 const useModelInstanceMock = vi.mocked(useModelInstance);
+const useAnimationSheetMock = vi.mocked(useAnimationSheet);
+
+/** What the screen handed the clip-player component on each render. */
+const animatedShowcaseProps = vi.hoisted((): Record<string, unknown>[] => []);
+
+vi.mock('../components/TacticsAnimatedShowcase.js', () => ({
+    // Same reason as the scene component below: it renders `<primitive>` and
+    // calls `useFrame`, neither of which exists outside an R3F reconciler. Its
+    // own suite drives it through `@react-three/test-renderer`.
+    TacticsAnimatedShowcase: (props: Record<string, unknown>) => {
+        animatedShowcaseProps.push(props);
+        return <div data-testid="tactics-animated-showcase-mock" />;
+    },
+}));
 
 function stubInstance(uuid: string): ModelInstance {
     return { root: { uuid }, clips: [] } as unknown as ModelInstance;
@@ -97,6 +115,7 @@ vi.mock('../components/TacticsModelShowcase.js', () => ({
 
 beforeEach(() => {
     useModelInstanceMock.mockReturnValue({ instance: null, loading: true, error: null });
+    useAnimationSheetMock.mockReturnValue(null);
 });
 
 afterEach(() => {
@@ -104,24 +123,86 @@ afterEach(() => {
     vi.clearAllMocks();
     gameCanvasCalls.length = 0;
     showcaseInstanceProps.length = 0;
+    animatedShowcaseProps.length = 0;
     showcaseMockReports.resetToClean();
 });
 
 describe('TacticsModelShowcaseScreen — model resolution', () => {
-    it('resolves the single showcase ref TWICE per render, one call per mounted instance', () => {
-        // Two calls PER RENDER, not two in total: the reports land in screen
-        // state, so the screen renders again after mount. One call whose result
-        // was reused for both quads would hand the SAME root to A and B,
-        // collapsing the two uuids the e2e compares — and that mutant shows up
-        // here as one call per render rather than two.
+    it('resolves each showcase ref TWICE per render, one call per mounted instance', () => {
+        // Two calls per ref PER RENDER, not two in total: the reports land in
+        // screen state, so the screen renders again after mount. One call whose
+        // result was reused for both quads of a pair would hand the SAME root to
+        // both, collapsing the two uuids the e2e compares — and that mutant
+        // shows up here as one call per ref per render rather than two.
+        //
+        // Both pairs matter, and for different reasons: the seam pair proves
+        // per-mount cloning, and the animated pair is what keeps the two mixer
+        // drivers off one root (Rule ONE-MIXER-PER-ROOT).
         render(<TacticsModelShowcaseScreen />);
 
         const renderCount = showcaseInstanceProps.length;
         expect(renderCount).toBeGreaterThanOrEqual(1);
-        expect(useModelInstanceMock).toHaveBeenCalledTimes(renderCount * 2);
+        expect(useModelInstanceMock).toHaveBeenCalledTimes(renderCount * 4);
+
+        const perRef = new Map<unknown, number>();
         for (const call of useModelInstanceMock.mock.calls) {
-            expect(call[0]).toBe(tacticsModelRefs.showcaseRig);
+            perRef.set(call[0], (perRef.get(call[0]) ?? 0) + 1);
         }
+        expect(Object.fromEntries(perRef)).toEqual({
+            [tacticsModelRefs.showcaseRig]: renderCount * 2,
+            [tacticsModelRefs.showcaseRigAnimated]: renderCount * 2,
+        });
+    });
+
+    it('parses the sheet once per render, for the ANIMATED ref only', () => {
+        // The unanimated rig carries no sheet, so a parse against its ref would
+        // be a memo keyed on `undefined` — silently null, and indistinguishable
+        // from a sheet the manifest forgot.
+        render(<TacticsModelShowcaseScreen />);
+
+        const renderCount = showcaseInstanceProps.length;
+        expect(useAnimationSheetMock).toHaveBeenCalledTimes(renderCount);
+        for (const call of useAnimationSheetMock.mock.calls) {
+            expect(call[0]).toBe(tacticsModelRefs.showcaseRigAnimated);
+        }
+    });
+
+    it('hands the clip-player component its two instances, the sheet and the clip name', () => {
+        const sheet = { clips: { wave: { durationSeconds: 1 } } };
+        useModelInstanceMock
+            .mockReturnValueOnce({ instance: stubInstance('uuid-a'), loading: false, error: null })
+            .mockReturnValueOnce({ instance: stubInstance('uuid-b'), loading: false, error: null })
+            .mockReturnValueOnce({
+                instance: stubInstance('uuid-played'),
+                loading: false,
+                error: null,
+            })
+            .mockReturnValueOnce({
+                instance: stubInstance('uuid-control'),
+                loading: false,
+                error: null,
+            });
+        useAnimationSheetMock.mockReturnValue({ sheet, warnings: [] });
+
+        render(<TacticsModelShowcaseScreen />);
+
+        expect(animatedShowcaseProps[0]).toMatchObject({
+            playedInstance: { root: { uuid: 'uuid-played' } },
+            controlInstance: { root: { uuid: 'uuid-control' } },
+            // The SHEET, not the parsed wrapper: the wrapper carries `warnings`
+            // beside it and is not a clip-sheet source.
+            sheet,
+            clip: tacticsShowcaseClip.name,
+        });
+    });
+
+    it('passes a null sheet through rather than an empty object', () => {
+        // `useAnimationSheet` answers null for a ref with no metadata, and
+        // `useClipPlayer` takes `ClipSheetSource | null`. An `?? {}` here would
+        // play the clip UNMARKED and look identical on screen.
+        render(<TacticsModelShowcaseScreen />);
+
+        expect(animatedShowcaseProps[0]?.['sheet']).toBeNull();
     });
 
     it('hands each resolved root down to the scene component, A then B', () => {
@@ -184,19 +265,28 @@ describe('TacticsModelShowcaseScreen', () => {
         expect(new Set(gameCanvasCalls.map((call) => call.camera)).size).toBe(1);
     });
 
-    it('frames both quads with an explicit world-unit orthographic frustum', () => {
+    it('frames all four quads with an explicit world-unit orthographic frustum', () => {
         // The quads are authored in the XY plane facing +Z, spanning x ±0.45
-        // and y 0→1.4 (showcase-rig.glb). This is the screen's own camera —
-        // it shares nothing with the board's, which looks down -Y.
+        // and y 0→1.4 (both rigs). This is the screen's own camera — it shares
+        // nothing with the board's, which looks down -Y.
         render(<TacticsModelShowcaseScreen />);
 
-        expect(gameCanvasCalls[0]?.camera).toEqual({
+        const camera = gameCanvasCalls[0]?.camera as { frustum: Record<string, number> };
+        expect(camera).toEqual({
             mode: 'orthographic',
             position: [0, 0.7, 6],
             lookAt: [0, 0.7, 0],
             up: [0, 1, 0],
-            frustum: { left: -2.4, right: 2.4, top: 1.5, bottom: -1.5, near: 0.1, far: 100 },
+            frustum: { left: -3.4, right: 3.4, top: 2.125, bottom: -2.125, near: 0.1, far: 100 },
         });
+
+        // The ASPECT is the load-bearing part, and it is not visible from the
+        // four numbers above: the canvas-fit policy letterboxes against it, so
+        // widening one axis alone re-frames the whole scene instead of making
+        // room in it. 1.6 is what the two-quad frustum had.
+        const width = camera.frustum['right']! - camera.frustum['left']!;
+        const height = camera.frustum['top']! - camera.frustum['bottom']!;
+        expect(width / height).toBeCloseTo(1.6, 6);
     });
 
     it('exposes the model-showcase reports as status data attributes (clean path)', () => {
@@ -284,17 +374,26 @@ describe('TacticsModelShowcaseScreen', () => {
         });
     });
 
-    it('renders the status element positioned and AFTER the GameCanvas', () => {
+    it('renders both status elements positioned and AFTER the GameCanvas', () => {
         // Positioned and after the canvas, both — camera-system.md §4.22
-        // "Canvas-fit rules".
+        // "Canvas-fit rules". The clip status is a second node under the same
+        // rule: it is written imperatively from the frame loop, but it is still
+        // a sibling of the canvas and would occlude it if it were not absolute.
         render(<TacticsModelShowcaseScreen />);
 
         const screenRoot = screen.getByTestId('tactics-model-showcase');
         const order = [...screenRoot.children].map((child) => child.getAttribute('data-testid'));
 
-        expect(order).toEqual(['tactics-showcase-r3f-canvas', 'tactics-model-showcase-status']);
-        expect(screen.getByTestId('tactics-model-showcase-status')).toHaveStyle({
-            position: 'absolute',
-        });
+        expect(order).toEqual([
+            'tactics-showcase-r3f-canvas',
+            'tactics-model-showcase-status',
+            'tactics-model-showcase-clip-status',
+        ]);
+        for (const testId of [
+            'tactics-model-showcase-status',
+            'tactics-model-showcase-clip-status',
+        ]) {
+            expect(screen.getByTestId(testId)).toHaveStyle({ position: 'absolute' });
+        }
     });
 });

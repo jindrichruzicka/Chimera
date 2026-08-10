@@ -44,12 +44,13 @@ export const SHOWCASE_POSE_RADIANS = Math.PI / 2;
 // Placement on the showcase screen's own camera (`TacticsModelShowcaseScreen`,
 // looking straight down -Z). The quads are authored upright in the XY plane
 // facing +Z, so they need no corrective rotation here; they are simply set
-// side by side about the origin, far enough apart that the posed instance's
-// sideways swing cannot overlap the unposed one — the e2e reads the pose off
-// the scene graph, but an overlap would make the rendered frame unreadable to
-// a human diagnosing a failure.
-const MODEL_A_POSITION: readonly [number, number, number] = [-1.1, 0, 0];
-const MODEL_B_POSITION: readonly [number, number, number] = [1.1, 0, 0];
+// side by side, far enough apart that the posed instance's sideways swing
+// cannot overlap the unposed one — the e2e reads the pose off the scene graph,
+// but an overlap would make the rendered frame unreadable to a human diagnosing
+// a failure. This pair occupies the LEFT half of the frustum; the clip-player
+// pair (`TacticsAnimatedShowcase`) has the right, at the same 1.7 spacing.
+const MODEL_A_POSITION: readonly [number, number, number] = [-2.55, 0, 0];
+const MODEL_B_POSITION: readonly [number, number, number] = [-0.85, 0, 0];
 
 function findPosedBone(root: Object3D): Object3D | undefined {
     return root.getObjectByName(POSED_BONE_NAME);
