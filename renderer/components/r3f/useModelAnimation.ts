@@ -25,13 +25,22 @@ import { useOwnedMixer } from './useOwnedMixer.js';
  * `invalidate()` is the caller's job. See `useEngineFrameloop.ts` for why demand
  * rendering reaches no engine canvas.
  *
+ * **Rule ONE-MIXER-PER-ROOT.** A model root carries exactly one mixer-owning
+ * hook: this one or `useClipPlayer`, never both. Each owns its own mixer, each
+ * advances it once per frame, and the two drive the SAME action cache — so a
+ * root bound twice plays every clip at a multiple of its speed and miscounts
+ * every wrap, with no exception and no visible fault beyond the speed itself.
+ * The pair is claimed and released in `mixerBindingRegistry` by `useOwnedMixer`,
+ * which reports a real duplicate through the log bridge one frame later
+ * (Invariant #67) rather than throwing past the `<Canvas>`.
+ *
  * Allocation and release are `useOwnedMixer.ts`, which records the commit-phase
- * effect, the `stopAllAction()` → `uncacheRoot()` order, and why neither may be
- * a `useMemo`. Mixer state is renderer-local and never enters a `GameSnapshot`,
- * store, IPC payload, save, or replay.
+ * effect, the `stopAllAction()` → `uncacheRoot()` order, the claim/release pair
+ * and why none of them may be a `useMemo`. Mixer state is renderer-local and
+ * never enters a `GameSnapshot`, store, IPC payload, save, or replay.
  */
 export function useModelAnimation(instance: ModelInstance | null): AnimationMixer | null {
-    const mixer = useOwnedMixer(instance);
+    const mixer = useOwnedMixer(instance, 'useModelAnimation');
 
     // Registered unconditionally (rules of hooks: `instance` transitions
     // between null and non-null across renders of one mounted component) and

@@ -13,6 +13,7 @@ import type * as ThreeModule from 'three';
 import type { AnimationMixer } from 'three';
 
 import type { ModelInstance } from '../../assets/ModelInstance.js';
+import { readMixerBinding } from './mixerBindingRegistry.js';
 import { useModelAnimation } from './useModelAnimation.js';
 
 const { recordedFrames, mixerLog } = vi.hoisted(() => ({
@@ -219,6 +220,128 @@ describe('useModelAnimation', () => {
             }).not.toThrow();
         }
         expect(mixerLog.events).toHaveLength(0);
+    });
+});
+
+describe('useModelAnimation — Rule ONE-MIXER-PER-ROOT', () => {
+    // `emitRendererError` is `logsApi?.emit`, and the emitter comes from an
+    // absent `globalThis.__chimera.logs` under vitest — so without this stub a
+    // spurious report would be silently swallowed and every case below would
+    // pass on a broken registry. The rAF stub is the second half: the report is
+    // deferred by a frame, and jsdom's timer-backed rAF cannot be flushed here.
+    let logEmit: ReturnType<typeof vi.fn>;
+    let rafCallbacks: Map<number, (timestamp: number) => void>;
+    let nextRafHandle: number;
+
+    beforeEach(() => {
+        logEmit = vi.fn();
+        vi.stubGlobal('__chimera', { logs: { emit: logEmit } });
+        rafCallbacks = new Map();
+        nextRafHandle = 1;
+        vi.stubGlobal('requestAnimationFrame', (callback: (timestamp: number) => void): number => {
+            const handle = nextRafHandle++;
+            rafCallbacks.set(handle, callback);
+            return handle;
+        });
+        vi.stubGlobal('cancelAnimationFrame', (handle: number): void => {
+            rafCallbacks.delete(handle);
+        });
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    function flushFrame(): void {
+        const due = [...rafCallbacks.values()];
+        rafCallbacks.clear();
+        for (const callback of due) {
+            callback(0);
+        }
+    }
+
+    function reportedErrorNames(): (string | undefined)[] {
+        return logEmit.mock.calls
+            .map((call) => call[0] as { level: string; error?: { name?: string } })
+            .filter((entry) => entry.level === 'error')
+            .map((entry) => entry.error?.name);
+    }
+
+    it('reports nothing for a StrictMode double mount on one stable instance', async () => {
+        // React 19 simulates the double mount only when `<StrictMode>` is the
+        // element handed to `root.render`, which is what this option produces —
+        // the `wrapper` form above puts it one level down and runs `['setup']`
+        // where this runs `['setup', 'cleanup', 'setup']`.
+        const instance = createInstance();
+        const { unmount } = renderHook(() => useModelAnimation(instance), {
+            reactStrictMode: true,
+        });
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        flushFrame();
+
+        expect(reportedErrorNames()).toEqual([]);
+        unmount();
+    });
+
+    it('leaves no registry entry after ten mount/unmount cycles on one root', async () => {
+        const instance = createInstance();
+
+        for (let cycle = 0; cycle < 10; cycle += 1) {
+            const { unmount } = renderHook(() => useModelAnimation(instance));
+            await act(async () => {
+                await Promise.resolve();
+            });
+            unmount();
+            flushFrame();
+        }
+
+        expect(reportedErrorNames()).toEqual([]);
+        // A fresh bind must behave as a FIRST bind: a ledger that kept counting
+        // would report on the eleventh mount with nothing wrong.
+        expect(readMixerBinding(instance.root)).toBeNull();
+    });
+
+    it('holds exactly one claim while mounted, named for this hook', async () => {
+        const instance = createInstance();
+        const { unmount } = renderHook(() => useModelAnimation(instance));
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(readMixerBinding(instance.root)).toEqual({
+            count: 1,
+            binders: ['useModelAnimation'],
+        });
+
+        unmount();
+        expect(readMixerBinding(instance.root)).toBeNull();
+    });
+
+    it('releases the claim on the old root when the instance changes', async () => {
+        let instance = createInstance();
+        const firstRoot = instance.root;
+        const { rerender, unmount } = renderHook(() => useModelAnimation(instance));
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        instance = createInstance();
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+        flushFrame();
+
+        expect(readMixerBinding(firstRoot)).toBeNull();
+        expect(readMixerBinding(instance.root)).toEqual({
+            count: 1,
+            binders: ['useModelAnimation'],
+        });
+        expect(reportedErrorNames()).toEqual([]);
+        unmount();
     });
 });
 

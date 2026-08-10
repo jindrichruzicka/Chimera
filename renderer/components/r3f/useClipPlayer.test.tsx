@@ -33,6 +33,7 @@ import type { MarkerEvent } from '../../animation/clipMarkerScheduler.js';
 import { MeshClipBackend } from '../../animation/MeshClipBackend.js';
 import type { ModelInstance } from '../../assets/ModelInstance.js';
 import { fakeRootState, resetFakeFiberRoot, update } from './__test-support__/fakeFiberRoot';
+import { readMixerBinding } from './mixerBindingRegistry.js';
 import { useClipPlayer } from './useClipPlayer.js';
 import type { ClipPlayerHandle, UseClipPlayerOptions } from './useClipPlayer.js';
 
@@ -945,6 +946,93 @@ describe('useClipPlayer — ownership', () => {
         });
 
         expect(logs.emit).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('useClipPlayer — Rule ONE-MIXER-PER-ROOT', () => {
+    // The duplicate report is deferred a frame, so the flush is what makes a
+    // spurious one visible; without the rAF stub jsdom's timer-backed
+    // implementation would never run the callback inside the case.
+    let rafCallbacks: Map<number, (timestamp: number) => void>;
+    let nextRafHandle: number;
+
+    beforeEach(() => {
+        rafCallbacks = new Map();
+        nextRafHandle = 1;
+        vi.stubGlobal('requestAnimationFrame', (callback: (timestamp: number) => void): number => {
+            const handle = nextRafHandle++;
+            rafCallbacks.set(handle, callback);
+            return handle;
+        });
+        vi.stubGlobal('cancelAnimationFrame', (handle: number): void => {
+            rafCallbacks.delete(handle);
+        });
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    function flushFrame(): void {
+        const due = [...rafCallbacks.values()];
+        rafCallbacks.clear();
+        for (const callback of due) {
+            callback(0);
+        }
+    }
+
+    it('reports nothing for a StrictMode double mount on one stable instance', async () => {
+        // A registry that only remembered the roots it had seen would call the
+        // second mount a duplicate — silently, since `emitRendererError`
+        // swallows a missing bridge, which is why `installLogsApi` runs here.
+        const logs = installLogsApi();
+        const instance = createInstance();
+        const { unmount } = renderHook(
+            () => useClipPlayer(instance, SHEET, { clip: 'attack', loop: 'loop' }),
+            STRICT,
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        flushFrame();
+
+        expect(logs.emit.mock.calls).toEqual([]);
+        unmount();
+    });
+
+    it('holds exactly one claim while mounted, named for this hook', async () => {
+        const instance = createInstance();
+        const { unmount } = renderHook(() =>
+            useClipPlayer(instance, SHEET, { clip: 'attack', loop: 'loop' }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(readMixerBinding(instance.root)).toEqual({ count: 1, binders: ['useClipPlayer'] });
+
+        unmount();
+        expect(readMixerBinding(instance.root)).toBeNull();
+    });
+
+    it('leaves no registry entry after ten mount/unmount cycles on one root', async () => {
+        const logs = installLogsApi();
+        const instance = createInstance();
+
+        for (let cycle = 0; cycle < 10; cycle += 1) {
+            const { unmount } = renderHook(() =>
+                useClipPlayer(instance, SHEET, { clip: 'attack', loop: 'loop' }),
+            );
+            await act(async () => {
+                await Promise.resolve();
+            });
+            unmount();
+            flushFrame();
+        }
+
+        expect(logs.emit.mock.calls).toEqual([]);
+        expect(readMixerBinding(instance.root)).toBeNull();
     });
 });
 

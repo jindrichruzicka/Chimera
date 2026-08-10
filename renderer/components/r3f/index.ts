@@ -6,11 +6,18 @@
  * "overlay"` multi-canvas) plus the two Canvas-bound animation hooks —
  * the only renderer R3F surface game apps may import (Invariant #96).
  *
- * The two hooks are a raw seam and a bound one, and a model uses ONE of them:
- * `useModelAnimation` hands back the `AnimationMixer` and drives it, leaving
- * actions, crossfades and loop modes to the caller; `useClipPlayer` owns its
- * own mixer and plays a declared clip through the `renderer/animation/*` layer,
- * firing the marks the clip sheet authors.
+ * The two hooks are a raw seam and a bound one, and a model uses ONE of them
+ * (Rule ONE-MIXER-PER-ROOT): `useModelAnimation` hands back the `AnimationMixer`
+ * and drives it, leaving actions, crossfades and loop modes to the caller;
+ * `useClipPlayer` owns its own mixer and plays a declared clip through the
+ * `renderer/animation/*` layer, firing the marks the clip sheet authors.
+ *
+ * `useAnimationTimeScale` is the third: the authoritative dilation multiplier as
+ * a plain number. `useClipPlayer` already follows it, so this is what everything
+ * a game animates by hand — a camera tween, a particle rate, a shader uniform, a
+ * HUD countdown — opts in with. It ships from here because `renderer/animation/`
+ * is not an importable subpath (Invariant #96), which is also why this barrel
+ * re-exports one module from outside its own directory.
  *
  * GameCanvas is the only canvas root a game mounts. It wires `PerfProbe`
  * (main role only), `FrameRateLimiter`, and the `frameloop` prop itself, so
@@ -27,6 +34,7 @@
  */
 
 export { GameCanvas } from './GameCanvas';
+export { useAnimationTimeScale } from '../../animation/useAnimationTimeScale';
 export { useModelAnimation } from './useModelAnimation';
 export { useClipPlayer } from './useClipPlayer';
 export type {

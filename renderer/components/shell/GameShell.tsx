@@ -40,6 +40,7 @@ import { FadeProvider } from './FadeContext.js';
 import { InGameMenuHost } from './InGameMenuHost.js';
 import { PerfHud } from './perf/PerfHud.js';
 import { SpectatorHud } from './SpectatorHud.js';
+import { TimeScaleBridge } from './TimeScaleBridge.js';
 
 interface GameShellBaseProps {
     readonly children?: ReactNode;
@@ -176,6 +177,16 @@ function RegistryGameShell({
 
     const gameShell = (
         <AssetManagerContext.Provider value={resolvedAssetManager}>
+            {/*
+             * Mounted here, inside the one expression BOTH return paths below
+             * return, rather than beside <EventAudioPlayer> in the fragment only
+             * the second path builds: a game that declares no eventAudioBinding
+             * — the blank scaffold included — would otherwise never mount the
+             * bridge, and authoritative dilation would be dead for it while the
+             * host ticker still re-paced the match. One mount site makes that
+             * miss structurally impossible.
+             */}
+            <TimeScaleBridge permille={snapshot.timeScalePermille} />
             <ContentDatabaseProvider value={contentDatabase}>
                 <FadeProvider>
                     <GameShellFrame

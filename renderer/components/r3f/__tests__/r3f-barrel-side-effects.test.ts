@@ -5,8 +5,9 @@
  * the `ui` and `audio` barrels each ship a test of this shape; the r3f barrel
  * had none until `useModelAnimation` joined it.
  *
- * **What it drags in.** The graph reaches TWO stores (`perfStore` via
- * `PerfProbe`, `settingsStore` via `selectTargetFps`), the renderer log bridge
+ * **What it drags in.** The graph reaches THREE stores (`perfStore` via
+ * `PerfProbe`, `settingsStore` via `selectTargetFps`, `timeScaleStore` via
+ * `useAnimationTimeScale`), the renderer log bridge
  * and part of `renderer/animation/` (attribution recorded at the module-set
  * assertion below, which is the enumeration) — recorded decisions, not drift. Every
  * `ModelInstance` import in this graph is TYPE-ONLY, so
@@ -14,6 +15,18 @@
  * graph: the model machinery ships from the `assets` barrel, and this one
  * only animates an instance a caller already holds. What this test measures
  * is the import GRAPH, not what evaluating it does.
+ *
+ * **Why the third store edge is `animation/timeScaleStore.ts` and not
+ * `gameStore`.** The dilation multiplier has to live somewhere both the shell
+ * (which holds the snapshot) and the animation layer (which paces against it)
+ * can reach. `gameStore` already holds the snapshot, so reading the permille
+ * straight off it looks free — but `renderer/state/gameStore.ts` builds its
+ * singleton at module scope, so an edge to it from anything in THIS graph
+ * would construct the game store in every consumer of the r3f barrel,
+ * including ones that never mount a match. A one-float store in
+ * `renderer/animation/` costs one more edge here and nothing at all at
+ * runtime. Recorded here the way the `perfStore` and `settingsStore` edges
+ * are.
  *
  * **The exported surface.** Pinned as a closed set below; the types by
  * `BarrelTypeSurface` (removal-only, via typecheck).
@@ -134,28 +147,34 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // modules are not public.
         expect(Object.keys(r3fBarrel).sort()).toEqual([
             'GameCanvas',
+            'useAnimationTimeScale',
             'useClipPlayer',
             'useModelAnimation',
         ]);
     });
 
-    it('pulls in exactly twenty modules — two stores, the log bridge, the animation layer, and no clone seam', async () => {
+    it('pulls in exactly twenty-three modules — three stores, the log bridge, the animation layer, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
-        // EXHAUSTIVE, not a denylist (see the audio sibling for why). The two
-        // store edges are real: PerfProbe publishes into perfStore, and both
+        // EXHAUSTIVE, not a denylist (see the audio sibling for why). The three
+        // store edges are real: PerfProbe publishes into perfStore, both
         // FrameRateLimiter and useEngineFrameloop read settings.display.targetFps
-        // through the one shared selectTargetFps module. rendererLogger is the
-        // third recorded edge: FrameRateLimiter reports a half-wired canvas,
-        // mainCanvasRegistry a duplicate role="main" pair, and useClipPlayer a
+        // through the one shared selectTargetFps module, and useClipPlayer reads
+        // the dilation multiplier out of timeScaleStore through
+        // useAnimationTimeScale (see the header for why that store and not
+        // gameStore). rendererLogger is the fourth recorded edge:
+        // FrameRateLimiter reports a half-wired canvas,
+        // mainCanvasRegistry a duplicate role="main" pair, mixerBindingRegistry
+        // a root carrying two mixer-owning hooks, and useClipPlayer a
         // clip-sheet authoring fault or a throwing game handler, all through the
         // log bridge rather than console (Invariant #67).
-        // The six `animation/` modules are useClipPlayer's runtime layer: the
-        // player, the mesh backend and the compile half under them. They stay
+        // The six clip `animation/` modules are useClipPlayer's runtime layer:
+        // the player, the mesh backend and the compile half under them. They stay
         // internal (Invariant #96) — reaching this graph is what a barrel EXPORT
         // means, and none of them is an importable subpath. `SpriteClipBackend`
-        // is the seventh module in that directory and is deliberately absent:
-        // no React binding ships for the sprite half, so nothing here names it.
+        // is the seventh clip module in that directory and is deliberately
+        // absent: no React binding ships for the sprite half, so nothing here
+        // names it.
         // Every ModelInstance import here is TYPE-ONLY, so no assets/
         // module — and no SkeletonUtils — appears; the clone seam ships from the
         // assets barrel. cameraFit is GameCanvas's own fit-policy geometry, and
@@ -169,6 +188,8 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'animation/ClipTimeline.ts',
             'animation/MeshClipBackend.ts',
             'animation/clipMarkerScheduler.ts',
+            'animation/timeScaleStore.ts',
+            'animation/useAnimationTimeScale.ts',
             'logging/rendererLogger.ts',
             'perf/PerfProbe.tsx',
             'perf/perfStore.ts',
@@ -177,6 +198,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/cameraFit.ts',
             'r3f/index.ts',
             'r3f/mainCanvasRegistry.ts',
+            'r3f/mixerBindingRegistry.ts',
             'r3f/selectTargetFps.ts',
             'r3f/useClipPlayer.ts',
             'r3f/useEngineFrameloop.ts',
@@ -220,6 +242,7 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             ['..', 'useModelAnimation.ts'],
             ['..', 'useOwnedMixer.ts'],
             ['..', 'useClipPlayer.ts'],
+            ['../../../animation', 'useAnimationTimeScale.ts'],
             ['../../shell/perf', 'PerfProbe.tsx'],
         ] as const) {
             const source = readFileSync(resolve(__dirname, dir, moduleFile), 'utf8');

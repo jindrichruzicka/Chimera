@@ -50,6 +50,19 @@
  * re-renders on the same frame, and a per-render re-apply would silently snap
  * the slow-mo back.
  *
+ * **Rule GLOBAL-BY-DEFAULT on the time scale.** The dilation multiplier comes
+ * from `useAnimationTimeScale` — the one float `TimeScaleBridge` seats from the
+ * authoritative `snapshot.timeScalePermille` — unless `options.timeScale` names
+ * one, which OVERRIDES it rather than composing with it. Default-on is the point:
+ * a game that had to opt each clip in would lose the whole effect the first time
+ * someone forgot, exactly the failure the bridge's single mount site exists to
+ * rule out. It is read once per frame, and it scales clip playback only — never
+ * the R3F clock, which `PerfProbe` reads and which F80 repaired.
+ *
+ * **Rule ONE-MIXER-PER-ROOT.** A model root carries this hook or
+ * `useModelAnimation`, never both; `useOwnedMixer` claims the root and reports a
+ * real duplicate through the log bridge.
+ *
  * **There is no clip anchor and no resync.** A clip free-runs from the render
  * that changed `clip`; nothing here reads a tick, a beat or a host tick rate.
  * Re-seating a playhead against simulation time needs a beat, and inventing one
@@ -74,6 +87,7 @@ import { ClipPlayer } from '../../animation/ClipPlayer.js';
 import type { ClipMarkerHandlers } from '../../animation/ClipPlayer.js';
 import type { ClipSheetSource } from '../../animation/ClipTimeline.js';
 import { MeshClipBackend } from '../../animation/MeshClipBackend.js';
+import { useAnimationTimeScale } from '../../animation/useAnimationTimeScale.js';
 import type { ModelInstance } from '../../assets/ModelInstance.js';
 import { emitRendererError, readRendererLogsApi } from '../../logging/rendererLogger.js';
 import { useOwnedMixer } from './useOwnedMixer.js';
@@ -151,10 +165,18 @@ export interface UseClipPlayerOptions {
      */
     readonly handlers?: ClipMarkerHandlers;
     /**
-     * The renderer-local dilation multiplier, read once per frame. `1` is real
-     * time, `0.25` quarter speed. Scales clip playback only: it is deliberately
-     * NOT the R3F clock, which would make `PerfProbe` report a dilated frame
-     * rate.
+     * Overrides the shared dilation multiplier for THIS clip. `1` is real time,
+     * `0.25` quarter speed.
+     *
+     * Absent — the ordinary case — the hook follows `useAnimationTimeScale`, so
+     * an authoritative `snapshot.timeScalePermille` slows every mounted clip
+     * with no wiring in the game at all. Passing a value opts this clip out of
+     * that entirely rather than composing with it: one axis, one writer, and a
+     * clip that must ignore a global slow-motion says so explicitly.
+     *
+     * Either way the multiplier is read once per frame and scales clip playback
+     * only: it is deliberately NOT the R3F clock, which would make `PerfProbe`
+     * report a dilated frame rate.
      */
     readonly timeScale?: number;
 }
@@ -209,8 +231,12 @@ export function useClipPlayer(
     sheet: ClipSheetSource | null,
     options: UseClipPlayerOptions,
 ): ClipPlayerHandle {
-    const mixer = useOwnedMixer(instance);
+    const mixer = useOwnedMixer(instance, 'useClipPlayer');
     const [player, setPlayer] = useState<ClipPlayer | null>(null);
+    // The shared multiplier, subscribed to here so an authoritative dilation
+    // re-renders this hook's owner and the frame loop reads the new value on the
+    // next frame — see Rule GLOBAL-BY-DEFAULT on `options.timeScale`.
+    const sharedTimeScale = useAnimationTimeScale();
 
     const { clip, loop, speed, handlers, timeScale } = options;
     const latest = useRef<LatestRender>({
@@ -224,7 +250,7 @@ export function useClipPlayer(
     // speed effect and the imperative handle always read the last committed
     // render.
     useEffect(() => {
-        latest.current = { handlers, timeScale: timeScale ?? 1, clip, player };
+        latest.current = { handlers, timeScale: timeScale ?? sharedTimeScale, clip, player };
     });
 
     useEffect(() => {

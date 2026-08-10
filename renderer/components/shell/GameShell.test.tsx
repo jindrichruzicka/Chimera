@@ -3,7 +3,7 @@
 
 import { act, cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../i18n/I18nProvider.js';
 import {
     gamePhase,
@@ -32,6 +32,7 @@ import {
     type InputActionRegistry,
 } from '../../input/InputActionRegistry.js';
 import { InputActionRegistryContext } from '../../input/InputActionRegistryContext.js';
+import { useTimeScaleStore } from '../../animation/timeScaleStore.js';
 import { useUiStore } from '../../state/uiStore.js';
 import {
     GameShell,
@@ -1415,5 +1416,108 @@ describe('GameShell — StrictMode-root remount safety (registry mode)', () => {
             expect(outcome).not.toBeInstanceOf(UnknownAssetManifestEntryError);
             expect((outcome as Error).message).toMatch(/not configured/);
         }
+    });
+});
+
+describe('GameShell — authoritative time dilation (registry mode)', () => {
+    // The bridge is mounted inside the ONE `gameShell` expression both of
+    // RegistryGameShell's return paths return, rather than beside
+    // `<EventAudioPlayer>` in the fragment only the second path builds. The pair
+    // of cases below is the mutation control for that: moving the mount into the
+    // fragment reds the no-binding case and leaves the with-binding one green.
+    const PLAYFIELD = (): React.ReactElement => <div data-testid="dilation-playfield" />;
+
+    function currentTimeScale(): number {
+        return useTimeScaleStore.getState().timeScale;
+    }
+
+    beforeEach(() => {
+        useTimeScaleStore.getState().setAuthoritativePermille(undefined);
+    });
+
+    afterEach(() => {
+        useTimeScaleStore.getState().setAuthoritativePermille(undefined);
+    });
+
+    it('propagates the dilated scale for a registry that declares NO event audio binding', () => {
+        const snapshot = makePlayerSnapshot({ timeScalePermille: 250 });
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: PLAYFIELD }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+        );
+
+        // The blank scaffold is exactly this shape, so a bridge mounted beside
+        // the audio player would leave authoritative dilation dead for it while
+        // the host ticker still re-paced the match.
+        expect(eventAudioPlayerSpy).not.toHaveBeenCalled();
+        expect(currentTimeScale()).toBe(0.25);
+    });
+
+    it('propagates the dilated scale for a registry that DOES declare one', () => {
+        const snapshot = makePlayerSnapshot({ timeScalePermille: 250 });
+
+        renderWithAudio(
+            <GameShell
+                registry={{
+                    playfield: PLAYFIELD,
+                    eventAudioBinding: {
+                        'combat:hit': { ref: TEST_AUDIO_REF, bus: 'sfx', volume: 0.5 },
+                    },
+                }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+        );
+
+        expect(eventAudioPlayerSpy).toHaveBeenCalledTimes(1);
+        expect(currentTimeScale()).toBe(0.25);
+    });
+
+    it('seats real time for an undilated snapshot', () => {
+        // Pre-dilated, so the assertion below distinguishes "seated real time"
+        // from "never wrote at all" — the store's own default is 1.
+        useTimeScaleStore.getState().setAuthoritativePermille(250);
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: PLAYFIELD }}
+                snapshot={makePlayerSnapshot()}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+        );
+
+        expect(currentTimeScale()).toBe(1);
+    });
+
+    it('re-seats the scale when a later snapshot changes it', () => {
+        const { rerender } = renderWithAudio(
+            <GameShell
+                registry={{ playfield: PLAYFIELD }}
+                snapshot={makePlayerSnapshot({ timeScalePermille: 250 })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+        );
+        expect(currentTimeScale()).toBe(0.25);
+
+        rerender(
+            wrapWithAudio(
+                <GameShell
+                    registry={{ playfield: PLAYFIELD }}
+                    snapshot={makePlayerSnapshot({ tick: 2 })}
+                    sendAction={vi.fn()}
+                    localPlayerId={playerId('p1')}
+                />,
+            ),
+        );
+
+        expect(currentTimeScale()).toBe(1);
     });
 });

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AnimationMixer } from 'three';
 
 import type { ModelInstance } from '../../assets/ModelInstance.js';
+import { registerMixerBinding } from './mixerBindingRegistry.js';
 
 /**
  * renderer/components/r3f/useOwnedMixer.ts
@@ -38,15 +39,27 @@ import type { ModelInstance } from '../../assets/ModelInstance.js';
  * are two roots anyway — keying on the field would tie a released mixer's
  * identity to a value the hook does not own.
  *
+ * **Rule ONE-MIXER-PER-ROOT.** The same effect that allocates the mixer claims
+ * `instance.root` in `mixerBindingRegistry` under `binderName`, and the same
+ * cleanup releases it — so a root carrying two mixer-owning hooks is reported
+ * (logged, deferred one frame, never thrown) rather than silently playing every
+ * clip at a multiple of its speed. The registry module's header records the
+ * rest.
+ *
  * Mixer state is renderer-local and never enters a `GameSnapshot`, store, IPC
  * payload, save, or replay.
  *
  * Its behaviour is pinned where it is consumed rather than in a suite of its
- * own: `useModelAnimation.test.tsx` owns the release-order,
- * identity-across-re-render and instance-change cases, and
- * `useClipPlayer.test.tsx` owns the StrictMode double-mount ledger.
+ * own: the two hooks' co-located suites own the release order, the mixer
+ * identity and the per-hook binding ledger, and
+ * `__tests__/one-mixer-per-root.test.tsx` owns the two-hooks-one-root report.
+ *
+ * @param binderName  The hook claiming the root, named in a duplicate report.
  */
-export function useOwnedMixer(instance: ModelInstance | null): AnimationMixer | null {
+export function useOwnedMixer(
+    instance: ModelInstance | null,
+    binderName: string,
+): AnimationMixer | null {
     const [mixer, setMixer] = useState<AnimationMixer | null>(null);
 
     useEffect(() => {
@@ -54,13 +67,16 @@ export function useOwnedMixer(instance: ModelInstance | null): AnimationMixer | 
             return undefined;
         }
         const allocatedMixer = new AnimationMixer(instance.root);
+        const releaseBinding = registerMixerBinding(instance.root, binderName);
         setMixer(allocatedMixer);
         return () => {
+            // LIFO: the claim was taken last, so it is released first.
+            releaseBinding();
             allocatedMixer.stopAllAction();
             allocatedMixer.uncacheRoot(instance.root);
             setMixer(null);
         };
-    }, [instance]);
+    }, [instance, binderName]);
 
     return mixer;
 }
