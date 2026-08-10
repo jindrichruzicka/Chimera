@@ -131,6 +131,33 @@ export interface InvalidAudioCueSheet {
     readonly ref?: string;
 }
 
+/**
+ * One violated animation-sheet rule on one `'gltf-model'` or `'sprite-sheet'` manifest
+ * entry.
+ *
+ * Every rule is SHEET SELF-CONSISTENCY — a property of the authored literal alone — so
+ * the gate reads no atlas, no glTF and no `tickRateMs`. Whether a `beatWindow` AGREES
+ * with the span its `from`/`to` imply is `compileAnimationWindows`' answer at content
+ * load, where an unreadable `tickRateMs` cannot silently skip the check.
+ */
+export interface InvalidAnimationSheet {
+    readonly source: AssetReferenceSource;
+    readonly reason: string;
+    /** The entry's `ref`, omitted when it is not itself statically readable. */
+    readonly ref?: string;
+}
+
+/**
+ * What both sheet gates report. One internal shape rather than two, so the sole finding
+ * constructor and the sole comparator serve both buckets and cannot drift into two
+ * differently-tested spellings of the same object.
+ */
+interface SheetFinding {
+    readonly source: AssetReferenceSource;
+    readonly reason: string;
+    readonly ref?: string;
+}
+
 /** A statically-resolved on-demand load whose ref is declared in no asset surface (hard error). */
 export type UndeclaredOnDemandLoad = AssetReference;
 
@@ -151,6 +178,7 @@ export interface AssetValidationReport {
     readonly unmanifested: readonly UnmanifestedAssetReference[];
     readonly unknownKinds: readonly UnknownAssetManifestKind[];
     readonly invalidCueSheets: readonly InvalidAudioCueSheet[];
+    readonly invalidAnimationSheets: readonly InvalidAnimationSheet[];
     readonly undeclaredOnDemandLoads: readonly UndeclaredOnDemandLoad[];
     readonly unresolvedOnDemandLoads: readonly UnresolvedOnDemandLoad[];
 }
@@ -163,6 +191,7 @@ interface CollectedAssetReferences {
 interface CollectedAssetManifestReferences extends CollectedAssetReferences {
     readonly kinds: readonly UnknownAssetManifestKind[];
     readonly invalidCueSheets: readonly InvalidAudioCueSheet[];
+    readonly invalidAnimationSheets: readonly InvalidAnimationSheet[];
     /**
      * `<Const>.<member>` → ref, from this file's own object-literal consts. Returned
      * rather than re-derived by the caller: it is collected here to resolve entry
@@ -184,15 +213,25 @@ const unreadableKindReason =
     'entry declares metadata but its kind is not a statically-readable literal, so the entry cannot be classified';
 
 /**
- * Worded for an entry that may or may not be an audio clip: it fires whenever a readable
- * `kind` has not ruled a cue sheet out, which includes the case where the `kind` is
- * hidden in the very member that cannot be read.
+ * Worded for an entry that may or may not carry the gate's sheet: it fires whenever a
+ * readable `kind` has not ruled that sheet out, which includes the case where the `kind`
+ * is hidden in the very member that cannot be read. `sheetLabel` names the sheet the
+ * calling gate looks for, so an unclassifiable entry says which gate could not clear it.
  */
-function unreadableEntryReason(kind: 'not-a-property' | 'unreadable-key'): string {
+function unreadableEntryReason(
+    kind: 'not-a-property' | 'unreadable-key',
+    sheetLabel: string,
+): string {
     return kind === 'not-a-property'
-        ? 'entry contains a member that is not a "name: value" property, so a cue sheet on it cannot be ruled out'
-        : 'entry contains a member whose key is not a statically-readable name, so a cue sheet on it cannot be ruled out';
+        ? `entry contains a member that is not a "name: value" property, so ${sheetLabel} on it cannot be ruled out`
+        : `entry contains a member whose key is not a statically-readable name, so ${sheetLabel} on it cannot be ruled out`;
 }
+
+/** The manifest kinds whose `metadata` slot carries an animation clip sheet. */
+const animationSheetKinds: ReadonlySet<string> = new Set(['gltf-model', 'sprite-sheet']);
+
+/** The one animation kind whose clips must additionally declare a `frames` run. */
+const SPRITE_SHEET_KIND = 'sprite-sheet';
 
 const assetRefCandidatePattern = /^[^\0/]+\/[^\0]*$/u;
 const externalOrAbsoluteAssetPattern = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u;
@@ -232,6 +271,7 @@ export async function validateAssetWorkspace(
     const fontRefs: AssetReference[] = [];
     const manifestKinds: UnknownAssetManifestKind[] = [];
     const invalidCueSheets: InvalidAudioCueSheet[] = [];
+    const invalidAnimationSheets: InvalidAnimationSheet[] = [];
     const malformed: MalformedAssetReference[] = [];
     const manifestConstMembers = new Map<string, string>();
 
@@ -256,6 +296,7 @@ export async function validateAssetWorkspace(
         manifestRefs.push(...collected.refs);
         manifestKinds.push(...collected.kinds);
         invalidCueSheets.push(...collected.invalidCueSheets);
+        invalidAnimationSheets.push(...collected.invalidAnimationSheets);
         malformed.push(...collected.malformed);
         // Key the tier-B const map by the manifest's own game so an identically-named
         // const in another game's manifest cannot cross-resolve an on-demand load
@@ -355,7 +396,8 @@ export async function validateAssetWorkspace(
     malformed.sort(compareMalformedFailures);
     unmanifested.sort(compareAssetReferenceFailures);
     unknownKinds.sort(compareUnknownKindFailures);
-    invalidCueSheets.sort(compareInvalidCueSheets);
+    invalidCueSheets.sort(compareSheetFindings);
+    invalidAnimationSheets.sort(compareSheetFindings);
     undeclaredOnDemandLoads.sort(compareAssetReferenceFailures);
     unresolvedOnDemandLoads.sort(compareUnresolvedOnDemandLoads);
 
@@ -368,6 +410,7 @@ export async function validateAssetWorkspace(
             unmanifested.length === 0 &&
             unknownKinds.length === 0 &&
             invalidCueSheets.length === 0 &&
+            invalidAnimationSheets.length === 0 &&
             undeclaredOnDemandLoads.length === 0,
         // Manifest refs count too. They were excluded, which meant the one number the
         // tool prints could not fall when a whole manifest stopped being read — the
@@ -381,6 +424,7 @@ export async function validateAssetWorkspace(
         unmanifested,
         unknownKinds,
         invalidCueSheets,
+        invalidAnimationSheets,
         undeclaredOnDemandLoads,
         unresolvedOnDemandLoads,
     };
@@ -469,6 +513,17 @@ export function formatAssetValidationReport(
     if (report.invalidCueSheets.length > 0) {
         lines.push('', 'Invalid audio cue sheets:');
         for (const sheet of report.invalidCueSheets) {
+            lines.push(
+                `- ${sheet.ref ?? '(unreadable ref)'}`,
+                `  source: ${formatSource(sheet.source, root)}`,
+                `  reason: ${sheet.reason}`,
+            );
+        }
+    }
+
+    if (report.invalidAnimationSheets.length > 0) {
+        lines.push('', 'Invalid animation sheets:');
+        for (const sheet of report.invalidAnimationSheets) {
             lines.push(
                 `- ${sheet.ref ?? '(unreadable ref)'}`,
                 `  source: ${formatSource(sheet.source, root)}`,
@@ -727,6 +782,7 @@ function collectAssetManifestRefs(
     const malformed: MalformedAssetReference[] = [];
     const kinds: UnknownAssetManifestKind[] = [];
     const invalidCueSheets: InvalidAudioCueSheet[] = [];
+    const invalidAnimationSheets: InvalidAnimationSheet[] = [];
     // Refs named through one of THIS file's own `AssetRef` consts, e.g.
     // `{ ref: tacticsAudioRefs.step }`. That shape is what the `audioClipEntry`
     // builder invites — the const already exists so screens can name the clip — and a
@@ -740,7 +796,7 @@ function collectAssetManifestRefs(
 
     visit(sourceFile);
 
-    return { refs, malformed, kinds, invalidCueSheets, constMembers };
+    return { refs, malformed, kinds, invalidCueSheets, invalidAnimationSheets, constMembers };
 
     function visit(node: Node): void {
         if (isPropertyAssignment(node) && isPropertyName(node.name, 'entries')) {
@@ -821,28 +877,36 @@ function collectAssetManifestRefs(
             const metadata = findProperty(entry.objectLiteral, 'metadata');
             const metadataSource = { ...source, location: `${source.location}.metadata` };
             const entryMembers = readObjectMembers(entry.objectLiteral);
-            // Only a readable, non-audio `kind` rules a cue sheet out. An unreadable one
-            // does not — so an entry that hides BOTH its kind and its metadata behind a
-            // spread or a computed key is unclassifiable, and each of the two guards
-            // below would otherwise wave it through on the strength of the other.
-            const rulesOutACueSheet = kind !== undefined && kind !== 'audio-clip';
-            if (entryMembers.kind !== 'readable' && !rulesOutACueSheet) {
-                invalidCueSheets.push(
-                    cueSheetFinding(source, unreadableEntryReason(entryMembers.kind), ref),
-                );
-            } else if (metadata !== undefined && kind === undefined) {
-                // An entry that declares metadata but hides its kind behind a constant
-                // cannot be classified, and an unclassifiable entry is the whole gate's
-                // escape hatch: `kind: AUDIO` would carry any sheet past it.
-                invalidCueSheets.push(cueSheetFinding(metadataSource, unreadableKindReason, ref));
-            } else if (metadata !== undefined && kind === 'audio-clip') {
-                collectCueSheetViolations(
-                    metadata.initializer,
-                    metadataSource,
-                    ref,
-                    invalidCueSheets,
-                );
-            }
+            const entryContext = {
+                entryMembers,
+                kind,
+                metadata: metadata?.initializer,
+                metadataSource,
+                ref,
+                source,
+            };
+
+            collectSheetGateFindings({
+                ...entryContext,
+                sheetLabel: 'a cue sheet',
+                carriesSheet: (entryKind) => entryKind === 'audio-clip',
+                checkSheet: collectCueSheetViolations,
+                findings: invalidCueSheets,
+            });
+
+            collectSheetGateFindings({
+                ...entryContext,
+                sheetLabel: 'an animation sheet',
+                carriesSheet: (entryKind) => animationSheetKinds.has(entryKind),
+                checkSheet: (sheetMetadata, report) => {
+                    collectAnimationSheetViolations(
+                        sheetMetadata,
+                        kind === SPRITE_SHEET_KIND,
+                        report,
+                    );
+                },
+                findings: invalidAnimationSheets,
+            });
         });
     }
 }
@@ -856,11 +920,22 @@ function collectAssetManifestRefs(
  * only half the job — the kind it implies has to come back out alongside the literal.
  * Without that, every builder-authored entry reads as kindless, and the cue-sheet gate
  * skips exactly the entries the builder exists to carry.
+ *
+ * `modelAnimationEntry` and `spriteAnimationEntry` (`simulation/content/animationManifest.ts`)
+ * are the same shape for the same reason: an entry authored through either of them reads
+ * as kindless until it is peeled here.
  */
 interface ManifestEntryLiteral {
     readonly objectLiteral: ObjectLiteralExpression;
     readonly impliedKind?: string;
 }
+
+/** Builder name → the `kind` its body bakes in. */
+const manifestEntryBuilderKinds: ReadonlyMap<string, string> = new Map([
+    ['audioClipEntry', 'audio-clip'],
+    ['modelAnimationEntry', 'gltf-model'],
+    ['spriteAnimationEntry', SPRITE_SHEET_KIND],
+]);
 
 function unwrapManifestEntry(expression: Expression): ManifestEntryLiteral | undefined {
     const objectLiteral = unwrapObjectLiteral(expression);
@@ -872,18 +947,80 @@ function unwrapManifestEntry(expression: Expression): ManifestEntryLiteral | und
     if (isAsExpression(expression) || isSatisfiesExpression(expression)) {
         return unwrapManifestEntry(expression.expression);
     }
-    if (
-        !isCallExpression(expression) ||
-        !isCalleeNamed(expression.expression, 'audioClipEntry') ||
-        expression.arguments.length !== 1
-    ) {
+    if (!isCallExpression(expression) || expression.arguments.length !== 1) {
+        return undefined;
+    }
+    let impliedKind: string | undefined;
+    for (const [builderName, builderKind] of manifestEntryBuilderKinds) {
+        if (isCalleeNamed(expression.expression, builderName)) {
+            impliedKind = builderKind;
+            break;
+        }
+    }
+    if (impliedKind === undefined) {
         return undefined;
     }
     const [argument] = expression.arguments;
     const builderArgument = argument === undefined ? undefined : unwrapObjectLiteral(argument);
     return builderArgument === undefined
         ? undefined
-        : { objectLiteral: builderArgument, impliedKind: 'audio-clip' };
+        : { objectLiteral: builderArgument, impliedKind };
+}
+
+/**
+ * Run one `metadata` gate over one manifest entry.
+ *
+ * The three-branch cascade is the cue gate's, generalised over WHICH kinds carry the
+ * gate's sheet. Only a readable kind this gate does not claim rules its sheet out — an
+ * unreadable one does not — so an entry that hides BOTH its kind and its metadata behind
+ * a spread or a computed key is unclassifiable, and each of the two guards below would
+ * otherwise wave it through on the strength of the other.
+ *
+ * Such an entry is reported by EVERY gate that could have been carrying a sheet on it,
+ * each saying what IT could not rule out. Two lines on one entry rather than one gate
+ * covering for the other: an entry whose kind is readable as `'gltf-model'` is ruled out
+ * by the cue gate and claimed by the animation gate, so the buckets do not overlap in
+ * what they prove.
+ */
+function collectSheetGateFindings(args: {
+    readonly entryMembers: ObjectMembers;
+    readonly kind: string | undefined;
+    readonly metadata: Expression | undefined;
+    readonly metadataSource: AssetReferenceSource;
+    readonly ref: string | undefined;
+    readonly source: AssetReferenceSource;
+    /** What this gate calls the sheet it looks for, e.g. `'a cue sheet'`. */
+    readonly sheetLabel: string;
+    /** Whether a readable `kind` can carry this gate's sheet. */
+    readonly carriesSheet: (kind: string) => boolean;
+    readonly checkSheet: (metadata: Expression, report: (reason: string) => void) => void;
+    readonly findings: SheetFinding[];
+}): void {
+    const { entryMembers, kind, metadata, metadataSource, ref, source, findings } = args;
+
+    const rulesOutTheSheet = kind !== undefined && !args.carriesSheet(kind);
+    if (entryMembers.kind !== 'readable' && !rulesOutTheSheet) {
+        findings.push(
+            sheetFinding(source, unreadableEntryReason(entryMembers.kind, args.sheetLabel), ref),
+        );
+        return;
+    }
+    if (metadata === undefined) {
+        return;
+    }
+    if (kind === undefined) {
+        // An entry that declares metadata but hides its kind behind a constant cannot be
+        // classified, and an unclassifiable entry is the whole gate's escape hatch:
+        // `kind: AUDIO` would carry any sheet past it.
+        findings.push(sheetFinding(metadataSource, unreadableKindReason, ref));
+        return;
+    }
+    if (!args.carriesSheet(kind)) {
+        return;
+    }
+    args.checkSheet(metadata, (reason) => {
+        findings.push(sheetFinding(metadataSource, reason, ref));
+    });
 }
 
 /**
@@ -901,16 +1038,7 @@ function unwrapManifestEntry(expression: Expression): ManifestEntryLiteral | und
  * `unwrapObjectLiteral` requires the sheet and its `cues` to be literals at all, and
  * {@link readObjectMembers} then requires every member of each to be readable.
  */
-function collectCueSheetViolations(
-    metadata: Expression,
-    source: AssetReferenceSource,
-    ref: string | undefined,
-    violations: InvalidAudioCueSheet[],
-): void {
-    const report = (reason: string): void => {
-        violations.push(cueSheetFinding(source, reason, ref));
-    };
-
+function collectCueSheetViolations(metadata: Expression, report: (reason: string) => void): void {
     const sheet = unwrapObjectLiteral(metadata);
     if (sheet === undefined) {
         report('metadata is not a statically-readable object literal; author the cue sheet inline');
@@ -1018,15 +1146,15 @@ function checkLoopRegion(
 }
 
 /**
- * The sole constructor for a cue-sheet finding. `ref` is omitted rather than set to
- * undefined (`exactOptionalPropertyTypes`), and having one site do that keeps the two
- * callers from drifting into two differently-tested spellings of the same object.
+ * The sole constructor for a sheet finding, cue or animation. `ref` is omitted rather
+ * than set to undefined (`exactOptionalPropertyTypes`), and having one site do that keeps
+ * the callers from drifting into differently-tested spellings of the same object.
  */
-function cueSheetFinding(
+function sheetFinding(
     source: AssetReferenceSource,
     reason: string,
     ref: string | undefined,
-): InvalidAudioCueSheet {
+): SheetFinding {
     return ref === undefined ? { source, reason } : { source, reason, ref };
 }
 
@@ -1102,6 +1230,424 @@ function readCues(
     }
 
     return complete ? cues : undefined;
+}
+
+/**
+ * Validate one `'gltf-model'` or `'sprite-sheet'` entry's `metadata` animation sheet.
+ *
+ * The build-time half of the same deliberate pair the cue gate is one half of. The
+ * renderer's readers (`renderer/assets/animationSheet.ts`,
+ * `renderer/animation/ClipPosition.ts`) apply their predicates to runtime VALUES and
+ * degrade fail-soft, dropping the unusable clip or mark; this applies its own to SYNTAX
+ * NODES and fails the build. The two read different things, so there is no
+ * implementation to share and neither rule list is derived from the other. This gate's
+ * behaviour is exercised by `describe('animation clip sheet validation')` in
+ * `index.test.ts`.
+ *
+ * Everything checked here is SHEET SELF-CONSISTENCY: a property of the authored literal
+ * alone, needing no atlas, no glTF and no `tickRateMs`, so the gate adds no blind spot
+ * the walker did not already have. A rule needing more than the sheet therefore lives
+ * elsewhere — whether a `beatWindow` AGREES with the span its `from`/`to` imply is
+ * `compileAnimationWindows`' answer at content load, where an unreadable `tickRateMs`
+ * cannot silently skip the check; whether a frame index addresses a cell is the atlas's,
+ * and the sheet does not name the atlas.
+ *
+ * A position outside `[0, 1]` is REFUSED here where the runtime resolver clamps it —
+ * "the author meant the end" is a fine answer for playback and a bad one for a build,
+ * since a clamped mark fires somewhere the author never wrote.
+ *
+ * @param requiresFrames  Whether every clip must declare a playable `frames` run, which
+ *                        is the one rule `'sprite-sheet'` adds over `'gltf-model'`.
+ */
+function collectAnimationSheetViolations(
+    metadata: Expression,
+    requiresFrames: boolean,
+    report: (reason: string) => void,
+): void {
+    const sheet = unwrapObjectLiteral(metadata);
+    if (sheet === undefined) {
+        report(
+            'metadata is not a statically-readable object literal; author the animation sheet inline',
+        );
+        return;
+    }
+    const members = readObjectMembers(sheet);
+    if (members.kind !== 'readable') {
+        report(
+            members.kind === 'not-a-property'
+                ? 'metadata contains an entry that is not a "name: value" property'
+                : 'metadata contains an entry whose key is not a statically-readable name',
+        );
+        return;
+    }
+
+    const clipsValue = new Map(members.entries).get('clips');
+    if (clipsValue === undefined) {
+        // A sheet that marks no clip is legal and marks nothing — the same answer the
+        // renderer's reader gives it.
+        return;
+    }
+    const clipsLiteral = unwrapObjectLiteral(clipsValue);
+    if (clipsLiteral === undefined) {
+        report('clips must be a statically-readable object literal');
+        return;
+    }
+    const clipMembers = readObjectMembers(clipsLiteral);
+    if (clipMembers.kind !== 'readable') {
+        report(
+            clipMembers.kind === 'not-a-property'
+                ? 'clips contains an entry that is not a "name: clip" property'
+                : 'clips contains an entry whose clip name is not a statically-readable key',
+        );
+        return;
+    }
+
+    for (const [clipName, clipValue] of clipMembers.entries) {
+        checkAnimationClip(clipName, clipValue, requiresFrames, report);
+    }
+}
+
+/** What a clip tells the position resolver about itself, once both fields have passed. */
+interface AuthoredClipContext {
+    readonly durationSeconds?: number;
+    readonly frameCount?: number;
+}
+
+/**
+ * Check one clip's record.
+ *
+ * A present-but-unusable `durationSeconds` or `frameCount` ends the clip: the marks are
+ * not checked, and whatever else the clip holds goes unreported until the field is
+ * fixed. What that costs and what it buys is measured by `rejects a frame position on a
+ * clip whose frameCount is zero` and `rejects a seconds position on a clip whose
+ * durationSeconds is zero`.
+ */
+function checkAnimationClip(
+    clipName: string,
+    clipValue: Expression,
+    requiresFrames: boolean,
+    report: (reason: string) => void,
+): void {
+    const clipLiteral = unwrapObjectLiteral(clipValue);
+    if (clipLiteral === undefined) {
+        report(`clip "${clipName}" must be a statically-readable object literal`);
+        return;
+    }
+    const members = readObjectMembers(clipLiteral);
+    if (members.kind !== 'readable') {
+        report(
+            members.kind === 'not-a-property'
+                ? `clip "${clipName}" contains an entry that is not a "name: value" property`
+                : `clip "${clipName}" contains an entry whose key is not a statically-readable name`,
+        );
+        return;
+    }
+    const byName = new Map(members.entries);
+
+    const context: { durationSeconds?: number; frameCount?: number } = {};
+    const durationValue = byName.get('durationSeconds');
+    if (durationValue !== undefined) {
+        const duration = readNumberExpression(durationValue);
+        if (duration === undefined || !Number.isFinite(duration) || duration <= 0) {
+            report(
+                `clip "${clipName}" declares a durationSeconds that is not a statically-readable finite number > 0`,
+            );
+            return;
+        }
+        context.durationSeconds = duration;
+    }
+    const frameCountValue = byName.get('frameCount');
+    if (frameCountValue !== undefined) {
+        const frameCount = readNumberExpression(frameCountValue);
+        if (frameCount === undefined || !Number.isInteger(frameCount) || frameCount <= 0) {
+            report(
+                `clip "${clipName}" declares a frameCount that is not a statically-readable whole number > 0`,
+            );
+            return;
+        }
+        context.frameCount = frameCount;
+    }
+
+    if (requiresFrames) {
+        checkSpriteFrames(clipName, byName.get('frames'), report);
+    }
+    checkAnimationNotifies(clipName, byName.get('notifies'), context, report);
+    checkAnimationPassages(clipName, byName.get('passages'), context, report);
+}
+
+/**
+ * A sprite clip's `frames` run: present, an array literal, non-empty, and every element a
+ * whole index a run could address.
+ *
+ * Whether an index names a cell is the ATLAS's question — the sheet does not name the
+ * atlas, so answering it here would need the cross-file read this gate does without.
+ */
+function checkSpriteFrames(
+    clipName: string,
+    framesValue: Expression | undefined,
+    report: (reason: string) => void,
+): void {
+    if (framesValue === undefined) {
+        report(`sprite clip "${clipName}" declares no frames run`);
+        return;
+    }
+    const framesLiteral = unwrapArrayLiteral(framesValue);
+    if (framesLiteral === undefined) {
+        report(`sprite clip "${clipName}" frames must be a statically-readable array literal`);
+        return;
+    }
+    if (framesLiteral.elements.length === 0) {
+        report(`sprite clip "${clipName}" declares an empty frames run`);
+        return;
+    }
+    framesLiteral.elements.forEach((element, index) => {
+        const frame = readNumberExpression(element);
+        if (frame === undefined || !Number.isInteger(frame) || frame < 0) {
+            report(
+                `sprite clip "${clipName}" frames[${index}] is not a statically-readable whole frame index >= 0`,
+            );
+        }
+    });
+}
+
+function checkAnimationNotifies(
+    clipName: string,
+    notifiesValue: Expression | undefined,
+    context: AuthoredClipContext,
+    report: (reason: string) => void,
+): void {
+    for (const [markName, mark] of readAnimationMarks(
+        clipName,
+        'notifies',
+        notifiesValue,
+        report,
+    )) {
+        const at = mark.get('at');
+        if (at === undefined) {
+            report(`notify "${clipName}.${markName}" declares no position`);
+            continue;
+        }
+        resolveAuthoredPhase(at, context, `notify "${clipName}.${markName}" position`, report);
+    }
+}
+
+function checkAnimationPassages(
+    clipName: string,
+    passagesValue: Expression | undefined,
+    context: AuthoredClipContext,
+    report: (reason: string) => void,
+): void {
+    for (const [markName, mark] of readAnimationMarks(
+        clipName,
+        'passages',
+        passagesValue,
+        report,
+    )) {
+        const from = mark.get('from');
+        const to = mark.get('to');
+        if (from === undefined || to === undefined) {
+            report(`passage "${clipName}.${markName}" declares no from/to span`);
+            continue;
+        }
+        const label = `passage "${clipName}.${markName}"`;
+        const fromPhase = resolveAuthoredPhase(from, context, `${label} from`, report);
+        const toPhase = resolveAuthoredPhase(to, context, `${label} to`, report);
+        // A `'loop'` clip restarts forwards; nothing downstream plays a passage that runs
+        // off the end and resumes at the start, so the loop mode licenses no wrap.
+        if (fromPhase !== undefined && toPhase !== undefined && toPhase <= fromPhase) {
+            report(
+                `${label} runs from phase ${fromPhase} to phase ${toPhase}; a passage must run forward and may not wrap`,
+            );
+        }
+        const beatWindow = mark.get('beatWindow');
+        if (beatWindow !== undefined) {
+            checkBeatWindow(label, beatWindow, report);
+        }
+    }
+}
+
+/**
+ * Read one `notifies` / `passages` map into readable mark records, reporting whatever
+ * stopped it being read. An absent map yields nothing and reports nothing; an unreadable
+ * MAP reports once and yields nothing, while an unreadable MARK inside a readable map
+ * reports and is skipped — so the caller still sees the map's other marks.
+ */
+function readAnimationMarks(
+    clipName: string,
+    field: 'notifies' | 'passages',
+    marksValue: Expression | undefined,
+    report: (reason: string) => void,
+): readonly (readonly [string, ReadonlyMap<string, Expression>])[] {
+    if (marksValue === undefined) {
+        return [];
+    }
+    const marksLiteral = unwrapObjectLiteral(marksValue);
+    if (marksLiteral === undefined) {
+        report(`clip "${clipName}" ${field} must be a statically-readable object literal`);
+        return [];
+    }
+    const members = readObjectMembers(marksLiteral);
+    if (members.kind !== 'readable') {
+        report(
+            members.kind === 'not-a-property'
+                ? `clip "${clipName}" ${field} contains an entry that is not a "name: mark" property`
+                : `clip "${clipName}" ${field} contains an entry whose mark name is not a statically-readable key`,
+        );
+        return [];
+    }
+
+    const marks: (readonly [string, ReadonlyMap<string, Expression>])[] = [];
+    for (const [markName, markValue] of members.entries) {
+        const markLiteral = unwrapObjectLiteral(markValue);
+        if (markLiteral === undefined) {
+            report(`mark "${clipName}.${markName}" must be a statically-readable object literal`);
+            continue;
+        }
+        const markMembers = readObjectMembers(markLiteral);
+        if (markMembers.kind !== 'readable') {
+            report(
+                markMembers.kind === 'not-a-property'
+                    ? `mark "${clipName}.${markName}" contains an entry that is not a "name: value" property`
+                    : `mark "${clipName}.${markName}" contains an entry whose key is not a statically-readable name`,
+            );
+            continue;
+        }
+        marks.push([markName, new Map(markMembers.entries)]);
+    }
+    return marks;
+}
+
+/**
+ * Resolve one authored `ClipPosition` to a phase, or report why it does not resolve: a
+ * bare number is already a phase, `{ seconds }` divides by `durationSeconds`, `{ frame }`
+ * divides by `frameCount`, and a value declaring both is ambiguous rather than given a
+ * precedence, since either choice would place the mark somewhere unwritten.
+ */
+function resolveAuthoredPhase(
+    position: Expression,
+    context: AuthoredClipContext,
+    label: string,
+    report: (reason: string) => void,
+): number | undefined {
+    const bare = readNumberExpression(position);
+    if (bare !== undefined) {
+        if (!Number.isFinite(bare)) {
+            report(`${label} is not a finite phase`);
+            return undefined;
+        }
+        return checkPhaseRange(bare, `${label} phase ${bare} is outside [0, 1]`, report);
+    }
+
+    const literal = unwrapObjectLiteral(position);
+    const members = literal === undefined ? undefined : readObjectMembers(literal);
+    if (members?.kind !== 'readable') {
+        report(`${label} is not a statically-readable clip position`);
+        return undefined;
+    }
+    const byName = new Map(members.entries);
+    const secondsValue = byName.get('seconds');
+    const frameValue = byName.get('frame');
+
+    if (secondsValue !== undefined && frameValue !== undefined) {
+        // Nothing in the union's two object arms stops them being merged, and either
+        // precedence would place the mark somewhere unwritten.
+        report(`${label} declares both seconds and frame; which one is meant is ambiguous`);
+        return undefined;
+    }
+    if (secondsValue !== undefined) {
+        const seconds = readNumberExpression(secondsValue);
+        if (seconds === undefined || !Number.isFinite(seconds)) {
+            report(
+                `${label} declares a seconds value that is not a statically-readable finite number`,
+            );
+            return undefined;
+        }
+        if (context.durationSeconds === undefined) {
+            report(`${label} needs durationSeconds to resolve, and the clip declares none`);
+            return undefined;
+        }
+        const phase = seconds / context.durationSeconds;
+        return checkPhaseRange(
+            phase,
+            `${label} resolves to phase ${phase}, outside [0, 1]`,
+            report,
+        );
+    }
+    if (frameValue !== undefined) {
+        const frame = readNumberExpression(frameValue);
+        if (frame === undefined || !Number.isInteger(frame)) {
+            report(`${label} declares a frame that is not a statically-readable whole number`);
+            return undefined;
+        }
+        if (context.frameCount === undefined) {
+            report(`${label} needs a frameCount to resolve, and the clip declares none`);
+            return undefined;
+        }
+        const phase = frame / context.frameCount;
+        return checkPhaseRange(
+            phase,
+            `${label} resolves to phase ${phase}, outside [0, 1]`,
+            report,
+        );
+    }
+
+    report(`${label} is not a statically-readable clip position`);
+    return undefined;
+}
+
+/** A phase, or `undefined` plus the caller's own out-of-range reason. */
+function checkPhaseRange(
+    phase: number,
+    outOfRangeReason: string,
+    report: (reason: string) => void,
+): number | undefined {
+    if (phase < 0 || phase > 1) {
+        report(outOfRangeReason);
+        return undefined;
+    }
+    return phase;
+}
+
+/**
+ * A passage's authored `[startBeat, endBeat]`: SHAPE only — two readable non-negative
+ * whole beats with `end` strictly after `start`. Whether they AGREE with the span
+ * `from`/`to` imply needs the game's `tickRateMs`, which lives in a manifest this gate
+ * does not read; that reconciliation is `compileAnimationWindows`' at content load.
+ */
+function checkBeatWindow(
+    label: string,
+    beatWindowValue: Expression,
+    report: (reason: string) => void,
+): void {
+    const windowLiteral = unwrapArrayLiteral(beatWindowValue);
+    const elements = windowLiteral?.elements.length === 2 ? windowLiteral.elements : undefined;
+    const startElement = elements?.[0];
+    const endElement = elements?.[1];
+    if (startElement === undefined || endElement === undefined) {
+        report(`${label} beatWindow must be a statically-readable two-element array of beats`);
+        return;
+    }
+    const start = readWholeBeat(startElement);
+    const end = readWholeBeat(endElement);
+    if (start === undefined) {
+        report(`${label} beatWindow startBeat is not a statically-readable whole beat >= 0`);
+    }
+    if (end === undefined) {
+        report(`${label} beatWindow endBeat is not a statically-readable whole beat >= 0`);
+    }
+    if (start === undefined || end === undefined) {
+        return;
+    }
+    if (end <= start) {
+        report(
+            `${label} authors beatWindow [${start}, ${end}]; endBeat must be greater than startBeat`,
+        );
+    }
+}
+
+function readWholeBeat(expression: Expression): number | undefined {
+    const beat = readNumberExpression(expression);
+    return beat === undefined || !Number.isInteger(beat) || beat < 0 ? undefined : beat;
 }
 
 function collectAssetLoaderKinds(sourceText: string, filePath: string): readonly string[] {
@@ -1753,11 +2299,11 @@ function compareUnknownKindFailures(
 
 /**
  * One sheet can raise several findings, so `reason` is part of the key: report order is
- * then a function of what the findings say, not of where in the sheet their cues sit.
- * Without it findings on one entry share a key and keep insertion order, so moving a cue
- * within the sheet silently reorders the build output.
+ * then a function of what the findings say, not of where in the sheet their cues or marks
+ * sit. Without it findings on one entry share a key and keep insertion order, so moving a
+ * cue or a mark within the sheet silently reorders the build output.
  */
-function compareInvalidCueSheets(left: InvalidAudioCueSheet, right: InvalidAudioCueSheet): number {
+function compareSheetFindings(left: SheetFinding, right: SheetFinding): number {
     return compareStrings(
         `${referenceSortKey(left)}\u0000${left.reason}`,
         `${referenceSortKey(right)}\u0000${right.reason}`,
@@ -1782,11 +2328,7 @@ function compareUnresolvedOnDemandLoads(
 }
 
 function referenceSortKey(
-    reference:
-        | AssetReference
-        | MalformedAssetReference
-        | UnknownAssetManifestKind
-        | InvalidAudioCueSheet,
+    reference: AssetReference | MalformedAssetReference | UnknownAssetManifestKind | SheetFinding,
 ): string {
     return `${reference.source.filePath}\u0000${reference.source.location}\u0000${'ref' in reference ? (reference.ref ?? '') : ''}`;
 }

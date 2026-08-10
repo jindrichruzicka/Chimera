@@ -2,9 +2,11 @@
 
 The build-time asset-reference gate. It reads every place an `AssetRef` can be
 declared and asserts that each one resolves to a file on disk, that declared
-refs also appear in an asset manifest, and that a handful of adjacent rules hold
-(font sources are local, cue sheets are in range, game assets are not smuggled
-into `renderer/public/assets`).
+refs also appear in an asset manifest, and that a handful of adjacent rules
+hold. `AssetValidationReport`'s buckets in [`index.ts`](index.ts) are the
+enumeration of what it checks; the printed report names one section per
+non-empty bucket, and `ok` is the conjunction over the ones that fail a build
+(`unresolvedOnDemandLoads` prints as a warning and does not).
 
 It enforces **Invariants #22, #52, #97 and #125**, and satisfies **#20** by
 living outside `simulation/` — the simulation never resolves an `AssetRef`, so

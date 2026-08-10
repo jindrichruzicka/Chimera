@@ -63,5 +63,5 @@ already in the exports map — the same route `foundation/crc32.js` and
 `foundation/asset-ref-parse.js` already take. No exports-map entry was added.
 
 Additive throughout; nothing is removed, renamed or narrowed, and no snapshot type changes.
-`validate-assets` does not yet gate animation sheets — the build-time half of the check lands
-with the rest of the feature.
+The build-time half — `validate-assets`' `invalidAnimationSheets` gate over the sheets these
+builders write — lands in `@chimera-engine/electron`.

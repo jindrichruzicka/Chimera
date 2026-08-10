@@ -1427,8 +1427,901 @@ describe('audio cue sheet validation', () => {
     });
 });
 
+// ── animation clip sheets ────────────────────────────────────────────────────
+
+/**
+ * The build-time half of the animation clip sheet, the structural twin of the audio cue
+ * gate above.
+ *
+ * Every rule here is SHEET SELF-CONSISTENCY — a property of the authored literal alone —
+ * so the gate reads no atlas, no glTF and no `tickRateMs`, and adds no blind spot the
+ * walker did not already have. Whether a `beatWindow` AGREES with its passage's span is
+ * `compileAnimationWindows`' answer at content load, where an unreadable `tickRateMs`
+ * cannot silently skip the check.
+ *
+ * Reject cases assert the exact reason ARRAY, so a mutant that appends a spurious extra
+ * finding is caught alongside one that changes the first.
+ */
+describe('animation clip sheet validation', () => {
+    /**
+     * The EVERY-RUN negative control. One case, both directions: delete any mirrored
+     * site — the collector merge, the all-clear conjunction, the exit-code path — and the
+     * bad half passes; make the gate fire on anything well-formed and the good half reds.
+     */
+    it('passes a well-formed sheet and fails a deliberately-bad one', async () => {
+        const good = await validateManifestEntries(
+            modelEntrySource(`{
+                clips: {
+                    swing: {
+                        durationSeconds: 0.8,
+                        loop: 'once',
+                        notifies: { impact: { at: 0.5 }, ring: { at: { seconds: 0.6 } } },
+                        passages: { windup: { from: 0, to: 0.5, beatWindow: [0, 8], window: 'guard' } },
+                    },
+                },
+            }`),
+        );
+        const bad = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { notifies: { impact: { at: 1.5 } } } } }`),
+        );
+
+        expect(good.ok).toBe(true);
+        expect(good.invalidAnimationSheets).toHaveLength(0);
+        expect(toAssetValidationExitCode(good)).toBe(0);
+
+        expect(bad.ok).toBe(false);
+        expect(bad.invalidAnimationSheets).toHaveLength(1);
+        expect(toAssetValidationExitCode(bad)).toBe(1);
+    });
+
+    it('rejects a notify whose bare phase is outside [0, 1]', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { notifies: { impact: { at: 1.5 } } } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position phase 1.5 is outside [0, 1]',
+        ]);
+        expect(report.invalidAnimationSheets[0]?.ref).toBe('tactics/models/rig.glb');
+        expect(report.invalidAnimationSheets[0]?.source.location).toBe('entries[0].metadata');
+    });
+
+    // The other end of the same range. A negative phase is what the runtime resolver
+    // silently clamps to 0, so a gate checking only the upper bound refuses exactly the
+    // half the author would have noticed anyway.
+    it('rejects a notify whose bare phase is below 0', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { notifies: { impact: { at: -0.5 } } } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position phase -0.5 is outside [0, 1]',
+        ]);
+    });
+
+    // `1e999` reads as Infinity, which the range test would refuse anyway — the finite
+    // test exists so the author is told the phase is not a number rather than that it is
+    // out of range, and the reason is also this finding's sort key.
+    it('names a non-finite bare phase as non-finite rather than out of range', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { notifies: { impact: { at: 1e999 } } } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position is not a finite phase',
+        ]);
+    });
+
+    it('rejects a passage whose to is not after its from', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { passages: { windup: { from: 0.6, to: 0.2 } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'passage "swing.windup" runs from phase 0.6 to phase 0.2; a passage must run forward and may not wrap',
+        ]);
+    });
+
+    // A `'loop'` clip restarts forwards; nothing downstream plays a passage that runs off
+    // the end and resumes at the start, so the loop mode does not license a wrap.
+    it('rejects a wrapping passage on a looping clip', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { spin: { loop: 'loop', passages: { tail: { from: 0.9, to: 0.1 } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'passage "spin.tail" runs from phase 0.9 to phase 0.1; a passage must run forward and may not wrap',
+        ]);
+    });
+
+    // `AnimationPassage.from`/`to` are `ClipPosition`s, so both bounds reach all three
+    // resolver arms — but every other passage fixture here authors a bare phase, which
+    // needs no clip context at all. These two prove the context reaches the passage arm,
+    // and the rejected one names the RESOLVED phases in its reason rather than the
+    // authored literals.
+    it('accepts passage bounds authored in seconds and in frames', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{
+                clips: {
+                    swing: {
+                        durationSeconds: 0.8,
+                        frameCount: 4,
+                        passages: {
+                            windup: { from: { seconds: 0.1 }, to: { seconds: 0.5 } },
+                            strike: { from: { frame: 1 }, to: { frame: 3 } },
+                        },
+                    },
+                },
+            }`),
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+    });
+
+    it('rejects a passage whose seconds bounds run backwards', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { durationSeconds: 0.8, passages: { windup: { from: { seconds: 0.5 }, to: { seconds: 0.1 } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'passage "swing.windup" runs from phase 0.625 to phase 0.125; a passage must run forward and may not wrap',
+        ]);
+    });
+
+    // The boundary the word "forward" turns on: a zero-length passage opens and closes on
+    // the same instant, which an inclusive comparator refuses and a strict one waves past.
+    it('rejects a passage whose to is equal to its from', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { passages: { hit: { from: 0.5, to: 0.5 } } } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'passage "swing.hit" runs from phase 0.5 to phase 0.5; a passage must run forward and may not wrap',
+        ]);
+    });
+
+    // Phase 1 is the clip end and a legal place to mark: the range is CLOSED at both
+    // ends. Without a fixture sitting exactly on it, a gate that refused every
+    // end-of-clip notify and every `to: 1` passage would ship green. All three arms of
+    // the resolver reach it — a bare phase, `{ seconds }` equal to the duration, and a
+    // passage's `to`.
+    it('accepts a position that resolves to phase 1 exactly', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{
+                clips: {
+                    swing: {
+                        durationSeconds: 0.8,
+                        notifies: { end: { at: 1 }, last: { at: { seconds: 0.8 } } },
+                        passages: { whole: { from: 0, to: 1 } },
+                    },
+                },
+            }`),
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+    });
+
+    // `frameCount` gets the finite test for free — `Number.isInteger(Infinity)` is false
+    // — while `durationSeconds` has no such backstop: admit Infinity and every
+    // `{ seconds }` on the clip divides to ~0 and passes.
+    it('rejects a non-finite durationSeconds', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { durationSeconds: 1e999 } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "swing" declares a durationSeconds that is not a statically-readable finite number > 0',
+        ]);
+    });
+
+    it('rejects a durationSeconds of zero', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { durationSeconds: 0 } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "swing" declares a durationSeconds that is not a statically-readable finite number > 0',
+        ]);
+    });
+
+    // The duration arm of the bail, the twin of the frameCount case below. Without the
+    // return, an author fixing `durationSeconds: 0` first gets a second finding saying
+    // the clip declares no durationSeconds — for a field they did declare.
+    it('rejects a seconds position on a clip whose durationSeconds is zero', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { durationSeconds: 0, notifies: { impact: { at: { seconds: 0.5 } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "swing" declares a durationSeconds that is not a statically-readable finite number > 0',
+        ]);
+    });
+
+    it('rejects a fractional frameCount', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { frameCount: 2.5 } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "swing" declares a frameCount that is not a statically-readable whole number > 0',
+        ]);
+    });
+
+    // Without the whole-number test `{ frame: 1.5 }` divides to a phase inside [0, 1] and
+    // passes the build, while `resolveFrame` refuses it at runtime.
+    it('rejects a fractional frame position', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { frameCount: 4, notifies: { impact: { at: { frame: 1.5 } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position declares a frame that is not a statically-readable whole number',
+        ]);
+    });
+
+    it('rejects a seconds position on a clip that declares no durationSeconds', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { notifies: { impact: { at: { seconds: 2 } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position needs durationSeconds to resolve, and the clip declares none',
+        ]);
+    });
+
+    it('rejects a seconds position beyond the clip duration', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { durationSeconds: 0.8, notifies: { impact: { at: { seconds: 2 } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position resolves to phase 2.5, outside [0, 1]',
+        ]);
+    });
+
+    // The clip bails on a bad frameCount rather than also reporting the frame position it
+    // cannot resolve — one root cause, one finding, as the cue gate does for a bad
+    // durationSeconds.
+    it('rejects a frame position on a clip whose frameCount is zero', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { frameCount: 0, notifies: { impact: { at: { frame: 3 } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "swing" declares a frameCount that is not a statically-readable whole number > 0',
+        ]);
+    });
+
+    it('rejects a frame position on a clip that declares no frameCount', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { notifies: { impact: { at: { frame: 3 } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position needs a frameCount to resolve, and the clip declares none',
+        ]);
+    });
+
+    // The frame arithmetic itself, not just its guards: `{ frame }` maps onto the START
+    // of its own cell, so frame 2 of a 4-frame run is phase 0.5 and frame 8 is phase 2.
+    // The rejected case names the quotient, so a resolver returning any other number for
+    // it reds; the accepted case is what stops the gate refusing every frame position.
+    it('accepts a frame position inside the run and rejects one past its end', async () => {
+        const accepted = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { frameCount: 4, notifies: { impact: { at: { frame: 2 } } } } } }`,
+            ),
+        );
+        const rejected = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { frameCount: 4, notifies: { impact: { at: { frame: 8 } } } } } }`,
+            ),
+        );
+
+        expect(accepted.ok).toBe(true);
+        expect(accepted.invalidAnimationSheets).toHaveLength(0);
+        expect(animationSheetReasons(rejected)).toEqual([
+            'notify "swing.impact" position resolves to phase 2, outside [0, 1]',
+        ]);
+    });
+
+    it('rejects a position that declares both seconds and frame', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { durationSeconds: 1, frameCount: 4, notifies: { impact: { at: { seconds: 0.5, frame: 2 } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position declares both seconds and frame; which one is meant is ambiguous',
+        ]);
+    });
+
+    it('rejects a sprite clip whose frames run is empty', async () => {
+        const report = await validateManifestEntries(
+            spriteEntrySource(`{ clips: { walk: { frames: [] } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'sprite clip "walk" declares an empty frames run',
+        ]);
+    });
+
+    it('rejects a sprite clip that declares no frames run at all', async () => {
+        const report = await validateManifestEntries(
+            spriteEntrySource(`{ clips: { walk: { durationSeconds: 0.5 } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'sprite clip "walk" declares no frames run',
+        ]);
+    });
+
+    // The authored run is atlas frame INDICES, so "is this frame in the atlas" is the
+    // atlas's question and not this gate's; what IS a property of the sheet alone is that
+    // every index is a whole number a run could address.
+    it('rejects a sprite frame index that is not a whole number >= 0', async () => {
+        const report = await validateManifestEntries(
+            spriteEntrySource(`{ clips: { walk: { frames: [0, -1, 1.5] } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'sprite clip "walk" frames[1] is not a statically-readable whole frame index >= 0',
+            'sprite clip "walk" frames[2] is not a statically-readable whole frame index >= 0',
+        ]);
+    });
+
+    it('leaves a mesh clip that declares no frames run alone', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { durationSeconds: 0.8 } } }`),
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+    });
+
+    it('rejects a beatWindow whose bounds are equal', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { passages: { hit: { from: 0.2, to: 0.4, beatWindow: [3, 3] } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'passage "swing.hit" authors beatWindow [3, 3]; endBeat must be greater than startBeat',
+        ]);
+    });
+
+    it('rejects a beatWindow bound that is not a whole beat >= 0', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { passages: { hit: { from: 0.2, to: 0.4, beatWindow: [-1, 2.5] } } } } }`,
+            ),
+        );
+
+        // Both bounds report, and the sort orders them by reason — so `endBeat` prints
+        // first regardless of which bound the author wrote first.
+        expect(animationSheetReasons(report)).toEqual([
+            'passage "swing.hit" beatWindow endBeat is not a statically-readable whole beat >= 0',
+            'passage "swing.hit" beatWindow startBeat is not a statically-readable whole beat >= 0',
+        ]);
+    });
+
+    // The printed report is the only channel an author sees, so a finding collected and
+    // then dropped by a missing printer or sort site would fail the build with nothing to
+    // act on.
+    it('prints the failing clip and passage, the manifest entry and the ref', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { passages: { hit: { from: 0.2, to: 0.4, beatWindow: [3, 3] } } } } }`,
+            ),
+        );
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(output).toContain('Invalid animation sheets:');
+        expect(output).toContain('- tactics/models/rig.glb');
+        expect(output).toContain('apps/tactics/asset-manifest.ts entries[0].metadata');
+        expect(output).toContain(
+            'passage "swing.hit" authors beatWindow [3, 3]; endBeat must be greater than startBeat',
+        );
+    });
+
+    // Two entries, and the later one's reason sorts first: without the file/location half
+    // of the sort key, findings interleave across entries instead of grouping.
+    it('groups findings by entry before ordering them by reason', async () => {
+        const report = await validateManifestEntries(
+            `${modelEntrySource(`{ clips: { zz: { notifies: { a: { at: 1.5 } } } } }`)},
+             ${modelEntrySource(`{ clips: { aa: { notifies: { a: { at: 2.5 } } } } }`)}`,
+        );
+
+        expect(
+            report.invalidAnimationSheets.map(
+                (sheet) => `${sheet.source.location} ${sheet.reason}`,
+            ),
+        ).toEqual([
+            'entries[0].metadata notify "zz.a" position phase 1.5 is outside [0, 1]',
+            'entries[1].metadata notify "aa.a" position phase 2.5 is outside [0, 1]',
+        ]);
+    });
+
+    // The readability rule reaches down the sheet, and BOTH shapes hide a member equally
+    // well: a spread makes a member unreadable, a computed key makes its NAME
+    // unreadable. A level that checks only one of the two lets exactly the shape it was
+    // written to stop walk straight past it.
+    it.each([
+        {
+            shape: 'a spread in the sheet',
+            metadata: `{ ...sharedSheet }`,
+            reason: 'metadata contains an entry that is not a "name: value" property',
+        },
+        {
+            shape: 'a computed key in the sheet',
+            metadata: `{ ['clips']: { swing: { durationSeconds: 1 } } }`,
+            reason: 'metadata contains an entry whose key is not a statically-readable name',
+        },
+        {
+            shape: 'a clip extracted to a constant',
+            metadata: `{ clips: { swing: SHARED_CLIP } }`,
+            reason: 'clip "swing" must be a statically-readable object literal',
+        },
+        {
+            shape: 'a spread in a clip',
+            metadata: `{ clips: { swing: { ...sharedClip } } }`,
+            reason: 'clip "swing" contains an entry that is not a "name: value" property',
+        },
+        {
+            shape: 'a computed key in a clip',
+            metadata: `{ clips: { swing: { ['durationSeconds']: 1 } } }`,
+            reason: 'clip "swing" contains an entry whose key is not a statically-readable name',
+        },
+        {
+            shape: 'a spread in a notifies map',
+            metadata: `{ clips: { swing: { notifies: { ...sharedMarks } } } }`,
+            reason: 'clip "swing" notifies contains an entry that is not a "name: mark" property',
+        },
+        {
+            shape: 'a computed mark name in a passages map',
+            metadata: `{ clips: { swing: { passages: { [HIT]: { from: 0, to: 1 } } } } }`,
+            reason: 'clip "swing" passages contains an entry whose mark name is not a statically-readable key',
+        },
+        {
+            shape: 'a mark extracted to a constant',
+            metadata: `{ clips: { swing: { notifies: { impact: SHARED_MARK } } } }`,
+            reason: 'mark "swing.impact" must be a statically-readable object literal',
+        },
+        {
+            shape: 'a spread in a mark',
+            metadata: `{ clips: { swing: { notifies: { impact: { ...sharedMark } } } } }`,
+            reason: 'mark "swing.impact" contains an entry that is not a "name: value" property',
+        },
+        {
+            shape: 'a computed key in a mark',
+            metadata: `{ clips: { swing: { notifies: { impact: { ['at']: 0.5 } } } } }`,
+            reason: 'mark "swing.impact" contains an entry whose key is not a statically-readable name',
+        },
+    ])('rejects $shape', async ({ metadata, reason }) => {
+        const report = await validateManifestEntries(modelEntrySource(metadata));
+
+        expect(animationSheetReasons(report)).toEqual([reason]);
+    });
+
+    it('rejects a seconds value that is not a statically-readable number', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { durationSeconds: 1, notifies: { impact: { at: { seconds: HALF } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position declares a seconds value that is not a statically-readable finite number',
+        ]);
+    });
+
+    // `1e999` reads as Infinity, and Infinity over any duration is Infinity — which the
+    // range test would refuse anyway. The finite test names the real fault instead.
+    it('names a non-finite seconds value as non-finite rather than out of range', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { durationSeconds: 1, notifies: { impact: { at: { seconds: 1e999 } } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position declares a seconds value that is not a statically-readable finite number',
+        ]);
+    });
+
+    // Three ways a position fails to be one, all sharing a reason: no `seconds`/`frame`
+    // member at all, a member hidden behind a spread, and a value that is no object.
+    // The spread arm is the one the readability rule exists for — without it a position
+    // could hide its unit and still pass.
+    it.each([
+        { shape: 'declares neither seconds nor frame', position: `{}` },
+        { shape: 'hides its members behind a spread', position: `{ ...sharedPosition }` },
+        { shape: 'is a string', position: `'half'` },
+    ])('rejects a position that $shape', async ({ position }) => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { notifies: { impact: { at: ${position} } } } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position is not a statically-readable clip position',
+        ]);
+    });
+
+    // Both sides of "two elements": a short window and a long one. Only the short side
+    // is caught by a `>= 2` length test, which is the coarsening a single fixture leaves
+    // open.
+    it.each([
+        { shape: 'is one element long', beatWindow: `[1]` },
+        { shape: 'is three elements long', beatWindow: `[0, 8, 9]` },
+        { shape: 'is extracted to a constant', beatWindow: `SHARED_WINDOW` },
+    ])('rejects a beatWindow that $shape', async ({ beatWindow }) => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { passages: { hit: { from: 0.2, to: 0.4, beatWindow: ${beatWindow} } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'passage "swing.hit" beatWindow must be a statically-readable two-element array of beats',
+        ]);
+    });
+
+    it('rejects a sprite frames run that is not an array literal', async () => {
+        const report = await validateManifestEntries(
+            spriteEntrySource(`{ clips: { walk: { frames: SHARED_FRAMES } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'sprite clip "walk" frames must be a statically-readable array literal',
+        ]);
+    });
+
+    it('rejects a sheet that is not a statically-readable object literal', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: 'tactics/models/rig.glb',
+                kind: 'gltf-model',
+                priority: 'deferred',
+                metadata: SHARED_SHEET,
+            }`,
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'metadata is not a statically-readable object literal; author the animation sheet inline',
+        ]);
+    });
+
+    it('rejects a clips map that is not a statically-readable object literal', async () => {
+        const report = await validateManifestEntries(modelEntrySource(`{ clips: SHARED_CLIPS }`));
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clips must be a statically-readable object literal',
+        ]);
+    });
+
+    it('rejects a clips map assembled by spreading another object', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { ...sharedClips } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clips contains an entry that is not a "name: clip" property',
+        ]);
+    });
+
+    it('rejects a clip whose key is computed', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { [SWING]: { durationSeconds: 1 } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clips contains an entry whose clip name is not a statically-readable key',
+        ]);
+    });
+
+    it('rejects a notifies map that is not a statically-readable object literal', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { notifies: SHARED_NOTIFIES } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "swing" notifies must be a statically-readable object literal',
+        ]);
+    });
+
+    it('rejects a notify that declares no position', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { notifies: { impact: { window: 'guard' } } } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" declares no position',
+        ]);
+    });
+
+    it('rejects a passage that declares no from/to span', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { passages: { hit: { from: 0.2 } } } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'passage "swing.hit" declares no from/to span',
+        ]);
+    });
+
+    // A fault on one mark reports and the walk CONTINUES: every other fixture here holds
+    // a single faulty mark, so nothing would notice a loop that stopped at the first one
+    // and left the rest of the clip unreported. One row per skip site — the notify and
+    // passage loops, and the two arms inside the mark reader.
+    it.each([
+        {
+            site: 'a notify with no position',
+            marks: `notifies: { impact: { window: 'guard' }, ring: { at: 1.5 } }`,
+            reasons: [
+                'notify "swing.impact" declares no position',
+                'notify "swing.ring" position phase 1.5 is outside [0, 1]',
+            ],
+        },
+        {
+            site: 'a passage with no span',
+            marks: `passages: { first: { from: 0.2 }, second: { from: 0.6, to: 0.2 } }`,
+            reasons: [
+                'passage "swing.first" declares no from/to span',
+                'passage "swing.second" runs from phase 0.6 to phase 0.2; a passage must run forward and may not wrap',
+            ],
+        },
+        {
+            site: 'a mark extracted to a constant',
+            marks: `notifies: { impact: SHARED_MARK, ring: { at: 1.5 } }`,
+            reasons: [
+                'mark "swing.impact" must be a statically-readable object literal',
+                'notify "swing.ring" position phase 1.5 is outside [0, 1]',
+            ],
+        },
+        {
+            site: 'a mark assembled by spreading',
+            marks: `notifies: { impact: { ...sharedMark }, ring: { at: 1.5 } }`,
+            reasons: [
+                'mark "swing.impact" contains an entry that is not a "name: value" property',
+                'notify "swing.ring" position phase 1.5 is outside [0, 1]',
+            ],
+        },
+    ])('reports a later mark after skipping $site', async ({ marks, reasons }) => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { ${marks} } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual(reasons);
+    });
+
+    // The printer's only fallback: an entry whose own `ref` is not statically readable
+    // still fails the build, and `(unreadable ref)` is the whole of what names it.
+    it('names the entry as unreadable when its ref is not a literal', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: refs.rig,
+                kind: 'gltf-model',
+                priority: 'deferred',
+                metadata: { clips: { swing: { notifies: { impact: { at: 1.5 } } } } },
+            }`,
+        );
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(animationSheetReasons(report)).toEqual([
+            'notify "swing.impact" position phase 1.5 is outside [0, 1]',
+        ]);
+        expect(report.invalidAnimationSheets[0]?.ref).toBeUndefined();
+        expect(output).toContain('Invalid animation sheets:');
+        expect(output).toContain('- (unreadable ref)');
+    });
+
+    it('accepts a sheet that declares no clips at all', async () => {
+        const report = await validateManifestEntries(modelEntrySource(`{}`));
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+    });
+
+    it('accepts a model entry that declares no metadata at all', async () => {
+        const report = await validateManifestEntries(
+            `{ ref: 'tactics/models/rig.glb', kind: 'gltf-model', priority: 'deferred' }`,
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+    });
+
+    it('leaves a non-animation entry carrying sheet-shaped metadata untouched', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: 'tactics/models/rig.glb',
+                kind: 'texture',
+                priority: 'deferred',
+                metadata: { clips: { swing: { notifies: { impact: { at: 1.5 } } } } },
+            }`,
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+    });
+
+    // The catch the cue gate structurally cannot make: its `kind` guard rules a MODEL
+    // entry out, so an unreadable member on one was invisible to the whole tool.
+    it('rejects a model entry assembled by spreading another object', async () => {
+        const report = await validateManifestEntries(
+            `{ ref: 'tactics/models/rig.glb', kind: 'gltf-model', ...withMetadata }`,
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'entry contains a member that is not a "name: value" property, so an animation sheet on it cannot be ruled out',
+        ]);
+        expect(report.invalidCueSheets).toHaveLength(0);
+        expect(report.invalidAnimationSheets[0]?.source.location).toBe('entries[0]');
+    });
+
+    // The unclassifiable entry stops at ONE finding per gate. Every other unreadable-entry
+    // fixture carries no readable sheet, so nothing would notice a bail that reported and
+    // then walked into the sheet anyway — adding a second finding for a sheet the gate
+    // has just said it cannot trust the entry of.
+    it('reports an unreadable entry once, without also checking the sheet it carries', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: 'tactics/models/rig.glb',
+                kind: 'gltf-model',
+                metadata: { clips: { swing: { notifies: { impact: { at: 1.5 } } } } },
+                ...extra,
+            }`,
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'entry contains a member that is not a "name: value" property, so an animation sheet on it cannot be ruled out',
+        ]);
+        expect(report.invalidCueSheets).toHaveLength(0);
+    });
+
+    it('rejects a model entry whose metadata key is computed', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: 'tactics/models/rig.glb',
+                kind: 'gltf-model',
+                priority: 'deferred',
+                ['metadata']: { clips: { swing: { notifies: { impact: { at: 1.5 } } } } },
+            }`,
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'entry contains a member whose key is not a statically-readable name, so an animation sheet on it cannot be ruled out',
+        ]);
+    });
+
+    // An unclassifiable entry could be carrying EITHER sheet, so each gate reports what
+    // it could not rule out. Two lines on one entry, not one gate covering for the other.
+    it('reports an entry hiding both its kind and its metadata in both sheet buckets', async () => {
+        const report = await validateManifestEntries(
+            `{ ref: 'tactics/models/rig.glb', ...withKindAndMetadata }`,
+        );
+
+        expect(cueSheetReasons(report)).toEqual([
+            'entry contains a member that is not a "name: value" property, so a cue sheet on it cannot be ruled out',
+        ]);
+        expect(animationSheetReasons(report)).toEqual([
+            'entry contains a member that is not a "name: value" property, so an animation sheet on it cannot be ruled out',
+        ]);
+    });
+
+    it('rejects a model entry that declares metadata under a kind it cannot read', async () => {
+        const report = await validateManifestEntries(
+            `{
+                ref: 'tactics/models/rig.glb',
+                kind: MODEL,
+                priority: 'deferred',
+                metadata: { clips: { swing: { notifies: { impact: { at: 1.5 } } } } },
+            }`,
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'entry declares metadata but its kind is not a statically-readable literal, so the entry cannot be classified',
+        ]);
+    });
+
+    // The one shape the gate deliberately does not reach, inherited from the walker and
+    // asserted as BEHAVIOUR: an element that is not an object literal contributes
+    // nothing at all rather than failing the run.
+    it('skips an entries element extracted to a constant', async () => {
+        const report = await validateManifestEntries(`RIG_ENTRY`);
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+        expect(report.invalidCueSheets).toHaveLength(0);
+    });
+
+    describe('entries authored through the animation builders', () => {
+        it('validates a sheet authored through modelAnimationEntry', async () => {
+            const report = await validateManifestEntries(
+                `modelAnimationEntry({
+                    ref: 'tactics/models/rig.glb',
+                    priority: 'deferred',
+                    metadata: { clips: { swing: { notifies: { impact: { at: 1.5 } } } } },
+                })`,
+            );
+
+            expect(animationSheetReasons(report)).toEqual([
+                'notify "swing.impact" position phase 1.5 is outside [0, 1]',
+            ]);
+            expect(report.invalidAnimationSheets[0]?.ref).toBe('tactics/models/rig.glb');
+        });
+
+        it('validates a sheet authored through spriteAnimationEntry', async () => {
+            const report = await validateManifestEntries(
+                `spriteAnimationEntry({
+                    ref: 'tactics/sprites/hero.png',
+                    priority: 'deferred',
+                    metadata: { clips: { walk: { frames: [] } } },
+                })`,
+            );
+
+            expect(animationSheetReasons(report)).toEqual([
+                'sprite clip "walk" declares an empty frames run',
+            ]);
+            expect(report.invalidAnimationSheets[0]?.ref).toBe('tactics/sprites/hero.png');
+        });
+
+        // The builder bakes its own `kind`, so an entry that reads as kindless takes the
+        // ref existence check (#22) and the declared-ref membership set (#52) down with
+        // the sheet gate.
+        it('existence-checks the ref of a builder-authored animation entry', async () => {
+            const report = await validateManifestEntries(
+                `modelAnimationEntry({ ref: 'tactics/models/absent.glb', priority: 'deferred' })`,
+            );
+
+            expect(report.missing.map((entry) => entry.ref)).toEqual(['tactics/models/absent.glb']);
+        });
+
+        it('accepts a well-formed sheet authored through spriteAnimationEntry', async () => {
+            const report = await validateManifestEntries(
+                `spriteAnimationEntry({
+                    ref: 'tactics/sprites/hero.png',
+                    priority: 'deferred',
+                    metadata: { clips: { walk: { durationSeconds: 0.5, frames: [0, 1, 0] } } },
+                })`,
+            );
+
+            expect(report.ok).toBe(true);
+            expect(report.invalidAnimationSheets).toHaveLength(0);
+        });
+    });
+});
+
 function cueSheetReasons(report: AssetValidationReport): readonly string[] {
     return report.invalidCueSheets.map((sheet) => sheet.reason);
+}
+
+function animationSheetReasons(report: AssetValidationReport): readonly string[] {
+    return report.invalidAnimationSheets.map((sheet) => sheet.reason);
 }
 
 /** An `'audio-clip'` manifest entry carrying `metadata` verbatim as authored. */
@@ -1437,6 +2330,26 @@ function audioClipEntrySource(metadataSource: string): string {
         ref: 'tactics/audio/theme.ogg',
         kind: 'audio-clip',
         priority: 'critical',
+        metadata: ${metadataSource},
+    }`;
+}
+
+/** A `'gltf-model'` manifest entry carrying `metadata` verbatim as authored. */
+function modelEntrySource(metadataSource: string): string {
+    return `{
+        ref: 'tactics/models/rig.glb',
+        kind: 'gltf-model',
+        priority: 'deferred',
+        metadata: ${metadataSource},
+    }`;
+}
+
+/** A `'sprite-sheet'` manifest entry carrying `metadata` verbatim as authored. */
+function spriteEntrySource(metadataSource: string): string {
+    return `{
+        ref: 'tactics/sprites/hero.png',
+        kind: 'sprite-sheet',
+        priority: 'deferred',
         metadata: ${metadataSource},
     }`;
 }
@@ -1454,6 +2367,8 @@ async function validateManifestEntries(entriesSource: string): Promise<AssetVali
                     };
                 `,
                 'apps/tactics/assets/audio/theme.ogg': '',
+                'apps/tactics/assets/models/rig.glb': '',
+                'apps/tactics/assets/sprites/hero.png': '',
             },
         }),
     });
