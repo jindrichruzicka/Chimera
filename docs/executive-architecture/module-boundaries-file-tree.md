@@ -55,7 +55,7 @@ chimera/
 │   │   │   └── SpectatorRegistry.ts # Host-local spectatorId → followedSeatId ledger; never in snapshot/saves/replays (Invariant #114)
 │   │   ├── runtime/                 # Simulation host and live-game runtime infrastructure
 │   │   │   ├── SimulationHost.ts    # Hosts sim tick loop; calls AgentManager.tickAll() after each tick
-│   │   │   ├── RealtimeTicker.ts    # SetInterval clock for manifest.realtime games; host starts/stops per match (§4.2.1)
+│   │   │   ├── RealtimeTicker.ts    # Wall-clock beat driver for manifest.realtime games; host starts/stops per match (§4.2.1)
 │   │   │   ├── SessionRuntime.ts    # Manages session lifecycle: setup, teardown, player assignment
 │   │   │   ├── HostSessionPipeline.ts # Orchestrates pings, broadcasts, heartbeat loop during active session
 │   │   │   └── StateBroadcaster.ts  # Per-player snapshot projection via commitment scheme; network dispatch + spectator perspective fan-out (broadcastWave/broadcastSpectator, Invariant #114)

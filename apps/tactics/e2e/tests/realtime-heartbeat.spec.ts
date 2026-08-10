@@ -32,7 +32,7 @@
  *
  * Dedicated port: no other spec binds it, so the two processes never contend
  * with a concurrently-scheduled fixture spec on the shared 7779 under
- * `workers: 2`. The ticker is a MAIN-process `setInterval` (Node), which is not
+ * `workers: 2`. The ticker runs on a MAIN-process Node timer, which is not
  * subject to the renderer background-throttling that freezes occluded-window
  * timers — so it fires normally even while the windows are backgrounded.
  *

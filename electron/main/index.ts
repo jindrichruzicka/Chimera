@@ -21,6 +21,7 @@ import {
     MalformedAssetRefError,
     parseAssetRef,
 } from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
+import { NORMAL_TIME_SCALE_PERMILLE } from '@chimera-engine/simulation/foundation/time-scale.js';
 import {
     registerGameHandlers,
     registerLobbyHandlers,
@@ -2190,6 +2191,15 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                               sessionRuntime.applyAction(envelope);
                               simulationHost.afterTick(sessionRuntime.getSnapshot());
                           },
+                          // Time dilation (F82,
+                          // docs/roadmap-sections/m10-first-public-release-v1.0.0.md):
+                          // the host paces the SAME beat sequence in wall-clock
+                          // time, read fresh each beat so a scale change lands
+                          // from the next beat on.
+                          getRateScalePermille: () =>
+                              sessionRuntime.getSnapshot().timeScalePermille ??
+                              NORMAL_TIME_SCALE_PERMILLE,
+                          logger: logger.child({ module: 'realtime-ticker' }),
                       });
 
             const sendHostedRendererSnapshot = (snapshot: PlayerSnapshot): void => {
