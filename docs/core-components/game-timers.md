@@ -62,7 +62,7 @@ export const TimerManager = {
     cancel(registry: TimerRegistry, id: TimerId): TimerRegistry,
 
     /**
-     * Advance all active timers by 1 tick.
+     * Advance all active timers by ONE BEAT — one outer `engine:tick`.
      * Returns updated registry + list of actions that fired.
      * Pure. Called by engine:tick reducer ONLY.
      */
@@ -141,7 +141,7 @@ return { ...state, timers: newTimers };
 
 ## Determinism Rules
 
-- Timers are driven by integer `tick` — **never** by `Date.now()` or `performance.now()`.
+- Timers are driven by the outer `engine:tick` BEAT, counted in whole beats — **never** by `Date.now()` or `performance.now()`, and never by a `GameSnapshot.tick` difference, which counts actions and so runs ahead of the beat on any tick a timer fired.
 - Turn-based games (manifest `realtime: false`): `engine:tick` dispatched explicitly by host at defined moments (end of turn, resolution phase).
 - Real-time games (manifest `realtime: true`): `engine:tick` dispatched automatically by the host-driven `RealtimeTicker` at `tickRateMs` (§4.2.1).
 - Timer IDs must be deterministic (derived from entity IDs + action type, not random UUIDs) so replays produce identical timer maps.

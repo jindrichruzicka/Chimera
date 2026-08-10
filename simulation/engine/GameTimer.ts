@@ -24,7 +24,9 @@ export interface GameTimer {
     readonly id: TimerId;
     /**
      * Ticks remaining until next fire.
-     * Decremented by TimerManager.advance() — never by wall-clock time.
+     * Decremented by TimerManager.advance() once per BEAT — one outer
+     * engine:tick — never by wall-clock time, and never by a snapshot.tick
+     * difference, which counts actions rather than beats.
      */
     readonly remainingTicks: number;
     /**
@@ -95,7 +97,7 @@ export const TimerManager = {
     },
 
     /**
-     * Advance all active timers by 1 tick.
+     * Advance all active timers by ONE BEAT — one outer `engine:tick`.
      *
      * For each active timer:
      *   - Decrements remainingTicks by 1.

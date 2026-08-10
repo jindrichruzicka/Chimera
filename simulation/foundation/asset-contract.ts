@@ -29,7 +29,7 @@ export type TextureAsset = AssetKindBrand<'texture'>;
 export type AudioClipAsset = AssetKindBrand<'audio-clip'>;
 /** → GLTF (drei or three/examples/jsm) */
 export type GLTFModelAsset = AssetKindBrand<'gltf-model'>;
-/** → THREE.Texture + SpriteAtlas frame map */
+/** → THREE.Texture plus the renderer-side atlas frame map (renderer/assets/). */
 export type SpriteSheetAsset = AssetKindBrand<'sprite-sheet'>;
 /** → plain JSON (no Three.js dependency at all) */
 export type ParticleConfigAsset = AssetKindBrand<'particle-config'>;

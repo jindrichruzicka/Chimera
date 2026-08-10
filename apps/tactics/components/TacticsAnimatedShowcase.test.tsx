@@ -14,7 +14,7 @@
  *     passage that opened twice, or one that closed for the wrong reason;
  *   - that unmounting mid-passage closes the open passage exactly once, as
  *     `'released'` — the teardown path, on a SINGLE mount;
- *   - that NOTHING dispatches (Invariant #131), asserted the only way it is
+ *   - that NOTHING dispatches (Invariant #132), asserted the only way it is
  *     assertable here. MEASURED: a game screen receives `sendAction` as a PROP
  *     from `GameScreenRegistry` — there is no `useSendAction` a game may import
  *     — so a mocked dispatcher hook would be a spy nothing could ever call, and
@@ -167,7 +167,7 @@ describe('TacticsAnimatedShowcase', () => {
         }
     });
 
-    it('hands its handlers events that carry no dispatcher (Invariant #131)', async () => {
+    it('hands its handlers events that carry no dispatcher (Invariant #132)', async () => {
         // The runtime half. A marker event is the ONLY thing this component
         // gives a game handler, so the prohibition holds exactly as long as
         // nothing dispatch-shaped rides on one — asserted as the exact key set,
