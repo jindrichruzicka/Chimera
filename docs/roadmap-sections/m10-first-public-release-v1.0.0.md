@@ -203,12 +203,24 @@ vacuously).
 
 Feature issue: [#909](https://github.com/jindrichruzicka/Chimera/issues/909).
 
-**Out of scope (deferred):** variable playback rate / pitch-shift / time-stretch
-(the rate is fixed at `1`), a higher-level `MusicDirector` layer, per-cue DSP
-effects / filters / EQ / reverb and 3D/spatial/HRTF panning, streaming
-(`MediaElementAudioSource`) playback, resizing the 32-voice pool or reshaping the
-three-stage bus graph, and cross-clip / global cue registries — all candidates for
-a follow-up.
+**Out of scope (deferred):** a higher-level `MusicDirector` layer, per-cue DSP
+effects / filters / EQ / reverb, streaming (`MediaElementAudioSource`) playback,
+resizing the 32-voice pool or reshaping the three-stage bus graph, and cross-clip /
+global cue registries — all candidates for a follow-up.
+
+Three entries this list originally carried were **taken up inside M10 rather than
+deferred past it**, and are recorded here so the deferral and the milestone do not
+tell two different stories. **3D / spatial panning** landed as **F84** — with
+**HRTF** specifically still deferred, since `panningModel` is pinned to
+`'equalpower'`, and with source cones, occlusion and reverb zones still out with the
+rest of the DSP list. The **cue-reactive half of `MusicDirector`** landed as
+**F85**, which adds the primitive that layer would have been built on — a music
+transition that waits for an authored cue — while the layer itself (named slots,
+stem stacks, in-flight retarget, a global cue registry) stays deferred. And
+**variable playback rate** landed as **F86**, as resampling, so rate and pitch move
+together; pitch-**preserving** time-stretch and live mid-voice rate changes stay
+deferred, and the option is named `rate` rather than `pitch` so the type does not
+promise the one it does not do.
 
 ### F75 — Standalone-Reachable Font Self-Hosting Tooling
 
@@ -399,6 +411,214 @@ Feature issue: [#975](https://github.com/jindrichruzicka/Chimera/issues/975).
 Feature issue: [#991](https://github.com/jindrichruzicka/Chimera/issues/991). This roadmap section is itself [#992](https://github.com/jindrichruzicka/Chimera/issues/992).
 
 **Out of scope (deferred):** No cross-client clip phase anchoring. The seek formula needs an absolute beat counter (eliminated above) and a renderer-visible tick rate, which no renderer registry slot supplies; two clients therefore see a swing at phases differing by network latency and a client joining mid-swing starts the clip at zero, both cosmetic by construction, and the anchor is purely additive later; No repair of the pre-existing one-action-one-tick replay assumption. A match containing a timer-firing `engine:tick`, or an `engine:undo`/`engine:redo`, is already unreplayable, and the correct fix — replacing the derived tick expectation with the recorded one — moves `ReplayPlayer.seek()`, the playback manager's tick accounting and the renderer scrub semantics together; F82's obligation is only to add no new inflation; No sprite React binding, sprite component or atlas reader in the public barrels. The sprite backend and its atlas parser ship as renderer internals so the clip-backend seam has two implementations, one of them not three.js-based; no game in the repo or the scaffold has any sprite content, and exporting the surface later is an additive minor while narrowing a shipped frame shape would be a major under the locked `1.X.Y` scheme; No shipping realtime game. Reason (1)'s manifests do not change, so the entire simulation half — windows, the dilation countdown, `onBeat` — ships unit-tested with no end-to-end adopter, and the demonstration is a named follow-up rather than a forced ticker; No `@chimera-engine/renderer/animation` subpath and no public barrel from F82 itself. The wider commitment this clause originally made — that the exports map, the package-exports contract, the pack probe list, Check 17's barrel regex, the games-side lint predicate and Invariant #96's count all stay unchanged inside the RC window — was **superseded by an explicit decision** to land the eighth barrel, `@chimera-engine/renderer/input` (issue #1008), before the 1.0.0 tag rather than after it; every one of those artifacts moved with it. A new subpath is additive, so the bump stays minor under the locked `1.X.Y` scheme; No `engine:set_time_scale` action and no dilation restore timer — one optional integer field plus one pure countdown, so overlapping requests are last-write-wins and nothing can stack or leak un-restored; No projection of the window registry or the restore countdown into `PlayerSnapshot`, since an open attack window reveals that an entity exists and is attacking; No reverse or ping-pong playback: nothing on the clip-backend seam models a reversing playhead, so both are refused with `RangeError` rather than clamped; No blending beyond a single crossfade verb, no state-machine or blend-tree authoring layer, and no engine-level animation-event registry slot; No trimmed or rotated atlas frames, no billboarding, and no engine-owned sprite geometry; No sub-beat gameplay windows — at the default 20 Hz the finest expressible mechanical window is one beat, and a narrower authored window is floored at one rather than zero; No `SaveFile` schema-version bump and no migration, since every new snapshot field is optional; No settings-driven animation speed, no dilation of `turnClock.deadlineMs` (which is millisecond-denominated, so slow-mo does not extend a turn timer), and no ticker catch-up or missed-tick recovery beyond an absolute next-fire target — all candidates for follow-ups.
+
+### F84 — Spatial Audio: Listener Pose, Distance Falloff & Moving Sources
+
+**Status: designed, not implemented.** The voice graph already contains a `PannerNode` —
+`source → voiceGain (1) → [panner] → busGain (2) → masterGain (3) → destination`, created by
+`connectVoice` whenever `PlayOptions.position` is present — and it has never been usable.
+It is written **once**, at `startVoice`, and **nothing in the repo has ever set
+`AudioContext.listener`**, so every positioned voice plays panned relative to the world
+origin under Chrome's `createPanner()` defaults (`distanceModel: 'inverse'`,
+`refDistance: 1`, `maxDistance: 10000`). There is no way to move a source after it starts,
+no way to say how far full volume reaches, and no way to say where the ears are. F84 turns
+that stub into an authored spatial layer and stays deliberately small: HRTF, source cones,
+occlusion, reverb zones and doppler are all non-goals, and `panningModel` is pinned to
+`'equalpower'`.
+
+**The listener is not the camera, and that is the load-bearing decision rather than an
+omission.** `apps/tactics` renders its board with `TACTICS_CAMERA_POSITION = [1, 12, 0]` — a
+top-down camera twelve units above the action. A listener bound to it would put every board
+sound roughly twelve units away and pan the whole board through a near-vertical axis, so a
+unit one tile left of another would be nearly indistinguishable from it. The pose is always
+supplied by the game, which knows what the player is _listening from_ (the focused unit, the
+board centre, the cursor) as distinct from what the camera is _looking at from_. There is one
+listener per app, shared by every canvas, so an F81 `role="overlay"` minimap must not move it;
+the default pose is the Web Audio default, so a game that sets nothing keeps today's
+behaviour exactly.
+
+Distances are authored as a full-volume radius and a falloff radius with a curve between them
+(`fullVolumeDistance` / `falloffDistance` / `falloff`), mapping onto `refDistance` /
+`maxDistance` / `distanceModel` with no arithmetic of the engine's own. **The default curve is
+`'linear'`, deliberately diverging from the platform default of `'inverse'`**: only the linear
+model reaches zero at `maxDistance`, while `inverse` and `exponential` clamp the _distance_
+there and hold a non-zero gain at every distance beyond it — so shipping the platform default
+would make `falloffDistance` name a radius that silences nothing. Inverted distances are a
+**static reject at `play()`**, invalid handle and no voice reserved, reusing the exact tier
+Invariant #117 established for `to <= from`; distances never reach the dynamic tier because
+they never need a decode. Equal distances are an authored hard cutoff, realised as the
+narrowest band the continuous model can express through a named constant.
+
+Invariant **#116 is untouched, by construction**: the panner sits _between_ stage 1 and stage
+2, so spatial attenuation is its own gain and nothing in this feature writes any of the three
+stages. A spatial voice therefore still ducks, still follows its bus volume, and still fades
+exactly as a non-spatial one does — where the obvious wrong implementation, computing
+attenuation in JS and multiplying it into stage 1, would break #116 and make every fade fight
+the distance curve. One event-side seam lands here too: `EventAudioBinding` is a static
+`{ ref, bus?, volume? }` map, so it gains an optional per-event options resolver. It receives
+the `GameEvent` the contract actually has — `{ readonly type: string }` and nothing else — so
+it can vary rate, volume, priority and bus but **cannot** produce a position; widening
+`GameEvent` with an opaque payload would push uninspected data through
+`StateProjector.project()`, which is a projection-contract change (Invariants #3/#8/#98) and
+not an audio one. Positioned event SFX therefore use explicit call sites, and **Tactics** is
+the reference adopter: board SFX played at the acting unit's position, with the listener
+anchored at the board focus and a comment at the call site saying why it is not the camera.
+
+| Task                                                                                       | Issue                                                           |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Add the spatial option types and the static distance-validation tier                       | [#1030](https://github.com/jindrichruzicka/Chimera/issues/1030) |
+| Configure the PannerNode from the resolved spatial spec                                    | [#1031](https://github.com/jindrichruzicka/Chimera/issues/1031) |
+| Add AudioManager.setListener with a feature-detected param path                            | [#1032](https://github.com/jindrichruzicka/Chimera/issues/1032) |
+| Add AudioManager.setVoicePosition for moving sources                                       | [#1033](https://github.com/jindrichruzicka/Chimera/issues/1033) |
+| Add useSpatialAudio and export the spatial surface from the audio barrel                   | [#1034](https://github.com/jindrichruzicka/Chimera/issues/1034) |
+| Add the per-event options resolver to the event-audio binding                              | [#1035](https://github.com/jindrichruzicka/Chimera/issues/1035) |
+| Adopt spatial audio in tactics with a positioned SFX and a non-camera listener             | [#1036](https://github.com/jindrichruzicka/Chimera/issues/1036) |
+| Author Invariant #132, sweep the docs and roadmap F84, cut the changeset and open the gate | [#1037](https://github.com/jindrichruzicka/Chimera/issues/1037) |
+
+Feature issue: [#1027](https://github.com/jindrichruzicka/Chimera/issues/1027).
+
+**Out of scope (deferred):** No HRTF panning — `panningModel` is pinned to `'equalpower'`,
+which costs no convolution against a 32-voice pool and buys little for the top-down and
+side-on cameras in the repo; No source cones (`coneInnerAngle` / `coneOuterAngle` /
+`coneOuterGain`) and no source orientation — sources are omnidirectional; No occlusion,
+obstruction, reverb zones or any DSP, which keeps F74's filters/EQ/reverb deferral intact; No
+doppler, which is no longer in the Web Audio spec and has nothing to implement; No
+camera-derived listener pose and no engine-owned r3f binding component — the pose is the
+game's, for the reason the section above measures; No typed, projection-gated `GameEvent`
+payloads, so the event-options resolver cannot produce a position — widening the event
+contract is a projection change, not an audio one, and is a named follow-up; No pool resize
+and no bus-graph reshape, unchanged from F74 — all candidates for a follow-up.
+
+### F85 — Music Cue Observation & Cue-Aligned Transitions
+
+**Status: designed, not implemented.** F74 gave music transitions everything except a sense of
+_when_. A game can crossfade two beds, but only **now**, so a swap driven by gameplay — the
+last enemy dies, the turn passes — cuts across whatever the music was in the middle of. F85
+adds the ability to say "do this at the next musical boundary", and it does so in two halves
+whose separation **is** the feature: **observe to decide**, a frame-sampled cue stream
+(`cue` / `loop` / `end`) with one frame of jitter by construction, for HUD, VFX and
+decision-making; and **schedule to execute**, `crossfadeAtCue` / `fadeOutAtCue`, armed now and
+executed sample-accurately at the cue through native `AudioBufferSourceNode` scheduling. A
+callback that fires a frame late and _then_ starts a crossfade would put the transition a
+frame off the beat, which is precisely the artifact the feature exists to remove — so neither
+mechanism is built out of the other.
+
+**Most of the arithmetic already exists.** `nextCueContextTime()` answers "when does this
+voice's playhead next reach cue X", loop-period-aware, with the entry-pass asymmetry worked
+out and the window treated as closed at `loopEnd` because that is where the playhead wraps; it
+is what `fadeOut({ toCue })` already runs on, and cue-aligned scheduling is largely a second
+consumer of it. What does not exist is its **dual** — where the playhead is _now_ — which is
+what a sampler needs, and the two directions are tested against each other rather than each
+against a hand-computed table. The enabling change on the scheduling side is likewise small,
+because `startVoice` is already shaped for it: it reads `audioContext.currentTime` **once** and
+threads that single `t0` through the gain floor, `source.start`, the stop maths and every
+pending ramp, with a comment saying that "applied atomically at t0" is only true if there is a
+single `t0` to apply them at. That local becomes a parameter, and the existing `linkedFadeOut`
+slot already takes `startedAt` as its argument, so crossfade linkage anchors at the cue with no
+change at all. Getting the anchoring wrong is silent rather than loud: a fade-in anchored at
+the call rather than at the scheduled start runs to completion **before the voice is audible**,
+so the bed simply appears at full volume.
+
+**Observation is inert by a missing parameter.** The cue-handler record carries no dispatcher,
+no `SendAction`, no `PlayerId`, no `EngineAction` and no tick — the discipline F82 used for
+`clipMarkerScheduler`, and for the same reason: a parameter that does not exist cannot be
+`eslint-disable`d. The pure scheduler is that module's **sibling** rather than a reuse of it;
+the rules carry over (half-open `(last, next]` crossing, close-before-wrap, once-per-step,
+ascending-then-lexicographic order) but the timeline does not, because audio cues are absolute
+buffer **seconds** with an asymmetric entry pass into a loop window that need not be the whole
+buffer, where a clip timeline is normalized **phase** in `[0, 1]` with cycles. The sampler is
+one `requestAnimationFrame` chain owned by `AudioManager`, started on the first subscription
+and cancelled on the last, so a game that never observes a cue pays no frame cost; it is not
+`useFrame`, because the audio barrel is not r3f-bound and cue observation has to work on a menu
+screen with no `<Canvas>` mounted. **Tactics** is the reference adopter and needs no new
+content: both ambience beds already declare `loopStart`/`loopEnd`, so the turn-driven swap
+becomes a `crossfadeAtCue` at the same `loopEnd` the loop already uses, and the e2e's claim
+becomes a **timing** one — the mirrored bed marker must not change at the turn boundary and
+must change afterwards.
+
+| Task                                                                                             | Issue                                                           |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Add the voice playhead reader and secondsUntilCue                                                | [#1038](https://github.com/jindrichruzicka/Chimera/issues/1038) |
+| Add the pure cue marker scheduler                                                                | [#1039](https://github.com/jindrichruzicka/Chimera/issues/1039) |
+| Wire the on-demand rAF cue sampler and AudioManager.observeCues                                  | [#1040](https://github.com/jindrichruzicka/Chimera/issues/1040) |
+| Let startVoice start a voice at a future context time                                            | [#1041](https://github.com/jindrichruzicka/Chimera/issues/1041) |
+| Add crossfadeAtCue and fadeOutAtCue with their fail-soft branches                                | [#1042](https://github.com/jindrichruzicka/Chimera/issues/1042) |
+| Add useAudioCues and export the cue surface from the audio barrel                                | [#1043](https://github.com/jindrichruzicka/Chimera/issues/1043) |
+| Adopt the cue-aligned ambience swap in tactics with an e2e                                       | [#1044](https://github.com/jindrichruzicka/Chimera/issues/1044) |
+| Author Invariants #133/#134, sweep the docs and roadmap F85, cut the changeset and open the gate | [#1045](https://github.com/jindrichruzicka/Chimera/issues/1045) |
+
+Feature issue: [#1028](https://github.com/jindrichruzicka/Chimera/issues/1028).
+
+**Out of scope (deferred):** No `MusicDirector` layer — named slots, stem stacks, in-flight
+retarget and a global cue registry stay deferred exactly as F74 left them; F85 lands the
+primitive that layer would have needed, not the layer; No cue events reaching the simulation.
+No dispatcher on the handler record and no `EngineAction` gated on a cue, held by a missing
+parameter rather than by a rule; No beat/tempo inference and no musical time — cues are the
+authored seconds already in `AudioClipMetadata`, and nothing derives bars, BPM or a grid; No
+new `'scheduled'` voice phase. A voice awaiting a future start stays `'playing'` with a future
+`startedAtContextTime`, because a fourth `VoicePhase` would move `voiceLoops` and Invariant
+#123's four-key ranking for a state lasting at most one bar; the consequence — such a voice
+ranks as playing for preemption while still inaudible — is documented rather than engineered
+away; No cue-authoring change, so `validate-assets` and Invariant #125 are untouched and the
+existing sheets pass as they stand; No sample-accurate observation. Observation is
+frame-sampled on purpose, and anything needing sample accuracy is a _scheduled_ op — all
+candidates for a follow-up.
+
+### F86 — Variable Playback Rate
+
+**Status: designed, not implemented.** Every voice in the engine plays at exactly rate `1`, and
+Invariant #122 states the constraint outright — cue-relative fade timing is derived "at a fixed
+`playbackRate` of 1". The practical cost is the machine-gun effect: `apps/tactics` binds `step`
+to every move and `swordHit` to every attack, and each replay is bit-identical, which is what
+makes repeated SFX read as a defect rather than as a footstep. F86 adds `PlayOptions.rate`,
+**immutable for the life of the voice**, plus a `rateFromSemitones` helper so the `2 ** (n/12)`
+constant appears in one place. This is resampling, so **rate and pitch move together**, and the
+option is named `rate` rather than `pitch` so the type does not promise a time-stretch it does
+not perform.
+
+**Rate turns a buffer-seconds quantity into a wall-clock one, so the whole feature is the four
+places that conversion happens** — `nextCueContextTime`'s entry-pass offset and loop-period
+advance, the looping `to` bound's `source.stop`, and the non-looping voice's implicit end — plus
+one portability rule for the fourth. The non-looping **bounded** play today passes its duration
+as `start(when, offset, duration)`'s third argument, which is buffer-relative; the code already
+calls the analogous meaning "not portable" for the looping branch, which is why that branch
+schedules `source.stop()` instead. So when the rate is not `1`, the play is bounded the same
+way — `source.stop(startedAt + seconds / rate)`, unambiguous, with `onended` still the single
+release path of Invariant #119. That rule matters more than it looks, because the unit suite
+runs against a Web Audio double that **cannot observe** the ambiguity at all: it is held by the
+code shape and by a test that a rate-shifted bounded play passes no third argument, never by an
+assertion about a duration the double would satisfy either way. Fade windows are authored in
+wall-clock milliseconds and are **not** divided — mixing the two axes is the defect this change
+most plausibly introduces.
+
+The rate's **immutability is what keeps the arithmetic a single division rather than an integral
+of rate over time**, which is why it lands as an amendment to Invariant #122 rather than as a new
+number: it is not a separate rule but the precondition that makes #122's own claim true. F85's
+playhead reader converts on the same axis, so whichever of the two lands second sweeps the
+other's arithmetic; neither blocks the other. **Tactics** adopts it through F84's per-event
+options resolver, with the jitter authored **by the game** — the engine supplies no randomness,
+so replays and tests stay under the game's control and nothing non-deterministic enters engine
+code.
+
+| Task                                                                                               | Issue                                                           |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Add PlayOptions.rate and the rateFromSemitones helper                                              | [#1046](https://github.com/jindrichruzicka/Chimera/issues/1046) |
+| Make the voice timeline arithmetic rate-aware and bound a rate-shifted play by stop()              | [#1047](https://github.com/jindrichruzicka/Chimera/issues/1047) |
+| Export the rate surface and adopt pitch-jittered footsteps in tactics                              | [#1048](https://github.com/jindrichruzicka/Chimera/issues/1048) |
+| Amend Invariant #122, sweep the rate-1 claims and roadmap F86, cut the changeset and open the gate | [#1049](https://github.com/jindrichruzicka/Chimera/issues/1049) |
+
+Feature issue: [#1029](https://github.com/jindrichruzicka/Chimera/issues/1029).
+
+**Out of scope (deferred):** No pitch-preserving time-stretch and no independent pitch shift —
+both need a phase vocoder or a WASM library, and rate and pitch are one knob here; No live rate
+changes (`setVoiceRate`). Every cached timeline anchor on `VoiceRecord` assumes a constant rate,
+so a mid-flight change would make cue timing a piecewise integral of rate over time — a different
+feature with a different invariant; the rate is read once, at `startVoice`; No `detune` option, a
+second spelling of the same quantity that `rateFromSemitones` already covers musically; No rate on
+the bus or master — rate is per-voice and the three-stage graph is unchanged; No engine-supplied
+per-play jitter. A game authors its own through the event-options resolver or its own call site,
+so nothing non-deterministic enters engine code; No new invariant number — #122 is amended, and
+the roll-call total does not move — all candidates for a follow-up.
 
 ---
 
