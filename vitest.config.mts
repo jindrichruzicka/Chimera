@@ -1,24 +1,17 @@
 import { readFileSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 import { createPreferTypeScriptSourceResolver } from './tools/vitest-resolver-plugin';
 
 const workspaceRoot = import.meta.dirname;
 
-// Vitest defaults to `availableParallelism() - 1` forks, all of which pull
-// module transforms from the single main-thread Vite pipeline. On high-core
-// machines that saturates the main thread for >60s, tripping birpc's
-// `onTaskUpdate` timeout on the heavy renderer suite (and starving slow async
-// tests waiting on transforms). Bounding the pool keeps the main thread
+// Cap at 1: even with 2 forks the Vite main thread is saturated by the heavy
+// ESLint/renderer test suites (~90 s total), tripping birpc's `onTaskUpdate`
+// timeout after all tests have passed. A single fork keeps the main thread
 // responsive; by avoiding redundant cold transforms it is also *faster* on the
 // renderer suite. The bottleneck is one main thread, so the cap is a small
 // constant rather than core-scaled.
-// Cap at 2: on the 4-core CI runner the formula previously yielded 3 forks,
-// which still saturated the Vite main thread and caused the final birpc
-// `onTaskUpdate` call to time out after all tests had passed.
-const availableParallelism = os.availableParallelism?.() ?? os.cpus().length;
-const MAX_TEST_FORKS = Math.max(1, Math.min(2, availableParallelism - 1));
+const MAX_TEST_FORKS = 1;
 
 const VIRTUAL_PREFIX = '\0chimera-raw-css:';
 const VIRTUAL_PREFIX_STRIPPED = 'chimera-raw-css:';
