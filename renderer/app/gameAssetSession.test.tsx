@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
-import type { AssetRef, GLTFModelAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import type {
+    AssetRef,
+    AudioClipAsset,
+    GLTFModelAsset,
+} from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AssetManager } from '../assets/AssetManager';
 import * as assetManagerModule from '../assets/AssetManager';
@@ -14,6 +18,7 @@ import { UnknownAssetManifestEntryError } from '../assets/AssetManager';
 import { useAssetManager } from '../assets/AssetManagerContext.js';
 import * as assetResolverModule from '../assets/AssetResolver';
 import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
+import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi.js';
 import { GameAssetSession, useRendererGameAssetManager } from './gameAssetSession.js';
 
 const DECLARED_REF = 'demo/models/rig.glb' as AssetRef<GLTFModelAsset>;
@@ -31,6 +36,17 @@ function manifestWith(gameId: string): AssetManifest {
                 metadata: DECLARED_METADATA,
             },
         ],
+    };
+}
+
+const CRITICAL_REF = 'demo/audio/music/bed.wav' as AssetRef<AudioClipAsset>;
+
+/** One critical entry alongside the deferred one, so the priority filter is falsifiable. */
+function manifestWithCriticalEntry(gameId: string): AssetManifest {
+    const base = manifestWith(gameId);
+    return {
+        gameId: base.gameId,
+        entries: [{ ref: CRITICAL_REF, kind: 'audio-clip', priority: 'critical' }, ...base.entries],
     };
 }
 
@@ -56,6 +72,7 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    Reflect.deleteProperty(globalThis, '__chimera');
 });
 
 describe('useRendererGameAssetManager', () => {
@@ -256,6 +273,89 @@ describe('GameAssetSession', () => {
         expect(dispose).toHaveBeenCalledTimes(1);
     });
 
+    it('preloads its own manifest’s critical entries and leaves the deferred ones on demand', async () => {
+        // A route outside a match owns its manager end to end, so nothing else
+        // would ever act on `priority: 'critical'` here.
+        const { loadedRefs } = instrumentAssetManagers();
+
+        render(
+            <GameAssetSession assetManifest={manifestWithCriticalEntry('demo')}>
+                <span data-testid="child" />
+            </GameAssetSession>,
+        );
+        // Drained to completion, not merely awaited: `preloadCritical` reaches
+        // its first `load()` synchronously, so a `waitFor` that samples once
+        // sees the critical ref whether or not the priority filter ran — the
+        // deferred load it must NOT make would land a microtask later.
+        await settleSession();
+
+        expect(loadedRefs).toEqual([CRITICAL_REF]);
+    });
+
+    it('never loads into a manager it has already disposed when the manifest identity changes', async () => {
+        // The manager lives in state, so a naive preload effect reads the
+        // PREVIOUS manager on the render that changes the manifest — after this
+        // component's own cleanup has disposed it. Anything cached into a
+        // disposed manager is unreachable by every dispose path there is: this
+        // surface's cleanup has already run for it (Invariant #21).
+        const { events, loadsIntoDisposedManagers } = instrumentAssetManagers();
+
+        const { rerender } = render(
+            <GameAssetSession assetManifest={manifestWithCriticalEntry('demo')}>
+                <span data-testid="child" />
+            </GameAssetSession>,
+        );
+        await settleSession();
+        rerender(
+            <GameAssetSession assetManifest={manifestWithCriticalEntry('other')}>
+                <span data-testid="child" />
+            </GameAssetSession>,
+        );
+        await settleSession();
+
+        expect(loadsIntoDisposedManagers()).toEqual([]);
+        // Non-vacuous: the second manifest must actually have been preloaded,
+        // so an implementation that simply stopped preloading cannot pass.
+        expect(events.filter((event) => event.endsWith(`load:${CRITICAL_REF}`))).toHaveLength(2);
+    });
+
+    it('reports nothing when its own teardown fails a preload still in flight', async () => {
+        // Tearing this session down disposes the manager it owns, and every
+        // load still in flight rejects with that. A teardown is not a failure,
+        // so the session must abandon its preload's REPORT in the same cleanup;
+        // without that, an ordinary unmount mid-bed logs an `asset-preload`
+        // error.
+        //
+        // TWO sessions failed by one stimulus, differing in one thing — only
+        // the first tears down. The second is the control leg, and it is what
+        // makes the silence mean something: an assertion that nothing was
+        // logged is satisfied just as well by a rejection that never arrived,
+        // so the control fails this case if the held loads ever stop reaching
+        // the report at all.
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
+        const { loadedRefs, failHeldLoads } = instrumentAssetManagers({ holdLoads: true });
+
+        const tornDown = render(
+            <GameAssetSession assetManifest={manifestWithCriticalEntry('torn-down')}>
+                <span data-testid="child" />
+            </GameAssetSession>,
+        );
+        render(
+            <GameAssetSession assetManifest={manifestWithCriticalEntry('still-mounted')}>
+                <span data-testid="child" />
+            </GameAssetSession>,
+        );
+        await settleSession();
+        expect(loadedRefs).toEqual([CRITICAL_REF, CRITICAL_REF]);
+
+        tornDown.unmount();
+        failHeldLoads(new Error('Asset load was superseded by dispose.'));
+        await settleSession();
+
+        expect(logs.emitCalls.map((entry) => entry.context?.['gameId'])).toEqual(['still-mounted']);
+    });
+
     it('disposes the previous manager when the manifest identity changes', async () => {
         const capture = captureManager();
         const { rerender } = render(
@@ -281,6 +381,86 @@ describe('GameAssetSession', () => {
         expect(capture.manager()).not.toBe(first);
     });
 });
+
+/**
+ * Drains a session's create-effect, its state commit, and the preload it
+ * starts. A macrotask boundary empties the microtask queue the sequential
+ * `preloadCritical` chain lives on; `act` keeps the React work inside it.
+ */
+async function settleSession(): Promise<void> {
+    await act(async () => {
+        await new Promise((resolve) => {
+            setTimeout(resolve, 0);
+        });
+    });
+}
+
+/**
+ * Records every manager the session builds, and every `load`/`dispose` on it,
+ * in one ordered log.
+ *
+ * `load` is replaced rather than delegated to: the real one reaches a network
+ * loader jsdom cannot serve, and the ref that was ASKED for — on WHICH manager,
+ * and whether that manager was already disposed — is what the cases assert.
+ */
+function instrumentAssetManagers(options: { readonly holdLoads?: boolean } = {}): {
+    readonly events: string[];
+    readonly loadedRefs: string[];
+    readonly loadsIntoDisposedManagers: () => string[];
+    readonly failHeldLoads: (error: Error) => void;
+} {
+    const events: string[] = [];
+    const loadedRefs: string[] = [];
+    const heldLoads: ((error: Error) => void)[] = [];
+    const createReal = assetManagerModule.createAssetManager;
+    let built = 0;
+
+    vi.spyOn(assetManagerModule, 'createAssetManager').mockImplementation((...args) => {
+        const manager = createReal(...args);
+        const name = `manager-${built++}`;
+        const disposeReal = manager.dispose.bind(manager);
+        manager.dispose = (): void => {
+            events.push(`${name}:dispose`);
+            disposeReal();
+        };
+        manager.load = async (ref): Promise<never> => {
+            events.push(`${name}:load:${String(ref)}`);
+            loadedRefs.push(String(ref));
+            if (options.holdLoads === true) {
+                // Never settles on its own — the load stays IN FLIGHT, which is
+                // the only state in which a teardown can produce a rejection.
+                return new Promise<never>((_resolve, reject) => {
+                    heldLoads.push(reject);
+                });
+            }
+            return { id: String(ref) } as never;
+        };
+        return manager;
+    });
+
+    return {
+        events,
+        loadedRefs,
+        loadsIntoDisposedManagers: (): string[] => {
+            const disposed = new Set<string>();
+            const offenders: string[] = [];
+            for (const event of events) {
+                const [name, verb] = event.split(':');
+                if (verb === 'dispose') {
+                    disposed.add(String(name));
+                } else if (disposed.has(String(name))) {
+                    offenders.push(event);
+                }
+            }
+            return offenders;
+        },
+        failHeldLoads: (error: Error): void => {
+            for (const reject of heldLoads.splice(0)) {
+                reject(error);
+            }
+        },
+    };
+}
 
 /** Reads the published manager out of the session subtree. */
 function captureManager(): {

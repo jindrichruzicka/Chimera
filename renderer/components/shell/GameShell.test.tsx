@@ -24,6 +24,7 @@ import {
 } from '../../assets/AssetManager';
 import { createAssetLoaderRegistry } from '../../assets/AssetLoaderRegistry';
 import { createDelegatingAssetManager } from '../../assets/DelegatingAssetManager';
+import { createRecordingLogsApi } from '../../logging/__test-support__/RecordingLogsApi.js';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
 import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
 import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerContext.js';
@@ -1609,5 +1610,141 @@ describe('GameShell — authoritative time dilation (registry mode)', () => {
         );
 
         expect(currentTimeScale()).toBe(1);
+    });
+});
+
+describe('GameShell — critical asset preload (registry mode)', () => {
+    const criticalRef = 'demo/audio/music/bed.wav' as AssetRef<AudioClipAsset>;
+    const deferredRef = 'demo/textures/stone.webp' as AssetRef<TextureAsset>;
+    const manifest: AssetManifest = {
+        gameId: 'demo',
+        entries: [
+            { ref: criticalRef, kind: 'audio-clip', priority: 'critical' },
+            { ref: deferredRef, kind: 'texture', priority: 'deferred' },
+        ],
+    };
+
+    /**
+     * A manager over a recording loader. Assertions read the refs the loader
+     * was asked for, so "preloaded the critical entry" is a load that actually
+     * reached a loader — not a `preloadCritical` call that could have filtered
+     * to nothing.
+     */
+    function createRecordingManager(): {
+        readonly assetManager: AssetManager;
+        readonly loadedRefs: string[];
+    } {
+        const loadedRefs: string[] = [];
+        const record = async (request: { readonly ref: string }): Promise<ResolvedAsset> => {
+            loadedRefs.push(String(request.ref));
+            return { id: request.ref };
+        };
+        return {
+            assetManager: createAssetManager(
+                { resolve: (ref) => `resolved://${ref}` },
+                manifest,
+                createAssetLoaderRegistry([
+                    { kind: 'audio-clip', load: record },
+                    { kind: 'texture', load: record },
+                ]),
+            ),
+            loadedRefs,
+        };
+    }
+
+    afterEach(() => {
+        Reflect.deleteProperty(globalThis, '__chimera');
+    });
+
+    it('preloads the critical entries of the injected manifest and leaves the deferred ones on demand', async () => {
+        const { assetManager, loadedRefs } = createRecordingManager();
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: () => <div data-testid="registry-playfield" /> }}
+                snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={assetManager}
+                assetManifest={manifest}
+            />,
+        );
+        await act(async () => {
+            await new Promise((resolve) => {
+                setTimeout(resolve, 0);
+            });
+        });
+
+        expect(loadedRefs).toEqual([criticalRef]);
+        expect(assetManager.get(criticalRef)).not.toBeNull();
+        expect(assetManager.get(deferredRef)).toBeNull();
+    });
+
+    it('loads nothing when the manifest declares no critical entry', async () => {
+        const deferredOnly: AssetManifest = {
+            gameId: 'demo',
+            entries: [{ ref: deferredRef, kind: 'texture', priority: 'deferred' }],
+        };
+        const loadedRefs: string[] = [];
+        const assetManager = createAssetManager(
+            { resolve: (ref) => `resolved://${ref}` },
+            deferredOnly,
+            createAssetLoaderRegistry([
+                {
+                    kind: 'texture',
+                    load: async (request): Promise<ResolvedAsset> => {
+                        loadedRefs.push(String(request.ref));
+                        return { id: request.ref };
+                    },
+                },
+            ]),
+        );
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: () => <div data-testid="registry-playfield" /> }}
+                snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={assetManager}
+                assetManifest={deferredOnly}
+            />,
+        );
+        await act(async () => {
+            await new Promise((resolve) => {
+                setTimeout(resolve, 0);
+            });
+        });
+
+        expect(loadedRefs).toEqual([]);
+    });
+
+    it('reports the unconfigured resolver when a critical manifest arrives with no injected manager', async () => {
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: () => <div data-testid="registry-playfield" /> }}
+                snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManifest={manifest}
+            />,
+        );
+        await act(async () => {
+            await new Promise((resolve) => {
+                setTimeout(resolve, 0);
+            });
+        });
+
+        // Declaring a critical asset while injecting no manager is a wiring
+        // mistake nothing else surfaces — the fallback manager's resolver
+        // throws for every ref, so the game's critical assets can never load.
+        // The shell still renders; the report is the only trace.
+        expect(screen.getByTestId('registry-playfield')).toBeTruthy();
+        expect(logs.emitCalls).toHaveLength(1);
+        expect(logs.emitCalls[0]?.source.module).toBe('asset-preload');
+        expect(logs.emitCalls[0]?.error?.message).toMatch(/not configured/);
     });
 });

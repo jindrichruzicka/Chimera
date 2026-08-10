@@ -28,6 +28,7 @@ import type { AssetResolver } from '../../assets/AssetResolver';
 import type { AudioManager } from '../../audio/AudioManager.js';
 import { useAudioManager } from '../../audio/AudioManagerContext.js';
 import { useSetGameAssetManager } from '../../assets/SetGameAssetManagerContext';
+import { useCriticalAssetPreload } from '../../assets/criticalAssetPreload.js';
 import type { InputAction } from '../../input/InputAction.js';
 import { useInputActionRegistry } from '../../input/InputActionRegistryContext.js';
 import { useActiveScreen } from '../../state/uiStore.js';
@@ -280,6 +281,15 @@ function useGameAssetManager(
             assetManager.registerManifest(assetManifest);
         }
     }, [assetManager, assetManifest]);
+
+    // What makes `priority: 'critical'` mean anything for a match (§4.10): the
+    // entries a game marked critical are warmed here so the first thing that
+    // needs one is served from cache rather than from a fetch+decode it has to
+    // wait out. Non-blocking — the match renders while it runs — and it is the
+    // manager's own priority filter that decides what loads, so a manifest of
+    // purely deferred entries costs one no-op call. See the hook for why it
+    // cannot move into `createAssetManager` beside the manifest registration.
+    useCriticalAssetPreload(assetManager, assetManifest);
 
     // Register the game AssetManager as the active delegate for the app-level AudioManager.
     //

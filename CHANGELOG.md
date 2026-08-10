@@ -7,6 +7,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `AssetManifestEntry.priority: 'critical'` now preloads. `AssetPreloader` and
+  `AssetManager.preloadCritical` both existed but had no caller anywhere in the renderer's runtime
+  path, so a critical entry behaved exactly like a deferred one — it decoded on first use, which
+  for the Tactics ambience beds meant a fade-in and a crossfade scheduled against buffers that had
+  not arrived. `GameShell` and `GameAssetSession` now run the preload in a commit-phase effect,
+  owned by whichever effect owns the manager (Invariant #21): non-blocking (the match renders while
+  it runs, and an in-flight ref is shared with any `useAsset` that asks for it first) and non-fatal
+  (a rejected critical load is reported under the `asset-preload` module and leaves the on-demand
+  path intact). Scene-level `requiredAssets` promotion remains unwired.
+
 ## [0.9.0] — 2026-07-12
 
 ### Added

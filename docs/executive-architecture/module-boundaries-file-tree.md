@@ -271,6 +271,7 @@ chimera/
 │   │   ├── AssetManagerProvider.tsx
 │   │   ├── AssetResolver.ts
 │   │   ├── AssetPreloader.ts
+│   │   ├── criticalAssetPreload.ts  # The §4.10 critical preload as GameShell and GameAssetSession run it — commit-phase, non-blocking, non-fatal
 │   │   ├── animationSheet.ts        # parseModel/SpriteAnimationMetadata — fail-soft readers of the animation sheet in AssetManifestEntry.metadata
 │   │   ├── spriteAtlas.ts           # parseSpriteAtlas — internal; measures atlas cells to raw flipY UVs
 │   │   ├── useAnimationSheet.ts     # Model sheet, memoised on metadata IDENTITY

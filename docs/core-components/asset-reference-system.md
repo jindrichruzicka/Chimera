@@ -24,7 +24,8 @@ The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-sy
 | `renderer/assets/AssetResolver.ts`         | `AssetRef<T>` → `file://` URL (env-aware: dev vs prod)                                                                                               |
 | `renderer/assets/AssetLoaderRegistry.ts`   | Runtime kind id → loader, open to game-contributed loaders without engine edits                                                                      |
 | `renderer/assets/AssetManager.ts`          | Loads, caches, and disposes resolved assets                                                                                                          |
-| `renderer/assets/AssetPreloader.ts`        | Bulk-preloads all `critical` manifest entries before match                                                                                           |
+| `renderer/assets/AssetPreloader.ts`        | Bulk-preloads all `critical` manifest entries as a session opens                                                                                     |
+| `renderer/assets/criticalAssetPreload.ts`  | Runs that preload for a surface owning a manager — see [Where the critical preload runs](#where-the-critical-preload-runs)                           |
 | `renderer/assets/useAsset.ts`              | React hook — returns loaded asset or `null` + loading flag                                                                                           |
 
 ---
@@ -247,6 +248,47 @@ export interface AssetManager {
 > **Invariant #21** — `AssetManager.dispose()` is called unconditionally at game session end. Components must never hold direct references to loaded Three.js assets.
 
 `AssetManager.load(ref)` resolves `ref` to a URL through `AssetResolver`, looks up the matching `AssetManifestEntry`, then dispatches to the loader registered for `entry.kind`. It does not infer semantic type from file extension. Extension sniffing is allowed inside a loader implementation, but the engine-level dispatch key is always the manifest kind.
+
+### Where the critical preload runs
+
+`priority: 'critical'` is not self-executing. Something has to call `preloadCritical`, and a surface
+may do so only for a manager whose lifetime it owns — the ownership rule is **Invariant #21**'s, not
+a second rule stated here. `renderer/assets/criticalAssetPreload.ts` is that call, and the engine
+surfaces making it are:
+
+| Surface                             | Manager it preloads into                                                                       | Manifest                 |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------ |
+| `GameShell` (`useGameAssetManager`) | the match-level manager — injected by `/game` and `/replays/player`, or the fallback it builds | the `assetManifest` prop |
+| `GameAssetSession`                  | the manager it builds for a route with no `GameShell` above it                                 | its `assetManifest` prop |
+
+The module exposes the preload two ways, and which one a surface takes follows from where it
+allocates its manager. `useCriticalAssetPreload` is the effect wrapper, for a manager whose identity
+moves in the same render as the manifest (a `useMemo` keyed on both, or an injected prop) — that
+pair can never be mismatched. `startCriticalAssetPreload` is the primitive, returning the callback
+that abandons the run's report; a surface that allocates its manager INSIDE an effect calls it from
+that same effect, because React runs every cleanup before every setup — so a separate effect's setup
+would read the previous manager out of state, the one the first effect's cleanup just disposed, and
+cache into it. `dispose()` empties a manager's maps without making it refuse work, so those assets
+would be unreachable by every remaining dispose path.
+
+Three further properties of that call are contractual rather than incidental:
+
+- **Commit phase, never render.** The preload cannot move into `createAssetManager` beside the
+  construction-time `registerManifest`. StrictMode discards one of the two managers
+  `useRendererGameAssetManager` builds in `useMemo`, and that orphan is tolerable only because it
+  is inert — manifest entries and no asset. Filling it with decoded audio and GPU textures makes
+  it a leak no dispose path can reach.
+- **Non-blocking.** The owning surface renders its subtree while the preload runs. A child that
+  loads the same ref through `useAsset` first is served the SAME promise — `AssetManager.load`
+  returns the in-flight entry — so the warm-up never costs a second fetch and never gates a frame.
+- **Non-fatal.** A rejected critical load is reported through the renderer logger under the
+  `asset-preload` module and dropped; the deferred on-demand path is untouched, so a missing asset
+  degrades one ref instead of refusing the match. `preloadCritical` awaits its entries in sequence
+  and stops at the first rejection, so entries after the failing one are not preloaded either.
+
+The scene arm — promoting a `SceneDescriptor.requiredAssets` set to critical for a transition, via
+`markRequiredAssetsCritical` and a `TransitionOverlay` progress gate — is a **separate** mechanism
+and is not wired; see [Scene Transitions](scene-transitions-fade.md).
 
 ### Asset sessions outside a match — `GameAssetSession`
 

@@ -133,7 +133,15 @@ Game reducers never dispatch from inside themselves. They set a domain event in 
 export function SceneRouter(): JSX.Element;
 ```
 
-`TransitionOverlay.tsx` (engine-provided): full-screen fade + progress bar + "Waiting for N player(s)…" status. Games can override via `GameScreenRegistry.transitionOverlay` slot.
+`TransitionOverlay.tsx` (engine-provided): a full-screen fade. Games can override it via the `GameScreenRegistry.transitionOverlay` slot. It renders no progress bar and no "Waiting for N player(s)…" status; see the component for what it does render.
+
+> **Not yet wired: the per-transition asset preload.** The two-phase protocol above ships — the
+> overlay renders on `phase === 'preparing'` and `useFadeTransition` dispatches
+> `engine:scene_ready` — but it dispatches on the FADE completing, not on assets loading. Nothing
+> calls `markRequiredAssetsCritical`, and the overlay has no progress channel to feed, so a scene's
+> `requiredAssets` currently declare an intent no code acts on. The manifest-level arm
+> (`priority: 'critical'`, run by `GameShell` and `GameAssetSession`) is separate and does run —
+> see [Where the critical preload runs](asset-reference-system.md#where-the-critical-preload-runs).
 
 ### Module Tree
 

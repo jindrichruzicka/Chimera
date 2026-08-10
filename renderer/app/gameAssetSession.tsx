@@ -29,6 +29,7 @@ import type { AssetManifest } from '@chimera-engine/simulation/content/AssetMani
 import { createAssetManager, type AssetManager } from '../assets/AssetManager';
 import { AssetManagerContext } from '../assets/AssetManagerContext.js';
 import { createRendererGameAssetResolver } from '../assets/AssetResolver';
+import { startCriticalAssetPreload } from '../assets/criticalAssetPreload.js';
 import type { LoadedRendererGame } from '../game/rendererGameRegistry';
 
 /**
@@ -118,8 +119,24 @@ export function GameAssetSession({
     React.useEffect(() => {
         const manager = createRendererGameAssetManager(assetManifest);
         setAssetManager(manager);
+        // The §4.10 critical preload for a session with no `GameShell` above
+        // it. GameShell runs the same warm-up for a match; nothing else would
+        // run it here, so a game marking a ref critical for a route like this
+        // would otherwise get the deferred behaviour it declared against.
+        //
+        // Started HERE, in the effect that owns the manager, rather than from
+        // `useCriticalAssetPreload` beside it: React runs every cleanup before
+        // every setup, so a separate effect's setup would read the PREVIOUS
+        // manager out of state — the one this cleanup just disposed — and cache
+        // the new manifest's critical assets into it, where no dispose path can
+        // reach them (Invariant #21). Abandoning in this same cleanup is what
+        // keeps the dispose's rejections out of the log; the two statements'
+        // relative order does not matter, since the rejection lands a microtask
+        // later than both.
+        const abandonPreload = startCriticalAssetPreload(manager, assetManifest);
 
         return () => {
+            abandonPreload();
             manager.dispose();
         };
     }, [assetManifest]);
