@@ -146,7 +146,7 @@ When saturated, `play()` reclaims one voice to host the new one, ranked **worst 
 
 `GameShell.tsx` manages the session lifecycle:
 
-- On game start it registers the game-level `AssetManager` with the app-level `DelegatingAssetManager` via `SetGameAssetManagerContext`. This allows `AudioManager.play()` to load game-specific audio assets through the game resolver and manifest.
+- On game start it registers the game-level `AssetManager` with the app-level `DelegatingAssetManager` via `SetGameAssetManagerContext`. This allows `AudioManager.play()` to load game-specific audio assets through the game resolver and manifest. The registration runs **during render**, not only in the passive effect that owns it for the rest of the mount: React flushes mount effects children-first, so a screen that plays a bed in its own mount effect would otherwise reach the delegating manager before the delegate is set, and `play()` swallows the resulting `NoActiveGameSessionError` — silence, with nothing logged. A `React.lazy` screen masks that on a session's first match alone (it suspends once and mounts a commit late, then renders synchronously from the resolved payload thereafter), which is why the symptom was a bed that played once per session.
 - On match end (`phase: ended`) it calls `AudioManager.stopAll()` to stop all active voices.
 - On unmount it clears the delegate (`setGameAssetManager(null)`) and disposes the game-level `AssetManager`.
 

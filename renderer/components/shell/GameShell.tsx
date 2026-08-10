@@ -282,6 +282,32 @@ function useGameAssetManager(
     }, [assetManager, assetManifest]);
 
     // Register the game AssetManager as the active delegate for the app-level AudioManager.
+    //
+    // Registered during RENDER, for the reason createAssetManager's JSDoc gives about
+    // the manifest: React flushes passive mount effects CHILDREN-FIRST, so a delegate
+    // registered only in the effect below arrives after a screen that loads in its own
+    // mount effect has already asked for its asset. A music bed is exactly that shape —
+    // `useSound` plays on mount, and the play resolves its clip through the app-level
+    // delegating manager (Invariant #64), which with no delegate rejects
+    // NoActiveGameSessionError. `AudioManager.play` swallows a rejected load, so the bed
+    // is simply silent, with nothing in the log.
+    //
+    // A screen mounted behind React.lazy hides this on the FIRST match of a session: the
+    // suspense lands it a commit late, by which time the effect has run. The payload is
+    // resolved for every match after that, so the screen mounts in GameShell's own commit
+    // and the bed never starts — which is what made this a second-match bug rather than a
+    // permanent one.
+    //
+    // Unlike the manifest registration the JSDoc rules out, this touches no state on the
+    // shared, already-committed delegating manager: it swaps one pointer, evicting and
+    // disposing nothing, and a discarded render is corrected by the next committed one —
+    // this runs on every render, not once.
+    setGameAssetManager(assetManager);
+
+    // The effect is what OWNS the binding across a mount's whole life. It re-registers
+    // rather than merely cleaning up, because StrictMode's simulated remount runs
+    // cleanup → setup with no render between them: without the setup call, the delegate
+    // would be left null for the rest of the mount.
     React.useEffect(() => {
         setGameAssetManager(assetManager);
         return () => {

@@ -23,6 +23,7 @@ import {
     type ResolvedAsset,
 } from '../../assets/AssetManager';
 import { createAssetLoaderRegistry } from '../../assets/AssetLoaderRegistry';
+import { createDelegatingAssetManager } from '../../assets/DelegatingAssetManager';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
 import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
 import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerContext.js';
@@ -983,6 +984,62 @@ describe('SetGameAssetManagerContext delegation wiring', () => {
 
         expect(setGameAssetManager).toHaveBeenLastCalledWith(null);
     });
+
+    it('has the delegate registered before a screen loads through it in its own mount effect', async () => {
+        // A music bed is exactly this shape: `useSound` plays in a mount effect, and the
+        // play resolves its clip through the APP-LEVEL delegating manager (Invariant
+        // #64), not the one GameShell publishes to the subtree. React flushes passive
+        // mount effects CHILDREN-FIRST, so a delegate registered in GameShell's own
+        // passive effect arrives after the screen has already asked for the clip — the
+        // same "provably too late" ordering `createAssetManager`'s JSDoc records for the
+        // manifest. It only bites when the screen mounts in GameShell's own commit,
+        // which is every mount after the first: a `React.lazy` screen suspends the
+        // first time and mounts a commit late, then renders synchronously from the
+        // resolved payload for the rest of the session.
+        const clip = { id: 'ambience-bed' };
+        const delegatingAssetManager = createDelegatingAssetManager();
+        const gameAssetManager = createAssetManager(
+            { resolve: (ref) => `resolved://${ref}` },
+            {
+                gameId: 'demo',
+                entries: [{ ref: TEST_AUDIO_REF, kind: 'audio-clip', priority: 'deferred' }],
+            },
+            createAssetLoaderRegistry([
+                { kind: 'audio-clip', load: async (): Promise<ResolvedAsset> => clip },
+            ]),
+        );
+        const outcomes: unknown[] = [];
+
+        function LoadingPlayfield(): React.ReactElement {
+            React.useEffect(() => {
+                void delegatingAssetManager.load(TEST_AUDIO_REF).then(
+                    (asset) => outcomes.push(asset),
+                    (error: unknown) =>
+                        outcomes.push(error instanceof Error ? error.name : String(error)),
+                );
+            }, []);
+            return <div />;
+        }
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: LoadingPlayfield }}
+                snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={gameAssetManager}
+            />,
+            undefined,
+            { setGameAssetManager: (manager) => delegatingAssetManager.setDelegate(manager) },
+        );
+        await act(async () => {});
+
+        // The clip itself, not merely "did not reject": a rejection here is
+        // `NoActiveGameSessionError`, the delegating manager's honest answer to a load
+        // made outside a match — so the failure mode is a correct diagnosis of the
+        // wrong situation, and for audio it is silence with nothing logged at all.
+        expect(outcomes).toEqual([clip]);
+    });
 });
 
 function createAssetManagerStub(): AssetManager {
@@ -1416,6 +1473,39 @@ describe('GameShell — StrictMode-root remount safety (registry mode)', () => {
             expect(outcome).not.toBeInstanceOf(UnknownAssetManifestEntryError);
             expect((outcome as Error).message).toMatch(/not configured/);
         }
+    });
+
+    it('leaves the app-level delegate registered after the simulated remount', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+        const assetManager = createAssetManagerStub();
+        const registrations: (AssetManager | null)[] = [];
+
+        baseRender(
+            <React.StrictMode>
+                <I18nProvider>
+                    {wrapWithAudio(
+                        <GameShell
+                            registry={{
+                                playfield: () => <div data-testid="strict-mode-playfield" />,
+                            }}
+                            snapshot={snapshot}
+                            sendAction={vi.fn()}
+                            localPlayerId={playerId('p1')}
+                            assetManager={assetManager}
+                        />,
+                        undefined,
+                        { setGameAssetManager: (manager) => registrations.push(manager) },
+                    )}
+                </I18nProvider>
+            </React.StrictMode>,
+        );
+        await screen.findByTestId('strict-mode-playfield');
+
+        // The simulated remount runs cleanup → setup with NO render between them, so
+        // the render-phase registration cannot be what survives it: the positive
+        // control is the `null` in the middle, which only a real double-invoke emits.
+        expect(registrations).toContain(null);
+        expect(registrations.at(-1)).toBe(assetManager);
     });
 });
 
