@@ -1549,8 +1549,8 @@ describe('verifyScaffold', () => {
     });
 
     it('reports lint when a rule id appears but its plant file does not', async () => {
-        // Isolates the per-file check. One rule firing five times reads
-        // identically to five rules firing once, unless the FILES are read too.
+        // Isolates the per-file check. One rule firing N times reads
+        // identically to N rules firing once, unless the FILES are read too.
         const { fs, files } = makeFakeFs();
         const dropped = PROBE_LINT_PLANTS[1];
         const { run } = makeFakeRun(

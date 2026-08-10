@@ -8,6 +8,7 @@
  *
  * Registered rules:
  *   - `chimera/no-fromfloat-in-simulation` (Invariant #76)
+ *   - `chimera/no-animation-derivation-in-reduce` (beat windows compile at content-load)
  *   - `chimera/no-hardcoded-design-values` (Invariants #86, #91)
  *   - `chimera/no-unknown-token-overrides` (Invariant #85)
  *   - `chimera/no-game-renderer-internals` (game renderer UI boundary)
@@ -29,6 +30,7 @@
  *   { plugins: { chimera: chimeraPlugin }, rules: { 'chimera/no-fromfloat-in-simulation': 'error' } }
  */
 
+import noAnimationDerivationInReduce from './rules/no-animation-derivation-in-reduce.js';
 import noFromFloatInSimulation from './rules/no-fromfloat-in-simulation.js';
 import noGameRendererInternals from './rules/no-game-renderer-internals.js';
 import noRawR3fCanvas from './rules/no-raw-r3f-canvas.js';
@@ -42,6 +44,7 @@ import noDynamicGamesImport from './rules/no-dynamic-games-import.js';
 export const chimeraPlugin = {
     rules: {
         'no-fromfloat-in-simulation': noFromFloatInSimulation,
+        'no-animation-derivation-in-reduce': noAnimationDerivationInReduce,
         'no-game-renderer-internals': noGameRendererInternals,
         'no-raw-r3f-canvas': noRawR3fCanvas,
         'no-hardcoded-design-values': noHardcodedDesignValues,

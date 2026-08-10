@@ -226,6 +226,22 @@ export const PROBE_LINT_PLANTS = [
         ].join('\n'),
     },
     {
+        // The window verifier called from a `reduce` body. Both halves of the
+        // rule are in the plant: the guarded callee, and a function BOUND to
+        // the name `reduce` — an arrow handed to `Array#reduce` would not trip
+        // it, so the plant has to be the real shape.
+        rel: 'simulation/verify-scaffold-probe-animation.ts',
+        ruleId: 'chimera/no-animation-derivation-in-reduce',
+        source: [
+            "import { compileAnimationWindows } from '@chimera-engine/simulation/content/index.js';",
+            'export function reduce(state) {',
+            "    compileAnimationWindows(state.sheet, 'probe', 50);",
+            '    return state;',
+            '}',
+            '',
+        ].join('\n'),
+    },
+    {
         rel: 'screens/VerifyScaffoldProbe.tsx',
         ruleId: 'chimera/no-hardcoded-design-values',
         source: [
@@ -1306,7 +1322,7 @@ async function runLintArm(deps: VerifyScaffoldDeps, tmp: string, appDir: string)
     // this process created, which on macOS is the `/var/folders/…` symlink to
     // the `/private/var/folders/…` ESLint prints — the same file under two names
     // that never compare equal, so every lookup below missed and the arm failed
-    // claiming no rule fired while the report named all five.
+    // claiming no rule fired while the report named every one of them.
     const realAppDir = await deps.fs.realpath(appDir);
     for (const [file, ruleId] of [
         ...PROBE_LINT_PLANTS.map((plant) => [plant.rel, plant.ruleId] as const),

@@ -65,7 +65,7 @@ const DEFAULT_TEMPLATE = 'blank';
  * (Invariant #43), the `no-restricted-imports` boundaries and the
  * `chimera/no-dynamic-games-import` arm beside them, `no-console` on the
  * composition root (Invariant #67) and the type-checked TypeScript set, on top
- * of the same five curated rules. Emitting this file there would SHADOW all of
+ * of the same six curated rules. Emitting this file there would SHADOW all of
  * that: flat config resolves the nearest config and does not merge, and
  * `pnpm -r lint` runs `eslint .` from inside each package.
  *

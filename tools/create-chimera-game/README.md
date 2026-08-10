@@ -165,19 +165,21 @@ inherits the monorepo's root config, which carries the same rules and more.) The
 executable form of Chimera's architecture invariants, and a fresh scaffold is green under
 them:
 
-| Rule                         | What it stops                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------------- |
-| `no-fromfloat-in-simulation` | `fromFloat()` in `simulation/` or `ai/` — it breaks cross-machine determinism   |
-| `no-hardcoded-design-values` | colour and size literals in `screens/` — use `var(--ch-*)` so themes reach them |
-| `no-unknown-token-overrides` | redefining a `--ch-*` the engine does not declare — it would theme nothing      |
-| `no-game-renderer-internals` | reaching past the renderer's public barrels into its internals                  |
-| `no-raw-r3f-canvas`          | mounting a raw `<Canvas>` — a game's canvas root is `<GameCanvas>`              |
+| Rule                                | What it stops                                                                          |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| `no-fromfloat-in-simulation`        | `fromFloat()` in `simulation/` or `ai/` — it breaks cross-machine determinism          |
+| `no-animation-derivation-in-reduce` | compiling an animation beat window inside `reduce()`/`validate()` — do it at load time |
+| `no-hardcoded-design-values`        | colour and size literals in `screens/` — use `var(--ch-*)` so themes reach them        |
+| `no-unknown-token-overrides`        | redefining a `--ch-*` the engine does not declare — it would theme nothing             |
+| `no-game-renderer-internals`        | reaching past the renderer's public barrels into its internals                         |
+| `no-raw-r3f-canvas`                 | mounting a raw `<Canvas>` — a game's canvas root is `<GameCanvas>`                     |
 
-Test files under `simulation/` and `ai/` are exempt from the first: building fixed-point
-values with `fromFloat()` in a fixture is fine, since the invariant is about hot paths.
+Test files under `simulation/` and `ai/` are exempt from the two `simulation/`+`ai/` rules:
+building fixed-point values with `fromFloat()` in a fixture is fine, and compiling a window is
+what a test of your own sheet does. Both rules are about hot paths, not test code.
 
-Read the second row's zone literally — it is `screens/` only, and `components/` is deliberately
-outside it. A `three` material colour is not a CSS value: nothing in the render path resolves
+Read `no-hardcoded-design-values`' zone literally — it is `screens/` only, and `components/` is
+deliberately outside it. A `three` material colour is not a CSS value: nothing in the render path resolves
 `var(--ch-*)` for it, so the rule cannot ask an in-Canvas colour for a token the way it asks a
 stylesheet. The consequence is worth knowing when you put a DOM component in `components/`: its
 literals are not checked, and keeping them on tokens is on you.

@@ -94,6 +94,24 @@ describe('standaloneLintConfig', () => {
         });
     });
 
+    it('maps the animation-window derivation ban onto the gameplay zones, OFF arm after', () => {
+        // The same two-block shape as its fromFloat sibling, and the ordering
+        // matters for the same reason: a flat config resolves from the LAST
+        // matching block, so the test-file arm relaxes nothing if it is emitted
+        // first.
+        const blocks = blocksFor(config, 'chimera/no-animation-derivation-in-reduce');
+
+        expect(blocks).toHaveLength(2);
+        expect(blocks[0]).toMatchObject({
+            files: ['simulation/**/*.{ts,tsx}', 'ai/**/*.{ts,tsx}'],
+            severity: 'error',
+        });
+        expect(blocks[1]).toMatchObject({
+            files: ['simulation/**/*.{test,spec}.{ts,tsx}', 'ai/**/*.{test,spec}.{ts,tsx}'],
+            severity: 'off',
+        });
+    });
+
     it('maps design values onto game screens, TS and CSS module arms alike', () => {
         const blocks = blocksFor(config, 'chimera/no-hardcoded-design-values');
 
@@ -242,7 +260,7 @@ describe('overlay discipline', () => {
  *   - `files` globs resolve against the linter's CWD, which for a game is its
  *     own app root — so the zone globs are app-root-relative, as the manifest
  *     says;
- *   - a rule's own predicate reads the ABSOLUTE filename, and four of the five
+ *   - a rule's own predicate reads the ABSOLUTE filename, and four of the six
  *     want an `apps/<name>/` segment in it.
  *
  * Get either half wrong and the rules go quiet, which is why the game path

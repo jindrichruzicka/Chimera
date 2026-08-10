@@ -13,7 +13,8 @@
  *     reason that names what it guards;
  *   - the zone globs, which mirror the monorepo's games-side blocks translated
  *     to app-root-relative form (§4.32 argues each one);
- *   - the fromFloat OFF arm on the simulation/ai test globs;
+ *   - the fromFloat and animation-derivation OFF arms on the simulation/ai
+ *     test globs;
  *   - the encoding rule that "no zone of this language" is `undefined` and
  *     never `[]` — ESLint rejects a flat-config block whose `files` is empty,
  *     so an empty array would reach a consumer as a config that fails to load.
@@ -73,9 +74,10 @@ const WITHHELD_RULES = [
 ] as const;
 
 describe('STANDALONE_LINT_RULES', () => {
-    it('curates exactly the five games-side rules', () => {
+    it('curates exactly the six games-side rules', () => {
         expect(STANDALONE_LINT_RULES.map((rule) => rule.ruleId)).toEqual([
             'chimera/no-fromfloat-in-simulation',
+            'chimera/no-animation-derivation-in-reduce',
             'chimera/no-hardcoded-design-values',
             'chimera/no-unknown-token-overrides',
             'chimera/no-game-renderer-internals',
@@ -99,6 +101,21 @@ describe('STANDALONE_LINT_RULES', () => {
     it('maps fromFloat onto the game gameplay zones with the test-file OFF arm', () => {
         const rule = ruleById('chimera/no-fromfloat-in-simulation');
 
+        expect(rule.zones).toEqual(['simulation/**/*.{ts,tsx}', 'ai/**/*.{ts,tsx}']);
+        expect(rule.exemptZones).toEqual([
+            'simulation/**/*.{test,spec}.{ts,tsx}',
+            'ai/**/*.{test,spec}.{ts,tsx}',
+        ]);
+        expect(rule.cssZones).toBeUndefined();
+    });
+
+    it('maps the animation-window derivation ban onto the same gameplay zones', () => {
+        // Same globs as its fromFloat sibling above, deliberately: both bind a
+        // game's reduce-time code. Asserted as literals rather than by reading
+        // the sibling entry, so narrowing one and not the other reds here.
+        const rule = ruleById('chimera/no-animation-derivation-in-reduce');
+
+        expect(rule.severity).toBe('error');
         expect(rule.zones).toEqual(['simulation/**/*.{ts,tsx}', 'ai/**/*.{ts,tsx}']);
         expect(rule.exemptZones).toEqual([
             'simulation/**/*.{test,spec}.{ts,tsx}',
@@ -199,11 +216,11 @@ describe('STANDALONE_LINT_EXCLUSIONS', () => {
         }
     });
 
-    it('partitions all nine plugin rules between curated and excluded', () => {
+    it('partitions all ten plugin rules between curated and excluded', () => {
         const curated = STANDALONE_LINT_RULES.map((rule) => rule.ruleId);
         const excluded = STANDALONE_LINT_EXCLUSIONS.map((exclusion) => exclusion.ruleId);
 
-        expect(new Set([...curated, ...excluded]).size).toBe(9);
+        expect(new Set([...curated, ...excluded]).size).toBe(10);
         for (const ruleId of excluded) {
             expect(curated).not.toContain(ruleId);
         }

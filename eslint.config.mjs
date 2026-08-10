@@ -39,7 +39,7 @@ const typescriptEslintRulesOff = Object.fromEntries(
  *     (see docs/coding-standards.md §3).
  *   - Determinism guard via `no-restricted-syntax` scoped to simulation/ai paths
  *     (see docs/coding-standards.md §7, §1.2).
- *   - The nine `chimera/*` architecture rules, loaded as compiled JS from
+ *   - The ten `chimera/*` architecture rules, loaded as compiled JS from
  *     `@chimera-engine/electron/eslint` — the same artifact a standalone game
  *     composes through `standaloneLintConfig()` (see §3, §4.32).
  *
@@ -759,6 +759,49 @@ export default tseslint.config(
         ],
         rules: {
             'chimera/no-fromfloat-in-simulation': 'off',
+        },
+    },
+
+    // Beat-owned animation windows are compiled once at content-load and never
+    // derived from the host pacing knob `tickRateMs` at reduce time. Same three
+    // gameplay globs and the same two 'off' carve-outs as the fromFloat blocks
+    // above — deliberately, because both bind reduce-time code — with one
+    // difference worth stating: this rule declares NO path predicate of its own,
+    // so these globs are its whole scope rather than one half of an AND. Top-level
+    // `ai/**` is absent here for the same reason it is absent above: the engine's
+    // own AI is not a per-game gameplay zone.
+    // Rule implementation: electron/dev-tools/eslint/rules/no-animation-derivation-in-reduce.ts
+    {
+        files: [
+            'simulation/**/*.{ts,tsx}',
+            'apps/*/simulation/**/*.{ts,tsx}',
+            'apps/*/ai/**/*.{ts,tsx}',
+        ],
+        plugins: { chimera: chimeraPlugin },
+        rules: {
+            'chimera/no-animation-derivation-in-reduce': 'error',
+        },
+    },
+    {
+        files: ['simulation/content/loaders/**/*.{ts,tsx}'],
+        rules: {
+            'chimera/no-animation-derivation-in-reduce': 'off',
+        },
+    },
+    // Test files inside simulation/ and per-game gameplay dirs may compile a
+    // window to assert the verifier's own behaviour — that is the function
+    // under test, not a hot path.
+    {
+        files: [
+            'simulation/**/*.test.{ts,tsx}',
+            'simulation/**/*.spec.{ts,tsx}',
+            'apps/*/simulation/**/*.test.{ts,tsx}',
+            'apps/*/simulation/**/*.spec.{ts,tsx}',
+            'apps/*/ai/**/*.test.{ts,tsx}',
+            'apps/*/ai/**/*.spec.{ts,tsx}',
+        ],
+        rules: {
+            'chimera/no-animation-derivation-in-reduce': 'off',
         },
     },
 

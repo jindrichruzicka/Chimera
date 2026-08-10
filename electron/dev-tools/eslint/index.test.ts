@@ -11,12 +11,12 @@
  * locked here:
  *
  *   - the plugin is reachable at its new home as a NAMED `chimeraPlugin`, and
- *     carries all nine rules. Its consumers compose against
+ *     carries all ten rules. Its consumers compose against
  *     `{ chimeraPlugin }`, so the export shape is API;
  *   - the plugin's rule set and the curated manifest cover EXACTLY each other.
  *     The manifest's own test can only assert a hardcoded count; here the
- *     plugin is a sibling module, so a tenth rule added to one and not the
- *     other reds instead of being silently ungoverned;
+ *     plugin is a sibling module, so a rule added to one and not the other
+ *     reds instead of being silently ungoverned;
  *   - no rule module derives a path from its own location any more. That is
  *     what a move re-aims: a walk-up anchored at the old home pointed at the
  *     repo root and would now point inside `electron/`, and from a published
@@ -52,6 +52,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const EXPECTED_RULE_NAMES = [
     'no-fromfloat-in-simulation',
+    'no-animation-derivation-in-reduce',
     'no-game-renderer-internals',
     'no-raw-r3f-canvas',
     'no-hardcoded-design-values',
@@ -76,7 +77,7 @@ const PLUGIN_SURFACE_MODULES: ReadonlySet<string> = new Set([
 ]);
 
 describe('chimeraPlugin', () => {
-    it('is a named export carrying all nine rules', () => {
+    it('is a named export carrying all ten rules', () => {
         expect(Object.keys(chimeraPlugin.rules).sort()).toEqual([...EXPECTED_RULE_NAMES].sort());
     });
 
@@ -360,7 +361,7 @@ describe('compiled plugin', () => {
             }));
         `);
 
-        expect(JSON.parse(output)).toEqual({ blocks: 7, css: 2, registered: true });
+        expect(JSON.parse(output)).toEqual({ blocks: 9, css: 2, registered: true });
     });
 
     it('resolves its base token set through the renderer package, with no option passed', () => {

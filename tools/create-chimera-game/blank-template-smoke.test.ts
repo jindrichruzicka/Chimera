@@ -901,8 +901,9 @@ describe('blank template, whole-tree properties', () => {
  * The scaffold README's two ENUMERATIONS, kept in step with what they describe.
  *
  * Both are the kind of prose that reads as authoritative and rots silently: the
- * guardrail table had already drifted to four of the preset's five rules before
- * anyone noticed, and the layout tree omitted three directories the template
+ * guardrail table had already drifted to four of the five rules the preset
+ * curated at the time before anyone noticed, and the layout tree omitted three
+ * directories the template
  * ships. Neither drift breaks a build, and both mislead exactly the reader who
  * has no other source — someone who scaffolded a game and has only this file.
  *

@@ -1,7 +1,7 @@
 /**
  * electron/dev-tools/eslint/curated-rules.ts
  *
- * The curated standalone lint rule set — which of the nine Chimera lint rules
+ * The curated standalone lint rule set — which of the ten Chimera lint rules
  * a game gets once it leaves the monorepo, at what severity, on which of its
  * own zones. The reasoning behind each verdict lives in §4.32; this file is the
  * machine-readable form of it.
@@ -24,6 +24,8 @@
  *   `no-game-renderer-internals` wants an `apps/<name>/` segment. A scaffolded
  *   game satisfies all of them because it lives at `apps/<kebab>` — which makes
  *   that layout part of this contract.
+ *   `no-animation-derivation-in-reduce` declares no path predicate, so its zones
+ *   below are its WHOLE scope and both of them stay live wherever the game sits.
  */
 
 /**
@@ -83,6 +85,19 @@ export const STANDALONE_LINT_RULES: readonly CuratedLintRule[] = [
         // Author fixtures build fixed-point values with fromFloat(); Invariant
         // #76 binds validate()/reduce() hot paths, not test code. Without this
         // arm a game's first simulation test reds on its own fixture builder.
+        exemptZones: ['simulation/**/*.{test,spec}.{ts,tsx}', 'ai/**/*.{test,spec}.{ts,tsx}'],
+    },
+    {
+        // Beat-owned animation windows compile at content-load, never from the
+        // host's `tickRateMs` at reduce time. Same gameplay zones as the rule
+        // above and for the same reason — a game's reducers are the hot path —
+        // but with no internal predicate, so these two globs are the whole
+        // scope. The exempt arm mirrors its sibling's: a window verifier is
+        // exactly what a simulation test calls to assert its own sheet, and
+        // without the arm a game's first animation test reds on that call.
+        ruleId: 'chimera/no-animation-derivation-in-reduce',
+        severity: 'error',
+        zones: ['simulation/**/*.{ts,tsx}', 'ai/**/*.{ts,tsx}'],
         exemptZones: ['simulation/**/*.{test,spec}.{ts,tsx}', 'ai/**/*.{test,spec}.{ts,tsx}'],
     },
     {
@@ -154,6 +169,6 @@ export const STANDALONE_LINT_EXCLUSIONS: readonly CuratedLintExclusion[] = [
     {
         // Invariant #1 (enforcement coverage).
         ruleId: 'chimera/no-dynamic-games-import',
-        reason: 'Holds the dynamic import() position of the game ban in every zone whose no-restricted-imports group names a game. Withheld because it is the only rule here with no path predicate of its own — the declaring zone IS its scope — and it classifies a game by NAME: any non-engine @chimera-engine/* package. A scaffolded game IS one (@chimera-engine/<game-kebab>) and self-imports through that specifier, so a game that code-splits one of those self-imports would be reported for lazily loading itself, the exact inverse of the boundary the rule holds in the engine.',
+        reason: 'Holds the dynamic import() position of the game ban in every zone whose no-restricted-imports group names a game. Withheld because it has no path predicate of its own — the declaring zone IS its scope — and it classifies a game by NAME: any non-engine @chimera-engine/* package. A scaffolded game IS one (@chimera-engine/<game-kebab>) and self-imports through that specifier, so a game that code-splits one of those self-imports would be reported for lazily loading itself, the exact inverse of the boundary the rule holds in the engine.',
     },
 ];
