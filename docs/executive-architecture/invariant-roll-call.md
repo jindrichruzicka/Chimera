@@ -105,6 +105,47 @@ now resolves a same-file const member (Invariant #52), pinned by a test assertin
 and an absent ref together: a reader that resolved neither would report the same empty
 `missing` list as one that resolved both.
 
+### F82 feature-review gate (#1071)
+
+Re-run in full on the gate's own branch, base `main` @ `986cb6e9`, 2026-08-11. All green:
+
+| Step               | Command                                                    | Result                   |
+| ------------------ | ---------------------------------------------------------- | ------------------------ |
+| Invariant checker  | `.claude/skills/invariants/scripts/check-invariants.sh`    | **exit 0**               |
+| Checker self-test  | `.claude/skills/invariants/tests/check-invariants.test.sh` | **144 / 144 pass**       |
+| Format             | `pnpm format:check`                                        | **exit 0**               |
+| Lint               | `pnpm lint`                                                | **exit 0**               |
+| Typecheck          | `pnpm typecheck`                                           | **exit 0**               |
+| Unit tests         | `pnpm test`                                                | **exit 0**               |
+| Asset validation   | `pnpm validate:assets`                                     | **exit 0**               |
+| Packaged bundle    | `pnpm verify:packaged-bundle`                              | **exit 0**               |
+| Showcase container | `pnpm verify:showcase-glb`                                 | **exit 0 — bytes match** |
+| E2E                | `pnpm test:e2e`                                            | **exit 0 — 145 passed**  |
+
+Rows #128–#132 are what this gate ratifies, and all five are code-verified: what holds them is
+the dedicated tests their evidence columns name, not a guard.
+
+Three of the feature's checks were FIRED here rather than read.
+`chimera/no-animation-derivation-in-reduce` resolves at error severity for a production file in
+every engine and per-game reduce-time subtree, and is absent for a renderer module —
+`--print-config`, standing in
+[`simulation/__tests__/eslint-animation-derivation-zone.test.ts`](../../simulation/__tests__/eslint-animation-derivation-zone.test.ts).
+`validate-assets` refuses a planted notify at 5 s of a 1 s clip
+(`notify "wave.crest" position resolves to phase 5, outside [0, 1]`, exit 1) where the
+unplanted tree exits 0. And the committed animated container still matches its generator byte
+for byte — the property
+[`tools/gen-showcase-animated-glb.test.ts`](../../tools/gen-showcase-animated-glb.test.ts)
+holds, reached here through `pnpm verify:showcase-glb`.
+
+The e2e row is why this gate runs e2e explicitly, and this time that earned its keep: the
+clip-player spec passed the suite **on a retry**. In isolation at `--retries=0` it failed 4 of
+6 runs, always on the same assertion. `crest` is authored at 0.5 s of a 1 s clip while the
+passage closes at phase 0.75, so a poll on the notify tally resolves a quarter-cycle before the
+passage-end reason is written, and the bare assertion on the next line read an empty attribute.
+Each mark now gets its own poll, and 8 of 8 isolated runs pass. The suite is configured
+`retries: 1`, so what a green exit code says about a spec at this failure rate is only that two
+attempts did not both fall in the same quarter-cycle.
+
 ---
 
 ## The roll-call — all 132 invariants

@@ -148,12 +148,23 @@ test.describe('Tactics model seam adoption', () => {
         // MEASURED against the real scheduler, a passage closes as 'looped' only
         // if it is still open at the wrap, and this one ends at phase 0.75. A
         // sheet whose passage ran to the clip's end would report the other.
+        //
+        // Each mark gets its OWN poll, because the two are a quarter of a cycle
+        // apart: `crest` is authored at 0.5 s of a 1 s clip while the passage
+        // closes at phase 0.75, so the notify tally rises 250 ms of clip time
+        // before the end reason is written. A reason read off the tally's poll
+        // is therefore read before anything has written it — the attribute
+        // answers `''`, and a bare assertion has no second chance.
         await expect
             .poll(async () => Number(await showcase.clipAttribute('clip-notifies')), {
                 timeout: 10_000,
             })
             .toBeGreaterThan(0);
-        expect(await showcase.clipAttribute('clip-passage-end-reason')).toBe('reached-end');
+        await expect
+            .poll(async () => showcase.clipAttribute('clip-passage-end-reason'), {
+                timeout: 10_000,
+            })
+            .toBe('reached-end');
 
         // And the control never moved while all that happened.
         expect(await showcase.clipAttribute('clip-control-bone-z')).toBe('0.0000');
