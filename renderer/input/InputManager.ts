@@ -14,7 +14,7 @@ import type { InputActionId, InputAction, InputEvent, RebindResult } from './Inp
 import type { KeyBinding } from './InputBindingSchema.js';
 import type { InputActionRegistry } from './InputActionRegistry.js';
 import type { KeyBindingRepository } from './KeyBindingRepository.js';
-import { emitRendererError } from '../logging/rendererLogger';
+import { emitRendererError, readRendererLogsApi } from '../logging/rendererLogger';
 
 // ─── Public interface ─────────────────────────────────────────────────────────
 
@@ -206,11 +206,7 @@ export function createInputManager(
                 // Invariant #67: forward the thrown Error with its stack and a
                 // named module (not 'global'). emitRendererError alone — console.*
                 // is forwarded too, so a console.* call would double the entry.
-                const logsApi = (
-                    globalThis as Record<string, unknown> & {
-                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                    }
-                ).__chimera?.logs;
+                const logsApi = readRendererLogsApi();
                 emitRendererError(
                     logsApi,
                     `[InputManager] subscriber for '${event.actionId}' threw an error`,

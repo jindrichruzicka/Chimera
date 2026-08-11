@@ -14,20 +14,29 @@ import { useToastStore } from '../state/toastStore';
 import { AppShell } from './AppShell';
 import RootLayout from './layout';
 
-const { mockEmitRendererError, mockInstallRendererLogger, mockRendererLoggerTeardown } = vi.hoisted(
-    () => {
-        const teardown = vi.fn();
-        return {
-            mockEmitRendererError: vi.fn(),
-            mockInstallRendererLogger: vi.fn(() => teardown),
-            mockRendererLoggerTeardown: teardown,
-        };
-    },
-);
+const {
+    mockEmitRendererError,
+    mockInstallRendererLogger,
+    mockReadRendererLogsApi,
+    mockRendererLoggerTeardown,
+} = vi.hoisted(() => {
+    const teardown = vi.fn();
+    return {
+        mockEmitRendererError: vi.fn(),
+        mockInstallRendererLogger: vi.fn(() => teardown),
+        mockReadRendererLogsApi: vi.fn(),
+        mockRendererLoggerTeardown: teardown,
+    };
+});
 
+// A factory mock without `importOriginal` replaces the module's whole export
+// surface, so every export a component under this layout reaches for must
+// appear here: RootErrorBoundary's componentDidCatch reads the bridge through
+// readRendererLogsApi before forwarding, and an absent export throws there.
 vi.mock('../logging/rendererLogger', () => ({
     emitRendererError: mockEmitRendererError,
     installRendererLogger: mockInstallRendererLogger,
+    readRendererLogsApi: mockReadRendererLogsApi,
 }));
 
 vi.mock('next/navigation', () => ({

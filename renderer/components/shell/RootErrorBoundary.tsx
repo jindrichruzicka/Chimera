@@ -13,7 +13,7 @@
 import React from 'react';
 import { CRASH_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
-import { emitRendererError } from '../../logging/rendererLogger';
+import { emitRendererError, readRendererLogsApi } from '../../logging/rendererLogger';
 
 // ── types ──────────────────────────────────────────────────────────────────────
 
@@ -75,11 +75,7 @@ export class RootErrorBoundary extends React.Component<Props, State> {
     }
 
     public override componentDidCatch(error: Error, info: React.ErrorInfo): void {
-        const logsApi = (
-            globalThis as Record<string, unknown> & {
-                __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-            }
-        ).__chimera?.logs;
+        const logsApi = readRendererLogsApi();
         emitRendererError(
             logsApi,
             '[RootErrorBoundary] Uncaught error in React tree',

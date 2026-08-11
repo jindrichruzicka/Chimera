@@ -17,7 +17,7 @@
 import React, { useEffect, useState } from 'react';
 import type { GameLanguage } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import { LanguageSelector } from '../components/ui/LanguageSelector';
-import { emitRendererError } from '../logging/rendererLogger';
+import { emitRendererError, readRendererLogsApi } from '../logging/rendererLogger';
 import { loadRendererGameShell } from '../game/rendererGameRegistry';
 import { ENGINE_SETTINGS_GAME_ID } from '../input/KeyBindingRepository';
 import { useSettingsStore } from '../state/settingsStore';
@@ -114,11 +114,7 @@ export function SettingsLanguageSelector({
                 // Invariant #67: forward with stack + named module (not 'global').
                 // emitRendererError alone — console.* is forwarded too, so a
                 // console.* would double it.
-                const logsApi = (
-                    globalThis as Record<string, unknown> & {
-                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                    }
-                ).__chimera?.logs;
+                const logsApi = readRendererLogsApi();
                 emitRendererError(
                     logsApi,
                     '[SettingsLanguageSelector] Failed to update language',

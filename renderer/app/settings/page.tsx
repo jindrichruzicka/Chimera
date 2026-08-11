@@ -39,7 +39,7 @@ import { loadRendererGame } from '../../game/rendererGameRegistry';
 import { ENGINE_SETTINGS_GAME_ID } from '../../input/KeyBindingRepository.js';
 import { useInputManager } from '../../input/InputManagerContext.js';
 import { useInputActionRegistry } from '../../input/InputActionRegistryContext.js';
-import { emitRendererError } from '../../logging/rendererLogger';
+import { emitRendererError, readRendererLogsApi } from '../../logging/rendererLogger';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import { SETTINGS_KEYS } from '../../i18n/engine-keys';
@@ -326,11 +326,7 @@ export default function SettingsPage(): React.ReactElement {
                     // is forwarded too, so a console call here would double the
                     // entry. This convention holds for every catch in this
                     // component.
-                    const logsApi = (
-                        globalThis as Record<string, unknown> & {
-                            __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                        }
-                    ).__chimera?.logs;
+                    const logsApi = readRendererLogsApi();
                     emitRendererError(
                         logsApi,
                         '[SettingsPage] rebind failed',
@@ -391,11 +387,7 @@ export default function SettingsPage(): React.ReactElement {
                 }
             })
             .catch((error: unknown) => {
-                const logsApi = (
-                    globalThis as Record<string, unknown> & {
-                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                    }
-                ).__chimera?.logs;
+                const logsApi = readRendererLogsApi();
                 emitRendererError(
                     logsApi,
                     '[SettingsPage] force-rebind failed',
@@ -417,11 +409,7 @@ export default function SettingsPage(): React.ReactElement {
                 });
             })
             .catch((error: unknown) => {
-                const logsApi = (
-                    globalThis as Record<string, unknown> & {
-                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                    }
-                ).__chimera?.logs;
+                const logsApi = readRendererLogsApi();
                 emitRendererError(
                     logsApi,
                     '[SettingsPage] resetBinding failed',
@@ -437,11 +425,7 @@ export default function SettingsPage(): React.ReactElement {
             .getState()
             .updateSettings(gameId, patch)
             .catch((error: unknown) => {
-                const logsApi = (
-                    globalThis as Record<string, unknown> & {
-                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                    }
-                ).__chimera?.logs;
+                const logsApi = readRendererLogsApi();
                 emitRendererError(
                     logsApi,
                     '[SettingsPage] Failed to update settings',
@@ -457,11 +441,7 @@ export default function SettingsPage(): React.ReactElement {
             .getState()
             .resetSettings(gameId)
             .catch((error: unknown) => {
-                const logsApi = (
-                    globalThis as Record<string, unknown> & {
-                        __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                    }
-                ).__chimera?.logs;
+                const logsApi = readRendererLogsApi();
                 emitRendererError(
                     logsApi,
                     '[SettingsPage] Failed to reset settings',

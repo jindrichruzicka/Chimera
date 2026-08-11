@@ -3,7 +3,7 @@ import { loadRendererGame } from '../game/rendererGameRegistry';
 import type { InputAction } from '../input/InputAction.js';
 import type { InputActionRegistry } from '../input/InputActionRegistry.js';
 import { useSettingsStore } from '../state/settingsStore';
-import { emitRendererError } from '../logging/rendererLogger';
+import { emitRendererError, readRendererLogsApi } from '../logging/rendererLogger';
 
 export function getSettingsApi(): SettingsAPI | null {
     const chimera = (globalThis as { __chimera?: { settings: SettingsAPI } }).__chimera;
@@ -29,11 +29,7 @@ export async function hydrateActiveGameSettings(
             // Invariant #67: forward with stack + named module (not 'global').
             // emitRendererError alone — console.* is forwarded too, so a console.*
             // call would double it.
-            const logsApi = (
-                globalThis as Record<string, unknown> & {
-                    __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                }
-            ).__chimera?.logs;
+            const logsApi = readRendererLogsApi();
             emitRendererError(
                 logsApi,
                 `[SettingsBootstrap] Failed to hydrate settings for '${activeGameId}'`,
@@ -64,11 +60,7 @@ export async function registerActiveGameInputActions(
             // Invariant #67: forward with stack + named module (not 'global').
             // emitRendererError alone — console.* is forwarded too, so a console.*
             // call would double it.
-            const logsApi = (
-                globalThis as Record<string, unknown> & {
-                    __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                }
-            ).__chimera?.logs;
+            const logsApi = readRendererLogsApi();
             emitRendererError(
                 logsApi,
                 `[SettingsBootstrap] Failed to register input actions for '${activeGameId}'`,

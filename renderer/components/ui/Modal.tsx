@@ -6,7 +6,7 @@ import type { ButtonVariant } from '../../theme/types';
 import { COMMON_KEYS } from '../../i18n/engine-keys';
 import { useTranslate } from '../../i18n/useTranslate';
 import { useEscapeLayer } from '../shell/EscapeStack';
-import { emitRendererError } from '../../logging/rendererLogger';
+import { emitRendererError, readRendererLogsApi } from '../../logging/rendererLogger';
 import { Button } from './Button';
 import styles from './Modal.module.css';
 import { useExitPresence } from './useExitPresence';
@@ -188,11 +188,7 @@ export function Modal({
         try {
             action.onClick?.();
         } catch (error) {
-            const logsApi = (
-                globalThis as Record<string, unknown> & {
-                    __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
-                }
-            ).__chimera?.logs;
+            const logsApi = readRendererLogsApi();
             emitRendererError(
                 logsApi,
                 '[Modal] action threw',

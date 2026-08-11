@@ -759,6 +759,25 @@ describe('SettingsPage — reset to defaults', () => {
         expect(mockPush).not.toHaveBeenCalled();
     });
 
+    it('forwards a named, stack-carrying entry when resetting settings fails', async () => {
+        // Invariant #67. Distinct from the update-failure case: `handleReset`
+        // is its own catch, so a reader that stops reaching the bridge there
+        // must red on its own message, not on the update path's.
+        mockReset.mockRejectedValueOnce(new Error('reset ipc down'));
+        const logs = createRecordingLogsApi();
+        (window as unknown as { __chimera: { logs: unknown } }).__chimera.logs = logs;
+
+        await renderSettingsPage();
+        fireEvent.click(screen.getByRole('button', { name: /^reset$/i }));
+
+        await waitFor(() => expect(logs.emitCalls).toHaveLength(1));
+        const entry = logs.emitCalls[0]!;
+        expect(entry.level).toBe('error');
+        expect(entry.source.module).toBe('settings-page');
+        expect(entry.error?.stack).toBeDefined();
+        expect(entry.message).toContain('Failed to reset settings');
+    });
+
     it('renders dialog-style reset and close controls aligned to the right', async () => {
         await renderSettingsPage();
 
@@ -1263,6 +1282,61 @@ describe('SettingsPage — conflict handling', () => {
         expect(conflictRebind).toHaveBeenCalledTimes(2);
     });
 
+    it('forwards a named, stack-carrying entry when rebind rejects', async () => {
+        // Invariant #67. `handleRebind` owns its own catch, so it needs its own
+        // killer: a reader that stops reaching the bridge here is invisible to
+        // the update-failure case in the volume-slider suite.
+        const logs = createRecordingLogsApi();
+        (window as unknown as { __chimera: { logs: unknown } }).__chimera.logs = logs;
+        await renderWithInputManager(
+            makeInputManagerDouble({ rebind: vi.fn().mockRejectedValue(new Error('rebind ipc')) }),
+        );
+
+        fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]!);
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyA', key: 'a' });
+        });
+
+        await waitFor(() => expect(logs.emitCalls).toHaveLength(1));
+        const entry = logs.emitCalls[0]!;
+        expect(entry.level).toBe('error');
+        expect(entry.source.module).toBe('settings-page');
+        expect(entry.error?.stack).toBeDefined();
+        expect(entry.message).toContain('rebind failed');
+    });
+
+    it('forwards a named, stack-carrying entry when force-rebind rejects', async () => {
+        // Invariant #67 — the force-rebind chain is a third catch. The reject
+        // lands on the second `rebind` call, after the conflict that produced
+        // the "Unbind existing" button.
+        const conflictRebind = vi
+            .fn()
+            .mockResolvedValueOnce({
+                ok: false,
+                reason: 'conflict',
+                conflictingAction: 'game:end-turn',
+            })
+            .mockRejectedValue(new Error('force rebind ipc'));
+        const logs = createRecordingLogsApi();
+        (window as unknown as { __chimera: { logs: unknown } }).__chimera.logs = logs;
+        await renderWithInputManager(makeInputManagerDouble({ rebind: conflictRebind }));
+
+        fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[1]!);
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyZ', key: 'z', ctrlKey: true });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /unbind existing/i }));
+        });
+
+        await waitFor(() => expect(logs.emitCalls).toHaveLength(1));
+        const entry = logs.emitCalls[0]!;
+        expect(entry.level).toBe('error');
+        expect(entry.source.module).toBe('settings-page');
+        expect(entry.error?.stack).toBeDefined();
+        expect(entry.message).toContain('force-rebind failed');
+    });
+
     it("force-rebinding one conflicted action uses that action's captured key even after another conflict is captured later", async () => {
         const conflictRebind = vi
             .fn()
@@ -1323,5 +1397,28 @@ describe('SettingsPage — per-action reset', () => {
         });
 
         expect(mockResetBinding).toHaveBeenCalledWith('game:end-turn');
+    });
+
+    it('forwards a named, stack-carrying entry when resetBinding rejects', async () => {
+        // Invariant #67 — `handleResetBinding`'s own catch, distinct from both
+        // the rebind and the settings-reset paths.
+        const logs = createRecordingLogsApi();
+        (window as unknown as { __chimera: { logs: unknown } }).__chimera.logs = logs;
+        await renderWithInputManager(
+            makeInputManagerDouble({
+                resetBinding: vi.fn().mockRejectedValue(new Error('resetBinding ipc')),
+            }),
+        );
+
+        await act(async () => {
+            fireEvent.click(screen.getAllByTestId('binding-reset')[0]!);
+        });
+
+        await waitFor(() => expect(logs.emitCalls).toHaveLength(1));
+        const entry = logs.emitCalls[0]!;
+        expect(entry.level).toBe('error');
+        expect(entry.source.module).toBe('settings-page');
+        expect(entry.error?.stack).toBeDefined();
+        expect(entry.message).toContain('resetBinding failed');
     });
 });
