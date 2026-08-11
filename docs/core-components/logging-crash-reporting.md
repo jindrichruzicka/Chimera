@@ -156,17 +156,9 @@ The renderer bridge is **interception, not injection**. There is no `Logger` to 
 
 ## RootErrorBoundary
 
-```tsx
-// renderer/components/shell/RootErrorBoundary.tsx
+`RootErrorBoundary.tsx`'s own header enumerates what the boundary does on catch. It is kept there rather than mirrored here, because a second copy of the list drifts from the first.
 
-// On catch:
-//   1. Forward error via emitRendererError()
-//   2. Render <CrashFallback /> with:
-//        • "An unexpected error occurred."
-//        • "Return to Main Menu" (resets app state)
-//        • "Restart Application" (calls system.relaunch(); main does app.relaunch() + app.exit(0))
-//        • Crash ID for bug reports
-```
+The half that is not visible from the renderer: "Restart Application" calls `system.relaunch()` over IPC, and main answers it with `app.relaunch()` followed by `app.exit(0)`.
 
 ---
 
