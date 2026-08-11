@@ -17,6 +17,10 @@
  * double-invokes render, and `useMemo` is explicitly allowed to discard a cached
  * value. What is asserted there is what a caller may actually rely on — identity
  * held across a COMMITTED rerender.
+ *
+ * That claim is also why this file mounts StrictMode through a `wrapper` and
+ * means it — see `../components/r3f/useModelAnimation.test.tsx` for which half
+ * of StrictMode that form reaches.
  */
 
 import { cleanup, renderHook } from '@testing-library/react';
@@ -145,17 +149,23 @@ describe('useAnimationSheet allocates once per metadata identity', () => {
     });
 
     it('holds that identity across a committed rerender under StrictMode', () => {
+        const getManifestMetadata = vi.fn(() => SWING_SHEET);
         const { result, rerender } = renderHook(() => useAnimationSheet(SWING_REF), {
-            wrapper: wrapperFor(
-                createManager(() => SWING_SHEET),
-                true,
-            ),
+            wrapper: wrapperFor(createManager(getManifestMetadata), true),
         });
         const first = result.current;
+
+        // Positive control: the hook body reads the manifest slot once per
+        // render invocation, so TWO reads is StrictMode's double-invoke
+        // actually happening. Without it this case asserts nothing the
+        // non-strict sibling above does not already assert, and would stay
+        // green if the `strict` argument were dropped.
+        expect(getManifestMetadata).toHaveBeenCalledTimes(2);
 
         rerender();
 
         expect(result.current).toBe(first);
+        expect(getManifestMetadata).toHaveBeenCalledTimes(4);
     });
 
     it('re-parses when the manager hands back a different object, deep-equal or not', () => {

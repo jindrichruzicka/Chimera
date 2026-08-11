@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { act, cleanup, renderHook } from '@testing-library/react';
-import React, { StrictMode, type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Group } from 'three';
@@ -93,6 +92,20 @@ function releasedEventKindsFor(mixer: unknown): string[] {
     return mixerLog.events.filter((event) => event.mixer === mixer).map((event) => event.kind);
 }
 
+/**
+ * A REAL StrictMode double mount. `useClipPlayer.test.tsx` records the probe and
+ * the versions it was taken against; the short of it is that the simulated
+ * mount/unmount/remount happens only when `<StrictMode>` is the element handed
+ * to `root.render`, which the `wrapper` option is not.
+ *
+ * The render phase is the half that does NOT need this: a nested `<StrictMode>`
+ * still double-invokes render and every `useMemo` factory under it. So a suite
+ * asserting a memo's identity may take the `wrapper` form and mean it —
+ * `useAnimationSheet.test.tsx` does — while a mixer allocated in an EFFECT is
+ * out of that form's reach.
+ */
+const STRICT = { reactStrictMode: true } as const;
+
 describe('useModelAnimation', () => {
     it('registers its frame callback at the default render priority on every render', async () => {
         const instance = createInstance();
@@ -162,22 +175,35 @@ describe('useModelAnimation', () => {
 
     it('releases with stopAllAction then uncacheRoot(root), and creations equal releases after a StrictMode mount/unmount', async () => {
         const instance = createInstance();
-        const wrapper = ({ children }: { readonly children: ReactNode }): ReactElement => (
-            <StrictMode>{children}</StrictMode>
-        );
-        const { result, unmount } = renderHook(() => useModelAnimation(instance), { wrapper });
+        const { result, unmount } = renderHook(() => useModelAnimation(instance), STRICT);
         await act(async () => {
             await Promise.resolve();
         });
         expect(result.current).not.toBeNull();
 
+        // Only a REAL double mount allocates twice — setup, cleanup, setup. The
+        // `wrapper` form allocates exactly ONE, so this count is what tells the
+        // two forms apart, and no `>= 1` bound can.
+        expect(mixerLog.created).toHaveLength(2);
+        // Release happens AT the simulated unmount — not deferred to the real
+        // one, and not at allocation. Both halves are needed to say that: the
+        // loop after `unmount()` reads the same recorded kinds whenever they
+        // were recorded, and a release moved into the effect SETUP leaves the
+        // discarded mixer looking correctly released here too. The live mixer
+        // having recorded nothing yet is what tells those apart.
+        expect(releasedEventKindsFor(mixerLog.created[0])).toEqual([
+            'stopAllAction',
+            'uncacheRoot',
+        ]);
+        expect(releasedEventKindsFor(mixerLog.created[1])).toEqual([]);
+
         unmount();
 
-        expect(mixerLog.created.length).toBeGreaterThanOrEqual(1);
         for (const mixer of mixerLog.created) {
             expect(releasedEventKindsFor(mixer)).toEqual(['stopAllAction', 'uncacheRoot']);
         }
         const uncacheEvents = mixerLog.events.filter((event) => event.kind === 'uncacheRoot');
+        expect(uncacheEvents).toHaveLength(2);
         for (const event of uncacheEvents) {
             expect(event.root).toBe(instance.root);
         }
@@ -268,14 +294,8 @@ describe('useModelAnimation — Rule ONE-MIXER-PER-ROOT', () => {
     }
 
     it('reports nothing for a StrictMode double mount on one stable instance', async () => {
-        // React 19 simulates the double mount only when `<StrictMode>` is the
-        // element handed to `root.render`, which is what this option produces —
-        // the `wrapper` form above puts it one level down and runs `['setup']`
-        // where this runs `['setup', 'cleanup', 'setup']`.
         const instance = createInstance();
-        const { unmount } = renderHook(() => useModelAnimation(instance), {
-            reactStrictMode: true,
-        });
+        const { unmount } = renderHook(() => useModelAnimation(instance), STRICT);
         await act(async () => {
             await Promise.resolve();
         });

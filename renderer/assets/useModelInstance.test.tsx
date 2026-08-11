@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { act, cleanup, render, renderHook } from '@testing-library/react';
-import React, { StrictMode, type ReactElement, type ReactNode } from 'react';
+import React, { type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AnimationClip, BufferGeometry, Group, Mesh, MeshBasicMaterial } from 'three';
@@ -63,14 +63,39 @@ afterEach(() => {
     cleanup();
 });
 
+/**
+ * A REAL StrictMode double mount — see
+ * `../components/r3f/useModelAnimation.test.tsx`.
+ *
+ * It composes with `wrapper`, which is why the context provider still is one:
+ * RTL builds `strictModeIfNeeded(wrapUiIfNeeded(ui, Wrapper))`, so StrictMode
+ * ends up OUTSIDE the provider and at the root.
+ */
+const STRICT = { reactStrictMode: true } as const;
+
 describe('useModelInstance', () => {
-    it('releases every clone it allocates under StrictMode: cloneCalls === releaseCalls after unmount', async () => {
+    it('clones once under a StrictMode double mount, after the load the double mount precedes, and releases it', async () => {
         const asset = createGltfAsset();
-        const manager = createAssetManagerStub(createResolvedLoad(asset));
+        // Counted through a closure rather than `vi.fn`, which erases `load`'s
+        // generic signature and stops the stub type-checking as an AssetManager.
+        let loadCalls = 0;
+        const resolvedLoad = createResolvedLoad(asset);
+        const manager = createAssetManagerStub(function load(ref) {
+            loadCalls += 1;
+            return resolvedLoad(ref);
+        });
 
         const { result, unmount } = renderHook(() => useModelInstance(modelRef), {
-            wrapper: createStrictModeWrapper(manager),
+            wrapper: createWrapper(manager),
+            ...STRICT,
         });
+
+        // The double mount REACHED the hook: `useAsset`'s effect ran
+        // setup/cleanup/setup, so the manager was asked twice. This is the
+        // assertion the `wrapper` form could not make — there `load` is called
+        // once — and it is what makes the clone count below a measurement
+        // rather than a coincidence.
+        expect(loadCalls).toBe(2);
 
         await act(async () => {
             await flushMicrotasks();
@@ -79,7 +104,13 @@ describe('useModelInstance', () => {
 
         unmount();
 
-        expect(cloneSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+        // ONE clone is the whole point: `useAsset` publishes through a promise,
+        // so `asset` is still null on the commit the simulated remount runs in,
+        // and the allocating effect early-returns both times. A hook that cloned
+        // without waiting for the asset would clone on each of those setups and
+        // release on each cleanup — leaving `cloneCalls === releaseCalls` true
+        // and only this count able to tell the difference.
+        expect(cloneSpy.mock.calls).toHaveLength(1);
         expect(releaseSpy).toHaveBeenCalledTimes(cloneSpy.mock.calls.length);
         const clonedRoots = cloneSpy.mock.results.map((cloneResult) => cloneResult.value);
         const releasedRoots = releaseSpy.mock.calls.map(([instance]) => instance.root);
@@ -329,24 +360,6 @@ function createWrapper(
     manager: AssetManager,
 ): ({ children }: { readonly children: ReactNode }) => ReactElement {
     return createManagerGetterWrapper(() => manager);
-}
-
-function createStrictModeWrapper(
-    manager: AssetManager,
-): ({ children }: { readonly children: ReactNode }) => ReactElement {
-    return function StrictModeAssetManagerProvider({
-        children,
-    }: {
-        readonly children: ReactNode;
-    }): ReactElement {
-        return (
-            <StrictMode>
-                <AssetManagerContext.Provider value={manager}>
-                    {children}
-                </AssetManagerContext.Provider>
-            </StrictMode>
-        );
-    };
 }
 
 function createManagerGetterWrapper(
