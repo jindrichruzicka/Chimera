@@ -70,6 +70,99 @@ export interface GameScreenProps {
     readonly isHost?: boolean;
 }
 
+/**
+ * Props handed to a game's transition overlay (§4.18–§4.19, §4.33–§4.36) — the
+ * component filling {@link GameScreenRegistry.transitionOverlay}.
+ *
+ * Widens {@link GameScreenProps} by one optional field, so an overlay written
+ * before this type existed keeps fitting the slot unchanged.
+ */
+export interface TransitionOverlayProps extends GameScreenProps {
+    /**
+     * Fraction in `[0, 1]` of the entering scene's declared required assets that
+     * have settled, or `null` when the wait is not measured. Absent when no
+     * preload is running.
+     *
+     * Never `0` as a stand-in for "unmeasured": a bar reading 0% for something
+     * nobody counted is a claim the engine will not author on a game's behalf.
+     */
+    readonly preloadProgress?: number | null;
+}
+
+/**
+ * Which wait a loading cover is standing in for.
+ *
+ * `'assets'` — the entering scene's declared `requiredAssets` are still
+ * resolving. `'code'` — the screen's own module has not resolved yet.
+ *
+ * Deliberately NOT `'chunk'`: the reason is REPORTED to the cover by the
+ * renderer, and this foundation leaf observes no bundler, so it names no
+ * bundler concept (Invariant #1).
+ */
+export type SceneLoadingReason = 'assets' | 'code';
+
+/**
+ * Props handed to a game-supplied loading cover (§4.36).
+ *
+ * Deliberately does NOT extend {@link GameScreenProps}. A cover stands in for a
+ * screen that is not mountable yet, so it is given neither `snapshot` (during a
+ * transition the snapshot is still the PRE-commit one, which would describe the
+ * scene being left) nor `sendAction` — a cover must not dispatch, and the
+ * missing parameter IS the prohibition.
+ */
+export interface GameLoadingScreenProps {
+    /** Screen key the cover stands in for — the key resolved in the registry. */
+    readonly screenKey: string;
+    /** Scene the cover is shown inside, as carried on the snapshot. */
+    readonly sceneId: string;
+    /** Which wait this cover is standing in for. */
+    readonly reason: SceneLoadingReason;
+    /**
+     * Fraction in `[0, 1]` of the wait that has settled, or `null` when it is not
+     * measured — a code-split `import()` exposes no progress channel. Required
+     * and nullable rather than optional with a `0` default, so an unmeasured
+     * wait is stated rather than rendered as 0%.
+     */
+    readonly progress: number | null;
+}
+
+/**
+ * Static loading cover: a line of text. The string is a translation key, or a
+ * literal — `useTranslate`'s `t` returns an unknown key unchanged, so a game
+ * that ships no bundle still renders what it wrote.
+ */
+export interface GameLoadingMessage {
+    readonly message: string;
+}
+
+/**
+ * Static loading cover: an image. `image` is a directly loadable `src` — a
+ * `chimera://` URL, a `data:` URI or a public path — never an `AssetRef`, which
+ * would have to resolve through the `AssetManager` and reintroduce the very wait
+ * the cover exists to mask.
+ */
+export interface GameLoadingImage {
+    readonly image: string;
+    readonly alt?: string;
+}
+
+/**
+ * Every form a loading cover may take.
+ *
+ * DISCRIMINATION HAZARD for a resolver narrowing this union: `React.lazy`
+ * returns an OBJECT, not a function, so narrowing on `typeof value === 'function'`
+ * first sends every lazy cover down the static-form branch. Narrow in this order
+ * — string sentinel, then `'message' in value`, then `'image' in value`, and only
+ * what is left is a component.
+ */
+export type GameLoadingScreen =
+    | GameScreenComponent<GameLoadingScreenProps>
+    | GameLoadingMessage
+    | GameLoadingImage
+    | 'spinner'
+    | 'progress'
+    | 'none';
+
 export interface GameHudProps extends GameScreenProps {
     readonly tick: number;
     readonly undoDisabled: boolean;
@@ -105,7 +198,7 @@ export interface GameScreenRegistry {
     readonly hud?: GameScreenComponent<GameHudProps>;
     readonly screens?: Readonly<Record<string, GameScreenComponent<GameScreenProps>>>;
     readonly sceneDefaultScreens?: Readonly<Record<string, string>>;
-    readonly transitionOverlay?: GameScreenComponent<GameScreenProps>;
+    readonly transitionOverlay?: GameScreenComponent<TransitionOverlayProps>;
     readonly gameResultBanner?: GameScreenComponent<GameResultBannerProps>;
     /**
      * Escape-toggled in-game menu for in-progress matches. Three states:
@@ -115,6 +208,21 @@ export interface GameScreenRegistry {
      * optional (Invariant #81 — `playfield` is the sole required slot).
      */
     readonly inGameMenu?: GameScreenComponent<InGameMenuProps> | 'none';
+    /**
+     * Cover for a screen that is waiting to become mountable (§4.36), used for
+     * any screen key {@link GameScreenRegistry.loadingScreens} does not name.
+     *
+     * Like every other slot it is supplied only through this registry
+     * (Invariant #80) and is optional (Invariant #81 — `playfield` is the sole
+     * required slot).
+     */
+    readonly loadingScreen?: GameLoadingScreen;
+    /**
+     * Per-screen-key loading covers. A key mapped to the `'none'` opt-out
+     * sentinel subtracts that one screen from
+     * {@link GameScreenRegistry.loadingScreen}.
+     */
+    readonly loadingScreens?: Readonly<Record<string, GameLoadingScreen>>;
     readonly eventAudioBinding?: GameEventAudioBinding;
 }
 
