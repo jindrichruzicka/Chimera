@@ -20,6 +20,7 @@ import type {
     EngineSettings,
     GameSettingsSchema,
 } from '@chimera-engine/simulation/settings/index.js';
+import { SceneRegistry } from '@chimera-engine/simulation/scene/index.js';
 import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
 import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
 import type { CommandContext, CommandScheduler } from '@chimera-engine/ai';
@@ -31,6 +32,7 @@ import {
     TACTICS_GAME_ID,
     TACTICS_MOVE_UNIT_ACTION,
 } from '@chimera-engine/tactics/simulation/constants.js';
+import { TACTICS_ASSET_DEMO_SCENE_ID } from '@chimera-engine/tactics/simulation/scenes.js';
 
 import { tacticsContribution } from './main.js';
 
@@ -81,6 +83,18 @@ describe('tactics composition root', () => {
 
         expect(registry.has(TACTICS_MOVE_UNIT_ACTION)).toBe(true);
         expect(registry.resolveGame(TACTICS_GAME_ID)).toBeDefined();
+    });
+
+    it('registerScenes contributes the asset-demo scene to a shared SceneRegistry', () => {
+        // The contribution field is what the host reads; wiring it in
+        // `apps/tactics/simulation/scenes.ts` alone would leave the whole arm
+        // dead, because nothing would ever call it.
+        const registry = new SceneRegistry();
+
+        tacticsContribution.registerScenes?.(registry);
+
+        expect(registry.has(TACTICS_ASSET_DEMO_SCENE_ID)).toBe(true);
+        expect(registry.requiredAssets(TACTICS_ASSET_DEMO_SCENE_ID).length).toBeGreaterThan(0);
     });
 
     it('registerSettings registers the game settings schema with the SettingsManager', () => {

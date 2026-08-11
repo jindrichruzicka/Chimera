@@ -139,6 +139,13 @@ export const ACTIONS_KEYS = {
     categoryGame: translationKey('game.tactics.actions.categoryGame'),
 } as const;
 
+/** The contributed `tactics:asset-demo` scene: its screen and its loading cover. */
+export const SCENE_KEYS = {
+    assetDemoHeading: translationKey('game.tactics.scene.assetDemoHeading'),
+    assetDemoEmpty: translationKey('game.tactics.scene.assetDemoEmpty'),
+    assetDemoLoading: translationKey('game.tactics.scene.assetDemoLoading'),
+} as const;
+
 // The grouped maps share leaf names across areas (`cancel`, `ready`, `settings`,
 // …), so a spread aggregate keyed by leaf name would silently collapse them. Key
 // the flat aggregate by each token's *full* string instead — unique by
@@ -155,6 +162,7 @@ const ALL_AREA_MAPS = [
     SETTINGS_KEYS,
     SHELL_KEYS,
     ACTIONS_KEYS,
+    SCENE_KEYS,
 ] as const;
 
 /**

@@ -31,6 +31,7 @@ import type { GameContent } from '@chimera-engine/simulation/foundation/game-con
 import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { SceneRegistry } from '@chimera-engine/simulation/scene/index.js';
 import type {
     CommitmentTurnOrchestration,
     VisibilityRules,
@@ -61,6 +62,25 @@ export interface MainGameContribution {
     readonly manifest: GameManifest;
     /** Register the game's action reducers into the shared engine registry. */
     readonly registerActions: (registry: ActionRegistry<BaseGameSnapshot>) => void;
+    /**
+     * Optional: register the game's `SceneDescriptor`s into the host's scene
+     * registry, alongside the engine's own `engine:lobby` / `engine:game` /
+     * `engine:post-game`. Absent ⇒ the game contributes no scenes and only the
+     * engine defaults exist, which is what every game did before this hook.
+     *
+     * The registry is built and kept local by `wireDefaultSceneActions`, so a
+     * descriptor's declared `requiredAssets` travel to the renderer on the
+     * snapshot rather than by handing the registry out. A game's renderer
+     * surface must not register scenes — this is a main-process contribution.
+     *
+     * `SceneDescriptor.initialize` is declared with method shorthand, so it is
+     * checked bivariantly and a `SceneDescriptor<TGameSnapshot>` is assignable
+     * to the `SceneRegistry<BaseGameSnapshot>` handed out here. That is the same
+     * variance escape {@link MainGameContribution.registerActions} already
+     * relies on, and it is what lets a game register a descriptor typed against
+     * its own snapshot.
+     */
+    readonly registerScenes?: (registry: SceneRegistry<BaseGameSnapshot>) => void;
     /**
      * Register the game's settings schema with the {@link SettingsManager}. A
      * thunk (rather than the raw schema) so the concrete `GameSettingsSchema<T>`

@@ -143,7 +143,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
     // mirrors electron/main/index.ts::main() registry seeding
     const gameRegistry = new ActionRegistry();
     registerEngineActions(gameRegistry);
-    wireDefaultSceneActions(gameRegistry);
+    wireDefaultSceneActions(gameRegistry, [contribution]);
     contribution.registerActions(gameRegistry);
 
     const repository = new InMemorySaveRepository();

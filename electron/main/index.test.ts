@@ -14,6 +14,7 @@ import type {
     BaseGameSnapshot,
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
+import { sceneId, type SceneRegistry } from '@chimera-engine/simulation/scene/index.js';
 import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
 import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type * as LoadGameContentModule from './content/loadGameContent.js';
@@ -2015,6 +2016,31 @@ describe('main', () => {
         await main(makeTestContributions());
 
         expect(capturedSaveManagerRepoClassName.value).toBe('FileSaveRepository');
+    });
+
+    it('routes the injected contributions through the scene wiring', async () => {
+        // `wireDefaultSceneActions` builds the scene registry and keeps it
+        // local, so a contributed scene enters the host through this call and
+        // nothing else here can stand in for it. Dropping the second argument
+        // compiles and starts — the game simply has no scenes, and the failure
+        // does not surface until a snapshot names one.
+        let registeredHere = false;
+        const registerScenes = vi.fn((registry: SceneRegistry<BaseGameSnapshot>) => {
+            registry.register({
+                sceneId: sceneId('test:contributed'),
+                defaultScreen: 'playfield',
+                requiredAssets: [],
+                initialize: (state) => state,
+            });
+            registeredHere = registry.has(sceneId('test:contributed'));
+        });
+
+        await main([{ ...makeTestContributions()[0]!, registerScenes }]);
+
+        expect(registerScenes).toHaveBeenCalledOnce();
+        // A real `SceneRegistry`, not some other object that happens to be
+        // passed: the descriptor it was handed is resolvable through it.
+        expect(registeredHere).toBe(true);
     });
 
     // ── Runtime Debug Layer gate (§4.12, F47 T5, Invariant #27) ──────────────

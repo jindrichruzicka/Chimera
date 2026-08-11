@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { InputAction } from '@chimera-engine/renderer/input';
 import { tacticsAssetManifest } from '../asset-manifest.js';
+import { TACTICS_KEYS } from '../shell/translations/keys.js';
 import { TACTICS_INPUT_ACTIONS, TacticsGameScreenRegistry } from './index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -84,5 +85,50 @@ describe('TacticsGameScreenRegistry', () => {
         // React.lazy components are exotic objects, not plain functions.
         expect(typeof menu).toBe('object');
         expect(menu).not.toBeNull();
+    });
+
+    it('registers a concrete screen for the contributed asset-demo scene', () => {
+        const screen = TacticsGameScreenRegistry.screens?.['asset-demo'];
+
+        expect(screen).toBeDefined();
+        // Invariant #87: registry screens are code-split behind React.lazy, so
+        // the entry is an exotic object rather than a plain function.
+        expect(typeof screen).toBe('object');
+        expect(screen).not.toBeNull();
+    });
+
+    it('covers the asset-demo screen key with a static message cover', () => {
+        const cover = TacticsGameScreenRegistry.loadingScreens?.['asset-demo'];
+
+        // The `{ message }` form specifically: it is motionless, so a
+        // screenshot of the cover is deterministic. A component or a spinner
+        // would not be.
+        expect(cover).toEqual({ message: 'game.tactics.scene.assetDemoLoading' });
+    });
+
+    it('declares NO registry-wide loading cover', () => {
+        // The load-bearing half of the pair: this game opts ONE screen key in,
+        // and declares no fallback covering every other screen.
+        expect(TacticsGameScreenRegistry.loadingScreen).toBeUndefined();
+    });
+
+    it('covers the asset-demo key and no other screen key', () => {
+        // Asserts the whole keyed set, not just that `asset-demo` is present:
+        // a second key added here would silently cover a screen nobody opted in.
+        expect(Object.keys(TacticsGameScreenRegistry.loadingScreens ?? {})).toEqual(['asset-demo']);
+    });
+
+    it('declares its cover message in the tactics translation catalogue', () => {
+        // The cover string is a translation KEY, and `t` returns an unknown key
+        // unchanged — so a typo would render the raw token instead of failing.
+        // This is what turns that into a test failure.
+        const cover = TacticsGameScreenRegistry.loadingScreens?.['asset-demo'];
+        const message =
+            cover !== undefined && typeof cover === 'object' && 'message' in cover
+                ? cover.message
+                : undefined;
+
+        expect(message).toBeDefined();
+        expect(Object.values(TACTICS_KEYS).map(String)).toContain(message);
     });
 });

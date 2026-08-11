@@ -1606,7 +1606,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // after this point.
     const gameRegistry = new ActionRegistry();
     registerEngineActions(gameRegistry);
-    wireDefaultSceneActions(gameRegistry);
+    wireDefaultSceneActions(gameRegistry, Object.values(mainGameRegistry));
     for (const game of Object.values(mainGameRegistry)) {
         game.registerActions(gameRegistry);
     }

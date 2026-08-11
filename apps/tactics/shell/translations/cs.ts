@@ -404,4 +404,9 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     // ── input actions (settings Controls panel) ─────────────────────────────────
     'game.tactics.actions.endTurn': 'Ukončit aktuální tah',
     'game.tactics.actions.categoryGame': 'Hra',
+
+    // ── contributed asset-demo scene ────────────────────────────────────────────
+    'game.tactics.scene.assetDemoHeading': 'Assety scény',
+    'game.tactics.scene.assetDemoEmpty': 'Tato scéna nedeklarovala žádné assety.',
+    'game.tactics.scene.assetDemoLoading': 'Načítání assetů scény…',
 };

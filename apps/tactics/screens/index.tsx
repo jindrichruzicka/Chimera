@@ -7,10 +7,12 @@ import {
     TACTICS_REVEAL_TILE_ACTION,
 } from '../simulation/actions.js';
 import { tacticsAudioRefs } from '../asset-manifest.js';
+import { SCENE_KEYS } from '../shell/translations/keys.js';
 // Side-effect import: redefines --ch-* tokens for the Tactics visual language.
 // Shared with shell loaders so URL-selected shell UI can wait for tokens before rendering.
 import '../styles/register-token-overrides.js';
 
+const TacticsAssetDemoScreen = React.lazy(() => import('./TacticsAssetDemoScreen.js'));
 const TacticsDemoBoard = React.lazy(() => import('./TacticsDemoBoard.js'));
 const TacticsGameHud = React.lazy(() => import('./TacticsGameHud.js'));
 const TacticsGameResultBanner = React.lazy(() => import('./TacticsGameResultBanner.js'));
@@ -60,10 +62,21 @@ export const TacticsGameScreenRegistry: GameScreenRegistry = {
     eventAudioBinding: TACTICS_EVENT_AUDIO_BINDING,
     screens: {
         summary: TacticsPostGameSummary,
+        'asset-demo': TacticsAssetDemoScreen,
     },
     sceneDefaultScreens: {
         'engine:game': 'playfield',
         'engine:post-game': 'summary',
+    },
+    // Keyed on the contributed scene's own screen key, and paired with no
+    // registry-wide `loadingScreen` — see `GameScreenRegistry.loadingScreens`.
+    //
+    // The motionless `{ message }` form, not a spinner or a component, so the
+    // cover is deterministic in a screenshot. The string is a translation key —
+    // `t` returns an unknown key unchanged, so `index.test.tsx` checks it
+    // against the catalogue rather than trusting it to fail loudly.
+    loadingScreens: {
+        'asset-demo': { message: SCENE_KEYS.assetDemoLoading },
     },
     gameResultBanner: TacticsGameResultBanner,
 };

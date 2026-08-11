@@ -130,4 +130,9 @@ export const tacticsBundleEn: Readonly<Record<string, string>> = {
     // ── input actions (settings Controls panel) ─────────────────────────────────
     'game.tactics.actions.endTurn': 'End current turn',
     'game.tactics.actions.categoryGame': 'Game',
+
+    // ── contributed asset-demo scene ────────────────────────────────────────────
+    'game.tactics.scene.assetDemoHeading': 'Scene assets',
+    'game.tactics.scene.assetDemoEmpty': 'This scene declared no assets.',
+    'game.tactics.scene.assetDemoLoading': 'Loading scene assets…',
 };

@@ -65,6 +65,10 @@ import { tacticsManifest } from '@chimera-engine/tactics/manifest.js';
 import { tacticsSettingsSchema } from '@chimera-engine/tactics/settings-schema.js';
 import { readStamina } from '@chimera-engine/tactics/simulation/stamina.js';
 import { tacticsVisibilityRules } from '@chimera-engine/tactics/simulation/visibility-rules.js';
+import {
+    registerTacticsScenes,
+    TACTICS_ASSET_DEMO_SCENE_ID,
+} from '@chimera-engine/tactics/simulation/scenes.js';
 
 import type { MainGameContribution } from '../game/mainGameRegistry.js';
 import {
@@ -1625,6 +1629,182 @@ describe('session restore protocol (F68) — integration', () => {
         expect(aiSeeds().at(-1)!.snapshot.viewerId).toBe(AI_SEAT);
 
         await clientA.manager.closeLobby();
+        await host.lobbyManager.closeLobby();
+    });
+});
+
+/**
+ * The scene half of the same wiring.
+ *
+ * `wireDefaultSceneActions` is called by the production composition root and
+ * also here, and threading contributions through the composition root alone
+ * leaves a restored host holding the engine's own scenes and nothing else. The
+ * cases below measure what that costs.
+ */
+describe('contributed scenes on the restored host', () => {
+    /**
+     * The file-level `contribution` deliberately carries NO `registerScenes` —
+     * it is the hookless case every other spec here exercises. This variant is
+     * the only one that contributes a scene.
+     */
+    const sceneContribution: MainGameContribution = {
+        ...contribution,
+        registerScenes: registerTacticsScenes,
+    };
+
+    function sceneAction(
+        actor: string,
+        type: string,
+        tick: number,
+        payload: Readonly<Record<string, unknown>>,
+    ): ActionEnvelope {
+        return { type, playerId: playerId(actor), tick, payload };
+    }
+
+    it('enters a contributed scene, and the refs the game declared reach the snapshot', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider, sceneContribution);
+
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 1,
+        });
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        expect(runtime).not.toBeNull();
+        const actor = String(hostInfo.hostId);
+
+        // Prepare: rejected as `unknown_scene` unless the harness handed this
+        // contribution to the wiring.
+        host.dispatchHostAction(
+            sceneAction(actor, 'engine:scene_prepare', runtime!.getSnapshot().tick, {
+                toSceneId: String(TACTICS_ASSET_DEMO_SCENE_ID),
+                params: {},
+            }),
+        );
+        const prepared = runtime!.getSnapshot();
+        expect(prepared.sceneTransition?.toSceneId).toBe(TACTICS_ASSET_DEMO_SCENE_ID);
+        expect(prepared.sceneTransition?.requiredAssets?.length).toBeGreaterThan(0);
+
+        // No explicit commit: the host commits for itself once every seat is
+        // ready (`SessionRuntime.resolveTimedOutOrReadySceneTransition`), so
+        // dispatching one here would be rejected as `no_transition`.
+        host.dispatchHostAction(
+            sceneAction(actor, 'engine:scene_ready', runtime!.getSnapshot().tick, {
+                playerId: actor,
+            }),
+        );
+
+        const committed = runtime!.getSnapshot();
+        expect(committed.sceneId).toBe(TACTICS_ASSET_DEMO_SCENE_ID);
+        expect(committed.sceneRequiredAssets).toEqual(prepared.sceneTransition?.requiredAssets);
+
+        await host.lobbyManager.closeLobby();
+    });
+
+    it('leaves an AI seat unready, so a transition in an AI match waits for the budget', async () => {
+        // MEASURED, and recorded because the reveal gate depends on it:
+        // `engine:start_game` seats every id in `payload.playerIds` into
+        // `state.players`, AI seats included, but `engine:scene_ready` is
+        // dispatched from exactly one place — `useFadeTransition`, inside a
+        // mounted `SceneRouter`. An AI seat has no renderer, so nothing ever
+        // readies it, and `areAllPlayersReady` iterates ALL of `state.players`.
+        // The transition therefore cannot reach `ready` and only the timeout
+        // path commits it.
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider, sceneContribution);
+
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 2,
+            agentSlots: [{ slotIndex: 1, kind: 'ai', omniscient: true }],
+        });
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        const actor = String(hostInfo.hostId);
+        const seats = Object.keys(runtime!.getSnapshot().players);
+        expect(seats).toHaveLength(2);
+
+        host.dispatchHostAction(
+            sceneAction(actor, 'engine:scene_prepare', runtime!.getSnapshot().tick, {
+                toSceneId: String(TACTICS_ASSET_DEMO_SCENE_ID),
+                params: {},
+            }),
+        );
+        host.dispatchHostAction(
+            sceneAction(actor, 'engine:scene_ready', runtime!.getSnapshot().tick, {
+                playerId: actor,
+            }),
+        );
+
+        // The host readied; the AI seat did not, so the barrier holds and the
+        // scene has NOT been entered.
+        const held = runtime!.getSnapshot();
+        expect(held.sceneTransition?.phase).toBe('preparing');
+        expect(held.sceneTransition?.playersReady).toEqual([hostInfo.hostId]);
+        expect(held.sceneId).not.toBe(TACTICS_ASSET_DEMO_SCENE_ID);
+
+        await host.lobbyManager.closeLobby();
+    });
+
+    it('restores a save taken inside a contributed scene and can re-enter it', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider, sceneContribution);
+
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 1,
+        });
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        const actor = String(hostInfo.hostId);
+        host.dispatchHostAction(
+            sceneAction(actor, 'engine:scene_prepare', runtime!.getSnapshot().tick, {
+                toSceneId: String(TACTICS_ASSET_DEMO_SCENE_ID),
+                params: {},
+            }),
+        );
+        host.dispatchHostAction(
+            sceneAction(actor, 'engine:scene_ready', runtime!.getSnapshot().tick, {
+                playerId: actor,
+            }),
+        );
+        expect(runtime!.getSnapshot().sceneId).toBe(TACTICS_ASSET_DEMO_SCENE_ID);
+
+        const file = runtime!.captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
+        await host.saveManager.save(file);
+        await host.lobbyManager.closeLobby();
+        await flushProviderEvents();
+
+        const loaded = await host.saveManager.restoreFromSave(QUALIFIED_SLOT);
+        await host.coordinator.restoreSession(loaded);
+
+        // The restored snapshot NAMES the contributed scene…
+        const restored = host.activeRuntime()!.getSnapshot();
+        expect(restored.sceneId).toBe(TACTICS_ASSET_DEMO_SCENE_ID);
+
+        // …and the restored host's own registry still resolves it, which is what
+        // the second call site buys. A registry holding only the engine's three
+        // scenes answers `unknown_scene` here and leaves the transition null.
+        host.dispatchHostAction(
+            sceneAction(actor, 'engine:scene_prepare', restored.tick, {
+                toSceneId: String(TACTICS_ASSET_DEMO_SCENE_ID),
+                params: {},
+            }),
+        );
+        expect(host.activeRuntime()!.getSnapshot().sceneTransition?.toSceneId).toBe(
+            TACTICS_ASSET_DEMO_SCENE_ID,
+        );
+
         await host.lobbyManager.closeLobby();
     });
 });

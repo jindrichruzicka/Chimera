@@ -19,6 +19,7 @@ import { main, type MainGameContribution } from '@chimera-engine/electron/main';
 
 import { createTacticsAIState } from '@chimera-engine/tactics/ai/tacticsPolicy.js';
 import { registerTacticsActions } from '@chimera-engine/tactics/simulation/actions.js';
+import { registerTacticsScenes } from '@chimera-engine/tactics/simulation/scenes.js';
 import { resolveTacticsFirstPlayer } from '@chimera-engine/tactics/simulation/init.js';
 import {
     paletteFromCollections,
@@ -43,6 +44,7 @@ export const tacticsContribution: MainGameContribution = {
     contentSchemas: TACTICS_CONTENT_SCHEMAS,
     lobbySetup: (content) => buildTacticsLobbySetup(paletteFromCollections(content)),
     registerActions: registerTacticsActions,
+    registerScenes: registerTacticsScenes,
     registerSettings: (manager) => manager.registerSchema(tacticsSettingsSchema),
     visibilityRules: tacticsVisibilityRules,
     resolveFirstPlayer: resolveTacticsFirstPlayer,
