@@ -1,56 +1,73 @@
 /**
  * renderer/__tests__/logs-bridge-read-shape.test.ts
  *
- * Source census for the renderer's read of the preload log bridge (§4.27,
- * Invariant #67): a production renderer module reaches the bridge's log
- * namespace through `readRendererLogsApi()`, never by casting the global and
- * narrowing to that namespace inline.
+ * Source census for the read of the preload log bridge (§4.27, Invariant #67):
+ * under the roots `listCensusRoots` names, no production module narrows the
+ * bridge to its log namespace inline, by casting the global and reading that
+ * property off it. Inside the engine renderer package the way to the namespace
+ * is `readRendererLogsApi()`.
  *
  * Consolidating the inline reads left that property as a measurement of one
  * tree — nothing re-runs a commit body. This census is the ratchet.
  *
+ * Those roots are of three kinds: the engine renderer package, every game app
+ * under `apps/`, and every scaffold template under
+ * `tools/create-chimera-game/templates/`. The allowance list names sites in the
+ * first only, and that asymmetry is the point rather than an omission —
+ * `readRendererLogsApi` sits behind no public barrel, so Invariant #96 puts it
+ * out of a game surface's reach, and what carries a game's report to the log
+ * file instead is the `console.warn` / `console.error` the installed bridge
+ * patches. A template is walked because it is copied into a repository where
+ * this census does not run, so its own tree is read here instead.
+ *
  * The properties below are independent — each is defeatable without the others:
  *
- * 1. **File filter** — `isProductionRendererSource` decides what the census
- *    reads at all. Pinned at BOTH ends of every anchor: a leading segment that
- *    merely contains `renderer`, a suffix that merely contains `.ts`, and the
- *    near-misses (`ad.ts` is not a declaration file, `latest.ts` is not a test)
- *    that a sloppier suffix test would silently exempt.
- * 2. **Match pattern** — `scanLogsBridgeReads` parses; it does not grep. What
+ * 1. **Root list** — `listCensusRoots` decides which trees exist for the walk.
+ *    Pinned against a synthetic tree carrying two apps and two templates, so a
+ *    root list narrowed back to one hard-coded app fails, and against the real
+ *    repository as an exact set.
+ * 2. **File filter** — `isProductionCensusSource` decides what the census reads
+ *    at all. Which paths it accepts and refuses, per root and at both ends of
+ *    each anchor, is the case list below — including the near-misses (`ad.ts`
+ *    is not a declaration file, `latest.ts` is not a test, `e2e-helpers/` is
+ *    not `e2e/`) that a sloppier test would silently exempt.
+ * 3. **Match pattern** — `scanLogsBridgeReads` parses; it does not grep. What
  *    it reaches is the case list below: `globalThis` and `window`, dotted and
  *    bracketed, three quote styles, the split cast-then-narrow form through the
  *    wrappers and the binding constructs enumerated there, and the
  *    destructuring forms — plus the negatives (prose, type positions, a
  *    different namespace, a local merely compared against the bridge) that say
  *    the pattern discriminates rather than matching the token.
- * 3. **Attribution** — a read buried in a callback, a constructor, or a class
+ * 4. **Attribution** — a read buried in a callback, a constructor, or a class
  *    body inside an allowed function does not inherit that function's name.
- * 4. **Allowance classifier** — `isAllowedSite` keys on file AND enclosing
+ * 5. **Allowance classifier** — `isAllowedSite` keys on file AND enclosing
  *    function. `LoggingBootstrap.resolveLogsApi` is a permanent exception, not
  *    a migration item: it reads `window` behind a `typeof window` guard,
  *    validates both `emit` and `readRecent`, and returns `LogsAPI | null` — a
  *    contract `readRendererLogsApi` does not offer. Pinned to prove the
- *    allowance covers that function rather than its file or its directory.
- * 5. **Composition and the tree** — `censusLogsBridgeReads` applies the filter
- *    before it parses, and over `renderer/` it matches EXACTLY the two allowed
- *    sites. Asserted as a set rather than as "no violations", so the case
- *    cannot pass by finding nothing at all. A game's own renderer tree,
- *    `apps/<game>/renderer`, is outside the walk.
+ *    allowance covers that function rather than its file, its directory, or its
+ *    basename under another root.
+ * 6. **Composition and the tree** — `censusLogsBridgeReads` applies the filter
+ *    before it parses, and over every root walked it matches EXACTLY the two
+ *    allowed sites. Asserted as a set rather than as "no violations", so the
+ *    case cannot pass by finding nothing at all.
  *
  * The probed tokens are assembled at runtime here and in the census module, per
  * the source-scan guard convention in the TDD skill's green-confirmation
  * checklist.
  */
 
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     censusLogsBridgeReads,
     isAllowedSite,
-    isProductionRendererSource,
-    listRendererSourceFiles,
+    isProductionCensusSource,
+    listCensusRoots,
+    listCensusSourceFiles,
     scanLogsBridgeReads,
     type LogsBridgeRead,
 } from './logsBridgeReadCensus';
@@ -58,11 +75,13 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '../../');
 
+const TEMPLATES_ROOT_PARENT = 'tools/create-chimera-game/templates';
+
 // Never spelled literally — see the file header.
 const BRIDGE = `__${'chimera'}`;
 const LOGS = `lo${'gs'}`;
 
-describe('isProductionRendererSource — what the census reads', () => {
+describe('isProductionCensusSource — what the census reads', () => {
     it.each([
         ['renderer/logging/rendererLogger.ts', true],
         ['renderer/app/LoggingBootstrap.tsx', true],
@@ -74,9 +93,12 @@ describe('isProductionRendererSource — what the census reads', () => {
         // Segment-wise, not substring: a `dist-helpers/` directory is source.
         ['renderer/dist-helpers/paths.ts', true],
 
-        // Start anchor, both ends: the path must BEGIN with the package.
+        // Start anchor, both ends: a leading segment that merely CONTAINS the
+        // package name is not it, and one the package name is merely a PREFIX
+        // of is not it either. Both rows carry a source extension, so the end
+        // anchor below cannot stand in for this one.
         ['xrenderer/logging/rendererLogger.ts', false],
-        ['apps/tactics/renderer/register.ts', false],
+        ['renderer-utils/logging/rendererLogger.ts', false],
         ['renderer', false],
         // End anchor, both ends: the path must END with a source extension.
         ['renderer/logging/rendererLogger.ts.bak', false],
@@ -90,8 +112,65 @@ describe('isProductionRendererSource — what the census reads', () => {
         ['renderer/__tests__/logsBridgeReadCensus.ts', false],
         ['renderer/animation/__test-support__/clips.ts', false],
         ['renderer/out/_next/chunk.ts', false],
-    ])('classifies %s as production=%s', (relPath, expected) => {
-        expect(isProductionRendererSource(relPath)).toBe(expected);
+    ])('classifies the engine renderer path %s as production=%s', (relPath, expected) => {
+        expect(isProductionCensusSource(relPath)).toBe(expected);
+    });
+
+    // A game app is a root in its own right, and the whole app tree is walked
+    // rather than the four surfaces Invariant #96 legalises: the allowance is
+    // empty everywhere under it, so no subdirectory carries a different policy,
+    // and a list of renderer directories would have to be kept in step with a
+    // consumer's own layout to stay true. `apps/<game>/renderer/register.ts`
+    // is the composition root of a game's renderer bundle, so it reads true.
+    it.each([
+        ['apps/tactics/renderer/register.ts', true],
+        ['apps/tactics/screens/BattleScreen.tsx', true],
+        ['apps/tactics/styles/register-token-overrides.tsx', true],
+        ['apps/tactics/simulation/reducers/move.ts', true],
+        // Segment-wise, not substring, at this anchor too: an `e2e-helpers/`
+        // directory is ordinary source.
+        ['apps/tactics/renderer/e2e-helpers/wait.ts', true],
+
+        // Start anchor, both ends: a leading segment that merely CONTAINS the
+        // parent is not it, a segment it is merely a PREFIX of is not it
+        // either, and a path under the parent that never names a game is not
+        // inside one.
+        ['xapps/tactics/renderer/register.ts', false],
+        ['appsx/tactics/renderer/register.ts', false],
+        ['apps/tactics.ts', false],
+        ['apps', false],
+        // Playwright drives a built app through the browser; its specs and the
+        // page objects beside them read the bridge on purpose, exactly as a
+        // renderer unit test does.
+        ['apps/tactics/e2e/tests/renderer-logging.spec.ts', false],
+        ['apps/tactics/e2e/pages/GamePage.ts', false],
+        ['apps/tactics/manifest.test.ts', false],
+        ['apps/tactics/css-modules.d.ts', false],
+        ['apps/tactics/__tests__/wiring.ts', false],
+        ['apps/tactics/dist/manifest.ts', false],
+        ['apps/tactics/renderer/out/_next/chunk.ts', false],
+    ])('classifies the game-app path %s as production=%s', (relPath, expected) => {
+        expect(isProductionCensusSource(relPath)).toBe(expected);
+    });
+
+    // The scaffold templates, whose tokens (`__GamePascal__`) are identifiers
+    // and whose specifiers are strings, so the parse reaches them in place even
+    // though ESLint and `tsc` are pointed at the generated app instead.
+    it.each([
+        [`${TEMPLATES_ROOT_PARENT}/blank/renderer/register.ts`, true],
+        [`${TEMPLATES_ROOT_PARENT}/blank/screens/PlayScreen.tsx`, true],
+
+        // Start anchor, both ends, as above — and the initializer's own source
+        // is not a template: it runs on the adopter's machine, never in a
+        // renderer bundle.
+        [`x${TEMPLATES_ROOT_PARENT}/blank/renderer/register.ts`, false],
+        [`${TEMPLATES_ROOT_PARENT}-extra/blank/renderer/register.ts`, false],
+        [`${TEMPLATES_ROOT_PARENT}/index.ts`, false],
+        ['tools/create-chimera-game/index.ts', false],
+        [`${TEMPLATES_ROOT_PARENT}/blank/manifest.test.ts`, false],
+        [`${TEMPLATES_ROOT_PARENT}/blank/e2e/tests/boot-smoke.spec.ts`, false],
+    ])('classifies the scaffold-template path %s as production=%s', (relPath, expected) => {
+        expect(isProductionCensusSource(relPath)).toBe(expected);
     });
 });
 
@@ -664,6 +743,32 @@ describe('isAllowedSite — scoped to a function, not a file or a directory', ()
     ])('refuses %s → %s', (file, enclosingFunction) => {
         expect(isAllowedSite(site(file, enclosingFunction))).toBe(false);
     });
+
+    // The allowance is empty under every root but the engine package, and the
+    // match is on the whole repo-relative path rather than on a suffix or a
+    // basename. That distinction stops being academic once an app is walked:
+    // an app has a `renderer/` directory of its own, and its Next host tree is
+    // `apps/<game>/renderer/app/`, so BOTH allowed sites have a path under a
+    // game app whose tail reproduces them exactly. Each allowed site is
+    // respelled below in the suffix form and the basename form, under each of
+    // the two roots the allowance does not cover — and the composition root a
+    // game registers through is refused beside them.
+    it.each([
+        ['apps/tactics/renderer/register.ts', 'readRendererLogsApi'],
+        ['apps/tactics/renderer/logging/rendererLogger.ts', 'readRendererLogsApi'],
+        ['apps/tactics/logging/rendererLogger.ts', 'readRendererLogsApi'],
+        ['apps/tactics/renderer/app/LoggingBootstrap.tsx', 'resolveLogsApi'],
+        ['apps/tactics/app/LoggingBootstrap.tsx', 'resolveLogsApi'],
+        [
+            `${TEMPLATES_ROOT_PARENT}/blank/renderer/logging/rendererLogger.ts`,
+            'readRendererLogsApi',
+        ],
+        [`${TEMPLATES_ROOT_PARENT}/blank/logging/rendererLogger.ts`, 'readRendererLogsApi'],
+        [`${TEMPLATES_ROOT_PARENT}/blank/renderer/app/LoggingBootstrap.tsx`, 'resolveLogsApi'],
+        [`${TEMPLATES_ROOT_PARENT}/blank/app/LoggingBootstrap.tsx`, 'resolveLogsApi'],
+    ])('refuses %s → %s, outside the engine package', (file, enclosingFunction) => {
+        expect(isAllowedSite(site(file, enclosingFunction))).toBe(false);
+    });
 });
 
 describe('censusLogsBridgeReads — the file filter is applied before the scan', () => {
@@ -674,49 +779,129 @@ describe('censusLogsBridgeReads — the file filter is applied before the scan',
         '',
     ].join('\n');
 
-    it('reports a hand-rolled read from a production renderer module', () => {
-        const reads = censusLogsBridgeReads([
-            { file: 'renderer/components/shell/StatusPanel.tsx', source: inlineRead },
-        ]);
+    // One row per root, because a root the filter stopped accepting is a tree
+    // the census silently reports nothing about — and nothing about a tree
+    // reads the same as a clean one. The exact matched set is asserted, and the
+    // unallowed remainder alongside it: under the two roots below the engine
+    // package the allowance is empty, so every read there is a violation.
+    it.each([
+        'renderer/components/shell/StatusPanel.tsx',
+        'apps/tactics/renderer/register.ts',
+        'apps/tactics/screens/BattleScreen.tsx',
+        `${TEMPLATES_ROOT_PARENT}/blank/renderer/register.ts`,
+    ])('reports a hand-rolled read from the production module %s', (file) => {
+        const reads = censusLogsBridgeReads([{ file, source: inlineRead }]);
 
-        expect(reads).toEqual([
-            {
-                file: 'renderer/components/shell/StatusPanel.tsx',
-                line: 2,
-                enclosingFunction: 'reportSomething',
-            },
-        ]);
-        expect(reads.filter((entry) => !isAllowedSite(entry))).toHaveLength(1);
+        expect(reads).toEqual([{ file, line: 2, enclosingFunction: 'reportSomething' }]);
+        expect(reads.filter((entry) => !isAllowedSite(entry))).toEqual(reads);
     });
 
     it.each([
         'renderer/components/shell/StatusPanel.test.tsx',
         'renderer/types/chimera.d.ts',
-        'apps/tactics/renderer/register.ts',
+        'apps/tactics/manifest.test.ts',
+        'apps/tactics/e2e/tests/renderer-logging.spec.ts',
+        `${TEMPLATES_ROOT_PARENT}/blank/e2e/tests/boot-smoke.spec.ts`,
+        'tools/create-chimera-game/index.ts',
     ])('skips %s', (file) => {
         expect(censusLogsBridgeReads([{ file, source: inlineRead }])).toEqual([]);
     });
 });
 
-describe('the renderer tree', () => {
-    const paths = listRendererSourceFiles(repoRoot);
+describe('listCensusRoots — a synthetic tree, so the roots are derived rather than named', () => {
+    let fixtureRoot: string;
 
-    it('walks the package rather than a hand-written list', () => {
+    beforeAll(() => {
+        fixtureRoot = mkdtempSync(resolve(tmpdir(), 'logs-bridge-census-'));
+        for (const file of [
+            'renderer/logging/rendererLogger.ts',
+            'renderer/out/_next/chunk.ts',
+            // Not a directory, so not a root — and a directory that is build
+            // output or vendored code is not one either.
+            'apps/README.md',
+            'apps/node_modules/some-package/index.ts',
+            'apps/alpha/renderer/register.ts',
+            'apps/alpha/dist/register.ts',
+            'apps/beta/screens/Play.tsx',
+            `${TEMPLATES_ROOT_PARENT}/blank/renderer/register.ts`,
+            `${TEMPLATES_ROOT_PARENT}/second/screens/Play.tsx`,
+        ]) {
+            const path = resolve(fixtureRoot, file);
+            mkdirSync(dirname(path), { recursive: true });
+            writeFileSync(path, '', 'utf8');
+        }
+    });
+
+    afterAll(() => {
+        rmSync(fixtureRoot, { recursive: true, force: true });
+    });
+
+    // TWO apps and TWO templates: with one of each, a root list that named
+    // `apps/tactics` outright would be indistinguishable from one that read the
+    // directory.
+    it('names the engine package plus every child of each root parent', () => {
+        expect(listCensusRoots(fixtureRoot)).toEqual([
+            'renderer',
+            'apps/alpha',
+            'apps/beta',
+            `${TEMPLATES_ROOT_PARENT}/blank`,
+            `${TEMPLATES_ROOT_PARENT}/second`,
+        ]);
+    });
+
+    // The walk starts at each root and must not descend into build output —
+    // the filter drops those paths afterwards either way, so nothing but this
+    // case reports a walk that reads an app's `dist` tree to throw it away.
+    it('walks every root and stops at build output', () => {
+        expect(listCensusSourceFiles(fixtureRoot)).toEqual([
+            'apps/alpha/renderer/register.ts',
+            'apps/beta/screens/Play.tsx',
+            'renderer/logging/rendererLogger.ts',
+            `${TEMPLATES_ROOT_PARENT}/blank/renderer/register.ts`,
+            `${TEMPLATES_ROOT_PARENT}/second/screens/Play.tsx`,
+        ]);
+    });
+});
+
+describe('the walked trees', () => {
+    // Walked inside the cases rather than while the suite is collected, and
+    // not in a hook either: a root parent holds files as well as directories
+    // (`apps/.gitkeep`), so a root list that stopped filtering them throws.
+    // Thrown during collection that takes the synthetic cases above down with
+    // it, and thrown in a hook it leaves these cases reported as skipped —
+    // either way hiding which predicate broke behind a suite that did not run.
+    let cachedPaths: string[] | undefined;
+    const walkedPaths = (): string[] => (cachedPaths ??= listCensusSourceFiles(repoRoot));
+
+    it('names the roots this repository actually holds', () => {
+        expect(listCensusRoots(repoRoot)).toEqual([
+            'renderer',
+            'apps/tactics',
+            `${TEMPLATES_ROOT_PARENT}/blank`,
+        ]);
+    });
+
+    it('walks each root rather than a hand-written list', () => {
         // Guards the derivation: a walk that returned nothing, or stopped at
-        // the package root, would make the census below vacuous.
-        expect(paths.length).toBeGreaterThan(200);
-        expect(paths).toContain('renderer/logging/rendererLogger.ts');
-        expect(paths).toContain('renderer/app/LoggingBootstrap.tsx');
-        expect(paths.some((file) => file.split('/').length > 3)).toBe(true);
+        // a root directory, would make the census below vacuous.
+        expect(walkedPaths().length).toBeGreaterThan(200);
+        expect(walkedPaths()).toContain('renderer/logging/rendererLogger.ts');
+        expect(walkedPaths()).toContain('renderer/app/LoggingBootstrap.tsx');
+        expect(walkedPaths()).toContain('apps/tactics/renderer/register.ts');
+        expect(walkedPaths()).toContain(`${TEMPLATES_ROOT_PARENT}/blank/renderer/register.ts`);
+        expect(walkedPaths().some((file) => file.split('/').length > 3)).toBe(true);
         // The walk hands over what the filter is there to drop, so the census
-        // below proves the filter runs rather than merely being defined.
-        expect(paths).toContain('renderer/logging/rendererLogger.test.ts');
-        expect(paths).toContain('renderer/types/chimera.d.ts');
+        // below proves the filter runs rather than merely being defined. The
+        // Playwright spec is the one that matters most: it holds a real read of
+        // the namespace, so a filter that stopped dropping it reds the census.
+        expect(walkedPaths()).toContain('renderer/logging/rendererLogger.test.ts');
+        expect(walkedPaths()).toContain('renderer/types/chimera.d.ts');
+        expect(walkedPaths()).toContain('apps/tactics/e2e/tests/renderer-logging.spec.ts');
     });
 
     it('reads the log bridge inline at exactly the two allowed sites', () => {
         const reads = censusLogsBridgeReads(
-            paths.map((file) => ({
+            walkedPaths().map((file) => ({
                 file,
                 source: readFileSync(resolve(repoRoot, file), 'utf8'),
             })),

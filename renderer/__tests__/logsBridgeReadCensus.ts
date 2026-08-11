@@ -1,13 +1,20 @@
 // renderer/__tests__/logsBridgeReadCensus.ts
 //
-// Predicates behind the renderer log-bridge read census (§4.27, Invariant #67).
-// A production renderer module reaches the preload bridge's log namespace
-// through `readRendererLogsApi()`, never by casting the global and narrowing to
-// that namespace inline. `apps/*/renderer/**` is outside the walk.
+// Predicates behind the log-bridge read census (§4.27, Invariant #67). Under
+// the roots `listCensusRoots` names, no production module narrows the preload
+// bridge to its log namespace inline, by casting the global and reading that
+// property off it. Inside the engine renderer package the way to the namespace
+// is `readRendererLogsApi()`, and the two sites allowed to skip the accessor
+// are listed below.
 //
-// Split out of the test that consumes it so each predicate — file filter, match
-// pattern, allowance classifier — is a named function pinnable against
-// synthetic inputs.
+// It lives here because this package owns the bridge and that accessor, but the
+// trees it walks are wider: a game app and a scaffold template each hold code
+// that ships in the same renderer bundle under the same preload bridge.
+// `listCensusRoots` names all three kinds of root.
+//
+// Split out of the test that consumes it so each predicate — root list, file
+// filter, match pattern, allowance classifier — is a named function pinnable
+// against synthetic inputs.
 //
 // It parses rather than greps. A grep cannot tell the read apart from the same
 // text in a comment or a type position, and it cannot follow the split form —
@@ -38,7 +45,7 @@ export interface LogsBridgeRead {
     readonly enclosingFunction: string | null;
 }
 
-export interface RendererSourceFile {
+export interface CensusSourceFile {
     readonly file: string;
     readonly source: string;
 }
@@ -49,15 +56,22 @@ interface AllowedSite {
 }
 
 /**
- * The two functions permitted to narrow the bridge inline.
+ * The two functions permitted to narrow the bridge inline. Both sit in the
+ * engine renderer package; under every other root the allowance is empty.
  *
- * `readRendererLogsApi` is the accessor every other module calls.
- * `LoggingBootstrap.resolveLogsApi` is a permanent exception rather than a
- * migration item: it reads `window` behind a `typeof window` guard (the
+ * `readRendererLogsApi` is the accessor every other module in this package
+ * calls. `LoggingBootstrap.resolveLogsApi` is a permanent exception rather than
+ * a migration item: it reads `window` behind a `typeof window` guard (the
  * static-export prerender has no window), validates that both `emit` and
  * `readRecent` are present, and returns `LogsAPI | null` — a contract
  * `readRendererLogsApi`, which returns an unvalidated emitter or `undefined`,
  * does not offer.
+ *
+ * A game app and a scaffold template get no counterpart entry. `renderer/logging/`
+ * sits behind none of the eight public barrels, so Invariant #96 puts the
+ * accessor itself out of a game surface's reach; what carries a game's report to
+ * the log file instead is `console.warn` / `console.error`, which
+ * `installRendererLogger` patches and forwards over the bridge.
  */
 const ALLOWED_SITES: readonly AllowedSite[] = [
     { file: 'renderer/logging/rendererLogger.ts', enclosingFunction: 'readRendererLogsApi' },
@@ -67,20 +81,53 @@ const ALLOWED_SITES: readonly AllowedSite[] = [
 /** Directory names whose contents are build output or vendored code, never source. */
 const NON_SOURCE_DIRECTORIES = new Set(['node_modules', 'out', 'dist', 'build', '.next']);
 
-/** Path segments that mark a module as test scaffolding rather than production code. */
-const TEST_DIRECTORIES = new Set(['__tests__', '__test-support__']);
+/**
+ * Path segments that mark a module as test scaffolding rather than production
+ * code. `e2e` covers a Playwright suite whole — its specs read the bridge
+ * through the browser on purpose, and so may the page objects beside them.
+ */
+const TEST_DIRECTORIES = new Set(['__tests__', '__test-support__', 'e2e']);
 
-const RENDERER_ROOT = 'renderer';
+/** The engine renderer package, which is a root on its own. */
+const ENGINE_RENDERER_ROOT = 'renderer';
 
 /**
- * Whether `relPath` (repo-relative, POSIX) is a production renderer module.
+ * Directories under which each game app and each scaffold template sits: every
+ * child directory of one is a census root, build output and vendored code aside.
+ *
+ * A game app is walked because part of it — the renderer composition root, the
+ * screens, the components, the shell contributions — ships in the same renderer
+ * bundle under the same preload bridge. It is walked WHOLE rather than by that
+ * list of surfaces: the allowance is empty everywhere under the app, so no
+ * subdirectory carries a policy of its own, and a directory list would have to
+ * track a consumer's own layout to stay true. A template is walked for a
+ * different reason: it is copied into a repository where this census does not
+ * run, so its own tree is read here instead.
+ */
+const ROOT_PARENTS = ['apps', 'tools/create-chimera-game/templates'] as const;
+
+/** Whether `relPath` sits under a census root — the start anchor of the filter. */
+function isUnderCensusRoot(relPath: string): boolean {
+    if (relPath.startsWith(`${ENGINE_RENDERER_ROOT}/`)) return true;
+
+    return ROOT_PARENTS.some((parent) => {
+        if (!relPath.startsWith(`${parent}/`)) return false;
+        // A root is a CHILD of the parent, so a path that stops at the parent's
+        // own level names no app and no template and is under neither.
+        return relPath.slice(parent.length + 1).includes('/');
+    });
+}
+
+/**
+ * Whether `relPath` (repo-relative, POSIX) is a production module the census
+ * reads.
  *
  * Declaration files are excluded because the bridge's own `Window`
  * augmentation lives in one, and tests because installing and reading the
  * bridge is what a test of it does.
  */
-export function isProductionRendererSource(relPath: string): boolean {
-    if (!relPath.startsWith(`${RENDERER_ROOT}/`)) return false;
+export function isProductionCensusSource(relPath: string): boolean {
+    if (!isUnderCensusRoot(relPath)) return false;
     if (!relPath.endsWith('.ts') && !relPath.endsWith('.tsx')) return false;
     if (relPath.endsWith('.d.ts')) return false;
     if (relPath.endsWith('.test.ts') || relPath.endsWith('.test.tsx')) return false;
@@ -99,14 +146,33 @@ export function isAllowedSite(read: LogsBridgeRead): boolean {
 }
 
 /**
- * The `.ts`/`.tsx` files the walk reaches under `renderer/`, repo-relative and
- * sorted. It does not descend into `NON_SOURCE_DIRECTORIES`.
+ * The trees the census walks, repo-relative: the engine renderer package, then
+ * each root parent's child directories in name order.
+ *
+ * Read off disk rather than listed, so an app or a template added later is
+ * covered without this module changing.
+ */
+export function listCensusRoots(repoRoot: string): string[] {
+    return [
+        ENGINE_RENDERER_ROOT,
+        ...ROOT_PARENTS.flatMap((parent) =>
+            readdirSync(resolve(repoRoot, parent), { withFileTypes: true })
+                .filter((entry) => entry.isDirectory() && !NON_SOURCE_DIRECTORIES.has(entry.name))
+                .map((entry) => `${parent}/${entry.name}`)
+                .sort(),
+        ),
+    ];
+}
+
+/**
+ * The `.ts`/`.tsx` files the walk reaches under `listCensusRoots`, repo-relative
+ * and sorted. It does not descend into `NON_SOURCE_DIRECTORIES`.
  *
  * Returns test and declaration files too: the filter above is what drops them,
  * so handing it what the walk reaches is what makes the filter observable at
  * the real tree.
  */
-export function listRendererSourceFiles(repoRoot: string): string[] {
+export function listCensusSourceFiles(repoRoot: string): string[] {
     const found: string[] = [];
 
     const walk = (relDir: string): void => {
@@ -123,14 +189,14 @@ export function listRendererSourceFiles(repoRoot: string): string[] {
         }
     };
 
-    walk(RENDERER_ROOT);
+    for (const root of listCensusRoots(repoRoot)) walk(root);
     return found.sort();
 }
 
 /** The inline bridge narrowings matched in the production modules of `files`. */
-export function censusLogsBridgeReads(files: readonly RendererSourceFile[]): LogsBridgeRead[] {
+export function censusLogsBridgeReads(files: readonly CensusSourceFile[]): LogsBridgeRead[] {
     return files
-        .filter(({ file }) => isProductionRendererSource(file))
+        .filter(({ file }) => isProductionCensusSource(file))
         .flatMap(({ file, source }) => scanLogsBridgeReads(file, source));
 }
 
