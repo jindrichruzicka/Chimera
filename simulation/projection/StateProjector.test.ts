@@ -25,6 +25,7 @@ import type {
     PlayerId,
 } from '../engine/types.js';
 import { entityId, gamePhase, playerId } from '../engine/types.js';
+import { buildAssetRef } from '../content/AssetRef.js';
 import type { AnimationWindowId, AnimationWindowRegistry } from '../engine/AnimationWindow.js';
 
 import type { PlayerSnapshot, StateProjector } from './StateProjector.js';
@@ -627,6 +628,49 @@ describe('DefaultStateProjector.project()', () => {
             // form satisfies `exactOptionalPropertyTypes`.
             expect(Object.hasOwn(snapshot, 'timeScalePermille')).toBe(false);
             expect(Object.hasOwn(view, 'timeScalePermille')).toBe(false);
+        });
+    });
+
+    describe('sceneRequiredAssets passthrough (committed scene asset declaration)', () => {
+        const backdrop = buildAssetRef('texture', 'engine/scene/backdrop.webp');
+        const rig = buildAssetRef('gltf-model', 'engine/scene/rig.glb');
+
+        it('sceneRequiredAssets is projected verbatim and identical for every viewer', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const sceneRequiredAssets = [rig, backdrop, rig];
+            const snapshot = makeSnapshot({ sceneRequiredAssets });
+
+            const viewP1 = projector.project(snapshot, P1);
+            const viewP2 = projector.project(snapshot, P2);
+
+            // Order and repeats survive: the declaration is what a client
+            // preloads from, not a set the projector is free to normalise.
+            expect(viewP1.sceneRequiredAssets).toEqual([rig, backdrop, rig]);
+            expect(viewP2.sceneRequiredAssets).toEqual([rig, backdrop, rig]);
+        });
+
+        it('sceneRequiredAssets is absent when the full state omits it', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot(); // no sceneRequiredAssets
+
+            const view = projector.project(snapshot, P1);
+
+            // `Object.hasOwn` rather than a value check: dropping the spread
+            // guard writes the key with `undefined`, which reads the same
+            // through `view.sceneRequiredAssets` and only the absent form
+            // satisfies `exactOptionalPropertyTypes`.
+            expect(Object.hasOwn(snapshot, 'sceneRequiredAssets')).toBe(false);
+            expect(Object.hasOwn(view, 'sceneRequiredAssets')).toBe(false);
+        });
+
+        it('an empty declaration still crosses, distinguishing "declares none" from "unknown"', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot({ sceneRequiredAssets: [] });
+
+            const view = projector.project(snapshot, P1);
+
+            expect(Object.hasOwn(view, 'sceneRequiredAssets')).toBe(true);
+            expect(view.sceneRequiredAssets).toEqual([]);
         });
     });
 

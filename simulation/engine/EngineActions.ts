@@ -490,6 +490,7 @@ const BASE_SNAPSHOT_KEYS = [
     'gameResult',
     'sceneId',
     'sceneDefaultScreen',
+    'sceneRequiredAssets',
     'sceneTransition',
     'setup',
     'matchId',
@@ -653,6 +654,12 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
             entities: payload.initialEntities ?? state.entities,
             phase: gamePhase('playing'),
             sceneId: sceneId('engine:game'),
+            // The scene's asset declaration is reset with the scene, or the new
+            // match would advertise the refs of whatever scene the previous one
+            // ended in. Written rather than resolved — this reducer holds no
+            // registry — and the engine scenes declare none
+            // (`DefaultScenes.test.ts` pins that).
+            sceneRequiredAssets: [],
             sceneTransition: null,
             // Carry host-authored lobby config onto the snapshot so projection
             // syncs it to every client. Preserve any prior `state.setup`
@@ -712,6 +719,8 @@ export const engineReturnToLobbyDefinition: ActionDefinition<EngineReturnToLobby
             tick: state.tick + 1,
             phase: gamePhase('lobby'),
             sceneId: sceneId('engine:lobby'),
+            // Reset with the scene, for the reason `engine:start_game` states.
+            sceneRequiredAssets: [],
             sceneTransition: null,
             gameResult: null,
             entities: {},

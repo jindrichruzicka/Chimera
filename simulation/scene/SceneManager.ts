@@ -83,6 +83,11 @@ export class SceneManager<TState extends BaseGameSnapshot = BaseGameSnapshot> {
 
         reduce: (state, payload): TState => {
             const descriptor = this.#registry.resolve(payload.toSceneId);
+            // Through the accessor, not off `descriptor` — this is the one
+            // production call to it, which is what
+            // `__tests__/required-assets-accessor.test.ts` pins. Simplifying it
+            // to the field read is behaviour-identical and reds there.
+            const requiredAssets = this.#registry.requiredAssets(payload.toSceneId);
             return {
                 ...state,
                 tick: state.tick + 1,
@@ -95,6 +100,10 @@ export class SceneManager<TState extends BaseGameSnapshot = BaseGameSnapshot> {
                     timeoutTicks: descriptor.timeoutTicks ?? DEFAULT_SCENE_TRANSITION_TIMEOUT_TICKS,
                     onClientTimeout:
                         descriptor.onClientTimeout ?? DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY,
+                    // Omitted when the scene declares none, so a transition
+                    // into a scene that needs nothing keeps the shape it had
+                    // before this field existed.
+                    ...(requiredAssets.length === 0 ? {} : { requiredAssets }),
                 },
             };
         },
@@ -218,6 +227,10 @@ export class SceneManager<TState extends BaseGameSnapshot = BaseGameSnapshot> {
                 tick: state.tick + 1,
                 sceneId: transition.toSceneId,
                 sceneDefaultScreen: nextDescriptor.defaultScreen,
+                // Unconditional, empty array included: `initialize` spreads the
+                // prior state, so omitting the write when the entered scene
+                // declares nothing would leave the previous scene's refs on it.
+                sceneRequiredAssets: nextDescriptor.requiredAssets,
                 sceneTransition: null,
             };
         },

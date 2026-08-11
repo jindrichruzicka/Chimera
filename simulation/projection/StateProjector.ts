@@ -34,6 +34,8 @@ import type {
     UndoMeta,
 } from '../engine/types.js';
 
+import type { AssetRef } from '../foundation/asset-contract.js';
+
 import type { CommitmentEnvelope, CommitmentId } from './CommitmentScheme.js';
 import type { ObservedEntityState, ObservedPlayerState, VisibilityRules } from './types.js';
 
@@ -60,6 +62,13 @@ export interface PlayerSnapshot {
     readonly phase: GamePhase;
     readonly sceneId?: SceneId;
     readonly sceneDefaultScreen?: string;
+    /**
+     * Refs the scene named by `sceneId` declares, passed through verbatim like
+     * `setup` — a public declaration with no owner-only content (§4.10,
+     * Invariant #52). An empty array means the scene declares none; absence
+     * means no scene declaration crossed at all.
+     */
+    readonly sceneRequiredAssets?: readonly AssetRef[];
     readonly sceneTransition?: SceneTransitionState | null;
     readonly players: Readonly<Record<PlayerId, ObservedPlayerState>>;
     readonly entities: Readonly<Record<EntityId, ObservedEntityState>>;
@@ -224,6 +233,9 @@ export class DefaultStateProjector<
             ...(fullState.sceneDefaultScreen === undefined
                 ? {}
                 : { sceneDefaultScreen: fullState.sceneDefaultScreen }),
+            ...(fullState.sceneRequiredAssets === undefined
+                ? {}
+                : { sceneRequiredAssets: fullState.sceneRequiredAssets }),
             ...(fullState.sceneTransition === undefined
                 ? {}
                 : { sceneTransition: fullState.sceneTransition }),

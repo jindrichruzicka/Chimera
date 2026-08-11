@@ -138,8 +138,9 @@ export function SceneRouter(): JSX.Element;
 > **Not yet wired: the per-transition asset preload.** The two-phase protocol above ships — the
 > overlay renders on `phase === 'preparing'` and `useFadeTransition` dispatches
 > `engine:scene_ready` — but it dispatches on the FADE completing, not on assets loading. Nothing
-> calls `markRequiredAssetsCritical`, and the overlay has no progress channel to feed, so a scene's
-> `requiredAssets` currently declare an intent no code acts on. The manifest-level arm
+> calls `markRequiredAssetsCritical`, and the overlay has no progress channel to feed. A scene's
+> `requiredAssets` do reach the client — see `SceneTransitionState.requiredAssets` and
+> `BaseGameSnapshot.sceneRequiredAssets` — but nothing loads from them. The manifest-level arm
 > (`priority: 'critical'`, run by `GameShell` and `GameAssetSession`) is separate and does run —
 > see [Where the critical preload runs](asset-reference-system.md#where-the-critical-preload-runs).
 

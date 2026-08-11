@@ -1024,6 +1024,117 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         }
     });
 
+    it('SNAPSHOT preserves a scene transition requiredAssets declaration', () => {
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 5,
+                viewerId: toPlayerId('p1'),
+                players: {},
+                entities: {},
+                phase: 'game',
+                sceneId: 'engine:game',
+                sceneTransition: {
+                    toSceneId: 'engine:arena',
+                    phase: 'preparing',
+                    startedAtTick: 1,
+                    params: {},
+                    playersReady: [],
+                    requiredAssets: ['tactics/models/arena.glb', 'tactics/textures/floor.webp'],
+                },
+                events: [],
+                gameResult: null,
+                undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
+            },
+            checksum: 42,
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'SNAPSHOT') {
+            expect(round.data.snapshot.sceneTransition).toStrictEqual(msg.snapshot.sceneTransition);
+        }
+    });
+
+    it('SNAPSHOT preserves the committed scene sceneRequiredAssets declaration', () => {
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 6,
+                viewerId: toPlayerId('p1'),
+                players: {},
+                entities: {},
+                phase: 'game',
+                sceneId: 'engine:arena',
+                sceneRequiredAssets: ['tactics/models/arena.glb', 'tactics/textures/floor.webp'],
+                events: [],
+                gameResult: null,
+                undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
+            },
+            checksum: 42,
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'SNAPSHOT') {
+            expect(round.data.snapshot.sceneRequiredAssets).toStrictEqual(
+                msg.snapshot.sceneRequiredAssets,
+            );
+        }
+    });
+
+    it('an undeclared snapshot key is stripped while an undeclared transition key rejects', () => {
+        // Control for the two cases above: the two objects fail differently
+        // when a field is missing from the schema, so neither test proves the
+        // other's mechanism. `SceneTransition` is `.strict()` — an unknown key
+        // is an error. The snapshot object is a plain `z.object` — an unknown
+        // key is parsed AWAY with `success: true`, and `validateSnapshotCrc`
+        // runs on the pre-zod bytes, so an omitted line there strips the field
+        // from every joined client with a matching checksum and no error.
+        const baseSnapshot = {
+            tick: 7,
+            viewerId: toPlayerId('p1'),
+            players: {},
+            entities: {},
+            phase: 'game',
+            events: [],
+            gameResult: null,
+            undoMeta: { canUndo: false, canRedo: false },
+            isMyTurn: true,
+        };
+
+        const strippedTopLevel = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: { ...baseSnapshot, notASnapshotField: ['x'] },
+            checksum: 42,
+        });
+        expect(strippedTopLevel.success).toBe(true);
+        if (strippedTopLevel.success && strippedTopLevel.data.type === 'SNAPSHOT') {
+            expect(Object.hasOwn(strippedTopLevel.data.snapshot, 'notASnapshotField')).toBe(false);
+        }
+
+        const rejectedInTransition = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: {
+                ...baseSnapshot,
+                sceneTransition: {
+                    toSceneId: 'engine:arena',
+                    phase: 'preparing',
+                    startedAtTick: 1,
+                    params: {},
+                    playersReady: [],
+                    notATransitionField: ['x'],
+                },
+            },
+            checksum: 42,
+        });
+        expect(rejectedInTransition.success).toBe(false);
+    });
+
     it('SNAPSHOT preserves null gameResult while the match is in progress', () => {
         const msg = {
             type: 'SNAPSHOT' as const,

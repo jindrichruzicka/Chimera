@@ -21,6 +21,7 @@ import type { TimerRegistry } from './GameTimer.js';
 export type { TimerRegistry } from './GameTimer.js';
 import type { AnimationWindowRegistry, ClosedAnimationWindow } from './AnimationWindow.js';
 export type { AnimationWindowRegistry } from './AnimationWindow.js';
+import type { AssetRef } from '../foundation/asset-contract.js';
 import type { Logger } from '../foundation/logging.js';
 import type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
 export type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
@@ -208,6 +209,23 @@ export interface BaseGameSnapshot {
     readonly sceneId?: SceneId;
     /** Default renderer screen key for the current scene, projected from SceneDescriptor (§4.18). Optional for older fixtures/saves. */
     readonly sceneDefaultScreen?: string;
+    /**
+     * Refs the scene named by `sceneId` declares in its
+     * `SceneDescriptor.requiredAssets` (§4.10, Invariant #52), projected
+     * verbatim. `SceneTransitionState.requiredAssets` covers the scene being
+     * entered; this covers the one already entered, which is what a client
+     * joining, restoring or replaying into the middle of a scene has.
+     *
+     * `engine:scene_commit`, `engine:start_game` and `engine:return_to_lobby`
+     * each write it beside the `sceneId` they set, empty array included. An
+     * omitted write does not clear the field: the commit path spreads the
+     * scene's `initialize` result and the two match-boundary paths spread the
+     * engine-owned base, so in both the previous scene's refs would be left
+     * standing.
+     *
+     * Optional: absent until one of those reducers runs.
+     */
+    readonly sceneRequiredAssets?: readonly AssetRef[];
     /** Pending two-phase scene transition, or null between transitions (§4.18). */
     readonly sceneTransition?: SceneTransitionState | null;
     /**

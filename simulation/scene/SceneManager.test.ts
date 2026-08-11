@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ActionRegistry } from '../engine/ActionRegistry.js';
 import { ActionPipeline, ActionUnauthorizedError } from '../engine/ActionPipeline.js';
+import { buildAssetRef, type AssetRef } from '../content/AssetRef.js';
 import { registerEngineActions } from '../engine/EngineActions.js';
 import {
     gamePhase,
@@ -36,9 +37,9 @@ function makeSnapshot(overrides: Partial<BaseGameSnapshot> = {}): BaseGameSnapsh
     };
 }
 
-function makePipeline(
+function makeActionRegistry(
     descriptors: readonly SceneDescriptor<BaseGameSnapshot>[],
-): ActionPipeline<BaseGameSnapshot> {
+): ActionRegistry<BaseGameSnapshot> {
     const sceneRegistry = new SceneRegistry<BaseGameSnapshot>();
     for (const descriptor of descriptors) {
         sceneRegistry.register(descriptor);
@@ -47,7 +48,13 @@ function makePipeline(
     const actionRegistry = new ActionRegistry<BaseGameSnapshot>();
     registerEngineActions(actionRegistry);
     sceneManager.registerActions(actionRegistry);
-    return new ActionPipeline(actionRegistry);
+    return actionRegistry;
+}
+
+function makePipeline(
+    descriptors: readonly SceneDescriptor<BaseGameSnapshot>[],
+): ActionPipeline<BaseGameSnapshot> {
+    return new ActionPipeline(makeActionRegistry(descriptors));
 }
 
 function action(
@@ -329,6 +336,106 @@ describe('SceneManager action definitions', () => {
         pipeline.process(ready, action('engine:scene_commit', ready, HOST, {}));
 
         expect(mutationAttempts).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('SceneManager required-asset carriage', () => {
+    const BACKDROP = buildAssetRef('texture', 'engine/scene/backdrop.webp');
+    const RIG = buildAssetRef('gltf-model', 'engine/scene/rig.glb');
+
+    function declaring(
+        rawSceneId: string,
+        requiredAssets: readonly AssetRef[],
+    ): SceneDescriptor<BaseGameSnapshot> {
+        return { ...makeDescriptor(rawSceneId), requiredAssets };
+    }
+
+    /** prepare → ready(host) → commit, for a snapshot whose only player is the host. */
+    function transitionTo(
+        pipeline: ActionPipeline<BaseGameSnapshot>,
+        state: BaseGameSnapshot,
+        rawSceneId: string,
+    ): BaseGameSnapshot {
+        const prepared = pipeline.process(
+            state,
+            action('engine:scene_prepare', state, HOST, { toSceneId: rawSceneId }),
+        );
+        const ready = pipeline.process(
+            prepared,
+            action('engine:scene_ready', prepared, HOST, { playerId: HOST }),
+        );
+        return pipeline.process(ready, action('engine:scene_commit', ready, HOST, {}));
+    }
+
+    it('carries the target scene declared refs onto the pending transition verbatim', () => {
+        // Declared out of alphabetical order and holding a repeat: a reducer
+        // that sorted, de-duplicated or re-mapped the refs on the way through
+        // would satisfy a set-shaped assertion and fails this one.
+        const pipeline = makePipeline([
+            makeDescriptor('engine:game'),
+            declaring('engine:next', [RIG, BACKDROP, RIG]),
+        ]);
+        const snapshot = makeSnapshot();
+
+        const prepared = pipeline.process(
+            snapshot,
+            action('engine:scene_prepare', snapshot, HOST, { toSceneId: 'engine:next' }),
+        );
+
+        expect(prepared.sceneTransition?.requiredAssets).toEqual([RIG, BACKDROP, RIG]);
+    });
+
+    it('omits requiredAssets from the transition when the target scene declares none', () => {
+        const pipeline = makePipeline([
+            makeDescriptor('engine:game'),
+            makeDescriptor('engine:next'),
+        ]);
+        const snapshot = makeSnapshot();
+
+        const prepared = pipeline.process(
+            snapshot,
+            action('engine:scene_prepare', snapshot, HOST, { toSceneId: 'engine:next' }),
+        );
+
+        // `Object.hasOwn`, not a value read: an emitted `requiredAssets: []`
+        // reads as falsy-empty through the property and would leave the
+        // omit-when-empty rule — which is what keeps the three engine scenes'
+        // transition shape byte-identical — unpinned.
+        expect(prepared.sceneTransition).not.toBeNull();
+        expect(Object.hasOwn(prepared.sceneTransition ?? {}, 'requiredAssets')).toBe(false);
+    });
+
+    it('writes sceneRequiredAssets on every commit, so a scene declaring none inherits nothing', () => {
+        const pipeline = makePipeline([
+            makeDescriptor('engine:game'),
+            declaring('engine:loaded', [BACKDROP, RIG]),
+            makeDescriptor('engine:bare'),
+        ]);
+        const soloHost = makeSnapshot({ players: { [HOST]: { id: HOST } } });
+
+        const loaded = transitionTo(pipeline, soloHost, 'engine:loaded');
+        expect(loaded.sceneRequiredAssets).toEqual([BACKDROP, RIG]);
+
+        // The second scene declares nothing. `initialize` spreads the prior
+        // state, so a commit that omitted the empty array would leave the first
+        // scene's refs standing on a scene that requires none.
+        const bare = transitionTo(pipeline, loaded, 'engine:bare');
+        expect(bare.sceneRequiredAssets).toEqual([]);
+    });
+
+    it('parses engine:scene_ready to exactly { playerId }, dropping every other key', () => {
+        // The withheld field is the prohibition: no progress fraction, no
+        // outcome and no ref list travels client → host on the ready ack.
+        const registry = makeActionRegistry([makeDescriptor('engine:game')]);
+
+        const parsed = registry.resolve('engine:scene_ready').parsePayload({
+            playerId: 'host',
+            requiredAssets: ['engine/scene/backdrop.webp'],
+            loadedFraction: 0.5,
+        });
+
+        expect(parsed).toEqual({ playerId: HOST });
+        expect(Object.keys(parsed)).toEqual(['playerId']);
     });
 });
 

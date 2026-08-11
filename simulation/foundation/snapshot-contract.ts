@@ -21,6 +21,7 @@
  * This module is PURE TYPE DECLARATIONS only — zero runtime code.
  */
 
+import type { AssetRef } from './asset-contract.js';
 import type {
     EntityId,
     GamePhase,
@@ -63,6 +64,13 @@ export interface PlayerSnapshot {
     readonly phase: GamePhase;
     readonly sceneId?: SceneId;
     readonly sceneDefaultScreen?: string;
+    /**
+     * Refs the scene named by `sceneId` declares, projected verbatim (§4.10,
+     * Invariant #52). An EMPTY array means the scene declares none, which is a
+     * different statement from absence — see
+     * `BaseGameSnapshot.sceneRequiredAssets` for when each occurs.
+     */
+    readonly sceneRequiredAssets?: readonly AssetRef[];
     readonly sceneTransition?: SceneTransitionState | null;
     readonly events: readonly GameEvent[];
     readonly gameResult: GameResult | null;

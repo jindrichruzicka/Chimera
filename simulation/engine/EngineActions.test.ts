@@ -36,6 +36,7 @@ import type { GameTimer, TimerId, TimerRegistry } from './GameTimer.js';
 import { TimerManager } from './GameTimer.js';
 import type { AnimationWindowId, AnimationWindowRegistry } from './AnimationWindow.js';
 import { AnimationWindowManager } from './AnimationWindow.js';
+import type { AssetRef } from '../foundation/asset-contract.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
 import type { Logger } from '../foundation/logging.js';
 import { createContentDatabase } from '../content/index.js';
@@ -836,6 +837,28 @@ describe('engine:start_game definition', () => {
         expect(next.sceneTransition).toBeNull();
     });
 
+    it('reduce resets the scene asset declaration with the scene it enters', () => {
+        // `sceneRequiredAssets` rides forward on the engine-owned base, so
+        // without an explicit write the lobby snapshot would name
+        // `engine:game` while still advertising the refs of whatever scene the
+        // previous match ended in.
+        const snapshot = {
+            ...makeSnapshot(hostId),
+            sceneId: sceneId('tactics:arena'),
+            sceneRequiredAssets: ['gltf-model/tactics/models/arena.glb' as AssetRef],
+        } satisfies BaseGameSnapshot;
+
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId] },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next.sceneId).toBe(sceneId('engine:game'));
+        expect(next.sceneRequiredAssets).toEqual([]);
+    });
+
     it('reduce applies initial entities and explicit first player through the game-start action', () => {
         const snapshot = makeSnapshot(hostId);
         const unit = entityId('unit-start-game-reduce');
@@ -1146,6 +1169,18 @@ describe('engine:return_to_lobby definition', () => {
         expect(next.phase).toBe('lobby');
         expect(next.sceneId).toBe(sceneId('engine:lobby'));
         expect(next.sceneTransition).toBeNull();
+    });
+
+    it('reduce resets the scene asset declaration with the scene it enters', () => {
+        const snapshot = {
+            ...makePlayingSnapshot(),
+            sceneRequiredAssets: ['gltf-model/tactics/models/arena.glb' as AssetRef],
+        } satisfies BaseGameSnapshot;
+
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+
+        expect(next.sceneId).toBe(sceneId('engine:lobby'));
+        expect(next.sceneRequiredAssets).toEqual([]);
     });
 
     it('reduce clears entities, turnClock, and gameResult (abandon, not a finished match)', () => {

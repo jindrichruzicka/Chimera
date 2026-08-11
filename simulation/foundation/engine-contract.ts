@@ -12,11 +12,12 @@
  * unchanged public import path for the rest of the codebase; the runtime brand
  * factories (`playerId`, `entityId`, `gamePhase`, `sceneId`) also stay there.
  *
- * This module is PURE TYPE DECLARATIONS only — zero runtime code, zero workspace
- * imports.
+ * This module is PURE TYPE DECLARATIONS only — zero runtime code.
  *
  * Architecture references: §4.2, §4.7.
  */
+
+import type { AssetRef } from './asset-contract.js';
 
 // ─── Primitive branded identifiers ───────────────────────────────────────────
 
@@ -58,6 +59,18 @@ export interface SceneTransitionState {
     readonly playersReady: readonly PlayerId[];
     readonly timeoutTicks?: number;
     readonly onClientTimeout?: 'proceed' | 'drop';
+    /**
+     * The refs the scene being entered declares in its
+     * `SceneDescriptor.requiredAssets` (Invariant #52), copied onto the
+     * transition so a client can preload them while the transition is pending.
+     * The descriptor is host-side only; for the scene already entered the
+     * declaration travels on `BaseGameSnapshot.sceneRequiredAssets` instead.
+     *
+     * Omitted — not empty — when the target scene declares none, which keeps
+     * the transition shape of a scene that needs nothing byte-identical to
+     * what it was before the field existed.
+     */
+    readonly requiredAssets?: readonly AssetRef[];
 }
 
 // ─── Game result ────────────────────────────────────────────────────────────

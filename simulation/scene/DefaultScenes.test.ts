@@ -15,6 +15,21 @@ describe('registerDefaultScenes', () => {
         expect(registry.has(sceneId('engine:post-game'))).toBe(true);
     });
 
+    it('declares no required assets on any engine scene', () => {
+        // `engine:start_game` and `engine:return_to_lobby` write an EMPTY
+        // `sceneRequiredAssets` beside the engine scene they enter, rather than
+        // resolving it — those reducers hold no registry. This is the pin on
+        // that coupling: an engine scene that started declaring refs would make
+        // the written array wrong, and reds here rather than at runtime.
+        const registry = new SceneRegistry<BaseGameSnapshot>();
+
+        registerDefaultScenes(registry);
+
+        expect(registry.requiredAssets(sceneId('engine:lobby'))).toEqual([]);
+        expect(registry.requiredAssets(sceneId('engine:game'))).toEqual([]);
+        expect(registry.requiredAssets(sceneId('engine:post-game'))).toEqual([]);
+    });
+
     it('uses playfield as the game scene default screen', () => {
         const registry = new SceneRegistry<BaseGameSnapshot>();
 

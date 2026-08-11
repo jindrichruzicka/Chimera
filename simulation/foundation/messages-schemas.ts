@@ -162,6 +162,13 @@ const SceneTransition = z
         playersReady: z.array(PlayerId).readonly(),
         timeoutTicks: z.number().int().nonnegative().optional(),
         onClientTimeout: z.enum(['proceed', 'drop']).optional(),
+        // Refs the scene being entered declares, so a joined client can preload
+        // them while the transition is pending. This object is `.strict()` — an
+        // undeclared key is an ERROR, not a strip — so omitting this line makes
+        // every SNAPSHOT frame from a host that emits the field fail to parse
+        // on every joined client. Measured by the round-trip case in
+        // `messages-schemas.test.ts`.
+        requiredAssets: z.array(z.string()).readonly().optional(),
     })
     .strict();
 
@@ -235,6 +242,11 @@ const PlayerSnapshot = z.object({
     phase: z.string(),
     sceneId: z.string().optional(),
     sceneDefaultScreen: z.string().optional(),
+    // Refs the scene named by `sceneId` declares, projected verbatim — what a
+    // client joining mid-scene has to gate on, since it saw no transition. The
+    // stripping hazard the `timeScalePermille` note below describes applies
+    // here identically.
+    sceneRequiredAssets: z.array(z.string()).readonly().optional(),
     sceneTransition: SceneTransition.nullable().optional(),
     events: z.array(z.object({ type: z.string() }).passthrough()),
     gameResult: GameResult.nullable(),
