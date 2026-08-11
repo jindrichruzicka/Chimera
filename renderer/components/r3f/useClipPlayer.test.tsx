@@ -997,6 +997,10 @@ describe('useClipPlayer — Rule ONE-MIXER-PER-ROOT', () => {
 
         flushFrame();
 
+        // Positive control for the absence below: `useOwnedMixer` allocates once
+        // per effect setup, so two allocations is the double mount happening,
+        // and the second of them is the re-bind this case says goes unreported.
+        expect(mixerLog.created).toHaveLength(2);
         expect(logs.emit.mock.calls).toEqual([]);
         unmount();
     });

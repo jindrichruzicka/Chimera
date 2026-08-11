@@ -302,6 +302,10 @@ describe('useModelAnimation — Rule ONE-MIXER-PER-ROOT', () => {
 
         flushFrame();
 
+        // Positive control for the absence below. `useOwnedMixer` allocates once
+        // per effect setup, so two allocations is the double mount happening —
+        // and the claim is that the SECOND bind on one root is not reported.
+        expect(mixerLog.created).toHaveLength(2);
         expect(reportedErrorNames()).toEqual([]);
         unmount();
     });
