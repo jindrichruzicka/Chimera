@@ -142,7 +142,7 @@ return { ...state, timers: newTimers };
 ## Determinism Rules
 
 - Timers are driven by the outer `engine:tick` BEAT, counted in whole beats — **never** by `Date.now()` or `performance.now()`, and never by a `GameSnapshot.tick` difference, which counts actions and so runs ahead of the beat on any tick a timer fired.
-- Turn-based games (manifest `realtime: false`): `engine:tick` dispatched explicitly by host at defined moments (end of turn, resolution phase).
+- Turn-based games (manifest `realtime: false`): no ticker, and — measured — no production host path dispatches `engine:tick` for them either (`SessionRuntime.dispatchTick` is private and reachable only through the e2e hook). Timers in such a game therefore wait on a beat the host never sends.
 - Real-time games (manifest `realtime: true`): `engine:tick` dispatched automatically by the host-driven `RealtimeTicker` at `tickRateMs` (§4.2.1).
 - Timer IDs must be deterministic (derived from entity IDs + action type, not random UUIDs) so replays produce identical timer maps.
 
