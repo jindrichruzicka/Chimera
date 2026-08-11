@@ -19,11 +19,11 @@
  * 2. **Match pattern** — `scanLogsBridgeReads` parses; it does not grep. What
  *    it reaches is the case list below: `globalThis` and `window`, dotted and
  *    bracketed, three quote styles, the split cast-then-narrow form through the
- *    wrappers enumerated there, and the destructuring forms — plus the
- *    negatives (prose, type positions, a different namespace) that say the
- *    pattern discriminates rather than matching the token.
- * 3. **Attribution** — `enclosingFunctionName` stops at the first construct
- *    owning a body, so a read buried in a callback, a constructor, or a class
+ *    wrappers and the binding constructs enumerated there, and the
+ *    destructuring forms — plus the negatives (prose, type positions, a
+ *    different namespace, a local merely compared against the bridge) that say
+ *    the pattern discriminates rather than matching the token.
+ * 3. **Attribution** — a read buried in a callback, a constructor, or a class
  *    body inside an allowed function does not inherit that function's name.
  * 4. **Allowance classifier** — `isAllowedSite` keys on file AND enclosing
  *    function. `LoggingBootstrap.resolveLogsApi` is a permanent exception, not
@@ -171,6 +171,133 @@ describe('scanLogsBridgeReads — the shape it matches', () => {
         ]);
     });
 
+    // The list above holds the binding construct fixed and varies the wrapper;
+    // this one holds the wrapper fixed and varies what binds the local. Each
+    // row is the same split read respelled: the parameter-default one lints
+    // clean in the renderer zone and typechecks under `--strict`, so a
+    // construct the scan skips is a read that lands with nothing to report it.
+    const CAST_TO_LOCAL = `(globalThis as { ${BRIDGE}?: unknown }).${BRIDGE}`;
+    const NARROW_LOCAL = `(chimera as { ${LOGS}?: unknown } | undefined)?.${LOGS}`;
+
+    it.each([
+        [
+            'a const initialiser',
+            [
+                'export function resolve(): unknown {',
+                `    const chimera = ${CAST_TO_LOCAL};`,
+                `    return ${NARROW_LOCAL};`,
+                '}',
+            ],
+            3,
+        ],
+        [
+            'a parameter default',
+            [
+                'export function resolve(',
+                `    chimera: unknown = ${CAST_TO_LOCAL},`,
+                '): unknown {',
+                `    return ${NARROW_LOCAL};`,
+                '}',
+            ],
+            4,
+        ],
+        [
+            'a parameter default on an arrow',
+            [
+                `export const resolve = (chimera: unknown = ${CAST_TO_LOCAL}): unknown =>`,
+                `    ${NARROW_LOCAL};`,
+            ],
+            2,
+        ],
+        // `prefer-const` closes the straight `let x; x = …` spelling, but not
+        // this one: the assignment sits in a branch, so the declaration cannot
+        // become a `const` and the module lints clean.
+        [
+            'an assignment made after the declaration',
+            [
+                'export function resolve(): unknown {',
+                '    let chimera: unknown;',
+                "    if (typeof window !== 'undefined') {",
+                `        chimera = ${CAST_TO_LOCAL};`,
+                '    }',
+                `    return ${NARROW_LOCAL};`,
+                '}',
+            ],
+            6,
+        ],
+    ] as const)('follows the bridge into a local bound by %s', (_form, lines, line) => {
+        expect(scanTs([...lines, ''].join('\n'))).toEqual([
+            { file: 'renderer/probe/module.ts', line, enclosingFunction: 'resolve' },
+        ]);
+    });
+
+    // Two bindings of one name inside one scope, which a default plus a later
+    // assignment makes an ordinary spelling. A binding adds to what the name
+    // can hold rather than replacing it, so both orders have to be followed:
+    // keeping only the first loses the second row, only the last the first.
+    it.each([
+        [
+            'the first',
+            [
+                `export function resolve(chimera: unknown = ${CAST_TO_LOCAL}): unknown {`,
+                '    chimera = chimera ?? {};',
+                `    return ${NARROW_LOCAL};`,
+                '}',
+            ],
+            3,
+        ],
+        [
+            'the second',
+            [
+                'export function resolve(): unknown {',
+                '    let chimera: unknown = null;',
+                "    if (typeof window !== 'undefined') {",
+                `        chimera = ${CAST_TO_LOCAL};`,
+                '    }',
+                `    return ${NARROW_LOCAL};`,
+                '}',
+            ],
+            6,
+        ],
+    ] as const)(
+        'follows a local bound twice where %s binding reaches the bridge',
+        (_which, lines, line) => {
+            expect(scanTs([...lines, ''].join('\n'))).toEqual([
+                { file: 'renderer/probe/module.ts', line, enclosingFunction: 'resolve' },
+            ]);
+        },
+    );
+
+    it('ignores a local whose parameter default is not the bridge', () => {
+        const reads = scanTs(
+            [
+                'export function resolve(chimera: unknown = globalThis): unknown {',
+                `    return ${NARROW_LOCAL};`,
+                '}',
+                '',
+            ].join('\n'),
+        );
+
+        expect(reads).toEqual([]);
+    });
+
+    // A comparison is not a binding — it can just as well be false — so the
+    // hop is followed out of an assignment, not out of any binary operator
+    // with the local on its left.
+    it('ignores a local merely compared against the bridge', () => {
+        const reads = scanTs(
+            [
+                'export function resolve(chimera: unknown): unknown {',
+                `    const isBridge = chimera === ${CAST_TO_LOCAL};`,
+                `    return isBridge ? null : ${NARROW_LOCAL};`,
+                '}',
+                '',
+            ].join('\n'),
+        );
+
+        expect(reads).toEqual([]);
+    });
+
     it.each([
         ['shorthand', `export const { ${LOGS} } = BRIDGE_EXPR;`],
         ['renamed', `export const { ${LOGS}: api } = BRIDGE_EXPR;`],
@@ -185,6 +312,44 @@ describe('scanLogsBridgeReads — the shape it matches', () => {
 
         expect(reads).toEqual([
             { file: 'renderer/probe/module.ts', line: 1, enclosingFunction: null },
+        ]);
+    });
+
+    // What the pattern hangs off has to be the bridge, in either spelling of
+    // the owner — otherwise every `const { logs } = …` in the package is a
+    // reported violation.
+    it.each([
+        [
+            'a declaration',
+            [`declare const props: { ${LOGS}: unknown };`, `export const { ${LOGS} } = props;`],
+        ],
+        [
+            'a parameter default',
+            [
+                `declare const fallback: { ${LOGS}: unknown };`,
+                `export function render({ ${LOGS} }: { ${LOGS}: unknown } = fallback): unknown {`,
+                `    return ${LOGS};`,
+                '}',
+            ],
+        ],
+    ])('ignores a namespace destructured out of %s that is not the bridge', (_form, lines) => {
+        expect(scanTs([...lines, ''].join('\n'))).toEqual([]);
+    });
+
+    // The same destructuring one construct over: what the pattern hangs off is
+    // a parameter's default rather than a declaration's initialiser.
+    it('matches a destructuring of the bridge in a parameter default', () => {
+        const reads = scanTs(
+            [
+                `export function read({ ${LOGS} }: { ${LOGS}: unknown } = (globalThis as { ${BRIDGE}: { ${LOGS}: unknown } }).${BRIDGE}): unknown {`,
+                `    return ${LOGS};`,
+                '}',
+                '',
+            ].join('\n'),
+        );
+
+        expect(reads).toEqual([
+            { file: 'renderer/probe/module.ts', line: 1, enclosingFunction: 'read' },
         ]);
     });
 
@@ -235,7 +400,7 @@ describe('scanLogsBridgeReads — the shape it matches', () => {
         ]);
     });
 
-    it('reports every read in a module, not just the first', () => {
+    it('reports a second read in the same module, not just the first', () => {
         const reads = scanTs(
             [
                 `export const first = (globalThis as { ${BRIDGE}?: { ${LOGS}?: unknown } }).${BRIDGE}?.${LOGS};`,

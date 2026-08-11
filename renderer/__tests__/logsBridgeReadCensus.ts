@@ -2,9 +2,8 @@
 //
 // Predicates behind the renderer log-bridge read census (§4.27, Invariant #67).
 // A production renderer module reaches the preload bridge's log namespace
-// through `readRendererLogsApi()`; this module reports the modules under
-// `renderer/` that instead cast the global and narrow to that namespace inline.
-// `apps/*/renderer/**` is outside the walk.
+// through `readRendererLogsApi()`, never by casting the global and narrowing to
+// that namespace inline. `apps/*/renderer/**` is outside the walk.
 //
 // Split out of the test that consumes it so each predicate — file filter, match
 // pattern, allowance classifier — is a named function pinnable against
@@ -128,14 +127,14 @@ export function listRendererSourceFiles(repoRoot: string): string[] {
     return found.sort();
 }
 
-/** Every inline bridge narrowing in the production modules of `files`. */
+/** The inline bridge narrowings matched in the production modules of `files`. */
 export function censusLogsBridgeReads(files: readonly RendererSourceFile[]): LogsBridgeRead[] {
     return files
         .filter(({ file }) => isProductionRendererSource(file))
         .flatMap(({ file, source }) => scanLogsBridgeReads(file, source));
 }
 
-/** Every inline bridge narrowing in one module's source, in source order. */
+/** The inline bridge narrowings matched in one module's source, in source order. */
 export function scanLogsBridgeReads(relPath: string, source: string): LogsBridgeRead[] {
     const sourceFile = ts.createSourceFile(
         relPath,
@@ -184,7 +183,7 @@ export function scanLogsBridgeReads(relPath: string, source: string): LogsBridge
 
 /** What a local name in the file can be traced back to. */
 interface AliasScope {
-    /** Initialisers of the declarations that bind a plain identifier, keyed by that name. */
+    /** The expressions bound to a plain identifier, keyed by that name. */
     readonly initialisers: Map<string, ts.Expression[]>;
     /** Locals a destructuring declaration bound straight to the bridge. */
     readonly bridgeLocals: Set<string>;
@@ -198,16 +197,37 @@ interface AliasScope {
  * is what makes the form visible at all. A shadowed name in another function
  * therefore over-matches rather than under-matches — the safe direction for a
  * guard, which fails loudly and is corrected by naming the local something else.
+ *
+ * Which constructs bind a local, and what each one has to hold for the hop to
+ * be followed, is the case list in `logs-bridge-read-shape.test.ts`.
  */
 function collectAliases(sourceFile: ts.SourceFile): AliasScope {
     const initialisers = new Map<string, ts.Expression[]>();
     const bridgeLocals = new Set<string>();
 
+    const bind = (name: string, expression: ts.Expression): void => {
+        const existing = initialisers.get(name);
+        if (existing === undefined) initialisers.set(name, [expression]);
+        else existing.push(expression);
+    };
+
     const visit = (node: ts.Node): void => {
-        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
-            const existing = initialisers.get(node.name.text);
-            if (existing === undefined) initialisers.set(node.name.text, [node.initializer]);
-            else existing.push(node.initializer);
+        // A parameter's default is a declaration initialiser in every sense
+        // that matters here. The assignment arm covers the `let` spelling
+        // `prefer-const` leaves alone: assigned inside a branch, the
+        // declaration cannot become a `const`.
+        if (
+            (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
+            ts.isIdentifier(node.name) &&
+            node.initializer
+        ) {
+            bind(node.name.text, node.initializer);
+        } else if (
+            ts.isBinaryExpression(node) &&
+            node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isIdentifier(node.left)
+        ) {
+            bind(node.left.text, node.right);
         }
         // A destructured bridge has no initialiser naming it, so the binding is
         // the only record that the local holds one — and under a renamed
@@ -245,11 +265,11 @@ function boundName(element: ts.BindingElement): string | null {
     return ts.isIdentifier(element.name) ? element.name.text : null;
 }
 
-/** Whether what a binding element destructures is the bridge. */
+/** Whether what a binding element destructures traces back to the bridge. */
 function bindingSourceReachesBridge(element: ts.BindingElement, scope: AliasScope): boolean {
     const owner = element.parent.parent;
 
-    if (ts.isVariableDeclaration(owner)) {
+    if (ts.isVariableDeclaration(owner) || ts.isParameter(owner)) {
         return (
             owner.initializer !== undefined && reachesBridge(owner.initializer, scope, new Set())
         );
@@ -291,7 +311,7 @@ function unwrap(expression: ts.Expression): ts.Expression {
     }
 }
 
-/** Whether `expression` evaluates to the preload bridge object. */
+/** Whether `expression` is one the scan traces back to the preload bridge. */
 function reachesBridge(expression: ts.Expression, scope: AliasScope, seen: Set<string>): boolean {
     const target = unwrap(expression);
 
@@ -314,13 +334,12 @@ function reachesBridge(expression: ts.Expression, scope: AliasScope, seen: Set<s
 /**
  * The name the allowance pair would have to carry for `node`, or `null`.
  *
- * The walk stops at the first construct that owns a body, and yields `null`
- * whenever that construct has no name a pair can name — module scope, an
- * anonymous callback, a constructor, a class static block, a class body. It
- * must never walk PAST one: attributing a read to whatever function the
- * construct happens to sit inside is how a read buried in an allowed function
- * inherits that function's allowance. `null` is refused by `isAllowedSite`,
- * because every entry there names a function.
+ * `null` whenever the read sits somewhere the pair cannot name — module scope,
+ * an anonymous callback, a constructor, a class static block, a class body.
+ * Attributing such a read to whatever function it happens to sit inside is how
+ * a read buried in an allowed function inherits that function's allowance.
+ * `null` is refused by `isAllowedSite`, because every entry there names a
+ * function.
  *
  * Which forms yield which name is the case list in
  * `logs-bridge-read-shape.test.ts`.
