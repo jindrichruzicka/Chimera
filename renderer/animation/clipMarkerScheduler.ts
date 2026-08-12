@@ -81,7 +81,8 @@ import type { CompiledMark, CompiledPassage } from './ClipTimeline.js';
  * - `'looped'` — the clip wrapped while the passage was still open.
  * - `'clip-ended'` — a `'once'` clip stopped with the passage still open.
  * - `'stopped'` — the player stopped this clip.
- * - `'clip-changed'` — the playback was replaced by another for the same clip.
+ * - `'clip-changed'` — the playback was replaced by another, of this clip or of
+ *   the one that took its place.
  * - `'seeked'` — the playhead was moved somewhere the passage cannot follow.
  * - `'released'` — the player, or the backend under it, was disposed.
  */

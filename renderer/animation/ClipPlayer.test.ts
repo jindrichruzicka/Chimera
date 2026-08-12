@@ -742,6 +742,265 @@ describe('the reasons a player ends a passage', () => {
     });
 });
 
+// ─── becoming the only clip ─────────────────────────────────────────────────────
+
+describe('transitionTo — become the only clip', () => {
+    const SPAN = sheetOf({ passages: { span: { from: 0.2, to: 0.9 } } });
+
+    /** A player with `swing` live and its passage open. */
+    function withSwingOpen(): ReturnType<typeof makePlayer> {
+        const made = makePlayer({
+            swing: { durationSeconds: 1, loop: 'loop' },
+            jab: { durationSeconds: 1, loop: 'loop' },
+            kick: { durationSeconds: 1, loop: 'loop' },
+        });
+        made.player.play({ clipName: 'swing', sheet: SPAN, handlers: made.handlers });
+        made.player.tick(0.5);
+        return made;
+    }
+
+    it('leaves exactly the incoming clip active and closes every other one once', () => {
+        const { player, calls, backend } = withSwingOpen();
+        player.play({ clipName: 'jab', sheet: SPAN, handlers: {} });
+        expect(player.activeClips).toEqual(['swing', 'jab']);
+
+        expect(player.transitionTo({ clipName: 'kick', handlers: {} })).toBe(true);
+
+        // `play` releases only the same-name entry, so a transition that fell
+        // through to it would leave every earlier clip live at full weight: an
+        // averaged pose that never resolves, and marks firing for ever.
+        expect(player.activeClips).toEqual(['kick']);
+        expect(calls).toEqual(['start:span', 'end:span:clip-changed']);
+        expect(backend.stopped).toEqual(['swing', 'jab']);
+    });
+
+    it('releases the others even when the incoming clip is one of the live ones', () => {
+        const { player, calls, backend } = withSwingOpen();
+        player.play({ clipName: 'jab', sheet: SPAN, handlers: {} });
+
+        expect(player.transitionTo({ clipName: 'swing', sheet: SPAN, handlers: {} })).toBe(true);
+
+        // The same-name replacement and the others are two separate releases,
+        // and neither is a branch of the other: scoping the second to "there was
+        // no same-name entry" leaves `jab` live at full weight for ever.
+        expect(player.activeClips).toEqual(['swing']);
+        expect(calls).toEqual(['start:span', 'end:span:clip-changed']);
+        expect(backend.stopped).toEqual(['swing', 'jab']);
+    });
+
+    it('emits no clip-end for the clips it replaced', () => {
+        // The outgoing clip is `'once'` and the tick below runs past its end, so
+        // a transition that left it live really would produce the `clip-end`
+        // this case denies. Against a looping fixture the assertion is
+        // unreachable and the case cannot fail.
+        const { player, calls, handlers } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'once' },
+            jab: { durationSeconds: 4, loop: 'loop' },
+        });
+        player.play({ clipName: 'swing', handlers });
+        player.tick(0.5);
+
+        player.transitionTo({ clipName: 'jab', handlers });
+        player.tick(1);
+
+        // A replaced clip did not END; `clip-end` is the playhead's word and the
+        // scheduler is its only producer.
+        expect(calls).not.toContain('clip-end');
+        expect(player.activeClips).toEqual(['jab']);
+    });
+
+    it('restarts a clip that is already live, exactly as play does', () => {
+        const { player, calls, backend } = withSwingOpen();
+
+        expect(player.transitionTo({ clipName: 'swing', sheet: SPAN, handlers: {} })).toBe(true);
+
+        expect(player.activeClips).toEqual(['swing']);
+        expect(calls).toEqual(['start:span', 'end:span:clip-changed']);
+        expect(backend.stopped).toEqual(['swing']);
+        expect(backend.sampleOf('swing')).toEqual({ phase: 0, cycle: 0, ended: false });
+    });
+
+    it('refuses a bad speed before it starts, releases or takes down anything', () => {
+        const { player, calls, backend, handlers } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'loop' },
+            jab: { durationSeconds: 1, loop: 'loop' },
+            kick: { durationSeconds: 0.4, loop: 'once' },
+        });
+        player.play({ clipName: 'swing', sheet: SPAN, handlers });
+        // A pose in flight as well as a live clip, so "takes down" is a ledger
+        // this case actually reads rather than a word in its title.
+        player.play({ clipName: 'kick', handlers });
+        player.tick(0.5);
+        expect(backend.held).toEqual(['kick']);
+
+        const before = [...calls];
+
+        expect(() => player.transitionTo({ clipName: 'jab', speed: -1 })).toThrow(RangeError);
+
+        expect(player.activeClips).toEqual(['swing']);
+        expect(calls).toEqual(before);
+        expect(backend.stopped).toEqual([]);
+        expect(backend.held).toEqual(['kick']);
+        expect(backend.sampleOf('jab')).toBeNull();
+    });
+
+    it('answers false and changes nothing for a clip the backend has not got', () => {
+        const { player, calls, backend } = withSwingOpen();
+
+        expect(player.transitionTo({ clipName: 'missing' })).toBe(false);
+
+        expect(player.activeClips).toEqual(['swing']);
+        expect(calls).toEqual(['start:span']);
+        expect(backend.stopped).toEqual([]);
+    });
+
+    it('answers false for a disposed player, which is how a caller tells the two apart', () => {
+        const { player } = withSwingOpen();
+        player.dispose();
+
+        expect(player.transitionTo({ clipName: 'jab' })).toBe(false);
+    });
+
+    it('seats a declared speed on the entry and on the first frame', () => {
+        const { player, backend } = makePlayer(
+            {
+                swing: { durationSeconds: 1, loop: 'loop' },
+                jab: { durationSeconds: 1, loop: 'loop' },
+            },
+            () => 0.25,
+        );
+        player.play({ clipName: 'swing' });
+
+        player.transitionTo({ clipName: 'jab', speed: 2 });
+
+        // 2 x 1 x 0.25 = 0.5, which is neither the declared 2 nor the default 1:
+        // factors that cancel would leave a first frame paced at the bare clip
+        // speed indistinguishable from one paced by the folded stack.
+        expect(backend.speedOf('jab')).toBeCloseTo(0.5, 12);
+        // …and the clip's own layer survives on the entry, so a later tick
+        // re-folds the same 2 rather than a 1.
+        player.tick(1);
+        expect(backend.speedOf('jab')).toBeCloseTo(0.5, 12);
+    });
+
+    it('keeps the clip a handler played during the clip-changed fan-out', () => {
+        // Both clips carry the passage, so the restarted one has marks of its
+        // own to fire — a sheet naming only the outgoing clip would leave the
+        // incoming one unmarked and this case green for the wrong reason.
+        const BOTH = {
+            clips: {
+                swing: { passages: { span: { from: 0.2, to: 0.9 } } },
+                jab: { passages: { span: { from: 0.2, to: 0.9 } } },
+            },
+        };
+        const { player, calls, backend } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'loop' },
+            jab: { durationSeconds: 1, loop: 'loop' },
+        });
+        let restarts = 0;
+        const handlers: ClipMarkerHandlers = {
+            onPassageStart: (event) => calls.push(`start:${event.name}`),
+            onPassageEnd: (event) => {
+                calls.push(`end:${event.name}:${event.reason}`);
+                if (restarts === 0) {
+                    restarts += 1;
+                    player.play({ clipName: 'jab', sheet: BOTH, handlers });
+                }
+            },
+        };
+        player.play({ clipName: 'swing', sheet: BOTH, handlers });
+        player.tick(0.3);
+
+        player.transitionTo({ clipName: 'jab', sheet: BOTH, handlers });
+
+        // The incoming entry is registered BEFORE the outgoing release fans out,
+        // so the entry a handler installs from that fan-out is the one that
+        // survives — registering afterwards would overwrite it and strand its
+        // playback on the backend.
+        expect(player.activeClips).toEqual(['jab']);
+        player.tick(0.3);
+        expect(calls).toEqual(['start:span', 'end:span:clip-changed', 'start:span']);
+        // The handler's play stops the playback this call started, from inside
+        // the release that invoked it, before the outgoing clip is let go.
+        expect(backend.stopped).toEqual(['jab', 'swing']);
+    });
+
+    it('takes down a pose a clip end left holding', () => {
+        const { player, backend, handlers } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'once' },
+            jab: { durationSeconds: 1, loop: 'loop' },
+        });
+        player.play({ clipName: 'swing', handlers });
+        player.tick(2);
+        expect(backend.held).toEqual(['swing']);
+
+        player.transitionTo({ clipName: 'jab' });
+
+        // Becoming the only clip means the poses of the clips that ended come
+        // down too, not just the live ones.
+        expect(backend.stopped).toEqual(['swing']);
+        expect(player.activeClips).toEqual(['jab']);
+    });
+});
+
+describe('stopAll', () => {
+    const SPAN = sheetOf({ passages: { span: { from: 0.2, to: 0.9 } } });
+
+    it('closes every active clip as stopped and releases every pose', () => {
+        // TWO clips still active when the call comes, so "every" is a claim the
+        // fixture carries: with one, a stopAll that closed only the first entry
+        // ships green. `jab` is short enough to end into a pose inside the same
+        // tick, so the call also has something held to take down.
+        const BOTH = {
+            clips: {
+                swing: { passages: { span: { from: 0.2, to: 0.9 } } },
+                kick: { passages: { arc: { from: 0.2, to: 0.9 } } },
+            },
+        };
+        const { player, calls, backend, handlers } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'loop' },
+            kick: { durationSeconds: 1, loop: 'loop' },
+            jab: { durationSeconds: 0.4, loop: 'once' },
+        });
+        player.play({ clipName: 'swing', sheet: BOTH, handlers });
+        player.play({ clipName: 'kick', sheet: BOTH, handlers });
+        player.play({ clipName: 'jab', handlers });
+        player.tick(0.5);
+        expect(backend.held).toEqual(['jab']);
+        expect(player.activeClips).toEqual(['swing', 'kick']);
+
+        player.stopAll();
+
+        expect(player.activeClips).toEqual([]);
+        // `jab` ended on its own before the call, so its own `clip-end` is in
+        // here; what `stopAll` produced is the two `'stopped'` closes.
+        expect(calls).toEqual([
+            'start:span',
+            'start:arc',
+            'clip-end',
+            'end:span:stopped',
+            'end:arc:stopped',
+        ]);
+        expect(backend.stopped).toEqual(['swing', 'kick', 'jab']);
+    });
+
+    it('is idempotent and leaves the player usable', () => {
+        const { player, calls, backend, handlers } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'loop' },
+        });
+        player.play({ clipName: 'swing', sheet: SPAN, handlers });
+        player.tick(0.5);
+
+        player.stopAll();
+        player.stopAll();
+
+        expect(calls).toEqual(['start:span', 'end:span:stopped']);
+        expect(backend.stopped).toEqual(['swing']);
+        expect(player.play({ clipName: 'swing' })).toBe(true);
+        expect(player.activeClips).toEqual(['swing']);
+    });
+});
+
 // ─── handlers that call back into the player ────────────────────────────────────
 
 describe('a handler that restarts its own clip during the fan-out', () => {

@@ -54,9 +54,9 @@
  * restores the model's original state synchronously — a bind-pose flash on the
  * same tick the `clip-end` handler runs, undoing the last frame
  * `clampWhenFinished` was holding. So the playback is held and kept, and the
- * pose comes down when something asks for it to: `stop` on that clip, a `play`
- * of it, or `dispose`. Every OTHER teardown here still stops, because "play
- * nothing" legitimately means the model goes back to where it started.
+ * pose comes down when a caller asks for it to. Every OTHER teardown here still
+ * stops, because "play nothing" legitimately means the model goes back to where
+ * it started.
  *
  * Rule SPEED-NON-NEGATIVE applies to both layers this class owns, through the
  * seam's own `checkedPlaybackSpeed` — one definition of the refusal, shared with
@@ -189,8 +189,10 @@ interface ActiveClip {
 /**
  * Drives clips on one backend and turns their playheads into marker events.
  *
- * Several clips may be in flight at once — a crossfade has two — and each keeps
- * its own timeline, scheduler and clip speed.
+ * Several clips may be in flight at once, each with its own timeline, scheduler
+ * and clip speed: {@link ClipPlayer.play} adds one and leaves the rest alone.
+ * {@link ClipPlayer.transitionTo} is the other shape — become the only clip —
+ * and {@link ClipPlayer.stopAll} is how a caller plays nothing.
  */
 export class ClipPlayer {
     readonly #backend: ClipBackend;
@@ -232,60 +234,93 @@ export class ClipPlayer {
         if (this.#disposed) {
             return false;
         }
-        const durationSeconds = this.#backend.getDurationSeconds(request.clipName);
-        if (durationSeconds === null) {
+        const started = this.#start(request);
+        if (started === null) {
             return false;
         }
-        // Refused before anything is started or replaced, so a bad speed leaves
-        // the player exactly as it was.
-        const clipSpeed = checkedPlaybackSpeed(request.speed ?? 1, 'clip speed');
-
-        const timeline = compileClipTimeline(
-            request.sheet ?? null,
-            request.clipName,
-            durationSeconds,
-        );
-        const loop = request.loop ?? timeline?.loop;
-        const speed = effectiveClipSpeed(clipSpeed, this.#playerSpeed, this.#getTimeScale());
-
-        const playback = this.#backend.play(request.clipName, {
-            ...(loop !== undefined ? { loop } : {}),
-            speed,
-        });
-        if (playback === null) {
-            return false;
-        }
-
-        const sample = playback.sample();
-        const replaced = this.#active.get(request.clipName);
-        // Registered BEFORE the outgoing playback is released, because releasing
-        // fans out and a handler may play this clip again from that fan-out.
-        // Registering first makes the handler's entry the one that survives and
-        // this call's the one that gets released; the other order overwrites the
-        // handler's entry and leaves its playback live on the backend, reachable
-        // by nothing but `backend.dispose()`.
-        this.#active.set(request.clipName, {
-            clipName: request.clipName,
-            playback,
-            durationSeconds,
-            marks: timeline?.marks ?? [],
-            handlers: request.handlers ?? {},
-            clipSpeed,
-            scheduler: initSchedulerState(sample),
-            seatedAt: sample,
-        });
-        if (replaced !== undefined) {
-            this.#release(replaced, 'clip-changed');
+        if (started.replaced !== undefined) {
+            this.#release(started.replaced, 'clip-changed');
         }
         // After the new playback is registered, so the backend has already taken
         // the clip's action over: what is released here is the bookkeeping, and
         // on a backend where the two share one action the release is a no-op.
         this.#releasePosing(request.clipName);
 
-        for (const warning of timeline?.warnings ?? []) {
+        for (const warning of started.warnings) {
             this.#report(warning);
         }
         return true;
+    }
+
+    /**
+     * Start `request.clipName` as the ONLY clip: every other clip in flight is
+     * closed with `'clip-changed'`, and every pose a clip end left holding comes
+     * down.
+     *
+     * The order below is the whole of this method's contract.
+     *
+     * 1. **Every refusal first.** A bad speed throws and an unplayable clip
+     *    answers `false` with nothing started, released or held — same as
+     *    {@link ClipPlayer.play}.
+     * 2. **Start the incoming playback**, so a backend that shares one resource
+     *    across a swap has the incoming clip holding it before the outgoing lets
+     *    go.
+     * 3. **Register the incoming entry**, and only THEN release the others.
+     *    Releasing fans out, and a handler that plays a clip from that fan-out
+     *    must win — that is what `#forget`'s identity check exists for. The other
+     *    order overwrites the handler's entry and strands its playback.
+     *
+     * The release of the others is unconditional. `play` releases only the entry
+     * of the same name and a backend's `play` stops only that clip's playback, so
+     * a transition that leaned on either would leave both clips live at full
+     * weight for ever: an averaged pose that never resolves, the outgoing clip's
+     * marks firing indefinitely, and a `passage-start` a `'loop'` clip never
+     * closes.
+     *
+     * @returns `false` when the backend has no such clip, or the player is
+     *          disposed — a caller telling those apart reads
+     *          {@link ClipPlayer.isDisposed}.
+     * @throws RangeError  when `request.speed` is negative or not finite.
+     */
+    transitionTo(request: ClipPlayRequest): boolean {
+        if (this.#disposed) {
+            return false;
+        }
+        // Captured before the incoming entry is registered, so the list cannot
+        // contain it however the map is keyed.
+        const others = [...this.#active.values()].filter(
+            (entry) => entry.clipName !== request.clipName,
+        );
+        const started = this.#start(request);
+        if (started === null) {
+            return false;
+        }
+        if (started.replaced !== undefined) {
+            this.#release(started.replaced, 'clip-changed');
+        }
+        for (const entry of others) {
+            this.#release(entry, 'clip-changed');
+        }
+        this.#releaseEveryPose();
+
+        for (const warning of started.warnings) {
+            this.#report(warning);
+        }
+        return true;
+    }
+
+    /**
+     * Stop every clip with `'stopped'` and take down every pose. Idempotent, and
+     * the player stays usable.
+     *
+     * The verb a caller needs to play NOTHING: stopping by name is unusable when
+     * the names are exactly what the caller has stopped tracking.
+     */
+    stopAll(): void {
+        for (const entry of [...this.#active.values()]) {
+            this.#release(entry, 'stopped');
+        }
+        this.#releaseEveryPose();
     }
 
     /**
@@ -411,9 +446,7 @@ export class ClipPlayer {
         // Before the backend's own dispose rather than leaning on it: what a
         // held playback holds is a resource of the backend's, and a player that
         // walked away from it would depend on the implementation sweeping up.
-        for (const clipName of [...this.#posing.keys()]) {
-            this.#releasePosing(clipName);
-        }
+        this.#releaseEveryPose();
         this.#backend.dispose();
     }
 
@@ -424,6 +457,76 @@ export class ClipPlayer {
         this.#fanOut(entry, step.events);
         entry.playback.stop();
         this.#forget(entry);
+    }
+
+    /**
+     * Compile, start and register `request`, or `null` when the backend has no
+     * such clip. Releases nothing — every caller owns what it takes down.
+     *
+     * @returns the registered entry, whatever entry it displaced under the same
+     *          name, and the compile warnings its caller reports once its own
+     *          teardown is done.
+     * @throws RangeError  when `request.speed` is negative or not finite, before
+     *                     anything is started or registered.
+     */
+    #start(request: ClipPlayRequest): {
+        readonly entry: ActiveClip;
+        readonly replaced: ActiveClip | undefined;
+        readonly warnings: readonly string[];
+    } | null {
+        const durationSeconds = this.#backend.getDurationSeconds(request.clipName);
+        if (durationSeconds === null) {
+            return null;
+        }
+        // Refused before anything is started or replaced, so a bad speed leaves
+        // the player exactly as it was.
+        const clipSpeed = checkedPlaybackSpeed(request.speed ?? 1, 'clip speed');
+
+        const timeline = compileClipTimeline(
+            request.sheet ?? null,
+            request.clipName,
+            durationSeconds,
+        );
+        const loop = request.loop ?? timeline?.loop;
+        // The folded stack on the first frame too, so a clip declared at half
+        // speed does not play one frame at 1x and get corrected on the next.
+        const speed = effectiveClipSpeed(clipSpeed, this.#playerSpeed, this.#getTimeScale());
+
+        const playback = this.#backend.play(request.clipName, {
+            ...(loop !== undefined ? { loop } : {}),
+            speed,
+        });
+        if (playback === null) {
+            return null;
+        }
+
+        const sample = playback.sample();
+        const replaced = this.#active.get(request.clipName);
+        const entry: ActiveClip = {
+            clipName: request.clipName,
+            playback,
+            durationSeconds,
+            marks: timeline?.marks ?? [],
+            handlers: request.handlers ?? {},
+            clipSpeed,
+            scheduler: initSchedulerState(sample),
+            seatedAt: sample,
+        };
+        // Registered BEFORE the caller releases anything, because releasing fans
+        // out and a handler may play this clip again from that fan-out.
+        // Registering first makes the handler's entry the one that survives and
+        // this call's the one that gets released; the other order overwrites the
+        // handler's entry and leaves its playback live on the backend, reachable
+        // by nothing but `backend.dispose()`.
+        this.#active.set(request.clipName, entry);
+        return { entry, replaced, warnings: timeline?.warnings ?? [] };
+    }
+
+    /** Take down every pose a clip end left holding. */
+    #releaseEveryPose(): void {
+        for (const clipName of [...this.#posing.keys()]) {
+            this.#releasePosing(clipName);
+        }
     }
 
     /** Release the pose `clipName` was left holding. A no-op when it holds none. */
