@@ -33,7 +33,7 @@ import type {
     ClipPlayback,
     SupportsClipBlending,
 } from './ClipBackend.js';
-import { supportsBlending } from './ClipBackend.js';
+import { checkedFade, supportsBlending } from './ClipBackend.js';
 import { ClipPlayer } from './ClipPlayer.js';
 import { MeshClipBackend } from './MeshClipBackend.js';
 import { describeClipBackend } from './__test-support__/clipBackendContract.js';
@@ -47,6 +47,27 @@ function makeClip(name: string, durationSeconds: number): AnimationClip {
     return new AnimationClip(name, durationSeconds, [
         new VectorKeyframeTrack('.position', [0, durationSeconds], [0, 0, 0, 1, 0, 0]),
     ]);
+}
+
+/**
+ * A clip driving `.scale` rather than `.position`, so a case can hold two clips
+ * whose bindings are distinct: a property two live actions share is restored
+ * only when the LAST of them lets go, which would make an "is the node back to
+ * its original state" assertion say nothing about either one.
+ */
+function makeScaleClip(name: string, durationSeconds: number): AnimationClip {
+    return new AnimationClip(name, durationSeconds, [
+        new VectorKeyframeTrack('.scale', [0, durationSeconds], [1, 1, 1, 2, 1, 1]),
+    ]);
+}
+
+/**
+ * `action`'s scheduled weight ramp, or `null` when it has none. three exposes no
+ * public reader for one, and "a fade was scheduled" is exactly the difference
+ * between a degenerate ramp and a cut.
+ */
+function weightInterpolantOf(action: AnimationAction): unknown {
+    return (action as unknown as { _weightInterpolant: unknown })._weightInterpolant;
 }
 
 /** A mixer bound to a bare root, plus the clips a case plays on it. */
@@ -417,6 +438,153 @@ describe('MeshClipBackend', () => {
             expect(backend.crossfadeTo('no-such-clip', 0.2)).toBeNull();
             expect(() => backend.crossfadeTo('attack', -0.2)).toThrow(RangeError);
             expect(() => backend.crossfadeTo('attack', Number.NaN)).toThrow(RangeError);
+
+            backend.dispose();
+        });
+
+        it('refuses a bad fade on a clip it does not have and on a disposed backend', () => {
+            const { backend } = makeRig([makeClip('attack', 1)]);
+
+            // The refusal runs BEFORE the fail-soft guard, so a sign error is
+            // reported where it was written rather than swallowed by the `null`
+            // an absent clip answers with. Pairing a bad fade only with a clip
+            // the backend HAS leaves the two orderings indistinguishable.
+            expect(() => backend.crossfadeTo('no-such-clip', -1)).toThrow(RangeError);
+            expect(() => backend.crossfadeTo('no-such-clip', Number.NaN)).toThrow(RangeError);
+
+            backend.dispose();
+            expect(() => backend.crossfadeTo('attack', -1)).toThrow(RangeError);
+            // A VALID fade still fails soft on both, which is what keeps this an
+            // ordering change rather than a contract change.
+            expect(backend.crossfadeTo('attack', 0.2)).toBeNull();
+        });
+
+        it('refuses it with the message the seam predicate produces', () => {
+            const { backend } = makeRig([makeClip('attack', 1)]);
+            let seamMessage = '';
+            try {
+                checkedFade(-0.2);
+            } catch (error) {
+                seamMessage = (error as RangeError).message;
+            }
+
+            // Two copies of the predicate could drift into two different
+            // contracts, both green; the message is the observable that says
+            // which one ran.
+            expect(seamMessage).not.toBe('');
+            expect(() => backend.crossfadeTo('attack', -0.2)).toThrow(seamMessage);
+
+            backend.dispose();
+        });
+
+        it('cuts on a zero-length fade, deactivating the outgoing action and restoring its node', () => {
+            // The two clips drive DIFFERENT properties, so `.position` has one
+            // binder and the restore below is unambiguously the outgoing
+            // action's binding being handed back.
+            const attack = makeClip('attack', 1);
+            const { root, mixer, backend } = makeRig([attack, makeScaleClip('idle', 1)]);
+            const originalX = root.position.x;
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.4);
+            const movedX = root.position.x;
+            const outgoing = mixer.clipAction(attack);
+            const incoming = backend.crossfadeTo('idle', 0, { loop: 'loop' });
+
+            expect(incoming).not.toBeNull();
+            expect(movedX).toBeGreaterThan(originalX);
+            // `fadeOut(0)` schedules a degenerate ramp: the action reaches weight
+            // 0 on the NEXT update and is disabled there, but `_deactivateAction`
+            // never runs — the binding is never handed back, `action.time` never
+            // reset. All three below are false under that, synchronously, with
+            // no further advance.
+            expect(root.position.x).toBe(originalX);
+            expect(outgoing.isRunning()).toBe(false);
+            expect(outgoing.time).toBe(0);
+
+            backend.dispose();
+        });
+
+        it('stops every outgoing playback on a zero-length fade and freezes each handle', () => {
+            const attack = makeClip('attack', 1);
+            const run = makeClip('run', 1);
+            const { mixer, backend } = makeRig([attack, run, makeScaleClip('idle', 1)]);
+            const first = play(backend, 'attack', { loop: 'loop' });
+            const second = play(backend, 'run', { loop: 'loop' });
+            backend.advance(0.4);
+
+            backend.crossfadeTo('idle', 0, { loop: 'loop' });
+
+            // Both halves of the release are pinned here. A bare `action.stop()`
+            // without the record release resets the action to 0 and leaves the
+            // record live, so each handle would answer phase 0 and `ended: false`
+            // — and a loop that cut only the first outgoing record would leave
+            // `run` running with a handle that never latched.
+            expect(first.sample()).toEqual({ phase: 0.4, cycle: 0, ended: true });
+            expect(second.sample()).toEqual({ phase: 0.4, cycle: 0, ended: true });
+            expect(mixer.clipAction(attack).isRunning()).toBe(false);
+            expect(mixer.clipAction(run).isRunning()).toBe(false);
+
+            backend.advance(0.4);
+            expect(first.sample().phase).toBe(0.4);
+            expect(second.sample().phase).toBe(0.4);
+
+            backend.dispose();
+        });
+
+        it('treats a small positive fade as a fade rather than a cut', () => {
+            const attack = makeClip('attack', 1);
+            const { mixer, backend } = makeRig([attack, makeScaleClip('idle', 1)]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.4);
+            backend.crossfadeTo('idle', 0.05, { loop: 'loop' });
+
+            // The cut arm is an equality on 0, never a threshold: widen it into
+            // one and a short blend silently becomes a hard cut.
+            expect(mixer.clipAction(attack).isRunning()).toBe(true);
+            expect(weightInterpolantOf(mixer.clipAction(attack))).not.toBeNull();
+
+            backend.dispose();
+        });
+
+        it('refuses an unusable loop mode with nothing yet released', () => {
+            const attack = makeClip('attack', 1);
+            const { mixer, backend } = makeRig([attack, makeScaleClip('idle', 1)]);
+            const outgoing = play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.4);
+
+            expect(() =>
+                backend.crossfadeTo('idle', 0, { loop: 'pingpong' as AnimationLoopMode }),
+            ).toThrow(RangeError);
+
+            // The incoming clip is started before anything is released, so a
+            // refusal there leaves the outgoing playback exactly as it was;
+            // releasing first would end it on a call that did nothing.
+            expect(outgoing.sample()).toEqual({ phase: 0.4, cycle: 0, ended: false });
+            expect(mixer.clipAction(attack).isRunning()).toBe(true);
+
+            backend.dispose();
+        });
+
+        it('leaves neither action holding a fade interpolant after a zero-length fade', () => {
+            const attack = makeClip('attack', 1);
+            const idle = makeScaleClip('idle', 1);
+            const { mixer, backend } = makeRig([attack, idle]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.4);
+            backend.crossfadeTo('idle', 0, { loop: 'loop' });
+
+            expect(weightInterpolantOf(mixer.clipAction(attack))).toBeNull();
+            expect(weightInterpolantOf(mixer.clipAction(idle))).toBeNull();
+
+            // The positive control: the probe can see a scheduled fade, so the
+            // two nulls above are the absence of one rather than the absence of
+            // a reader.
+            backend.crossfadeTo('attack', 0.4, { loop: 'loop' });
+            expect(weightInterpolantOf(mixer.clipAction(attack))).not.toBeNull();
+            expect(weightInterpolantOf(mixer.clipAction(idle))).not.toBeNull();
 
             backend.dispose();
         });

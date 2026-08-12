@@ -321,7 +321,7 @@ chimera/
 │   ├── animation/                    # Clip-sheet compile half, marker scheduling, the clip backends and the dilation store (F82); renderer-internal — no `exports` subpath (useAnimationTimeScale ships through the components/r3f barrel)
 │   │   ├── ClipPosition.ts          # resolveClipPosition — fail-soft authored position → phase in [0, 1]
 │   │   ├── ClipTimeline.ts          # compileClipTimeline — sorted phase-denominated marks; warnings returned, not logged
-│   │   ├── ClipBackend.ts           # ClipBackend / ClipPlayback / PlayheadSample seam; supportsBlending narrows, checkedPlaybackSpeed / checkedLoopMode refuse
+│   │   ├── ClipBackend.ts           # ClipBackend / ClipPlayback / PlayheadSample seam; supportsBlending narrows, and the seam owns the argument refusals rather than each backend
 │   │   ├── clipMarkerScheduler.ts   # Pure playhead → notify/passage/clip-end batches; sole producer of clip-end
 │   │   ├── ClipPlayer.ts            # Speed stack, per-playback step bound, handler fan-out; getTimeScale and report injected
 │   │   ├── MeshClipBackend.ts       # ClipBackend + SupportsClipBlending over an INJECTED AnimationMixer; ended derived from state

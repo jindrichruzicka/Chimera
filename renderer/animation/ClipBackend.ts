@@ -3,9 +3,9 @@
  *
  * The seam between the animation layer and whatever actually moves pixels: a
  * three.js `AnimationMixer` driving a skinned mesh, or a sprite atlas stepping
- * through frame indices. Interfaces, one narrowing guard and the two refusals
- * every implementation owes its callers — no playback machinery lives here,
- * which is what lets the compile half stay three.js-free.
+ * through frame indices. Interfaces, one narrowing guard, and the argument
+ * refusals the seam owns rather than each backend — no playback machinery lives
+ * here, which is what lets the compile half stay three.js-free.
  *
  * Feature reference: F82 — Animation System (clip sheets, marker scheduling,
  * beat-owned gameplay windows, time dilation),
@@ -96,7 +96,7 @@ export interface ClipBackend {
      * This is the third argument `compileClipTimeline` range-checks against.
      */
     getDurationSeconds(clipName: AnimationClipName): number | null;
-    /** Start a clip, or `null` if the backend has no such clip. Fail-soft; never throws. */
+    /** Start a clip. `null` when the backend has no such clip, or was disposed. */
     play(clipName: AnimationClipName, options?: ClipPlayOptions): ClipPlayback | null;
     /** Advance every playback this backend owns by `deltaSeconds`. */
     advance(deltaSeconds: number): void;
@@ -109,6 +109,12 @@ export interface SupportsClipBlending extends ClipBackend {
     /**
      * Start `clipName` while fading the current playback out across `fadeSeconds`.
      * `null` on an absent clip, like {@link ClipBackend.play}.
+     *
+     * A `fadeSeconds` of 0 is a CUT, not a degenerate fade: the incoming clip
+     * starts at full weight and the outgoing one is released the way
+     * {@link ClipPlayback.stop} releases it. An unusable length is refused with a
+     * `RangeError` — see {@link checkedFade} — before the absent-clip guard, so
+     * the fail-soft `null` never swallows a caller's sign error.
      */
     crossfadeTo(
         clipName: AnimationClipName,
@@ -148,6 +154,28 @@ export function checkedPlaybackSpeed(value: number, label: string): number {
     if (!Number.isFinite(value) || value < 0) {
         throw new RangeError(
             `${label} must be a finite number of at least 0, received ${value}; reverse playback is not supported`,
+        );
+    }
+    return value;
+}
+
+/**
+ * `value` if it is a usable fade length, or a `RangeError`.
+ *
+ * 0 is ACCEPTED and means a cut, not a fade of no length — see
+ * `MeshClipBackend.crossfadeTo` for why a zero fade must not reach the mixer.
+ * Negative and non-finite are refused rather than clamped, for the reason
+ * {@link checkedPlaybackSpeed} refuses a negative multiplier: a duration is
+ * written by a caller, and a sign error must fail where it was written.
+ *
+ * It lives on the seam rather than inside a backend so that a caller checking a
+ * fade length reaches for this rather than writing a second copy: two copies of
+ * the predicate could drift into two different contracts, both green.
+ */
+export function checkedFade(value: number): number {
+    if (!Number.isFinite(value) || value < 0) {
+        throw new RangeError(
+            `crossfade length must be a finite number of at least 0, received ${value}`,
         );
     }
     return value;

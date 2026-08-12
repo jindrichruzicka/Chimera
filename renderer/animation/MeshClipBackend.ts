@@ -69,7 +69,7 @@ import type {
     AnimationLoopMode,
 } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
 
-import { checkedLoopMode, checkedPlaybackSpeed } from './ClipBackend.js';
+import { checkedFade, checkedLoopMode, checkedPlaybackSpeed } from './ClipBackend.js';
 import type {
     ClipBackend,
     ClipPlayOptions,
@@ -195,6 +195,20 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
      * keeps its action alive at falling weight, and disables it once the weight
      * reaches zero, but nothing will re-target it.
      *
+     * **A zero-length fade is a cut, and takes a different path.** `fadeOut(0)`
+     * is not one: it schedules a degenerate ramp whose action reaches weight 0
+     * and `enabled = false` on the next update, while `_deactivateAction` is
+     * never called — the `PropertyMixer` binding is never handed back,
+     * `restoreOriginalState` never runs, and `action.time` is never reset. So a
+     * fade of 0 starts the incoming clip with no `fadeIn` and hard-stops every
+     * outgoing playback, which is what makes it observationally a cut.
+     *
+     * **The refusal comes first, the fail-soft guard second.** A bad fade throws
+     * whether or not this backend has the clip and whether or not it is disposed;
+     * the reverse order would answer a caller's sign error with `null`. The
+     * incoming clip is started before anything is released, so an unusable loop
+     * mode or speed also refuses with nothing yet released.
+     *
      * @throws RangeError  when `fadeSeconds` is negative or not finite, or
      *                     `options` carry an unusable loop mode or speed.
      */
@@ -203,15 +217,21 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
         fadeSeconds: number,
         options?: ClipPlayOptions,
     ): ClipPlayback | null {
+        const fade = checkedFade(fadeSeconds);
         if (this.#disposed || !this.#clips.has(clipName)) {
             return null;
         }
-        const fade = checkedFade(fadeSeconds);
         const outgoing = [...this.#live.values()].filter((record) => record.clipName !== clipName);
 
         const playback = this.play(clipName, options);
         if (playback === null) {
             return null;
+        }
+        if (fade === 0) {
+            for (const record of outgoing) {
+                this.#stop(record);
+            }
+            return playback;
         }
         this.#live.get(clipName)?.action.fadeIn(fade);
         for (const record of outgoing) {
@@ -375,14 +395,4 @@ function wrapsCrossed(record: LivePlayback, deltaSeconds: number, mixerTimeScale
 
 function isUsableDuration(value: number): boolean {
     return Number.isFinite(value) && value > 0;
-}
-
-/** `value` if it is a usable fade length, or a `RangeError`. */
-function checkedFade(value: number): number {
-    if (!Number.isFinite(value) || value < 0) {
-        throw new RangeError(
-            `crossfade length must be a finite number of at least 0, received ${value}`,
-        );
-    }
-    return value;
 }

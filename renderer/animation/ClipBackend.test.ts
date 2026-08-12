@@ -2,7 +2,7 @@
  * renderer/animation/ClipBackend.test.ts
  *
  * Unit tests for the runtime code in the clip-backend seam: the narrowing guard
- * `supportsBlending` and the two refusals every implementation owes its callers.
+ * `supportsBlending` and the argument refusals the seam owns.
  * Everything else in `ClipBackend.ts` is an interface, held by the conforming
  * double below — a shape error there is a `pnpm typecheck` failure, not an
  * assertion failure, which is the only gate a type has.
@@ -23,7 +23,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { AnimationLoopMode } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
 
-import { checkedLoopMode, checkedPlaybackSpeed, supportsBlending } from './ClipBackend.js';
+import {
+    checkedFade,
+    checkedLoopMode,
+    checkedPlaybackSpeed,
+    supportsBlending,
+} from './ClipBackend.js';
 import type {
     ClipBackend,
     ClipPlayback,
@@ -114,6 +119,26 @@ describe('checkedPlaybackSpeed', () => {
         expect(() => checkedPlaybackSpeed(-1, 'player speed')).toThrow(/^player speed must be/u);
         expect(() => checkedPlaybackSpeed(-1, 'clip speed')).toThrow(/^clip speed must be/u);
     });
+});
+
+describe('checkedFade', () => {
+    it('accepts a zero-length fade, the seam spelling of a cut', () => {
+        // The boundary is an explicit fixture rather than something the refusal
+        // cases imply by omission: 0 is the one fade length a caller writes to
+        // mean "no blend at all", and a `value <= 0` refusal would fail it.
+        expect(checkedFade(0)).toBe(0);
+    });
+
+    it.each([0.05, 0.2, 1, 30])('accepts the usable fade length %s', (value) => {
+        expect(checkedFade(value)).toBe(value);
+    });
+
+    it.each([-0.2, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+        'refuses %s',
+        (value) => {
+            expect(() => checkedFade(value)).toThrow(RangeError);
+        },
+    );
 });
 
 describe('checkedLoopMode', () => {
