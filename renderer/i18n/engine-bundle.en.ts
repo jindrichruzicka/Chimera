@@ -276,6 +276,11 @@ export const engineBundleEn: TranslationBundle = {
     'engine.gameResult.won': 'You won',
     'engine.gameResult.lose': 'You lose',
 
+    // ── loading covers (§4.36) ──────────────────────────────────────────────────
+    // Accessible name for the engine loading presets and the default alt text of
+    // an {@link GameLoadingImage} cover.
+    'engine.loading.label': 'Loading…',
+
     // ── in-game HUD scaffold ────────────────────────────────────────────────────
     'engine.hud.undo': 'Undo',
     'engine.hud.redo': 'Redo',

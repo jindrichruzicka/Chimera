@@ -293,7 +293,8 @@
      * The complete stacking contract, lowest to highest: shell background,
      * raised in-page chrome (HUD docks, toggle thumbs), tooltip/popover,
      * modal/drawer, toasts (must clear open modals), connection status
-     * (visible through everything interactive), scene fade, app screen fade. */
+     * (visible through everything interactive), scene fade, app screen fade,
+     * loading HUD. */
     --ch-z-base: 0;
     --ch-z-raised: 1;
     --ch-z-tooltip: 90;
@@ -302,6 +303,7 @@
     --ch-z-status: 120;
     --ch-z-scene-fade: 130;
     --ch-z-screen-fade: 140;
+    --ch-z-loading-hud: 150;
 
     /* Layered ambient + key shadows; glows pair with them for hover accents. */
     --ch-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.22);

@@ -14,6 +14,7 @@ import type {
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import { useActiveScreen, useUiStore } from '../../state/uiStore.js';
+import { SceneLoadingFallback } from './SceneLoadingFallback.js';
 import { TransitionOverlay } from './TransitionOverlay.js';
 import { useFadeTransition } from './useFadeTransition.js';
 
@@ -75,7 +76,17 @@ export function SceneRouter({
             data-active-scene-id={sceneId}
             data-active-screen-key={activeScreenKey}
         >
-            <React.Suspense fallback={<div data-testid="scene-screen-loading" />}>
+            <React.Suspense
+                fallback={
+                    <SceneLoadingFallback
+                        registry={registry}
+                        screenKey={activeScreenKey}
+                        sceneId={String(sceneId)}
+                        reason="code"
+                        progress={null}
+                    />
+                }
+            >
                 <Screen {...screenProps} />
             </React.Suspense>
             {Overlay === undefined ? (

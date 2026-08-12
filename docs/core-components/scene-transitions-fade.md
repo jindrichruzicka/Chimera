@@ -125,7 +125,7 @@ Game reducers never dispatch from inside themselves. They set a domain event in 
 ### Renderer: SceneRouter & TransitionOverlay
 
 ```typescript
-// renderer/components/shell/SceneRouter.tsx
+// renderer/components/scene/SceneRouter.tsx
 // - sceneTransition === null → render defaultScreen for sceneId
 // - phase === 'preparing'   → TransitionOverlay + AssetPreloader + sendAction(SceneReady)
 // - phase === 'ready'       → TransitionOverlay at 100% until commit
@@ -188,7 +188,7 @@ A fixed-position `<div>` with `pointer-events: none` at `z-index: 9999`. Opacity
 ### FadeControl Context
 
 ```typescript
-// renderer/components/shell/TransitionOverlay.tsx
+// renderer/components/shell/FadeContext.ts
 
 export interface FadeControl {
     fadeOut(durationMs?: number): Promise<void>; // 0 → 1 (to black)

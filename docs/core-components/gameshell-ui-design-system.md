@@ -565,7 +565,7 @@ itself, locked token-for-token by `renderer/styles/tokens.test.ts`.
  * the ladder stays strictly increasing: shell background, raised in-page
  * chrome (HUD docks, toggle thumbs), tooltip/popover, modal/drawer, toasts
  * (must clear open modals), connection status (visible through everything
- * interactive), scene fade, app screen fade. */
+ * interactive), scene fade, app screen fade, loading HUD. */
 --ch-z-base: 0;
 --ch-z-raised: 1;
 --ch-z-tooltip: 90;
@@ -574,6 +574,7 @@ itself, locked token-for-token by `renderer/styles/tokens.test.ts`.
 --ch-z-status: 120;
 --ch-z-scene-fade: 130;
 --ch-z-screen-fade: 140;
+--ch-z-loading-hud: 150;
 
 /* ── Shadows & Glows ─────────────────────────────────────────
  * Layered ambient + key shadows; the glows pair with them for hover accents
@@ -833,17 +834,7 @@ const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
 
 ### Suspense Integration
 
-```typescript
-// renderer/components/shell/GameShell.tsx
-const ActiveScreen = resolveActiveScreen(registry, activeScreenKey);
-return (
-    <React.Suspense fallback={<ScreenLoadingFallback />}>
-        <ActiveScreen />
-    </React.Suspense>
-);
-```
-
-`<ScreenLoadingFallback />` — neutral spinner; distinct from `TransitionOverlay` (§4.19). `TransitionOverlay` handles full-screen scene transitions; Suspense fallback handles within-scene first-visit screen loads.
+The screen `<React.Suspense>` boundary lives in `renderer/components/scene/SceneRouter.tsx`; its fallback is the loading cover (`SceneLoadingFallback`), which resolves the registry's `loadingScreens[key] ?? loadingScreen` cascade and falls back to an empty `scene-screen-loading` div. Distinct from `TransitionOverlay` (§4.19): `TransitionOverlay` handles full-screen scene transitions, the Suspense fallback handles within-scene first-visit screen loads.
 
 ### Invariants
 

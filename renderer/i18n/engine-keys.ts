@@ -309,6 +309,16 @@ export const GAME_RESULT_KEYS = {
     lose: translationKey('engine.gameResult.lose'),
 } as const;
 
+/**
+ * Engine loading covers standing in for a screen that is not mountable yet
+ * (§4.36). One accessible name covers three renderings of the same wait — the
+ * spinner's `label`, the progress bar's `label`, and the default `alt` of an
+ * `{ image }` cover — so three tokens would be three translations of one string.
+ */
+export const LOADING_KEYS = {
+    label: translationKey('engine.loading.label'),
+} as const;
+
 /** Engine-default in-game HUD scaffold (undo/redo/end-turn). */
 export const HUD_KEYS = {
     undo: translationKey('engine.hud.undo'),
@@ -383,6 +393,7 @@ const ALL_AREA_MAPS = [
     CONNECTION_KEYS,
     GAME_SHELL_KEYS,
     GAME_RESULT_KEYS,
+    LOADING_KEYS,
     HUD_KEYS,
     PERF_HUD_KEYS,
     ACTIONS_KEYS,

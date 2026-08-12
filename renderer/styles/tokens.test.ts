@@ -293,6 +293,7 @@ const expectedTokens = [
     '--ch-z-status',
     '--ch-z-scene-fade',
     '--ch-z-screen-fade',
+    '--ch-z-loading-hud',
     '--ch-shadow-sm',
     '--ch-shadow-md',
     '--ch-shadow-lg',
@@ -515,8 +516,12 @@ describe('renderer design tokens', () => {
         }
     });
 
-    it('orders the z-index ladder from shell background to screen fade', () => {
+    it('orders the z-index ladder from shell background to the loading HUD', () => {
         const css = readTokensCss();
+        // Named tokens only, never the literals: a loading cover shown while a
+        // route fade is painted has to clear --ch-z-screen-fade, so the rung is
+        // asserted by its RELATION to the token below it. Aliasing the new rung
+        // onto --ch-z-scene-fade (or any var() reference) parses as NaN here.
         const ladder = [
             '--ch-z-base',
             '--ch-z-raised',
@@ -526,6 +531,7 @@ describe('renderer design tokens', () => {
             '--ch-z-status',
             '--ch-z-scene-fade',
             '--ch-z-screen-fade',
+            '--ch-z-loading-hud',
         ].map((token) => Number.parseInt(extractTokenValue(css, token), 10));
 
         for (const [index, layer] of ladder.entries()) {

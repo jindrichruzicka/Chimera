@@ -234,8 +234,6 @@ chimera/
 │   │   ├── shell/                   # Engine-provided navigation chrome
 │   │   │   ├── GameShell.tsx       # Hosts the active game's screen registry; game-agnostic
 │   │   │   ├── SpectatorHud.tsx     # Read-only spectator overlay: followed-seat name + Tab switch hotkey (Invariants #114/#115)
-│   │   │   ├── SceneRouter.tsx      # Watches sceneId / sceneTransition; see §4.18
-│   │   │   ├── TransitionOverlay.tsx  # Fixed full-screen fade overlay; see §4.19
 │   │   │   ├── RootErrorBoundary.tsx  # Top-level React error boundary; see §4.27
 │   │   │   ├── ToastHost.tsx        # Renders transient notifications; see §4.30
 │   │   │   ├── perf/                # Performance HUD — toggled with F3; see §4.16
@@ -244,6 +242,15 @@ chimera/
 │   │   │   │   └── perfStore.ts
 │   │   │   └── debug/               # Debug Inspector F9 toggle — headless; see §4.12
 │   │   │       └── DebugInspectorToggle.tsx
+│   │   ├── scene/                   # Scene routing + the waits around it; see §4.18–§4.19, §4.36
+│   │   │   ├── SceneRouter.tsx      # Watches sceneId / sceneTransition; owns the screen Suspense boundary; see §4.18
+│   │   │   ├── TransitionOverlay.tsx  # Fixed full-screen fade overlay; see §4.19
+│   │   │   ├── SceneLoadingFallback.tsx  # Registry-resolved loading cover; falls back to an empty div; see §4.36
+│   │   │   ├── EngineLoadingPreset.tsx   # The engine's own cover forms (spinner / progress / message / image); see §4.36
+│   │   │   ├── resolveLoadingScreen.ts   # loadingScreens[key] ?? loadingScreen cascade; see §4.36
+│   │   │   ├── useFadeTransition.ts # Drives the fade around a scene transition and acks scene_ready; see §4.18
+│   │   │   ├── scenePreload.ts      # Budgeted, fail-open warm-up of a scene's requiredAssets; see §4.10
+│   │   │   └── FadeContext.ts       # Re-export of the shell fade context for scene-local consumers
 │   │   ├── audio/                   # Event-driven audio playback components (e.g. EventAudioPlayer)
 │   │   ├── chat/                    # PUBLIC chat component (Tier 2); barrel: @chimera-engine/renderer/components/chat; mounted by game HUDs only; see §4.35.1
 │   │   │   ├── index.ts             # Public barrel

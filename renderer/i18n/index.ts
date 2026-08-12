@@ -32,6 +32,7 @@ export {
     GAME_SHELL_KEYS,
     HUD_KEYS,
     IN_GAME_MENU_KEYS,
+    LOADING_KEYS,
     LOBBY_KEYS,
     MENU_KEYS,
     PERF_HUD_KEYS,

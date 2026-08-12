@@ -206,6 +206,32 @@ function warnOnMalformedGameIcons(gameId: string, icons: GameIconSet): void {
     }
 }
 
+/**
+ * Light, dev-time validation of a game's per-screen loading covers (§4.36).
+ * Like the sibling translations and icons guards this is a typo-catching safety
+ * net, never a hard error: a game mid-refactor must keep loading. Warns once per
+ * key that names neither `'playfield'` (the always-present slot, Invariant #81)
+ * nor an entry in `registry.screens`. A non-object map is tolerated the same way,
+ * since `Object.keys(null)` would throw and cost the whole game load.
+ */
+function warnOnUnknownLoadingScreenKeys(gameId: string, registry: GameScreenRegistry): void {
+    const { loadingScreens, screens } = registry;
+    if (typeof loadingScreens !== 'object' || loadingScreens === null) {
+        console.warn(
+            `[chimera] game '${gameId}' contributed a loadingScreens map that is not an object; ignoring.`,
+        );
+        return;
+    }
+    for (const screenKey of Object.keys(loadingScreens)) {
+        if (screenKey === 'playfield' || screens?.[screenKey] !== undefined) {
+            continue;
+        }
+        console.warn(
+            `[chimera] game '${gameId}' declares a loadingScreens cover for '${screenKey}', which names neither 'playfield' nor a registered screen.`,
+        );
+    }
+}
+
 export async function loadRendererGame(gameId: string): Promise<LoadedRendererGame> {
     const loader = rendererGameLoaders.get(gameId);
     if (loader === undefined) {
@@ -213,6 +239,9 @@ export async function loadRendererGame(gameId: string): Promise<LoadedRendererGa
     }
 
     const game = await loader();
+    if (game.registry.loadingScreens !== undefined) {
+        warnOnUnknownLoadingScreenKeys(gameId, game.registry);
+    }
     if (game.shell?.fonts !== undefined) {
         await loadGameFonts(game.shell.fonts);
     }

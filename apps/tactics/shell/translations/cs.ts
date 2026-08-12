@@ -265,6 +265,9 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.gameResult.won': 'Vyhrál jsi',
     'engine.gameResult.lose': 'Prohrál jsi',
 
+    // ── loading covers ──────────────────────────────────────────────────────────
+    'engine.loading.label': 'Načítání…',
+
     // ── in-game HUD scaffold ────────────────────────────────────────────────────
     'engine.hud.undo': 'Zpět',
     'engine.hud.redo': 'Znovu',

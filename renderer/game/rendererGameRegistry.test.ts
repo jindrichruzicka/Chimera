@@ -458,6 +458,98 @@ describe('rendererGameRegistry', () => {
         });
     });
 
+    describe('registry.loadingScreens key validation (§4.36)', () => {
+        let warnSpy: ReturnType<typeof vi.spyOn>;
+
+        beforeEach(() => {
+            warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        });
+
+        afterEach(() => {
+            warnSpy.mockRestore();
+        });
+
+        function registerLoadingScreens(
+            loadingScreens: NonNullable<LoadedRendererGame['registry']['loadingScreens']>,
+            screens?: LoadedRendererGame['registry']['screens'],
+        ): void {
+            const game = fakeGame({
+                registry: {
+                    playfield: FAKE_PLAYFIELD,
+                    loadingScreens,
+                    ...(screens === undefined ? {} : { screens }),
+                },
+            });
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(game),
+                loadShell: () => Promise.resolve(game.shell ?? fakeShell()),
+            });
+        }
+
+        it('warns once, naming the key, for a cover that names no known screen', async () => {
+            registerLoadingScreens({ 'tech-tree': 'spinner' });
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            expect(String(warnSpy.mock.calls[0]?.[0])).toContain('tech-tree');
+        });
+
+        it('still loads the game — a stale key mid-refactor is a warning, never a throw', async () => {
+            registerLoadingScreens({ 'tech-tree': 'spinner' });
+
+            await expect(loadRendererGame('fake')).resolves.toBeDefined();
+        });
+
+        it("accepts 'playfield', the always-present slot, without warning", async () => {
+            registerLoadingScreens({ playfield: 'spinner' });
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('accepts a key naming a registered screen without warning', async () => {
+            registerLoadingScreens({ 'tech-tree': 'spinner' }, { 'tech-tree': FAKE_PLAYFIELD });
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('warns for each unknown key and stays silent about the known ones', async () => {
+            registerLoadingScreens(
+                { playfield: 'spinner', 'tech-tree': 'spinner', summary: 'progress' },
+                { 'tech-tree': FAKE_PLAYFIELD },
+            );
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            expect(String(warnSpy.mock.calls[0]?.[0])).toContain('summary');
+        });
+
+        it('warns nothing when the registry declares no per-key covers', async () => {
+            registerFake();
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('warns and does not throw when loadingScreens is not a plain object', async () => {
+            // Same code-authored cast escape hatch the sibling translations and
+            // icons guards defend: Object.keys(null) would throw and cost the game.
+            registerLoadingScreens(
+                null as unknown as NonNullable<LoadedRendererGame['registry']['loadingScreens']>,
+            );
+
+            await expect(loadRendererGame('fake')).resolves.toBeDefined();
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+        });
+    });
+
     it('rejects unknown game ids', async () => {
         registerFake();
 
