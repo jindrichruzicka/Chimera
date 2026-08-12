@@ -48,7 +48,10 @@
  * `(clip, root)` pair — so a second `play` of the same clip re-targets the same
  * object. A handle whose playback has been released therefore keeps answering
  * from a captured sample rather than from an action that has moved on or gone
- * back to zero (Rule ONE-ACTION-PER-CLIP).
+ * back to zero (Rule ONE-ACTION-PER-CLIP). That freeze is bookkeeping and says
+ * nothing about the screen: `stop` hands the binding back and the model returns
+ * to its original state, while `hold` leaves the action posing exactly where it
+ * was.
  *
  * **`cycle` is counted from the step, not from the phase.** three reports a
  * wrapped `action.time` and nothing about how it got there, and the one step
@@ -373,6 +376,9 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
             stop: () => {
                 this.#stop(record);
             },
+            hold: () => {
+                this.#hold(record);
+            },
         };
     }
 
@@ -398,6 +404,32 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
         this.#posing.delete(record.clipName);
         record.ramp = null;
         record.action.stop();
+    }
+
+    /**
+     * End `record` while leaving its action posing what it last wrote.
+     *
+     * Guarded before it writes anything, and that is not defensive tidiness. A
+     * terminal record is exactly a record that is out of the live set — `#release`
+     * is what freezes one and what removes it — so this one check is also the
+     * "does this record still own its action" check that {@link MeshClipBackend#stop}
+     * spells out. It has to be, because three caches ONE action per
+     * `(clip, root)` and a stale handle names whatever is playing that clip now:
+     * `ClipPlayer` fans its `clip-end` batch out BEFORE it holds, so a handler
+     * that replays the clip from `onClipEnd` would otherwise have its fresh
+     * playback paused for ever, under a sample reporting an ordinary playhead.
+     *
+     * The pause is what makes a hold a hold: a released record is out of the live
+     * set for BOOKKEEPING while its action is still one the mixer advances, so a
+     * held looping clip would otherwise keep animating under a frozen sample.
+     * three reads `paused` as an effective time scale of 0.
+     */
+    #hold(record: LivePlayback): void {
+        if (record.frozen !== null) {
+            return;
+        }
+        record.action.paused = true;
+        this.#release(record);
     }
 
     /**
@@ -478,8 +510,16 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
         }
     }
 
-    /** Point `action` at one loop mode and one rate. Never touches its weight. */
+    /**
+     * Point `action` at one loop mode and one rate, and un-pause it. Never
+     * touches its weight.
+     *
+     * The un-pause is what lets a HELD action be taken over: `play` reaches
+     * `reset()` first, which clears the flag, but a resume does not, and a
+     * resumed action that stayed paused would pose its last frame for ever.
+     */
     #seat(action: AnimationAction, loop: AnimationLoopMode, speed: number): void {
+        action.paused = false;
         action.setLoop(
             loop === 'loop' ? LoopRepeat : LoopOnce,
             loop === 'loop' ? Number.POSITIVE_INFINITY : 1,
@@ -517,10 +557,11 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
             return;
         }
         // The posing pass needs a snapshot, because ending a record's posing
-        // deletes it from the map being walked.
+        // deletes it from the map being walked. A record is released when its
+        // ramp ARRIVES on this step, never merely because it has none: a held
+        // playback poses with no ramp at all and must survive every advance.
         for (const record of [...this.#posing.values()]) {
-            stepRamp(record, deltaSeconds);
-            if (record.ramp === null) {
+            if (stepRamp(record, deltaSeconds)) {
                 this.#stop(record);
             }
         }
@@ -602,17 +643,25 @@ function isUsableDuration(value: number): boolean {
     return Number.isFinite(value) && value > 0;
 }
 
-/** Move `record`'s ramp on by `deltaSeconds`, and clear it once it has arrived. */
-function stepRamp(record: LivePlayback, deltaSeconds: number): void {
+/**
+ * Move `record`'s ramp on by `deltaSeconds`, clearing it once it has arrived.
+ *
+ * @returns whether the ramp arrived on THIS call — which is what the posing pass
+ *          releases on, so that a record with no ramp at all (a held playback) is
+ *          not swept up by the same condition.
+ */
+function stepRamp(record: LivePlayback, deltaSeconds: number): boolean {
     const { ramp } = record;
     if (ramp === null) {
-        return;
+        return false;
     }
     ramp.elapsedSeconds += deltaSeconds;
     applyRamp(record);
-    if (ramp.elapsedSeconds >= ramp.durationSeconds) {
-        record.ramp = null;
+    if (ramp.elapsedSeconds < ramp.durationSeconds) {
+        return false;
     }
+    record.ramp = null;
+    return true;
 }
 
 /**

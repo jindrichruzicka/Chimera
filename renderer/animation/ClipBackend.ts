@@ -87,6 +87,22 @@ export interface ClipPlayback {
     setSpeed(speed: number): void;
     /** Release this playback. Idempotent. */
     stop(): void;
+    /**
+     * End this playback while leaving what it poses on screen.
+     *
+     * Terminal exactly as {@link ClipPlayback.stop} is — the playhead freezes,
+     * the sample latches `ended`, and nothing re-targets it — but the pose stays:
+     * a mesh action keeps its last frame under `clampWhenFinished`, a sprite quad
+     * keeps its last cell. It exists because a `'once'` clip that reaches its end
+     * should stay on that last frame rather than flash the model's original state
+     * on the same tick its `clip-end` handler runs.
+     *
+     * What it does NOT do is release the resources the pose is made of, so a held
+     * playback is still the backend's to release: by the next `play` or
+     * `crossfadeTo` of the same clip, by `stop()`, or by `dispose()`. Idempotent,
+     * and a no-op once the playback is terminal by any route.
+     */
+    hold(): void;
 }
 
 /** A source of clips that can be played and advanced. */

@@ -48,6 +48,16 @@
  *    because a mark that fires every frame would otherwise fill a log with one
  *    fault.
  *
+ * **A clip that ends is HELD, not stopped.** The two are terminal alike, and the
+ * clip leaves the active set either way; what differs is the screen. Stopping a
+ * finished `'once'` clip hands its resources back, which on a mesh backend
+ * restores the model's original state synchronously — a bind-pose flash on the
+ * same tick the `clip-end` handler runs, undoing the last frame
+ * `clampWhenFinished` was holding. So the playback is held and kept, and the
+ * pose comes down when something asks for it to: `stop` on that clip, a `play`
+ * of it, or `dispose`. Every OTHER teardown here still stops, because "play
+ * nothing" legitimately means the model goes back to where it started.
+ *
  * Rule SPEED-NON-NEGATIVE applies to both layers this class owns, through the
  * seam's own `checkedPlaybackSpeed` — one definition of the refusal, shared with
  * the backends that make it rather than restated here.
@@ -187,6 +197,13 @@ export class ClipPlayer {
     readonly #getTimeScale: () => number;
     readonly #report: (message: string, cause?: unknown) => void;
     readonly #active = new Map<AnimationClipName, ActiveClip>();
+    /**
+     * The playbacks a clip END left posing: terminal, out of the active set, and
+     * still on their last frame. Held here rather than dropped, because the
+     * backend's resources are behind them and only this player knows when they
+     * stop being wanted.
+     */
+    readonly #posing = new Map<AnimationClipName, ClipPlayback>();
     /** Marks whose handler already reported a fault, so it reports once, not once a frame. */
     readonly #reportedMarks = new Set<AnimationMarkName>();
     #reportedClipEnd = false;
@@ -260,6 +277,10 @@ export class ClipPlayer {
         if (replaced !== undefined) {
             this.#release(replaced, 'clip-changed');
         }
+        // After the new playback is registered, so the backend has already taken
+        // the clip's action over: what is released here is the bookkeeping, and
+        // on a backend where the two share one action the release is a no-op.
+        this.#releasePosing(request.clipName);
 
         for (const warning of timeline?.warnings ?? []) {
             this.#report(warning);
@@ -267,12 +288,23 @@ export class ClipPlayer {
         return true;
     }
 
-    /** Stop `clipName`, closing whatever it had open with `'stopped'`. A no-op if it is not playing. */
+    /**
+     * Stop `clipName`, closing whatever it had open with `'stopped'`. A no-op if
+     * it is not playing.
+     *
+     * A clip that ENDED is not playing but is still posing its last frame, and
+     * this is how that pose is taken down. Nothing is fanned out on that path,
+     * and not by choice: what `#posing` holds is a backend handle rather than an
+     * entry, so there is no scheduler left to close and no handlers to close it
+     * to. `stepScheduler` closed them on the tick that ended the clip.
+     */
     stop(clipName: AnimationClipName): void {
         const entry = this.#active.get(clipName);
         if (entry !== undefined) {
             this.#release(entry, 'stopped');
+            return;
         }
+        this.#releasePosing(clipName);
     }
 
     /**
@@ -332,9 +364,19 @@ export class ClipPlayer {
             );
             entry.scheduler = step.state;
             this.#fanOut(entry, step.events);
-            if (step.state.terminated) {
-                entry.playback.stop();
-                this.#forget(entry);
+            if (step.state.terminated && this.#forget(entry)) {
+                // HELD, not stopped: a `'once'` clip that reached its end is
+                // being clamped on its last frame, and stopping it here restores
+                // the model's original state synchronously — a bind-pose flash on
+                // the same tick the `clip-end` handler runs.
+                //
+                // Only when this entry is still the registered one. A handler
+                // that replayed the clip during the fan-out above has already had
+                // this playback released as the one it replaced, and holding a
+                // pose for a clip that is playing again would keep a backend
+                // resource behind a handle nothing will ask for.
+                entry.playback.hold();
+                this.#posing.set(entry.clipName, entry.playback);
             }
         }
     }
@@ -354,8 +396,9 @@ export class ClipPlayer {
     }
 
     /**
-     * Release every clip with `'released'` and dispose the backend. Idempotent;
-     * a disposed player plays and ticks nothing.
+     * Release every clip with `'released'`, take down every pose a clip end left
+     * holding, and dispose the backend. Idempotent; a disposed player plays and
+     * ticks nothing.
      */
     dispose(): void {
         if (this.#disposed) {
@@ -364,6 +407,12 @@ export class ClipPlayer {
         this.#disposed = true;
         for (const entry of [...this.#active.values()]) {
             this.#release(entry, 'released');
+        }
+        // Before the backend's own dispose rather than leaning on it: what a
+        // held playback holds is a resource of the backend's, and a player that
+        // walked away from it would depend on the implementation sweeping up.
+        for (const clipName of [...this.#posing.keys()]) {
+            this.#releasePosing(clipName);
         }
         this.#backend.dispose();
     }
@@ -377,6 +426,16 @@ export class ClipPlayer {
         this.#forget(entry);
     }
 
+    /** Release the pose `clipName` was left holding. A no-op when it holds none. */
+    #releasePosing(clipName: AnimationClipName): void {
+        const posing = this.#posing.get(clipName);
+        if (posing === undefined) {
+            return;
+        }
+        this.#posing.delete(clipName);
+        posing.stop();
+    }
+
     /**
      * Drop `entry` from the active set, unless a handler already replaced it.
      *
@@ -385,11 +444,16 @@ export class ClipPlayer {
      * that restarts its own clip (the canonical use of `onClipEnd`) would have the
      * playback it just started deleted by the call that invoked it: still live on
      * the backend, never ticked again, and released only by `backend.dispose()`.
+     *
+     * @returns whether `entry` was still the registered one — which is also the
+     *          answer to "is this playback's teardown still this call's to do".
      */
-    #forget(entry: ActiveClip): void {
-        if (this.#active.get(entry.clipName) === entry) {
-            this.#active.delete(entry.clipName);
+    #forget(entry: ActiveClip): boolean {
+        if (this.#active.get(entry.clipName) !== entry) {
+            return false;
         }
+        this.#active.delete(entry.clipName);
+        return true;
     }
 
     /** Deliver one batch in array order, isolating each handler from the next. */

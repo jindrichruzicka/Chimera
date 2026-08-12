@@ -216,6 +216,14 @@ export class SpriteClipBackend implements ClipBackend {
             stop: () => {
                 this.#release(record);
             },
+            hold: () => {
+                // The same body as `stop`, and that is the point rather than an
+                // oversight: this backend writes `uv` into a geometry it does not
+                // own and never writes it back, so what it poses is already left
+                // on screen by a release. The mesh backend is the one where the
+                // two verbs differ, because three hands a binding back.
+                this.#release(record);
+            },
         };
     }
 

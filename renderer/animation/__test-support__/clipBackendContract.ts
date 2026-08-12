@@ -288,6 +288,31 @@ export function describeClipBackend(name: string, createFixture: () => ClipBacke
             });
         });
 
+        it('freezes a held playback where it was and leaves it there', () => {
+            withFixture((fixture) => {
+                const [playback] = started(fixture, { loop: 'loop' });
+                fixture.backend.advance(fixture.durationSeconds * 0.5);
+                const last = playback.sample();
+
+                playback.hold();
+
+                // Terminal in exactly the way `stop` is — what differs is on
+                // screen, which is per-implementation and asserted there.
+                const held = playback.sample();
+                expect(held.phase).toBe(last.phase);
+                expect(held.cycle).toBe(last.cycle);
+                expect(held.ended).toBe(true);
+
+                fixture.backend.advance(fixture.durationSeconds);
+                expect(playback.sample()).toEqual(held);
+                playback.hold();
+                expect(playback.sample()).toEqual(held);
+                // A hold is still releasable, and releasing it moves nothing.
+                playback.stop();
+                expect(playback.sample()).toEqual(held);
+            });
+        });
+
         it('disposes twice without throwing and stays disposed', () => {
             withFixture((fixture) => {
                 const [playback] = started(fixture, { loop: 'loop' });

@@ -47,6 +47,7 @@ const playback: ClipPlayback = {
     sample: (): PlayheadSample => ({ phase: 0, cycle: 0, ended: false }),
     setSpeed: () => undefined,
     stop: () => undefined,
+    hold: () => undefined,
 };
 
 /** Both option fields, so the shape is named somewhere rather than only declared. */

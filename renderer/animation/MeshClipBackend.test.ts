@@ -412,25 +412,143 @@ describe('MeshClipBackend', () => {
     });
 
     describe('a stopped playback stops moving the object', () => {
-        it('leaves the bound node where it was, however far the backend is advanced', () => {
+        it('hands the bound node back to its original state and stops writing to it', () => {
             const { root, backend } = makeRig([makeClip('attack', 1)]);
+            const originalX = root.position.x;
             const playback = play(backend, 'attack', { loop: 'loop' });
 
             backend.advance(0.4);
             const movingX = root.position.x;
             playback.stop();
             backend.advance(0.2);
-            const afterStop = root.position.x;
             backend.advance(0.2);
 
-            // The frozen sample is bookkeeping; this is the visible half. An
-            // action that was released but never stopped keeps writing its track
-            // into the node on every advance — three only hands the node back to
-            // its original state when the action is deactivated.
-            expect(movingX).toBeGreaterThan(0);
-            expect(root.position.x).toBe(afterStop);
+            // The frozen sample is bookkeeping; this is the visible half. The
+            // original state is captured BEFORE anything played: reading it after
+            // the stop would compare the restored value with itself, which holds
+            // whether or not the action was ever deactivated.
+            expect(movingX).toBeGreaterThan(originalX);
+            expect(root.position.x).toBe(originalX);
 
             backend.dispose();
+        });
+
+        it('leaves the bound node posed when the playback is held instead', () => {
+            const { root, backend } = makeRig([makeClip('attack', 1)]);
+            const playback = play(backend, 'attack', { loop: 'loop' });
+
+            backend.advance(0.4);
+            const posed = root.position.x;
+            playback.hold();
+            backend.advance(0.2);
+
+            // The whole difference between the two terminal verbs: the pose stays
+            // on screen, and the playhead does not move under it.
+            expect(posed).toBeGreaterThan(0);
+            expect(root.position.x).toBe(posed);
+            expect(playback.sample()).toEqual({ phase: 0.4, cycle: 0, ended: true });
+
+            backend.dispose();
+        });
+
+        it('lets a crossfade resume an action a hold had frozen', () => {
+            const attack = makeClip('attack', 1);
+            const { backend } = makeRig([attack, makeScaleClip('idle', 1)]);
+            const playback = play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.4);
+            playback.hold();
+
+            const resumed = backend.crossfadeTo('attack', 0.4, { loop: 'loop' });
+            backend.advance(0.2);
+
+            // A hold pauses the action; `play` clears that through `reset()` but
+            // a resume does not, so a resumed action that stayed paused would
+            // pose its held frame for ever while its handle reported a playhead
+            // that never moved.
+            expect(resumed?.sample().phase).toBeCloseTo(0.6, 6);
+
+            backend.dispose();
+        });
+
+        it('does not let a held handle pause the playback that took its action over', () => {
+            const attack = makeClip('attack', 1);
+            const { backend } = makeRig([attack]);
+            const stale = play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.4);
+            stale.hold();
+            const live = play(backend, 'attack', { loop: 'loop' });
+
+            stale.hold();
+            backend.advance(0.3);
+
+            // three caches ONE action per (clip, root), so a hold that wrote
+            // `paused` before checking whether this record still owns its action
+            // would freeze the playback that took it over — for ever, under a
+            // sample that keeps reporting an ordinary playhead.
+            expect(live.sample().phase).toBeCloseTo(0.3, 6);
+
+            backend.dispose();
+        });
+
+        it('keeps a clip a clip-end handler replayed moving, rather than holding its action', () => {
+            const { root, backend } = makeRig([makeClip('attack', 1)]);
+            const player = new ClipPlayer({
+                backend,
+                getTimeScale: () => 1,
+                report: () => undefined,
+            });
+            let replayed = false;
+            const replay = (): void => {
+                if (replayed) {
+                    return;
+                }
+                replayed = true;
+                player.play({ clipName: 'attack', loop: 'once', handlers: { onClipEnd: replay } });
+            };
+            player.play({ clipName: 'attack', loop: 'once', handlers: { onClipEnd: replay } });
+
+            player.tick(1.5);
+            player.tick(0.3);
+
+            // The player fans `clip-end` out BEFORE it holds, so a handler that
+            // replays the clip leaves the ending handle naming an action the new
+            // playback is already driving. Pausing that action here freezes the
+            // replayed clip for ever under a sample that keeps reporting an
+            // ordinary playhead.
+            expect(replayed).toBe(true);
+            expect(player.activeClips).toEqual(['attack']);
+            expect(root.position.x).toBeCloseTo(0.3, 6);
+            player.tick(0.3);
+            expect(root.position.x).toBeCloseTo(0.6, 6);
+
+            player.dispose();
+        });
+
+        it('holds the pose a finished once clip ended on when a ClipPlayer drives it', () => {
+            const { root, backend } = makeRig([makeClip('attack', 1)]);
+            const originalX = root.position.x;
+            const player = new ClipPlayer({
+                backend,
+                getTimeScale: () => 1,
+                report: () => undefined,
+            });
+            player.play({ clipName: 'attack', loop: 'once' });
+
+            player.tick(0.9);
+            const posedBeforeTheEnd = root.position.x;
+            player.tick(0.2);
+
+            // Captured before the terminating tick: read afterwards it would be
+            // the restored original compared with itself. `clampWhenFinished`
+            // holds the last frame right up to the release the terminal branch
+            // used to do, which is the bind-pose flash this replaces.
+            expect(posedBeforeTheEnd).toBeGreaterThan(originalX);
+            expect(root.position.x).toBe(1);
+            player.tick(0.5);
+            expect(root.position.x).toBe(1);
+
+            player.dispose();
+            expect(root.position.x).toBe(originalX);
         });
     });
 

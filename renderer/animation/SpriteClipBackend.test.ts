@@ -221,6 +221,29 @@ describe('SpriteClipBackend', () => {
             geometry.dispose();
         });
 
+        it('leaves the last cell on the quad when a playback is held, and when it is stopped', () => {
+            const cell1 = ATLAS.frames[1]?.uv;
+            const { geometry, backend } = makeRig();
+            const playback = play(backend, 'walk', { loop: 'loop' });
+            backend.advance(0.3);
+            expect(readUv(geometry)).toEqual(cell1);
+
+            playback.hold();
+            backend.advance(0.3);
+
+            // Both terminal verbs leave the same thing on screen here, and that
+            // is the shape of the seam rather than an oversight: this backend
+            // writes `uv` into a geometry it does not own, so it has nothing to
+            // hand back. The mesh backend is where the two differ.
+            expect(readUv(geometry)).toEqual(cell1);
+            playback.stop();
+            backend.advance(0.3);
+            expect(readUv(geometry)).toEqual(cell1);
+
+            backend.dispose();
+            geometry.dispose();
+        });
+
         it('writes nothing while the frame index is unchanged', () => {
             const { geometry, backend } = makeRig();
             play(backend, 'walk', { loop: 'loop' });

@@ -50,6 +50,12 @@ export interface FakeClipBackend extends ClipBackend {
     readonly advanceCalls: readonly number[];
     /** Clip names `dispose` or a playback's `stop` released, in call order. */
     readonly stopped: readonly AnimationClipName[];
+    /**
+     * Clip names a playback's `hold` ended, in call order. Separate from
+     * {@link FakeClipBackend.stopped} so an assertion naming one verb cannot pass
+     * because the other was called.
+     */
+    readonly held: readonly AnimationClipName[];
     /** How many times `dispose` was called — not whether it ever was. */
     readonly disposeCalls: number;
     /** The speed last set on this clip's live playback, or `null` when none is live. */
@@ -84,8 +90,11 @@ export function createFakeClipBackend(
     clips: Readonly<Record<AnimationClipName, FakeClipSpec>>,
 ): FakeClipBackend {
     const live = new Set<LivePlayback>();
+    /** The playbacks a `hold` ended: no longer integrating, not yet released. */
+    const holding = new Set<LivePlayback>();
     const advanceCalls: number[] = [];
     const stopped: AnimationClipName[] = [];
+    const held: AnimationClipName[] = [];
     let disposeCalls = 0;
 
     /** The most recently started live playback for `clipName`. */
@@ -107,8 +116,28 @@ export function createFakeClipBackend(
         };
     }
 
-    function release(playback: LivePlayback): void {
+    /**
+     * End `playback` while leaving what it poses. It stops integrating and its
+     * sample stays answerable, but it is still the backend's to release — which
+     * is why it moves into `holding` rather than being forgotten.
+     */
+    function hold(playback: LivePlayback): void {
         if (!live.delete(playback)) {
+            return;
+        }
+        holding.add(playback);
+        held.push(playback.clipName);
+    }
+
+    /**
+     * Release `playback`, whether it was live or holding. A stop AFTER a hold is
+     * real work on the backends this doubles — it is what hands a mesh action's
+     * binding back — so it is ledgered rather than swallowed as a repeat.
+     */
+    function stop(playback: LivePlayback): void {
+        const wasLive = live.delete(playback);
+        const wasHolding = holding.delete(playback);
+        if (!wasLive && !wasHolding) {
             return;
         }
         stopped.push(playback.clipName);
@@ -120,6 +149,9 @@ export function createFakeClipBackend(
         },
         get stopped() {
             return [...stopped];
+        },
+        get held() {
+            return [...held];
         },
         get disposeCalls() {
             return disposeCalls;
@@ -153,7 +185,10 @@ export function createFakeClipBackend(
                     playback.speed = speed;
                 },
                 stop: () => {
-                    release(playback);
+                    stop(playback);
+                },
+                hold: () => {
+                    hold(playback);
                 },
             };
             return handle;
@@ -185,8 +220,8 @@ export function createFakeClipBackend(
 
         dispose() {
             disposeCalls += 1;
-            for (const playback of [...live]) {
-                release(playback);
+            for (const playback of [...live, ...holding]) {
+                stop(playback);
             }
         },
 
@@ -269,6 +304,9 @@ export function createBlendingFakeClipBackend(
         },
         get stopped() {
             return base.stopped;
+        },
+        get held() {
+            return base.held;
         },
         get disposeCalls() {
             return base.disposeCalls;

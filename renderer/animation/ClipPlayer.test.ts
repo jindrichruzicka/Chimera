@@ -411,6 +411,98 @@ describe('a batch that ends the clip is fanned out in array order', () => {
 
         expect(player.activeClips).toEqual([]);
     });
+
+    it('holds the playback of a clip that ended rather than stopping it', () => {
+        const { player, backend, calls, handlers } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'once' },
+        });
+        player.play({
+            clipName: 'swing',
+            sheet: sheetOf({ passages: { span: { from: 0.2, to: 1 } } }),
+            handlers,
+        });
+
+        player.tick(2);
+
+        // The two verbs are ledgered apart, so this cannot pass because the
+        // other one was called. A stop here restores the model's original state
+        // on the same tick the `clip-end` handler runs.
+        expect(backend.held).toEqual(['swing']);
+        expect(backend.stopped).toEqual([]);
+        expect(calls).toEqual(['start:span', 'end:span:reached-end', 'clip-end']);
+    });
+
+    it('releases a held playback on stop and fans out nothing for it', () => {
+        const { player, backend, calls, handlers } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'once' },
+        });
+        player.play({
+            clipName: 'swing',
+            sheet: sheetOf({ passages: { span: { from: 0.2, to: 1 } } }),
+            handlers,
+        });
+        player.tick(2);
+        const afterTheEnd = [...calls];
+
+        player.stop('swing');
+
+        // Nothing is fanned out for a pose: `#posing` holds a backend handle
+        // rather than an entry, so there is no scheduler to close and no
+        // handlers to close it to.
+        expect(calls).toEqual(afterTheEnd);
+        expect(backend.stopped).toEqual(['swing']);
+        // …and releasing it twice is still a no-op.
+        player.stop('swing');
+        expect(backend.stopped).toEqual(['swing']);
+    });
+
+    it('releases what a clip end left posing when the same clip is played again', () => {
+        const { player, backend, handlers } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'once' },
+        });
+        player.play({ clipName: 'swing', handlers });
+        player.tick(2);
+
+        player.play({ clipName: 'swing', handlers });
+
+        // The pose belonged to the playback that ended, not to the clip name: a
+        // player that kept it would hold a backend resource for a clip that is
+        // playing again, and release it on the NEXT end.
+        expect(backend.held).toEqual(['swing']);
+        expect(backend.stopped).toEqual(['swing']);
+        expect(player.activeClips).toEqual(['swing']);
+    });
+
+    it('releases every held playback before it disposes the backend', () => {
+        const { player, backend, handlers } = makePlayer({
+            swing: { durationSeconds: 1, loop: 'once' },
+            jab: { durationSeconds: 1, loop: 'once' },
+        });
+        // Read INSIDE the backend's dispose: this backend releases whatever it
+        // is still holding, so a `stopped` read afterwards says 'swing' whether
+        // or not the player released it first, and the ordering claim would pass
+        // for a player that never touched its posing map.
+        const stoppedWhenDisposed: string[] = [];
+        const disposeBackend = backend.dispose.bind(backend);
+        vi.spyOn(backend, 'dispose').mockImplementation(() => {
+            stoppedWhenDisposed.push(...backend.stopped);
+            disposeBackend();
+        });
+        player.play({ clipName: 'swing', handlers });
+        player.play({ clipName: 'jab', handlers });
+        // Two clips ending on the same tick, so "every" is a claim the fixture
+        // can carry: one held pose leaves a release-the-first-one-only mutant
+        // alive.
+        player.tick(2);
+        expect(backend.held).toEqual(['swing', 'jab']);
+        expect(backend.stopped).toEqual([]);
+
+        player.dispose();
+
+        expect(stoppedWhenDisposed).toEqual(['swing', 'jab']);
+        expect(backend.stopped).toEqual(['swing', 'jab']);
+        expect(backend.disposeCalls).toBe(1);
+    });
 });
 
 // ─── Rule HANDLER-ISOLATION ─────────────────────────────────────────────────────
@@ -615,6 +707,7 @@ describe('the reasons a player ends a passage', () => {
                     sample: () => ({ phase: 0, cycle: 0, ended: false }),
                     setSpeed: () => {},
                     stop: () => {},
+                    hold: () => {},
                 }),
                 advance: () => {},
                 dispose: () => {},
