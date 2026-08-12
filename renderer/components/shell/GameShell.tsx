@@ -221,6 +221,7 @@ function RegistryGameShell({
                             {...(isHost === undefined ? {} : { isHost })}
                             {...(fadeOutMs === undefined ? {} : { fadeOutMs })}
                             {...(fadeInMs === undefined ? {} : { fadeInMs })}
+                            {...(assetManifest === undefined ? {} : { assetManifest })}
                         />
                     </GameShellFrame>
                     <InGameMenuHost

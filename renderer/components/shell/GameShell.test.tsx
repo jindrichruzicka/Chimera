@@ -25,6 +25,7 @@ import {
 import { createAssetLoaderRegistry } from '../../assets/AssetLoaderRegistry';
 import { createDelegatingAssetManager } from '../../assets/DelegatingAssetManager';
 import { createRecordingLogsApi } from '../../logging/__test-support__/RecordingLogsApi.js';
+import { createStubAssetManager } from '../../assets/__test-support__/StubAssetManager.js';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
 import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
 import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerContext.js';
@@ -1746,5 +1747,56 @@ describe('GameShell — critical asset preload (registry mode)', () => {
         expect(logs.emitCalls).toHaveLength(1);
         expect(logs.emitCalls[0]?.source.module).toBe('asset-preload');
         expect(logs.emitCalls[0]?.error?.message).toMatch(/not configured/);
+    });
+});
+
+describe('GameShell — scene preload manifest forwarding (registry mode)', () => {
+    const sceneRef = 'demo/textures/arena.webp' as AssetRef<TextureAsset>;
+    const manifest: AssetManifest = {
+        gameId: 'demo',
+        entries: [{ ref: sceneRef, kind: 'texture', priority: 'deferred' }],
+    };
+
+    it('forwards its assetManifest to SceneRouter, so a scene preload can run', async () => {
+        const injected = createStubAssetManager({ [String(sceneRef)]: 'hang' });
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: () => <div data-testid="registry-playfield" /> }}
+                snapshot={makePlayerSnapshot({
+                    sceneId: makeSceneId('engine:game'),
+                    sceneTransition: {
+                        toSceneId: makeSceneId('engine:post-game'),
+                        phase: 'preparing',
+                        startedAtTick: 1,
+                        params: {},
+                        playersReady: [],
+                        requiredAssets: [sceneRef],
+                    },
+                })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={injected}
+                assetManifest={manifest}
+                fadeOutMs={0}
+                fadeInMs={0}
+            />,
+        );
+        await act(async () => {
+            await new Promise((resolve) => {
+                setTimeout(resolve, 0);
+            });
+        });
+
+        // The run PROMOTES the scene's declared refs before registering, so a
+        // `'critical'` entry for this ref is the fingerprint of a preload that
+        // actually received a manifest — the shell's own backstop registration
+        // re-registers the manifest verbatim, entry priorities untouched.
+        const promoted = injected.registered.filter((registered) =>
+            registered.entries.some(
+                (entry) => entry.ref === sceneRef && entry.priority === 'critical',
+            ),
+        );
+        expect(promoted).toHaveLength(1);
     });
 });

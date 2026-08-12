@@ -14,6 +14,7 @@ import {
 import { DefaultAssetManager, type AssetManager } from '../../assets/AssetManager.js';
 import {
     SCENE_PRELOAD_BUDGET_MS,
+    scenePreloadMeasuresProgress,
     startScenePreload,
     type ScenePreloadOutcome,
 } from './scenePreload.js';
@@ -134,6 +135,47 @@ describe('SCENE_PRELOAD_BUDGET_MS', () => {
         const SCENE_TRANSITION_BARRIER_POLL_MS = 15_000;
 
         expect(SCENE_PRELOAD_BUDGET_MS).toBeLessThan(SCENE_TRANSITION_BARRIER_POLL_MS);
+    });
+});
+
+// ── what counts as a measured run ─────────────────────────────────────────────
+
+describe('scenePreloadMeasuresProgress', () => {
+    const measured = {
+        assetManager: buildManager().assetManager,
+        assetManifest: manifest([entry(ref('a'))]),
+        requiredAssets: [ref('a')],
+    };
+
+    it('is true when a manager, a manifest and at least one ref are all present', () => {
+        expect(scenePreloadMeasuresProgress(measured)).toBe(true);
+    });
+
+    // One case per input, never one fixture blanking several: each is what
+    // makes the run below take its synchronous no-op path, and a caller reading
+    // this predicate needs each to matter on its own.
+    it.each([
+        ['no manager', { assetManager: null }],
+        ['no manifest', { assetManifest: undefined }],
+        ['no declared refs', { requiredAssets: [] }],
+    ])('is false with %s', (_case, blank) => {
+        expect(scenePreloadMeasuresProgress({ ...measured, ...blank })).toBe(false);
+    });
+
+    it('is false for exactly the inputs startScenePreload skips', async () => {
+        // The pairing is the point of exporting it: a caller gates its progress
+        // channel on this, so a drift between the two would surface a fraction
+        // for a run that measured nothing.
+        for (const blank of [
+            { assetManager: null },
+            { assetManifest: undefined },
+            { requiredAssets: [] },
+        ]) {
+            const inputs = { ...measured, ...blank };
+            expect(scenePreloadMeasuresProgress(inputs)).toBe(false);
+            await expect(startScenePreload(inputs).settled).resolves.toBe('skipped');
+        }
+        await expect(startScenePreload(measured).settled).resolves.not.toBe('skipped');
     });
 });
 

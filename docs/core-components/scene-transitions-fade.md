@@ -71,6 +71,8 @@ interface SceneTransitionState {
     readonly startedAtTick: number;
     readonly params: SceneEnterParams;
     readonly playersReady: readonly PlayerId[];
+    /** The entering scene's declaration, copied off its host-side descriptor. */
+    readonly requiredAssets?: readonly AssetRef[];
 }
 ```
 
@@ -127,7 +129,7 @@ Game reducers never dispatch from inside themselves. They set a domain event in 
 ```typescript
 // renderer/components/scene/SceneRouter.tsx
 // - sceneTransition === null → render defaultScreen for sceneId
-// - phase === 'preparing'   → TransitionOverlay + AssetPreloader + sendAction(SceneReady)
+// - phase === 'preparing'   → TransitionOverlay + scene preload + sendAction(SceneReady)
 // - phase === 'ready'       → TransitionOverlay at 100% until commit
 // - sceneId change          → unmount old tree; mount new tree
 export function SceneRouter(): JSX.Element;
@@ -135,12 +137,19 @@ export function SceneRouter(): JSX.Element;
 
 `TransitionOverlay.tsx` (engine-provided): a full-screen fade. Games can override it via the `GameScreenRegistry.transitionOverlay` slot. It renders no progress bar and no "Waiting for N player(s)…" status; see the component for what it does render.
 
-> **Not yet wired: the per-TRANSITION asset preload.** The two-phase protocol above ships — the
-> overlay renders on `phase === 'preparing'` and `useFadeTransition` dispatches
-> `engine:scene_ready` — but it dispatches on the FADE completing, not on assets loading. The
-> committed-scene half of the same declaration is wired: `BaseGameSnapshot.sceneRequiredAssets`
-> gates a ROUTE ENTRY through `useCriticalAssetPreloadGate` — see
-> [Where the critical preload runs](asset-reference-system.md#where-the-critical-preload-runs).
+#### The barrier's ack waits for the entering scene's assets
+
+`useFadeTransition` acks only after BOTH the fade-out and the entering scene's preload have settled: it awaits `fadeOut()`, then starts `startScenePreload` over `sceneTransition.requiredAssets` (§4.10) and awaits its run before dispatching `engine:scene_ready`.
+
+The ack fires on **all four** preload outcomes — `loaded`, `failed`, `timeout`, `skipped`. Withholding it on a bad disk would freeze the match rather than degrade it: the host waits for every player, evaluates `timeoutTicks` only when an action is applied, and a turn-based game has no ticker to apply one.
+
+A run is abandoned by **cancellation, never disposal** (Invariant #21 — the manager is borrowed). Cancelling is not the transition effect's cleanup: that effect depends on the parsed `sceneTransition` object and re-runs on every state frame, so a remote player's ack alone would kill the local run. The two cancel sites are an unmount-only effect and an explicit transition-identity check.
+
+Progress is a plain `useState` in `SceneRouter`, fed by the hook's `onPreloadProgress` and handed to `TransitionOverlay`, to a game-supplied overlay, and to the transition's loading cover — the third cover site (§4.36), rendered as a SIBLING of the overlay branch. It is not in `uiStore` (a module singleton two mounted routers would cross-talk through) and not on `FadeControl` (also mounted app-level, where no scene preload exists).
+
+A run that waits on nothing — no manager, no manifest, or no declared refs — reports **no** fraction, and `SceneRouter` then withholds the prop entirely rather than passing `null`, so the overlay a game already sees is unchanged. Forwarding what such a run does report would author "100% preloaded" over a wait nobody counted, for every transition in every game shipping no manifest; the hook asks `scenePreloadMeasuresProgress` rather than restating the condition, and the pairing is pinned in `renderer/components/scene/scenePreload.test.ts`. A measured run reports `0` the moment it starts, then one fraction per settled ref.
+
+The committed-scene half of the same declaration is separate: `BaseGameSnapshot.sceneRequiredAssets` gates a ROUTE ENTRY through `useCriticalAssetPreloadGate` — see [Where the critical preload runs](asset-reference-system.md#where-the-critical-preload-runs).
 
 ### Module Tree
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -8,15 +8,70 @@ import {
     playerId,
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import type { AssetRef, TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import type { AssetManager } from '../../assets/AssetManager.js';
+import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
+import {
+    createStubAssetManager,
+    stubManifest,
+    textureRef,
+} from '../../assets/__test-support__/StubAssetManager.js';
 import { FadeContext, FadeProvider, type FadeControl } from '../shell/FadeContext.js';
+import type * as ScenePreloadModule from './scenePreload.js';
 import { useFadeTransition } from './useFadeTransition.js';
 
+// Records every run the hook starts and counts its cancels, while DELEGATING to
+// the real `startScenePreload` — the outcomes, the budget and the progress
+// channel under test here are that module's, and a hand-written double would be
+// asserting against itself.
+const preloadRuns = vi.hoisted(() => [] as { cancelCalls: number }[]);
+
+vi.mock('./scenePreload.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof ScenePreloadModule>();
+    return {
+        ...actual,
+        startScenePreload: (options: Parameters<typeof actual.startScenePreload>[0]) => {
+            const run = actual.startScenePreload(options);
+            const record = { cancelCalls: 0 };
+            preloadRuns.push(record);
+            return {
+                settled: run.settled,
+                cancel: (): void => {
+                    record.cancelCalls += 1;
+                    run.cancel();
+                },
+            };
+        },
+    };
+});
+
 const LOCAL_PLAYER = playerId('local-player');
+
+/** Captured before any `vi.useFakeTimers()`, so {@link flushPendingWork} yields for real. */
+const realSetTimeout = globalThis.setTimeout;
+
+/**
+ * Yields to a REAL macrotask, which drains the whole pending microtask queue in
+ * one go.
+ *
+ * Explicit, and deliberately not a fixed count of `await Promise.resolve()`:
+ * the fade → preload → dispatch chain's length is an implementation detail, and
+ * a counted flush silently under-drains the moment another `await` joins it.
+ */
+async function flushPendingWork(): Promise<void> {
+    await act(async () => {
+        await new Promise<void>((resolve) => {
+            realSetTimeout(resolve, 0);
+        });
+    });
+}
 
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    preloadRuns.length = 0;
 });
 
 beforeEach(() => {
@@ -66,6 +121,53 @@ describe('useFadeTransition', () => {
         expect(sendAction).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(1);
 
+        expect(sendAction).toHaveBeenCalledWith({
+            type: 'engine:scene_ready',
+            playerId: LOCAL_PLAYER,
+            tick: snapshot.tick,
+            payload: { playerId: LOCAL_PLAYER },
+        });
+    });
+
+    it('dispatches engine:scene_ready exactly once under a StrictMode root', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+        const snapshot = makeSnapshot({
+            sceneTransition: {
+                toSceneId: makeSceneId('engine:post-game'),
+                phase: 'preparing',
+                startedAtTick: 2,
+                params: {},
+                playersReady: [],
+            },
+        });
+
+        function Harness(): React.ReactElement {
+            useFadeTransition({
+                snapshot,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                fadeOutMs: 32,
+                fadeInMs: 32,
+            });
+            return <div />;
+        }
+
+        // StrictMode as the ROOT element: React simulates a remount, running
+        // every effect's cleanup and then its setup again on the SAME instance,
+        // with refs preserved. `pnpm dev` runs both Next configs with
+        // `reactStrictMode: true`, so this is the shape the barrier meets there.
+        render(
+            <React.StrictMode>
+                <FadeProvider>
+                    <Harness />
+                </FadeProvider>
+            </React.StrictMode>,
+        );
+
+        await vi.runAllTimersAsync();
+
+        expect(sendAction).toHaveBeenCalledOnce();
         expect(sendAction).toHaveBeenCalledWith({
             type: 'engine:scene_ready',
             playerId: LOCAL_PLAYER,
@@ -284,6 +386,507 @@ describe('useFadeTransition', () => {
         expect(sendAction).not.toHaveBeenCalled();
     });
 });
+
+describe('useFadeTransition — entering scene asset preload', () => {
+    // ── the two conjuncts, one dedicated killer each ─────────────────────────
+
+    it('withholds scene_ready while the fade-out is still running, preload settled or not', async () => {
+        const sendAction = vi.fn();
+        const ref = textureRef('arena');
+        // The fade never resolves, and the preload is reachable only THROUGH it,
+        // so a dispatch here means the fade wait was dropped from the chain.
+        const fadeControl = makeFadeControl({
+            fadeOut: vi.fn().mockReturnValue(new Promise<void>(() => undefined)),
+        });
+
+        renderPreloadHarness({
+            fadeControl,
+            sendAction,
+            assetManager: createStubAssetManager(),
+            assetManifest: stubManifest([ref]),
+            snapshot: makePreloadingSnapshot([ref]),
+        });
+        await flushPendingWork();
+
+        expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('withholds scene_ready while the entering scene’s assets are still loading', async () => {
+        const sendAction = vi.fn();
+        const ref = textureRef('arena');
+
+        renderPreloadHarness({
+            sendAction,
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+            snapshot: makePreloadingSnapshot([ref]),
+        });
+        await flushPendingWork();
+
+        expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    // ── fail open: every outcome acks the barrier ────────────────────────────
+
+    it('dispatches scene_ready once every declared ref has loaded', async () => {
+        const sendAction = vi.fn();
+        const ref = textureRef('arena');
+
+        renderPreloadHarness({
+            sendAction,
+            assetManager: createStubAssetManager({ [String(ref)]: 'resolve' }),
+            assetManifest: stubManifest([ref]),
+            snapshot: makePreloadingSnapshot([ref]),
+        });
+        await flushPendingWork();
+
+        expect(sendAction).toHaveBeenCalledOnce();
+    });
+
+    it('dispatches scene_ready when a declared ref FAILS to load', async () => {
+        const sendAction = vi.fn();
+        const ref = textureRef('arena');
+
+        renderPreloadHarness({
+            sendAction,
+            assetManager: createStubAssetManager({ [String(ref)]: 'reject' }),
+            assetManifest: stubManifest([ref]),
+            snapshot: makePreloadingSnapshot([ref]),
+        });
+        await flushPendingWork();
+
+        expect(sendAction).toHaveBeenCalledOnce();
+    });
+
+    it('dispatches scene_ready when the preload budget elapses first', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+        const ref = textureRef('arena');
+
+        renderPreloadHarness({
+            sendAction,
+            preloadTimeoutMs: 40,
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+            snapshot: makePreloadingSnapshot([ref]),
+        });
+        await flushPendingWork();
+        expect(sendAction).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(40);
+        await flushPendingWork();
+
+        // The host barrier waits for EVERY player and only evaluates its own
+        // timeout when an action is applied, and a turn-based game has no
+        // ticker — so a client that withheld its ack on a bad disk would freeze
+        // the match with no host timeout able to fire.
+        expect(sendAction).toHaveBeenCalledOnce();
+    });
+
+    it('dispatches scene_ready for a scene that declares no required assets', async () => {
+        const sendAction = vi.fn();
+
+        renderPreloadHarness({
+            sendAction,
+            assetManager: createStubAssetManager(),
+            assetManifest: stubManifest([textureRef('arena')]),
+            snapshot: makePreloadingSnapshot([]),
+        });
+        await flushPendingWork();
+
+        expect(sendAction).toHaveBeenCalledOnce();
+    });
+
+    // ── nothing starts once the caller has moved on ──────────────────────────
+    //
+    // A fade is 300 ms by default, and the unmount-only cancel has already run
+    // by the time it resolves — so a run started here is UNCANCELLABLE: it
+    // registers a manifest and loads into a borrowed manager whose unique
+    // disposer has gone (Invariant #21), and keeps reporting progress at a
+    // caller that stopped listening.
+
+    it('starts no preload when the fade resolves after unmount', async () => {
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'hang' });
+        const releaseFade = deferredFade();
+
+        const { unmount } = renderPreloadHarness({
+            fadeControl: releaseFade.control,
+            sendAction: vi.fn(),
+            assetManager,
+            assetManifest: stubManifest([ref]),
+            snapshot: makePreloadingSnapshot([ref]),
+        });
+        await flushPendingWork();
+
+        unmount();
+        releaseFade.resolve();
+        await flushPendingWork();
+
+        expect(preloadRuns).toHaveLength(0);
+        expect(assetManager.registered).toHaveLength(0);
+    });
+
+    it('starts no preload when the fade resolves after the transition target changed', async () => {
+        const leaving = textureRef('arena');
+        const entering = textureRef('lobby');
+        const assetManager = createStubAssetManager({
+            [String(leaving)]: 'hang',
+            [String(entering)]: 'hang',
+        });
+        const assetManifest = stubManifest([leaving, entering]);
+        const releaseFade = deferredFade();
+        const sendAction = vi.fn();
+
+        const { rerender } = renderPreloadHarness({
+            fadeControl: releaseFade.control,
+            sendAction,
+            assetManager,
+            assetManifest,
+            snapshot: makePreloadingSnapshot([leaving]),
+        });
+        await flushPendingWork();
+
+        rerender(
+            makePreloadHarnessTree({
+                fadeControl: releaseFade.control,
+                sendAction,
+                assetManager,
+                assetManifest,
+                snapshot: makePreloadingSnapshot([entering], {
+                    toSceneId: 'engine:lobby',
+                    tick: 4,
+                }),
+            }),
+        );
+        // Releases BOTH fades; only the surviving transition may start a run.
+        releaseFade.resolve();
+        await flushPendingWork();
+
+        expect(preloadRuns).toHaveLength(1);
+        expect(assetManager.registered).toHaveLength(1);
+        expect(assetManager.registered[0]?.entries).toContainEqual(
+            expect.objectContaining({ ref: entering, priority: 'critical' }),
+        );
+    });
+
+    // ── a run that waits on nothing measures nothing ─────────────────────────
+    //
+    // One case per input `startScenePreload` skips on, never one fixture
+    // tripping several: the hook asks that module's own predicate, and each
+    // conjunct needs its own killer.
+
+    it.each([
+        [
+            'the entering scene declares no refs',
+            (): PreloadHarnessOptions => ({
+                sendAction: vi.fn(),
+                assetManager: createStubAssetManager(),
+                assetManifest: stubManifest([textureRef('arena')]),
+                snapshot: makePreloadingSnapshot([]),
+            }),
+        ],
+        [
+            'the game ships no manifest',
+            (): PreloadHarnessOptions => ({
+                sendAction: vi.fn(),
+                assetManager: createStubAssetManager(),
+                assetManifest: undefined,
+                snapshot: makePreloadingSnapshot([textureRef('arena')]),
+            }),
+        ],
+        [
+            'no asset manager is in context',
+            (): PreloadHarnessOptions => ({
+                sendAction: vi.fn(),
+                assetManager: null,
+                assetManifest: stubManifest([textureRef('arena')]),
+                snapshot: makePreloadingSnapshot([textureRef('arena')]),
+            }),
+        ],
+    ])('reports no fraction when %s', async (_case, build) => {
+        const onPreloadProgress = vi.fn();
+
+        renderPreloadHarness({ ...build(), onPreloadProgress });
+        await flushPendingWork();
+
+        // The run's own no-op path reports `1` — 100% of an empty list. Passing
+        // that on would author a measurement nobody took, which is the same
+        // fabrication the contract refuses for `0`.
+        expect(onPreloadProgress.mock.calls.map(([fraction]) => fraction)).not.toContain(1);
+        expect(onPreloadProgress).not.toHaveBeenCalledWith(0);
+    });
+
+    it('reports 0 the moment a measured run starts', async () => {
+        const onPreloadProgress = vi.fn();
+        const ref = textureRef('arena');
+
+        renderPreloadHarness({
+            sendAction: vi.fn(),
+            onPreloadProgress,
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+            snapshot: makePreloadingSnapshot([ref]),
+        });
+        await flushPendingWork();
+
+        expect(onPreloadProgress).toHaveBeenCalledWith(0);
+    });
+
+    // ── cancellation is NOT the transition effect's cleanup ──────────────────
+
+    it('keeps a pending preload running when another player acknowledges mid-transition', async () => {
+        const sendAction = vi.fn();
+        const onPreloadProgress = vi.fn();
+        const first = textureRef('arena');
+        const second = textureRef('floor');
+        const assetManager = createStubAssetManager({
+            [String(first)]: 'deferred',
+            [String(second)]: 'hang',
+        });
+
+        const { rerender } = renderPreloadHarness({
+            sendAction,
+            onPreloadProgress,
+            assetManager,
+            assetManifest: stubManifest([first, second]),
+            snapshot: makePreloadingSnapshot([first, second]),
+        });
+        await flushPendingWork();
+        expect(preloadRuns).toHaveLength(1);
+
+        // The effect depends on the freshly parsed `sceneTransition` OBJECT, so
+        // a remote ack re-runs it on the very next state frame. A cancel hung on
+        // that effect's cleanup would kill this client's own run right here.
+        rerender(
+            makePreloadHarnessTree({
+                sendAction,
+                onPreloadProgress,
+                assetManager,
+                assetManifest: stubManifest([first, second]),
+                snapshot: makePreloadingSnapshot([first, second], {
+                    tick: 4,
+                    playersReady: [playerId('other-player')],
+                }),
+            }),
+        );
+        await flushPendingWork();
+
+        expect(preloadRuns[0]?.cancelCalls).toBe(0);
+
+        assetManager.settleDeferred(first);
+        await flushPendingWork();
+
+        expect(onPreloadProgress).toHaveBeenCalledWith(0.5);
+    });
+
+    it('cancels the pending run and acks nothing when the transition target changes', async () => {
+        const sendAction = vi.fn();
+        const leaving = textureRef('arena');
+        const entering = textureRef('lobby');
+        const assetManager = createStubAssetManager({
+            [String(leaving)]: 'deferred',
+            [String(entering)]: 'hang',
+        });
+
+        const { rerender } = renderPreloadHarness({
+            sendAction,
+            assetManager,
+            assetManifest: stubManifest([leaving, entering]),
+            snapshot: makePreloadingSnapshot([leaving]),
+        });
+        await flushPendingWork();
+        expect(preloadRuns).toHaveLength(1);
+
+        rerender(
+            makePreloadHarnessTree({
+                sendAction,
+                assetManager,
+                assetManifest: stubManifest([leaving, entering]),
+                snapshot: makePreloadingSnapshot([entering], {
+                    toSceneId: 'engine:lobby',
+                    tick: 4,
+                }),
+            }),
+        );
+        await flushPendingWork();
+
+        expect(preloadRuns[0]?.cancelCalls).toBeGreaterThan(0);
+
+        // The abandoned run settles AFTER the swap: without the identity
+        // re-check on the far side of the await it would ack the transition the
+        // client already left.
+        assetManager.settleDeferred(leaving);
+        await flushPendingWork();
+
+        expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('cancels the pending run on unmount', async () => {
+        const ref = textureRef('arena');
+
+        const { unmount } = renderPreloadHarness({
+            sendAction: vi.fn(),
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+            snapshot: makePreloadingSnapshot([ref]),
+        });
+        await flushPendingWork();
+        expect(preloadRuns).toHaveLength(1);
+
+        unmount();
+
+        expect(preloadRuns[0]?.cancelCalls).toBeGreaterThan(0);
+    });
+
+    // ── the progress channel ─────────────────────────────────────────────────
+
+    it('reports null progress once the transition ends', async () => {
+        const onPreloadProgress = vi.fn();
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'resolve' });
+        const assetManifest = stubManifest([ref]);
+
+        const { rerender } = renderPreloadHarness({
+            sendAction: vi.fn(),
+            onPreloadProgress,
+            assetManager,
+            assetManifest,
+            snapshot: makePreloadingSnapshot([ref]),
+        });
+        await flushPendingWork();
+        expect(onPreloadProgress).toHaveBeenLastCalledWith(1);
+
+        rerender(
+            makePreloadHarnessTree({
+                sendAction: vi.fn(),
+                onPreloadProgress,
+                assetManager,
+                assetManifest,
+                snapshot: makeSnapshot({ tick: 5, sceneTransition: null }),
+            }),
+        );
+        await flushPendingWork();
+
+        expect(onPreloadProgress).toHaveBeenLastCalledWith(null);
+    });
+});
+
+// ── preload fixtures ─────────────────────────────────────────────────────────
+
+function makeFadeControl(overrides: Partial<FadeControl> = {}): FadeControl {
+    return {
+        phase: 'idle',
+        opacity: 0,
+        setPhase: vi.fn(),
+        fadeOut: vi.fn().mockResolvedValue(undefined),
+        fadeIn: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+    };
+}
+
+function makePreloadingSnapshot(
+    requiredAssets: readonly AssetRef<TextureAsset>[],
+    overrides: {
+        readonly toSceneId?: string;
+        readonly tick?: number;
+        readonly playersReady?: readonly ReturnType<typeof playerId>[];
+    } = {},
+): PlayerSnapshot {
+    return makeSnapshot({
+        tick: overrides.tick ?? 3,
+        sceneTransition: {
+            toSceneId: makeSceneId(overrides.toSceneId ?? 'engine:post-game'),
+            phase: 'preparing',
+            startedAtTick: 2,
+            params: {},
+            playersReady: overrides.playersReady ?? [],
+            requiredAssets,
+        },
+    });
+}
+
+interface PreloadHarnessOptions {
+    readonly snapshot: PlayerSnapshot;
+    readonly sendAction: ReturnType<typeof vi.fn>;
+    /** `null` stands for "no `AssetManagerContext` above this tree". */
+    readonly assetManager: AssetManager | null;
+    /** `undefined` stands for "this game ships no manifest". */
+    readonly assetManifest: AssetManifest | undefined;
+    readonly onPreloadProgress?: (fraction: number | null) => void;
+    readonly preloadTimeoutMs?: number;
+    readonly fadeControl?: FadeControl;
+}
+
+/** A `FadeControl` whose fade-out the test decides the moment of. */
+function deferredFade(): { readonly control: FadeControl; readonly resolve: () => void } {
+    const resolvers: (() => void)[] = [];
+    return {
+        control: {
+            phase: 'idle',
+            opacity: 0,
+            setPhase: () => undefined,
+            fadeOut: () =>
+                new Promise<void>((resolve) => {
+                    resolvers.push(resolve);
+                }),
+            fadeIn: () => Promise.resolve(),
+        },
+        resolve: () => {
+            for (const resolveFade of resolvers.splice(0)) {
+                resolveFade();
+            }
+        },
+    };
+}
+
+/**
+ * Declared at module scope, NOT rebuilt per tree: a fresh component identity on
+ * a rerender makes React unmount and remount the subtree, which would discard
+ * the very refs the run's lifetime lives in — and would then report a cancel
+ * that the code under test never asked for.
+ */
+function PreloadHarness(options: PreloadHarnessOptions): React.ReactElement {
+    useFadeTransition({
+        snapshot: options.snapshot,
+        localPlayerId: LOCAL_PLAYER,
+        sendAction: options.sendAction,
+        ...(options.assetManifest === undefined ? {} : { assetManifest: options.assetManifest }),
+        ...(options.onPreloadProgress === undefined
+            ? {}
+            : { onPreloadProgress: options.onPreloadProgress }),
+        ...(options.preloadTimeoutMs === undefined
+            ? {}
+            : { preloadTimeoutMs: options.preloadTimeoutMs }),
+    });
+    return <div />;
+}
+
+function makePreloadHarnessTree(options: PreloadHarnessOptions): React.ReactElement {
+    return (
+        <AssetManagerContext.Provider value={options.assetManager}>
+            <FadeContext.Provider value={options.fadeControl ?? sharedInstantFadeControl}>
+                <PreloadHarness {...options} />
+            </FadeContext.Provider>
+        </AssetManagerContext.Provider>
+    );
+}
+
+/**
+ * A fade that completes on the spot, shared so a rerender does not hand the hook
+ * a fresh `FadeControl` identity mid-transition.
+ */
+const sharedInstantFadeControl: FadeControl = {
+    phase: 'idle',
+    opacity: 0,
+    setPhase: () => undefined,
+    fadeOut: () => Promise.resolve(),
+    fadeIn: () => Promise.resolve(),
+};
+
+function renderPreloadHarness(options: PreloadHarnessOptions): ReturnType<typeof render> {
+    return render(makePreloadHarnessTree(options));
+}
 
 function makeSceneId(raw: string): NonNullable<PlayerSnapshot['sceneId']> {
     return raw as NonNullable<PlayerSnapshot['sceneId']>;

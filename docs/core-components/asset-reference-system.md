@@ -310,9 +310,9 @@ Three further properties of that call are contractual rather than incidental:
   degrades one ref instead of refusing the match. `preloadCritical` awaits its entries in sequence
   and stops at the first rejection, so entries after the failing one are not preloaded either.
 
-The scene-TRANSITION arm — the same promotion driven from a `TransitionOverlay` progress gate as an
-entering scene commits — is a **separate** mechanism, with its own run in
-`renderer/components/scene/scenePreload.ts`; see [Scene Transitions](scene-transitions-fade.md). The
+The scene-TRANSITION arm is a **separate** mechanism, with its own run in
+`renderer/components/scene/scenePreload.ts`, awaited by `useFadeTransition` before the barrier's
+`engine:scene_ready`; see [Scene Transitions](scene-transitions-fade.md). The
 promotion helper's importers are censused in
 `renderer/assets/__tests__/required-assets-producer.test.ts`. The committed-scene half of the same
 declaration is the route gate above.

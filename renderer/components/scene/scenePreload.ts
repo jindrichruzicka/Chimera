@@ -83,6 +83,41 @@ export interface StartScenePreloadOptions {
     readonly onProgress?: (fraction: number) => void;
 }
 
+/** The three inputs that decide whether a run waits on anything. */
+export type ScenePreloadInputs = Pick<
+    StartScenePreloadOptions,
+    'assetManager' | 'assetManifest' | 'requiredAssets'
+>;
+
+/** {@link ScenePreloadInputs} with everything a measured run needs present. */
+interface MeasuredScenePreloadInputs {
+    readonly assetManager: AssetManager;
+    readonly assetManifest: AssetManifest;
+    readonly requiredAssets: readonly AssetRef[];
+}
+
+/**
+ * Whether a run over these inputs waits on anything at all.
+ *
+ * `false` means the run is the synchronous no-op below, resolving `'skipped'`
+ * — nothing is waited on, so there is no fraction anyone measured. Exported so
+ * a CALLER can decide that without restating the condition: a second copy of it
+ * drifts silently, and the caller that surfaces a fraction to a player is
+ * exactly the one that must not report a number over an empty list.
+ *
+ * A type guard so the narrowing is the COMPILER's, not a comment's — the run
+ * below reads both the manager and the manifest on the far side of it.
+ */
+export function scenePreloadMeasuresProgress(
+    inputs: ScenePreloadInputs,
+): inputs is MeasuredScenePreloadInputs {
+    return (
+        inputs.assetManager !== null &&
+        inputs.assetManifest !== undefined &&
+        inputs.requiredAssets.length > 0
+    );
+}
+
 export function startScenePreload({
     assetManager,
     assetManifest,
@@ -96,20 +131,23 @@ export function startScenePreload({
     // waiting on, so it is dropped.
     let finished = false;
 
-    if (assetManager === null || assetManifest === undefined || requiredAssets.length === 0) {
+    const inputs: ScenePreloadInputs = { assetManager, assetManifest, requiredAssets };
+    if (!scenePreloadMeasuresProgress(inputs)) {
         // Synchronous, and with NO manifest re-registration: a transition into a
         // scene that declares nothing must cost exactly what it cost before this
         // gate existed, down to the microtask.
         onProgress?.(1);
         return { settled: Promise.resolve('skipped'), cancel: () => undefined };
     }
+    const measuredManager = inputs.assetManager;
+    const measuredManifest = inputs.assetManifest;
 
     // The FULL manifest, promoted — never a sub-manifest filtered to the scene's
     // refs. `registerManifest` evicts every cached ref absent from the manifest
     // it is handed, so a filtered one would wipe the match's whole asset cache
     // mid-transition. Re-registering the promoted copy evicts nothing: entry
     // equivalence compares kind and metadata, and never `priority`.
-    assetManager.registerManifest(markRequiredAssetsCritical(assetManifest, requiredAssets));
+    measuredManager.registerManifest(markRequiredAssetsCritical(measuredManifest, requiredAssets));
 
     const total = requiredAssets.length;
     let completed = 0;
@@ -137,7 +175,7 @@ export function startScenePreload({
     const everyRefSettled = Promise.all(
         requiredAssets.map(async (ref) => {
             try {
-                await assetManager.load(ref);
+                await measuredManager.load(ref);
             } catch (error: unknown) {
                 failures += 1;
                 lastError = error;
@@ -181,7 +219,7 @@ export function startScenePreload({
                 readRendererLogsApi(),
                 '[assets] scene preload failed; those refs load on demand instead',
                 lastError instanceof Error ? lastError : new Error(String(lastError)),
-                { gameId: assetManifest.gameId },
+                { gameId: measuredManifest.gameId },
                 LOG_MODULE,
             );
         }
