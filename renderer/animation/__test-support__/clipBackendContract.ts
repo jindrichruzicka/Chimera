@@ -36,7 +36,13 @@ import type {
     AnimationLoopMode,
 } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
 
-import type { ClipBackend, ClipPlayOptions, ClipPlayback } from '../ClipBackend.js';
+import { supportsBlending } from '../ClipBackend.js';
+import type {
+    ClipBackend,
+    ClipPlayOptions,
+    ClipPlayback,
+    SupportsClipBlending,
+} from '../ClipBackend.js';
 
 /** Everything the suite needs to drive one implementation. */
 export interface ClipBackendFixture {
@@ -46,6 +52,13 @@ export interface ClipBackendFixture {
     readonly clipName: AnimationClipName;
     /** That clip's exact length, as {@link ClipBackend.getDurationSeconds} reports it. */
     readonly durationSeconds: number;
+    /**
+     * Whether this implementation blends. Declared by the fixture rather than
+     * read off the backend, so the claim below is two-sided: one implementation
+     * says `true` and the other says `false`, and a `supportsBlending` that
+     * always answered one of them fails on the other side.
+     */
+    readonly blends: boolean;
     /**
      * Release what the FIXTURE allocated — a geometry, a root, a mixer. Runs
      * after the backend's own `dispose`, never instead of it.
@@ -100,6 +113,19 @@ export function describeClipBackend(name: string, createFixture: () => ClipBacke
     }
 
     describe(`${name} satisfies the ClipBackend contract`, () => {
+        it('agrees with supportsBlending about whether it can blend', () => {
+            withFixture((fixture) => {
+                // Both sides in one claim: the guard's answer and the presence of
+                // a CALLABLE `crossfadeTo` must move together, so neither a
+                // backend that grew one without declaring it nor a guard that
+                // answered a constant survives across the two implementations.
+                expect(supportsBlending(fixture.backend)).toBe(fixture.blends);
+                expect(typeof (fixture.backend as Partial<SupportsClipBlending>).crossfadeTo).toBe(
+                    fixture.blends ? 'function' : 'undefined',
+                );
+            });
+        });
+
         it('answers its own clip and refuses one it does not have', () => {
             withFixture((fixture) => {
                 expect(fixture.backend.getDurationSeconds(fixture.clipName)).toBe(
@@ -331,6 +357,167 @@ export function describeClipBackend(name: string, createFixture: () => ClipBacke
                 playback.setSpeed(4);
                 fixture.backend.advance(fixture.durationSeconds);
                 expect(playback.sample()).toEqual({ ...terminal, ended: true });
+            });
+        });
+    });
+}
+
+/** What the blending arm needs on top of {@link ClipBackendFixture}. */
+export interface BlendingClipBackendFixture extends ClipBackendFixture {
+    /** The implementation under test, narrowed. */
+    readonly backend: SupportsClipBlending;
+    /**
+     * A SECOND clip the backend can play, whose contribution is invisible to
+     * {@link BlendingClipBackendFixture.posedValue}. Two clips driving the same
+     * output would make every assertion below read one number for two
+     * contributions, and "the outgoing clip is gone" would be unstateable.
+     */
+    readonly otherClipName: AnimationClipName;
+    /**
+     * What the backend is posing from {@link ClipBackendFixture.clipName} right
+     * now, as one number — a bound node's coordinate, a written `uv`. Read
+     * before anything is played, it is the resting value every case compares
+     * against.
+     */
+    posedValue(): number;
+}
+
+/**
+ * Run the {@link SupportsClipBlending} contract against `createFixture`.
+ *
+ * Separate from {@link describeClipBackend} because blending is the capability
+ * the two backends do NOT share: a sprite atlas has nothing to interpolate, and
+ * folding these cases into the base suite would make the shared contract
+ * unsatisfiable by half its implementations.
+ *
+ * The load-bearing property is the one no unit test of a single method states:
+ * a crossfaded-out playback is TERMINAL and still POSING at the same time — its
+ * handle answers a frozen sample while its contribution is still on screen — and
+ * `stop()` is what ends the second half.
+ */
+export function describeBlendingClipBackend(
+    name: string,
+    createFixture: () => BlendingClipBackendFixture,
+): void {
+    function withFixture(assert: (fixture: BlendingClipBackendFixture) => void): void {
+        const fixture = createFixture();
+        try {
+            assert(fixture);
+        } finally {
+            fixture.backend.dispose();
+            fixture.release();
+        }
+    }
+
+    describe(`${name} satisfies the SupportsClipBlending contract`, () => {
+        it('refuses a fade that is not a usable length, whatever clip it names', () => {
+            withFixture((fixture) => {
+                for (const fade of [-0.2, Number.NaN, Number.POSITIVE_INFINITY]) {
+                    expect(() => fixture.backend.crossfadeTo(fixture.clipName, fade)).toThrow(
+                        RangeError,
+                    );
+                    // Refused BEFORE the fail-soft guard: an absent clip must not
+                    // turn a caller's sign error into a `null`.
+                    expect(() => fixture.backend.crossfadeTo('no-such-clip', fade)).toThrow(
+                        RangeError,
+                    );
+                }
+                expect(fixture.backend.crossfadeTo('no-such-clip', 0.2)).toBeNull();
+            });
+        });
+
+        it('accepts a zero-length fade and cuts on it', () => {
+            withFixture((fixture) => {
+                const resting = fixture.posedValue();
+                const outgoing = fixture.backend.play(fixture.clipName, { loop: 'loop' });
+                if (outgoing === null) {
+                    throw new Error(`fixture clip '${fixture.clipName}' is not playable`);
+                }
+                fixture.backend.advance(fixture.durationSeconds * 0.4);
+                expect(fixture.posedValue()).not.toBe(resting);
+
+                expect(fixture.backend.crossfadeTo(fixture.otherClipName, 0)).not.toBeNull();
+
+                // Nothing of the outgoing clip is left: not a weight-0 action
+                // still holding its binding, which is what a degenerate fade
+                // produces, but a released one.
+                expect(fixture.posedValue()).toBe(resting);
+                expect(outgoing.sample().ended).toBe(true);
+            });
+        });
+
+        it('keeps a crossfaded-out playback posing while its handle reports terminal', () => {
+            withFixture((fixture) => {
+                const resting = fixture.posedValue();
+                const outgoing = fixture.backend.play(fixture.clipName, { loop: 'loop' });
+                if (outgoing === null) {
+                    throw new Error(`fixture clip '${fixture.clipName}' is not playable`);
+                }
+                fixture.backend.advance(fixture.durationSeconds * 0.4);
+                const last = outgoing.sample();
+
+                fixture.backend.crossfadeTo(fixture.otherClipName, fixture.durationSeconds, {
+                    loop: 'loop',
+                });
+
+                // Terminal: the playhead is frozen where the blend started and
+                // `ended` is latched, however far the backend is advanced.
+                expect(outgoing.sample()).toEqual({ ...last, ended: true });
+                fixture.backend.advance(fixture.durationSeconds * 0.1);
+                expect(outgoing.sample()).toEqual({ ...last, ended: true });
+                // …and still posing, which is the half a frozen sample hides.
+                expect(fixture.posedValue()).not.toBe(resting);
+
+                // `stop()` on a frozen handle is what cancels a blend. Without it
+                // the action poses at a falling weight with no verb to end it.
+                outgoing.stop();
+                expect(fixture.posedValue()).toBe(resting);
+                fixture.backend.advance(fixture.durationSeconds * 0.1);
+                expect(fixture.posedValue()).toBe(resting);
+            });
+        });
+
+        it('fades nothing out when the request names the clip already in flight', () => {
+            const step = 0.25;
+            const blended = createFixture();
+            const plain = createFixture();
+            try {
+                for (const fixture of [blended, plain]) {
+                    if (fixture.backend.play(fixture.clipName, { loop: 'loop' }) === null) {
+                        throw new Error(`fixture clip '${fixture.clipName}' is not playable`);
+                    }
+                }
+                blended.backend.crossfadeTo(blended.clipName, blended.durationSeconds, {
+                    loop: 'loop',
+                });
+
+                // The same clip is not something to blend away from: a fade-out
+                // of the action the request just took over would leave it
+                // invisible, and a fade-IN would dissolve it out of the rest
+                // pose. Either shows up as a pose the plain `play` does not have.
+                blended.backend.advance(blended.durationSeconds * step);
+                plain.backend.advance(plain.durationSeconds * step);
+                expect(blended.posedValue()).toBe(plain.posedValue());
+            } finally {
+                for (const fixture of [blended, plain]) {
+                    fixture.backend.dispose();
+                    fixture.release();
+                }
+            }
+        });
+
+        it('leaves nothing posing once it is disposed', () => {
+            withFixture((fixture) => {
+                const resting = fixture.posedValue();
+                fixture.backend.play(fixture.clipName, { loop: 'loop' });
+                fixture.backend.advance(fixture.durationSeconds * 0.4);
+                fixture.backend.crossfadeTo(fixture.otherClipName, fixture.durationSeconds, {
+                    loop: 'loop',
+                });
+
+                fixture.backend.dispose();
+
+                expect(fixture.posedValue()).toBe(resting);
             });
         });
     });

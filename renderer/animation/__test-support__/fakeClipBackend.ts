@@ -19,7 +19,14 @@
 import type { AnimationLoopMode } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
 import type { AnimationClipName } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
 
-import type { ClipBackend, ClipPlayOptions, ClipPlayback, PlayheadSample } from '../ClipBackend.js';
+import { checkedFade } from '../ClipBackend.js';
+import type {
+    ClipBackend,
+    ClipPlayOptions,
+    ClipPlayback,
+    PlayheadSample,
+    SupportsClipBlending,
+} from '../ClipBackend.js';
 
 /** One clip this backend knows how to play. */
 export interface FakeClipSpec {
@@ -204,4 +211,104 @@ export function createFakeClipBackend(
     };
 
     return backend;
+}
+
+/** One `crossfadeTo` a test can read back. */
+export interface CrossfadeCall {
+    readonly clipName: AnimationClipName;
+    /** The fade length, after {@link checkedFade} accepted it. */
+    readonly fadeSeconds: number;
+    readonly options: ClipPlayOptions | undefined;
+}
+
+/** A {@link FakeClipBackend} that also blends, plus the ledger of what it was asked. */
+export interface BlendingFakeClipBackend extends FakeClipBackend, SupportsClipBlending {
+    /** Every crossfade this backend accepted, in call order. */
+    readonly crossfadeCalls: readonly CrossfadeCall[];
+}
+
+/**
+ * A blending fake over `clips`, with nothing playing.
+ *
+ * What it models of {@link SupportsClipBlending} is what the cases in
+ * `ClipBackend.test.ts` › `the blending fake` measure. What the weights do
+ * during a blend is a mesh concern and is not modelled here — a fake that
+ * pretended to interpolate would be asserting three's arithmetic with none of
+ * three's code.
+ *
+ * {@link createFakeClipBackend} deliberately stays non-blending. It is the
+ * negative control that keeps `supportsBlending`'s conjunct killable: with only
+ * a blending double in the repo, a guard that answered `true` unconditionally
+ * would pass every test that uses one.
+ */
+export function createBlendingFakeClipBackend(
+    clips: Readonly<Record<AnimationClipName, FakeClipSpec>>,
+): BlendingFakeClipBackend {
+    const base = createFakeClipBackend(clips);
+    const crossfadeCalls: CrossfadeCall[] = [];
+    /**
+     * The handles a crossfade may have to release. A set rather than a map keyed
+     * by clip name: {@link createFakeClipBackend} keeps two playbacks of one clip
+     * live, and keying by name would leave the earlier one integrating.
+     */
+    const handles = new Set<ClipPlayback>();
+
+    function start(clipName: AnimationClipName, options?: ClipPlayOptions): ClipPlayback | null {
+        const playback = base.play(clipName, options);
+        if (playback !== null) {
+            handles.add(playback);
+        }
+        return playback;
+    }
+
+    // Delegated field by field rather than spread: the ledgers on the base are
+    // getters, and a spread would freeze one snapshot of each into this object.
+    return {
+        get advanceCalls() {
+            return base.advanceCalls;
+        },
+        get stopped() {
+            return base.stopped;
+        },
+        get disposeCalls() {
+            return base.disposeCalls;
+        },
+        get crossfadeCalls() {
+            return [...crossfadeCalls];
+        },
+
+        getDurationSeconds: (clipName) => base.getDurationSeconds(clipName),
+        play: (clipName, options) => start(clipName, options),
+        advance: (deltaSeconds) => {
+            base.advance(deltaSeconds);
+        },
+        dispose: () => {
+            base.dispose();
+            handles.clear();
+        },
+        speedOf: (clipName) => base.speedOf(clipName),
+        sampleOf: (clipName) => base.sampleOf(clipName),
+        jumpTo: (clipName, sample) => {
+            base.jumpTo(clipName, sample);
+        },
+
+        crossfadeTo(clipName, fadeSeconds, options) {
+            // Refused before the absent-clip guard and before anything starts,
+            // through the seam's own predicate rather than a copy of it.
+            const fadeLength = checkedFade(fadeSeconds);
+            const incoming = start(clipName, options);
+            if (incoming === null) {
+                return null;
+            }
+            crossfadeCalls.push({ clipName, fadeSeconds: fadeLength, options });
+            for (const handle of [...handles]) {
+                if (handle.clipName === clipName) {
+                    continue;
+                }
+                handle.stop();
+                handles.delete(handle);
+            }
+            return incoming;
+        },
+    };
 }

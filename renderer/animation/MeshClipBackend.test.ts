@@ -36,7 +36,10 @@ import type {
 import { checkedFade, supportsBlending } from './ClipBackend.js';
 import { ClipPlayer } from './ClipPlayer.js';
 import { MeshClipBackend } from './MeshClipBackend.js';
-import { describeClipBackend } from './__test-support__/clipBackendContract.js';
+import {
+    describeBlendingClipBackend,
+    describeClipBackend,
+} from './__test-support__/clipBackendContract.js';
 
 /**
  * A clip with one two-key position track — enough for `AnimationMixer` to bind
@@ -98,8 +101,30 @@ describeClipBackend('MeshClipBackend', () => {
         backend: new MeshClipBackend({ mixer, clips: [clip] }),
         clipName: 'attack',
         durationSeconds: 1,
+        blends: true,
         release: () => {
             // The mixer is the FIXTURE's allocation, not the backend's.
+            mixer.uncacheRoot(root);
+        },
+    };
+});
+
+describeBlendingClipBackend('MeshClipBackend', () => {
+    // `attack` drives `.position` and `idle` drives `.scale`, so the posed value
+    // below reads ONE clip's contribution: a property both of them wrote would
+    // be restored only when the second let go, and every "the outgoing clip is
+    // gone" assertion would pass for the wrong reason.
+    const attack = makeClip('attack', 1);
+    const root = new Object3D();
+    const mixer = new AnimationMixer(root);
+    return {
+        backend: new MeshClipBackend({ mixer, clips: [attack, makeScaleClip('idle', 1)] }),
+        clipName: 'attack',
+        otherClipName: 'idle',
+        durationSeconds: 1,
+        blends: true,
+        posedValue: () => root.position.x,
+        release: () => {
             mixer.uncacheRoot(root);
         },
     };
@@ -541,9 +566,11 @@ describe('MeshClipBackend', () => {
             backend.crossfadeTo('idle', 0.05, { loop: 'loop' });
 
             // The cut arm is an equality on 0, never a threshold: widen it into
-            // one and a short blend silently becomes a hard cut.
+            // one and a short blend silently becomes a hard cut, which this
+            // separates from a fade by the weight the outgoing action still has.
             expect(mixer.clipAction(attack).isRunning()).toBe(true);
-            expect(weightInterpolantOf(mixer.clipAction(attack))).not.toBeNull();
+            backend.advance(0.025);
+            expect(mixer.clipAction(attack).getEffectiveWeight()).toBeCloseTo(0.5, 6);
 
             backend.dispose();
         });
@@ -567,7 +594,7 @@ describe('MeshClipBackend', () => {
             backend.dispose();
         });
 
-        it('leaves neither action holding a fade interpolant after a zero-length fade', () => {
+        it('leaves no action holding a three fade interpolant, on a cut or on a fade', () => {
             const attack = makeClip('attack', 1);
             const idle = makeScaleClip('idle', 1);
             const { mixer, backend } = makeRig([attack, idle]);
@@ -579,12 +606,423 @@ describe('MeshClipBackend', () => {
             expect(weightInterpolantOf(mixer.clipAction(attack))).toBeNull();
             expect(weightInterpolantOf(mixer.clipAction(idle))).toBeNull();
 
-            // The positive control: the probe can see a scheduled fade, so the
-            // two nulls above are the absence of one rather than the absence of
-            // a reader.
+            // And on a real fade too: this backend owns its weight ramps rather
+            // than handing them to `fadeIn` / `fadeOut`, whose schedules start
+            // from hardcoded endpoints instead of from where the action is.
             backend.crossfadeTo('attack', 0.4, { loop: 'loop' });
-            expect(weightInterpolantOf(mixer.clipAction(attack))).not.toBeNull();
+            expect(weightInterpolantOf(mixer.clipAction(attack))).toBeNull();
+            expect(weightInterpolantOf(mixer.clipAction(idle))).toBeNull();
+
+            // The positive control: the probe can see a scheduled fade, so the
+            // four nulls above are the absence of one rather than the absence of
+            // a reader. Scheduled directly on the action, since nothing in this
+            // backend schedules one any more.
+            mixer.clipAction(idle).fadeOut(0.4);
             expect(weightInterpolantOf(mixer.clipAction(idle))).not.toBeNull();
+
+            backend.dispose();
+        });
+
+        it('lets stop() cancel a blend that is still posing', () => {
+            const attack = makeClip('attack', 2);
+            const { root, mixer, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+            const originalX = root.position.x;
+            const outgoing = play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.5);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            backend.advance(0.1);
+            expect(root.position.x).not.toBe(originalX);
+
+            outgoing.stop();
+
+            // A released record was frozen and then unreachable: `#stop` returned
+            // early on it, so a crossfaded-out action posed at falling weight
+            // with no verb left to cancel it until the backend was disposed.
+            expect(mixer.clipAction(attack).isRunning()).toBe(false);
+            expect(root.position.x).toBe(originalX);
+            backend.advance(0.1);
+            expect(root.position.x).toBe(originalX);
+
+            backend.dispose();
+        });
+
+        it('never raises the interrupted action weight when another blend starts', () => {
+            const attack = makeClip('attack', 2);
+            const idle = makeClip('idle', 2);
+            const run = makeClip('run', 2);
+            const { mixer, backend } = makeRig([attack, idle, run]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.5);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            backend.advance(0.1);
+            const idleAction = mixer.clipAction(idle);
+            const before = idleAction.getEffectiveWeight();
+            expect(before).toBeCloseTo(0.25, 6);
+
+            backend.crossfadeTo('run', 0.4, { loop: 'loop' });
+            backend.advance(1 / 60);
+
+            // three's `fadeOut` schedules a ramp from a hardcoded 1 rather than
+            // from where the action actually is, so a blend interrupted a
+            // quarter of the way in snaps back to nearly full weight before it
+            // starts falling. The claim is about the INTERRUPTED action: the
+            // incoming one rises by design, so a universal over every action
+            // would be false of a module that is behaving.
+            expect(idleAction.getEffectiveWeight()).toBeLessThanOrEqual(before);
+
+            backend.dispose();
+        });
+
+        it('starts at full weight when there is nothing to fade out', () => {
+            const attack = makeClip('attack', 2);
+            const { mixer, backend } = makeRig([attack]);
+
+            backend.crossfadeTo('attack', 0.4, { loop: 'loop' });
+            const action = mixer.clipAction(attack);
+
+            // A fade-in ramps from 0 — not from the pose on screen — so a blend
+            // with nothing outgoing dissolves the model out of its rest pose.
+            expect(action.getEffectiveWeight()).toBe(1);
+            backend.advance(0.1);
+            expect(action.getEffectiveWeight()).toBe(1);
+
+            backend.dispose();
+        });
+
+        it('resumes a clip that is still posing instead of restarting it', () => {
+            const attack = makeClip('attack', 2);
+            const idle = makeClip('idle', 2);
+            const { mixer, backend } = makeRig([attack, idle]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(1);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            backend.advance(0.1);
+            const attackAction = mixer.clipAction(attack);
+            const weightBefore = attackAction.getEffectiveWeight();
+            expect(weightBefore).toBeCloseTo(0.75, 6);
+
+            const resumed = backend.crossfadeTo('attack', 0.4, { loop: 'loop' });
+            if (resumed === null) {
+                throw new Error('crossfadeTo returned null for a clip the backend has');
+            }
+
+            // `play`'s `action.reset()` snaps the playhead to 0 and the weight to
+            // 0, which looks worse than the cut the blend replaced. The playhead
+            // is kept and the weight rises from where it already is.
+            expect(resumed.sample().phase).toBeCloseTo(0.55, 6);
+            expect(attackAction.getEffectiveWeight()).toBeCloseTo(weightBefore, 6);
+            backend.advance(0.1);
+            expect(attackAction.getEffectiveWeight()).toBeGreaterThan(weightBefore);
+
+            backend.dispose();
+        });
+
+        it('hard-stops a record that is already posing when another blend starts', () => {
+            const attack = makeClip('attack', 2);
+            const { mixer, backend } = makeRig([
+                attack,
+                makeScaleClip('idle', 2),
+                makeClip('run', 2),
+            ]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.5);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            backend.advance(0.1);
+            const posing = mixer.clipAction(attack);
+            expect(posing.isRunning()).toBe(true);
+
+            backend.crossfadeTo('run', 0.4, { loop: 'loop' });
+
+            // Overlapping blends must not accumulate posing actions: the record
+            // the first blend left is terminal the moment a second one starts.
+            expect(posing.isRunning()).toBe(false);
+            expect(posing.time).toBe(0);
+
+            backend.dispose();
+        });
+
+        it('stops the actions it left posing when it is disposed', () => {
+            const attack = makeClip('attack', 2);
+            const { mixer, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.5);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            const posing = mixer.clipAction(attack);
+            expect(posing.time).toBeCloseTo(0.5, 6);
+
+            backend.dispose();
+
+            // `uncacheAction` deactivates an action and hands its binding back,
+            // so the node returns to its original state either way; only a real
+            // stop also resets the playhead. That is the observable that says
+            // the posing record was released rather than swept up by the
+            // uncache loop it happens to be in front of.
+            expect(posing.time).toBe(0);
+            expect(posing.isRunning()).toBe(false);
+        });
+
+        it('seats a released action at the rate it was started at', () => {
+            const attack = makeClip('attack', 2);
+            const { mixer, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+            const playback = play(backend, 'attack', { loop: 'loop', speed: 0.5 });
+
+            // Rule STEP-BOUNDED's emergency rate: `ClipPlayer` writes
+            // `bounded / raw` for exactly one frame's delta, and a released
+            // action would otherwise spend its whole fade at it.
+            playback.setSpeed(20);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+
+            expect(mixer.clipAction(attack).timeScale).toBe(0.5);
+
+            backend.dispose();
+        });
+
+        it('does not let a stopped posing handle disturb the playback that resumed its action', () => {
+            const attack = makeClip('attack', 2);
+            const idle = makeClip('idle', 2);
+            const { mixer, backend } = makeRig([attack, idle]);
+            const stale = play(backend, 'attack', { loop: 'loop' });
+            backend.advance(1);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            const resumed = backend.crossfadeTo('attack', 0.4, { loop: 'loop' });
+            if (resumed === null) {
+                throw new Error('crossfadeTo returned null for a clip the backend has');
+            }
+
+            // Both handles name the same clip and three caches ONE action for
+            // it, so a `stop` on the released handle must not reach the action
+            // the resumed playback is now driving.
+            stale.stop();
+
+            expect(mixer.clipAction(attack).isRunning()).toBe(true);
+            backend.advance(0.1);
+            expect(resumed.sample().phase).toBeCloseTo(0.55, 6);
+
+            backend.dispose();
+        });
+
+        it('releases the posing action when its ramp reaches zero', () => {
+            const attack = makeClip('attack', 2);
+            const { root, mixer, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+            const originalX = root.position.x;
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.5);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            backend.advance(0.2);
+            expect(mixer.clipAction(attack).isRunning()).toBe(true);
+
+            backend.advance(0.2);
+
+            // The end of the ramp is the end of the posing. Without this the
+            // backend accumulates permanently-active weight-0 actions, each
+            // still lending a binding, from the first crossfade onwards.
+            expect(mixer.clipAction(attack).isRunning()).toBe(false);
+            expect(root.position.x).toBe(originalX);
+
+            backend.dispose();
+        });
+
+        it('writes this frame ramp position before the mixer applies it', () => {
+            const attack = makeClip('attack', 2);
+            const { root, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(1);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            backend.advance(0.2);
+
+            // The clip runs `.position.x` from 0 to 1 across its length, so at
+            // phase 0.6 under weight 0.5 the node sits at 0.3 — a mixer updated
+            // with the PREVIOUS frame's weight would leave it at 0.6, which is
+            // the whole first frame of a blend rendered unblended.
+            expect(root.position.x).toBeCloseTo(0.3, 6);
+
+            backend.dispose();
+        });
+
+        it('lands exactly on the target weight when advanced past the fade', () => {
+            const attack = makeClip('attack', 2);
+            const idle = makeScaleClip('idle', 2);
+            const { mixer, backend } = makeRig([attack, idle]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            const incoming = mixer.clipAction(idle);
+            backend.advance(4);
+
+            // A ramp read as raw elapsed/duration overshoots to -9 and 10 here.
+            expect(mixer.clipAction(attack).getEffectiveWeight()).toBe(0);
+            expect(incoming.getEffectiveWeight()).toBe(1);
+
+            backend.dispose();
+        });
+
+        // The mixer is shared, and its owner may write any weight on any action
+        // it can reach. Both ends of the clamp, separately: one fixture tripping
+        // a two-sided guard leaves the drop-either-side mutant alive.
+        it.each([
+            { wrote: 5, halfway: 0.5, note: 'five times the pose for the whole fade' },
+            { wrote: -3, halfway: 0, note: 'a negative weight, which is a pose subtracted' },
+        ])(
+            'seeds a ramp from a usable weight when the mixer owner wrote $wrote',
+            ({ wrote, halfway }) => {
+                const attack = makeClip('attack', 2);
+                const { mixer, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+
+                play(backend, 'attack', { loop: 'loop' });
+                mixer.clipAction(attack).setEffectiveWeight(wrote);
+                backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+                backend.advance(0.2);
+
+                expect(mixer.clipAction(attack).getEffectiveWeight()).toBeCloseTo(halfway, 6);
+
+                backend.dispose();
+            },
+        );
+
+        it('cuts rather than resumes when a zero-length fade names a posing clip', () => {
+            const attack = makeClip('attack', 2);
+            const { mixer, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(1);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            const cut = backend.crossfadeTo('attack', 0, { loop: 'loop' });
+
+            // The resume arm is gated on a positive fade: a cut is a cut even
+            // for a clip this backend happens to be fading out, and resuming one
+            // mid-pose would leave the caller with a clip it never asked to
+            // continue.
+            expect(cut?.sample()).toEqual({ phase: 0, cycle: 0, ended: false });
+            expect(mixer.clipAction(attack).time).toBe(0);
+
+            backend.dispose();
+        });
+
+        it('resumes onto the loop mode and speed the request carried', () => {
+            const attack = makeClip('attack', 2);
+            const { mixer, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+
+            play(backend, 'attack', { loop: 'once', speed: 0.5 });
+            backend.advance(1);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+
+            backend.crossfadeTo('attack', 0.4, { loop: 'loop', speed: 2 });
+
+            // A resume takes over an action that was seated for the PREVIOUS
+            // playback — a different loop mode, a different rate, and, for a
+            // 'once' clip, `clampWhenFinished`. Options that reached `play` but
+            // not the resume path would be silently dropped for the one call
+            // shape that needs them most.
+            const action = mixer.clipAction(attack);
+            expect(action.timeScale).toBe(2);
+            expect(action.loop).toBe(LoopRepeat);
+            expect(action.clampWhenFinished).toBe(false);
+
+            backend.dispose();
+        });
+
+        it('counts a wrap a resumed looping playback crosses', () => {
+            const attack = makeClip('attack', 2);
+            const { backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(1.1);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            const resumed = backend.crossfadeTo('attack', 0.4, { loop: 'loop' });
+
+            backend.advance(1.2);
+
+            // `wrapsCrossed` measures the step from `lastPhase`, so a resumed
+            // record seeded at 0 rather than at the playhead it took over
+            // reports no wrap — and the seated scheduler drops every mark in the
+            // clip for that frame.
+            expect(resumed?.sample().cycle).toBe(1);
+
+            backend.dispose();
+        });
+
+        it('seats the incoming ramp before the caller can draw a frame', () => {
+            const attack = makeClip('attack', 2);
+            const idle = makeScaleClip('idle', 2);
+            const { mixer, backend } = makeRig([attack, idle]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.5);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+
+            // With no `advance` in between: `play` leaves the incoming action at
+            // weight 1, so a ramp installed but not applied renders the incoming
+            // clip unblended for every frame drawn before the next tick.
+            expect(mixer.clipAction(idle).getEffectiveWeight()).toBe(0);
+            expect(mixer.clipAction(attack).getEffectiveWeight()).toBe(1);
+
+            backend.dispose();
+        });
+
+        it('takes over the action of a clip that is still posing when it is played again', () => {
+            const attack = makeClip('attack', 2);
+            const { mixer, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(1);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            const replayed = play(backend, 'attack', { loop: 'loop' });
+            backend.advance(0.1);
+
+            // A posing record left owned by nothing keeps stepping its own
+            // fade-out ramp onto the action `play` just restarted, so the
+            // replayed clip would be dragged back down to 0 by its predecessor.
+            expect(mixer.clipAction(attack).getEffectiveWeight()).toBe(1);
+            expect(replayed.sample().phase).toBeCloseTo(0.05, 6);
+
+            backend.dispose();
+        });
+
+        it('resumes against the divisor the playback was started with', () => {
+            const attack = makeClip('attack', 2);
+            const { backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+
+            play(backend, 'attack', { loop: 'loop' });
+            backend.advance(1);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            // `ModelInstance` hands back the cached asset's `animations` array by
+            // reference, so `clip.duration` is public mutable state. A resume
+            // that re-read it would move the reported phase of a playhead that
+            // did not move at all.
+            attack.duration = 8;
+
+            const resumed = backend.crossfadeTo('attack', 0.4, { loop: 'loop' });
+
+            expect(resumed?.sample().phase).toBeCloseTo(0.5, 6);
+
+            backend.dispose();
+        });
+
+        it('refuses an unusable loop mode on the resume path with the posing record untouched', () => {
+            const attack = makeClip('attack', 2);
+            const { mixer, backend } = makeRig([attack, makeScaleClip('idle', 2)]);
+            const outgoing = play(backend, 'attack', { loop: 'loop' });
+            backend.advance(1);
+            backend.crossfadeTo('idle', 0.4, { loop: 'loop' });
+            backend.advance(0.1);
+            const posingWeight = mixer.clipAction(attack).getEffectiveWeight();
+
+            expect(() =>
+                backend.crossfadeTo('attack', 0.4, { loop: 'pingpong' as AnimationLoopMode }),
+            ).toThrow(RangeError);
+
+            // The resume path does not go through `play`, so it owes the same
+            // refusal before it touches anything: the posing record is still
+            // posing, still frozen, still on the weight it was on.
+            expect(outgoing.sample()).toEqual({ phase: 0.5, cycle: 0, ended: true });
+            expect(mixer.clipAction(attack).getEffectiveWeight()).toBe(posingWeight);
+            expect(mixer.clipAction(attack).isRunning()).toBe(true);
 
             backend.dispose();
         });

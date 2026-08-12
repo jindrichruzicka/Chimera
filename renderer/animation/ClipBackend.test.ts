@@ -36,6 +36,10 @@ import type {
     PlayheadSample,
     SupportsClipBlending,
 } from './ClipBackend.js';
+import {
+    createBlendingFakeClipBackend,
+    createFakeClipBackend,
+} from './__test-support__/fakeClipBackend.js';
 
 /** A playback double; the sample it returns is fixed and never read for its value here. */
 const playback: ClipPlayback = {
@@ -81,6 +85,18 @@ describe('supportsBlending', () => {
         expect(supportsBlending(notCallable)).toBe(false);
     });
 
+    it('tells the two shipped doubles apart', () => {
+        // The doubles the rest of the suite runs against, rather than the hand
+        // written literals above: with only a blending one in the repo, a guard
+        // that answered `true` unconditionally would pass everything that uses
+        // it, so the plain fake is the negative control that keeps the conjunct
+        // killable.
+        const specs = { attack: { durationSeconds: 1 } };
+
+        expect(supportsBlending(createBlendingFakeClipBackend(specs))).toBe(true);
+        expect(supportsBlending(createFakeClipBackend(specs))).toBe(false);
+    });
+
     it('narrows the backend type for the caller', () => {
         // The reason the guard is a type predicate and not a boolean helper: the
         // call below does not compile unless the narrowing happened. It passes
@@ -93,6 +109,79 @@ describe('supportsBlending', () => {
         );
         expect(backend.play('swing', options)).toBe(playback);
         expect(backend.play('swing', { loop: 'loop' })).toBeNull();
+    });
+});
+
+describe('the blending fake', () => {
+    const specs = { attack: { durationSeconds: 1 }, idle: { durationSeconds: 1 } };
+
+    it('starts the incoming clip and releases every other live playback', () => {
+        const backend = createBlendingFakeClipBackend(specs);
+        const outgoing = backend.play('attack', { loop: 'loop' });
+        backend.advance(0.4);
+
+        const incoming = backend.crossfadeTo('idle', 0.2, { loop: 'loop' });
+
+        expect(incoming?.clipName).toBe('idle');
+        expect(backend.stopped).toEqual(['attack']);
+        expect(backend.sampleOf('attack')).toBeNull();
+        // Released, not forgotten: the handle still answers where it was, which
+        // is what a caller reads a terminal playhead out of.
+        expect(outgoing?.sample().phase).toBeCloseTo(0.4, 12);
+        expect(backend.sampleOf('idle')).toEqual({ phase: 0, cycle: 0, ended: false });
+    });
+
+    it('releases every other live playback, including a second one of the same clip', () => {
+        const backend = createBlendingFakeClipBackend(specs);
+        const first = backend.play('attack', { loop: 'loop' });
+        const second = backend.play('attack', { loop: 'loop' });
+        backend.advance(0.25);
+
+        backend.crossfadeTo('idle', 0.2, { loop: 'loop' });
+
+        // The fake it wraps keeps both playbacks of a clip live, so a ledger
+        // keyed by clip name would release `second` and leave `first`
+        // integrating for the rest of the test.
+        expect(backend.stopped).toEqual(['attack', 'attack']);
+        expect(first?.sample().phase).toBeCloseTo(0.25, 12);
+        expect(second?.sample().phase).toBeCloseTo(0.25, 12);
+        backend.advance(0.25);
+        expect(first?.sample().phase).toBeCloseTo(0.25, 12);
+    });
+
+    it('records what it was asked, after the fade was accepted', () => {
+        const backend = createBlendingFakeClipBackend(specs);
+
+        backend.crossfadeTo('attack', 0.25, { loop: 'loop', speed: 2 });
+        backend.crossfadeTo('idle', 0);
+
+        expect(backend.crossfadeCalls).toEqual([
+            { clipName: 'attack', fadeSeconds: 0.25, options: { loop: 'loop', speed: 2 } },
+            { clipName: 'idle', fadeSeconds: 0, options: undefined },
+        ]);
+    });
+
+    it('refuses a bad fade and fails soft on a clip it does not have', () => {
+        const backend = createBlendingFakeClipBackend(specs);
+
+        expect(() => backend.crossfadeTo('attack', -1)).toThrow(RangeError);
+        expect(() => backend.crossfadeTo('no-such-clip', Number.NaN)).toThrow(RangeError);
+        expect(backend.crossfadeTo('no-such-clip', 0.2)).toBeNull();
+        // Nothing was started or recorded by any of the three.
+        expect(backend.crossfadeCalls).toEqual([]);
+        expect(backend.sampleOf('attack')).toBeNull();
+    });
+
+    it('keeps its ledgers live rather than snapshotting the ones it wraps', () => {
+        const backend = createBlendingFakeClipBackend(specs);
+
+        backend.advance(0.1);
+        backend.dispose();
+
+        // A `{ ...base }` would have frozen each getter's value at construction,
+        // and every ledger below would read empty for the whole test.
+        expect(backend.advanceCalls).toEqual([0.1]);
+        expect(backend.disposeCalls).toBe(1);
     });
 });
 

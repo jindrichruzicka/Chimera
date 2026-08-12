@@ -59,6 +59,28 @@
  * **Ping-pong never reaches an action.** `AnimationLoopMode` spells `'once'` and
  * `'loop'`, and the mapping below is exhaustive over those two; any other value
  * is refused with a `RangeError` instead of falling through to a default.
+ *
+ * **The weight ramps are this backend's, not three's.** `fadeIn` and `fadeOut`
+ * schedule a multiplier interpolant between HARDCODED endpoints — `fadeOut` from
+ * 1, `fadeIn` from 0 — regardless of where the action's weight actually is. Three
+ * visible artefacts follow from that: a blend interrupted a quarter of the way in
+ * snaps back to nearly full weight, a blend with nothing outgoing dissolves the
+ * model out of its rest pose, and a clip that is still fading out cannot be
+ * brought back without restarting it at phase 0 and weight 0. So
+ * a ramp here is a `(from, to, duration)` on the record, stepped once per
+ * {@link MeshClipBackend.advance} and written through `setEffectiveWeight` — it
+ * starts wherever the action already is, and this module schedules no three fade
+ * interpolant at all. The ramp is stepped by the RAW delta, so a blend length is
+ * real time regardless of what the speed stack is doing to the clip.
+ *
+ * **Rule POSING-RELEASE.** A crossfaded-out playback is terminal — its handle is
+ * frozen — but its action is still posing the model while its weight falls, so
+ * the record stays owned in `#posing` rather than being dropped on the floor. A
+ * posing action holds a `PropertyMixer` binding lent from the component-owned
+ * clone (Invariant #21), so ending that posing is not optional: a path that
+ * forgot would leave the binding held for the life of the mixer. Ending it is
+ * `#stop`, and the cases under `describe('crossfadeTo')` are what say which
+ * calls reach it.
  */
 
 import { LoopOnce, LoopRepeat } from 'three';
@@ -94,6 +116,15 @@ export interface MeshClipBackendOptions {
     readonly clips: readonly AnimationClip[];
 }
 
+/** A weight ramp this backend drives itself, one step per `advance`. */
+interface WeightRamp {
+    /** Where the action's weight was when the ramp was installed. */
+    readonly fromWeight: number;
+    readonly toWeight: number;
+    readonly durationSeconds: number;
+    elapsedSeconds: number;
+}
+
 /** One clip in flight on the mixer, plus the bookkeeping a sample is read from. */
 interface LivePlayback {
     readonly clipName: AnimationClipName;
@@ -102,11 +133,21 @@ interface LivePlayback {
     /** Captured when the playback started, so a later `clip.duration` cannot move it. */
     readonly durationSeconds: number;
     readonly loop: AnimationLoopMode;
+    /**
+     * The rate this playback was STARTED at, which its action is seated back to
+     * when it is released. A released action is re-targeted by nothing, so
+     * leaving it at whatever the last tick wrote would let it spend a whole fade
+     * at Rule STEP-BOUNDED's emergency rate — a `bounded / raw` that was valid
+     * for exactly one frame's delta.
+     */
+    readonly startSpeed: number;
     /** The phase the last `advance` left, which the next one measures its step from. */
     lastPhase: number;
     cycle: number;
     /** `null` while live; the terminal sample once released. */
     frozen: PlayheadSample | null;
+    /** The ramp this record's weight is on, or `null` at a settled weight. */
+    ramp: WeightRamp | null;
 }
 
 /**
@@ -119,6 +160,12 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
     readonly #mixer: AnimationMixer;
     readonly #clips = new Map<AnimationClipName, AnimationClip>();
     readonly #live = new Map<AnimationClipName, LivePlayback>();
+    /**
+     * The records that are terminal but still posing the model: crossfaded out,
+     * frozen, weight falling. Owned here under Rule POSING-RELEASE rather than
+     * dropped, because each still lends a `PropertyMixer` binding.
+     */
+    readonly #posing = new Map<AnimationClipName, LivePlayback>();
     /** The clips this backend asked the mixer to cache an action for. */
     readonly #cached = new Set<AnimationClip>();
     #disposed = false;
@@ -153,20 +200,12 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
         const loop = checkedLoopMode(options?.loop ?? 'once');
         const speed = checkedPlaybackSpeed(options?.speed ?? 1, 'clip speed');
 
-        const replaced = this.#live.get(clipName);
-        if (replaced !== undefined) {
-            this.#stop(replaced);
-        }
+        this.#stopExisting(clipName);
 
         const action = this.#mixer.clipAction(clip);
         this.#cached.add(clip);
         action.reset();
-        action.setLoop(
-            loop === 'loop' ? LoopRepeat : LoopOnce,
-            loop === 'loop' ? Number.POSITIVE_INFINITY : 1,
-        );
-        action.clampWhenFinished = loop === 'once';
-        action.timeScale = speed;
+        this.#seat(action, loop, speed);
         // `reset()` restores `enabled` and the playhead but not the weight, so an
         // action that was faded out would come back invisible without this.
         action.setEffectiveWeight(1);
@@ -178,9 +217,11 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
             action,
             durationSeconds: clip.duration,
             loop,
+            startSpeed: speed,
             lastPhase: 0,
             cycle: 0,
             frozen: null,
+            ramp: null,
         };
         this.#live.set(clipName, record);
         return this.#handle(record);
@@ -191,23 +232,31 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
      *
      * Every other, rather than "the current one": a backend may hold several, and
      * there is no ordering among them that would make one of them THE current
-     * playback. Each faded-out playback is terminal from this call onwards — three
-     * keeps its action alive at falling weight, and disables it once the weight
-     * reaches zero, but nothing will re-target it.
+     * playback. Each faded-out playback's handle is terminal from this call
+     * onwards, while its action keeps posing under Rule POSING-RELEASE.
      *
      * **A zero-length fade is a cut, and takes a different path.** `fadeOut(0)`
      * is not one: it schedules a degenerate ramp whose action reaches weight 0
      * and `enabled = false` on the next update, while `_deactivateAction` is
      * never called — the `PropertyMixer` binding is never handed back,
      * `restoreOriginalState` never runs, and `action.time` is never reset. So a
-     * fade of 0 starts the incoming clip with no `fadeIn` and hard-stops every
+     * fade of 0 starts the incoming clip with no ramp and hard-stops every
      * outgoing playback, which is what makes it observationally a cut.
+     *
+     * **What the incoming clip does depends on what is already there.** With
+     * something outgoing it ramps in from 0, which is the ordinary crossfade.
+     * With nothing outgoing it starts at full weight — a ramp from 0 there would
+     * dissolve the model out of its rest pose. And when the clip is one this
+     * backend is still fading OUT, it is resumed rather than restarted: same
+     * action, playhead untouched, weight ramped up from where it already is.
      *
      * **The refusal comes first, the fail-soft guard second.** A bad fade throws
      * whether or not this backend has the clip and whether or not it is disposed;
      * the reverse order would answer a caller's sign error with `null`. The
      * incoming clip is started before anything is released, so an unusable loop
-     * mode or speed also refuses with nothing yet released.
+     * mode or speed also refuses with nothing yet released — and so that the
+     * binding a swap shares stays lent, which is what stops `restoreOriginalState`
+     * firing in the middle of a transition.
      *
      * @throws RangeError  when `fadeSeconds` is negative or not finite, or
      *                     `options` carry an unusable loop mode or speed.
@@ -221,22 +270,50 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
         if (this.#disposed || !this.#clips.has(clipName)) {
             return null;
         }
-        const outgoing = [...this.#live.values()].filter((record) => record.clipName !== clipName);
+        // Checked here as well as inside `play`, because the resume path below
+        // does not go through it and a refusal must land before anything is
+        // started, resumed or released.
+        const loop = checkedLoopMode(options?.loop ?? 'once');
+        const speed = checkedPlaybackSpeed(options?.speed ?? 1, 'clip speed');
 
-        const playback = this.play(clipName, options);
+        const outgoing = [...this.#live.values()].filter((record) => record.clipName !== clipName);
+        const resumable = fade > 0 ? this.#posing.get(clipName) : undefined;
+
+        const playback =
+            resumable === undefined
+                ? this.play(clipName, { loop, speed })
+                : this.#resume(resumable, loop, speed, fade);
         if (playback === null) {
             return null;
         }
-        if (fade === 0) {
-            for (const record of outgoing) {
+
+        // Every OTHER posing record is terminal now: overlapping blends must not
+        // accumulate actions that nothing will ever re-target.
+        for (const record of [...this.#posing.values()]) {
+            if (record.clipName !== clipName) {
                 this.#stop(record);
             }
-            return playback;
         }
-        this.#live.get(clipName)?.action.fadeIn(fade);
+
         for (const record of outgoing) {
-            record.action.fadeOut(fade);
+            if (fade === 0) {
+                this.#stop(record);
+                continue;
+            }
             this.#release(record);
+            this.#rampTo(record, 0, fade);
+        }
+        if (fade > 0 && resumable === undefined && outgoing.length > 0) {
+            const incoming = this.#live.get(clipName);
+            if (incoming !== undefined) {
+                incoming.ramp = {
+                    fromWeight: 0,
+                    toWeight: 1,
+                    durationSeconds: fade,
+                    elapsedSeconds: 0,
+                };
+                applyRamp(incoming);
+            }
         }
         return playback;
     }
@@ -245,6 +322,7 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
         if (this.#disposed || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0) {
             return;
         }
+        this.#stepRamps(deltaSeconds);
         this.#mixer.update(deltaSeconds);
         for (const record of this.#live.values()) {
             const phase = phaseOf(record);
@@ -263,10 +341,14 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
      */
     dispose(): void {
         // Idempotent by construction rather than by an early return: a second
-        // call walks an emptied live set, and `uncacheAction` on a clip the mixer
+        // call walks two emptied sets, and `uncacheAction` on a clip the mixer
         // no longer holds an action for is itself a no-op.
         this.#disposed = true;
-        for (const record of [...this.#live.values()]) {
+        // The posing set as well as the live one, ahead of the uncache loop.
+        // `uncacheAction` would deactivate a posing action too, so the model
+        // returns to its original state either way — but only a stop resets the
+        // playhead, and a record this backend owns is released by this backend.
+        for (const record of [...this.#live.values(), ...this.#posing.values()]) {
             this.#stop(record);
         }
         for (const clip of this.#cached) {
@@ -294,17 +376,33 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
         };
     }
 
-    /** Release `record` and put its action back. A no-op once it is terminal. */
+    /**
+     * Release `record` and put its action back — the one way a record's posing
+     * ends under Rule POSING-RELEASE, whatever called it.
+     *
+     * Reaches a FROZEN record, unlike the release below: a crossfaded-out
+     * playback is frozen the moment the blend starts and is exactly the thing a
+     * caller cancels a blend by stopping. What it must not do is reach an action
+     * this record no longer owns — three caches one action per `(clip, root)`,
+     * so a later playback of the same clip is driving the very action a stale
+     * handle would otherwise stop.
+     */
     #stop(record: LivePlayback): void {
-        if (record.frozen !== null) {
+        const owned =
+            this.#live.get(record.clipName) === record ||
+            this.#posing.get(record.clipName) === record;
+        this.#release(record);
+        if (!owned) {
             return;
         }
-        this.#release(record);
+        this.#posing.delete(record.clipName);
+        record.ramp = null;
         record.action.stop();
     }
 
     /**
-     * Capture `record`'s terminal sample and drop it from the live set.
+     * Capture `record`'s terminal sample, move it out of the live set and into
+     * the posing one, and seat its action back to the rate it started at.
      *
      * A delete by key is exact here: the map holds at most one record per clip
      * name, a record sits in it only while unfrozen, and the guard above returns
@@ -312,6 +410,10 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
      * be deferred past the registration of a replacement either — `play` re-uses
      * three's ONE cached action for the clip, so the outgoing playback has to let
      * go of it before the incoming one resets it.
+     *
+     * The action is NOT stopped here. It keeps posing the model at a falling
+     * weight, which is the whole point of a crossfade; {@link MeshClipBackend#stop}
+     * is what ends that.
      */
     #release(record: LivePlayback): void {
         if (record.frozen !== null) {
@@ -319,6 +421,109 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
         }
         record.frozen = { phase: phaseOf(record), cycle: record.cycle, ended: true };
         this.#live.delete(record.clipName);
+        this.#posing.set(record.clipName, record);
+        record.action.timeScale = record.startSpeed;
+    }
+
+    /**
+     * Take over the action a posing `previous` record holds: a new live record
+     * on the same action, its playhead untouched, its weight ramped from where
+     * it is up to 1.
+     *
+     * A new record rather than an un-freeze, because `previous`'s handle is
+     * terminal and `PlayheadSample.ended` never reverts. The captured divisor
+     * comes across unchanged: the action's playhead has been measured against it
+     * since the clip started, and swapping in a re-read `clip.duration` here
+     * would move the reported phase without the playhead moving at all.
+     */
+    #resume(
+        previous: LivePlayback,
+        loop: AnimationLoopMode,
+        speed: number,
+        fadeSeconds: number,
+    ): ClipPlayback {
+        this.#posing.delete(previous.clipName);
+        this.#seat(previous.action, loop, speed);
+
+        const record: LivePlayback = {
+            clipName: previous.clipName,
+            clip: previous.clip,
+            action: previous.action,
+            durationSeconds: previous.durationSeconds,
+            loop,
+            startSpeed: speed,
+            lastPhase: 0,
+            cycle: 0,
+            frozen: null,
+            ramp: null,
+        };
+        record.lastPhase = phaseOf(record);
+        this.#live.set(record.clipName, record);
+        this.#rampTo(record, 1, fadeSeconds);
+        return this.#handle(record);
+    }
+
+    /** Release whatever this backend still holds for `clipName`, live or posing. */
+    #stopExisting(clipName: AnimationClipName): void {
+        // Posing first: releasing a live record puts it in the posing map under
+        // this same key, which would otherwise leave a posing action owned by
+        // nothing and running for the life of the mixer.
+        const posing = this.#posing.get(clipName);
+        if (posing !== undefined) {
+            this.#stop(posing);
+        }
+        const live = this.#live.get(clipName);
+        if (live !== undefined) {
+            this.#stop(live);
+        }
+    }
+
+    /** Point `action` at one loop mode and one rate. Never touches its weight. */
+    #seat(action: AnimationAction, loop: AnimationLoopMode, speed: number): void {
+        action.setLoop(
+            loop === 'loop' ? LoopRepeat : LoopOnce,
+            loop === 'loop' ? Number.POSITIVE_INFINITY : 1,
+        );
+        action.clampWhenFinished = loop === 'once';
+        action.timeScale = speed;
+    }
+
+    /** Ramp `record` from the weight it has now to `toWeight`, and seat it there. */
+    #rampTo(record: LivePlayback, toWeight: number, durationSeconds: number): void {
+        record.ramp = {
+            fromWeight: usableWeight(record.action.getEffectiveWeight()),
+            toWeight,
+            durationSeconds,
+            elapsedSeconds: 0,
+        };
+        applyRamp(record);
+    }
+
+    /**
+     * Step every ramp by `deltaSeconds` and end the posing of whatever finished.
+     *
+     * Runs BEFORE `mixer.update`, so the weight the frame is rendered at is this
+     * frame's rather than the previous one's, and a record that reached 0 is
+     * deactivated before it can pose anything again.
+     */
+    #stepRamps(deltaSeconds: number): void {
+        // The live pass iterates the map itself: it mutates records and actions,
+        // never the maps, and this runs at 60 Hz on a backend that is usually
+        // ramping nothing at all.
+        for (const record of this.#live.values()) {
+            stepRamp(record, deltaSeconds);
+        }
+        if (this.#posing.size === 0) {
+            return;
+        }
+        // The posing pass needs a snapshot, because ending a record's posing
+        // deletes it from the map being walked.
+        for (const record of [...this.#posing.values()]) {
+            stepRamp(record, deltaSeconds);
+            if (record.ramp === null) {
+                this.#stop(record);
+            }
+        }
     }
 }
 
@@ -395,4 +600,50 @@ function wrapsCrossed(record: LivePlayback, deltaSeconds: number, mixerTimeScale
 
 function isUsableDuration(value: number): boolean {
     return Number.isFinite(value) && value > 0;
+}
+
+/** Move `record`'s ramp on by `deltaSeconds`, and clear it once it has arrived. */
+function stepRamp(record: LivePlayback, deltaSeconds: number): void {
+    const { ramp } = record;
+    if (ramp === null) {
+        return;
+    }
+    ramp.elapsedSeconds += deltaSeconds;
+    applyRamp(record);
+    if (ramp.elapsedSeconds >= ramp.durationSeconds) {
+        record.ramp = null;
+    }
+}
+
+/**
+ * Write `record`'s ramp position onto its action.
+ *
+ * Linear in real time, and exact at both ends: `from + (to - from) * 1` is `to`
+ * itself, so a finished ramp settles on the weight it was aimed at rather than
+ * near it. A ramp of no length is already finished — every caller here passes a
+ * positive one, and the guard is what keeps a zero from producing `NaN`.
+ */
+function applyRamp(record: LivePlayback): void {
+    const ramp = record.ramp;
+    if (ramp === null) {
+        return;
+    }
+    const progress =
+        ramp.durationSeconds > 0 ? Math.min(1, ramp.elapsedSeconds / ramp.durationSeconds) : 1;
+    record.action.setEffectiveWeight(
+        ramp.fromWeight + (ramp.toWeight - ramp.fromWeight) * progress,
+    );
+}
+
+/**
+ * `value` as a weight a ramp can start from. The reading comes from three —
+ * `_effectiveWeight` is whatever the last update or the last write left — and a
+ * ramp seeded with a non-finite or out-of-range one would put the action at a
+ * weight no frame should render.
+ */
+function usableWeight(value: number): number {
+    if (!Number.isFinite(value)) {
+        return 0;
+    }
+    return Math.min(1, Math.max(0, value));
 }

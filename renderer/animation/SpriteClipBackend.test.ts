@@ -136,6 +136,7 @@ describeClipBackend('SpriteClipBackend', () => {
         }),
         clipName: 'walk',
         durationSeconds: 0.5,
+        blends: false,
         release: () => {
             // The geometry is the FIXTURE's allocation, not the backend's.
             geometry.dispose();
