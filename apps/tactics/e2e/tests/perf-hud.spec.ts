@@ -114,16 +114,27 @@ test.describe('Performance HUD', () => {
         // border's width, squashing the frustum onto a narrower canvas. jsdom
         // computes no layout, so the resulting ASPECT can only be measured here;
         // the frame's own style keys are pinned in GameCanvas.test.tsx.
-        const minimapCanvas = await minimap.locator('canvas').boundingBox();
-        if (minimapCanvas === null) {
-            throw new Error('Expected the minimap canvas to lay out');
-        }
         // The same relative bound the board's grid-click gate uses: one property
         // ("a canvas carries its camera's aspect"), one number.
-        expect(
-            Math.abs(minimapCanvas.width / minimapCanvas.height - MINIMAP_CAMERA_ASPECT) /
-                MINIMAP_CAMERA_ASPECT,
-        ).toBeLessThanOrEqual(TACTICS_CANVAS_ASPECT_TOLERANCE);
+        //
+        // POLLED, not sampled once: an r3f canvas enters the DOM at the HTML
+        // default 300×150 and takes its wrapper's box on the first frame r3f
+        // measures. MEASURED on both this branch and its base — the box reads
+        // 300×150 once and 192×128 from ~50 ms on — so a single read races that
+        // first frame and asserts the DEFAULT's aspect (2.0), a relative error
+        // of exactly 1/3. A canvas that never reaches its camera's aspect still
+        // fails here, on the poll timeout.
+        await expect
+            .poll(async () => {
+                const box = await minimap.locator('canvas').boundingBox();
+                if (box === null) {
+                    return Number.POSITIVE_INFINITY;
+                }
+                return (
+                    Math.abs(box.width / box.height - MINIMAP_CAMERA_ASPECT) / MINIMAP_CAMERA_ASPECT
+                );
+            })
+            .toBeLessThanOrEqual(TACTICS_CANVAS_ASPECT_TOLERANCE);
 
         // The perf HUD still publishes live metrics with the overlay mounted
         // (probe exclusivity per role is pinned at unit level, not re-derived

@@ -2,7 +2,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LogsAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 import { createRecordingLogsApi } from './__test-support__/RecordingLogsApi.js';
-import { emitRendererError, installRendererLogger, readRendererLogsApi } from './rendererLogger.js';
+import {
+    emitRendererError,
+    emitRendererWarning,
+    installRendererLogger,
+    readRendererLogsApi,
+} from './rendererLogger.js';
 
 // jsdom provides window/PromiseRejectionEvent at runtime; these declarations
 // let the root tsconfig (no DOM lib) type-check this file.
@@ -338,6 +343,65 @@ describe('emitRendererError', () => {
         emitRendererError(logsApi, 'boom', new Error('x'), undefined, 'RootErrorBoundary');
 
         expect(logsApi.emitCalls[0]?.source.module).toBe('RootErrorBoundary');
+    });
+});
+
+describe('emitRendererWarning', () => {
+    it('emits a warn-level entry with the caller module and context', () => {
+        const logsApi = createRecordingLogsApi();
+
+        emitRendererWarning(logsApi, 'budget elapsed', { budgetMs: 8000 }, 'asset-preload-gate');
+
+        const entry = logsApi.emitCalls[0];
+        expect(entry?.level).toBe('warn');
+        expect(entry?.message).toBe('budget elapsed');
+        expect(entry?.source).toEqual({ process: 'renderer', module: 'asset-preload-gate' });
+        expect(entry?.context).toEqual({ budgetMs: 8000 });
+    });
+
+    // The one shape difference from `emitRendererError`: a warning describes a
+    // deadline that passed, not a throw, so there is no Error to serialise and
+    // the field must be ABSENT rather than present-and-empty — the
+    // `chimera:logs:emit` schema validates `error` when the key exists.
+    it('omits the error field entirely', () => {
+        const logsApi = createRecordingLogsApi();
+
+        emitRendererWarning(logsApi, 'budget elapsed');
+
+        expect(logsApi.emitCalls[0]).not.toHaveProperty('error');
+    });
+
+    it('defaults the module to global and omits an absent context', () => {
+        const logsApi = createRecordingLogsApi();
+
+        emitRendererWarning(logsApi, 'budget elapsed');
+
+        expect(logsApi.emitCalls[0]?.source.module).toBe('global');
+        expect(logsApi.emitCalls[0]).not.toHaveProperty('context');
+    });
+
+    it('truncates an oversized module name', () => {
+        const logsApi = createRecordingLogsApi();
+
+        emitRendererWarning(logsApi, 'boom', undefined, 'M'.repeat(500));
+
+        expect(logsApi.emitCalls[0]?.source.module).toHaveLength(256);
+    });
+
+    it('is inert without a bridge and swallows a throwing one', () => {
+        expect(() => {
+            emitRendererWarning(undefined, 'boom');
+        }).not.toThrow();
+        expect(() => {
+            emitRendererWarning(
+                {
+                    emit: () => {
+                        throw new Error('bridge down');
+                    },
+                },
+                'boom',
+            );
+        }).not.toThrow();
     });
 });
 

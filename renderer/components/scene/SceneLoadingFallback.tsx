@@ -10,9 +10,10 @@
 // (Invariant #81).
 //
 // A game-supplied cover is wrapped in BOTH its own Suspense boundary and an
-// error boundary: it renders INSIDE a Suspense fallback, where a suspension
-// bubbles to GameShell's outer `fallback={null}` and blanks the whole scene, and
-// where a throw would escalate a missing cover into a missing game.
+// error boundary. At the `SceneRouter` site this renders inside a Suspense
+// fallback, where a suspension bubbles to GameShell's outer `fallback={null}`
+// and blanks the whole scene; at every site a throw would escalate a missing
+// cover into a missing game.
 
 import React from 'react';
 import type {

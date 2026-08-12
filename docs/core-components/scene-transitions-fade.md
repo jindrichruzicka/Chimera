@@ -135,13 +135,12 @@ export function SceneRouter(): JSX.Element;
 
 `TransitionOverlay.tsx` (engine-provided): a full-screen fade. Games can override it via the `GameScreenRegistry.transitionOverlay` slot. It renders no progress bar and no "Waiting for N player(s)…" status; see the component for what it does render.
 
-> **Not yet wired: the per-transition asset preload.** The two-phase protocol above ships — the
+> **Not yet wired: the per-TRANSITION asset preload.** The two-phase protocol above ships — the
 > overlay renders on `phase === 'preparing'` and `useFadeTransition` dispatches
-> `engine:scene_ready` — but it dispatches on the FADE completing, not on assets loading. A scene's
-> `requiredAssets` do reach the client — see `SceneTransitionState.requiredAssets` and
-> `BaseGameSnapshot.sceneRequiredAssets` — but nothing loads from them. The manifest-level arm
-> (`priority: 'critical'`, run by `GameShell` and `GameAssetSession`) is separate and does run —
-> see [Where the critical preload runs](asset-reference-system.md#where-the-critical-preload-runs).
+> `engine:scene_ready` — but it dispatches on the FADE completing, not on assets loading. The
+> committed-scene half of the same declaration is wired: `BaseGameSnapshot.sceneRequiredAssets`
+> gates a ROUTE ENTRY through `useCriticalAssetPreloadGate` — see
+> [Where the critical preload runs](asset-reference-system.md#where-the-critical-preload-runs).
 
 ### Module Tree
 

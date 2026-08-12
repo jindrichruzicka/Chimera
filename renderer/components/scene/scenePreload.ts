@@ -8,9 +8,8 @@
 // releases the reveal — is the part worth testing, and none of it needs a DOM.
 // The effect that owns a run's lifetime lives with its caller.
 //
-// It is also the first production caller of `markRequiredAssetsCritical`;
-// `renderer/assets/__tests__/required-assets-producer.test.ts` pins that this
-// stays the only one.
+// It promotes through `markRequiredAssetsCritical`; that helper's importers are
+// censused in `renderer/assets/__tests__/required-assets-producer.test.ts`.
 //
 // Invariant #21: the manager is BORROWED. This module never constructs,
 // disposes or evicts one. Which surface disposes which manager is enumerated in

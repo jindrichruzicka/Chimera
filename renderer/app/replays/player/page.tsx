@@ -30,7 +30,9 @@ import type {
     PlayerSnapshot,
     ReplayPlaybackInfo,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import { useCriticalAssetPreloadGate } from '../../../assets/criticalAssetPreload.js';
 import { useLeaveGame } from '../../../bridge/useLeaveGame';
+import { RouteEntryLoadingCover } from '../../../components/scene/RouteEntryLoadingCover';
 import { GameShell } from '../../../components/shell/GameShell';
 import { ReplayControls } from '../../../components/replay/ReplayControls';
 import { parseReplayKind } from '../../../components/replay/replayKind';
@@ -319,6 +321,15 @@ function ReplayPlayerView(): React.ReactElement {
     const loadedGame = useLoadedRendererGame(info?.gameId ?? null, reportError);
     // GameShell below disposes this manager (Invariant #21); the hook only builds.
     const assetManager = useRendererGameAssetManager(loadedGame);
+    // The §4.10 route-entry gate. Its answer drives the cover BELOW ONLY — never
+    // `isReady`: a replay is always entered on an already-committed scene, and
+    // withholding <GameShell> here would orphan the manager above, whose unique
+    // disposer it is (Invariant #21) and which this hook never disposes.
+    const criticalAssets = useCriticalAssetPreloadGate(
+        assetManager,
+        loadedGame?.assetManifest,
+        snapshot?.sceneRequiredAssets,
+    );
     // The game's content collections, keyed by the replay's gameId, exactly as the
     // live game route supplies them (`renderer/app/game/page.tsx`). A game's screen
     // interprets these (tactics derives its colour palette); without them every
@@ -461,6 +472,14 @@ function ReplayPlayerView(): React.ReactElement {
                     leaveGame={handleLeaveReplay}
                     localPlayerId={info.viewerId as PlayerSnapshot['viewerId']}
                 />
+                {/*
+                 * Inside the already-`position: relative` playfield wrapper, so
+                 * the cover spans the recorded frame and leaves the transport
+                 * controls above it reachable.
+                 */}
+                {criticalAssets.ready ? null : (
+                    <RouteEntryLoadingCover registry={loadedGame.registry} snapshot={snapshot} />
+                )}
             </div>
         </main>
     );

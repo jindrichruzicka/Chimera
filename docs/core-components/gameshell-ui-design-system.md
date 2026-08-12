@@ -836,6 +836,8 @@ const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
 
 The screen `<React.Suspense>` boundary lives in `renderer/components/scene/SceneRouter.tsx`; its fallback is the loading cover (`SceneLoadingFallback`), which resolves the registry's `loadingScreens[key] ?? loadingScreen` cascade and falls back to an empty `scene-screen-loading` div. Distinct from `TransitionOverlay` (§4.19): `TransitionOverlay` handles full-screen scene transitions, the Suspense fallback handles within-scene first-visit screen loads.
 
+The same cover has a second site, `RouteEntryLoadingCover`, which is not a Suspense fallback: `/game` and `/replays/player` render it as a sibling LAYER over the already-mounted `GameShell` while the route-entry asset gate waits (§4.10). It resolves the screen key the route owns — `snapshot.sceneDefaultScreen ?? registry.sceneDefaultScreens[sceneId] ?? 'playfield'` — rather than `useActiveScreen()`, whose `uiStore` is a module singleton `/game` never resets.
+
 ### Invariants
 
 | #   | Rule                                                                                                                                                 |

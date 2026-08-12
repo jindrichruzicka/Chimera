@@ -25,7 +25,7 @@ The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-sy
 | `renderer/assets/AssetLoaderRegistry.ts`   | Runtime kind id → loader, open to game-contributed loaders without engine edits                                                                      |
 | `renderer/assets/AssetManager.ts`          | Loads, caches, and disposes resolved assets                                                                                                          |
 | `renderer/assets/AssetPreloader.ts`        | Bulk-preloads all `critical` manifest entries as a session opens                                                                                     |
-| `renderer/assets/criticalAssetPreload.ts`  | Runs that preload for a surface owning a manager — see [Where the critical preload runs](#where-the-critical-preload-runs)                           |
+| `renderer/assets/criticalAssetPreload.ts`  | Runs that preload, and gates a route's reveal on it — see [Where the critical preload runs](#where-the-critical-preload-runs)                        |
 | `renderer/assets/useAsset.ts`              | React hook — returns loaded asset or `null` + loading flag                                                                                           |
 
 ---
@@ -251,25 +251,49 @@ export interface AssetManager {
 
 ### Where the critical preload runs
 
-`priority: 'critical'` is not self-executing. Something has to call `preloadCritical`, and a surface
-may do so only for a manager whose lifetime it owns — the ownership rule is **Invariant #21**'s, not
-a second rule stated here. `renderer/assets/criticalAssetPreload.ts` is that call, and the engine
-surfaces making it are:
+`priority: 'critical'` is not self-executing. Something has to call `preloadCritical`.
+`renderer/assets/criticalAssetPreload.ts` is that call, and the engine surfaces making it are:
 
-| Surface                             | Manager it preloads into                                                                       | Manifest                 |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------ |
-| `GameShell` (`useGameAssetManager`) | the match-level manager — injected by `/game` and `/replays/player`, or the fallback it builds | the `assetManifest` prop |
-| `GameAssetSession`                  | the manager it builds for a route with no `GameShell` above it                                 | its `assetManifest` prop |
+| Surface                             | Manager it preloads into                                                                       | Manifest                                  |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `GameShell` (`useGameAssetManager`) | the match-level manager — injected by `/game` and `/replays/player`, or the fallback it builds | the `assetManifest` prop                  |
+| `GameAssetSession`                  | the manager it builds for a route with no `GameShell` above it                                 | its `assetManifest` prop                  |
+| `/game`, `/replays/player`          | the manager the route builds and then injects into `GameShell`                                 | the loaded game's, promoted (gate, below) |
 
-The module exposes the preload two ways, and which one a surface takes follows from where it
-allocates its manager. `useCriticalAssetPreload` is the effect wrapper, for a manager whose identity
-moves in the same render as the manifest (a `useMemo` keyed on both, or an injected prop) — that
-pair can never be mismatched. `startCriticalAssetPreload` is the primitive, returning the callback
-that abandons the run's report; a surface that allocates its manager INSIDE an effect calls it from
-that same effect, because React runs every cleanup before every setup — so a separate effect's setup
-would read the previous manager out of state, the one the first effect's cleanup just disposed, and
-cache into it. `dispose()` empties a manager's maps without making it refuse work, so those assets
-would be unreachable by every remaining dispose path.
+The module exposes the preload three ways. Two of them differ by where the caller allocates its
+manager. `useCriticalAssetPreload` is the effect wrapper, for a manager whose identity moves in the
+same render as the manifest (a `useMemo` keyed on both, or an injected prop) — that pair can never
+be mismatched. `startCriticalAssetPreload` is the primitive, returning the callback that abandons
+the run's report; a surface that allocates its manager INSIDE an effect calls it from that same
+effect, because React runs every cleanup before every setup — so a separate effect's setup would
+read the previous manager out of state, the one the first effect's cleanup just disposed, and cache
+into it. `dispose()` empties a manager's maps without making it refuse work, so those assets would
+be unreachable by every remaining dispose path.
+
+The third, `useCriticalAssetPreloadGate`, differs by what the caller does with the ANSWER: it runs
+the same warm-up and reports `{ ready, outcome }`, so a route can hold its REVEAL — the app-level
+fade-in, and a `RouteEntryLoadingCover` over the scene — until the assets are there. Four
+independent settle paths, because each has its own failure mode: the run resolving, the run
+REJECTING (`preloadCritical` stops at the first bad ref, so this is the common shape of a broken
+declaration), `CRITICAL_ASSET_PRELOAD_BUDGET_MS` elapsing, and a blank manager or manifest — the
+last computed in render rather than in an effect, so a manifest-less game is ready on its first
+render instead of waiting on a run that will never start. Only the budget path reports, as a
+warning under the `asset-preload-gate` module; a failed ref is left to the run itself. One path is
+unreported by either arm: a ref made critical by scene promotion is loaded by the gate alone, so
+its failure shows only as the gate's `'failed'` outcome.
+
+Its `sceneRequiredAssets` parameter is a runtime consumer of a declared
+`SceneDescriptor.requiredAssets` (Invariant #52): a route entered on an
+already-committed scene — a restore, a replay — reaches that scene's declaration only through
+`BaseGameSnapshot.sceneRequiredAssets`, and the gate promotes those refs with
+`markRequiredAssetsCritical` before running. Both callers promote the FULL manifest built from the
+same base object; a sub-manifest filtered to the scene's refs would evict every ref absent from it.
+
+**A gate withholds a reveal, never a MOUNT.** `GameShell` is the unique disposer of a page-injected
+manager (Invariant #21), so a route that withheld its mount while waiting here would orphan the very
+manager the gate is preloading into. Running both arms is free: every ref after the first resolves
+through the manager's `loadedAssets`/`inFlightLoads`, and re-registering an equivalent manifest
+evicts nothing (entry equivalence compares kind and metadata, never `priority`).
 
 Three further properties of that call are contractual rather than incidental:
 
@@ -286,9 +310,12 @@ Three further properties of that call are contractual rather than incidental:
   degrades one ref instead of refusing the match. `preloadCritical` awaits its entries in sequence
   and stops at the first rejection, so entries after the failing one are not preloaded either.
 
-The scene arm — promoting a `SceneDescriptor.requiredAssets` set to critical for a transition, via
-`markRequiredAssetsCritical` and a `TransitionOverlay` progress gate — is a **separate** mechanism
-and is not wired; see [Scene Transitions](scene-transitions-fade.md).
+The scene-TRANSITION arm — the same promotion driven from a `TransitionOverlay` progress gate as an
+entering scene commits — is a **separate** mechanism, with its own run in
+`renderer/components/scene/scenePreload.ts`; see [Scene Transitions](scene-transitions-fade.md). The
+promotion helper's importers are censused in
+`renderer/assets/__tests__/required-assets-producer.test.ts`. The committed-scene half of the same
+declaration is the route gate above.
 
 ### Asset sessions outside a match — `GameAssetSession`
 

@@ -247,6 +247,7 @@ chimera/
 │   │   │   ├── TransitionOverlay.tsx  # Fixed full-screen fade overlay; see §4.19
 │   │   │   ├── SceneLoadingFallback.tsx  # Registry-resolved loading cover; falls back to an empty div; see §4.36
 │   │   │   ├── EngineLoadingPreset.tsx   # The engine's own cover forms (spinner / progress / message / image); see §4.36
+│   │   │   ├── RouteEntryLoadingCover.tsx  # The route-entry cover site: a sibling layer over the mounted shell while the preload gate waits; see §4.36
 │   │   │   ├── resolveLoadingScreen.ts   # loadingScreens[key] ?? loadingScreen cascade; see §4.36
 │   │   │   ├── useFadeTransition.ts # Drives the fade around a scene transition and acks scene_ready; see §4.18
 │   │   │   ├── scenePreload.ts      # Budgeted, fail-open warm-up of a scene's requiredAssets; see §4.10
@@ -278,7 +279,7 @@ chimera/
 │   │   ├── AssetManagerProvider.tsx
 │   │   ├── AssetResolver.ts
 │   │   ├── AssetPreloader.ts
-│   │   ├── criticalAssetPreload.ts  # The §4.10 critical preload as GameShell and GameAssetSession run it — commit-phase, non-blocking, non-fatal
+│   │   ├── criticalAssetPreload.ts  # The §4.10 critical preload — commit-phase, non-blocking, non-fatal; plus the route-entry gate that reports when it settles
 │   │   ├── animationSheet.ts        # parseModel/SpriteAnimationMetadata — fail-soft readers of the animation sheet in AssetManifestEntry.metadata
 │   │   ├── spriteAtlas.ts           # parseSpriteAtlas — public via the barrel; measures atlas cells to raw flipY UVs
 │   │   ├── useAnimationSheet.ts     # Model sheet, memoised on metadata IDENTITY

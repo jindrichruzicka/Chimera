@@ -9,9 +9,7 @@ decoded on first use. For a music bed that means a fade-in, or a crossfade, sche
 against a buffer that has not arrived; nothing warns, because `AudioManager.play()`
 swallows a slow load.
 
-`GameShell` and `GameAssetSession` now run the preload through the new
-`criticalAssetPreload` module. Which surfaces may run it follows from Invariant #21: a
-surface preloads only into a manager whose lifetime it owns.
+The preload now runs through the new `criticalAssetPreload` module.
 
 Properties of that call that callers can rely on:
 
@@ -40,5 +38,5 @@ critical entries, whatever the route renders: in this repo the Tactics `/model-s
 route fetches and decodes the two ambience beds it does not use.
 
 Scene-level `requiredAssets` promotion (`markRequiredAssetsCritical`, the
-`TransitionOverlay` progress gate) is a separate arm and remains unwired; the scene
-transitions doc now says so.
+`TransitionOverlay` progress gate) is a separate arm; the scene transitions doc
+covers it.

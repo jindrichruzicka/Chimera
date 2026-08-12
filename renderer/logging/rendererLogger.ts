@@ -249,3 +249,26 @@ export function emitRendererError(
         // swallow — prevent re-entry if IPC bridge throws
     }
 }
+
+/**
+ * The `warn`-level twin of {@link emitRendererError}, for a condition that is
+ * diagnostic rather than a failure — a deadline that elapsed, a fail-open gate
+ * that released.
+ *
+ * Takes NO `Error` parameter, and that is the whole shape difference: there is
+ * no throw behind a warning like this, so `LogEntry.error` stays absent rather
+ * than carrying a synthesised stack that points at the reporter instead of at
+ * a cause. Every cap and every swallow is the error path's, unchanged.
+ */
+export function emitRendererWarning(
+    logsApi: RendererLogEmitter | undefined,
+    message: string,
+    context?: Record<string, unknown>,
+    moduleName = 'global',
+): void {
+    try {
+        logsApi?.emit(makeEntry('warn', message, context, undefined, moduleName));
+    } catch {
+        // swallow — prevent re-entry if IPC bridge throws
+    }
+}

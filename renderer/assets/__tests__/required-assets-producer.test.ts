@@ -4,8 +4,10 @@
  * Census of the modules that import `markRequiredAssetsCritical`.
  *
  * The helper promotes a scene's declared `requiredAssets` to `critical` in a
- * copy of the manifest, and the scene preload run is its only production
- * caller. This asserts the EXACT importer set, in both directions:
+ * copy of the manifest, and two production surfaces call it: the scene preload
+ * run (a transition into a scene) and the route-entry gate (a route entered on
+ * an already-committed scene, reading the same refs off the snapshot). This
+ * asserts the EXACT importer set, in both directions:
  *
  *   - the set shrinking means the arm lost its producer again, silently;
  *   - the set growing means a second surface promotes refs into a manager whose
@@ -175,8 +177,15 @@ describe('importsName', () => {
 // ─── The census ───────────────────────────────────────────────────────────────
 
 describe('markRequiredAssetsCritical importers', () => {
-    it('is imported by the scene preload run and nothing else', () => {
-        expect(importersOf(PROBED_NAME)).toEqual(['renderer/components/scene/scenePreload.ts']);
+    it('is imported by the two preload runs and nothing else', () => {
+        // Both entries promote into a manager they were HANDED, never one they
+        // built: the scene run borrows the match manager for a transition, and
+        // the route gate warms the manager its route is about to hand to
+        // `GameShell`, the unique disposer of it (Invariant #21).
+        expect(importersOf(PROBED_NAME)).toEqual([
+            'renderer/assets/criticalAssetPreload.ts',
+            'renderer/components/scene/scenePreload.ts',
+        ]);
     });
 
     it('scans a tree that actually contains the declaring module', () => {

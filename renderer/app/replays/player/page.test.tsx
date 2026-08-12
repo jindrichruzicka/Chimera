@@ -14,9 +14,19 @@ import type {
 } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // Stub the game renderer loader so the player page does not pull in real
-// apps/* screen modules under test.
+// apps/* screen modules under test. Routed through a hoisted mock so a case can
+// hand the route a game that declares a manifest.
+const loadRendererGameMock = vi.hoisted(() => vi.fn());
 vi.mock('../../../game/rendererGameRegistry', () => ({
-    loadRendererGame: vi.fn(() => Promise.resolve({ registry: { screens: {} } })),
+    loadRendererGame: loadRendererGameMock,
+}));
+
+// The manager the route builds and injects. Mocked at its source so a case owns
+// whether the critical preload ever settles; without that the gate's pending
+// window is not observable.
+const assetManagerFor = vi.hoisted(() => vi.fn());
+vi.mock('../../gameAssetSession.js', () => ({
+    useRendererGameAssetManager: (loadedGame: unknown) => assetManagerFor(loadedGame),
 }));
 
 // Stub GameShell — we assert which snapshot AND content it receives, not how it
@@ -27,23 +37,32 @@ vi.mock('../../../components/shell/GameShell', () => ({
         snapshot,
         content,
         leaveGame,
+        assetManager,
     }: {
         snapshot?: PlayerSnapshot;
         content?: GameContent;
         leaveGame?: () => void;
-    }) => (
-        <div
-            data-testid="game-shell"
-            data-tick={snapshot?.tick ?? 'none'}
-            data-content={content === undefined ? 'none' : JSON.stringify(content)}
-        >
-            {/* Surfaces the in-game-menu leave so the player's `handleLeaveReplay`
-                navigation can be exercised without the real shell UI. */}
-            <button type="button" data-testid="shell-leave-btn" onClick={() => leaveGame?.()}>
-                leave
-            </button>
-        </div>
-    ),
+        assetManager?: { dispose(): void };
+    }) => {
+        // Mirrors Invariant #21 in the double: GameShell is the unique disposer
+        // of the manager its host route injects, and the route disposes nothing.
+        // Without this the unmount case could not tell "disposed once" from
+        // "never disposed at all".
+        React.useEffect(() => () => assetManager?.dispose(), [assetManager]);
+        return (
+            <div
+                data-testid="game-shell"
+                data-tick={snapshot?.tick ?? 'none'}
+                data-content={content === undefined ? 'none' : JSON.stringify(content)}
+            >
+                {/* Surfaces the in-game-menu leave so the player's `handleLeaveReplay`
+                    navigation can be exercised without the real shell UI. */}
+                <button type="button" data-testid="shell-leave-btn" onClick={() => leaveGame?.()}>
+                    leave
+                </button>
+            </div>
+        );
+    },
 }));
 
 // The page reads `?path=`/`?kind=` via `useSearchParams`; back it with the URL
@@ -108,9 +127,56 @@ function makeBridge(overrides: Partial<ReplayAPI> = {}): Partial<ReplayAPI> {
     };
 }
 
+/**
+ * A manager double whose critical preload settles only when a case says so.
+ *
+ * The route hands one of these to `GameShell` and never disposes it, so the
+ * double records `dispose` for the shell double to call.
+ */
+function createManagerDouble(): {
+    readonly assetManager: { dispose(): void };
+    readonly dispose: ReturnType<typeof vi.fn>;
+    settle(): void;
+} {
+    let resolvePreload: (() => void) | undefined;
+    const dispose = vi.fn();
+    return {
+        assetManager: {
+            registerManifest: vi.fn(),
+            preloadCritical: vi.fn(
+                () =>
+                    new Promise<void>((resolve) => {
+                        resolvePreload = resolve;
+                    }),
+            ),
+            get: () => null,
+            load: () => Promise.reject(new Error('not used')),
+            getManifestMetadata: () => undefined,
+            dispose,
+        } as unknown as { dispose(): void },
+        dispose,
+        settle: () => resolvePreload?.(),
+    };
+}
+
+const CRITICAL_MANIFEST = {
+    gameId: 'tactics',
+    entries: [{ ref: 'tactics/textures/board.webp', kind: 'texture', priority: 'critical' }],
+};
+
+/** One double per test: the gate keys on manager IDENTITY, so it must be stable. */
+let managerDouble: ReturnType<typeof createManagerDouble>;
+
 beforeEach(() => {
     mockRouterPush.mockClear();
     window.history.replaceState({}, '', `/replays/player?path=${encodeURIComponent(PATH)}`);
+    loadRendererGameMock.mockReset();
+    loadRendererGameMock.mockResolvedValue({ registry: { screens: {} } });
+    managerDouble = createManagerDouble();
+    assetManagerFor.mockReset();
+    assetManagerFor.mockImplementation((loadedGame: unknown) =>
+        loadedGame === null ? null : managerDouble.assetManager,
+    );
 });
 
 afterEach(() => {
@@ -579,5 +645,67 @@ describe('ReplayPlayerPage', () => {
             expect(exportCurrent).toHaveBeenCalledWith('Client POV');
             expect(exportCurrentMatch).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe('ReplayPlayerPage asset reveal gate', () => {
+    it('shows the loading cover OVER the mounted shell, not instead of it', async () => {
+        loadRendererGameMock.mockResolvedValue({
+            registry: { screens: {} },
+            assetManifest: CRITICAL_MANIFEST,
+        });
+        installReplayBridge(makeBridge());
+
+        render(<ReplayPlayerPage />);
+        await screen.findByTestId('game-shell');
+
+        // Both, at once. Withholding <GameShell> here would orphan the manager
+        // `useRendererGameAssetManager` allocated and never disposes — exactly
+        // the leak Invariant #21 exists to prevent.
+        expect(screen.getByTestId('game-shell')).toBeInTheDocument();
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await act(async () => {
+            managerDouble.settle();
+            await Promise.resolve();
+        });
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(screen.getByTestId('game-shell')).toBeInTheDocument();
+    });
+
+    it('leaves its own loading state even while the critical load never resolves', async () => {
+        loadRendererGameMock.mockResolvedValue({
+            registry: { screens: {} },
+            assetManifest: CRITICAL_MANIFEST,
+        });
+        installReplayBridge(makeBridge());
+
+        render(<ReplayPlayerPage />, { 'engine.replays.playerLoading': 'Buffering…' });
+        await screen.findByTestId('game-shell');
+
+        // `isReady` is deliberately NOT gated on the preload: the transport
+        // controls and the shell belong to the route, and a route that waited
+        // here would never build the manager the preload needs.
+        expect(screen.queryByText('Buffering…')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /step forward/i })).toBeInTheDocument();
+    });
+
+    it('disposes the injected manager exactly once when unmounted mid-preload', async () => {
+        loadRendererGameMock.mockResolvedValue({
+            registry: { screens: {} },
+            assetManifest: CRITICAL_MANIFEST,
+        });
+        installReplayBridge(makeBridge());
+
+        const view = render(<ReplayPlayerPage />);
+        await screen.findByTestId('game-shell');
+        expect(managerDouble.dispose).not.toHaveBeenCalled();
+
+        view.unmount();
+
+        // One manager, one disposal: the gate must not have made the route swap
+        // managers mid-flight, and its own teardown must not add a second owner.
+        expect(managerDouble.dispose).toHaveBeenCalledTimes(1);
     });
 });

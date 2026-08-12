@@ -7,17 +7,27 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The route-entry asset reveal gate. `/game` and `/replays/player` hold their reveal until the
+  critical asset preload settles, so a match no longer opens on a scene whose textures and audio
+  are still arriving. Both routes render a §4.36 loading cover over the mounted shell while they
+  wait; on `/game` the app-level screen fade is held with it. The shell still mounts while the gate waits (a withheld mount would orphan the manager
+  `GameShell` alone disposes), the wait is bounded by `CRITICAL_ASSET_PRELOAD_BUDGET_MS` (8 s), and
+  every settle path reveals — a rejected load and an elapsed budget included. A scene's declared
+  `requiredAssets`, carried on `BaseGameSnapshot.sceneRequiredAssets`, gate a route entered on that
+  scene too.
+
 ### Fixed
 
 - `AssetManifestEntry.priority: 'critical'` now preloads. `AssetPreloader` and
   `AssetManager.preloadCritical` both existed but had no caller anywhere in the renderer's runtime
   path, so a critical entry behaved exactly like a deferred one — it decoded on first use, which
   for the Tactics ambience beds meant a fade-in and a crossfade scheduled against buffers that had
-  not arrived. `GameShell` and `GameAssetSession` now run the preload in a commit-phase effect,
-  owned by whichever effect owns the manager (Invariant #21): non-blocking (the match renders while
+  not arrived. The preload now runs in a commit-phase effect: non-blocking (the match renders while
   it runs, and an in-flight ref is shared with any `useAsset` that asks for it first) and non-fatal
   (a rejected critical load is reported under the `asset-preload` module and leaves the on-demand
-  path intact). Scene-level `requiredAssets` promotion remains unwired.
+  path intact).
 
 ## [0.9.0] — 2026-07-12
 

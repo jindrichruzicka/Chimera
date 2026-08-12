@@ -23,9 +23,11 @@ import {
     type EngineAction,
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import { useCriticalAssetPreloadGate } from '../../assets/criticalAssetPreload.js';
 import { useOptionalFade } from '../../components/shell/FadeContext';
 import { screenFadeMs } from '../../components/shell/screenFadeDuration';
 import { GameShell } from '../../components/shell/GameShell';
+import { RouteEntryLoadingCover } from '../../components/scene/RouteEntryLoadingCover';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
 import { useRendererGameAssetManager } from '../gameAssetSession.js';
@@ -68,7 +70,13 @@ export default function GamePage(): React.ReactElement | null {
     const leavingToMainMenu = useLobbyUiStore((state) => state.leavingToMainMenu);
     const isSpectator = useIsSpectator();
     const restoreAbortPending = useSaveStore((state) => state.restoreAbortPending);
+    // A restore parks the host on /game and waits for the saved remote seats, so
+    // the reveal has to be released while it does — see the fade-in effect below.
+    const restoreWaiting = useSaveStore((state) => state.restore?.state === 'waiting');
     const leavingRef = React.useRef(false);
+    // Declared up here because the restore-abort exit below reads it: an abort
+    // that happens before the latch has fired owns the release of the scrim.
+    const fadedInRef = React.useRef(false);
     const gameId = lobbyState?.info.gameId ?? null;
     const gameContent = useGameContent(gameId);
     const loadedGame = useLoadedRendererGame(gameId);
@@ -76,6 +84,16 @@ export default function GamePage(): React.ReactElement | null {
     const t = useTranslate();
     // GameShell below disposes this manager (Invariant #21); the hook only builds.
     const assetManager = useRendererGameAssetManager(loadedGame);
+    // The §4.10 route-entry gate. It warms the SAME manifest GameShell's own arm
+    // warms — every ref after the first resolves through the manager's cache —
+    // and the answer is what the reveal below waits on. `sceneRequiredAssets`
+    // travels on the snapshot because a route entered on an already-committed
+    // scene has no other channel to that scene's declaration (Invariant #52).
+    const criticalAssets = useCriticalAssetPreloadGate(
+        assetManager,
+        loadedGame?.assetManifest,
+        snapshot?.sceneRequiredAssets,
+    );
     const sendActionToHost = useSendAction();
     const sendAction = React.useCallback(
         (action: EngineAction): void => {
@@ -140,6 +158,14 @@ export default function GamePage(): React.ReactElement | null {
         if (restoreAbortPending && !leavingRef.current) {
             leavingRef.current = true;
             useSaveStore.getState().clearRestoreAbort();
+            // /saves has no mount fade-in of its own, so whoever leaves /game
+            // owes it a transparent scrim. Before the reveal gate existed the
+            // fade-in had always fired by now; with the gate it may not have,
+            // and an abort during the preload would land on a black /saves.
+            if (!fadedInRef.current) {
+                fadedInRef.current = true;
+                void fadeRef.current?.fadeIn(screenFadeMs());
+            }
             const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
             useGameStore.getState().reset();
             router.replace(withShellGameId('/saves', explicitGameId));
@@ -233,20 +259,40 @@ export default function GamePage(): React.ReactElement | null {
     useInputAction('engine:redo', onRedoKey);
     useInputAction('game:end-turn', onEndTurnKey);
 
-    // App-level screen fade: once the game is actually here (snapshot + game +
-    // assets all loaded, i.e. GameShell is about to render), ease in from the
-    // black overlay that the lobby→game transition faded to. Latched so it fires
-    // once per entry, and re-armed if we drop back out of the ready state.
-    const sceneReady =
+    // Whether GameShell can MOUNT: snapshot + game + manager all present. It is
+    // deliberately the same predicate as the two early returns below, and the
+    // preload term is deliberately NOT in it — a preload gates a REVEAL, never a
+    // mount, because GameShell is the unique disposer of the manager this route
+    // injects (Invariant #21) and a withheld mount would orphan it.
+    const shellReady =
         snapshot !== null && gameId !== null && loadedGame !== null && assetManager !== null;
-    const fadedInRef = React.useRef(false);
+    // Whether the game may be SHOWN. The restore release is not an optimisation:
+    // RestoreWaitingOverlay is a Modal at --ch-z-modal, below both the scrim at
+    // --ch-z-screen-fade and the cover at --ch-z-loading-hud, so holding the
+    // reveal through a restore wait hides the only control that can abort it.
+    const sceneReady = shellReady && (criticalAssets.ready || restoreWaiting);
+
+    // App-level screen fade: once the game is actually here AND its critical
+    // assets have settled, ease in from the black overlay that the lobby→game
+    // transition faded to. Latched so it fires once per entry, and re-armed if
+    // we drop back out of the ready state.
+    //
+    // The deps are `[sceneReady]` alone: `leavingRef.current` is a ref (never
+    // reactive) and `snapshot.phase` is not listed, so a SUPPRESSED fade-in is
+    // never retried once the suppressing condition clears. That is safe because
+    // each suppressor ends by leaving this route — a leave navigates away, and
+    // the phase:'lobby' window ends at /lobby, which fades itself in. Widening
+    // the deps would instead resurrect the fade-out a leave just performed.
     React.useEffect(() => {
-        if (sceneReady && !fadedInRef.current) {
-            fadedInRef.current = true;
-            void fadeRef.current?.fadeIn(screenFadeMs());
-        } else if (!sceneReady) {
+        if (!sceneReady) {
             fadedInRef.current = false;
+            return;
         }
+        if (fadedInRef.current || leavingRef.current || snapshot?.phase === 'lobby') {
+            return;
+        }
+        fadedInRef.current = true;
+        void fadeRef.current?.fadeIn(screenFadeMs());
     }, [sceneReady]);
 
     if (snapshot === null) {
@@ -282,36 +328,51 @@ export default function GamePage(): React.ReactElement | null {
     };
 
     return (
-        <GameShell
-            registry={loadedGame.registry}
-            assetManager={assetManager}
-            {...(loadedGame.assetManifest === undefined
-                ? {}
-                : { assetManifest: loadedGame.assetManifest })}
-            {...(loadedGame.inputActions === undefined
-                ? {}
-                : { inputActions: loadedGame.inputActions })}
-            snapshot={snapshot}
-            currentTick={currentTick}
-            sendAction={sendAction}
-            {...(gameContent === undefined ? {} : { content: gameContent })}
-            reveal={lastReveal}
-            canEndTurn={!isTerminalSnapshot(snapshot) && snapshot.isMyTurn}
-            localPlayerId={resolvedPlayerId}
-            isHost={isHost}
-            isSpectator={isSpectator}
-            {...(process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1'
-                ? { fadeOutMs: 0, fadeInMs: 0 }
-                : {})}
-            onUndo={() =>
-                dispatchGameAction(snapshot, resolvedPlayerId, 'engine:undo', { steps: 1 })
-            }
-            onRedo={() =>
-                dispatchGameAction(snapshot, resolvedPlayerId, 'engine:redo', { steps: 1 })
-            }
-            onEndTurn={() => dispatchGameAction(snapshot, resolvedPlayerId, 'engine:end_turn', {})}
-            {...(isHost ? { onSaveGame: handleSaveGame } : {})}
-        />
+        <>
+            <GameShell
+                registry={loadedGame.registry}
+                assetManager={assetManager}
+                {...(loadedGame.assetManifest === undefined
+                    ? {}
+                    : { assetManifest: loadedGame.assetManifest })}
+                {...(loadedGame.inputActions === undefined
+                    ? {}
+                    : { inputActions: loadedGame.inputActions })}
+                snapshot={snapshot}
+                currentTick={currentTick}
+                sendAction={sendAction}
+                {...(gameContent === undefined ? {} : { content: gameContent })}
+                reveal={lastReveal}
+                canEndTurn={!isTerminalSnapshot(snapshot) && snapshot.isMyTurn}
+                localPlayerId={resolvedPlayerId}
+                isHost={isHost}
+                isSpectator={isSpectator}
+                {...(process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1'
+                    ? { fadeOutMs: 0, fadeInMs: 0 }
+                    : {})}
+                onUndo={() =>
+                    dispatchGameAction(snapshot, resolvedPlayerId, 'engine:undo', { steps: 1 })
+                }
+                onRedo={() =>
+                    dispatchGameAction(snapshot, resolvedPlayerId, 'engine:redo', { steps: 1 })
+                }
+                onEndTurn={() =>
+                    dispatchGameAction(snapshot, resolvedPlayerId, 'engine:end_turn', {})
+                }
+                {...(isHost ? { onSaveGame: handleSaveGame } : {})}
+            />
+            {/*
+             * A SIBLING of the shell, not a wrapper around it: the shell has to
+             * mount for its manager to be disposed (Invariant #21), so what the
+             * gate withholds is the sight of it. Rendered last so it paints over
+             * the scene it covers, and dropped on every settle path — a cover
+             * left standing at --ch-z-loading-hud sits above every modal and
+             * toast for the rest of the match.
+             */}
+            {sceneReady ? null : (
+                <RouteEntryLoadingCover registry={loadedGame.registry} snapshot={snapshot} />
+            )}
+        </>
     );
 }
 

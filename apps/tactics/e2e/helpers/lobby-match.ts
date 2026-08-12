@@ -52,4 +52,12 @@ export async function readyAndStart(
     const clientGame = new GamePage(clientWindow);
     await hostGame.canvas.waitFor({ state: 'visible' });
     await clientGame.canvas.waitFor({ state: 'visible' });
+    // The canvas mounts BEFORE the match is revealed: the route-entry asset gate
+    // holds the app-level fade opaque until the critical preload settles (§4.10).
+    // Every spec that starts a match this way would otherwise race that reveal,
+    // so the wait lives here rather than in each spec. Both windows run their own
+    // gate, so both are waited on. The gate itself is never disabled under e2e —
+    // determinism comes from this wait.
+    await expect(hostWindow.getByTestId('screen-fade-overlay')).toHaveCSS('opacity', '0');
+    await expect(clientWindow.getByTestId('screen-fade-overlay')).toHaveCSS('opacity', '0');
 }
