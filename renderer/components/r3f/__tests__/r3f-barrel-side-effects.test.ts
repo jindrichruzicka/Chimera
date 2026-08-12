@@ -7,14 +7,16 @@
  *
  * **What it drags in.** The graph reaches THREE stores (`perfStore` via
  * `PerfProbe`, `settingsStore` via `selectTargetFps`, `timeScaleStore` via
- * `useAnimationTimeScale`), the renderer log bridge
- * and part of `renderer/animation/` (attribution recorded at the module-set
- * assertion below, which is the enumeration) — recorded decisions, not drift. Every
- * `ModelInstance` import in this graph is TYPE-ONLY, so
- * the clone seam (and with it `SkeletonUtils`) is deliberately NOT in this
- * graph: the model machinery ships from the `assets` barrel, and this one
- * only animates an instance a caller already holds. What this test measures
- * is the import GRAPH, not what evaluating it does.
+ * `useAnimationTimeScale`), the renderer log bridge, part of
+ * `renderer/animation/`, and part of `renderer/assets/` (attribution recorded at
+ * the module-set assertion below, which is the enumeration) — recorded
+ * decisions, not drift. The `assets/` edge is `AnimatedSprite`'s: an element
+ * that takes an `AssetRef` has to resolve it, so it reaches `useAsset` and the
+ * two sprite readers at RUNTIME. What stays out is `assets/ModelInstance.ts` —
+ * the sole `SkeletonUtils` importer — so the clone seam is still deliberately
+ * NOT in this graph: the model machinery ships from the `assets` barrel, and
+ * every `ModelInstance` import here is TYPE-ONLY. What this test measures is the
+ * import GRAPH, not what evaluating it does.
  *
  * **Why the third store edge is `animation/timeScaleStore.ts` and not
  * `gameStore`.** The dilation multiplier has to live somewhere both the shell
@@ -36,7 +38,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { build, type Plugin } from 'esbuild';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,6 +64,8 @@ import type {
     PassageEndEvent,
     PassageEndReason,
     ClipEndEvent,
+    UseSpriteClipPlayerOptions,
+    AnimatedSpriteProps,
 } from '../index';
 
 /** The barrel's TYPE surface — see the audio sibling for why each is named. */
@@ -84,6 +88,11 @@ interface BarrelTypeSurface {
     readonly clipOptions: UseClipPlayerOptions;
     readonly clipHandle: ClipPlayerHandle;
     readonly clipHandlers: ClipMarkerHandlers;
+    // The sprite half's own two: the options its seam takes and the props its
+    // element takes. The marker event types above are shared with it — one
+    // scheduler, one handler surface, whichever backend is under it.
+    readonly spriteClipOptions: UseSpriteClipPlayerOptions;
+    readonly spriteProps: AnimatedSpriteProps;
     readonly markerEvent: MarkerEvent;
     readonly notify: NotifyEvent;
     readonly passageStart: PassageEvent;
@@ -94,6 +103,44 @@ interface BarrelTypeSurface {
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Every shipped `.ts`/`.tsx` under `renderer/`, absolute, excluding tests,
+ * doubles, declaration files and build output — the set a bundler could reach.
+ */
+function walkRendererSources(rendererRoot: string): readonly string[] {
+    const found: string[] = [];
+    const skipped = new Set([
+        'node_modules',
+        'dist',
+        'out',
+        '.next',
+        '__tests__',
+        '__test-support__',
+    ]);
+
+    const walk = (directory: string): void => {
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+            const path = resolve(directory, entry.name);
+            if (entry.isDirectory()) {
+                if (!skipped.has(entry.name)) {
+                    walk(path);
+                }
+                continue;
+            }
+            if (
+                /\.tsx?$/u.test(entry.name) &&
+                !entry.name.endsWith('.d.ts') &&
+                !/\.test\.tsx?$/u.test(entry.name)
+            ) {
+                found.push(path);
+            }
+        }
+    };
+
+    walk(rendererRoot);
+    return found;
+}
 
 /** Marks every bare specifier external so the bundle holds only in-repo source. */
 const externalizeBareImports: Plugin = {
@@ -142,44 +189,49 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         const typeSurface: BarrelTypeSurface | undefined = undefined;
         expect(typeSurface).toBeUndefined();
 
-        // The runtime surface is the GameCanvas root plus the two Canvas-bound
-        // animation hooks; the barrel header (index.ts) records why the wiring
-        // modules are not public.
+        // The runtime surface is the GameCanvas root, the Canvas-bound animation
+        // hooks for both halves, and the one element (AnimatedSprite) that
+        // packages the sprite half; the barrel header (index.ts) records why the
+        // wiring modules are not public.
         expect(Object.keys(r3fBarrel).sort()).toEqual([
+            'AnimatedSprite',
             'GameCanvas',
             'useAnimationTimeScale',
             'useClipPlayer',
             'useModelAnimation',
+            'useSpriteClipPlayer',
         ]);
     });
 
-    it('pulls in exactly twenty-three modules — three stores, the log bridge, the animation layer, and no clone seam', async () => {
+    it('pulls in exactly thirty-four modules — three stores, the log bridge, both animation halves, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why). The three
         // store edges are real: PerfProbe publishes into perfStore, both
         // FrameRateLimiter and useEngineFrameloop read settings.display.targetFps
-        // through the one shared selectTargetFps module, and useClipPlayer reads
-        // the dilation multiplier out of timeScaleStore through
+        // through the one shared selectTargetFps module, and both clip players
+        // read the dilation multiplier out of timeScaleStore through
         // useAnimationTimeScale (see the header for why that store and not
         // gameStore). rendererLogger is the fourth recorded edge:
         // FrameRateLimiter reports a half-wired canvas,
         // mainCanvasRegistry a duplicate role="main" pair, mixerBindingRegistry
-        // a root carrying two mixer-owning hooks, and useClipPlayer a
+        // a root carrying two mixer-owning hooks, and both clip players a
         // clip-sheet authoring fault or a throwing game handler, all through the
         // log bridge rather than console (Invariant #67).
-        // The six clip `animation/` modules are useClipPlayer's runtime layer:
-        // the player, the mesh backend and the compile half under them. They stay
-        // internal (Invariant #96) — reaching this graph is what a barrel EXPORT
-        // means, and none of them is an importable subpath. `SpriteClipBackend`
-        // is the seventh clip module in that directory and is deliberately
-        // absent: no React binding ships for the sprite half, so nothing here
-        // names it.
-        // Every ModelInstance import here is TYPE-ONLY, so no assets/
-        // module — and no SkeletonUtils — appears; the clone seam ships from the
-        // assets barrel. cameraFit is GameCanvas's own fit-policy geometry, and
-        // being pure arithmetic it adds no edge of its own — no store, no
-        // bridge, no external package.
+        // The eight clip `animation/` modules are the two players' runtime
+        // layer: the player, BOTH backends, the authored-sheet-to-run-spec
+        // bridge, and the compile half under them. They stay internal
+        // (Invariant #96) — reaching this graph is what a barrel EXPORT means,
+        // and none of them is an importable subpath.
+        // The six `assets/` modules are AnimatedSprite's: it resolves an
+        // AssetRef, so it reaches useAsset and the two sprite readers at
+        // RUNTIME. `assets/ModelInstance.ts` is deliberately absent and is the
+        // one that matters — it is the sole SkeletonUtils importer, so the clone
+        // seam stays out of this graph and keeps shipping from the assets
+        // barrel. Every ModelInstance import HERE is still type-only.
+        // cameraFit is GameCanvas's own fit-policy geometry, and being pure
+        // arithmetic it adds no edge of its own — no store, no bridge, no
+        // external package.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
             'animation/ClipBackend.ts',
@@ -187,12 +239,21 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'animation/ClipPosition.ts',
             'animation/ClipTimeline.ts',
             'animation/MeshClipBackend.ts',
+            'animation/SpriteClipBackend.ts',
             'animation/clipMarkerScheduler.ts',
+            'animation/spriteClipSpecs.ts',
             'animation/timeScaleStore.ts',
             'animation/useAnimationTimeScale.ts',
+            'assets/AssetManagerContext.ts',
+            'assets/animationSheet.ts',
+            'assets/spriteAtlas.ts',
+            'assets/useAnimationSheet.ts',
+            'assets/useAsset.ts',
+            'assets/useSpriteAtlas.ts',
             'logging/rendererLogger.ts',
             'perf/PerfProbe.tsx',
             'perf/perfStore.ts',
+            'r3f/AnimatedSprite.tsx',
             'r3f/FrameRateLimiter.tsx',
             'r3f/GameCanvas.tsx',
             'r3f/cameraFit.ts',
@@ -200,20 +261,50 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/mainCanvasRegistry.ts',
             'r3f/mixerBindingRegistry.ts',
             'r3f/selectTargetFps.ts',
+            'r3f/useClipPlayback.ts',
             'r3f/useClipPlayer.ts',
             'r3f/useEngineFrameloop.ts',
             'r3f/useModelAnimation.ts',
             'r3f/useOwnedMixer.ts',
+            'r3f/useSpriteClipPlayer.ts',
             'state/settingsStore.ts',
         ]);
 
+        // The clone seam's own module, named directly: the SkeletonUtils
+        // assertion below is what this graph must not reach, and this is the
+        // in-repo module that would carry it in.
+        expect(dirAndFile).not.toContain('assets/ModelInstance.ts');
+
         // three and the fiber runtime are externalized peers — reached, but the
         // consumer app owns the one copy. The clone seam must stay out.
+        //
+        // Why `assets/ModelInstance.ts` absent IS the clone seam absent: it is
+        // the SOLE module under `renderer/` that imports `SkeletonUtils`, so
+        // there is no second door. That word is load-bearing for the reasoning
+        // three headers now state, so it is measured rather than asserted —
+        // see `is the sole SkeletonUtils importer under renderer/` below.
         expect(importsRuntime(externals, 'three')).toBe(true);
         expect(importsRuntime(externals, '@react-three/fiber')).toBe(true);
         expect(externals.has('three/examples/jsm/utils/SkeletonUtils.js')).toBe(false);
         expect(importsRuntime(externals, '@chimera-engine/ai')).toBe(false);
         expect(importsRuntime(externals, '@chimera-engine/networking')).toBe(false);
+    });
+
+    it('is the sole SkeletonUtils importer under renderer/, so ModelInstance absent means the seam is absent', () => {
+        // The absolute three headers rest on. Without it, "ModelInstance.ts is
+        // out, therefore SkeletonUtils is out" is a non-sequitur the day a
+        // second module imports the clone helper — and that module could be one
+        // this graph DOES reach, leaving the assertion above green and the
+        // reasoning false. Sources only: a test may name it freely (and
+        // `useModelInstance.test.tsx` does, to mock it).
+        const shipped = walkRendererSources(resolve(__dirname, '..', '..', '..'));
+        const importers = shipped.filter((file) =>
+            readFileSync(file, 'utf8').includes('three/examples/jsm/utils/SkeletonUtils.js'),
+        );
+
+        expect(importers.map((file) => file.split('/').slice(-2).join('/'))).toEqual([
+            'assets/ModelInstance.ts',
+        ]);
     });
 
     it('names none of the removed engine-wiring exports in its export statements', () => {
@@ -242,6 +333,9 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             ['..', 'useModelAnimation.ts'],
             ['..', 'useOwnedMixer.ts'],
             ['..', 'useClipPlayer.ts'],
+            ['..', 'useClipPlayback.ts'],
+            ['..', 'useSpriteClipPlayer.ts'],
+            ['..', 'AnimatedSprite.tsx'],
             ['../../../animation', 'useAnimationTimeScale.ts'],
             ['../../shell/perf', 'PerfProbe.tsx'],
         ] as const) {

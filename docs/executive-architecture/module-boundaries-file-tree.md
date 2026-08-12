@@ -249,8 +249,8 @@ chimera/
 │   │   │   ├── index.ts             # Public barrel
 │   │   │   └── ChatPanel.tsx        # In-match chat UI; see §4.29
 │   │   ├── ui/                      # PUBLIC UI primitive library (Tier 1); barrel: @chimera-engine/renderer/components/ui (includes <LanguageSelector>, §4.39)
-│   │   └── r3f/                     # Reusable R3F building blocks; PUBLIC barrel: @chimera-engine/renderer/components/r3f (curated: the GameCanvas root — the only canvas root a game mounts, Invariant #127 — plus useModelAnimation, useClipPlayer, useAnimationTimeScale and the curated types)
-│   │       ├── index.ts             # Public barrel (exports GameCanvas + useModelAnimation + useClipPlayer + useAnimationTimeScale + the curated types; PerfProbe/FrameRateLimiter/useEngineFrameloop/useOwnedMixer/mainCanvasRegistry/mixerBindingRegistry are engine wiring and stay unexported)
+│   │   └── r3f/                     # Reusable R3F building blocks; PUBLIC barrel: @chimera-engine/renderer/components/r3f (curated: the GameCanvas root — the only canvas root a game mounts, Invariant #127 — plus useModelAnimation, useClipPlayer, useSpriteClipPlayer, AnimatedSprite, useAnimationTimeScale and the curated types)
+│   │       ├── index.ts             # Public barrel (exports GameCanvas + useModelAnimation + useClipPlayer + useSpriteClipPlayer + AnimatedSprite + useAnimationTimeScale + the curated types; PerfProbe/FrameRateLimiter/useEngineFrameloop/useOwnedMixer/useClipPlayback/mainCanvasRegistry/mixerBindingRegistry are engine wiring and stay unexported)
 │   │       ├── GameCanvas.tsx       # <Canvas> root; declarative `camera` prop (preset | explicit config); role="main"|"overlay" — mounts FrameRateLimiter always, PerfProbe on the main canvas only — and owns the frameloop prop from useEngineFrameloop(); see §4.22
 │   │       ├── FrameRateLimiter.tsx # Loop DRIVER for display.targetFps: one rAF chain calling advance(); registers no useFrame and never presents; see §4.22
 │   │       ├── useEngineFrameloop.ts # Canvas-FREE hook returning the frameloop prop that canvas needs ('never' capped, 'always' uncapped); see §4.22
@@ -266,14 +266,14 @@ chimera/
 │   │   ├── chatStore.ts             # see §4.29
 │   │   └── toastStore.ts            # see §4.30
 │   ├── assets/                      # Asset loading layer; PUBLIC barrel: @chimera-engine/renderer/assets (curated: hooks + provider + asset/error types; files behind it stay internal)
-│   │   ├── index.ts                 # Public barrel (exports useAsset, useAssetManager, useModelInstance, useAnimationSheet, AssetManagerProvider, error/asset/sheet types; remaining internals stay unexported)
+│   │   ├── index.ts                 # Public barrel; the exported set lives in index.ts itself, pinned by __tests__/assets-barrel-side-effects.test.ts. Everything not re-exported there stays internal
 │   │   ├── AssetManager.ts
 │   │   ├── AssetManagerProvider.tsx
 │   │   ├── AssetResolver.ts
 │   │   ├── AssetPreloader.ts
 │   │   ├── criticalAssetPreload.ts  # The §4.10 critical preload as GameShell and GameAssetSession run it — commit-phase, non-blocking, non-fatal
 │   │   ├── animationSheet.ts        # parseModel/SpriteAnimationMetadata — fail-soft readers of the animation sheet in AssetManifestEntry.metadata
-│   │   ├── spriteAtlas.ts           # parseSpriteAtlas — internal; measures atlas cells to raw flipY UVs
+│   │   ├── spriteAtlas.ts           # parseSpriteAtlas — public via the barrel; measures atlas cells to raw flipY UVs
 │   │   ├── useAnimationSheet.ts     # Model sheet, memoised on metadata IDENTITY
 │   │   └── useAsset.ts
 │   ├── game/

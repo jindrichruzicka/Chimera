@@ -28,11 +28,15 @@ import React, { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildAssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
-import type { AssetRef, GLTFModelAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import type {
+    AssetRef,
+    GLTFModelAsset,
+    SpriteSheetAsset,
+} from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AssetManager } from './AssetManager.js';
 import { AssetManagerContext } from './AssetManagerContext.js';
-import { useAnimationSheet } from './useAnimationSheet.js';
+import { useAnimationSheet, useSpriteAnimationSheet } from './useAnimationSheet.js';
 
 afterEach(() => {
     cleanup();
@@ -52,6 +56,23 @@ const SWING_SHEET = {
 const SWING_REF: AssetRef<GLTFModelAsset> = buildAssetRef<GLTFModelAsset>(
     'tactics',
     'models/warrior.glb',
+);
+
+/** The sprite twin: the same vocabulary plus the frame run only a sprite has. */
+const RUN_SPRITE_SHEET = {
+    clips: {
+        run: {
+            frames: [0, 1, 2, 3],
+            durationSeconds: 0.5,
+            loop: 'loop',
+            notifies: { step: { at: 0.5 } },
+        },
+    },
+};
+
+const RUN_SPRITE_REF: AssetRef<SpriteSheetAsset> = buildAssetRef<SpriteSheetAsset>(
+    'tactics',
+    'sprites/runner.json',
 );
 
 function createManager(getManifestMetadata: () => unknown): AssetManager {
@@ -199,5 +220,54 @@ describe('useAnimationSheet allocates once per metadata identity', () => {
         // memo saves, and the returned identity is the only observable of it.
         expect(getManifestMetadata.mock.calls.length).toBeGreaterThan(1);
         expect(result.current).toBe(first);
+    });
+});
+
+describe('useSpriteAnimationSheet reads the sprite half of the same slot', () => {
+    it('parses a sprite sheet, keeping the frame run the mesh reader has no field for', () => {
+        const manager = createManager(() => RUN_SPRITE_SHEET);
+        const { result } = renderHook(() => useSpriteAnimationSheet(RUN_SPRITE_REF), {
+            wrapper: wrapperFor(manager),
+        });
+
+        expect(result.current?.sheet.clips?.['run']?.frames).toEqual([0, 1, 2, 3]);
+        expect(result.current?.sheet.clips?.['run']?.notifies).toEqual({ step: { at: 0.5 } });
+        expect(result.current?.warnings).toEqual([]);
+    });
+
+    it('drops a sprite clip that declares no frame run, because nothing could show it', () => {
+        const { result } = renderHook(() => useSpriteAnimationSheet(RUN_SPRITE_REF), {
+            wrapper: wrapperFor(createManager(() => ({ clips: { run: { durationSeconds: 1 } } }))),
+        });
+
+        expect(result.current?.sheet.clips?.['run']).toBeUndefined();
+        expect(result.current?.warnings).toHaveLength(1);
+    });
+
+    it('returns null for a null ref without asking the manager anything', () => {
+        const getManifestMetadata = vi.fn(() => RUN_SPRITE_SHEET);
+        const { result } = renderHook(() => useSpriteAnimationSheet(null), {
+            wrapper: wrapperFor(createManager(getManifestMetadata)),
+        });
+
+        expect(result.current).toBeNull();
+        expect(getManifestMetadata).not.toHaveBeenCalled();
+    });
+
+    it('allocates once per metadata identity, like its mesh twin', () => {
+        const { result, rerender } = renderHook(() => useSpriteAnimationSheet(RUN_SPRITE_REF), {
+            wrapper: wrapperFor(createManager(() => RUN_SPRITE_SHEET)),
+        });
+        const first = result.current;
+
+        rerender();
+
+        expect(result.current).toBe(first);
+    });
+
+    it('refuses to run outside an AssetManagerContext provider', () => {
+        expect(() => renderHook(() => useSpriteAnimationSheet(RUN_SPRITE_REF))).toThrow(
+            'useAssetManager must be used inside AssetManagerContext.Provider',
+        );
     });
 });

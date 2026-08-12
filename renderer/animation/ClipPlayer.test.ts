@@ -570,6 +570,20 @@ describe('the reasons a player ends a passage', () => {
         expect(player.activeClips).toEqual([]);
     });
 
+    it('answers isDisposed false while live and true once disposed', () => {
+        // The one channel that separates the two `false`s `play` returns: a
+        // disposed player, and a clip the backend cannot play. A caller that
+        // reports the second as an authoring fault has to be able to rule out
+        // the first — see `useClipPlayback.ts`'s playback effect.
+        const { player } = openPassage();
+
+        expect(player.isDisposed).toBe(false);
+
+        player.dispose();
+
+        expect(player.isDisposed).toBe(true);
+    });
+
     it('is idempotent on dispose, and neither plays nor ticks afterwards', () => {
         const { player, calls, backend } = openPassage();
 

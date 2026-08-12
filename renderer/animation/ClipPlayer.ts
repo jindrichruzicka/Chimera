@@ -340,6 +340,20 @@ export class ClipPlayer {
     }
 
     /**
+     * Whether {@link ClipPlayer.dispose} has run.
+     *
+     * Exists because `play` answers `false` for a disposed player and `false` for
+     * a clip the backend cannot play, and a CALLER has to tell those apart: the
+     * second is an authoring fault worth reporting, the first is a player its
+     * owner already replaced. A React binding that re-allocates on one input
+     * while playing on another sees the old player for exactly one commit, and
+     * without this it reports a fault against a clip that is perfectly fine.
+     */
+    get isDisposed(): boolean {
+        return this.#disposed;
+    }
+
+    /**
      * Release every clip with `'released'` and dispose the backend. Idempotent;
      * a disposed player plays and ticks nothing.
      */

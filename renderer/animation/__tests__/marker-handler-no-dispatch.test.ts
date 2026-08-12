@@ -127,10 +127,14 @@ describe('Invariant #132 — the surface DECLARES no dispatcher', () => {
     const OWNING_MODULES = [
         'clipMarkerScheduler.ts',
         'ClipPlayer.ts',
-        // The React binding re-exports the handler type verbatim and re-wraps
-        // all five members. It declares nothing new, which is the point — and
-        // is unmeasured unless it is read.
+        // The React bindings. `useClipPlayback` is where all five members are
+        // re-wrapped — both the mesh and the sprite binding delegate to it — so
+        // it is the one that would carry a smuggled parameter. The two hooks
+        // above it re-export the handler type and declare nothing new, which is
+        // the point, and is unmeasured unless they are read.
+        '../components/r3f/useClipPlayback.ts',
         '../components/r3f/useClipPlayer.ts',
+        '../components/r3f/useSpriteClipPlayer.ts',
     ] as const;
 
     it.each(OWNING_MODULES)('names no dispatch API in %s', (moduleName) => {

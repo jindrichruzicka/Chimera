@@ -80,14 +80,17 @@ describe('@chimera-engine/renderer/assets barrel', () => {
             'MalformedModelAssetError',
             'NoActiveGameSessionError',
             'UnknownAssetManifestEntryError',
+            'parseSpriteAtlas',
             'useAnimationSheet',
             'useAsset',
             'useAssetManager',
             'useModelInstance',
+            'useSpriteAnimationSheet',
+            'useSpriteAtlas',
         ]);
     });
 
-    it('pulls in exactly eleven asset-layer modules and no store', async () => {
+    it('pulls in exactly thirteen asset-layer modules and no store', async () => {
         const { inputs, externals } = await analyzeModule('index.ts');
 
         // EXHAUSTIVE, not a denylist (see the audio sibling for why).
@@ -95,9 +98,10 @@ describe('@chimera-engine/renderer/assets barrel', () => {
         // because the exported errors live in them; `AssetLoaderRegistry.ts`
         // rides in because `AssetManager.ts` builds its default loader
         // registry from it; `animationSheet.ts` because `useAnimationSheet.ts`
-        // calls its parser. `spriteAtlas.ts` is deliberately ABSENT: the sprite
-        // half of the sheet seam has no React binding yet and the barrel names
-        // none of it. No `state/` store appears — this barrel, unlike `audio`,
+        // calls both its parsers; `spriteAtlas.ts` and `useSpriteAtlas.ts`
+        // because the sprite half of the sheet seam now ships from here — it
+        // has a React binding to serve (`AnimatedSprite`, `useSpriteClipPlayer`).
+        // No `state/` store appears — this barrel, unlike `audio`,
         // is import-inert at the store level.
         // Compared on the last TWO path segments (CWD-independent — see the
         // audio sibling).
@@ -111,9 +115,11 @@ describe('@chimera-engine/renderer/assets barrel', () => {
             'assets/ModelInstance.ts',
             'assets/animationSheet.ts',
             'assets/index.ts',
+            'assets/spriteAtlas.ts',
             'assets/useAnimationSheet.ts',
             'assets/useAsset.ts',
             'assets/useModelInstance.ts',
+            'assets/useSpriteAtlas.ts',
         ]);
 
         // three IS reached — a recorded decision, not drift: `AssetManager.ts`
@@ -137,6 +143,7 @@ describe('@chimera-engine/renderer/assets barrel', () => {
             'useModelInstance.ts',
             'ModelInstance.ts',
             'useAnimationSheet.ts',
+            'useSpriteAtlas.ts',
         ]) {
             const source = readFileSync(resolve(__dirname, '..', moduleFile), 'utf8');
             expect(source.split('\n')[0], moduleFile).toBe(`'use client';`);

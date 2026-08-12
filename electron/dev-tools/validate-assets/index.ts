@@ -1733,7 +1733,7 @@ function collectManifestConstMembers(
  * AST-scans the on-demand load scope — engine scene descriptors plus every
  * Invariant #96 game surface (`apps/<name>/{screens,components,shell,renderer}`
  * and any scene/screen-segment path) — for on-demand asset load call sites:
- * `useAsset(...)`, `useModelInstance(...)`,
+ * `useAsset(...)`, `useModelInstance(...)`, `useSpriteAtlas(...)`,
  * `<assetReceiver>.load(...)`, `<assetReceiver>.get(...)` — and resolves the first
  * argument to a ref key. String literals and `buildAssetRef(g, p)` (tier A) and
  * manifest-const member accesses (tier B, via `manifestConstMembers`) become refs;
@@ -1963,12 +1963,23 @@ function isCalleeNamed(expression: Expression, name: string): boolean {
 }
 
 /**
- * The exact hook identifiers the on-demand scan matches as direct calls. Both
- * take an `AssetRef` first argument and load on demand: `useAsset` resolves
- * any declared ref, `useModelInstance` resolves a `gltf-model` ref and clones
- * it. A hook missing from this set is a blind spot in a CI-blocking check.
+ * The exact hook identifiers the on-demand scan matches as direct calls. All
+ * three take an `AssetRef` first argument and load on demand: `useAsset`
+ * resolves any declared ref, `useModelInstance` resolves a `gltf-model` ref and
+ * clones it, and `useSpriteAtlas` resolves a `sprite-sheet` ref and measures its
+ * cells. A hook missing from this set is a blind spot in a CI-blocking check.
+ *
+ * `useSpriteAnimationSheet` is deliberately absent because it LOADS nothing —
+ * it reads the manifest metadata slot and answers `null` fail-soft for a ref the
+ * manifest has never heard of. That is the scope line this set is drawn on, and
+ * it is the whole reason: a ref reaching only that hook is genuinely unscanned,
+ * not scanned somewhere else.
  */
-const ON_DEMAND_LOAD_HOOK_NAMES: ReadonlySet<string> = new Set(['useAsset', 'useModelInstance']);
+const ON_DEMAND_LOAD_HOOK_NAMES: ReadonlySet<string> = new Set([
+    'useAsset',
+    'useModelInstance',
+    'useSpriteAtlas',
+]);
 
 /**
  * Returns a display label for an on-demand load callee, or undefined when the call

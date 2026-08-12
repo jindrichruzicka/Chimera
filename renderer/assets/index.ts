@@ -27,10 +27,12 @@
  * Which surface disposes which manager is enumerated in Invariant #21 and
  * not restated here.
  *
- * The sprite half of the sheet seam — `spriteAtlas.ts` and
- * `parseSpriteAnimationMetadata` — is internal for the same reason: there is no
- * sprite React binding yet, and an export with no caller freezes a signature
- * nothing has used.
+ * The sprite half of the sheet seam ships from here too, now that there is
+ * something to draw with (`AnimatedSprite`, `useSpriteClipPlayer`):
+ * `useSpriteAtlas` measures a loaded sheet's cells, `useSpriteAnimationSheet`
+ * reads its clip sheet, and `parseSpriteAtlas` is the non-React reader under the
+ * first. `SpriteAtlas`/`SpriteAtlasFrame` are named because `useSpriteAtlas`
+ * returns them and a game factoring that value out has to annotate it.
  *
  * Re-export only: importing this barrel mounts nothing, loads nothing, and —
  * unlike `audio` — constructs no store.
@@ -42,8 +44,10 @@ export { useAsset, type UseAssetState } from './useAsset.js';
 export { useAssetManager } from './AssetManagerContext.js';
 export { AssetManagerProvider, type AssetManagerProviderProps } from './AssetManagerProvider.js';
 export { useModelInstance, type UseModelInstanceState } from './useModelInstance.js';
-export { useAnimationSheet } from './useAnimationSheet.js';
-export type { ParsedModelAnimationSheet } from './animationSheet.js';
+export { useAnimationSheet, useSpriteAnimationSheet } from './useAnimationSheet.js';
+export type { ParsedModelAnimationSheet, ParsedSpriteAnimationSheet } from './animationSheet.js';
+export { useSpriteAtlas, type UseSpriteAtlasState } from './useSpriteAtlas.js';
+export { parseSpriteAtlas, type SpriteAtlas, type SpriteAtlasFrame } from './spriteAtlas.js';
 export { MalformedModelAssetError, type ModelInstance } from './ModelInstance.js';
 export {
     UnknownAssetManifestEntryError,

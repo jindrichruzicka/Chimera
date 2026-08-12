@@ -305,6 +305,8 @@ import {
     GameCanvas,
     useModelAnimation,
     useClipPlayer,
+    useSpriteClipPlayer,
+    AnimatedSprite,
 } from '@chimera-engine/renderer/components/r3f';
 
 // Tier 4 — the game-registration seam, called by the renderer composition root:

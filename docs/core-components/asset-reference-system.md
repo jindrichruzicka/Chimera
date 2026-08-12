@@ -321,7 +321,7 @@ export function useAsset<T extends AssetKind>(
 
 ### Example — Entity Component (engine-internal)
 
-`renderer/assets/` ships one public surface: the `@chimera-engine/renderer/assets` barrel (`./assets` in the package `exports`), which carries `useAsset`, `useAssetManager`, `useModelInstance`, `useAnimationSheet`, the `AssetManagerProvider`, and the asset/error/parsed-sheet types they take. Every individual file behind the barrel (`AssetManager.ts`, `AssetResolver.ts`, …) remains a renderer internal game surfaces must not import (Invariant #96). The example below lives **inside `renderer/`** and uses relative imports.
+`renderer/assets/` ships one public surface: the `@chimera-engine/renderer/assets` barrel (`./assets` in the package `exports`). What it carries is enumerated in one place — `renderer/assets/index.ts`, held closed by `renderer/assets/__tests__/assets-barrel-side-effects.test.ts` — rather than copied here, because a copied list is re-falsified by the next export. Every individual file behind the barrel (`AssetManager.ts`, `AssetResolver.ts`, …) remains a renderer internal game surfaces must not import (Invariant #96). The example below lives **inside `renderer/`** and uses relative imports.
 
 ```tsx
 // renderer/components/r3f/ — engine-internal example (not a shipped file)
@@ -403,6 +403,59 @@ keep asset-manager receivers named accordingly.
 
 ---
 
+## Sprite Sheet Use
+
+A `sprite-sheet` ref resolves to ONE cached `LoadedSpriteSheetAsset` — a decoded
+`Texture` plus the atlas descriptor's raw frame map. Two hooks turn that into something
+playable, both on the public `@chimera-engine/renderer/assets` barrel:
+`useSpriteAtlas` measures the descriptor against the decoded image and returns
+UV-ready cells alongside the texture, and `useSpriteAnimationSheet` reads the
+`SpriteAnimationMetadata` clip sheet authored onto the manifest entry.
+
+Most games never call either. `AnimatedSprite` (public
+`@chimera-engine/renderer/components/r3f` barrel, requires a `<Canvas>`) is the whole
+path in one element:
+
+```tsx
+import { AnimatedSprite } from '@chimera-engine/renderer/components/r3f';
+
+function Runner({ sheetRef }: { readonly sheetRef: AssetRef<SpriteSheetAsset> }) {
+    return <AnimatedSprite sheet={sheetRef} clip="run" loop="loop" scale={2} />;
+}
+```
+
+It draws nothing until the sheet's texture has decoded — a quad mounted earlier would
+be an opaque white square for the length of the load — then plays the marks the clip
+sheet authors through the same `ClipPlayer` and marker scheduler as the mesh half, and
+follows the authoritative time dilation by default. A game that owns its own mesh and
+material uses `useSpriteClipPlayer(atlas, geometry, sheet, options)` directly instead.
+
+The sharp edges here are different from the model ones:
+
+1. **A sprite is a `Mesh`, never a `THREE.Sprite`.** `Sprite` shares ONE module-level
+   geometry across every instance, and sprite playback animates by writing that
+   geometry's `uv` attribute — so one `Sprite` playing a clip would re-cut every other
+   `Sprite` in the scene. `AnimatedSprite` allocates its own `PlaneGeometry`, which is
+   also why the quad is world-oriented rather than camera-facing.
+2. **One writer per quad.** Two clip players over one geometry fight over `uv` every
+   frame. `AnimatedSprite` owns the quad it drives; a caller of `useSpriteClipPlayer`
+   pairs one geometry with one mounted hook.
+3. **The texture is shared and must not be configured per-sprite.** Writing
+   `magFilter`, `colorSpace` or `flipY` for one sprite changes every sprite cut from
+   that sheet (Invariant #21). Filtering and color space belong to how the sheet is
+   authored and loaded.
+4. **`durationSeconds` is mandatory on a sprite clip.** The backend plays cells at an
+   fps derived as `frames.length / durationSeconds`, so the authored length is what
+   every compiled mark is placed against. A clip without one is dropped with a warning
+   rather than given an invented frame rate.
+5. **Pass stable objects.** The atlas and the parsed sheet are dependencies of the
+   backend allocation, and allocating sets state — so a caller that rebuilds either
+   per render does not merely restart the clip, it drives an unbounded render loop.
+   Both hooks memoise what they parse; the failure mode is a manager or a sheet
+   accessor that builds a fresh object per call.
+
+---
+
 ## CI Validation
 
 `electron/dev-tools/validate-assets/index.ts` crawls all content JSON files, collects every field whose value matches the `AssetRef` format (`<gameId>/<path>`), and asserts that the file exists on disk.
@@ -411,7 +464,7 @@ keep asset-manager receivers named accordingly.
 
 The on-demand arm (Invariant #52) additionally AST-scans every Invariant #96 game surface —
 `apps/<name>/screens/`, `apps/<name>/components/`, `apps/<name>/shell/`, and `apps/<name>/renderer/` — plus engine scene
-descriptors for `useAsset(...)` / `useModelInstance(...)` calls and `<receiver>.load(...)` /
+descriptors for `useAsset(...)` / `useModelInstance(...)` / `useSpriteAtlas(...)` calls and `<receiver>.load(...)` /
 `<receiver>.get(...)` calls, and requires each statically-resolvable ref to be a member of the
 workspace-wide declared-ref union (a manifest entry, a scene's `requiredAssets`, content data
 JSON, or a font `src` — Invariant #52's membership rule). The `.load`/`.get` matchers are receiver-gated on `/asset/i` — a deliberate
@@ -464,4 +517,4 @@ mechanics and the `typescript` runtime dependency the AST crawl needs.
 - [Content Database](content-database-data-refs.md) — `DataRef<T>` for cross-collection data references
 - [Renderer Contexts](gameshell-ui-design-system.md) — `AssetManagerContext` injection in `GameShell`
 - [Module Boundaries](../executive-architecture/module-boundaries-file-tree.md) — `renderer/assets/` file tree
-- `@chimera-engine/renderer/assets` — the public barrel (Invariant #96) carrying `useAsset`, `useAssetManager`, `useModelInstance`, `useAnimationSheet`, `AssetManagerProvider`, and the asset/error/parsed-sheet types they take
+- `@chimera-engine/renderer/assets` — the public barrel (Invariant #96); its exported set is enumerated in `renderer/assets/index.ts` and pinned by `assets-barrel-side-effects.test.ts`

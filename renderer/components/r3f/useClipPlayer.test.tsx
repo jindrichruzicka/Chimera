@@ -922,6 +922,47 @@ describe('useClipPlayer — ownership', () => {
         expect(logs.emit.mock.calls).toEqual([]);
     });
 
+    it('reports nothing when the instance and the clip change in the SAME commit', async () => {
+        // The mesh half of the disposed-player window. Changing `instance`
+        // re-runs the allocation effect, which disposes the old player before
+        // this commit's playback effect runs; changing `clip` in the same commit
+        // is what makes that playback effect run at all, against the `player`
+        // its render captured — now disposed. `ClipPlayer.play` answers `false`
+        // for a disposed player exactly as for a clip the backend cannot play,
+        // so without `useClipPlayback`'s `isDisposed` guard this reports an
+        // authoring fault for a clip the new model does carry.
+        //
+        // The sprite binding reaches the same window through `sheet` alone, and
+        // that is where the guard was found; this is the mesh case the guard's
+        // "an allocator keyed on an input that also restarts the playback"
+        // covers, measured rather than reasoned.
+        const logs = installLogsApi();
+        let instance: ModelInstance = {
+            root: new Object3D(),
+            clips: [makeClip('attack', CLIP_SECONDS), makeClip('idle', CLIP_SECONDS)],
+        };
+        let clip = 'attack';
+        const { rerender } = renderHook(() => useClipPlayer(instance, SHEET, { clip }));
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(logs.emit.mock.calls).toEqual([]);
+
+        instance = {
+            root: new Object3D(),
+            clips: [makeClip('attack', CLIP_SECONDS), makeClip('idle', CLIP_SECONDS)],
+        };
+        clip = 'idle';
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        // Both clips exist on both models, so every report reaching this channel
+        // is spurious by construction.
+        expect(logs.emit.mock.calls).toEqual([]);
+    });
+
     it('starts the clip once per instance, not once per commit of the swap', async () => {
         // The counting channel is the sheet's one compile warning, emitted by
         // every `play`. Without the root pairing above, the commit that swaps

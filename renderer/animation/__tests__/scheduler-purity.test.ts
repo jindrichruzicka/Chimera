@@ -48,6 +48,10 @@ const PURE_MODULES = [
     'ClipPosition.ts',
     'ClipTimeline.ts',
     'clipMarkerScheduler.ts',
+    // The authored-sheet-to-run-spec bridge. Pure despite serving a backend that
+    // is not: its `SpriteClipSpec` import is TYPE-ONLY, so it reaches neither
+    // `SpriteClipBackend.ts` nor the `three` under it.
+    'spriteClipSpecs.ts',
 ] as const;
 
 describe('pathsOutside', () => {

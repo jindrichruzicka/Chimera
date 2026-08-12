@@ -24,17 +24,23 @@
  * keep the authored one stable; the manifest re-registration case in
  * `AssetManager.test.ts` is the pattern where it does not.
  *
- * Only the mesh half is published. A sprite binding would also need a component
- * to draw with, and an exported hook with no caller freezes a signature nothing
- * has used.
+ * **Both halves are published.** The two hooks differ only in which parser they
+ * name: a mesh clip is marked, a sprite clip is marked AND carries the atlas
+ * frame run that says which cells it plays. The sprite half shipped once there
+ * was something to draw with — `AnimatedSprite` and `useSpriteClipPlayer` — so
+ * neither signature is frozen without a caller.
  */
 
 import { useMemo } from 'react';
 
-import type { AssetRef, GLTFModelAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import type {
+    AssetRef,
+    GLTFModelAsset,
+    SpriteSheetAsset,
+} from '@chimera-engine/simulation/content/AssetRef.js';
 
-import { parseModelAnimationMetadata } from './animationSheet.js';
-import type { ParsedModelAnimationSheet } from './animationSheet.js';
+import { parseModelAnimationMetadata, parseSpriteAnimationMetadata } from './animationSheet.js';
+import type { ParsedModelAnimationSheet, ParsedSpriteAnimationSheet } from './animationSheet.js';
 import { useAssetManager } from './AssetManagerContext.js';
 
 /**
@@ -56,4 +62,22 @@ export function useAnimationSheet(
     // parser already answers `null` for. A second guard here would be a branch
     // no input could tell apart from the first.
     return useMemo(() => parseModelAnimationMetadata(metadata), [metadata]);
+}
+
+/**
+ * The sprite clip sheet authored onto `ref`'s manifest entry, parsed and
+ * memoised, or `null` when there is none to read.
+ *
+ * Identical to {@link useAnimationSheet} but for the one field a sprite clip
+ * adds: `frames`, the atlas frame indices the clip plays in order. A sprite clip
+ * without a usable frame run is DROPPED rather than kept, because there is
+ * nothing for it to show — that fault arrives as a warning, like every other.
+ */
+export function useSpriteAnimationSheet(
+    ref: AssetRef<SpriteSheetAsset> | null,
+): ParsedSpriteAnimationSheet | null {
+    const assetManager = useAssetManager();
+    const metadata = ref === null ? undefined : assetManager.getManifestMetadata(ref);
+
+    return useMemo(() => parseSpriteAnimationMetadata(metadata), [metadata]);
 }
