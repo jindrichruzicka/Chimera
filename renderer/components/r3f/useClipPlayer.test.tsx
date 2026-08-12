@@ -102,7 +102,21 @@ const SHEET: ClipSheetSource = {
 };
 
 /**
- * One unresolvable notify, so every `play` of `attack` against it produces
+ * A notify on `attack` alone, so any emission after a switch to `idle` names the
+ * clip the hook abandoned. `idle` carries nothing at all, which is what makes
+ * silence a claim about the outgoing clip rather than about the sheet.
+ */
+const NOTIFY_SHEET: ClipSheetSource = {
+    clips: {
+        attack: {
+            durationSeconds: CLIP_SECONDS,
+            notifies: { impact: { at: { seconds: 1 } } },
+        },
+    },
+};
+
+/**
+ * One unresolvable notify, so every start of `attack` against it produces
  * exactly one compile warning — which makes the report count a proxy for the
  * number of times the hook actually started the clip.
  */
@@ -288,7 +302,7 @@ describe('useClipPlayer — declarative playback', () => {
     it('plays nothing for a null clip and stops the clip in flight when clip goes null', async () => {
         // The log bridge is installed for the whole case: `clip: null` is a
         // documented public value, and a guard that let it reach
-        // `ClipPlayer.play` would get `false` back — the same answer an
+        // the player would get `false` back — the same answer an
         // unplayable clip gives — and report an authoring fault named "null"
         // against a model that is deliberately playing nothing.
         const logs = installLogsApi();
@@ -330,7 +344,7 @@ describe('useClipPlayer — declarative playback', () => {
         expect(logs.emit.mock.calls).toEqual([]);
     });
 
-    it('closes the outgoing clip as stopped when the clip prop changes', async () => {
+    it('closes the outgoing clip as clip-changed when the clip prop changes', async () => {
         const instance: ModelInstance = {
             root: new Object3D(),
             clips: [makeClip('attack', CLIP_SECONDS), makeClip('idle', CLIP_SECONDS)],
@@ -356,9 +370,47 @@ describe('useClipPlayer — declarative playback', () => {
             await Promise.resolve();
         });
 
+        // `'stopped'` is what a caller ASKING for a stop gets. A clip prop that
+        // moved on replaced the playback, which is a different thing to a game
+        // switching on the reason.
         expect(recorder.events).toEqual([
-            { kind: 'passage-end', name: 'swing', reason: 'stopped' },
+            { kind: 'passage-end', name: 'swing', reason: 'clip-changed' },
         ]);
+    });
+
+    it('leaves the abandoned clip firing nothing after the clip prop changes', async () => {
+        const instance: ModelInstance = {
+            root: new Object3D(),
+            clips: [makeClip('attack', CLIP_SECONDS), makeClip('idle', CLIP_SECONDS)],
+        };
+        const recorder = makeRecorder();
+        let clip = 'attack';
+        const { rerender } = renderHook(() =>
+            useClipPlayer(instance, NOTIFY_SHEET, {
+                clip,
+                loop: 'loop',
+                handlers: recorder.handlers,
+            }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.3);
+
+        clip = 'idle';
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+        recorder.events.length = 0;
+        // Past the notify authored in `attack`, and past its end. A transition
+        // that left the outgoing entry active would fire it every wrap; a
+        // transition that left the PLAYBACK live on the backend would keep
+        // moving a second action under the same model.
+        driveFrame(1.5);
+        driveFrame(1.5);
+
+        expect(recorder.events).toEqual([]);
     });
 
     it('re-plays the clip when the loop prop changes, so a once clip becomes a looping one', async () => {
@@ -392,7 +444,49 @@ describe('useClipPlayer — declarative playback', () => {
         expect(recorder.events.map((event) => event.kind)).toContain('passage-start');
     });
 
-    it('restarts the clip against a replaced sheet', async () => {
+    it('closes a mid-passage playback as clip-changed when only the loop prop moves', async () => {
+        const instance = createInstance();
+        const recorder = makeRecorder();
+        let loop: AnimationLoopMode = 'loop';
+        const { rerender } = renderHook(() =>
+            useClipPlayer(instance, SHEET, {
+                clip: 'attack',
+                loop,
+                speed: 0.5,
+                handlers: recorder.handlers,
+            }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.6);
+        expect(recorder.events).toEqual([{ kind: 'passage-start', name: 'swing' }]);
+        recorder.events.length = 0;
+
+        loop = 'once';
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        // A same-name restart is a replacement like any other: the clip name did
+        // not move, so a reason of `'stopped'` would tell a game a caller asked
+        // for a stop that nobody asked for.
+        expect(recorder.events).toEqual([
+            { kind: 'passage-end', name: 'swing', reason: 'clip-changed' },
+        ]);
+        // …and the declared speed is re-seated on the restarted playback. The
+        // passage opens at phase 0.1 of a 2 s clip. At the declared half speed
+        // one 0.3 s frame reaches phase 0.075 and does not open it; at the 1 a
+        // restart would fall back to, the same frame reaches 0.15 and does.
+        recorder.events.length = 0;
+        driveFrame(0.3);
+        expect(recorder.events).toEqual([]);
+        driveFrame(0.3);
+        expect(recorder.events).toEqual([{ kind: 'passage-start', name: 'swing' }]);
+    });
+
+    it('restarts the clip against a replaced sheet, closing the old timeline as clip-changed', async () => {
         const renamed: ClipSheetSource = {
             clips: {
                 attack: {
@@ -425,9 +519,11 @@ describe('useClipPlayer — declarative playback', () => {
         });
 
         // The sheet is a dependency of the playback effect, so a replacement
-        // closes what the old timeline had open and re-seats the playhead.
+        // closes what the old timeline had open and re-seats the playhead. The
+        // clip NAME did not change, and the reason still is not `'stopped'`:
+        // this playback was replaced, not stopped.
         expect(recorder.events).toEqual([
-            { kind: 'passage-end', name: 'swing', reason: 'stopped' },
+            { kind: 'passage-end', name: 'swing', reason: 'clip-changed' },
         ]);
         recorder.events.length = 0;
         driveFrame(0.3);
@@ -565,7 +661,7 @@ describe('useClipPlayer — speed', () => {
         });
         driveFrame(0.4);
 
-        // `ClipPlayer.play` defaults the clip-speed layer to 1, so the seat is
+        // The clip-speed layer defaults to 1 on every start, so the seat is
         // what carries the declared speed onto the clip a restart starts.
         expect(actionSecondsFor(instance, 'idle')).toBeCloseTo(0.4 * 0.5, 12);
     });
@@ -745,7 +841,9 @@ describe('useClipPlayer — ownership', () => {
         unmount();
 
         // Asserted with no await between: a release deferred to a microtask
-        // would leave this empty.
+        // would leave this empty. The playback effect registers no cleanup of
+        // its own, so the allocator's `dispose()` is the only thing that can
+        // produce this — and `'released'` is what says so.
         expect(recorder.events).toEqual([
             { kind: 'passage-end', name: 'swing', reason: 'released' },
         ]);
@@ -771,6 +869,9 @@ describe('useClipPlayer — ownership', () => {
 
         unmount();
 
+        // One close, not two, on a mount that ran its effects twice — and it is
+        // the allocator's `dispose()` making it, since the playback effect
+        // registers no cleanup that could contribute a second.
         expect(recorder.events).toEqual([
             { kind: 'passage-end', name: 'swing', reason: 'released' },
         ]);
@@ -890,7 +991,7 @@ describe('useClipPlayer — ownership', () => {
 
     it('reports nothing when the clip changes after the instance is cleared', async () => {
         // Clearing `instance` disposes the player, and a disposed `ClipPlayer`
-        // answers `play` with `false` — the same answer an unplayable clip
+        // answers a start with `false` — the same answer an unplayable clip
         // gives. So the cleanup has to clear the STATE as well as dispose the
         // object, or the next `clip` change reports an authoring fault against
         // a model that is not even mounted.
@@ -927,7 +1028,7 @@ describe('useClipPlayer — ownership', () => {
         // re-runs the allocation effect, which disposes the old player before
         // this commit's playback effect runs; changing `clip` in the same commit
         // is what makes that playback effect run at all, against the `player`
-        // its render captured — now disposed. `ClipPlayer.play` answers `false`
+        // its render captured — now disposed. The player answers `false`
         // for a disposed player exactly as for a clip the backend cannot play,
         // so without `useClipPlayback`'s `isDisposed` guard this reports an
         // authoring fault for a clip the new model does carry.
@@ -965,7 +1066,7 @@ describe('useClipPlayer — ownership', () => {
 
     it('starts the clip once per instance, not once per commit of the swap', async () => {
         // The counting channel is the sheet's one compile warning, emitted by
-        // every `play`. Without the root pairing above, the commit that swaps
+        // every start. Without the root pairing above, the commit that swaps
         // the instance allocates a player on the PREVIOUS mixer and plays on
         // it — a third start, on a mixer whose root was already uncached, that
         // the next commit throws away. Nothing else this hook exposes can see

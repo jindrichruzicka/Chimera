@@ -168,7 +168,7 @@ export function useSpriteClipPlayer(
             // observe the teardown, and disposes the backend under it — which
             // releases only what the backend allocated, never the caller's
             // geometry. The state must be cleared too, not just the object
-            // disposed: a disposed `ClipPlayer` answers `play` with `false`,
+            // disposed: a disposed `ClipPlayer` answers a start with `false`,
             // which reads as an unplayable clip, so a player left in state would
             // turn the next `clip` change into a spurious authoring fault. That
             // clears the NEXT commit; the one in flight — this effect is keyed on

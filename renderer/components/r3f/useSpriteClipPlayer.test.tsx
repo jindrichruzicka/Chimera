@@ -286,7 +286,7 @@ describe('useSpriteClipPlayer drives a run of atlas cells', () => {
         // The allocation effect's `specs` dependency, reached the only way it
         // can be: a sheet swap over an UNCHANGED atlas and geometry. Without it
         // the backend keeps the old runs while the playback effect (which does
-        // key on `sheet`) restarts — so `play` answers false and the game gets a
+        // key on `sheet`) restarts — so the start answers false and the game gets a
         // spurious authoring fault for a clip its new sheet does carry.
         const { geometry, rerender } = mountSprite({
             sheet: { clips: { run: { frames: [0, 1], durationSeconds: 1 } } },
@@ -308,23 +308,36 @@ describe('useSpriteClipPlayer drives a run of atlas cells', () => {
     });
 
     it('restarts from the first cell of the new clip when the clip changes', () => {
+        // `idle` outlasts the advance below and `run` does not, so a `clip-end`
+        // after the switch can only have come from the clip the hook abandoned.
         const sheet: SpriteAnimationMetadata = {
             clips: {
                 run: { frames: [0, 1, 2, 3], durationSeconds: 1 },
-                idle: { frames: [1], durationSeconds: 1 },
+                idle: { frames: [1], durationSeconds: 8 },
             },
         };
-        const { geometry, rerender } = mountSprite({ sheet });
+        const recorder = makeRecorder();
+        const { geometry, rerender } = mountSprite({
+            sheet,
+            options: { clip: 'run', handlers: recorder.handlers },
+        });
 
         advance(0.5);
         expect(shownCellIndex(geometry!)).toBe(2);
 
-        rerender({ options: { clip: 'idle' }, sheet });
+        rerender({ options: { clip: 'idle', handlers: recorder.handlers }, sheet });
+        recorder.events.length = 0;
+        advance(2);
 
         // `idle` is a one-cell run over atlas cell 1 — distinct from both the
         // cell `run` was showing and from cell 0, so neither a stale playback
         // nor a reset-to-zero would pass here.
         expect(shownCellIndex(geometry!)).toBe(1);
+        // And nothing of `run` is left to end. `SpriteClipBackend` holds ONE
+        // live playback and releases the previous one itself, so a player-side
+        // leak is invisible to the quad — the abandoned clip's `clip-end` is
+        // what would surface it.
+        expect(recorder.events.map((event) => event.kind)).not.toContain('clip-end');
     });
 });
 

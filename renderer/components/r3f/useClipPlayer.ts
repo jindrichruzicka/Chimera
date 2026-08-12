@@ -147,7 +147,7 @@ export function useClipPlayer(
             // Closes every open passage as 'released' before anything else can
             // observe the teardown, and disposes the backend under it. The
             // state must be cleared too, not just the object disposed: a
-            // disposed `ClipPlayer` answers `play` with `false`, which reads as
+            // disposed `ClipPlayer` answers a start with `false`, which reads as
             // an unplayable clip, so a player left in state would turn the next
             // `clip` change into a spurious authoring fault. That clears the
             // NEXT commit; the one in flight — where this cleanup has already

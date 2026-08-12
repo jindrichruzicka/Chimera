@@ -38,9 +38,9 @@
  * stays there.
  *
  * **Rule LAST-WRITER-WINS on the clip-speed layer.** `options.speed` reaches
- * that layer through two writers, one per axis and never per render. `play`
- * SEATS it on each playback it starts — `clip`, `loop` and `sheet` each restart
- * the playback, and `ClipPlayer.play` defaults the layer to 1 — and a
+ * that layer through two writers, one per axis and never per render. The
+ * playback effect SEATS it on each playback it starts — `clip`, `loop` and
+ * `sheet` each restart the playback, and the layer defaults to 1 — and a
  * `speed`-keyed effect RE-TARGETS the playback in flight, so a speed change
  * re-paces a clip rather than restarting it.
  * {@link ClipPlayerHandle.setClipSpeed} writes the same layer directly, so an
@@ -80,9 +80,12 @@ import { useAnimationTimeScale } from '../../animation/useAnimationTimeScale.js'
 /** What a caller declares. Everything but `clip` is optional. */
 export interface UseClipPlaybackOptions {
     /**
-     * The clip to play, or `null` to play nothing. Changing it stops whatever
-     * was in flight — its open passages close as `'stopped'` — and starts the
-     * new clip from its first frame.
+     * The clip to play, or `null` to play nothing.
+     *
+     * Changing it makes the new clip the only one in flight, from its first
+     * frame: whatever was playing has its open passages closed as
+     * `'clip-changed'`. `null` stops everything, and those passages close as
+     * `'stopped'` — a caller asking for nothing is asking for a stop.
      */
     readonly clip: AnimationClipName | null;
     /** Overrides the loop mode the sheet authored for `clip`. */
@@ -219,22 +222,36 @@ export function useClipPlayback(
         latest.current = { handlers, clip, player, reportFault };
     });
 
+    // The playback effect. It registers NO cleanup: a transition releases what
+    // it replaces, and the one release this hook cannot express that way —
+    // `clip → null` — is `stopAll`. The outgoing clip's name is not recoverable
+    // here: `latest.current.clip` is the INCOMING clip by the time this body
+    // runs, because the ref effect above has no dependency array and is declared
+    // first, so it has already committed this render's value.
     useEffect(() => {
-        if (player === null || clip === null) {
+        if (player === null) {
             return undefined;
         }
         // A player the SAME commit already tore down. An allocator keyed on an
         // input that also restarts the playback — the sprite binding's `sheet`
         // reaches both — runs its cleanup before this effect, so the `player`
         // captured by this render is disposed and its replacement is one commit
-        // away. `play` would answer `false` for it, indistinguishable from a
-        // clip the backend cannot play, and report an authoring fault against a
-        // clip that is fine. Skipped rather than reported: the state change is
-        // already scheduled, and this effect re-runs against the new player.
+        // away. Starting a clip on it would answer `false`, indistinguishable
+        // from a clip the backend cannot play, and report an authoring fault
+        // against a clip that is fine. Skipped rather than reported: the state
+        // change is already scheduled, and this effect re-runs against the new
+        // player.
         if (player.isDisposed) {
             return undefined;
         }
-        const started = player.play({
+        if (clip === null) {
+            // Declaring no clip is asking for a stop, and it is the one change
+            // this hook cannot express as a transition: there is no incoming
+            // clip to become the only one.
+            player.stopAll();
+            return undefined;
+        }
+        const started = player.transitionTo({
             clipName: clip,
             sheet,
             handlers: {
@@ -245,12 +262,12 @@ export function useClipPlayback(
                 onClipEnd: (event) => latest.current.handlers?.onClipEnd?.(event),
             },
             ...(loop !== undefined ? { loop } : {}),
-            // `clip`, `loop` and `sheet` each restart the playback, and
-            // `ClipPlayer.play` defaults the clip-speed layer to 1 — so a play
-            // that seats nothing drops the declared speed on every restart the
-            // hook performs for itself. `speed` is deliberately NOT a
-            // dependency of this effect: a speed change must re-target the
-            // playback, not restart it.
+            // `clip`, `loop` and `sheet` each restart the playback, and a
+            // transition defaults the clip-speed layer to 1 — so a start that
+            // seats nothing drops the declared speed on every restart the hook
+            // performs for itself. `speed` is deliberately NOT a dependency of
+            // this effect: a speed change must re-target the playback, not
+            // restart it.
             speed: speed ?? 1,
         });
         if (!started) {
@@ -259,17 +276,16 @@ export function useClipPlayback(
             // every render. It is a report channel, not an input.
             latest.current.reportFault(clip);
         }
-        return () => {
-            player.stop(clip);
-        };
+        return undefined;
     }, [player, clip, loop, sheet]);
 
     // The other writer of the clip-speed layer — see Rule LAST-WRITER-WINS.
     // Keyed on `speed` ALONE: the playback and the clip it applies to come from
     // the ref, because every input that would change them has already restarted
-    // the playback in this same commit and `play` seated this value on it. A
-    // dependency on either would make this a second write of a value that is
-    // already correct, on the one axis where nothing could tell the two apart.
+    // the playback in this same commit and the playback effect seated this value
+    // on it. A dependency on either would make this a second write of a value
+    // that is already correct, on the one axis where nothing could tell the two
+    // apart.
     useEffect(() => {
         const { clip: liveClip, player: livePlayer } = latest.current;
         if (livePlayer === null || liveClip === null) {
