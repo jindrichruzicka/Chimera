@@ -3,7 +3,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { InputAction } from '@chimera-engine/renderer/input';
+import type { BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
+import { SceneRegistry } from '@chimera-engine/simulation/scene/index.js';
 import { tacticsAssetManifest } from '../asset-manifest.js';
+import { registerTacticsScenes, TACTICS_ASSET_DEMO_SCENE_ID } from '../simulation/scenes.js';
 import { TACTICS_KEYS } from '../shell/translations/keys.js';
 import { TACTICS_INPUT_ACTIONS, TacticsGameScreenRegistry } from './index.js';
 
@@ -95,6 +98,25 @@ describe('TacticsGameScreenRegistry', () => {
         // the entry is an exotic object rather than a plain function.
         expect(typeof screen).toBe('object');
         expect(screen).not.toBeNull();
+    });
+
+    it('maps the contributed scene id to the screen key its descriptor declares', () => {
+        // ONE fact, declared TWICE: on the descriptor as `defaultScreen` (main
+        // process) and in this map (renderer). After a commit the snapshot
+        // carries the descriptor's value and it WINS the cascade, so an omission
+        // here is invisible on the committed scene — but the ENTERING scene has
+        // no snapshot field of its own, and `SceneRouter` resolves the scene
+        // preload cover's screen key through this map alone. A contributed scene
+        // missing from it resolves `'playfield'`, which this game deliberately
+        // leaves uncovered, so the declared cover is silently replaced by the
+        // engine default while the preload runs.
+        const sceneRegistry = new SceneRegistry<BaseGameSnapshot>();
+        registerTacticsScenes(sceneRegistry);
+        const descriptor = sceneRegistry.resolve(TACTICS_ASSET_DEMO_SCENE_ID);
+
+        expect(TacticsGameScreenRegistry.sceneDefaultScreens?.[TACTICS_ASSET_DEMO_SCENE_ID]).toBe(
+            descriptor.defaultScreen,
+        );
     });
 
     it('covers the asset-demo screen key with a static message cover', () => {

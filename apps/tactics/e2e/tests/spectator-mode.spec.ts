@@ -93,6 +93,12 @@ async function startHostPlusAiMatch(options: {
 
     const hostGame = new GamePage(hostWindow);
     await expect(hostGame.canvas).toBeVisible({ timeout: 20_000 });
+    // The canvas mounts BEFORE the match is revealed: the route-entry asset
+    // gate holds the app-level scrim opaque until the critical preload settles
+    // (§4.10). `toBeVisible()` ignores opacity, so a fully black window passes
+    // it — this spec builds its own launch and never imports
+    // `helpers/lobby-match`, where the same wait covers every other lobby hop.
+    await expect(hostWindow.getByTestId('screen-fade-overlay')).toHaveCSS('opacity', '0');
 
     const hostId = await hostLobby.localPlayerId();
     if (hostId === null) {
@@ -149,8 +155,15 @@ test.describe('Spectator mode', () => {
                 .poll(() => readLocalRole(spectatorWindow), { timeout: 20_000 })
                 .toBe('spectator');
 
-            // Receives a seated player's board and the read-only HUD.
+            // Receives a seated player's board and the read-only HUD. The
+            // spectator arrives through the same fade path as any other seat
+            // (GameStoreBootstrap's fadeOut → /game), so its reveal is waited on
+            // before anything is read off the revealed window.
             await expect(spectatorGame.canvas).toBeVisible({ timeout: 20_000 });
+            await expect(spectatorWindow.getByTestId('screen-fade-overlay')).toHaveCSS(
+                'opacity',
+                '0',
+            );
             await expect(spectatorWindow.getByTestId('spectator-hud')).toBeVisible();
 
             // Read-only: action controls are locked and the host-only save is withheld.

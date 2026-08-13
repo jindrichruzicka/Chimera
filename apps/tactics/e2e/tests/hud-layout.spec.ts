@@ -42,4 +42,33 @@ test.describe('HUD layout', () => {
         // And it sits at the footer's trailing edge, past the centered island.
         expect(toggle.x).toBeGreaterThan(panel.x + panel.width);
     });
+
+    /**
+     * The permanent negative control for the opt-in loading cover (§4.36).
+     *
+     * Tactics declares `loadingScreens` for its `asset-demo` screen and for
+     * nothing else, and no registry-wide `loadingScreen` — so the default is
+     * NOTHING, and the in-match playfield is where that default is visible. It
+     * lives here, on an ordinary screen in the real build, precisely so it
+     * stays a negative control: opting the playfield in would delete the only
+     * evidence that a game gets no cover it did not ask for.
+     */
+    test('an ordinary tactics screen carries no loading cover once the match is up', async ({
+        hostWindow,
+    }) => {
+        // The settled state, after the HUD is up: the route-entry gate raises
+        // its own cover during boot and drops it on every settle path, so what
+        // is measured here is that nothing was left standing and that the
+        // playfield resolves no cover of its own.
+        await hostWindow.getByTestId('tactics-hud-panel').waitFor();
+
+        // The declared-cover surface: every engine preset form renders through
+        // this one element, so its absence is the absence of a resolved cover.
+        await expect(hostWindow.getByTestId('scene-loading-preset')).toHaveCount(0);
+        // And neither cover LAYER is standing. Both are `--ch-z-loading-hud`,
+        // above every modal and toast, so one left up would outlive the wait it
+        // was raised for and swallow the rest of the match visually.
+        await expect(hostWindow.getByTestId('route-entry-loading-cover')).toHaveCount(0);
+        await expect(hostWindow.getByTestId('scene-preload-cover')).toHaveCount(0);
+    });
 });

@@ -4,85 +4,24 @@
  * Drives engine:scene_prepare through the real renderer IPC path and verifies
  * the host-side scene manager reaches engine:post-game on both windows.
  *
- * Note: scene_ready acknowledgements are sent automatically by useFadeTransition
- * in SceneRouter after the fade-out animation completes (~300 ms per renderer).
- * The test does NOT need to send them explicitly; it verifies only the stable
- * final state after the auto-mechanism has fired.
+ * The scene_ready acknowledgements are sent by useFadeTransition in each
+ * SceneRouter, so the test never sends them; SessionRuntime auto-dispatches
+ * engine:scene_commit once both players are ready. What each renderer waits for
+ * before acking is the fade-out AND the entering scene's asset preload (§4.10).
+ * engine:post-game declares no required assets, so here that preload is a
+ * synchronous no-op — which is the second thing this spec pins: a transition
+ * with nothing to load must be byte-identical to what it was before the preload
+ * arm existed.
  */
-import type { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/direct-game.fixture';
 import { GamePage } from '../pages/GamePage';
+import { installRevealTimeline, readRevealTimeline } from '../helpers/reveal-timeline';
+import { SCENE_BARRIER_POLL_MS, requestScene } from '../helpers/scene-transition';
 
-interface HostSnapshotView {
-    readonly tick: number;
-    readonly viewerId: string;
-    readonly sceneId?: string;
-    readonly sceneTransition?: {
-        readonly phase?: string;
-        readonly playersReady?: readonly string[];
-    } | null;
-}
-
-function isHostSnapshotView(value: unknown): value is HostSnapshotView {
-    if (typeof value !== 'object' || value === null) {
-        return false;
-    }
-    const record = value as Readonly<Record<string, unknown>>;
-    return typeof record['tick'] === 'number' && typeof record['viewerId'] === 'string';
-}
-
-async function readHostSnapshot(hostApp: ElectronApplication): Promise<HostSnapshotView> {
-    const snapshot = await hostApp.evaluate(() => globalThis.__e2eHooks?.lastHostSnapshot ?? null);
-    if (!isHostSnapshotView(snapshot)) {
-        throw new Error('Host E2E snapshot was not available');
-    }
-    return snapshot;
-}
-
-async function requestPostGameScene(hostApp: ElectronApplication, hostWindow: Page): Promise<void> {
-    await expect
-        .poll(async () => (await readHostSnapshot(hostApp)).sceneId ?? null, { timeout: 15_000 })
-        .toBe('engine:game');
-
-    await hostWindow.evaluate(async (toSceneId) => {
-        const gameApi = (
-            globalThis as {
-                readonly __chimera?: {
-                    readonly game?: {
-                        readonly sendAction?: (action: unknown) => void;
-                        readonly getCurrentSnapshot?: () => Promise<{
-                            readonly tick: number;
-                            readonly viewerId: string;
-                        } | null>;
-                    };
-                };
-            }
-        ).__chimera?.game;
-
-        if (gameApi === undefined || typeof gameApi.sendAction !== 'function') {
-            throw new Error('window.__chimera.game.sendAction is unavailable');
-        }
-
-        if (typeof gameApi.getCurrentSnapshot !== 'function') {
-            throw new Error('window.__chimera.game.getCurrentSnapshot is unavailable');
-        }
-
-        const snapshot = await gameApi.getCurrentSnapshot();
-        if (snapshot === null) {
-            throw new Error('Renderer current snapshot was not available');
-        }
-
-        gameApi.sendAction({
-            type: 'engine:scene_prepare',
-            playerId: snapshot.viewerId,
-            tick: snapshot.tick,
-            payload: {
-                toSceneId,
-                params: {},
-            },
-        });
-    }, 'engine:post-game');
-}
+/** The scene a running match is committed to, and the precondition for the hop. */
+const IN_MATCH_SCENE_ID = 'engine:game';
+/** The zero-`requiredAssets` scene this spec transitions to. */
+const POST_GAME_SCENE_ID = 'engine:post-game';
 
 test('host scene_prepare transitions host and client into post-game', async ({
     hostApp,
@@ -92,19 +31,42 @@ test('host scene_prepare transitions host and client into post-game', async ({
     const hostGame = new GamePage(hostWindow);
     const clientGame = new GamePage(clientWindow);
 
-    await requestPostGameScene(hostApp, hostWindow);
-    // useFadeTransition in each SceneRouter automatically sends engine:scene_ready
-    // after the fade-out animation (~300 ms).  SessionRuntime then auto-dispatches
-    // engine:scene_commit once both players are ready.  No explicit acknowledgement
-    // is required from the test.
+    await installRevealTimeline(hostWindow);
+    await requestScene(hostApp, hostWindow, POST_GAME_SCENE_ID, IN_MATCH_SCENE_ID);
     await Promise.all([
-        expect.poll(() => hostGame.activeSceneId(), { timeout: 15_000 }).toBe('engine:post-game'),
-        expect.poll(() => clientGame.activeSceneId(), { timeout: 15_000 }).toBe('engine:post-game'),
-        expect.poll(() => hostGame.activeScreenKey(), { timeout: 15_000 }).toBe('summary'),
-        expect.poll(() => clientGame.activeScreenKey(), { timeout: 15_000 }).toBe('summary'),
+        expect
+            .poll(() => hostGame.activeSceneId(), { timeout: SCENE_BARRIER_POLL_MS })
+            .toBe(POST_GAME_SCENE_ID),
+        expect
+            .poll(() => clientGame.activeSceneId(), { timeout: SCENE_BARRIER_POLL_MS })
+            .toBe(POST_GAME_SCENE_ID),
+        expect
+            .poll(() => hostGame.activeScreenKey(), { timeout: SCENE_BARRIER_POLL_MS })
+            .toBe('summary'),
+        expect
+            .poll(() => clientGame.activeScreenKey(), { timeout: SCENE_BARRIER_POLL_MS })
+            .toBe('summary'),
     ]);
     await expect(hostGame.postGameSummary).toBeVisible();
     await expect(clientGame.postGameSummary).toBeVisible();
     await expect(hostGame.transitionOverlay).toHaveCount(0);
     await expect(clientGame.transitionOverlay).toHaveCount(0);
+
+    // A run that waits on nothing reports NOTHING: `SceneRouter` withholds the
+    // prop rather than passing a value, so the overlay stays byte-identical to
+    // what it emitted before the preload arm existed. Emitting
+    // `data-preload-progress="1"` on this path would satisfy a presence check
+    // and falsify that property — 100% of an empty list is the SHAPE of a
+    // measurement, not one somebody took.
+    const timeline = await readRevealTimeline(hostWindow);
+    const context = `reveal timeline: ${JSON.stringify(timeline)}`;
+    const inFlight = timeline.samples.filter((sample) => sample.transitionOverlayMounted);
+    // Non-vacuity: the overlay really was up. Every mutation batch is sampled,
+    // so its mount and its unmount are separate states however brief the
+    // transition was.
+    expect(inFlight.length, context).toBeGreaterThan(0);
+    expect(
+        inFlight.map((sample) => [sample.preloadProgress, sample.preloadCoverText]),
+        context,
+    ).toEqual(inFlight.map(() => [null, null]));
 });

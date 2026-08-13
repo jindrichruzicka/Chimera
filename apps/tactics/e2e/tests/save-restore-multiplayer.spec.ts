@@ -375,6 +375,13 @@ test.describe('Save / restore — multiplayer', () => {
             hostWindow.getByRole('status', { name: 'Waiting for players to reconnect' }),
         ).toBeVisible();
         await expect(hostGame.canvas).toBeVisible({ timeout: NAV_TIMEOUT_MS });
+        // This is a SECOND /saves → /game hop, which `readyAndStart` (step 1)
+        // never covers: it runs its own route-entry asset gate, and the canvas
+        // mounts before the gate releases the scrim. `toBeVisible()` ignores
+        // opacity, so without this wait everything below reads a black window
+        // (§4.10). The restore's waiting overlay releases the gate on its own
+        // path, so this wait settles either way.
+        await expect(hostWindow.getByTestId('screen-fade-overlay')).toHaveCSS('opacity', '0');
 
         // 6. Client relaunches and rejoins through the real join-code UI;
         //    the persisted session ticket reclaims its original seat and the
