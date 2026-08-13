@@ -418,6 +418,76 @@ describe('useClipPlayer — declarative playback', () => {
         expect(outgoing.getEffectiveWeight()).toBeCloseTo(0.5, 6);
     });
 
+    it('blends for the length the sheet authored when the caller declares none', async () => {
+        // The only surface a game has: `renderer/animation/*` is not an
+        // importable subpath, so if a sheet-authored blend cannot be reached
+        // through this hook it cannot be reached at all.
+        const SHEET_WITH_BLEND: ClipSheetSource = {
+            clips: {
+                attack: { durationSeconds: CLIP_SECONDS },
+                idle: { durationSeconds: CLIP_SECONDS, blendInSeconds: 0.4 },
+            },
+        };
+        const instance: ModelInstance = {
+            root: new Object3D(),
+            clips: [makeClip('attack', CLIP_SECONDS), makeClip('idle', CLIP_SECONDS)],
+        };
+        let clip = 'attack';
+        const { rerender } = renderHook(() =>
+            useClipPlayer(instance, SHEET_WITH_BLEND, { clip, loop: 'loop' }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.3);
+
+        clip = 'idle';
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.2);
+
+        // Halfway through the AUTHORED fade. A hook that forwarded an explicit 0
+        // on the caller's behalf would win the resolution chain's first term and
+        // cut here, leaving the sheet field unreachable.
+        const outgoing = actionFor(instance, 'attack');
+        expect(outgoing.isRunning()).toBe(true);
+        expect(outgoing.getEffectiveWeight()).toBeCloseTo(0.5, 6);
+    });
+
+    it('lets a declared blend of zero override the sheet, back to a cut', async () => {
+        const SHEET_WITH_BLEND: ClipSheetSource = {
+            clips: {
+                attack: { durationSeconds: CLIP_SECONDS },
+                idle: { durationSeconds: CLIP_SECONDS, blendInSeconds: 0.4 },
+            },
+        };
+        const instance: ModelInstance = {
+            root: new Object3D(),
+            clips: [makeClip('attack', CLIP_SECONDS), makeClip('idle', CLIP_SECONDS)],
+        };
+        let clip = 'attack';
+        const { rerender } = renderHook(() =>
+            useClipPlayer(instance, SHEET_WITH_BLEND, { clip, loop: 'loop', blendSeconds: 0 }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.3);
+
+        clip = 'idle';
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.2);
+
+        // A declared 0 is a caller asking for a cut, and it must beat an authored
+        // blend rather than read as "declared nothing".
+        expect(actionFor(instance, 'attack').isRunning()).toBe(false);
+    });
+
     it('cuts when the caller declares no blend, at the same moment of the same change', async () => {
         const instance: ModelInstance = {
             root: new Object3D(),

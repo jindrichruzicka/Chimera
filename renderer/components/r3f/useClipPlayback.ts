@@ -294,7 +294,16 @@ export function useClipPlayback(
             // that should cause one. Keyed on it, raising the value mid-clip
             // would restart the very clip it was raised to blend away from —
             // and it would blend from that clip to itself, which is a cut.
-            blendSeconds: latest.current.blendSeconds ?? 0,
+            //
+            // Sent only when the caller declared one. The player resolves
+            // `blendSeconds ?? the sheet's blendInSeconds ?? 0`, so an explicit
+            // 0 forwarded on a caller's behalf is not a neutral default — it is
+            // a call-site override that wins over every authored length, and it
+            // would make the sheet field unreachable from the only surface a
+            // game has.
+            ...(latest.current.blendSeconds !== undefined
+                ? { blendSeconds: latest.current.blendSeconds }
+                : {}),
         });
         if (!started) {
             // Read off the ref rather than closed over, so a caller passing an

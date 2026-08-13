@@ -418,7 +418,7 @@ One consequence is worth stating because it caught prose across the repo: `GameS
 
 Feature issue: [#991](https://github.com/jindrichruzicka/Chimera/issues/991). This roadmap section is itself [#992](https://github.com/jindrichruzicka/Chimera/issues/992), refreshed against the shipped tree by [#1011](https://github.com/jindrichruzicka/Chimera/issues/1011).
 
-**Out of scope (deferred):** No cross-client clip phase anchoring. The seek formula needs an absolute beat counter (eliminated above) and a renderer-visible tick rate, which no renderer registry slot supplies; two clients therefore see a swing at phases differing by network latency and a client joining mid-swing starts the clip at zero, both cosmetic by construction, and the anchor is purely additive later; No repair of the pre-existing one-action-one-tick replay assumption. A match containing a timer-firing `engine:tick`, or an `engine:undo`/`engine:redo`, is already unreplayable, and the correct fix — replacing the derived tick expectation with the recorded one — moves `ReplayPlayer.seek()`, the playback manager's tick accounting and the renderer scrub semantics together; F82's obligation is only to add no new inflation; No sprite React binding, sprite component or atlas reader in the public barrels. The sprite backend and its atlas parser shipped as renderer internals so the clip-backend seam has two implementations, one of them not three.js-based — and MEASURED at the merged tree, that is still the whole sprite story: no game in the repo or the scaffold has any sprite content, so the surface has no adopter and none was invented for it. #1006 adopted the MESH half only. Exporting the sprite surface later is an additive minor, while narrowing a shipped frame shape would be a major under the locked `1.X.Y` scheme; No shipping realtime game. Reason (1)'s manifests did not change, so the entire simulation half — windows, the dilation countdown, `onBeat` — shipped unit-tested with no end-to-end adopter. The tactics clip-player adoption (#1006) is the RENDERER half only: tactics is `realtime: false`, so no `engine:tick` is ever dispatched on that route and the clip free-runs off the frame clock. The demonstration remains a named follow-up rather than a forced ticker; No `@chimera-engine/renderer/animation` subpath and no public barrel from F82 itself. The wider commitment this clause originally made — that the exports map, the package-exports contract, the pack probe list, Check 17's barrel regex, the games-side lint predicate and Invariant #96's count all stay unchanged inside the RC window — was **superseded by an explicit decision** to land the eighth barrel, `@chimera-engine/renderer/input` (issue #1008), before the 1.0.0 tag rather than after it; every one of those artifacts moved with it. A new subpath is additive, so the bump stays minor under the locked `1.X.Y` scheme; No `engine:set_time_scale` action and no dilation restore timer — one optional integer field plus one pure countdown, so overlapping requests are last-write-wins and nothing can stack or leak un-restored; No projection of the window registry or the restore countdown into `PlayerSnapshot`, since an open attack window reveals that an entity exists and is attacking; No reverse or ping-pong playback: nothing on the clip-backend seam models a reversing playhead, so both are refused with `RangeError` rather than clamped; No blending beyond a single crossfade verb, no state-machine or blend-tree authoring layer, and no engine-level animation-event registry slot; No trimmed or rotated atlas frames, no billboarding, and no engine-owned sprite geometry; No sub-beat gameplay windows — at the default 20 Hz the finest expressible mechanical window is one beat, and a narrower authored window is floored at one rather than zero; No `SaveFile` schema-version bump and no migration, since every new snapshot field is optional; No settings-driven animation speed, no dilation of `turnClock.deadlineMs` (which is millisecond-denominated, so slow-mo does not extend a turn timer), and no ticker catch-up or missed-tick recovery beyond an absolute next-fire target — all candidates for follow-ups.
+**Out of scope (deferred):** No cross-client clip phase anchoring. The seek formula needs an absolute beat counter (eliminated above) and a renderer-visible tick rate, which no renderer registry slot supplies; two clients therefore see a swing at phases differing by network latency and a client joining mid-swing starts the clip at zero, both cosmetic by construction, and the anchor is purely additive later; No repair of the pre-existing one-action-one-tick replay assumption. A match containing a timer-firing `engine:tick`, or an `engine:undo`/`engine:redo`, is already unreplayable, and the correct fix — replacing the derived tick expectation with the recorded one — moves `ReplayPlayer.seek()`, the playback manager's tick accounting and the renderer scrub semantics together; F82's obligation is only to add no new inflation; No sprite React binding, sprite component or atlas reader in the public barrels. That clause held only until the sprite half of the feature landed: `useSpriteClipPlayer` and `AnimatedSprite` ship from the `components/r3f` barrel, and the atlas reader from `assets`, so the export it defers already happened inside F82 itself. What remains true is the adoption half — no game in the repo or the scaffold has any sprite content, and #1006 adopted the MESH half only — and the versioning consequence, which is why the clause is worth keeping rather than deleting: an additive export is additive, while narrowing a shipped frame shape is a break — see `docs/versioning-policy.md` for what each costs under the locked `1.X.Y` scheme. F89 narrowed `UseSpriteClipPlayerOptions` for exactly that reason, before `blendSeconds` ever shipped on it; No shipping realtime game. Reason (1)'s manifests did not change, so the entire simulation half — windows, the dilation countdown, `onBeat` — shipped unit-tested with no end-to-end adopter. The tactics clip-player adoption (#1006) is the RENDERER half only: tactics is `realtime: false`, so no `engine:tick` is ever dispatched on that route and the clip free-runs off the frame clock. The demonstration remains a named follow-up rather than a forced ticker; No `@chimera-engine/renderer/animation` subpath and no public barrel from F82 itself. The wider commitment this clause originally made — that the exports map, the package-exports contract, the pack probe list, Check 17's barrel regex, the games-side lint predicate and Invariant #96's count all stay unchanged inside the RC window — was **superseded by an explicit decision** to land the eighth barrel, `@chimera-engine/renderer/input` (issue #1008), before the 1.0.0 tag rather than after it; every one of those artifacts moved with it. A new subpath is additive, so the bump stays minor under the locked `1.X.Y` scheme; No `engine:set_time_scale` action and no dilation restore timer — one optional integer field plus one pure countdown, so overlapping requests are last-write-wins and nothing can stack or leak un-restored; No projection of the window registry or the restore countdown into `PlayerSnapshot`, since an open attack window reveals that an entity exists and is attacking; No reverse or ping-pong playback: nothing on the clip-backend seam models a reversing playhead, so both are refused with `RangeError` rather than clamped; No blending beyond a single crossfade verb, no state-machine or blend-tree authoring layer, and no engine-level animation-event registry slot. The first of those three was **superseded by an explicit decision** to reach that verb before the 1.0.0 tag rather than after it: F89 makes a blend declarable at a call site and once per clip in the manifest, on the same single crossfade seam. The other two stand; No trimmed or rotated atlas frames, no billboarding, and no engine-owned sprite geometry; No sub-beat gameplay windows — at the default 20 Hz the finest expressible mechanical window is one beat, and a narrower authored window is floored at one rather than zero; No `SaveFile` schema-version bump and no migration, since every new snapshot field is optional; No settings-driven animation speed, no dilation of `turnClock.deadlineMs` (which is millisecond-denominated, so slow-mo does not extend a turn timer), and no ticker catch-up or missed-tick recovery beyond an absolute next-fire target — all candidates for follow-ups.
 
 ### F84 — Spatial Audio: Listener Pose, Distance Falloff & Moving Sources
 
@@ -627,6 +627,117 @@ the bus or master — rate is per-voice and the three-stage graph is unchanged; 
 per-play jitter. A game authors its own through the event-options resolver or its own call site,
 so nothing non-deterministic enters engine code; No new invariant number — #122 is amended, and
 the roll-call total does not move — all candidates for a follow-up.
+
+### F89 — Blended Clip Transitions, Finished-Clip Pose Retention & Authored Blend Durations
+
+Two defects sat under F82's animation layer, and the second is the reason the first was worth
+fixing properly. Changing `clip` on `useClipPlayer` was a **hard cut** — the crossfade seam
+existed, was tested, and had no caller — and a finished `'once'` clip did not even hold its last
+frame: the player stopped the action on the terminating tick, three restored the model's original
+state synchronously, and a one-shot ended in a **bind-pose flash** on the very tick its
+`clip-end` handler ran. F89 lands both, plus one authoring surface, in the order that makes each
+cheap: repair the backend seam, give the player a verb that means _become the only clip_, then
+make a blend length declarable at a call site and once per clip in the manifest.
+
+**Mark ownership: the incoming clip owns the stream from the instant the transition starts.**
+Every open passage on every outgoing clip closes synchronously inside the call, and the outgoing
+clip then fires no `notify`, no `passage-tick` and no `clip-end` however long its action keeps
+posing. The two other candidate answers — "the outgoing clip keeps emitting until its fade ends"
+and "both emit while they overlap" — are not merely undesirable, they are **unreachable without
+un-freezing the backend**: a released playback's handle answers a frozen sample by construction,
+so a player that wanted to keep stepping the outgoing clip would have to re-open a terminal
+record. Worse, an outgoing entry left active in the player emits a **fabricated `clip-end`** on
+the next tick, because the scheduler reads `ended` off that frozen sample — including for a
+`'loop'` clip, which can never end. Ownership by the incoming clip is therefore the only answer
+whose failure mode is silence rather than fiction.
+
+**The `'stopped'` → `'clip-changed'` reason flip is unconditional.** A clip prop that moved, a
+`loop` change and a `sheet` change all close the outgoing playback as `'clip-changed'`, whether
+or not a blend was asked for. Gating the reason on `blendSeconds > 0` would make a game's
+`switch (event.reason)` mean two different things depending on a duration, which is exactly the
+sort of coupling a public enum should not have. `'stopped'` keeps its own meaning: it is what a
+caller **asking** for a stop gets — `player.stop(name)`, `stopAll()`, and the hook's `clip → null`
+arm. `'released'` still means the player or its backend was disposed.
+
+**A blend length is wall-clock seconds and does not compose with the dilation multiplier.** The
+mesh backend drives its ramps from the raw delta `ClipPlayer.tick` hands `advance`, so a 0.3 s
+blend takes 0.3 s in a scene running at a quarter speed. That is a decision, not an accident:
+the multiplier paces _content_, and a transition between two states of the UI reads as broken
+when it stretches with the slow-motion it is announcing. Invariant #130's single derivation site
+is untouched, and the duration is a duration everywhere — never a multiplier.
+
+**The weight ramps are the backend's own, not three's.** `fadeIn` and `fadeOut` schedule a
+multiplier interpolant between **hardcoded** endpoints — out from 1, in from 0 — regardless of
+where the action's weight actually is, and three exposes no public way to ramp from an arbitrary
+current weight. Three visible artefacts follow: a blend interrupted a quarter of the way in snaps
+back to nearly full weight, a blend with nothing outgoing dissolves the model out of its rest
+pose, and a clip still fading out cannot be brought back without restarting it at phase 0. So a
+ramp is a `(from, to, duration)` on the record, stepped once per `advance` before the mixer
+update; this layer schedules no three fade interpolant at all, and `crossfadeTo(name, 0)` is a
+real cut rather than the degenerate ramp three produces, whose action reaches weight 0 without
+ever being deactivated.
+
+**A terminal playback is not necessarily an invisible one.** `ClipPlayback.hold()` joins `stop()`
+on the seam: both freeze the playhead and latch `ended`, and only `stop()` hands the resources
+back. That distinction is what lets a finished `'once'` clip stay on its last frame, and it is
+why the player keeps two maps rather than one — the poses a clip **end** left, and the playbacks a
+**blend** is fading out. Reading one map for both looks tidy and breaks an A→B→A alternation into
+blend, cut, blend, because a clip whose fade has ended is still listed as posing while a clip
+that ended is exactly the one a blend must not resume.
+
+**The sprite asymmetry is deliberate.** The runtime option is narrowed **off** the sprite hook
+(`UseSpriteClipPlayerOptions` omits `blendSeconds`, and `AnimatedSpriteProps` with it), while the
+authored `blendInSeconds` sits on the **shared** track sheet and a sprite clip may carry it. A
+React prop that typechecks and silently does nothing is a trap sprung at the call site; an
+authored sheet field is data the compile half already treats uniformly, one validator
+range-checks in one place, and `supportsBlending` declines at runtime. Narrowing a published type
+later would be a removal; narrowing before it ships costs nothing.
+
+**Three layers read the sheet field and each failed silently in isolation** — the `validate-assets`
+gate read a fixed set of member names, the renderer parser is an allow-list that drops unknown
+keys with no warning, and the compiled timeline had no slot. That is why they are three tasks with
+three owners, and why the gate and the parser both range-check: one is a static AST read that
+refuses what it cannot read, the other a predicate over runtime values. Neither may be dropped on
+the grounds that the other covers it. Both accept exactly `0`, which is what an animator writes to
+say _this clip cuts in_.
+
+| Task                                                                                             | Issue                                                           |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Hoist checkedFade onto the clip-backend seam and make a zero-length crossfade a real cut         | [#1082](https://github.com/jindrichruzicka/Chimera/issues/1082) |
+| Own the released-but-posing action in MeshClipBackend and remove crossfadeTo's weight artefacts  | [#1083](https://github.com/jindrichruzicka/Chimera/issues/1083) |
+| Add ClipPlayback.hold() and hold a finished 'once' clip's action instead of stopping it          | [#1084](https://github.com/jindrichruzicka/Chimera/issues/1084) |
+| Implement ClipPlayer.transitionTo and ClipPlayer.stopAll                                         | [#1085](https://github.com/jindrichruzicka/Chimera/issues/1085) |
+| Drive the playback effect through transitionTo and give clip → null its own stop                 | [#1086](https://github.com/jindrichruzicka/Chimera/issues/1086) |
+| Add blendSeconds, narrow the sprite options alias and route a positive blend through crossfadeTo | [#1087](https://github.com/jindrichruzicka/Chimera/issues/1087) |
+| Add blendInSeconds to the AnimationTrackSheet authoring vocabulary                               | [#1088](https://github.com/jindrichruzicka/Chimera/issues/1088) |
+| Read and resolve blendInSeconds through parseTrackSheet, the compiled timeline and ClipPlayer    | [#1089](https://github.com/jindrichruzicka/Chimera/issues/1089) |
+| Range-check blendInSeconds in the validate-assets animation gate                                 | [#1090](https://github.com/jindrichruzicka/Chimera/issues/1090) |
+| Sweep the falsified prose, write the F89 roadmap section and cut the changeset                   | [#1091](https://github.com/jindrichruzicka/Chimera/issues/1091) |
+| F89 feature review and merge gate                                                                | [#1092](https://github.com/jindrichruzicka/Chimera/issues/1092) |
+
+Feature issue: [#1081](https://github.com/jindrichruzicka/Chimera/issues/1081).
+
+**Out of scope (deferred):** No layered or masked blending, no blend trees or parametric blends,
+and no inertialisation — F82 defers all three and F89 adds none of them; No blend verb on
+`ClipPlayerHandle`. The declarative option covers the known cases and the handle stays at one
+method, with the consequence worth naming: a game cancels an in-flight blend by asking the
+player for another change — declaring a different clip, or none — rather than by naming
+the blend; No fade-out on `clip → null`. The seam has no fade-to-nothing
+primitive, so declaring no clip stays a hard cut with the original-state restore — documented
+rather than discovered; No dilation of the blend duration, recorded on the option rather than
+changed; No tactics adoption of a blend and no animation e2e spec. `showcase-rig-animated.glb`
+carries exactly one clip and is gated byte-for-byte by `verify:showcase-glb`, so a second clip
+means regenerating a committed fixture, re-authoring its sheet and extending the game's window
+verification; the end-to-end proof is `renderer/animation/__tests__/blended-transition.test.ts`
+driving a real `ClipPlayer` over a real `MeshClipBackend` against real `three` instead, and the
+adoption is a named follow-up; No §4.40 core-component section — the number stays reserved and
+that section is F82's outstanding follow-up, not F89's scope; No new numbered invariant. #133 and
+#134 are reserved by F85, so the posing-action release rule ships as a named module-header rule,
+the way Rule SPEED-NON-NEGATIVE and Rule STEP-BOUNDED already do; No
+`@chimera-engine/renderer/animation` subpath — both blend surfaces ride already-exported types,
+so the exports map, the package-exports contract and Invariant #96's eight-barrel count are
+unchanged; No docs-site sync, since the published docs live in a separate repository — all
+candidates for a follow-up.
 
 ---
 

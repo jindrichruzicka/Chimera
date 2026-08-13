@@ -318,13 +318,13 @@ chimera/
 │   │   ├── TokenModeI18nProvider.tsx  # Store-connected wrapper (debug token-mode + active-game bundle)
 │   │   ├── useTranslate.ts          # useTranslate() — throws outside I18nProvider (#83)
 │   │   └── useActiveGameTranslations.ts  # Resolves active game's locale/languages/override bundle
-│   ├── animation/                    # Clip-sheet compile half, marker scheduling, the clip backends and the dilation store (F82); renderer-internal — no `exports` subpath (useAnimationTimeScale ships through the components/r3f barrel)
+│   ├── animation/                    # Clip-sheet compile half, marker scheduling, the clip backends, blended transitions and the dilation store (F82, F89); renderer-internal — no `exports` subpath (useAnimationTimeScale ships through the components/r3f barrel)
 │   │   ├── ClipPosition.ts          # resolveClipPosition — fail-soft authored position → phase in [0, 1]
 │   │   ├── ClipTimeline.ts          # compileClipTimeline — sorted phase-denominated marks; warnings returned, not logged
-│   │   ├── ClipBackend.ts           # ClipBackend / ClipPlayback / PlayheadSample seam; supportsBlending narrows, and the seam owns the argument refusals rather than each backend
+│   │   ├── ClipBackend.ts           # ClipBackend / ClipPlayback / PlayheadSample seam; two terminal verbs (stop releases, hold leaves the pose), supportsBlending narrows, and the seam owns the argument refusals rather than each backend
 │   │   ├── clipMarkerScheduler.ts   # Pure playhead → notify/passage/clip-end batches; sole producer of clip-end
-│   │   ├── ClipPlayer.ts            # Speed stack, per-playback step bound, handler fan-out; getTimeScale and report injected
-│   │   ├── MeshClipBackend.ts       # ClipBackend + SupportsClipBlending over an INJECTED AnimationMixer; ended derived from state
+│   │   ├── ClipPlayer.ts            # Speed stack, per-playback step bound, handler fan-out, transitionTo/stopAll and the poses a clip end or a blend left; getTimeScale and report injected
+│   │   ├── MeshClipBackend.ts       # ClipBackend + SupportsClipBlending over an INJECTED AnimationMixer; ended derived from state, weight ramps owned here rather than three's, released-but-posing actions owned under Rule POSING-RELEASE
 │   │   ├── SpriteClipBackend.ts     # ClipBackend over an atlas run; writes uv into an injected geometry, never touches the shared Texture
 │   │   ├── timeScaleStore.ts        # One float: the authoritative dilation multiplier, derived only via timeScaleMultiplier (Invariant #130)
 │   │   └── useAnimationTimeScale.ts # Read seam onto that float; the one module here re-exported from the components/r3f barrel
