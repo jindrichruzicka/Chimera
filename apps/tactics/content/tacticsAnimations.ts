@@ -3,12 +3,16 @@
  *
  * Content-load verification of the tactics clip sheets.
  *
- * The `wave` clip's gameplay passage is authored TWICE — once as clip-relative
- * phases (`from`/`to`, what the renderer plays) and once as beat integers
- * (`beatWindow`, what the simulation would open). `compileAnimationWindows`
- * RECOMPUTES the second from the first and compares; it never derives one from
- * the other, because deriving would make the length of a gameplay window a
- * function of the host pacing knob `tickRateMs`.
+ * Each showcase clip's gameplay passage is authored TWICE — once as
+ * clip-relative phases (`from`/`to`, what the renderer plays) and once as beat
+ * integers (`beatWindow`, what the simulation would open).
+ * `compileAnimationWindows` RECOMPUTES the second from the first and compares;
+ * it never derives one from the other, because deriving would make the length of
+ * a gameplay window a function of the host pacing knob `tickRateMs`.
+ *
+ * It is called once PER CLIP, over the clip names the sheet itself declares: the
+ * verifier takes one clip name and reads that clip's passages alone, so a list
+ * written here instead would leave any clip added later reconciled by nothing.
  *
  * The call is at MODULE SCOPE, which is the whole point: a disagreement throws
  * while this module is being imported, so the game refuses to start rather than
@@ -32,10 +36,10 @@ import type { CompiledAnimationWindow } from '@chimera-engine/simulation/content
 import { DEFAULT_TICK_RATE_MS } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { ModelAnimationMetadata } from '@chimera-engine/simulation/content/animationManifest.js';
 
-import { tacticsAssetManifest, tacticsModelRefs, tacticsShowcaseClip } from '../asset-manifest.js';
+import { tacticsAssetManifest, tacticsModelRefs } from '../asset-manifest.js';
 
 /**
- * The showcase clip's sheet, read back out of the manifest rather than
+ * The showcase clips' sheet, read back out of the manifest rather than
  * re-authored here.
  *
  * Reading it back is what makes the verification below bind the sheet the game
@@ -62,13 +66,28 @@ function showcaseAnimationMetadata(): ModelAnimationMetadata {
 }
 
 /**
- * The compiled `[startBeat, endBeat]` windows the showcase clip declares.
+ * The compiled `[startBeat, endBeat]` windows each showcase clip declares, keyed
+ * by clip name.
  *
  * Evaluated at import. A `beatWindow` that disagrees with the span its phases
  * imply raises `AnimationWindowMismatchError` HERE, before any screen mounts.
+ *
+ * One entry per clip rather than one flattened list, because the verification is
+ * per clip: `compileAnimationWindows` takes a clip name and reads that clip's
+ * passages alone. A flat list of windows could not say which clip contributed
+ * which, so it could not tell a clip that was never verified from one that
+ * authored no window at all.
+ *
+ * The clip list comes from the SHEET, not from a list written here. A hand-named
+ * set would verify whatever it named on the day it was written, and a clip added
+ * to the manifest afterwards would ship with its two halves reconciled by
+ * nothing — silently, because a sheet needs no permission from this file to grow.
  */
-export const TACTICS_SHOWCASE_WINDOWS: readonly CompiledAnimationWindow[] = compileAnimationWindows(
-    showcaseAnimationMetadata(),
-    tacticsShowcaseClip.name,
-    DEFAULT_TICK_RATE_MS,
+export const TACTICS_SHOWCASE_WINDOWS: Readonly<
+    Record<string, readonly CompiledAnimationWindow[]>
+> = Object.fromEntries(
+    Object.keys(showcaseAnimationMetadata().clips ?? {}).map((clipName) => [
+        clipName,
+        compileAnimationWindows(showcaseAnimationMetadata(), clipName, DEFAULT_TICK_RATE_MS),
+    ]),
 );

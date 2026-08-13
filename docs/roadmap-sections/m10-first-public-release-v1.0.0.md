@@ -726,12 +726,12 @@ player for another change — declaring a different clip, or none — rather tha
 the blend; No fade-out on `clip → null`. The seam has no fade-to-nothing
 primitive, so declaring no clip stays a hard cut with the original-state restore — documented
 rather than discovered; No dilation of the blend duration, recorded on the option rather than
-changed; No tactics adoption of a blend and no animation e2e spec. `showcase-rig-animated.glb`
-carries exactly one clip and is gated byte-for-byte by `verify:showcase-glb`, so a second clip
-means regenerating a committed fixture, re-authoring its sheet and extending the game's window
-verification; the end-to-end proof is `renderer/animation/__tests__/blended-transition.test.ts`
-driving a real `ClipPlayer` over a real `MeshClipBackend` against real `three` instead, and the
-adoption is a named follow-up; No §4.40 core-component section — the number stays reserved and
+changed; No tactics adoption of a blend and no animation e2e spec — F89's end-to-end proof is
+`renderer/animation/__tests__/blended-transition.test.ts`, driving a real `ClipPlayer` over a real
+`MeshClipBackend` against real `three`. Adopting it meant regenerating the byte-gated
+`showcase-rig-animated.glb` around a second clip, re-authoring its sheet and extending the game's
+window verification, so it was filed as a follow-up and landed under
+[#1095](https://github.com/jindrichruzicka/Chimera/issues/1095); No §4.40 core-component section — the number stays reserved and
 that section is F82's outstanding follow-up, not F89's scope; No new numbered invariant. #133 and
 #134 are reserved by F85, so the posing-action release rule ships as a named module-header rule,
 the way Rule SPEED-NON-NEGATIVE and Rule STEP-BOUNDED already do; No

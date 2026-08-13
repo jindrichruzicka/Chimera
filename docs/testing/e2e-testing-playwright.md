@@ -70,51 +70,9 @@ apps/tactics/e2e/
 │   └── relaunch.ts              # Relaunch an Electron process with captured args/env
 ├── types/
 │   └── e2e-hooks.d.ts           # __e2eHooks ambient (references electron dist types)
-└── tests/
-    ├── boot-smoke.spec.ts
-    ├── chat.spec.ts
-    ├── component-gallery.spec.ts
-    ├── debug-inspector.spec.ts
-    ├── end-turn.spec.ts
-    ├── game-flow.spec.ts
-    ├── game-navigation.spec.ts
-    ├── game-result.spec.ts
-    ├── i18n-language-switch.spec.ts  # F71 UI-language switch: game-token re-translate + persistence + single-language inertness (ports 7791/7792)
-    ├── in-game-menu-leave.spec.ts
-    ├── input-keybindings.spec.ts
-    ├── leave-to-tactics-menu.spec.ts
-    ├── lobby-fixture.spec.ts
-    ├── lobby-password.spec.ts
-    ├── lobby.spec.ts
-    ├── main-menu-custom.spec.ts
-    ├── main-menu.spec.ts
-    ├── multiplayer-soak.spec.ts
-    ├── obfuscation.spec.ts
-    ├── pass-and-play-auto-handoff.spec.ts
-    ├── perf-hud.spec.ts
-    ├── perf-renderer-heap.spec.ts
-    ├── player-left-toast.spec.ts
-    ├── presence-toast.spec.ts
-    ├── reconnect.spec.ts
-    ├── replay-delete.spec.ts
-    ├── replay-leave-preserves-gameid.spec.ts
-    ├── replay-sequential-matches.spec.ts
-    ├── replay.spec.ts
-    ├── save-load-ui.spec.ts     # Menu-driven save/load/delete UI flow (port 7786)
-    ├── save-load.spec.ts        # IPC-driven save + relaunch menu-restore (port 7785)
-    ├── scene-transition.spec.ts
-    ├── settings-persistence.spec.ts
-    ├── settings-tabs.spec.ts
-    ├── shell-background.spec.ts
-    ├── stamina-reset-new-match.spec.ts
-    ├── tactics-3d-render.spec.ts
-    ├── tactics-ai.spec.ts
-    ├── tactics-commitment.spec.ts
-    ├── tactics-lobby-color-sync.spec.ts
-    ├── tactics-replay-initial-color.spec.ts
-    ├── tactics-stamina-turns.spec.ts
-    ├── theme.spec.ts
-    └── undo-redo.spec.ts
+└── tests/                       # The specs. Deliberately NOT enumerated here — a branch
+                                 #   that adds one has no reason to come and say so, and
+                                 #   `ls apps/tactics/e2e/tests/` is the census.
 ```
 
 > **Note — Vitest shape-check files in `apps/tactics/e2e/` root:** the root `*.test.ts` files

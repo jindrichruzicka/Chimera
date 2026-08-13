@@ -42,16 +42,46 @@ export class ModelShowcasePage {
     /** The R3F `<canvas>` the showcase renders into. */
     readonly canvas: Locator;
 
+    /**
+     * The clip toggle — the route's only control, and the only way anything here
+     * asks for a clip CHANGE. It carries the clip the screen currently declares,
+     * which is what separates "the transition never started" from "the
+     * transition started and did not blend": a bone rotation says neither.
+     */
+    readonly clipToggle: Locator;
+
     public constructor(private readonly page: Page) {
         this.root = page.getByTestId('tactics-model-showcase');
         this.status = page.getByTestId('tactics-model-showcase-status');
         this.clipStatus = page.getByTestId('tactics-model-showcase-clip-status');
         this.canvas = this.root.locator('canvas').first();
+        this.clipToggle = page.getByTestId('tactics-model-showcase-clip-toggle');
     }
 
     /** The current value of one clip-status data attribute, or `null` if unwritten. */
     public async clipAttribute(name: string): Promise<string | null> {
         return this.clipStatus.getAttribute(`data-${name}`);
+    }
+
+    /**
+     * The played instance's animated bone rotation, in radians, or `NaN` while
+     * there is no rotation to read.
+     *
+     * TWO states mean that, and both are load-bearing: the attribute is ABSENT
+     * until the first frame writes anything, and it is written EMPTY on every
+     * frame before the model has loaded or if the animated bone cannot be found
+     * by name. `Number` answers 0 for both of those, and 0 is a rotation the rig
+     * really poses — so a caller reading the raw number could not tell a bone at
+     * rest from a model that never arrived.
+     */
+    public async playedBoneRotation(): Promise<number> {
+        const raw = await this.clipAttribute('clip-played-bone-z');
+        return raw === null || raw === '' ? Number.NaN : Number(raw);
+    }
+
+    /** Ask the screen for the other clip. */
+    public async toggleClip(): Promise<void> {
+        await this.clipToggle.click();
     }
 
     public async goto(): Promise<void> {

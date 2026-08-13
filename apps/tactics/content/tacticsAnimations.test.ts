@@ -1,7 +1,7 @@
 /**
  * apps/tactics/content/tacticsAnimations.test.ts
  *
- * The content-load verification of the showcase clip's beat window.
+ * The content-load verification of the showcase clips' beat windows.
  *
  * Two independent properties, because each fails silently without the other:
  *
@@ -29,30 +29,63 @@ import {
 } from '@chimera-engine/simulation/content/animationWindows.js';
 import { DEFAULT_TICK_RATE_MS } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
-import { tacticsShowcaseClip } from '../asset-manifest.js';
+import {
+    tacticsAssetManifest,
+    tacticsModelRefs,
+    tacticsShowcaseLeanClip,
+    tacticsShowcaseWaveClip,
+} from '../asset-manifest.js';
 import { TACTICS_SHOWCASE_WINDOWS } from './tacticsAnimations.js';
 import * as tacticsContent from './tacticsContent.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-/** The shipped sheet, rebuilt from the mirror so a mutation cannot touch it. */
-function authoredSheet(beatWindow: readonly [number, number]) {
+/** Both windowed clips, each with the mirror of its own sheet. */
+const CLIPS = [
+    { name: tacticsShowcaseWaveClip.name, mirror: tacticsShowcaseWaveClip },
+    { name: tacticsShowcaseLeanClip.name, mirror: tacticsShowcaseLeanClip },
+] as const;
+
+/**
+ * The shipped sheet, rebuilt from the mirrors so a mutation cannot touch it.
+ *
+ * `beatWindows` overrides one clip's authored window by name, which is what lets
+ * a case shift EITHER clip and see the refusal land on that clip alone.
+ */
+function authoredSheet(beatWindows: Readonly<Record<string, readonly [number, number]>> = {}) {
     return {
         clips: {
-            [tacticsShowcaseClip.name]: {
-                durationSeconds: tacticsShowcaseClip.durationSeconds,
+            [tacticsShowcaseWaveClip.name]: {
+                durationSeconds: tacticsShowcaseWaveClip.durationSeconds,
                 loop: 'loop' as const,
                 notifies: {
-                    [tacticsShowcaseClip.notifyName]: {
-                        at: { seconds: tacticsShowcaseClip.notifySeconds },
+                    [tacticsShowcaseWaveClip.notifyName]: {
+                        at: { seconds: tacticsShowcaseWaveClip.notifySeconds },
                     },
                 },
                 passages: {
-                    [tacticsShowcaseClip.passageName]: {
-                        from: tacticsShowcaseClip.passageFromPhase,
-                        to: tacticsShowcaseClip.passageToPhase,
-                        beatWindow,
-                        window: tacticsShowcaseClip.windowName,
+                    [tacticsShowcaseWaveClip.passageName]: {
+                        from: tacticsShowcaseWaveClip.passageFromPhase,
+                        to: tacticsShowcaseWaveClip.passageToPhase,
+                        beatWindow:
+                            beatWindows[tacticsShowcaseWaveClip.name] ??
+                            tacticsShowcaseWaveClip.passageBeatWindow,
+                        window: tacticsShowcaseWaveClip.windowName,
+                    },
+                },
+            },
+            [tacticsShowcaseLeanClip.name]: {
+                durationSeconds: tacticsShowcaseLeanClip.durationSeconds,
+                loop: 'loop' as const,
+                blendInSeconds: tacticsShowcaseLeanClip.blendInSeconds,
+                passages: {
+                    [tacticsShowcaseLeanClip.passageName]: {
+                        from: tacticsShowcaseLeanClip.passageFromPhase,
+                        to: tacticsShowcaseLeanClip.passageToPhase,
+                        beatWindow:
+                            beatWindows[tacticsShowcaseLeanClip.name] ??
+                            tacticsShowcaseLeanClip.passageBeatWindow,
+                        window: tacticsShowcaseLeanClip.windowName,
                     },
                 },
             },
@@ -60,48 +93,88 @@ function authoredSheet(beatWindow: readonly [number, number]) {
     };
 }
 
+/** The clip sheets the SHIPPED manifest entry carries, keyed by clip name. */
+function shippedClipSheets(): Readonly<Record<string, unknown>> {
+    const entry = tacticsAssetManifest.entries.find(
+        (candidate) => candidate.ref === tacticsModelRefs.showcaseRigAnimated,
+    );
+    return (entry?.metadata as { clips?: Record<string, unknown> })?.clips ?? {};
+}
+
 describe('tactics animation content load', () => {
-    it('compiles the showcase clip to the window the manifest authored', () => {
+    it('verifies every clip the shipped sheet declares, not a subset named by hand', () => {
+        // The keys, against the sheet's own — which is what makes the case below
+        // a statement about the sheet rather than about two names this file and
+        // the module happen to share. A module that listed its clips itself would
+        // pass every value assertion here and silently stop covering the next
+        // clip the manifest grows.
+        expect(Object.keys(TACTICS_SHOWCASE_WINDOWS).sort()).toEqual(
+            Object.keys(shippedClipSheets()).sort(),
+        );
+        // …and there is more than one, so "every" is not one clip in disguise.
+        expect(Object.keys(TACTICS_SHOWCASE_WINDOWS).length).toBeGreaterThan(1);
+    });
+
+    it('compiles each showcase clip to the window its own sheet authored', () => {
         // Importing this module IS the check: the value below is what the
-        // module-scope call produced while this file was being loaded.
-        expect(TACTICS_SHOWCASE_WINDOWS).toEqual([
-            {
-                passageName: tacticsShowcaseClip.passageName,
-                window: tacticsShowcaseClip.windowName,
-                beatWindow: tacticsShowcaseClip.passageBeatWindow,
-            },
-        ]);
+        // module-scope calls produced while this file was being loaded.
+        //
+        // Keyed by clip, not flattened: a flat list of windows cannot say which
+        // clip each came from, so a module that verified one clip twice and the
+        // other never would satisfy a count and a membership check alike.
+        expect(TACTICS_SHOWCASE_WINDOWS).toEqual({
+            [tacticsShowcaseWaveClip.name]: [
+                {
+                    passageName: tacticsShowcaseWaveClip.passageName,
+                    window: tacticsShowcaseWaveClip.windowName,
+                    beatWindow: tacticsShowcaseWaveClip.passageBeatWindow,
+                },
+            ],
+            [tacticsShowcaseLeanClip.name]: [
+                {
+                    passageName: tacticsShowcaseLeanClip.passageName,
+                    window: tacticsShowcaseLeanClip.windowName,
+                    beatWindow: tacticsShowcaseLeanClip.passageBeatWindow,
+                },
+            ],
+        });
     });
 
-    it('REFUSES a beat window that disagrees with the phases it is paired with', () => {
-        // The negative control. Without it the assertion above is satisfied by a
-        // verifier that derives the window instead of checking it — which is the
-        // exact defect the whole two-unit authoring scheme exists to prevent.
-        const shifted: readonly [number, number] = [
-            tacticsShowcaseClip.passageBeatWindow[0] + 1,
-            tacticsShowcaseClip.passageBeatWindow[1],
-        ];
+    it.each(CLIPS)(
+        'REFUSES a $name beat window that disagrees with the phases it is paired with',
+        ({ name, mirror }) => {
+            // The negative control. Without it the assertion above is satisfied
+            // by a verifier that derives the window instead of checking it —
+            // which is the exact defect the whole two-unit authoring scheme
+            // exists to prevent. Once per clip, because the verification is once
+            // per clip: a second clip added to the sheet and to nothing else
+            // would leave this green if the shift only ever landed on the first.
+            const shifted: readonly [number, number] = [
+                mirror.passageBeatWindow[0] + 1,
+                mirror.passageBeatWindow[1],
+            ];
 
-        expect(() =>
-            compileAnimationWindows(
-                authoredSheet(shifted),
-                tacticsShowcaseClip.name,
-                DEFAULT_TICK_RATE_MS,
-            ),
-        ).toThrow(AnimationWindowMismatchError);
-    });
+            expect(() =>
+                compileAnimationWindows(
+                    authoredSheet({ [name]: shifted }),
+                    name,
+                    DEFAULT_TICK_RATE_MS,
+                ),
+            ).toThrow(AnimationWindowMismatchError);
+        },
+    );
 
-    it('accepts the shipped pair at the same tick rate the module passes', () => {
-        // The positive half of the same probe: the refusal above is about the
-        // MUTATION, not about the fixture builder disagreeing with the manifest.
-        expect(
-            compileAnimationWindows(
-                authoredSheet(tacticsShowcaseClip.passageBeatWindow),
-                tacticsShowcaseClip.name,
-                DEFAULT_TICK_RATE_MS,
-            ),
-        ).toEqual(TACTICS_SHOWCASE_WINDOWS);
-    });
+    it.each(CLIPS)(
+        'accepts the shipped $name pair at the same tick rate the module passes',
+        ({ name }) => {
+            // The positive half of the same probe: the refusal above is about the
+            // MUTATION, not about the fixture builder disagreeing with the
+            // manifest.
+            expect(compileAnimationWindows(authoredSheet(), name, DEFAULT_TICK_RATE_MS)).toEqual(
+                TACTICS_SHOWCASE_WINDOWS[name],
+            );
+        },
+    );
 
     it('is reachable from the content adapter the composition root imports', () => {
         // The structural half, and the reason it is three assertions rather than

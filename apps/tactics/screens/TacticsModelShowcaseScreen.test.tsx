@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
@@ -9,7 +9,11 @@ import { vi } from 'vitest';
 import { useAnimationSheet, useModelInstance } from '@chimera-engine/renderer/assets';
 import type { ModelInstance } from '@chimera-engine/renderer/assets';
 
-import { tacticsModelRefs, tacticsShowcaseClip } from '../asset-manifest.js';
+import {
+    tacticsModelRefs,
+    tacticsShowcaseLeanClip,
+    tacticsShowcaseWaveClip,
+} from '../asset-manifest.js';
 import { TacticsModelShowcaseScreen } from './TacticsModelShowcaseScreen';
 
 const gameCanvasCalls = vi.hoisted((): { readonly camera: unknown }[] => []);
@@ -43,6 +47,19 @@ vi.mock('../components/TacticsAnimatedShowcase.js', () => ({
 
 function stubInstance(uuid: string): ModelInstance {
     return { root: { uuid }, clips: [] } as unknown as ModelInstance;
+}
+
+/**
+ * What the screen handed the clip-player component on its LAST render.
+ *
+ * The last one, because the interesting renders here are the ones a click
+ * causes: an assertion against `[0]` would read the mount and call a toggle
+ * that changed nothing a pass.
+ */
+function latestAnimatedProps(): Record<string, unknown> {
+    const props = animatedShowcaseProps[animatedShowcaseProps.length - 1];
+    expect(props, 'the clip-player component never rendered').toBeDefined();
+    return props!;
 }
 
 // Mocks ONLY GameCanvas: the engine mounts PerfProbe and FrameRateLimiter
@@ -192,8 +209,64 @@ describe('TacticsModelShowcaseScreen — model resolution', () => {
             // The SHEET, not the parsed wrapper: the wrapper carries `warnings`
             // beside it and is not a clip-sheet source.
             sheet,
-            clip: tacticsShowcaseClip.name,
+            clip: tacticsShowcaseWaveClip.name,
         });
+    });
+
+    it('starts on the wave clip and swaps to lean and back as the toggle is pressed', () => {
+        // The toggle is the only thing on this route that changes a clip while
+        // one is playing, and a clip CHANGE is the whole subject of the blend
+        // e2e: the transition is what `useClipPlayer` blends, and it happens on
+        // the commit that changes this prop.
+        render(<TacticsModelShowcaseScreen />);
+
+        expect(latestAnimatedProps()['clip']).toBe(tacticsShowcaseWaveClip.name);
+
+        fireEvent.click(screen.getByTestId('tactics-model-showcase-clip-toggle'));
+        expect(latestAnimatedProps()['clip']).toBe(tacticsShowcaseLeanClip.name);
+
+        // And back, so a spec can run the transition in either direction — the
+        // way back is the CUT, because only `lean` authors a blend length.
+        fireEvent.click(screen.getByTestId('tactics-model-showcase-clip-toggle'));
+        expect(latestAnimatedProps()['clip']).toBe(tacticsShowcaseWaveClip.name);
+    });
+
+    it('changes ONLY the clip across a toggle, keeping the sheet identity', () => {
+        // `sheet` is a dependency of the playback effect, so a new object handed
+        // down on the toggling render would restart the clip instead of blending
+        // into it — with a passing blend spec and no blend on screen. Same for
+        // the two instances: a re-resolved root would remount the whole player.
+        const sheet = { clips: { wave: { durationSeconds: 1 } } };
+        useAnimationSheetMock.mockReturnValue({ sheet, warnings: [] });
+        useModelInstanceMock.mockReturnValue({
+            instance: stubInstance('uuid-shared'),
+            loading: false,
+            error: null,
+        });
+
+        render(<TacticsModelShowcaseScreen />);
+        const before = latestAnimatedProps();
+
+        fireEvent.click(screen.getByTestId('tactics-model-showcase-clip-toggle'));
+        const after = latestAnimatedProps();
+
+        expect(after['sheet']).toBe(before['sheet']);
+        expect(after['playedInstance']).toBe(before['playedInstance']);
+        expect(after['controlInstance']).toBe(before['controlInstance']);
+        expect(after['clip']).not.toBe(before['clip']);
+    });
+
+    it('publishes the declared clip on the toggle, so a spec can see the click land', () => {
+        // A blend is read off a bone rotation, which says nothing about WHY it
+        // moved. This attribute is what separates "the transition never started"
+        // from "the transition started and did not blend".
+        render(<TacticsModelShowcaseScreen />);
+
+        const toggle = screen.getByTestId('tactics-model-showcase-clip-toggle');
+        expect(toggle).toHaveAttribute('data-showcase-clip', tacticsShowcaseWaveClip.name);
+
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('data-showcase-clip', tacticsShowcaseLeanClip.name);
     });
 
     it('passes a null sheet through rather than an empty object', () => {
@@ -374,11 +447,14 @@ describe('TacticsModelShowcaseScreen', () => {
         });
     });
 
-    it('renders both status elements positioned and AFTER the GameCanvas', () => {
-        // Positioned and after the canvas, both — camera-system.md §4.22
+    it('renders the status elements and the toggle positioned and AFTER the GameCanvas', () => {
+        // Positioned and after the canvas, all three — camera-system.md §4.22
         // "Canvas-fit rules". The clip status is a second node under the same
         // rule: it is written imperatively from the frame loop, but it is still
         // a sibling of the canvas and would occlude it if it were not absolute.
+        // The toggle is a third: it is the only node here with a box, so in flow
+        // it would push the canvas down and shrink the frame every pixel
+        // assertion on this route is read from.
         render(<TacticsModelShowcaseScreen />);
 
         const screenRoot = screen.getByTestId('tactics-model-showcase');
@@ -388,10 +464,12 @@ describe('TacticsModelShowcaseScreen', () => {
             'tactics-showcase-r3f-canvas',
             'tactics-model-showcase-status',
             'tactics-model-showcase-clip-status',
+            'tactics-model-showcase-clip-toggle',
         ]);
         for (const testId of [
             'tactics-model-showcase-status',
             'tactics-model-showcase-clip-status',
+            'tactics-model-showcase-clip-toggle',
         ]) {
             expect(screen.getByTestId(testId)).toHaveStyle({ position: 'absolute' });
         }

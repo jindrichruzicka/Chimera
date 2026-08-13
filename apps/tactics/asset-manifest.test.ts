@@ -29,8 +29,8 @@
  * what it does not.
  *
  * Fourth, and for the same reason one level up: `showcase-rig-animated.glb` carries
- * a CLIP, and the manifest authors a sheet describing it. Every field of that sheet
- * — the clip's name, its length, where a mark sits inside it — is a claim about
+ * two CLIPS, and the manifest authors a sheet for each. Every field of those sheets
+ * — a clip's name, its length, where a mark sits inside it — is a claim about
  * bytes no build gate opens, so the last section reads the container and compares.
  *
  * The readers themselves are the engine's published ones
@@ -53,7 +53,8 @@ import {
     tacticsAudioRefs,
     tacticsModelRefs,
     tacticsMusicCues,
-    tacticsShowcaseClip,
+    tacticsShowcaseLeanClip,
+    tacticsShowcaseWaveClip,
 } from './asset-manifest.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -229,8 +230,8 @@ describe('Tactics asset manifest — the showcase rig container', () => {
 });
 
 /**
- * The ANIMATED showcase rig, and the agreement between the clip inside it and
- * the sheet the manifest authors for it.
+ * The ANIMATED showcase rig, and the agreement between the clips inside it and
+ * the sheets the manifest authors for them.
  *
  * A clip sheet names a clip, a length and positions inside it. Every one of
  * those is a claim about bytes no build gate opens: `validate-assets` checks the
@@ -238,7 +239,7 @@ describe('Tactics asset manifest — the showcase rig container', () => {
  * #52), and `compileAnimationWindows` checks the authored beat window against
  * the authored phases — all three read the sheet, none reads the model. A
  * re-export that
- * renamed the clip, shortened it, or dropped the animated bone leaves every gate
+ * renamed a clip, shortened it, or dropped the animated bone leaves every gate
  * green and the marker firing at the wrong instant, or not at all.
  *
  * These read that agreement off the container. The fixture is generated
@@ -246,18 +247,37 @@ describe('Tactics asset manifest — the showcase rig container', () => {
  * `pnpm verify:showcase-glb`, so what is checked here is the AUTHORING, not the
  * generator: a manifest number changed without the generator, or the reverse.
  */
-describe('Tactics asset manifest — the animated showcase clip', () => {
+describe('Tactics asset manifest — the animated showcase clips', () => {
     const animatedRig = () =>
         readGlbDocument(assetPathForRef(here, tacticsModelRefs.showcaseRigAnimated));
 
-    /** The single animation the container declares. */
-    const waveAnimation = () => {
-        const animations = animatedRig().animations ?? [];
-        expect(animations).toHaveLength(1);
-        return animations[0]!;
+    /** The animation the container declares under `name`. */
+    const animationNamed = (name: string) => {
+        const animation = (animatedRig().animations ?? []).find(
+            (candidate) => candidate.name === name,
+        );
+        expect(animation, `the animated rig declares no clip named '${name}'`).toBeDefined();
+        return animation!;
     };
 
-    it('declares the animated rig once, through modelAnimationEntry, with the sheet inline', () => {
+    /** The sheets the manifest entry carries, read back out of the entry. */
+    const clipSheets = (): Readonly<Record<string, { readonly blendInSeconds?: number }>> => {
+        const entry = tacticsAssetManifest.entries.find(
+            (candidate) => candidate.ref === tacticsModelRefs.showcaseRigAnimated,
+        );
+        return (
+            (entry?.metadata as { clips?: Record<string, { blendInSeconds?: number }> })?.clips ??
+            {}
+        );
+    };
+
+    /** Both clips, each paired with the mirror of its own sheet. */
+    const CLIPS = [
+        { name: tacticsShowcaseWaveClip.name, sheet: tacticsShowcaseWaveClip },
+        { name: tacticsShowcaseLeanClip.name, sheet: tacticsShowcaseLeanClip },
+    ] as const;
+
+    it('declares the animated rig once, through modelAnimationEntry, with both sheets inline', () => {
         const entry = tacticsAssetManifest.entries.find(
             (candidate) => candidate.ref === tacticsModelRefs.showcaseRigAnimated,
         );
@@ -269,20 +289,33 @@ describe('Tactics asset manifest — the animated showcase clip', () => {
         expect(entry?.priority).toBe('deferred');
         expect(entry?.metadata).toEqual({
             clips: {
-                [tacticsShowcaseClip.name]: {
-                    durationSeconds: tacticsShowcaseClip.durationSeconds,
+                [tacticsShowcaseWaveClip.name]: {
+                    durationSeconds: tacticsShowcaseWaveClip.durationSeconds,
                     loop: 'loop',
                     notifies: {
-                        [tacticsShowcaseClip.notifyName]: {
-                            at: { seconds: tacticsShowcaseClip.notifySeconds },
+                        [tacticsShowcaseWaveClip.notifyName]: {
+                            at: { seconds: tacticsShowcaseWaveClip.notifySeconds },
                         },
                     },
                     passages: {
-                        [tacticsShowcaseClip.passageName]: {
-                            from: tacticsShowcaseClip.passageFromPhase,
-                            to: tacticsShowcaseClip.passageToPhase,
-                            beatWindow: tacticsShowcaseClip.passageBeatWindow,
-                            window: tacticsShowcaseClip.windowName,
+                        [tacticsShowcaseWaveClip.passageName]: {
+                            from: tacticsShowcaseWaveClip.passageFromPhase,
+                            to: tacticsShowcaseWaveClip.passageToPhase,
+                            beatWindow: tacticsShowcaseWaveClip.passageBeatWindow,
+                            window: tacticsShowcaseWaveClip.windowName,
+                        },
+                    },
+                },
+                [tacticsShowcaseLeanClip.name]: {
+                    durationSeconds: tacticsShowcaseLeanClip.durationSeconds,
+                    loop: 'loop',
+                    blendInSeconds: tacticsShowcaseLeanClip.blendInSeconds,
+                    passages: {
+                        [tacticsShowcaseLeanClip.passageName]: {
+                            from: tacticsShowcaseLeanClip.passageFromPhase,
+                            to: tacticsShowcaseLeanClip.passageToPhase,
+                            beatWindow: tacticsShowcaseLeanClip.passageBeatWindow,
+                            window: tacticsShowcaseLeanClip.windowName,
                         },
                     },
                 },
@@ -290,41 +323,74 @@ describe('Tactics asset manifest — the animated showcase clip', () => {
         });
     });
 
-    it('names the clip the sheet marks and the screen plays', () => {
+    it('authors a blend length on the incoming clip alone', () => {
+        // The asymmetry is what makes the SHEET-resolved blend reachable from a
+        // game at all: the showcase screen names no `blendSeconds`, so a
+        // transition into `lean` blends for exactly as long as this field says,
+        // and the way back is a cut. A `blendInSeconds` on both clips would
+        // still blend — and would no longer say which value did it.
+        const sheets = clipSheets();
+
+        expect(sheets[tacticsShowcaseLeanClip.name]?.blendInSeconds).toBe(
+            tacticsShowcaseLeanClip.blendInSeconds,
+        );
+        expect(sheets[tacticsShowcaseWaveClip.name]?.blendInSeconds).toBeUndefined();
+    });
+
+    it.each(CLIPS)('names the $name clip the sheet marks and the screen plays', ({ name }) => {
         // `useClipPlayer` looks the clip up by name on the loaded model. A
         // rename here reports "not a playable clip" at runtime and nowhere else.
-        expect(waveAnimation().name).toBe(tacticsShowcaseClip.name);
+        expect(animationNamed(name).name).toBe(name);
     });
 
-    it("the sheet's durationSeconds is the clip's real length", () => {
-        // The length lives at `accessors[sampler.input].max[0]` — an animation
-        // sampler input is required to declare its bounds, which is the only
-        // reason a clip's length is knowable without decoding the buffer.
-        const document = animatedRig();
-        const lengths = (waveAnimation().samplers ?? []).map((sampler) => {
-            const input =
-                sampler.input === undefined ? undefined : document.accessors?.[sampler.input];
-            return input?.max?.[0];
-        });
+    it.each(CLIPS)(
+        "the $name sheet's durationSeconds is that clip's real length",
+        ({ name, sheet }) => {
+            // The length lives at `accessors[sampler.input].max[0]` — an
+            // animation sampler input is required to declare its bounds, which is
+            // the only reason a clip's length is knowable without decoding the
+            // buffer.
+            //
+            // Per clip, and that is what makes it worth asserting twice: the two
+            // are authored at different lengths, so a sheet carrying the other
+            // one's would put every phase-authored mark somewhere it was not
+            // written.
+            const document = animatedRig();
+            const lengths = (animationNamed(name).samplers ?? []).map((sampler) => {
+                const input =
+                    sampler.input === undefined ? undefined : document.accessors?.[sampler.input];
+                return input?.max?.[0];
+            });
 
-        expect(lengths).not.toHaveLength(0);
-        expect(Math.max(...lengths.map((length) => length ?? 0))).toBe(
-            tacticsShowcaseClip.durationSeconds,
-        );
-    });
+            expect(lengths).not.toHaveLength(0);
+            expect(Math.max(...lengths.map((length) => length ?? 0))).toBe(sheet.durationSeconds);
+        },
+    );
 
     it('places the authored notify strictly inside the clip', () => {
         // A notify at or past the end never fires on a 'once' clip and fires at
         // the wrap on a looping one — either way it is not where it was written.
-        expect(tacticsShowcaseClip.notifySeconds).toBeGreaterThan(0);
-        expect(tacticsShowcaseClip.notifySeconds).toBeLessThan(tacticsShowcaseClip.durationSeconds);
+        expect(tacticsShowcaseWaveClip.notifySeconds).toBeGreaterThan(0);
+        expect(tacticsShowcaseWaveClip.notifySeconds).toBeLessThan(
+            tacticsShowcaseWaveClip.durationSeconds,
+        );
     });
 
-    it('drives the bone the sheet is written against', () => {
-        // The passage is a span of a SWING. A channel targeting some other node
+    it.each(CLIPS)('opens the $name passage strictly inside its own clip', ({ sheet }) => {
+        // Authored as phases, so the bounds are the unit interval. An inverted or
+        // collapsed span is DROPPED by `compileClipTimeline` with a warning
+        // nothing in a running game reads, and a passage at phase 0 or 1 sits on
+        // the wrap.
+        expect(sheet.passageFromPhase).toBeGreaterThan(0);
+        expect(sheet.passageToPhase).toBeGreaterThan(sheet.passageFromPhase);
+        expect(sheet.passageToPhase).toBeLessThan(1);
+    });
+
+    it.each(CLIPS)('drives the bone the $name sheet is written against', ({ name }) => {
+        // Each passage is a span of a MOTION. A channel targeting some other node
         // leaves the marks firing on a bone that never moves.
         const document = animatedRig();
-        const targets = (waveAnimation().channels ?? []).map(
+        const targets = (animationNamed(name).channels ?? []).map(
             (channel) => document.nodes?.[channel.target?.node ?? -1]?.name,
         );
 

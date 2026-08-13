@@ -1,14 +1,19 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { GameCanvas, type OrthographicCameraConfig } from '@chimera-engine/renderer/components/r3f';
 import {
     useAnimationSheet,
     useModelInstance,
     type UseModelInstanceState,
 } from '@chimera-engine/renderer/assets';
+import { Button } from '@chimera-engine/renderer/components/ui';
 
-import { tacticsModelRefs, tacticsShowcaseClip } from '../asset-manifest.js';
+import {
+    tacticsModelRefs,
+    tacticsShowcaseLeanClip,
+    tacticsShowcaseWaveClip,
+} from '../asset-manifest.js';
 import { TacticsAnimatedShowcase } from '../components/TacticsAnimatedShowcase.js';
 import {
     TacticsModelShowcase,
@@ -25,8 +30,9 @@ import {
  * they would be extra geometry in every board pixel-count and board-click
  * spec's frame, so they live here instead, where they are the only thing
  * rendered and no gameplay test can see them. Nothing in the app links to this
- * route: the model-instances e2e navigates to it directly, and the packaged
- * build refuses it (`showcaseRouteGate.ts`, which owns that half).
+ * route: an e2e spec navigates to it directly (`ModelShowcasePage`, which owns
+ * the only way in), and the packaged build refuses it (`showcaseRouteGate.ts`,
+ * which owns that half).
  *
  * It is a plain screen component, NOT a `GameScreenRegistry` entry: registry
  * screens are selected by scene/snapshot and need a running match, and this
@@ -39,6 +45,16 @@ import {
  * `TacticsModelShowcase` prop-driven is what lets its own test render it with
  * no provider. Two calls, one per mounted quad: that is what gives each mount
  * its own `SkeletonUtils` clone, which is the seam's whole claim.
+ *
+ * **The clip toggle, and why the route has a control at all.** A blended
+ * transition is something a game asks for by declaring a DIFFERENT clip while
+ * one is playing, so a screen that names one clip for ever cannot produce one —
+ * the blend chain would be exercised by unit suites and by nothing that runs in
+ * a window. The toggle is that ask, made from the DOM so an e2e can drive it,
+ * and the direction is asymmetric on purpose: `lean` authors a
+ * `blendInSeconds` and `wave` does not, so the way there blends and the way back
+ * cuts. `apps/tactics/e2e/tests/animation-blend.spec.ts` is what reads the
+ * result.
  */
 export function TacticsModelShowcaseScreen(): React.ReactElement {
     const [reportA, setReportA] = useState<TacticsModelShowcaseReport | null>(null);
@@ -56,6 +72,18 @@ export function TacticsModelShowcaseScreen(): React.ReactElement {
     // canvas component would restart the clip on every render.
     const animationSheet = useAnimationSheet(tacticsModelRefs.showcaseRigAnimated);
     const clipStatusRef = useRef<HTMLDivElement | null>(null);
+    // The declared clip, and the ONE thing the toggle below changes. A clip
+    // change is what `useClipPlayer` turns into a transition, so this state is
+    // the route's only way to reach a blend at all — nothing else here can ask
+    // for one, and the blend's length comes from the incoming clip's own sheet.
+    const [clip, setClip] = useState<string>(tacticsShowcaseWaveClip.name);
+    const toggleClip = useCallback(() => {
+        setClip((current) =>
+            current === tacticsShowcaseWaveClip.name
+                ? tacticsShowcaseLeanClip.name
+                : tacticsShowcaseWaveClip.name,
+        );
+    }, []);
 
     return (
         <div data-testid="tactics-model-showcase" style={screenStyle}>
@@ -73,7 +101,7 @@ export function TacticsModelShowcaseScreen(): React.ReactElement {
                     playedInstance={animatedPlayed.instance}
                     controlInstance={animatedControl.instance}
                     sheet={animationSheet?.sheet ?? null}
-                    clip={tacticsShowcaseClip.name}
+                    clip={clip}
                     statusRef={clipStatusRef}
                 />
             </GameCanvas>
@@ -89,6 +117,21 @@ export function TacticsModelShowcaseScreen(): React.ReactElement {
                 ref={clipStatusRef}
                 style={showcaseStatusStyle}
             />
+            {/* The route's only control. It carries the declared clip as an
+                attribute because a bone rotation cannot say WHY it moved: a spec
+                reading only the bone cannot tell a transition that never started
+                from one that started and cut. */}
+            <Button
+                data-testid="tactics-model-showcase-clip-toggle"
+                data-showcase-clip={clip}
+                onClick={toggleClip}
+                size="sm"
+                style={clipToggleStyle}
+            >
+                {clip === tacticsShowcaseWaveClip.name
+                    ? `Play ${tacticsShowcaseLeanClip.name}`
+                    : `Play ${tacticsShowcaseWaveClip.name}`}
+            </Button>
         </div>
     );
 }
@@ -150,6 +193,23 @@ const SHOWCASE_CAMERA = {
 const showcaseStatusStyle: React.CSSProperties = {
     position: 'absolute',
     pointerEvents: 'none',
+};
+
+/**
+ * The clip toggle: absolutely positioned in a bottom corner, and pointer-events
+ * stay ON because a click is the whole point of it.
+ *
+ * Out of flow because it is the only node on this screen with a box: in flow it
+ * would push the canvas down, and the canvas is what every pixel assertion on
+ * this route is read from. A corner because it overlaps the canvas wherever it
+ * sits — the canvas fills the screen — and the quads are centred, so a corner is
+ * where it costs the fewest of the magenta pixels `model-instances.spec.ts`
+ * counts.
+ */
+const clipToggleStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
 };
 
 /**

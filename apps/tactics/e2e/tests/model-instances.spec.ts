@@ -10,8 +10,7 @@
  * code path ever to load the webpack async GLTFLoader chunk
  * (`__webpack_require__.e`) through the custom protocol.
  *
- * The showcase lives on its own route, reached only from here (why:
- * `TacticsModelShowcaseScreen`).
+ * The showcase lives on its own route (why: `TacticsModelShowcaseScreen`).
  *
  * The route needs NO match: it opens its own game asset session
  * (`<GameAssetSession>`), so this uses the plain single-window Electron

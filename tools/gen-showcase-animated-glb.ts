@@ -32,11 +32,18 @@
  * ## What the container holds
  *
  * The same shape as the rig beside it — a two-bone skinned quad with an unlit
- * magenta material and one embedded buffer — plus one animation, `wave`, that
- * rotates the `top` bone about Z. The rig's node names are kept (`root`, `top`,
- * `showcase-quad`) because the showcase screen finds the posed bone BY NAME, and
- * only the scene root is renamed so the two models are distinguishable in a
- * scene-graph dump.
+ * magenta material and one embedded buffer — plus TWO animations, both rotating
+ * the `top` bone about Z: `wave`, which swings it, and `lean`, which holds it
+ * over at a rotation the swing never reaches. The rig's node names are kept
+ * (`root`, `top`, `showcase-quad`) because the showcase screen finds the posed
+ * bone BY NAME, and only the scene root is renamed so the two models are
+ * distinguishable in a scene-graph dump.
+ *
+ * Two clips rather than one because a blend needs somewhere to blend TO, and
+ * their ranges are kept apart because that is what makes a blend observable: a
+ * bone rotation between the swing's peak and the lean's hold is one neither clip
+ * can produce alone, so a frame reading one is a frame in the middle of a
+ * transition. `apps/tactics/e2e/tests/animation-blend.spec.ts` is what asks.
  *
  * The pure core is unit-tested; only the file I/O lives in the VITEST-excluded
  * CLI entry (an async IIFE — tsx transforms `tools/*.ts` as CommonJS, and
@@ -49,6 +56,14 @@ export const SHOWCASE_ANIMATED_GLB_REL_PATH =
 
 /** The clip's name — the key the manifest sheet marks and `useClipPlayer` plays. */
 export const SHOWCASE_ANIMATED_CLIP_NAME = 'wave';
+
+/**
+ * The SECOND clip's name — what the showcase screen's toggle blends into.
+ *
+ * A container with one clip can be played; it cannot be blended, because a
+ * blend needs something to blend to. That is the whole reason this one exists.
+ */
+export const SHOWCASE_ANIMATED_LEAN_CLIP_NAME = 'lean';
 
 /**
  * The bone the clip rotates, and the one `TacticsModelShowcase` poses by name.
@@ -79,6 +94,40 @@ export const SHOWCASE_ANIMATED_KEY_SECONDS: readonly number[] = [0, 0.25, 0.5, 0
 export const SHOWCASE_ANIMATED_DURATION_SECONDS = 1;
 
 /**
+ * The `lean` clip's keyframe times, in seconds, and its length.
+ *
+ * Two keys, because the clip holds ONE rotation for its whole span: a hold needs
+ * a start and an end and nothing between them. Both values are exactly
+ * representable in binary floating point, for the reason the swing's are.
+ */
+export const SHOWCASE_ANIMATED_LEAN_KEY_SECONDS: readonly number[] = [0, 0.5];
+
+/** The lean clip's authored length in seconds — its last keyframe time. */
+export const SHOWCASE_ANIMATED_LEAN_DURATION_SECONDS = 0.5;
+
+/**
+ * The largest Z rotation the `wave` clip reaches, in radians (20°).
+ *
+ * Stated here as an angle because that is the unit every consumer of this
+ * fixture reads it in — the bone rotation a screen writes out, the band an e2e
+ * calls a blend. The container states it too: the swing's rotation accessor
+ * declares component-wise bounds, and `2·asin(z)` recovers this number from
+ * them, which is what keeps this constant a fact about the bytes rather than a
+ * comment beside them.
+ */
+export const SHOWCASE_ANIMATED_SWING_RADIANS = 0.3490658503988659;
+
+/**
+ * The Z rotation the `lean` clip holds, in radians (60°).
+ *
+ * Clear of the swing's peak, and that gap is the point: a bone rotation between
+ * the two is one NEITHER clip can pose on its own, so a frame reading one is a
+ * frame in the middle of a blend. A lean inside the swing's range would leave
+ * that band empty and make a blend unobservable from the bone alone.
+ */
+export const SHOWCASE_ANIMATED_LEAN_RADIANS = 1.0471975511965976;
+
+/**
  * The `top` bone's rotation at each key, as a quaternion about Z: a swing to
  * +20°, back through rest, out to −20°, and home.
  *
@@ -92,6 +141,18 @@ const SWING_QUATERNIONS: readonly (readonly [number, number, number, number])[] 
     [0, 0, 0, 1],
     [0, 0, -0.17364817766693033, 0.984807753012208],
     [0, 0, 0, 1],
+];
+
+/**
+ * The `top` bone's rotation at each of the lean clip's keys: the same +60° at
+ * both, so the clip holds one pose for its whole length.
+ *
+ * Authored literals for the determinism reason above: `0.5` is sin(30°) and
+ * `0.8660254037844387` is cos(30°) — half-angles again.
+ */
+const LEAN_QUATERNIONS: readonly (readonly [number, number, number, number])[] = [
+    [0, 0, 0.5, 0.8660254037844387],
+    [0, 0, 0.5, 0.8660254037844387],
 ];
 
 // ── Geometry ─────────────────────────────────────────────────────────────────
@@ -262,6 +323,8 @@ export function buildShowcaseAnimatedGlb(): Uint8Array {
     const inverseBindValues = INVERSE_BIND_MATRICES.flatMap((matrix) => [...matrix]);
     const keySeconds = [...SHOWCASE_ANIMATED_KEY_SECONDS];
     const rotationValues = SWING_QUATERNIONS.flatMap((quaternion) => [...quaternion]);
+    const leanKeySeconds = [...SHOWCASE_ANIMATED_LEAN_KEY_SECONDS];
+    const leanRotationValues = LEAN_QUATERNIONS.flatMap((quaternion) => [...quaternion]);
 
     const positionView = packer.push(packFloats(positionValues));
     const jointView = packer.push(packUnsignedShorts(jointValues));
@@ -271,11 +334,16 @@ export function buildShowcaseAnimatedGlb(): Uint8Array {
     const inverseBindView = packer.push(packFloats(inverseBindValues));
     const keyTimeView = packer.push(packFloats(keySeconds));
     const rotationView = packer.push(packFloats(rotationValues));
+    const leanKeyTimeView = packer.push(packFloats(leanKeySeconds));
+    const leanRotationView = packer.push(packFloats(leanRotationValues));
 
     const bin = packer.concat();
 
     const positionBounds = boundsOf(asFloat32(positionValues), 3);
     const keyTimeBounds = boundsOf(asFloat32(keySeconds), 1);
+    const rotationBounds = boundsOf(asFloat32(rotationValues), 4);
+    const leanKeyTimeBounds = boundsOf(asFloat32(leanKeySeconds), 1);
+    const leanRotationBounds = boundsOf(asFloat32(leanRotationValues), 4);
 
     const json = {
         asset: { version: '2.0', generator: 'chimera gen-showcase-animated-glb' },
@@ -305,6 +373,14 @@ export function buildShowcaseAnimatedGlb(): Uint8Array {
                 name: SHOWCASE_ANIMATED_CLIP_NAME,
                 channels: [{ sampler: 0, target: { node: 3, path: 'rotation' } }],
                 samplers: [{ input: 6, output: 7, interpolation: 'LINEAR' }],
+            },
+            // The same bone, a second curve. Both clips driving one node is what
+            // makes a blend between them visible on a single rotation, which is
+            // the only channel a DOM-observable game screen has.
+            {
+                name: SHOWCASE_ANIMATED_LEAN_CLIP_NAME,
+                channels: [{ sampler: 0, target: { node: 3, path: 'rotation' } }],
+                samplers: [{ input: 8, output: 9, interpolation: 'LINEAR' }],
             },
         ],
         materials: [
@@ -371,10 +447,36 @@ export function buildShowcaseAnimatedGlb(): Uint8Array {
                 max: keyTimeBounds.max,
             },
             {
+                // min/max on a rotation accessor is optional — the spec asks for
+                // it on POSITION and on a sampler INPUT only — and is authored
+                // here on purpose: the angles it bounds are what this clip puts
+                // on screen, and a reader outside this file (the manifest's own
+                // test, the game's blend band) can then check the pose rather
+                // than trust a comment about it.
                 bufferView: 7,
                 componentType: COMPONENT_TYPE_FLOAT,
                 count: SWING_QUATERNIONS.length,
                 type: 'VEC4',
+                min: rotationBounds.min,
+                max: rotationBounds.max,
+            },
+            {
+                bufferView: 8,
+                componentType: COMPONENT_TYPE_FLOAT,
+                count: leanKeySeconds.length,
+                type: 'SCALAR',
+                min: leanKeyTimeBounds.min,
+                max: leanKeyTimeBounds.max,
+            },
+            {
+                // Bounded for the reason above, and here they are also EQUAL:
+                // the clip holds one rotation, so its min and max are the pose.
+                bufferView: 9,
+                componentType: COMPONENT_TYPE_FLOAT,
+                count: LEAN_QUATERNIONS.length,
+                type: 'VEC4',
+                min: leanRotationBounds.min,
+                max: leanRotationBounds.max,
             },
         ],
         bufferViews: [
@@ -418,6 +520,16 @@ export function buildShowcaseAnimatedGlb(): Uint8Array {
                 buffer: 0,
                 byteOffset: rotationView.byteOffset,
                 byteLength: rotationView.bytes.length,
+            },
+            {
+                buffer: 0,
+                byteOffset: leanKeyTimeView.byteOffset,
+                byteLength: leanKeyTimeView.bytes.length,
+            },
+            {
+                buffer: 0,
+                byteOffset: leanRotationView.byteOffset,
+                byteLength: leanRotationView.bytes.length,
             },
         ],
         // No `uri`: the buffer IS this container's BIN chunk, which is what

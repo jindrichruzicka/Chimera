@@ -75,7 +75,7 @@ tags: [architecture, index, chimera, engine, overview, invariants, ipc, simulati
 | File                                                                   | Architecture Section | Contents                                                                                                                                         |
 | ---------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [testing/property-tests-soak.md](testing/property-tests-soak.md)       | §10.0–§10.1          | Vitest toolchain, file conventions, `vitest.config.mts`, package.json scripts, unit/property tests, CI pipeline, full §10.1 test scenario matrix |
-| [testing/e2e-testing-playwright.md](testing/e2e-testing-playwright.md) | §13                  | Playwright E2E, `CHIMERA_E2E=1`, fixtures, page objects, helpers, all specs, `__e2eHooks` contract, CI YAML                                      |
+| [testing/e2e-testing-playwright.md](testing/e2e-testing-playwright.md) | §13                  | Playwright E2E, `CHIMERA_E2E=1`, fixtures, page objects, helpers, `__e2eHooks` contract, CI YAML                                                 |
 
 ---
 

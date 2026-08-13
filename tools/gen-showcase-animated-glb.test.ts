@@ -25,12 +25,22 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { readGlbDocument } from '../electron/dev-tools/test-support/glbDocument.js';
+import type {
+    GltfAccessor,
+    GltfAnimation,
+    GltfDocument,
+} from '../electron/dev-tools/test-support/glbDocument.js';
 import {
     BufferPacker,
     SHOWCASE_ANIMATED_CLIP_NAME,
     SHOWCASE_ANIMATED_DURATION_SECONDS,
     SHOWCASE_ANIMATED_GLB_REL_PATH,
     SHOWCASE_ANIMATED_KEY_SECONDS,
+    SHOWCASE_ANIMATED_LEAN_CLIP_NAME,
+    SHOWCASE_ANIMATED_LEAN_DURATION_SECONDS,
+    SHOWCASE_ANIMATED_LEAN_KEY_SECONDS,
+    SHOWCASE_ANIMATED_LEAN_RADIANS,
+    SHOWCASE_ANIMATED_SWING_RADIANS,
     SHOWCASE_POSED_BONE_NAME,
     buildShowcaseAnimatedGlb,
     checkGlbDrift,
@@ -55,52 +65,127 @@ function documentOf(bytes: Uint8Array, name: string): ReturnType<typeof readGlbD
     return readGlbDocument(filePath);
 }
 
+/** The animation named `name`, which must be there for any assertion about it to mean anything. */
+function animationNamed(doc: GltfDocument, name: string): GltfAnimation {
+    const animation = (doc.animations ?? []).find((candidate) => candidate.name === name);
+    expect(animation, `the container declares no animation named '${name}'`).toBeDefined();
+    return animation!;
+}
+
+/** The accessors behind one clip's only sampler: its keyframe times and its rotations. */
+function accessorsOf(
+    doc: GltfDocument,
+    name: string,
+): { readonly input: GltfAccessor; readonly output: GltfAccessor } {
+    const sampler = animationNamed(doc, name).samplers?.[0];
+    const input = sampler?.input === undefined ? undefined : doc.accessors?.[sampler.input];
+    const output = sampler?.output === undefined ? undefined : doc.accessors?.[sampler.output];
+    expect(input, `clip '${name}' has no keyframe-time accessor`).toBeDefined();
+    expect(output, `clip '${name}' has no rotation accessor`).toBeDefined();
+    return { input: input!, output: output! };
+}
+
+/**
+ * The Z rotation a pure-Z quaternion component carries, in radians.
+ *
+ * The clips rotate about Z alone, so each key is `(0, 0, sin(θ/2), cos(θ/2))`
+ * and the component-wise accessor bound is enough to recover θ. Reading the
+ * angle rather than the raw component is what lets a case state the pose in the
+ * units every consumer of this fixture works in.
+ */
+function rotationRadians(quaternionZ: number): number {
+    return 2 * Math.asin(quaternionZ);
+}
+
 describe('buildShowcaseAnimatedGlb', () => {
     const bytes = buildShowcaseAnimatedGlb();
     const doc = documentOf(bytes, 'built.glb');
 
-    it('emits one animation, named as the sheet names it', () => {
+    it('emits the two clips the sheets name, in authoring order', () => {
         expect(doc.animations?.map((animation) => animation.name)).toEqual([
             SHOWCASE_ANIMATED_CLIP_NAME,
+            SHOWCASE_ANIMATED_LEAN_CLIP_NAME,
         ]);
     });
 
-    it('drives the posed bone rotation, so the clip is visible on the bone the screen reads', () => {
+    it('drives the posed bone rotation from BOTH clips, on the bone the screen reads', () => {
         const topIndex = doc.nodes?.findIndex((node) => node.name === SHOWCASE_POSED_BONE_NAME);
         expect(topIndex).toBeGreaterThanOrEqual(0);
 
-        const channels = doc.animations?.[0]?.channels ?? [];
-        expect(channels).toHaveLength(1);
-        expect(channels[0]?.target).toEqual({ node: topIndex, path: 'rotation' });
+        // Per animation, not over a flattened channel list: a second clip whose
+        // channel targeted the first clip's node would leave a flattened count
+        // and a flattened target set both correct.
+        for (const animation of doc.animations ?? []) {
+            expect(animation.channels).toHaveLength(1);
+            expect(animation.channels?.[0]?.target).toEqual({ node: topIndex, path: 'rotation' });
+        }
     });
 
-    it("carries the clip's authored length as the sampler input's max", () => {
-        // The one number the manifest sheet has to agree with, and the reason
-        // the reader was widened: it is only knowable by parsing the container.
-        const animation = doc.animations?.[0];
-        const durations = (animation?.samplers ?? []).map((sampler) => {
-            const input = sampler.input === undefined ? undefined : doc.accessors?.[sampler.input];
-            return input?.max?.[0];
-        });
-
-        expect(durations).toEqual([SHOWCASE_ANIMATED_DURATION_SECONDS]);
+    it("carries each clip's authored length as its own sampler input's max", () => {
+        // The numbers the manifest sheets have to agree with, and the reason the
+        // reader was widened: only knowable by parsing the container. Per clip,
+        // because the two lengths differ and one sheet agreeing with the other
+        // clip's length is the drift this catches.
+        expect(accessorsOf(doc, SHOWCASE_ANIMATED_CLIP_NAME).input.max).toEqual([
+            SHOWCASE_ANIMATED_DURATION_SECONDS,
+        ]);
+        expect(accessorsOf(doc, SHOWCASE_ANIMATED_LEAN_CLIP_NAME).input.max).toEqual([
+            SHOWCASE_ANIMATED_LEAN_DURATION_SECONDS,
+        ]);
     });
 
-    it('keys the sampler on the authored times, with a matching rotation per key', () => {
-        const animation = doc.animations?.[0];
-        const sampler = animation?.samplers?.[0];
-        expect(sampler?.interpolation).toBe('LINEAR');
+    it.each([
+        { clip: SHOWCASE_ANIMATED_CLIP_NAME, keySeconds: SHOWCASE_ANIMATED_KEY_SECONDS },
+        { clip: SHOWCASE_ANIMATED_LEAN_CLIP_NAME, keySeconds: SHOWCASE_ANIMATED_LEAN_KEY_SECONDS },
+    ])(
+        'keys the $clip sampler on its authored times, with a rotation per key',
+        ({ clip, keySeconds }) => {
+            const sampler = animationNamed(doc, clip).samplers?.[0];
+            expect(sampler?.interpolation).toBe('LINEAR');
 
-        const input = sampler?.input === undefined ? undefined : doc.accessors?.[sampler.input];
-        const output = sampler?.output === undefined ? undefined : doc.accessors?.[sampler.output];
+            const { input, output } = accessorsOf(doc, clip);
 
-        expect(input?.count).toBe(SHOWCASE_ANIMATED_KEY_SECONDS.length);
-        expect(input?.type).toBe('SCALAR');
-        expect(input?.min).toEqual([0]);
-        // A rotation channel is quaternions, one per key — a count mismatch is
-        // the shape glTF readers accept and then play as garbage.
-        expect(output?.count).toBe(SHOWCASE_ANIMATED_KEY_SECONDS.length);
-        expect(output?.type).toBe('VEC4');
+            expect(input.count).toBe(keySeconds.length);
+            expect(input.type).toBe('SCALAR');
+            expect(input.min).toEqual([0]);
+            // A rotation channel is quaternions, one per key — a count mismatch is
+            // the shape glTF readers accept and then play as garbage.
+            expect(output.count).toBe(keySeconds.length);
+            expect(output.type).toBe('VEC4');
+        },
+    );
+
+    it('declares the rotation extremes each clip poses, so they are readable from the container', () => {
+        // The rotation accessors carry min/max — optional for anything but
+        // POSITION and a sampler input — because the angles they bound are the
+        // only statement of what these clips put on screen that a reader outside
+        // this file can check. Without them the fixture's poses are prose.
+        const swing = accessorsOf(doc, SHOWCASE_ANIMATED_CLIP_NAME).output;
+        expect(rotationRadians(swing.max?.[2] ?? 0)).toBeCloseTo(
+            SHOWCASE_ANIMATED_SWING_RADIANS,
+            6,
+        );
+        expect(rotationRadians(swing.min?.[2] ?? 0)).toBeCloseTo(
+            -SHOWCASE_ANIMATED_SWING_RADIANS,
+            6,
+        );
+
+        const lean = accessorsOf(doc, SHOWCASE_ANIMATED_LEAN_CLIP_NAME).output;
+        expect(rotationRadians(lean.max?.[2] ?? 0)).toBeCloseTo(SHOWCASE_ANIMATED_LEAN_RADIANS, 6);
+        // A hold, not a sweep: both bounds are the one rotation it poses, which
+        // is what makes the settled value after a blend an exact number.
+        expect(lean.min).toEqual(lean.max);
+    });
+
+    it('holds the lean clip clear of every rotation the swing reaches', () => {
+        // The property the game's blend band rests on: a bone rotation above the
+        // swing's peak and below the lean's hold is one NEITHER clip can pose
+        // alone, so observing it is observing a blend. Two clips whose ranges
+        // overlapped would leave that band empty with everything else green.
+        const swing = accessorsOf(doc, SHOWCASE_ANIMATED_CLIP_NAME).output;
+        const lean = accessorsOf(doc, SHOWCASE_ANIMATED_LEAN_CLIP_NAME).output;
+
+        expect(lean.min?.[2] ?? 0).toBeGreaterThan(swing.max?.[2] ?? 0);
     });
 
     it('is self-contained: one embedded buffer, no images, unlit', () => {
@@ -164,9 +249,9 @@ describe('BufferPacker', () => {
     // Driven DIRECTLY, because the generator cannot reach these arms: every view
     // it packs today is a multiple of 4 bytes long, so deleting the alignment
     // entirely leaves the committed bytes identical and every other case green.
-    // MEASURED at the shipped fixture — offsets 0,48,80,144,192,204,332,352 and
-    // a 432-byte buffer — so a suite that only built the real container would be
-    // asserting nothing about alignment at all.
+    // MEASURED at the shipped fixture — offsets 0,48,80,144,192,204,332,352,432,440
+    // and a 472-byte buffer — so a suite that only built the real container would
+    // be asserting nothing about alignment at all.
 
     it('leaves an already-aligned run untouched', () => {
         const packer = new BufferPacker();

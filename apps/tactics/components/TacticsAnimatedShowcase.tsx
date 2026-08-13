@@ -15,7 +15,8 @@ import type { ModelAnimationMetadata } from '@chimera-engine/simulation/content/
  * Two instances of ONE animated ref, each under a DIFFERENT driver:
  *
  *   - the **played** instance runs `useClipPlayer` with the clip sheet the
- *     manifest authored, so its `top` bone swings;
+ *     manifest authored, so its `top` bone moves — swinging or leaning,
+ *     depending on which clip the screen above currently declares;
  *   - the **control** instance runs plain `useModelAnimation`, which owns a
  *     mixer and starts no action, so its bone does not move.
  *
