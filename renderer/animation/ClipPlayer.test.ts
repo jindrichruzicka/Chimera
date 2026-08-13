@@ -1111,6 +1111,164 @@ describe('transitionTo — the blend', () => {
         ]);
     });
 
+    it('blends for the length the sheet authored when the call site names none', () => {
+        const { player, backend } = blendingPlayer();
+
+        player.transitionTo({
+            clipName: 'guard',
+            sheet: { clips: { guard: { durationSeconds: 1, blendInSeconds: 0.3 } } },
+        });
+
+        // The authored middle term of `request.blendSeconds ?? sheet ?? 0`: an
+        // animator says "this clip always eases in" once, and a call site that
+        // says nothing gets it.
+        expect(backend.crossfadeCalls).toEqual([
+            { clipName: 'guard', fadeSeconds: 0.3, options: { speed: 1 } },
+        ]);
+    });
+
+    it('lets a call-site blend of zero override an authored one, back to a cut', () => {
+        const { player, backend } = blendingPlayer();
+
+        player.transitionTo({
+            clipName: 'guard',
+            sheet: { clips: { guard: { durationSeconds: 1, blendInSeconds: 0.3 } } },
+            blendSeconds: 0,
+        });
+
+        // `??` and not `||`: a call site asking for 0 is asking for a cut, and a
+        // chain that fell through on falsy would hand it the authored 0.3.
+        expect(backend.crossfadeCalls).toEqual([]);
+        expect(backend.stopped).toEqual(['swing']);
+    });
+
+    it('prefers the call site over the sheet when both name a length', () => {
+        const { player, backend } = blendingPlayer();
+
+        player.transitionTo({
+            clipName: 'guard',
+            sheet: { clips: { guard: { durationSeconds: 1, blendInSeconds: 0.3 } } },
+            blendSeconds: 0.1,
+        });
+
+        expect(backend.crossfadeCalls).toEqual([
+            { clipName: 'guard', fadeSeconds: 0.1, options: { speed: 1 } },
+        ]);
+    });
+
+    it('ignores an authored blend length on a backend that cannot blend', () => {
+        const backend = createFakeClipBackend(CLIPS);
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+        player.play({ clipName: 'swing' });
+
+        player.transitionTo({
+            clipName: 'guard',
+            sheet: { clips: { guard: { durationSeconds: 1, blendInSeconds: 0.3 } } },
+        });
+
+        // The sprite path, at the layer that decides it: the sheet is shared and
+        // the parser keeps the field for either backend, so what declines it is
+        // `supportsBlending`. No throw, no warning, no behaviour change — a cut.
+        // That the REAL sprite backend answers that guard `false` is pinned by
+        // `SpriteClipBackend.test.ts` › `is a ClipBackend that does not blend`;
+        // this case is about what the player does with the answer.
+        expect(backend.stopped).toEqual(['swing']);
+        expect(backend.held).toEqual([]);
+        expect(player.activeClips).toEqual(['guard']);
+    });
+
+    it('refuses a bad blend the caller wrote even for a clip the backend has not got', () => {
+        const { player, backend, calls } = blendingPlayer();
+
+        // The fail-soft `false` answers "no such clip"; it must not also swallow
+        // a sign error the caller wrote. Same ordering the backend's own
+        // `crossfadeTo` has, and for the same reason.
+        expect(() => player.transitionTo({ clipName: 'no-such-clip', blendSeconds: -1 })).toThrow(
+            RangeError,
+        );
+        expect(player.transitionTo({ clipName: 'no-such-clip', blendSeconds: 0.3 })).toBe(false);
+
+        expect(player.activeClips).toEqual(['swing']);
+        expect(calls).toEqual(['start:span']);
+        expect(backend.stopped).toEqual([]);
+    });
+
+    it('leaves play alone: it neither blends for a sheet nor refuses one', () => {
+        const backend = createBlendingFakeClipBackend(CLIPS);
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+        player.play({ clipName: 'swing' });
+
+        // `play` ADDS a clip rather than replacing what is there, so it has
+        // nothing to blend from and reads neither term of the chain — including
+        // an authored value it would otherwise have to refuse.
+        expect(
+            player.play({
+                clipName: 'guard',
+                sheet: { clips: { guard: { durationSeconds: 1, blendInSeconds: 0.3 } } },
+            }),
+        ).toBe(true);
+        expect(backend.crossfadeCalls).toEqual([]);
+        expect(player.activeClips).toEqual(['swing', 'guard']);
+
+        expect(() =>
+            player.play({
+                clipName: 'guard',
+                sheet: { clips: { guard: { durationSeconds: 1, blendInSeconds: -1 } } },
+            }),
+        ).not.toThrow();
+    });
+
+    it('refuses an authored blend length on a backend that cannot blend', () => {
+        const backend = createFakeClipBackend(CLIPS);
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+        player.play({ clipName: 'swing' });
+
+        // The arm the front refusal cannot reach: the call site names no blend,
+        // so what is refused is what RESOLUTION produced, on a transition that
+        // could not have blended anyway. A refusal scoped to transitions that
+        // can blend would let this through and cut silently.
+        expect(() =>
+            player.transitionTo({
+                clipName: 'guard',
+                sheet: { clips: { guard: { durationSeconds: 1, blendInSeconds: -1 } } },
+            }),
+        ).toThrow(RangeError);
+
+        expect(player.activeClips).toEqual(['swing']);
+        expect(backend.stopped).toEqual([]);
+    });
+
+    it('answers false rather than throwing for a bad speed on a clip it has not got', () => {
+        const { player, backend } = blendingPlayer();
+
+        // Not a blend claim, but the one beside it: the SPEED refusal sits
+        // inside the start, behind the unplayable-clip answer, where the
+        // call-site blend refusal sits in front of it. Pinned because the
+        // docblock states both orderings and only one of them was measured.
+        expect(player.transitionTo({ clipName: 'no-such-clip', speed: -1 })).toBe(false);
+        expect(() => player.transitionTo({ clipName: 'guard', speed: -1 })).toThrow(RangeError);
+        expect(backend.stopped).toEqual([]);
+    });
+
+    it('refuses an authored blend length the parser would have let through', () => {
+        const { player, backend, calls } = blendingPlayer();
+
+        // The compiled timeline is built from a sheet the caller hands over
+        // directly, which no parser has been near. The two refusal layers
+        // compose rather than shadowing each other: whatever reaches the player
+        // still passes `checkedFade`.
+        expect(() =>
+            player.transitionTo({
+                clipName: 'guard',
+                sheet: { clips: { guard: { durationSeconds: 1, blendInSeconds: -1 } } },
+            }),
+        ).toThrow(RangeError);
+
+        expect(player.activeClips).toEqual(['swing']);
+        expect(calls).toEqual(['start:span']);
+        expect(backend.stopped).toEqual([]);
+    });
+
     it('leaves a blend in flight reachable by stopAll', () => {
         const { player, backend } = blendingPlayer();
         player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 });

@@ -170,6 +170,10 @@ describe('parseModelAnimationMetadata range-checks only what it can decide alone
         ['frameCount', { frameCount: -3 }],
         ['loop', { loop: 'ping-pong' }],
         ['loop', { loop: 1 }],
+        ['blendInSeconds', { blendInSeconds: -1 }],
+        ['blendInSeconds', { blendInSeconds: 'fast' }],
+        ['blendInSeconds', { blendInSeconds: Number.NaN }],
+        ['blendInSeconds', { blendInSeconds: Number.POSITIVE_INFINITY }],
     ])('drops a malformed %s with one warning and keeps the clip', (field, clip) => {
         const result = parseModelAnimationMetadata({ clips: { swing: clip } });
 
@@ -256,6 +260,61 @@ describe('parseModelAnimationMetadata range-checks only what it can decide alone
         // Carried by reference, and not even shape-checked. See
         // `renderer/animation/ClipPosition.ts`.
         expect(result?.sheet.clips?.['swing']?.notifies?.['woosh']?.at).toBe(at);
+        expect(result?.warnings).toEqual([]);
+    });
+});
+
+describe('parseModelAnimationMetadata carries an authored blend-in length', () => {
+    it('keeps a positive blend length on the parsed clip', () => {
+        const result = parseModelAnimationMetadata({
+            clips: { swing: { durationSeconds: 1.2, blendInSeconds: 0.2 } },
+        });
+
+        expect(result?.sheet.clips?.['swing']).toEqual({
+            durationSeconds: 1.2,
+            blendInSeconds: 0.2,
+        });
+        expect(result?.warnings).toEqual([]);
+    });
+
+    it('keeps a blend length of exactly zero, which authors a cut', () => {
+        // The boundary is an explicit fixture rather than something the refusal
+        // cases imply: 0 is what an animator writes to say "this clip cuts in",
+        // and the positive-number predicate the sibling fields use would drop it
+        // with a warning.
+        const result = parseModelAnimationMetadata({ clips: { swing: { blendInSeconds: 0 } } });
+
+        expect(result?.sheet.clips?.['swing']).toEqual({ blendInSeconds: 0 });
+        expect(result?.warnings).toEqual([]);
+    });
+
+    it('keeps the rest of a clip whose blend length it drops', () => {
+        const result = parseModelAnimationMetadata({
+            clips: { swing: { durationSeconds: 1.2, loop: 'loop', blendInSeconds: -1 } },
+        });
+
+        expect(result?.sheet.clips?.['swing']).toEqual({ durationSeconds: 1.2, loop: 'loop' });
+        expect(result?.warnings).toHaveLength(1);
+        // The CLIP name, not just the field name: an animator reads this message
+        // to find which of forty clips they typed the value into.
+        expect(result?.warnings[0]).toContain("'swing'");
+        expect(result?.warnings[0]).toContain('blendInSeconds');
+    });
+
+    it('keeps one authored on a SPRITE clip, which has nothing to honour it', () => {
+        const result = parseSpriteAnimationMetadata({
+            clips: { run: { frames: [0, 1], durationSeconds: 0.5, blendInSeconds: 0.2 } },
+        });
+
+        // The shared sheet is shared: the parser is one reader for both backends
+        // and does not learn which one is under it. Nothing warns, because there
+        // is nothing wrong with the value — a sprite playback simply has no
+        // weights to interpolate, so `supportsBlending` is what declines it.
+        expect(result?.sheet.clips?.['run']).toEqual({
+            frames: [0, 1],
+            durationSeconds: 0.5,
+            blendInSeconds: 0.2,
+        });
         expect(result?.warnings).toEqual([]);
     });
 });

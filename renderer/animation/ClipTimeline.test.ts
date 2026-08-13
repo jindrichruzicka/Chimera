@@ -46,6 +46,32 @@ function marksOf(clip: AnimationTrackSheet, runtimeDurationSeconds = 2): readonl
     return compileClipTimeline(sheetOf(clip), CLIP, runtimeDurationSeconds)?.marks ?? [];
 }
 
+describe('compileClipTimeline carries the authored blend length', () => {
+    it('puts an authored blendInSeconds on the compiled timeline', () => {
+        const timeline = compileClipTimeline(
+            { clips: { swing: { durationSeconds: 1, blendInSeconds: 0.25 } } },
+            'swing',
+            1,
+        );
+
+        expect(timeline?.blendInSeconds).toBe(0.25);
+    });
+
+    it('leaves it absent when the sheet authors none', () => {
+        const timeline = compileClipTimeline(
+            { clips: { swing: { durationSeconds: 1 } } },
+            'swing',
+            1,
+        );
+
+        // Absent rather than 0: the player's resolution chain reads `??`, and a
+        // defaulted 0 here would be indistinguishable from an authored cut while
+        // silently winning over nothing.
+        expect(timeline).not.toBeNull();
+        expect(Object.hasOwn(timeline!, 'blendInSeconds')).toBe(false);
+    });
+});
+
 describe('compileClipTimeline', () => {
     describe('returns null only when there is nothing to play', () => {
         it.each([

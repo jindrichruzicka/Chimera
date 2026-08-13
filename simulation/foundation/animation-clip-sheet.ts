@@ -138,6 +138,13 @@ export interface AnimationTrackSheet {
      * the compile half is deliberately backend-agnostic: a mesh-only home would
      * teach it the one distinction it exists not to know.
      *
+     * Honoured only by a renderer backend that has weights to interpolate, so a
+     * sprite clip may author it and simply not have it honoured. A call site that
+     * names its own blend length overrides this one rather than composing with
+     * it, and the duration is REAL TIME either way: it does not scale with the
+     * dilation multiplier, which the renderer's `threads the folded speed stack
+     * through the blend` measures at the one site the two could have met.
+     *
      * Read by NOTHING in `simulation/`, which the census in the co-located test
      * measures. Like every other field here it is carried opaquely in
      * `AssetManifestEntry.metadata`.

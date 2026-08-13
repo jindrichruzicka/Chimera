@@ -102,8 +102,9 @@ export interface UseClipPlaybackOptions {
      */
     readonly speed?: number;
     /**
-     * Seconds to blend out of the clip in flight and into this one. `0` — the
-     * default — cuts.
+     * Seconds to blend out of the clip in flight and into this one, overriding
+     * whatever the clip's own sheet authored — including with a `0`, which asks
+     * for a cut.
      *
      * REAL TIME: the duration does not compose with the dilation multiplier, so
      * a blend takes as long in a slowed-down scene as it does at full speed.

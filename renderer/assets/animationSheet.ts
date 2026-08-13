@@ -140,6 +140,7 @@ function parseTrackSheet(
         durationSeconds?: number;
         frameCount?: number;
         loop?: AnimationLoopMode;
+        blendInSeconds?: number;
         notifies?: Readonly<Record<AnimationMarkName, AnimationNotify>>;
         passages?: Readonly<Record<AnimationMarkName, AnimationPassage>>;
     } = {};
@@ -173,6 +174,17 @@ function parseTrackSheet(
         } else {
             warnings.push(
                 `Animation clip '${clipName}' declares a loop mode that is neither 'once' nor 'loop'; dropping the field.`,
+            );
+        }
+    }
+
+    const rawBlendIn = rawClip['blendInSeconds'];
+    if (rawBlendIn !== undefined) {
+        if (isFiniteNonNegative(rawBlendIn)) {
+            sheet.blendInSeconds = rawBlendIn;
+        } else {
+            warnings.push(
+                `Animation clip '${clipName}' declares a blendInSeconds that is not a finite number of at least 0; dropping the field.`,
             );
         }
     }
@@ -348,6 +360,15 @@ function isPlainObject(value: unknown): value is Readonly<Record<string, unknown
 
 function isFinitePositive(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+/**
+ * A usable blend length. NOT {@link isFinitePositive}: 0 is a meaningful authored
+ * value — it says this clip cuts in — and the positive predicate its sibling
+ * fields use would drop it with a warning.
+ */
+function isFiniteNonNegative(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 function isPositiveInteger(value: unknown): value is number {

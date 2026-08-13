@@ -67,6 +67,12 @@ export interface CompiledClipTimeline {
     readonly durationSeconds: number;
     /** The authored loop mode. Absent leaves the choice to the player. */
     readonly loop?: AnimationLoopMode;
+    /**
+     * The authored blend-in length in seconds, carried through untouched. Absent
+     * rather than defaulted, so the player's resolution chain can tell "the sheet
+     * says nothing" from "the sheet says cut".
+     */
+    readonly blendInSeconds?: number;
     /** Ascending by phase, ties by name. Every name appears at most once. */
     readonly marks: readonly CompiledMark[];
     /** Every authoring fault found, at most one per authored mark. */
@@ -188,6 +194,7 @@ export function compileClipTimeline(
         clipName,
         durationSeconds: runtimeDurationSeconds,
         ...(clip.loop !== undefined ? { loop: clip.loop } : {}),
+        ...(clip.blendInSeconds !== undefined ? { blendInSeconds: clip.blendInSeconds } : {}),
         marks,
         warnings,
     };

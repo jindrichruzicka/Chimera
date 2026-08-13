@@ -144,8 +144,9 @@ export interface ClipPlayRequest {
     /** The clip's own layer of the speed stack. Defaults to 1. */
     readonly speed?: number;
     /**
-     * Seconds to blend out of the outgoing clip and into this one. `0` — the
-     * default — cuts.
+     * Seconds to blend out of the outgoing clip and into this one, overriding
+     * whatever the clip's own sheet authored — including with a `0`, which asks
+     * for a cut.
      *
      * REAL TIME, and deliberately so: it does not compose with the dilation
      * multiplier, so a blend takes as long in a slowed-down scene as it does at
@@ -293,9 +294,11 @@ export class ClipPlayer {
      *
      * The order below is the whole of this method's contract.
      *
-     * 1. **Every refusal first.** A bad speed or an unusable blend length throws
-     *    and an unplayable clip answers `false`, with nothing started, released
-     *    or held — same as {@link ClipPlayer.play}.
+     * 1. **Every refusal before any mutation.** A blend length the CALLER wrote
+     *    is refused first of all, ahead of the `false` an unplayable clip
+     *    answers with. A bad speed, and a blend length RESOLUTION produced from
+     *    the sheet, are refused once the clip is known — still with nothing
+     *    started, released or held.
      * 2. **Start the incoming playback**, so a backend that shares one resource
      *    across a swap has the incoming clip holding it before the outgoing lets
      *    go.
@@ -314,18 +317,22 @@ export class ClipPlayer {
      * @returns `false` when the backend has no such clip, or the player is
      *          disposed — a caller telling those apart reads
      *          {@link ClipPlayer.isDisposed}.
-     * @throws RangeError  when `request.speed` is negative or not finite, or
-     *                     `request.blendSeconds` is.
+     * @throws RangeError  when a blend length the caller wrote is negative or
+     *                     not finite — before the unplayable-clip answer — and
+     *                     when `request.speed` or the sheet's own blend length
+     *                     is, once the clip is known to be playable.
      */
     transitionTo(request: ClipPlayRequest): boolean {
         if (this.#disposed) {
             return false;
         }
-        // Before the branch and before any mutation: a bare `blendSeconds > 0`
-        // would send a negative or `NaN` duration down the cut path and lose the
-        // refusal entirely, on a backend that cannot blend as much as on one
-        // that can.
-        const fade = checkedFade(request.blendSeconds ?? 0);
+        // What the CALLER wrote, refused before the fail-soft guard inside
+        // `#start` can answer `false` for a clip the backend has not got — the
+        // ordering `crossfadeTo` has for the same reason. What RESOLUTION comes
+        // to is checked again inside `#start`, because the sheet's own value is
+        // not known until the clip is compiled; the same predicate applied to two
+        // different values, not two copies of one.
+        checkedFade(request.blendSeconds ?? 0);
         // Captured before the incoming entry is registered, so the list cannot
         // contain it however the map is keyed.
         const others = [...this.#active.values()].filter(
@@ -338,20 +345,23 @@ export class ClipPlayer {
         // path, which restarts. A clip that is FADING is not excluded: resuming
         // one is what a backend does well, and is the case `#fading` is kept
         // apart from `#posing` for.
-        const blendingBackend =
-            fade > 0 &&
+        //
+        // How LONG a blend runs is resolved inside `#start`, which is where the
+        // sheet is compiled. The refusal there covers every transition that gets
+        // that far, including one this candidate is `null` for, so an unusable
+        // authored length throws on a backend that cannot blend as loudly as on
+        // one that can.
+        const candidate =
             !this.#active.has(request.clipName) &&
             !this.#posing.has(request.clipName) &&
             supportsBlending(this.#backend)
                 ? this.#backend
                 : null;
-        const started = this.#start(
-            request,
-            blendingBackend === null ? null : { backend: blendingBackend, fadeSeconds: fade },
-        );
+        const started = this.#start(request, { backend: candidate });
         if (started === null) {
             return false;
         }
+        const blended = started.blended;
         // The poses of the OTHER clips come down now: the incoming clip is
         // started, so a backend sharing one resource across the swap has already
         // handed it over.
@@ -366,8 +376,8 @@ export class ClipPlayer {
             // frame the blend started, and there would be nothing on screen to
             // fade out of. Kept in `#fading` so `stopAll` and `dispose` can
             // reach a blend that is still on screen.
-            this.#release(entry, 'clip-changed', blendingBackend !== null);
-            if (blendingBackend !== null) {
+            this.#release(entry, 'clip-changed', blended);
+            if (blended) {
                 this.#fading.set(entry.clipName, entry.playback);
             }
         }
@@ -550,19 +560,19 @@ export class ClipPlayer {
      * @returns the registered entry, whatever entry it displaced under the same
      *          name, and the compile warnings its caller reports once its own
      *          teardown is done.
-     * @throws RangeError  when `request.speed` is negative or not finite, before
-     *                     anything is started or registered.
+     * @throws RangeError  when `request.speed` is negative or not finite, or
+     *                     when a blend intent resolves an unusable length —
+     *                     both before anything is started or registered.
      */
     #start(
         request: ClipPlayRequest,
-        blend: {
-            readonly backend: SupportsClipBlending;
-            readonly fadeSeconds: number;
-        } | null = null,
+        blend: { readonly backend: SupportsClipBlending | null } | null = null,
     ): {
         readonly entry: ActiveClip;
         readonly replaced: ActiveClip | undefined;
         readonly warnings: readonly string[];
+        /** Whether the incoming playback was started with a crossfade. */
+        readonly blended: boolean;
     } | null {
         const durationSeconds = this.#backend.getDurationSeconds(request.clipName);
         if (durationSeconds === null) {
@@ -578,6 +588,14 @@ export class ClipPlayer {
             durationSeconds,
         );
         const loop = request.loop ?? timeline?.loop;
+        // Resolved HERE because this is where the sheet is compiled, and refused
+        // before anything is started — for a verb that blends, whether or not
+        // this particular transition can. `??` and not `||`: a call site asking
+        // for 0 is asking for a cut, and must beat a sheet that authored a blend
+        // rather than fall through to it.
+        const fadeSeconds =
+            blend === null ? 0 : checkedFade(request.blendSeconds ?? timeline?.blendInSeconds ?? 0);
+        const blendOn = blend?.backend ?? null;
         // The folded stack on the first frame too, so a clip declared at half
         // speed does not play one frame at 1x and get corrected on the next.
         const speed = effectiveClipSpeed(clipSpeed, this.#playerSpeed, this.#getTimeScale());
@@ -593,10 +611,10 @@ export class ClipPlayer {
         // here: a second `supportsBlending` test would be a copy of the caller's
         // predicate that nothing could make disagree, and the seam warns about
         // exactly that shape.
-        const playback =
-            blend === null
-                ? this.#backend.play(request.clipName, options)
-                : blend.backend.crossfadeTo(request.clipName, blend.fadeSeconds, options);
+        const blending = blendOn !== null && fadeSeconds > 0;
+        const playback = blending
+            ? blendOn.crossfadeTo(request.clipName, fadeSeconds, options)
+            : this.#backend.play(request.clipName, options);
         if (playback === null) {
             return null;
         }
@@ -620,7 +638,7 @@ export class ClipPlayer {
         // handler's entry and leaves its playback live on the backend, reachable
         // by nothing but `backend.dispose()`.
         this.#active.set(request.clipName, entry);
-        return { entry, replaced, warnings: timeline?.warnings ?? [] };
+        return { entry, replaced, warnings: timeline?.warnings ?? [], blended: blending };
     }
 
     /** Take down everything on screen that is not being played. */
