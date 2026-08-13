@@ -29,7 +29,8 @@
 
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import { build } from 'esbuild';
-import { resolve, dirname } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { relative, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
     AnimationClipName,
@@ -45,6 +46,31 @@ import type {
     SpriteClipDeclaration,
 } from './animation-clip-sheet.js';
 import type { AssetManifestEntry } from '../content/AssetManifest.js';
+
+/** `simulation/`, resolved from this file rather than from the runner's cwd. */
+const simulationRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** Every shipped `.ts` under `simulation/`, excluding tests and doubles. */
+function simulationSourceFiles(): readonly string[] {
+    const skipped = new Set(['node_modules', 'dist', 'out', '__tests__', '__test-support__']);
+    const found: string[] = [];
+    const walk = (directory: string): void => {
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+            const path = resolve(directory, entry.name);
+            if (entry.isDirectory()) {
+                if (!skipped.has(entry.name)) {
+                    walk(path);
+                }
+                continue;
+            }
+            if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
+                found.push(path);
+            }
+        }
+    };
+    walk(simulationRoot);
+    return found.sort((left, right) => left.localeCompare(right));
+}
 
 // ─── The three open name aliases ──────────────────────────────────────────────
 
@@ -168,6 +194,42 @@ describe('AnimationTrackSheet', () => {
     it('type-checks an empty sheet — every field is optional', () => {
         const empty: AnimationTrackSheet = {};
         expect(empty).toEqual({});
+    });
+
+    it('is named by no shipped simulation source but its own declaration', () => {
+        // The field is authored vocabulary carried opaquely in `metadata`, and a
+        // reducer, a pipeline or a `validate()` that read it would be a renderer
+        // concern leaking sim-side. Asserted as the exact matched SET rather than
+        // a count; what keeps THIS file out of that set is the `.test.ts` filter
+        // in the walk, which is why the walk excludes tests rather than trusting
+        // how the token is spelled here.
+        const token = 'blendInSeconds';
+        const found = simulationSourceFiles().filter((file) =>
+            readFileSync(file, 'utf8').includes(token),
+        );
+
+        expect(found.map((file) => relative(simulationRoot, file))).toEqual([
+            'foundation/animation-clip-sheet.ts',
+        ]);
+    });
+
+    it('carries an authored blend-in length, in seconds', () => {
+        const track: AnimationTrackSheet = { durationSeconds: 1.2, blendInSeconds: 0.2 };
+
+        expect(track.blendInSeconds).toBe(0.2);
+    });
+
+    it('types the blend-in length as optional seconds, and refuses a word', () => {
+        // The direct pin first: an excess-property error also discharges a
+        // `@ts-expect-error`, so the directive below cannot tell "wrong type"
+        // from "field absent" on its own.
+        expectTypeOf<AnimationTrackSheet['blendInSeconds']>().toEqualTypeOf<number | undefined>();
+
+        const bad: AnimationTrackSheet = {
+            // @ts-expect-error: a blend length is seconds, not an authored word
+            blendInSeconds: 'fast',
+        };
+        expect(bad).toBeDefined();
     });
 
     it('carries NO frame list — sprite frames belong to SpriteClipDeclaration', () => {

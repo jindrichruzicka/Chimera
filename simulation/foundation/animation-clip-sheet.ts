@@ -127,6 +127,22 @@ export interface AnimationTrackSheet {
     readonly frameCount?: number;
     /** How the clip behaves at its end. Absent means the player decides. */
     readonly loop?: AnimationLoopMode;
+    /**
+     * Seconds to blend into this clip from whatever was playing.
+     *
+     * Authored once here rather than at every call site, the move `loop` already
+     * makes — "this clip always eases in over 0.2 s" is a property of the clip,
+     * not of the moment it is played.
+     *
+     * It sits on the SHARED sheet rather than on a mesh-only declaration because
+     * the compile half is deliberately backend-agnostic: a mesh-only home would
+     * teach it the one distinction it exists not to know.
+     *
+     * Read by NOTHING in `simulation/`, which the census in the co-located test
+     * measures. Like every other field here it is carried opaquely in
+     * `AssetManifestEntry.metadata`.
+     */
+    readonly blendInSeconds?: number;
     /** Notify points, keyed by mark name. */
     readonly notifies?: Readonly<Record<AnimationMarkName, AnimationNotify>>;
     /** Sub-passages, keyed by mark name. */
