@@ -1,11 +1,11 @@
 /**
  * renderer/animation/__tests__/scheduler-purity.test.ts
  *
- * Two claims about the compile half plus the scheduler and the player:
+ * Two claims about the modules `PURE_MODULES` lists below:
  *
- * 1. **Graph purity.** Their whole in-repo graph is exactly the modules listed
- *    below, and they depend on no package at all — no `three`, no `react`,
- *    no `@react-three/fiber`, and nothing else either.
+ * 1. **Graph purity.** Their whole in-repo graph is exactly those modules, and
+ *    they depend on no package at all — no `three`, no `react`, no
+ *    `@react-three/fiber`, and nothing else either.
  * 2. **No marker event carries a dispatcher.** Each event's key set is closed at
  *    the type level, so a later `sendAction`, `dispatch`, `playerId` or `tick`
  *    field cannot be added to one without failing `pnpm typecheck`. It says
@@ -38,10 +38,6 @@ import type {
 
 import { analyze, ANIMATION_DIR, ANIMATION_SUBTREE, pathsOutside } from './animationGraph.js';
 
-/**
- * The framework-free half of `renderer/animation/`: the compile modules, the
- * scheduler and the player.
- */
 const PURE_MODULES = [
     'ClipBackend.ts',
     'ClipPlayer.ts',
@@ -74,7 +70,7 @@ describe('pathsOutside', () => {
     });
 });
 
-describe('renderer/animation compile-half purity', () => {
+describe('renderer/animation pure-module graph', () => {
     it('reaches nothing outside this directory and depends on no package at all', async () => {
         for (const modulePath of PURE_MODULES) {
             const { externals, reached } = await analyze({

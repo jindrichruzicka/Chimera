@@ -2,7 +2,7 @@
  * renderer/animation/__tests__/animationGraph.ts
  *
  * The esbuild analyzer both guards over `renderer/animation/` share: the
- * directory census (`animation-dir-census.test.ts`) and the compile-half purity
+ * directory census (`animation-dir-census.test.ts`) and the pure-module graph
  * claim (`scheduler-purity.test.ts`). Not a test itself — one copy, so the two
  * guards cannot drift into measuring different graphs.
  *
