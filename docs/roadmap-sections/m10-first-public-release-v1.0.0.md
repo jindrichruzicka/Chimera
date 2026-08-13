@@ -680,10 +680,11 @@ ever being deactivated.
 **A terminal playback is not necessarily an invisible one.** `ClipPlayback.hold()` joins `stop()`
 on the seam: both freeze the playhead and latch `ended`, and only `stop()` hands the resources
 back. That distinction is what lets a finished `'once'` clip stay on its last frame, and it is
-why the player keeps two maps rather than one — the poses a clip **end** left, and the playbacks a
-**blend** is fading out. Reading one map for both looks tidy and breaks an A→B→A alternation into
-blend, cut, blend, because a clip whose fade has ended is still listed as posing while a clip
-that ended is exactly the one a blend must not resume.
+why the player keeps two maps rather than one — the poses a clip **end** left standing, and
+whatever a **blend** is fading out, which is the clip it replaced plus any pose it is fading out
+of. Reading one map for both looks tidy and breaks an A→B→A alternation into blend, cut, blend,
+because a clip whose fade has ended is still listed as posing while a clip that ended and is
+merely standing there is exactly the one a blend must not resume.
 
 **The sprite asymmetry is deliberate.** The runtime option is narrowed **off** the sprite hook
 (`UseSpriteClipPlayerOptions` omits `blendSeconds`, and `AnimatedSpriteProps` with it), while the

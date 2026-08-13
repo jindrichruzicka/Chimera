@@ -941,7 +941,10 @@ describe('transitionTo — become the only clip', () => {
         player.transitionTo({ clipName: 'jab' });
 
         // Becoming the only clip means the poses of the clips that ended come
-        // down too, not just the live ones.
+        // down too, not just the live ones — on the cut arm, which is the only
+        // one a backend that cannot blend has. What a BLEND does with them is
+        // `transitionTo — the blend` › `leaves a pose a clip end left holding
+        // for the backend to fade out`.
         expect(backend.stopped).toEqual(['swing']);
         expect(player.activeClips).toEqual(['jab']);
     });
@@ -1089,6 +1092,66 @@ describe('transitionTo — the blend', () => {
         expect(backend.crossfadeCalls).toEqual([]);
         expect(backend.stopped).toEqual(['guard']);
         expect(backend.sampleOf('guard')).toEqual({ phase: 0, cycle: 0, ended: false });
+    });
+
+    it('leaves a pose a clip end left holding for the backend to fade out', () => {
+        const backend = createBlendingFakeClipBackend({
+            swing: { durationSeconds: 1, loop: 'once' },
+            guard: { durationSeconds: 1, loop: 'loop' },
+        });
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+        player.play({ clipName: 'swing', loop: 'once' });
+        player.tick(2);
+        expect(backend.held).toEqual(['swing']);
+        expect(backend.stopped).toEqual([]);
+
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 });
+
+        // What a one-shot leaves on the screen is the thing the next blend has to
+        // fade out of. Taking it down here would hand its resources back on the
+        // frame the blend started — the same reason a live outgoing clip is held
+        // rather than stopped — so it stays the backend's, with the ramp that
+        // ends it.
+        expect(backend.stopped).toEqual([]);
+
+        // …and it is still reachable: a pose being faded out of is a pose this
+        // player is holding, so stopping everything reaches it.
+        player.stopAll();
+        expect(backend.stopped).toEqual(['guard', 'swing']);
+    });
+
+    it('disposes what a blend was fading out of', () => {
+        const backend = createBlendingFakeClipBackend({
+            swing: { durationSeconds: 1, loop: 'once' },
+            guard: { durationSeconds: 1, loop: 'loop' },
+        });
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+        player.play({ clipName: 'swing', loop: 'once' });
+        player.tick(2);
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 });
+
+        player.dispose();
+
+        // The other half of Rule POSING-RELEASE: a pose handed to a blend is
+        // still one this player must release, or its binding outlives it.
+        expect(backend.stopped).toEqual(['guard', 'swing']);
+    });
+
+    it('cuts a held pose down when the same transition asks for no blend', () => {
+        const backend = createBlendingFakeClipBackend({
+            swing: { durationSeconds: 1, loop: 'once' },
+            guard: { durationSeconds: 1, loop: 'loop' },
+        });
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+        player.play({ clipName: 'swing', loop: 'once' });
+        player.tick(2);
+
+        player.transitionTo({ clipName: 'guard' });
+
+        // The negative control for the two cases above, on a backend that CAN
+        // blend: with no fade there is nothing to fade out of, so the pose comes
+        // down on the transition frame.
+        expect(backend.stopped).toEqual(['swing']);
     });
 
     it('blends on every transition of an alternation, not every other one', () => {

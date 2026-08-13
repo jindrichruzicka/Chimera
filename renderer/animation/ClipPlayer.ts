@@ -228,12 +228,15 @@ export class ClipPlayer {
      */
     readonly #posing = new Map<AnimationClipName, ClipPlayback>();
     /**
-     * The playbacks a BLEND left fading out. Kept apart from the map above, and
-     * that separation is load-bearing rather than tidy: `transitionTo` refuses to
-     * blend into a clip it is POSING — a finished clip resumed mid-hold stays on
-     * its last frame for ever — while a clip that is fading out is exactly the
-     * one a backend can resume, so reading one map for both would downgrade every
-     * second transition of an A/B alternation to a cut.
+     * The playbacks a BLEND left fading out — the clip it replaced, and any pose
+     * it is fading out of. Kept apart from the map above, and that separation is
+     * load-bearing rather than tidy: `transitionTo` refuses to blend into a clip
+     * it is POSING — a finished clip resumed mid-hold stays on its last frame for
+     * ever — while a clip that is FADING is one a backend can take up again, so
+     * reading one map for both would downgrade every second transition of an A/B
+     * alternation to a cut. What a backend does with a fading clip is its own
+     * call: `MeshClipBackend` restarts one whose `'once'` playhead has reached
+     * the end — the case a faded-out pose falls into — and resumes the rest.
      *
      * An entry outlives its fade: nothing prunes it when the ramp arrives,
      * because the handle is terminal either way and its `stop` is then a no-op.
@@ -289,8 +292,7 @@ export class ClipPlayer {
 
     /**
      * Start `request.clipName` as the ONLY clip: every other clip in flight is
-     * closed with `'clip-changed'`, and everything on screen that is not being
-     * played comes down with them.
+     * closed with `'clip-changed'`.
      *
      * The order below is the whole of this method's contract.
      *
@@ -362,10 +364,27 @@ export class ClipPlayer {
             return false;
         }
         const blended = started.blended;
-        // The poses of the OTHER clips come down now: the incoming clip is
-        // started, so a backend sharing one resource across the swap has already
-        // handed it over.
+        // A pose the blend is fading OUT of is not a pose to take down. A held
+        // last frame is on the screen exactly as a live clip is, so the backend
+        // ramps its weight to 0 like any other outgoing thing; stopping it here
+        // would hand its binding back on the frame the blend started and leave
+        // nothing to fade out of — the same reason `others` below is held rather
+        // than stopped. Taken out of `#posing` BEFORE the sweep and put into
+        // `#fading` after it, because the sweep is what ends an EARLIER blend's
+        // fade, which the backend has just hard-stopped for the same reason.
+        //
+        // Every pose, with no exception for the incoming clip: `blended` is only
+        // ever true for a clip `#posing` does not hold, which is what the
+        // candidate rule above tests. A filter here would be a second copy of
+        // that rule with nothing able to make the two disagree.
+        const fadingOutOf = blended ? [...this.#posing] : [];
+        for (const [clipName] of fadingOutOf) {
+            this.#posing.delete(clipName);
+        }
         this.#releaseEveryPose();
+        for (const [clipName, playback] of fadingOutOf) {
+            this.#fading.set(clipName, playback);
+        }
         if (started.replaced !== undefined) {
             this.#release(started.replaced, 'clip-changed');
         }

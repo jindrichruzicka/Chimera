@@ -33,7 +33,9 @@ Behaviour an adopter sees without asking for anything:
   `PassageEndEvent.reason` should read the new value.
 - A `'once'` clip that reaches its end now HOLDS its last frame instead of restoring the
   model's original state on the same tick its `clip-end` handler runs. The pose comes
-  down when something asks the player for a change — including declaring another clip.
+  down when something asks the player for a change — including declaring another clip,
+  which blends out of the held frame when it declares a blend and cuts it when it does
+  not.
 
 An authored `blendInSeconds` that is not a finite number of at least zero now fails
 `validate-assets` at build time, naming the clip, and is dropped with a warning by the

@@ -98,9 +98,11 @@ export interface ClipPlayback {
      * on the same tick its `clip-end` handler runs.
      *
      * What it does NOT do is release the resources the pose is made of, so a held
-     * playback is still the backend's to release: by the next `play` or
-     * `crossfadeTo` of the same clip, by `stop()`, or by `dispose()`. Idempotent,
-     * and a no-op once the playback is terminal by any route.
+     * playback is still the backend's to release: by a later `play` or
+     * `crossfadeTo` of the same clip, by `stop()`, by `dispose()`, or — on a
+     * backend that blends — by a `crossfadeTo` of another clip, which takes the
+     * pose down over its fade. Idempotent, and a no-op once the playback is
+     * terminal by any route.
      */
     hold(): void;
 }

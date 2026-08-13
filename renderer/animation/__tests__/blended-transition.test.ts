@@ -236,6 +236,109 @@ describe('a blended clip transition, over real three', () => {
         expect(events).toEqual([]);
     });
 
+    it('blends out of the last frame a finished once clip is holding', () => {
+        const { root, player, events } = makeRig();
+        player.play({
+            clipName: 'attack',
+            sheet: SHEET,
+            loop: 'once',
+            handlers: handlersFor(events),
+        });
+        // Past the end: nothing is active, and what is on screen is a held pose
+        // rather than a live clip — `attack`'s last frame, at 1.
+        player.tick(2.5);
+        expect(root.position.x).toBe(1);
+        expect(player.activeClips).toEqual([]);
+
+        player.transitionTo({ clipName: 'guard', loop: 'loop', blendSeconds: FADE_SECONDS });
+        player.tick(FADE_SECONDS / 2);
+
+        // The two halves of this feature composing: a one-shot that ended and
+        // held blends back out of the pose it is holding, exactly as a live clip
+        // blends out of the frame it is on. Tearing the held pose down instead
+        // reads `guard`'s 0 here — the bind-pose flash, moved off the
+        // terminating tick and onto the next clip change.
+        const blended = root.position.x;
+        expect(blended).toBeGreaterThan(0);
+        expect(blended).toBeLessThan(1);
+    });
+
+    it('lets go of the held action once the blend it faded out of arrives', () => {
+        const { root, mixer, player, events, clips } = makeRig();
+        player.play({
+            clipName: 'attack',
+            sheet: SHEET,
+            loop: 'once',
+            handlers: handlersFor(events),
+        });
+        player.tick(2.5);
+        const attackAction = mixer.clipAction(clips.attack);
+
+        player.transitionTo({ clipName: 'guard', loop: 'loop', blendSeconds: FADE_SECONDS });
+        player.tick(FADE_SECONDS);
+        player.tick(0.5);
+
+        // A pose faded out of is still a lent `PropertyMixer` binding until the
+        // ramp arrives (Invariant #21, Rule POSING-RELEASE), so the weight alone
+        // is not the claim: the playhead is what separates a released action from
+        // one merely paused at 0, because only `stop` resets it. It was held at
+        // the end of the clip, 2.
+        expect(attackAction.time).toBe(0);
+        expect(attackAction.getEffectiveWeight()).toBe(0);
+        expect(root.position.x).toBe(0);
+        expect(player.activeClips).toEqual(['guard']);
+    });
+
+    it('replays a held clip that a blend is still fading out', () => {
+        const { root, player, events } = makeRig();
+        player.play({
+            clipName: 'attack',
+            sheet: SHEET,
+            loop: 'once',
+            handlers: handlersFor(events),
+        });
+        player.tick(2.5);
+        player.transitionTo({ clipName: 'guard', loop: 'loop', blendSeconds: FADE_SECONDS });
+        // Mid-fade: `attack` is neither active nor posing but still on screen,
+        // at a falling weight, on the last frame it was held at.
+        player.tick(FADE_SECONDS / 2);
+
+        player.transitionTo({ clipName: 'attack', loop: 'once', blendSeconds: FADE_SECONDS });
+        player.tick(0.5);
+
+        // The player blends into it — a fading clip is one a backend may take up
+        // again — and the backend restarts rather than resumes, because the
+        // action it would resume is clamped at the end of a finished clip and
+        // would pose that frame for ever. Parked, the node reads 1 here; replayed
+        // it reads the quarter of the sweep 0.5 s buys.
+        expect(player.activeClips).toEqual(['attack']);
+        expect(root.position.x).toBeCloseTo(0.25, 6);
+    });
+
+    it('cuts out of a held pose when the transition asks for no blend', () => {
+        const { root, mixer, player, events, clips } = makeRig();
+        player.play({
+            clipName: 'attack',
+            sheet: SHEET,
+            loop: 'once',
+            handlers: handlersFor(events),
+        });
+        player.tick(2.5);
+        expect(root.position.x).toBe(1);
+        const attackAction = mixer.clipAction(clips.attack);
+
+        player.transitionTo({ clipName: 'guard', loop: 'loop' });
+
+        // The negative control for the two cases above: at zero length a held
+        // pose is hard-stopped on the transition frame, before anything is
+        // ticked, and the node is on `guard`'s pose outright. The playhead is
+        // what says it: only `stop` resets one, and this action was parked at the
+        // end of the clip, 2, for the whole hold.
+        expect(attackAction.time).toBe(0);
+        player.tick(FADE_SECONDS / 2);
+        expect(root.position.x).toBe(0);
+    });
+
     it('cuts when the same transition asks for no blend', () => {
         const { root, player, events } = makeRig();
         player.play({

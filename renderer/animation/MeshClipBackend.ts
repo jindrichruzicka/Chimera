@@ -84,6 +84,17 @@
  * forgot would leave the binding held for the life of the mixer. Ending it is
  * `#stop`, and the cases under `describe('crossfadeTo')` are what say which
  * calls reach it.
+ *
+ * Two kinds of record pose, and what tells them apart is where their ramp is
+ * AIMED, not whether they have one. A record being ramped to 0 is a blend tail:
+ * a second blend hard-stops it, and otherwise its arriving ramp is what ends it.
+ * Everything else is a HELD pose — a last frame, at the weight it was playing
+ * at, indefinitely — and a held pose may well carry a ramp: a `'once'` clip
+ * shorter than the blend that brought it in finishes with its own fade-IN still
+ * running, and that ramp's arrival settles the pose rather than ending it. A
+ * blend fades out of a held pose; a stop, a zero-length fade or `dispose` ends
+ * one outright. Both kinds end at `#stop`, and the cases under
+ * `describe('crossfadeTo')` are what say which calls reach it.
  */
 
 import { LoopOnce, LoopRepeat } from 'three';
@@ -231,12 +242,22 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
     }
 
     /**
-     * Start `clipName` while fading out every OTHER playback in flight.
+     * Start `clipName` while fading out every OTHER playback in flight, and
+     * every HELD pose.
      *
      * Every other, rather than "the current one": a backend may hold several, and
      * there is no ordering among them that would make one of them THE current
      * playback. Each faded-out playback's handle is terminal from this call
      * onwards, while its action keeps posing under Rule POSING-RELEASE.
+     *
+     * **A held pose is something to fade out of.** What a blend has to make
+     * continuous is what is on the screen, and a `'once'` clip that ended and was
+     * held is on the screen exactly as a live clip is — its handle terminal, its
+     * action paused on its last frame. Fading out of it is the whole point of a
+     * one-shot that ends and blends back: hard-stopping it instead would move the
+     * bind-pose flash onto the transition rather than remove it. A record already
+     * being ramped to 0 is the other population and keeps being hard-stopped; the
+     * split is spelled out under Rule POSING-RELEASE.
      *
      * **A zero-length fade is a cut, and takes a different path.** `fadeOut(0)`
      * is not one: it schedules a degenerate ramp whose action reaches weight 0
@@ -244,14 +265,18 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
      * never called — the `PropertyMixer` binding is never handed back,
      * `restoreOriginalState` never runs, and `action.time` is never reset. So a
      * fade of 0 starts the incoming clip with no ramp and hard-stops every
-     * outgoing playback, which is what makes it observationally a cut.
+     * outgoing playback and every held pose, which is what makes it
+     * observationally a cut.
      *
      * **What the incoming clip does depends on what is already there.** With
-     * something outgoing it ramps in from 0, which is the ordinary crossfade.
-     * With nothing outgoing it starts at full weight — a ramp from 0 there would
-     * dissolve the model out of its rest pose. And when the clip is one this
-     * backend is still fading OUT, it is resumed rather than restarted: same
-     * action, playhead untouched, weight ramped up from where it already is.
+     * something fading out — a live playback or a held pose, since both are on
+     * the screen — it ramps in from 0, which is the ordinary crossfade. With
+     * nothing fading out it starts at full weight: a ramp from 0 there would
+     * dissolve the model out of its rest pose, and one against a pose left at
+     * full weight would pop the other way, because three normalizes the
+     * accumulation. And when the clip is one this backend is still fading OUT,
+     * it is resumed rather than restarted: same action, playhead untouched,
+     * weight ramped up from where it already is.
      *
      * **The refusal comes first, the fail-soft guard second.** A bad fade throws
      * whether or not this backend has the clip and whether or not it is disposed;
@@ -280,7 +305,13 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
         const speed = checkedPlaybackSpeed(options?.speed ?? 1, 'clip speed');
 
         const outgoing = [...this.#live.values()].filter((record) => record.clipName !== clipName);
-        const resumable = fade > 0 ? this.#posing.get(clipName) : undefined;
+        // A posing record is resumable unless its action is parked on the last
+        // frame of a finished `'once'` clip: `clampWhenFinished` holds it there,
+        // so resuming would pose that frame for ever and play nothing. Restart
+        // is the only answer that plays the clip a caller asked for, and `play`
+        // ends the pose on its way through `#stopExisting`.
+        const posing = fade > 0 ? this.#posing.get(clipName) : undefined;
+        const resumable = posing !== undefined && !isClampedAtEnd(posing) ? posing : undefined;
 
         const playback =
             resumable === undefined
@@ -290,12 +321,29 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
             return null;
         }
 
-        // Every OTHER posing record is terminal now: overlapping blends must not
-        // accumulate actions that nothing will ever re-target.
+        // The posing set holds two populations and a blend owes them opposite
+        // things. One already being ramped to 0 is on its way out under an
+        // earlier blend, and is terminal now at whatever weight it reached:
+        // overlapping blends must not accumulate actions that nothing will ever
+        // re-target. Everything else is a held pose — put there by `hold`, at
+        // the weight it was playing at — so a fade ramps it out like any other
+        // thing on screen, whether or not a fade-in of its own is still running.
+        let fadingOut = 0;
         for (const record of [...this.#posing.values()]) {
-            if (record.clipName !== clipName) {
-                this.#stop(record);
+            // Defensive rather than a case: both paths that could reach the
+            // incoming clip's own posing record take it out first — `#resume`
+            // deletes it, `play` stops it through `#stopExisting` — and ramping
+            // it to 0 here would fade out the very action the incoming playback
+            // has just taken over.
+            if (record.clipName === clipName) {
+                continue;
             }
+            if (fade > 0 && !isFadingOut(record)) {
+                this.#rampTo(record, 0, fade);
+                fadingOut += 1;
+                continue;
+            }
+            this.#stop(record);
         }
 
         for (const record of outgoing) {
@@ -305,8 +353,11 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
             }
             this.#release(record);
             this.#rampTo(record, 0, fade);
+            fadingOut += 1;
         }
-        if (fade > 0 && resumable === undefined && outgoing.length > 0) {
+        // Counted rather than read off the live set, because a held pose fades
+        // out without ever having been in it.
+        if (fade > 0 && resumable === undefined && fadingOut > 0) {
             const incoming = this.#live.get(clipName);
             if (incoming !== undefined) {
                 incoming.ramp = {
@@ -557,11 +608,16 @@ export class MeshClipBackend implements ClipBackend, SupportsClipBlending {
             return;
         }
         // The posing pass needs a snapshot, because ending a record's posing
-        // deletes it from the map being walked. A record is released when its
-        // ramp ARRIVES on this step, never merely because it has none: a held
-        // playback poses with no ramp at all and must survive every advance.
+        // deletes it from the map being walked. A record is released when a
+        // FADE-OUT ramp arrives on this step: never merely because it has no
+        // ramp, since a held playback poses with none at all and must survive
+        // every advance, and never merely because SOME ramp arrived, since a
+        // clip that finished before its own fade-in did is held with that ramp
+        // still running — its arrival settles the pose rather than ending it.
+        // Read before the step, which clears an arriving ramp.
         for (const record of [...this.#posing.values()]) {
-            if (stepRamp(record, deltaSeconds)) {
+            const leaving = isFadingOut(record);
+            if (stepRamp(record, deltaSeconds) && leaving) {
                 this.#stop(record);
             }
         }
@@ -644,11 +700,37 @@ function isUsableDuration(value: number): boolean {
 }
 
 /**
+ * Whether `record`'s playhead has reached the end of a `'once'` clip.
+ *
+ * Read off the playhead rather than off `frozen.ended`, which every released
+ * record carries: what matters here is where the ACTION is, and
+ * `clampWhenFinished` parks a finished `'once'` action at exactly its clip
+ * length, so resuming one poses that frame for ever. A `'loop'` clip never
+ * qualifies however far it has run, which `resumes a looping posing clip that
+ * shared state pushed to phase 1` is what says.
+ */
+function isClampedAtEnd(record: LivePlayback): boolean {
+    return record.loop === 'once' && phaseOf(record) >= 1;
+}
+
+/**
+ * Whether a blend is taking `record` out — a ramp aimed at 0.
+ *
+ * The posing set's two populations are told apart here rather than by whether a
+ * ramp is present at all: a `'once'` clip shorter than the blend that brought it
+ * in finishes while its own fade-IN is still running, so it is HELD with a
+ * rising ramp, and the mere presence of one would classify the commonest short
+ * one-shot as a blend tail. Only the fade-out paths aim a ramp at 0.
+ */
+function isFadingOut(record: LivePlayback): boolean {
+    return record.ramp !== null && record.ramp.toWeight === 0;
+}
+
+/**
  * Move `record`'s ramp on by `deltaSeconds`, clearing it once it has arrived.
  *
- * @returns whether the ramp arrived on THIS call — which is what the posing pass
- *          releases on, so that a record with no ramp at all (a held playback) is
- *          not swept up by the same condition.
+ * @returns whether the ramp arrived on THIS call. A record with no ramp arrives
+ *          at nothing and answers `false`.
  */
 function stepRamp(record: LivePlayback, deltaSeconds: number): boolean {
     const { ramp } = record;
