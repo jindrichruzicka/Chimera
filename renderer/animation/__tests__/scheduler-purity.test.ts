@@ -3,8 +3,8 @@
  *
  * Two claims about the compile half plus the scheduler and the player:
  *
- * 1. **Graph purity.** Their whole in-repo graph is exactly the five modules
- *    listed below, and they depend on no package at all — no `three`, no `react`,
+ * 1. **Graph purity.** Their whole in-repo graph is exactly the modules listed
+ *    below, and they depend on no package at all — no `three`, no `react`,
  *    no `@react-three/fiber`, and nothing else either.
  * 2. **No marker event carries a dispatcher.** Each event's key set is closed at
  *    the type level, so a later `sendAction`, `dispatch`, `playerId` or `tick`
@@ -97,7 +97,7 @@ describe('renderer/animation compile-half purity', () => {
         }
     });
 
-    it('reaches exactly these five modules between them, and nothing else in the repo', async () => {
+    it('reaches exactly the listed modules between them, and nothing else in the repo', async () => {
         const reached = new Set<string>();
         for (const modulePath of PURE_MODULES) {
             const analysis = await analyze({ entryPoint: resolve(ANIMATION_DIR, modulePath) });
@@ -107,8 +107,10 @@ describe('renderer/animation compile-half purity', () => {
         }
 
         // A closed set over the UNION, which the per-module loop above cannot
-        // state: that loop would stay green if one of these five quietly stopped
-        // being reachable, or if a sixth in-directory module were pulled in.
+        // state: that loop would stay green if an unlisted in-directory module
+        // were pulled in. It says nothing in the other direction — every listed
+        // module is its own analysis's entry point, so the union holds all of
+        // them however little they reference each other.
         expect([...reached].sort()).toEqual(
             [...PURE_MODULES].map((name) => `${ANIMATION_SUBTREE}${name}`).sort(),
         );
@@ -126,7 +128,7 @@ describe('renderer/animation compile-half purity', () => {
 
     it('would report a sibling module the union does not list', async () => {
         // The opposite-polarity control for the closed union: a module in this
-        // directory that is NOT one of the five is visible to the same analyzer.
+        // directory that the list does NOT name is visible to the same analyzer.
         const { reached } = await analyze({
             entryPoint: resolve(ANIMATION_DIR, '__test-support__/fakeClipBackend.ts'),
         });
