@@ -8,9 +8,10 @@
  *
  * **The number.** A reserved section number is cited by prose that says it is
  * reserved; once the section exists that prose is false. So every tracked file
- * carrying the token must also carry a path that RESOLVES to the section — a
- * dead path or a bare basename is the same defect wearing the right name — and
- * the two sentences that reserved it must be gone rather than reworded.
+ * carrying the token, the section itself aside, must also carry a path that
+ * RESOLVES to the section — a dead path or a bare basename is the same defect
+ * wearing the right name — and the two sentences that reserved it must be gone
+ * rather than reworded.
  *
  * **The index.** `docs/architecture-overview.md` is the hub every other section
  * is reached through; a section absent from its table is unreachable however
@@ -173,19 +174,51 @@ function assertEveryPointerResolves(cell: string, label: string): void {
  * of the repo's citation idioms are accepted: relative to the citing file (a
  * markdown link) and relative to the repo root (how a module header names a
  * doc).
+ *
+ * `readText` is a parameter so this composition can be fed a synthetic file:
+ * the weaker `read(file).includes(SECTION_BASENAME)` needs one carrying the
+ * basename with no resolving path to tell it apart. Measured by `rejects a file
+ * that carries the basename with no path that resolves to the section`; the
+ * tree-wide scan below is what binds the default.
  */
-function citesTheSection(file: string): boolean {
-    return pathsResolvingToTheSection(read(file), path.dirname(file)).length > 0;
+function citesTheSection(file: string, readText: (rel: string) => string = read): boolean {
+    return pathsResolvingToTheSection(readText(file), path.dirname(file)).length > 0;
 }
+
+/**
+ * A run of the characters a repo-relative path is written from. The basename is
+ * deliberately absent: the filter below decides membership EXACTLY, so a scan
+ * narrowed to runs ENDING in the basename read the section path out of the
+ * front of `animation-system.mdx` and called it resolved.
+ */
+const PATH_TOKEN = /[\w./-]+/g;
+
+/** Every character `PATH_TOKEN` admits — the set a widened trim could reach into. */
+const PATH_CHARACTERS = [
+    ...'abcdefghijklmnopqrstuvwxyz',
+    ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    ...'0123456789',
+    ...'_./-',
+];
+
+/**
+ * The full stops a citation ends on. A citation that ends a sentence leaves the
+ * stop inside the run above, where it is punctuation and not path — as does an
+ * ellipsis, which is why the whole trailing run goes rather than one character.
+ * Nothing else a run may end on is trimmed, which `trims the full stop and no
+ * other character a run may end on` measures over `PATH_CHARACTERS`.
+ */
+const SENTENCE_END = /\.+$/;
 
 /** The paths in `text` that resolve to the section, either from `dir` or from the repo root. */
 function pathsResolvingToTheSection(text: string, dir: string): string[] {
-    const pattern = new RegExp(`[\\w./-]*${escapeForRegExp(SECTION_BASENAME)}`, 'g');
-    return (text.match(pattern) ?? []).filter(
-        (candidate) =>
-            path.normalize(path.join(dir, candidate)) === SECTION_DOC ||
-            path.normalize(candidate) === SECTION_DOC,
-    );
+    return (text.match(PATH_TOKEN) ?? [])
+        .map((run) => run.replace(SENTENCE_END, ''))
+        .filter(
+            (candidate) =>
+                path.normalize(path.join(dir, candidate)) === SECTION_DOC ||
+                path.normalize(candidate) === SECTION_DOC,
+        );
 }
 
 /** Every tracked file the tree-wide citation scan reads. */
@@ -267,6 +300,90 @@ describe('the citation-path check', () => {
             pathsResolvingToTheSection('written up in animation-system.md', 'docs/testing'),
         ).toEqual([]);
     });
+
+    it('walks every character the candidate pattern admits', () => {
+        // Anti-vacuity for the boundary walk below: thinning `PATH_CHARACTERS`
+        // frees the trim again on whatever was dropped, and the walk stays
+        // green while it happens. The set is derived from `PATH_TOKEN` here
+        // rather than restated.
+        const admits = new RegExp(PATH_TOKEN.source);
+        const admitted = [...Array(0x80).keys()]
+            .map((code) => String.fromCharCode(code))
+            .filter((character) => admits.test(character));
+
+        expect([...PATH_CHARACTERS].sort()).toEqual(admitted.sort());
+    });
+
+    it('trims the full stop and no other character a run may end on', () => {
+        // One fixture per character loses a race with the character class, so
+        // this walks the whole set `PATH_TOKEN` admits instead. The `x` case is
+        // also the old basename-anchored pattern's false positive — it read the
+        // section path out of the front of `animation-system.mdx` and called it
+        // resolved.
+        for (const character of PATH_CHARACTERS) {
+            expect(
+                pathsResolvingToTheSection(`see ${SECTION_DOC}${character}`, 'renderer/animation'),
+                `run ending in "${character}"`,
+            ).toEqual(character === '.' ? [SECTION_DOC] : []);
+        }
+    });
+
+    it('accepts a repo-rooted citation that ends a sentence', () => {
+        // The full stop is punctuation, and it sits inside the path-shaped run.
+        expect(
+            pathsResolvingToTheSection(
+                `Feature F89 — Animation System, ${SECTION_DOC}.`,
+                'renderer/animation',
+            ),
+        ).toEqual([SECTION_DOC]);
+    });
+
+    it('accepts a citation whose run ends in more than one full stop', () => {
+        // Trimming exactly one would leave `…animation-system.md.`, which
+        // resolves nowhere.
+        expect(pathsResolvingToTheSection(`see ${SECTION_DOC}...`, 'renderer/animation')).toEqual([
+            SECTION_DOC,
+        ]);
+    });
+});
+
+describe('the per-file citation check', () => {
+    /** A stand-in tree: a file it does not list reads as empty. */
+    const tree =
+        (files: Readonly<Record<string, string>>) =>
+        (file: string): string =>
+            files[file] ?? '';
+
+    it('rejects a file that carries the basename with no path that resolves to the section', () => {
+        expect(
+            citesTheSection(
+                'docs/testing/notes.md',
+                tree({
+                    'docs/testing/notes.md': `${SECTION_TOKEN} is written up in ${SECTION_BASENAME}`,
+                }),
+            ),
+        ).toBe(false);
+    });
+
+    it('accepts a link resolved from the citing file’s own directory', () => {
+        expect(
+            citesTheSection(
+                'docs/core-components/other.md',
+                tree({
+                    'docs/core-components/other.md': `see [the section](${SECTION_BASENAME})`,
+                }),
+            ),
+        ).toBe(true);
+    });
+
+    it('accepts a repo-rooted path in a file nowhere near the section', () => {
+        expect(
+            citesTheSection(
+                'renderer/animation/ClipPlayer.ts',
+                tree({ 'renderer/animation/ClipPlayer.ts': `see ${SECTION_DOC}` }),
+            ),
+        ).toBe(true);
+    });
 });
 
 describe('the section exists and owns its number', () => {
@@ -291,7 +408,7 @@ describe('the section exists and owns its number', () => {
 });
 
 describe('every citation of the number resolves to the section', () => {
-    it('names the section path in every tracked text file that carries the number', () => {
+    it('resolves a path to the section from every tracked text file that carries the number, the section itself aside', () => {
         const files = trackedTextFiles();
         // Anti-vacuity: the scan must cover the tree, not an empty list.
         expect(files.length).toBeGreaterThan(1000);
