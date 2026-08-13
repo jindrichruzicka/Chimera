@@ -384,7 +384,7 @@ Feature issue: [#975](https://github.com/jindrichruzicka/Chimera/issues/975).
 
 What landed is the layer a game animates against: **clip sheets** (authored notify points and sub-passages), a pure **marker scheduler** turning a stream of playhead samples into `notify` / `passage-start` / `passage-tick` / `passage-end` / `clip-end` emissions, a **three-layer multiplicative speed stack**, and **authoritative time dilation** that re-paces the simulation heartbeat and every clip together. Each task authored the invariant rows its own change required — Invariant #89 obliges any task adding a `ReduceContext` field to land one — and #1007 authored the rest: the set is #128 (`beatReducer`), #129 (host-only beat-owned windows), #130 (one derivation site for the dilation multiplier), #131 (`TimeScaleBridge` as the dilation store's sole writer) and #132 (no animation event may gate an `EngineAction`).
 
-**§4.40 is RESERVED, not written.** The number is set aside for a core-component section that does not exist, so nothing outside this roadmap may cite it. The design lives here and the contracts live in the invariants; writing the section is a follow-up, not a thing that quietly happened.
+**§4.40 is [`docs/core-components/animation-system.md`](../core-components/animation-system.md)**, written under [#1096](https://github.com/jindrichruzicka/Chimera/issues/1096) after F89 had added a second feature's worth of surface under the same number. It carries the contract — the vocabulary, the seam, the player's verbs, the bindings, the named rules and the invariants. What stays here is the design record: why the mixer is frame-driven, what was measured to decide it, and what each feature deferred.
 
 **Two clocks, and they never touch.** The RENDERER clock is float seconds and normalized phase, driven by one `useFrame` at default priority; it owns clip position, marker firing, passage open/close and playback speed. The SIMULATION clock is the integer BEAT — one outer `engine:tick` — and it owns hit windows, damage, cooldowns, AI, saves and replays. Playback is **frame-driven**, every gameplay consequence is **beat-driven**, and the two meet only at authoring time: the visual passage and the mechanical window are written twice and verified against each other when content loads, rather than either being converted into the other at runtime, so a host pacing knob never determines a gameplay window's length. `chimera/no-animation-derivation-in-reduce` (#1005) is the lint leg of that separation: the verifier is a content-load call. What the rule does and does not catch — it matches by NAME at the call site, so an aliased import goes unreported — is measured in its own suite.
 
@@ -731,8 +731,11 @@ changed; No tactics adoption of a blend and no animation e2e spec — F89's end-
 `MeshClipBackend` against real `three`. Adopting it meant regenerating the byte-gated
 `showcase-rig-animated.glb` around a second clip, re-authoring its sheet and extending the game's
 window verification, so it was filed as a follow-up and landed under
-[#1095](https://github.com/jindrichruzicka/Chimera/issues/1095); No §4.40 core-component section — the number stays reserved and
-that section is F82's outstanding follow-up, not F89's scope; No new numbered invariant. #133 and
+[#1095](https://github.com/jindrichruzicka/Chimera/issues/1095); No §4.40 core-component section — that
+section was F82's outstanding follow-up, not F89's scope, and it landed afterwards under
+[#1096](https://github.com/jindrichruzicka/Chimera/issues/1096) as
+[`docs/core-components/animation-system.md`](../core-components/animation-system.md), covering both
+features' surface; No new numbered invariant. #133 and
 #134 are reserved by F85, so the posing-action release rule ships as a named module-header rule,
 the way Rule SPEED-NON-NEGATIVE and Rule STEP-BOUNDED already do; No
 `@chimera-engine/renderer/animation` subpath — both blend surfaces ride already-exported types,

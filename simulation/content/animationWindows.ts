@@ -11,12 +11,15 @@
 // window a function of the host pacing knob `tickRateMs`: raising the tick rate
 // would silently widen or narrow every hit window in the game.
 //
-// Rule WINDOW-OUTWARD-ROUNDING — a passage's beats are the beats it TOUCHES:
-//   startBeat = floor(fromSeconds × 1000 / tickRateMs)
-//   endBeat   = max(startBeat + 1, ceil(toSeconds × 1000 / tickRateMs))
+// Rule WINDOW-OUTWARD-ROUNDING — a passage's beats are the beats it TOUCHES,
+// where beats = seconds × 1000 / tickRateMs:
+//   startBeat = floor(fromBeats + BEAT_EPSILON)
+//   endBeat   = max(startBeat + 1, ceil(toBeats - BEAT_EPSILON))
 // The `max` is the structural one-beat floor: at the default 20 Hz the finest
 // expressible mechanical window is one beat, and a narrower authored span is
-// floored at one rather than collapsing to the empty window `[n, n]`.
+// floored at one rather than collapsing to the empty window `[n, n]`. The
+// epsilon snaps a bound landing on a beat boundary onto it, so a span authored
+// in whole beats is not pushed outward by the float division.
 //
 // Purity: the verifier reads its input and returns authored values by reference.
 // It mutates nothing, reads no clock and dispatches nothing (Invariant #1).
