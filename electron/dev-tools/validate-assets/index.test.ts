@@ -1647,6 +1647,97 @@ describe('animation clip sheet validation', () => {
         ]);
     });
 
+    it('accepts an authored blendInSeconds', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { durationSeconds: 0.8, blendInSeconds: 0.2 } } }`),
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+    });
+
+    // The predicate its `durationSeconds` neighbour uses is `> 0`, and copying that
+    // here would refuse the one value an animator writes to say "this clip cuts in".
+    // Its own case, because that is the mutant most likely to arrive later.
+    it('accepts a blendInSeconds of exactly zero, which authors a cut', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { blendInSeconds: 0 } } }`),
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+    });
+
+    it.each([
+        ['negative', '-1'],
+        ['not a number', "'fast'"],
+        ['non-finite', '1e999'],
+        ['not statically readable', 'BLEND'],
+    ])('rejects a blendInSeconds that is %s', async (_label, authored) => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { durationSeconds: 0.8, blendInSeconds: ${authored} } } }`,
+            ),
+        );
+
+        // The gate's own verdict, not only its reason list: what a CI run reads is
+        // the exit code this folds into.
+        expect(report.ok).toBe(false);
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "swing" declares a blendInSeconds that is not a statically-readable finite number >= 0',
+        ]);
+    });
+
+    // The bail returns rather than falling through to the mark checks, exactly as its
+    // siblings do, so an author is not handed findings for marks they cannot fix until
+    // the field above them is.
+    it('reports a bad blendInSeconds once, with the marks after it unreported', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(
+                `{ clips: { swing: { durationSeconds: 0.8, blendInSeconds: -1, notifies: { impact: { at: 9 } } } } }`,
+            ),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "swing" declares a blendInSeconds that is not a statically-readable finite number >= 0',
+        ]);
+    });
+
+    // The precedence between the two bails, pinned rather than left arbitrary: the
+    // blend is read AFTER frameCount, the order the runtime parser reads them in, so a
+    // clip with both faults reports the frameCount one and returns before the blend is
+    // read at all.
+    it('reports the frameCount fault alone when a clip authors both badly', async () => {
+        const report = await validateManifestEntries(
+            modelEntrySource(`{ clips: { swing: { frameCount: 0, blendInSeconds: -1 } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "swing" declares a frameCount that is not a statically-readable whole number > 0',
+        ]);
+    });
+
+    it('accepts a well-formed blendInSeconds on a sprite clip', async () => {
+        const report = await validateManifestEntries(
+            spriteEntrySource(`{ clips: { walk: { frames: [0, 1], blendInSeconds: 0.2 } } }`),
+        );
+
+        expect(report.ok).toBe(true);
+        expect(report.invalidAnimationSheets).toHaveLength(0);
+    });
+
+    // The field lives on the SHARED track sheet, so a sprite clip may author it even
+    // though no sprite backend honours it — a bad value is still an authoring fault.
+    it('rejects a bad blendInSeconds on a sprite clip too', async () => {
+        const report = await validateManifestEntries(
+            spriteEntrySource(`{ clips: { walk: { frames: [0, 1], blendInSeconds: -1 } } }`),
+        );
+
+        expect(animationSheetReasons(report)).toEqual([
+            'clip "walk" declares a blendInSeconds that is not a statically-readable finite number >= 0',
+        ]);
+    });
+
     it('rejects a fractional frameCount', async () => {
         const report = await validateManifestEntries(
             modelEntrySource(`{ clips: { swing: { frameCount: 2.5 } } }`),

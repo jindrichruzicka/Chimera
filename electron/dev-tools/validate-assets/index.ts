@@ -1316,11 +1316,9 @@ interface AuthoredClipContext {
 /**
  * Check one clip's record.
  *
- * A present-but-unusable `durationSeconds` or `frameCount` ends the clip: the marks are
- * not checked, and whatever else the clip holds goes unreported until the field is
- * fixed. What that costs and what it buys is measured by `rejects a frame position on a
- * clip whose frameCount is zero` and `rejects a seconds position on a clip whose
- * durationSeconds is zero`.
+ * What each early return costs an author, and what it buys, is measured by `rejects a
+ * frame position on a clip whose frameCount is zero` and `rejects a seconds position on
+ * a clip whose durationSeconds is zero`.
  */
 function checkAnimationClip(
     clipName: string,
@@ -1366,6 +1364,22 @@ function checkAnimationClip(
             return;
         }
         context.frameCount = frameCount;
+    }
+
+    // Read after the two fields the mark checks consume, which keeps those adjacent and
+    // matches the order the runtime parser reads them in. `>= 0` where its
+    // `durationSeconds` neighbour uses `> 0`, and that difference is the whole of this
+    // check: 0 is what an animator writes to say this clip cuts in, and refusing it
+    // would refuse the one value the field exists to make sayable.
+    const blendInValue = byName.get('blendInSeconds');
+    if (blendInValue !== undefined) {
+        const blendIn = readNumberExpression(blendInValue);
+        if (blendIn === undefined || !Number.isFinite(blendIn) || blendIn < 0) {
+            report(
+                `clip "${clipName}" declares a blendInSeconds that is not a statically-readable finite number >= 0`,
+            );
+            return;
+        }
     }
 
     if (requiresFrames) {
