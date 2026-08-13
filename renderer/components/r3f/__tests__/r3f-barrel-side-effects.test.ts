@@ -102,6 +102,25 @@ interface BarrelTypeSurface {
     readonly clipEnd: ClipEndEvent;
 }
 
+/**
+ * A blend duration is a mesh option and only a mesh option.
+ *
+ * Values rather than type declarations, because only an object LITERAL trips
+ * excess-property checking — a declared field of a narrowed type is legal, and a
+ * spread would satisfy the same assignment silently. A sprite playback rewrites
+ * quad UVs and has no weight to interpolate, so the field is absent from its
+ * options and from the element's props rather than accepted and ignored, and
+ * each `@ts-expect-error` below fails `pnpm typecheck` the day that stops being
+ * true.
+ */
+const blendSurface = {
+    mesh: { clip: 'attack', blendSeconds: 0.3 } satisfies UseClipPlayerOptions,
+    // @ts-expect-error a sprite playback has no weights to blend
+    sprite: { clip: 'run', blendSeconds: 0.3 } satisfies UseSpriteClipPlayerOptions,
+    // @ts-expect-error and neither has the element that drives one
+    spriteElement: { clip: 'run', sheet: null, blendSeconds: 0.3 } satisfies AnimatedSpriteProps,
+};
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -323,6 +342,18 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         ]) {
             expect(withoutComments, `${name} must not be re-exported`).not.toContain(name);
         }
+    });
+
+    it('publishes a blend duration on the mesh options and on nothing else', () => {
+        // The runtime half of the three declarations above: the mesh literal
+        // really carries the field, so the two suppressed errors are the absence
+        // of it from the sprite surfaces rather than a typo in the property name.
+        // Read on ALL THREE literals: a typo in the property name would leave
+        // the two suppressed errors reporting an excess property that is not the
+        // one this pin is about, and the sprite reads below are what catch it.
+        expect(blendSurface.mesh.blendSeconds).toBe(0.3);
+        expect(blendSurface.sprite.blendSeconds).toBe(0.3);
+        expect(blendSurface.spriteElement.blendSeconds).toBe(0.3);
     });
 
     it("carries 'use client' on line 1 of every module shipping React surface", () => {

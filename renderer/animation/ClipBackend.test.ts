@@ -116,7 +116,7 @@ describe('supportsBlending', () => {
 describe('the blending fake', () => {
     const specs = { attack: { durationSeconds: 1 }, idle: { durationSeconds: 1 } };
 
-    it('starts the incoming clip and releases every other live playback', () => {
+    it('starts the incoming clip and leaves every other live playback holding', () => {
         const backend = createBlendingFakeClipBackend(specs);
         const outgoing = backend.play('attack', { loop: 'loop' });
         backend.advance(0.4);
@@ -124,7 +124,11 @@ describe('the blending fake', () => {
         const incoming = backend.crossfadeTo('idle', 0.2, { loop: 'loop' });
 
         expect(incoming?.clipName).toBe('idle');
-        expect(backend.stopped).toEqual(['attack']);
+        // Held rather than stopped: a blend leaves the outgoing clip posing at a
+        // falling weight, which is terminal without being released — and a
+        // double that stopped them would hide a caller's own stop-instead-of-hold.
+        expect(backend.held).toEqual(['attack']);
+        expect(backend.stopped).toEqual([]);
         expect(backend.sampleOf('attack')).toBeNull();
         // Released, not forgotten: the handle still answers where it was, which
         // is what a caller reads a terminal playhead out of.
@@ -132,7 +136,7 @@ describe('the blending fake', () => {
         expect(backend.sampleOf('idle')).toEqual({ phase: 0, cycle: 0, ended: false });
     });
 
-    it('releases every other live playback, including a second one of the same clip', () => {
+    it('holds every other live playback, including a second one of the same clip', () => {
         const backend = createBlendingFakeClipBackend(specs);
         const first = backend.play('attack', { loop: 'loop' });
         const second = backend.play('attack', { loop: 'loop' });
@@ -143,11 +147,24 @@ describe('the blending fake', () => {
         // The fake it wraps keeps both playbacks of a clip live, so a ledger
         // keyed by clip name would release `second` and leave `first`
         // integrating for the rest of the test.
-        expect(backend.stopped).toEqual(['attack', 'attack']);
+        expect(backend.held).toEqual(['attack', 'attack']);
+        expect(backend.stopped).toEqual([]);
         expect(first?.sample().phase).toBeCloseTo(0.25, 12);
         expect(second?.sample().phase).toBeCloseTo(0.25, 12);
         backend.advance(0.25);
         expect(first?.sample().phase).toBeCloseTo(0.25, 12);
+    });
+
+    it('releases rather than holds the others on a zero-length fade', () => {
+        const backend = createBlendingFakeClipBackend(specs);
+        backend.play('attack', { loop: 'loop' });
+
+        backend.crossfadeTo('idle', 0, { loop: 'loop' });
+
+        // A zero fade is a cut on the backend this doubles, which hard-stops
+        // every outgoing playback rather than leaving it posing.
+        expect(backend.stopped).toEqual(['attack']);
+        expect(backend.held).toEqual([]);
     });
 
     it('records what it was asked, after the fade was accepted', () => {

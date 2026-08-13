@@ -69,8 +69,13 @@ import type {
     AnimationMarkName,
 } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
 
-import { checkedPlaybackSpeed } from './ClipBackend.js';
-import type { ClipBackend, ClipPlayback, PlayheadSample } from './ClipBackend.js';
+import { checkedFade, checkedPlaybackSpeed, supportsBlending } from './ClipBackend.js';
+import type {
+    ClipBackend,
+    ClipPlayback,
+    PlayheadSample,
+    SupportsClipBlending,
+} from './ClipBackend.js';
 import { compileClipTimeline } from './ClipTimeline.js';
 import type { ClipSheetSource, CompiledMark } from './ClipTimeline.js';
 import { initSchedulerState, stepScheduler, terminateScheduler } from './clipMarkerScheduler.js';
@@ -138,6 +143,21 @@ export interface ClipPlayRequest {
     readonly loop?: AnimationLoopMode;
     /** The clip's own layer of the speed stack. Defaults to 1. */
     readonly speed?: number;
+    /**
+     * Seconds to blend out of the outgoing clip and into this one. `0` — the
+     * default — cuts.
+     *
+     * REAL TIME, and deliberately so: it does not compose with the dilation
+     * multiplier, so a blend takes as long in a slowed-down scene as it does at
+     * full speed. Read by {@link ClipPlayer.transitionTo} — which decides what a
+     * duration comes to against the backend and what is in flight, under
+     * `describe('transitionTo — the blend')`. {@link ClipPlayer.play} adds a
+     * clip rather than replacing what is there, and does not read it at all.
+     *
+     * @throws RangeError  when negative or not finite, at the layer it was
+     *                     written and before anything is started or released.
+     */
+    readonly blendSeconds?: number;
 }
 
 /**
@@ -206,6 +226,20 @@ export class ClipPlayer {
      * stop being wanted.
      */
     readonly #posing = new Map<AnimationClipName, ClipPlayback>();
+    /**
+     * The playbacks a BLEND left fading out. Kept apart from the map above, and
+     * that separation is load-bearing rather than tidy: `transitionTo` refuses to
+     * blend into a clip it is POSING — a finished clip resumed mid-hold stays on
+     * its last frame for ever — while a clip that is fading out is exactly the
+     * one a backend can resume, so reading one map for both would downgrade every
+     * second transition of an A/B alternation to a cut.
+     *
+     * An entry outlives its fade: nothing prunes it when the ramp arrives,
+     * because the handle is terminal either way and its `stop` is then a no-op.
+     * It exists so `stopAll` and `dispose` can reach a blend that is still on
+     * screen.
+     */
+    readonly #fading = new Map<AnimationClipName, ClipPlayback>();
     /** Marks whose handler already reported a fault, so it reports once, not once a frame. */
     readonly #reportedMarks = new Set<AnimationMarkName>();
     #reportedClipEnd = false;
@@ -254,14 +288,14 @@ export class ClipPlayer {
 
     /**
      * Start `request.clipName` as the ONLY clip: every other clip in flight is
-     * closed with `'clip-changed'`, and every pose a clip end left holding comes
-     * down.
+     * closed with `'clip-changed'`, and everything on screen that is not being
+     * played comes down with them.
      *
      * The order below is the whole of this method's contract.
      *
-     * 1. **Every refusal first.** A bad speed throws and an unplayable clip
-     *    answers `false` with nothing started, released or held — same as
-     *    {@link ClipPlayer.play}.
+     * 1. **Every refusal first.** A bad speed or an unusable blend length throws
+     *    and an unplayable clip answers `false`, with nothing started, released
+     *    or held — same as {@link ClipPlayer.play}.
      * 2. **Start the incoming playback**, so a backend that shares one resource
      *    across a swap has the incoming clip holding it before the outgoing lets
      *    go.
@@ -280,28 +314,63 @@ export class ClipPlayer {
      * @returns `false` when the backend has no such clip, or the player is
      *          disposed — a caller telling those apart reads
      *          {@link ClipPlayer.isDisposed}.
-     * @throws RangeError  when `request.speed` is negative or not finite.
+     * @throws RangeError  when `request.speed` is negative or not finite, or
+     *                     `request.blendSeconds` is.
      */
     transitionTo(request: ClipPlayRequest): boolean {
         if (this.#disposed) {
             return false;
         }
+        // Before the branch and before any mutation: a bare `blendSeconds > 0`
+        // would send a negative or `NaN` duration down the cut path and lose the
+        // refusal entirely, on a backend that cannot blend as much as on one
+        // that can.
+        const fade = checkedFade(request.blendSeconds ?? 0);
         // Captured before the incoming entry is registered, so the list cannot
         // contain it however the map is keyed.
         const others = [...this.#active.values()].filter(
             (entry) => entry.clipName !== request.clipName,
         );
-        const started = this.#start(request);
+        // Nothing a blend could mean is left when the incoming clip is the one
+        // already in flight; and a clip in `#posing` is one a clip END left on
+        // its last frame, which a backend asked to blend into resumes exactly
+        // there — for ever, on a clip that is finished. Both fall to the cut
+        // path, which restarts. A clip that is FADING is not excluded: resuming
+        // one is what a backend does well, and is the case `#fading` is kept
+        // apart from `#posing` for.
+        const blendingBackend =
+            fade > 0 &&
+            !this.#active.has(request.clipName) &&
+            !this.#posing.has(request.clipName) &&
+            supportsBlending(this.#backend)
+                ? this.#backend
+                : null;
+        const started = this.#start(
+            request,
+            blendingBackend === null ? null : { backend: blendingBackend, fadeSeconds: fade },
+        );
         if (started === null) {
             return false;
         }
+        // The poses of the OTHER clips come down now: the incoming clip is
+        // started, so a backend sharing one resource across the swap has already
+        // handed it over.
+        this.#releaseEveryPose();
         if (started.replaced !== undefined) {
             this.#release(started.replaced, 'clip-changed');
         }
         for (const entry of others) {
-            this.#release(entry, 'clip-changed');
+            // HELD on the blending arm. The backend has already released these
+            // playbacks into its own posing set, with a weight ramp running on
+            // each; stopping them here would hand their resources back on the
+            // frame the blend started, and there would be nothing on screen to
+            // fade out of. Kept in `#fading` so `stopAll` and `dispose` can
+            // reach a blend that is still on screen.
+            this.#release(entry, 'clip-changed', blendingBackend !== null);
+            if (blendingBackend !== null) {
+                this.#fading.set(entry.clipName, entry.playback);
+            }
         }
-        this.#releaseEveryPose();
 
         for (const warning of started.warnings) {
             this.#report(warning);
@@ -310,8 +379,8 @@ export class ClipPlayer {
     }
 
     /**
-     * Stop every clip with `'stopped'` and take down every pose. Idempotent, and
-     * the player stays usable.
+     * Stop every clip with `'stopped'` and take down everything on screen that
+     * is not being played. Idempotent, and the player stays usable.
      *
      * The verb a caller needs to play NOTHING: stopping by name is unusable when
      * the names are exactly what the caller has stopped tracking.
@@ -327,11 +396,11 @@ export class ClipPlayer {
      * Stop `clipName`, closing whatever it had open with `'stopped'`. A no-op if
      * it is not playing.
      *
-     * A clip that ENDED is not playing but is still posing its last frame, and
-     * this is how that pose is taken down. Nothing is fanned out on that path,
-     * and not by choice: what `#posing` holds is a backend handle rather than an
-     * entry, so there is no scheduler left to close and no handlers to close it
-     * to. `stepScheduler` closed them on the tick that ended the clip.
+     * It also takes down whatever of this clip is still on screen without being
+     * played: a last frame a clip end left, and a blend still fading out.
+     * Nothing is fanned out on those paths, and not by choice — what `#posing`
+     * and `#fading` hold is a backend handle rather than an entry, so there is
+     * no scheduler left to close and no handlers to close it to.
      */
     stop(clipName: AnimationClipName): void {
         const entry = this.#active.get(clipName);
@@ -431,9 +500,9 @@ export class ClipPlayer {
     }
 
     /**
-     * Release every clip with `'released'`, take down every pose a clip end left
-     * holding, and dispose the backend. Idempotent; a disposed player plays and
-     * ticks nothing.
+     * Release every clip with `'released'`, take down everything on screen that
+     * is not being played, and dispose the backend. Idempotent; a disposed player
+     * plays and ticks nothing.
      */
     dispose(): void {
         if (this.#disposed) {
@@ -450,12 +519,27 @@ export class ClipPlayer {
         this.#backend.dispose();
     }
 
-    /** Close one clip out for a reason that came from outside the playhead. */
-    #release(entry: ActiveClip, reason: 'stopped' | 'clip-changed' | 'released'): void {
+    /**
+     * Close one clip out for a reason that came from outside the playhead.
+     *
+     * @param hold  Leave what the playback poses on screen instead of releasing
+     *              it — for a clip something else is already fading out of. The
+     *              scheduler is closed either way: this entry is terminal, and
+     *              nothing about the pose changes that.
+     */
+    #release(
+        entry: ActiveClip,
+        reason: 'stopped' | 'clip-changed' | 'released',
+        hold = false,
+    ): void {
         const step = terminateScheduler(entry.scheduler, reason);
         entry.scheduler = step.state;
         this.#fanOut(entry, step.events);
-        entry.playback.stop();
+        if (hold) {
+            entry.playback.hold();
+        } else {
+            entry.playback.stop();
+        }
         this.#forget(entry);
     }
 
@@ -469,7 +553,13 @@ export class ClipPlayer {
      * @throws RangeError  when `request.speed` is negative or not finite, before
      *                     anything is started or registered.
      */
-    #start(request: ClipPlayRequest): {
+    #start(
+        request: ClipPlayRequest,
+        blend: {
+            readonly backend: SupportsClipBlending;
+            readonly fadeSeconds: number;
+        } | null = null,
+    ): {
         readonly entry: ActiveClip;
         readonly replaced: ActiveClip | undefined;
         readonly warnings: readonly string[];
@@ -492,10 +582,21 @@ export class ClipPlayer {
         // speed does not play one frame at 1x and get corrected on the next.
         const speed = effectiveClipSpeed(clipSpeed, this.#playerSpeed, this.#getTimeScale());
 
-        const playback = this.#backend.play(request.clipName, {
+        const options = {
             ...(loop !== undefined ? { loop } : {}),
+            // The same seat both paths owe the incoming clip: the folded stack,
+            // so a clip declared at half speed plays at half speed through a
+            // blend as well as through a cut.
             speed,
-        });
+        };
+        // The narrowing travels with the value rather than being re-derived
+        // here: a second `supportsBlending` test would be a copy of the caller's
+        // predicate that nothing could make disagree, and the seam warns about
+        // exactly that shape.
+        const playback =
+            blend === null
+                ? this.#backend.play(request.clipName, options)
+                : blend.backend.crossfadeTo(request.clipName, blend.fadeSeconds, options);
         if (playback === null) {
             return null;
         }
@@ -522,21 +623,26 @@ export class ClipPlayer {
         return { entry, replaced, warnings: timeline?.warnings ?? [] };
     }
 
-    /** Take down every pose a clip end left holding. */
+    /** Take down everything on screen that is not being played. */
     #releaseEveryPose(): void {
-        for (const clipName of [...this.#posing.keys()]) {
+        for (const clipName of [...this.#posing.keys(), ...this.#fading.keys()]) {
             this.#releasePosing(clipName);
         }
     }
 
-    /** Release the pose `clipName` was left holding. A no-op when it holds none. */
+    /**
+     * Take down whatever of `clipName` is on screen without being played — a last
+     * frame a clip end left, a blend still fading out — and forget it. A no-op
+     * when there is neither.
+     */
     #releasePosing(clipName: AnimationClipName): void {
-        const posing = this.#posing.get(clipName);
-        if (posing === undefined) {
-            return;
+        for (const held of [this.#posing, this.#fading]) {
+            const playback = held.get(clipName);
+            if (playback !== undefined) {
+                held.delete(clipName);
+                playback.stop();
+            }
         }
-        this.#posing.delete(clipName);
-        posing.stop();
     }
 
     /**

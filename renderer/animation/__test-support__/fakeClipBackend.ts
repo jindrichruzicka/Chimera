@@ -343,7 +343,18 @@ export function createBlendingFakeClipBackend(
                 if (handle.clipName === clipName) {
                     continue;
                 }
-                handle.stop();
+                // A fade leaves them HELD — terminal from this call onwards, and
+                // what they pose still on screen, falling — while a zero fade is
+                // a cut and releases them outright, which is what
+                // `MeshClipBackend.crossfadeTo` does at each length. A double
+                // that always held would make a caller's own
+                // `stop`-instead-of-`hold` invisible; one that always stopped
+                // would model the cut for both.
+                if (fadeLength > 0) {
+                    handle.hold();
+                } else {
+                    handle.stop();
+                }
                 handles.delete(handle);
             }
             return incoming;

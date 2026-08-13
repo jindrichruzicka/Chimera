@@ -112,11 +112,17 @@ function reportUnplayableSpriteClip(clipName: string): void {
 /**
  * What a caller declares. Everything but `clip` is optional.
  *
- * The sprite binding adds no option of its own: the surface is the one
- * `useClipPlayer` takes, so a game moving a clip between a mesh and a sprite
- * rewrites nothing but the element it sits on.
+ * The sprite binding adds no option of its own, and takes one AWAY: the surface
+ * is the one `useClipPlayer` takes minus `blendSeconds`, so a game moving a clip
+ * between a mesh and a sprite rewrites nothing but the element it sits on —
+ * unless it was blending, which it will be told about at compile time.
+ *
+ * A sprite playback rewrites quad UVs and has no weight to interpolate, so there
+ * is nothing here for a blend duration to mean. Removed rather than accepted and
+ * ignored: a `blendSeconds` that typechecks and silently cuts is an authoring
+ * trap that only shows up as "the blend does not work on this one".
  */
-export type UseSpriteClipPlayerOptions = UseClipPlaybackOptions;
+export type UseSpriteClipPlayerOptions = Omit<UseClipPlaybackOptions, 'blendSeconds'>;
 
 /**
  * Play `options.clip` out of `sheet` across `atlas`, writing each cell into

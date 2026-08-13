@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AnimationTrackSheet } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
 
-import { createFakeClipBackend, type FakeClipSpec } from './__test-support__/fakeClipBackend.js';
+import {
+    createBlendingFakeClipBackend,
+    createFakeClipBackend,
+    type FakeClipSpec,
+} from './__test-support__/fakeClipBackend.js';
 import {
     boundedStepSeconds,
     ClipPlayer,
@@ -940,6 +944,240 @@ describe('transitionTo — become the only clip', () => {
         // down too, not just the live ones.
         expect(backend.stopped).toEqual(['swing']);
         expect(player.activeClips).toEqual(['jab']);
+    });
+});
+
+describe('transitionTo — the blend', () => {
+    const SPAN = sheetOf({ passages: { span: { from: 0.2, to: 0.9 } } });
+    const CLIPS = {
+        swing: { durationSeconds: 1, loop: 'loop' },
+        guard: { durationSeconds: 1, loop: 'loop' },
+    } as const;
+
+    /** A player over the BLENDING double, with `swing` live and its passage open. */
+    function blendingPlayer(): {
+        readonly player: ClipPlayer;
+        readonly backend: ReturnType<typeof createBlendingFakeClipBackend>;
+        readonly calls: string[];
+    } {
+        const backend = createBlendingFakeClipBackend(CLIPS);
+        const calls: string[] = [];
+        const handlers: ClipMarkerHandlers = {
+            onPassageStart: (event) => calls.push(`start:${event.name}`),
+            onPassageEnd: (event) => calls.push(`end:${event.name}:${event.reason}`),
+            onClipEnd: () => calls.push('clip-end'),
+        };
+        const player = new ClipPlayer({
+            backend,
+            getTimeScale: () => 1,
+            report: () => undefined,
+        });
+        player.play({ clipName: 'swing', sheet: SPAN, handlers });
+        player.tick(0.5);
+        return { player, backend, calls };
+    }
+
+    it('routes a positive blend through crossfadeTo and holds what it replaced', () => {
+        const { player, backend, calls } = blendingPlayer();
+
+        expect(player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 })).toBe(true);
+
+        expect(backend.crossfadeCalls).toEqual([
+            { clipName: 'guard', fadeSeconds: 0.3, options: { speed: 1 } },
+        ]);
+        // HELD, not stopped: the backend has already released the outgoing
+        // playback into its own posing set with a ramp running, and stopping it
+        // here would leave the blend with nothing to fade out of.
+        expect(backend.held).toEqual(['swing']);
+        expect(backend.stopped).toEqual([]);
+        expect(player.activeClips).toEqual(['guard']);
+        // The passage still closes, and for the reason a replacement closes it.
+        expect(calls).toEqual(['start:span', 'end:span:clip-changed']);
+    });
+
+    it('cuts when the backend cannot blend, however long the blend asked for', () => {
+        const backend = createFakeClipBackend(CLIPS);
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+        player.play({ clipName: 'swing' });
+
+        expect(player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 })).toBe(true);
+
+        // The conjunct that keeps a sprite atlas out of the blending path: it
+        // has no weights to interpolate, and a blend that silently did nothing
+        // would be worse than a cut.
+        expect(backend.stopped).toEqual(['swing']);
+        expect(backend.held).toEqual([]);
+        expect(player.activeClips).toEqual(['guard']);
+    });
+
+    it('cuts on a blend of zero, on a backend that could have blended', () => {
+        const { player, backend } = blendingPlayer();
+
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0 });
+
+        expect(backend.crossfadeCalls).toEqual([]);
+        expect(backend.stopped).toEqual(['swing']);
+        expect(backend.held).toEqual([]);
+    });
+
+    it('cuts when no blend is asked for at all', () => {
+        const { player, backend } = blendingPlayer();
+
+        player.transitionTo({ clipName: 'guard' });
+
+        expect(backend.crossfadeCalls).toEqual([]);
+        expect(backend.stopped).toEqual(['swing']);
+    });
+
+    it('cuts a same-name request, because there is nothing to blend out of', () => {
+        const { player, backend } = blendingPlayer();
+
+        player.transitionTo({ clipName: 'swing', blendSeconds: 0.3 });
+
+        // A blend from a clip to itself is a fade-out of the very action the
+        // incoming playback took over, so it is a restart at full weight.
+        expect(backend.crossfadeCalls).toEqual([]);
+        expect(backend.stopped).toEqual(['swing']);
+        expect(backend.held).toEqual([]);
+    });
+
+    it('cuts when the incoming clip is one of the clips already live', () => {
+        const { player, backend } = blendingPlayer();
+        player.play({ clipName: 'guard' });
+
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 });
+
+        // The conjunct is "the incoming clip is not already in flight", not
+        // "something else is": with `guard` live alongside `swing`, a blend into
+        // `guard` would fade out the very action the incoming playback takes
+        // over.
+        expect(backend.crossfadeCalls).toEqual([]);
+        expect(backend.stopped).toEqual(['guard', 'swing']);
+        expect(backend.held).toEqual([]);
+    });
+
+    it('still routes through crossfadeTo when there is nothing live to blend out of', () => {
+        const backend = createBlendingFakeClipBackend(CLIPS);
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 });
+
+        // The backend is what decides a blend with nothing outgoing is a plain
+        // start at full weight; the player asks for the blend either way, so
+        // widening the conjunct to "something else is live" is visible here.
+        expect(backend.crossfadeCalls).toEqual([
+            { clipName: 'guard', fadeSeconds: 0.3, options: { speed: 1 } },
+        ]);
+    });
+
+    it('cuts a blend into a clip this player is still posing, and restarts it', () => {
+        const backend = createBlendingFakeClipBackend({
+            swing: { durationSeconds: 1, loop: 'loop' },
+            guard: { durationSeconds: 0.4, loop: 'once' },
+        });
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+        player.play({ clipName: 'guard' });
+        player.tick(0.5);
+        expect(backend.held).toEqual(['guard']);
+
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 });
+
+        // A clip the player is posing has ENDED, and a caller asking for it
+        // again wants it from the top. Blending into it makes the backend resume
+        // the held action where it stopped — on a finished clip, its last frame,
+        // for ever.
+        expect(backend.crossfadeCalls).toEqual([]);
+        expect(backend.stopped).toEqual(['guard']);
+        expect(backend.sampleOf('guard')).toEqual({ phase: 0, cycle: 0, ended: false });
+    });
+
+    it('blends on every transition of an alternation, not every other one', () => {
+        const { player, backend } = blendingPlayer();
+
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 });
+        player.tick(1);
+        player.transitionTo({ clipName: 'swing', blendSeconds: 0.3 });
+        player.tick(1);
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 });
+
+        // A→B→A is the ordinary case for the only production caller, which
+        // transitions on every clip change. A player that remembered a clip as
+        // "posing" after its fade had ended would refuse to blend back into it,
+        // and the alternation would degrade to blend, cut, blend.
+        expect(backend.crossfadeCalls.map((call) => call.clipName)).toEqual([
+            'guard',
+            'swing',
+            'guard',
+        ]);
+    });
+
+    it('leaves a blend in flight reachable by stopAll', () => {
+        const { player, backend } = blendingPlayer();
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0.3 });
+        expect(backend.held).toEqual(['swing']);
+
+        player.stopAll();
+
+        // "Play nothing" has to mean nothing: a playback the blend left posing
+        // is in neither set a caller can name, so the player keeps it where
+        // `stopAll` and `dispose` can still reach it. The live clip goes first
+        // and the pose after, which is the order `stopAll` walks.
+        expect(backend.stopped).toEqual(['guard', 'swing']);
+        expect(player.activeClips).toEqual([]);
+    });
+
+    it('threads the folded speed stack through the blend', () => {
+        const backend = createBlendingFakeClipBackend(CLIPS);
+        const player = new ClipPlayer({
+            backend,
+            getTimeScale: () => 0.5,
+            report: () => undefined,
+        });
+        player.play({ clipName: 'swing' });
+
+        player.transitionTo({ clipName: 'guard', blendSeconds: 0.3, speed: 0.5 });
+
+        // 0.5 x 1 x 0.5: a blended change owes the incoming clip the same first
+        // frame a cut does, or a clip declared at half speed plays its first
+        // frame at a quarter rate and is corrected on the next tick.
+        expect(backend.crossfadeCalls).toEqual([
+            { clipName: 'guard', fadeSeconds: 0.3, options: { speed: 0.25 } },
+        ]);
+        expect(backend.speedOf('guard')).toBe(0.25);
+        player.tick(0.1);
+        expect(backend.speedOf('guard')).toBe(0.25);
+    });
+
+    it.each([-0.2, Number.NaN, Number.POSITIVE_INFINITY])(
+        'refuses a blend of %s before anything is started, released or held',
+        (blendSeconds) => {
+            const { player, backend, calls } = blendingPlayer();
+
+            expect(() => player.transitionTo({ clipName: 'guard', blendSeconds })).toThrow(
+                RangeError,
+            );
+
+            expect(player.activeClips).toEqual(['swing']);
+            expect(calls).toEqual(['start:span']);
+            expect(backend.stopped).toEqual([]);
+            expect(backend.held).toEqual([]);
+            expect(backend.crossfadeCalls).toEqual([]);
+            expect(backend.sampleOf('guard')).toBeNull();
+        },
+    );
+
+    it('refuses a bad blend on a backend that cannot blend either', () => {
+        const backend = createFakeClipBackend(CLIPS);
+        const player = new ClipPlayer({ backend, getTimeScale: () => 1, report: () => undefined });
+        player.play({ clipName: 'swing' });
+
+        // A `blendSeconds > 0` test alone would send this down the cut path and
+        // lose the refusal on exactly the backend where the value is inert.
+        expect(() => player.transitionTo({ clipName: 'guard', blendSeconds: -1 })).toThrow(
+            RangeError,
+        );
+        expect(backend.stopped).toEqual([]);
+        expect(player.activeClips).toEqual(['swing']);
     });
 });
 

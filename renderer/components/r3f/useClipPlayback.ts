@@ -102,6 +102,23 @@ export interface UseClipPlaybackOptions {
      */
     readonly speed?: number;
     /**
+     * Seconds to blend out of the clip in flight and into this one. `0` — the
+     * default — cuts.
+     *
+     * REAL TIME: the duration does not compose with the dilation multiplier, so
+     * a blend takes as long in a slowed-down scene as it does at full speed.
+     *
+     * Read when the clip CHANGES, not when this value does: it is a parameter of
+     * the next transition rather than an input that should cause one, so raising
+     * it mid-clip changes the next blend and nothing about the current one. A
+     * backend with no weights to interpolate cuts instead.
+     *
+     * Rule SPEED-NON-NEGATIVE's sibling refusal: a negative or non-finite value
+     * raises a `RangeError` out of the commit-phase effect, before anything is
+     * started or released, rather than falling through to a silent cut.
+     */
+    readonly blendSeconds?: number;
+    /**
      * What to be told about. Read fresh on every emission, so swapping handlers
      * does not restart the clip in flight.
      */
@@ -145,6 +162,7 @@ export interface ClipPlayerHandle {
 interface LatestRender {
     handlers: ClipMarkerHandlers | undefined;
     clip: AnimationClipName | null;
+    blendSeconds: number | undefined;
     player: ClipPlayer | null;
     reportFault: (clipName: AnimationClipName) => void;
 }
@@ -206,10 +224,11 @@ export function useClipPlayback(
     options: UseClipPlaybackOptions,
     reportFault: (clipName: AnimationClipName) => void,
 ): ClipPlayerHandle {
-    const { clip, loop, speed, handlers } = options;
+    const { clip, loop, speed, blendSeconds, handlers } = options;
     const latest = useRef<LatestRender>({
         handlers: undefined,
         clip: null,
+        blendSeconds: undefined,
         player: null,
         reportFault,
     });
@@ -219,7 +238,7 @@ export function useClipPlayback(
     // render. Declared FIRST, so it has already run when the playback effect
     // below reads the ref on the same commit.
     useEffect(() => {
-        latest.current = { handlers, clip, player, reportFault };
+        latest.current = { handlers, clip, blendSeconds, player, reportFault };
     });
 
     // The playback effect. It registers NO cleanup: a transition releases what
@@ -269,6 +288,12 @@ export function useClipPlayback(
             // this effect: a speed change must re-target the playback, not
             // restart it.
             speed: speed ?? 1,
+            // Off the ref, and deliberately NOT in the dependency list below: a
+            // blend length is a parameter of the NEXT transition, not an input
+            // that should cause one. Keyed on it, raising the value mid-clip
+            // would restart the very clip it was raised to blend away from —
+            // and it would blend from that clip to itself, which is a cut.
+            blendSeconds: latest.current.blendSeconds ?? 0,
         });
         if (!started) {
             // Read off the ref rather than closed over, so a caller passing an

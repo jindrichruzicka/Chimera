@@ -23,6 +23,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AnimationClip, AnimationMixer, Object3D, VectorKeyframeTrack } from 'three';
+import type { AnimationAction } from 'three';
 import type * as ThreeModule from 'three';
 
 import type { AnimationLoopMode } from '@chimera-engine/simulation/foundation/animation-clip-sheet.js';
@@ -201,6 +202,16 @@ function actionSeconds(instance: ModelInstance): number {
     return actionSecondsFor(instance, 'attack');
 }
 
+/** The three action driving `clipName`, off the mixer the hook allocated last. */
+function actionFor(instance: ModelInstance, clipName: string): AnimationAction {
+    const mixer = mixerLog.created[mixerLog.created.length - 1] as AnimationMixer;
+    const clip = instance.clips.find((candidate) => candidate.name === clipName);
+    if (clip === undefined) {
+        throw new Error(`fixture instance carries no clip named '${clipName}'`);
+    }
+    return mixer.clipAction(clip);
+}
+
 /** Stands in for the preload log bridge `emitRendererError` reads at call time. */
 function installLogsApi(): { emit: ReturnType<typeof vi.fn> } {
     const logs = { emit: vi.fn() };
@@ -376,6 +387,104 @@ describe('useClipPlayer — declarative playback', () => {
         expect(recorder.events).toEqual([
             { kind: 'passage-end', name: 'swing', reason: 'clip-changed' },
         ]);
+    });
+
+    it('blends out of the outgoing clip when the caller declares a blend', async () => {
+        const instance: ModelInstance = {
+            root: new Object3D(),
+            clips: [makeClip('attack', CLIP_SECONDS), makeClip('idle', CLIP_SECONDS)],
+        };
+        let clip = 'attack';
+        const { rerender } = renderHook(() =>
+            useClipPlayer(instance, SHEET, { clip, loop: 'loop', blendSeconds: 0.4 }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.3);
+
+        clip = 'idle';
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.2);
+
+        // Halfway through the declared fade: the outgoing action is still
+        // running and still posing, at half weight. A cut stops it outright, so
+        // both assertions move together and neither can pass on its own.
+        const outgoing = actionFor(instance, 'attack');
+        expect(outgoing.isRunning()).toBe(true);
+        expect(outgoing.getEffectiveWeight()).toBeCloseTo(0.5, 6);
+    });
+
+    it('cuts when the caller declares no blend, at the same moment of the same change', async () => {
+        const instance: ModelInstance = {
+            root: new Object3D(),
+            clips: [makeClip('attack', CLIP_SECONDS), makeClip('idle', CLIP_SECONDS)],
+        };
+        let clip = 'attack';
+        const { rerender } = renderHook(() =>
+            useClipPlayer(instance, SHEET, { clip, loop: 'loop' }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.3);
+
+        clip = 'idle';
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.2);
+
+        // The negative control for the case above.
+        expect(actionFor(instance, 'attack').isRunning()).toBe(false);
+    });
+
+    it('refuses a negative declarative blend the way it refuses a negative speed', async () => {
+        const instance = createInstance();
+
+        // Out of the commit-phase effect, like the sibling speed refusal: a sign
+        // error is a fault in the game's own JSX, and every entry point into the
+        // animation layer refuses one where it is written rather than falling
+        // through to a silent cut.
+        expect(() =>
+            renderHook(() => useClipPlayer(instance, SHEET, { clip: 'attack', blendSeconds: -1 })),
+        ).toThrow(RangeError);
+    });
+
+    it('does not restart the clip when only blendSeconds changes', async () => {
+        const instance = createInstance();
+        const recorder = makeRecorder();
+        let blendSeconds = 0.2;
+        const { rerender } = renderHook(() =>
+            useClipPlayer(instance, SHEET, {
+                clip: 'attack',
+                loop: 'loop',
+                blendSeconds,
+                handlers: recorder.handlers,
+            }),
+        );
+        await act(async () => {
+            await Promise.resolve();
+        });
+        driveFrame(0.6);
+        recorder.events.length = 0;
+
+        blendSeconds = 0.5;
+        rerender();
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        // A blend length is a parameter of the NEXT transition, not an input
+        // that should cause one: keyed on it, this raise would restart the very
+        // clip it was raised to blend away from — and blend it to itself, which
+        // is a cut.
+        expect(recorder.events).toEqual([]);
+        expect(actionSeconds(instance)).toBeCloseTo(0.6, 12);
     });
 
     it('leaves the abandoned clip firing nothing after the clip prop changes', async () => {
