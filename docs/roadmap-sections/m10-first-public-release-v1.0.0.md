@@ -58,7 +58,7 @@ The complete rules, the lock-step rationale, and the release-time enforcement li
 
 ## Features
 
-### F71 — Internationalization / i18n
+### F71 — Internationalization / i18n `§4.39, §4.37, Appendix D.4`
 
 Introduces an **opt-in** internationalization system so a game can ship multiple UI
 languages, while games that do not need it pay **zero cost** and see **no behaviour
@@ -103,7 +103,7 @@ formatting (beyond ICU plural/select on counts), OS/profile-locale auto-detectio
 content-database data translation, and a key-extraction tool — all candidates for a
 follow-up.
 
-### F72 — Spectator Mode
+### F72 — Spectator Mode `§4.14, §4.6, Appendix D.3`
 
 Lets a peer **watch a running match** it did not join, fixing the previously
 broken join-in-progress path (a mid-match join used to fabricate a phantom seat).
@@ -148,7 +148,7 @@ Feature issue: [#875](https://github.com/jindrichruzicka/Chimera/issues/875).
 chat, latency/late-join catch-up buffering, and spectating a replay rather than a
 live match — all candidates for a follow-up.
 
-### F74 — Audio Cues, Fades & Crossfade
+### F74 — Audio Cues, Fades & Crossfade `§4.25`
 
 Lands the design-stage **Cue, Fade & Crossfade Extensions** of the Audio System
 (§4.25) as working, TDD'd code, adding five renderer-only capabilities on top of
@@ -222,7 +222,7 @@ together; pitch-**preserving** time-stretch and live mid-voice rate changes stay
 deferred, and the option is named `rate` rather than `pitch` so the type does not
 promise the one it does not do.
 
-### F75 — Standalone-Reachable Font Self-Hosting Tooling
+### F75 — Standalone-Reachable Font Self-Hosting Tooling `§4.37`
 
 The Google-Fonts self-hosting downloader — the development-time tooling that Invariant #97 names as the only sanctioned way to bring game fonts on-disk — was reachable only inside the monorepo (`pnpm fetch:fonts`, tsx). F75 relocates it from repo-root `tools/fetch-google-fonts.ts` into a dedicated tooling subdirectory of the already-published `@chimera-engine/electron` package (`electron/dev-tools/fetch-google-fonts/`) and exposes it as a `chimera-fetch-fonts` bin, replaying the shipped `chimera-dev-mp` pattern (pre-built node JS, `#!/usr/bin/env node` shebang, `isDirectInvocation` entry) — zero new publish/version surface, no Changesets `fixed`-array or verify-list edits. Its two monorepo-layout assumptions (output dir + emitted `src` prefix) are parameterized behind byte-for-byte-compatible defaults, so `pnpm fetch:fonts -- --game <id> --url <css>` (root cwd) is unchanged. The `create-chimera-game` blank template gains an `assets/fonts/` convention, a `shell/fonts.ts` `gameFonts` stub forwarded through `renderer/loaders.ts`, and a scaffolded app-level `fetch:fonts` script naming the bare bin with an explicit `--out-dir assets/fonts` — so that when pnpm runs the script with cwd = `apps/<kebab>`, the `.woff2` files land in the game's own asset dir instead of a doubled `apps/<kebab>/apps/<kebab>/…` path, and a fresh standalone game self-hosts fonts on day one. Upholds (does not graduate) **Invariants #97, #52, #22, #20**; Tactics remains the reference adopter of the `GameFontFace[]` shape.
 
@@ -238,7 +238,7 @@ Feature issue: [#924](https://github.com/jindrichruzicka/Chimera/issues/924).
 
 **Out of scope (deferred):** no new published package (rejected the five-surface tax of a dedicated CLI package); no `readFlagValue` arg-parser hardening; no migration/re-fetch of existing games' fonts; `--game` stays required; no standalone root-level `fetch:fonts` script (its cwd would mis-root `--out-dir`); the scaffold ships an empty `gameFonts` stub (no auto-population) — all candidates for a follow-up.
 
-### F76 — Standalone-Reachable Asset-Reference Validation
+### F76 — Standalone-Reachable Asset-Reference Validation `§4.10`
 
 Makes the `validate-assets` build-time guard (Invariants #52/#22, and #20 by living outside `simulation/`) reachable by standalone games — the third sibling of the M10 dev-tooling-reachability arc after the fonts downloader (F75) and alongside the harness (§4.32). The tool relocates from the never-published repo-root `tools/` into `electron/dev-tools/validate-assets/` inside the already-published `@chimera-engine/electron`, and ships as the `chimera-validate-assets` bin exactly as `chimera-dev-mp` does. Two distribution facts drive the work. First, the relocated tool has a genuine runtime dependency on the `typescript` package (it uses `createSourceFile`/`forEachChild`/`isCallExpression` values for its on-demand-load AST scan) that `electron/package.json` did not declare — it worked only via root-devDep hoisting, the exact under-declaration `verify:pack` exists to catch. In the event that dependency had to land with the RELOCATION rather than with the bin: electron’s build emits every non-test `.ts` under it and `files: ["dist"]` publishes the result, so the moment the tool moved in, its runtime import shipped and `verify:publish` went red. Second, and contrary to first appearances, there is no layout problem to solve: a standalone project scaffolded by `create-chimera-game` is not flat — it places the game at `apps/<kebab>` under an `apps/*` pnpm workspace — so the existing monorepo discovery, pointed at the project root, already scans `apps/*`, finds the single game, and resolves `<root>/apps/<kebab>/assets/…` byte-for-byte.
 
@@ -255,7 +255,7 @@ Feature issue: [#930](https://github.com/jindrichruzicka/Chimera/issues/930).
 
 **Out of scope (deferred):** No new published package. A dedicated `@chimera-engine/cli` home is rejected (multiple enforcement-list + Changesets `fixed`-array edits for one dev script); the tool rides electron's existing bin/version/verify surface — the F75 precedent; No `ProjectLayout`/flat-mode abstraction, and no `--flat`/`--game-root`/`--game-id` flags. The scaffold keeps the `apps/<kebab>` shape under an `apps/*` workspace, so the existing monorepo discovery pointed at the project root (via the app-level script's `../..`) validates the game non-vacuously with zero new tool code; a flat mode is a follow-up only if a future scaffold ever drops the `apps/` prefix; No root-level `validate:assets` script. App-level only, because pnpm links the bin into `apps/<kebab>/node_modules/.bin` (not the project root's) AND app-level cwd = `apps/<kebab>` makes `../..` resolve to the project root; a root-cwd run would resolve above the project and is now refused rather than passing vacuously; No `readFlagValue` hardening. No new flags are introduced; the naive positional `argv[0]` workspace-root parsing is untouched — a robust arg parser stays a follow-up; No migration of existing games. `apps/tactics` keeps the monorepo default (`pnpm validate:assets`, cwd = repo root) — all candidates for a follow-up.
 
-### F77 — Standalone-Reachable Platform Icon-Set Generation
+### F77 — Standalone-Reachable Platform Icon-Set Generation `§4.32`
 
 The platform icon-set generator derives the whole set — loose PNGs, the `chimera.png` runtime default, and the `.icns`/`.ico` containers — from one master logo, but it lived in the unpublished root package, so a standalone game that ships its own master had no way to run it. F77 relocates the generator into `electron/dev-tools/generate-icons/` inside the already-published `@chimera-engine/electron` and exposes it as a `chimera-generate-icons` bin, reusing the `chimera-dev-mp` BIN pattern — including the package's `isDirectInvocation` entry gate, which realpath-canonicalizes both the module URL and `argv[1]` so the bin actually runs when a scaffolded game invokes it through its `node_modules/.bin` symlink rather than silently no-opping. The distinguishing concern is dependency weight: the tool's `sharp` codec (a large native binary) must not become a runtime dependency of electron, or every game install — most of which never regenerate icons — would drag it in.
 
@@ -275,7 +275,7 @@ Feature issue: [#935](https://github.com/jindrichruzicka/Chimera/issues/935).
 
 **Out of scope (deferred):** No new published package. A dedicated `@chimera-engine/cli` home is rejected (five enforcement-list edits + a Changesets `fixed`-array edit for a single dev script); the tool rides electron's existing bin/version/verify surface, exactly as `chimera-dev-mp` and `chimera-fetch-fonts`; No `--basename` flag. The generated stem stays `chimera` so a game that repoints `electron-builder.yml` `from: assets/icons` at its own generated set gets a branded fallback under the `chimera.png` filename the host's `resolveAppIcon` resolves; a configurable basename is a follow-up; No auto-generation on scaffold and no auto-installed codecs. The `icons:generate` script and the `sharp` install are opt-in; forcing either onto every scaffold would re-impose the native-binary cost on games that never regenerate icons; No auto-rewiring of the consumer's icon fields. The tool writes the engine-shaped set; the scaffold documents which fields a game repoints (electron-builder top-level `icon:`, manifest `icon`, the `from: assets/icons` fallback) to actually consume it — rewriting them at generate time is out of scope; No `readFlagValue` hardening. The naive positional `--source`/`--out` parser is preserved as-is; a robust parser is a shared follow-up with the sibling tooling features; No migration of existing games. The engine and `apps/tactics` keep their committed icon sets; this feature does not re-generate them — all candidates for a follow-up.
 
-### F78 — Standalone-Reachable Architectural-Invariant Lint Preset
+### F78 — Standalone-Reachable Architectural-Invariant Lint Preset `§4.32`
 
 Standalone games shipped with the published `@chimera-engine/*` packages and nothing of the repo-root `tools/` tree, so the seven architectural-invariant ESLint rules — the executable form of the determinism, design-token, and engine-boundary invariants — never reached a scaffolded game. A fresh game's `eslint .` was a hard error (no flat config was emitted, and the ESLint extension was deliberately unrecommended because there was nothing for it to run), which meant a `fromFloat()` in a game's `simulation/` reducer or a hardcoded colour in a screen passed review unflagged. F78 closed that gap the way F75 closed it for fonts: it relocated the rules into the already-published `@chimera-engine/electron` package, compiled them so the plugin ships as real JS (retiring the `plugin.cjs` runtime-tsx hack), and exposed both the plugin and a curated flat-config preset at a new `@chimera-engine/electron/eslint` subpath — the SUBPATH-EXPORT pattern proven by `verify-packaged-bundle`, not a bin.
 
@@ -298,7 +298,7 @@ Feature issue: [#941](https://github.com/jindrichruzicka/Chimera/issues/941).
 
 **Out of scope (deferred):** No new published package. A dedicated `@chimera-engine/eslint-config` home is rejected for the same reason F75 rejected a CLI package — multiple enforcement-list + Changesets `fixed`-array edits for one dev surface; the rules ride electron's existing dist/version/verify surface like `chimera-dev-mp` and `packaged-bundle`; No full opinionated base config. The preset is an OVERLAY (Chimera rule blocks + zone globs + CSS token arm) layered on the game's own TS base, never owning the game's parser options, ignores, or Prettier compatibility; No extension of the engine-internal boundary rules to games. `no-main-games-import` / `no-main-provider-internals` / `no-shell-games-import` stay scoped to the engine's `electron/main/` and `renderer/app/` shell — a game's `electron/main.ts` composition root legitimately names its game and wires its provider; No retune of the engine's own lint semantics. Every existing monorepo rule zone, severity, and exemption (incl. the fromFloat test-file relaxation and the `no-console` ratchet) is preserved verbatim; F78 relocates the machinery, it does not re-tune the config; No formatter opinions. The scaffold recommends the ESLint extension but ships no Prettier config or `.editorconfig`; formatting stays out of the guardrail scope; No new rules or arg-parser hardening. No invariant is authored and no rule logic is rewritten beyond the token-path resolution repair — all candidates for a follow-up.
 
-### F79 — Games-Reachable Asset Barrel & Per-Instance Model Instancing
+### F79 — Games-Reachable Asset Barrel & Per-Instance Model Instancing `§4.10`
 
 The release-candidate audit filed this as "gltf models lack a per-instance clone seam", but the real defect sat one layer deeper: **no game could obtain any loaded asset at all.** The renderer package's `exports` map had no asset entry, Invariant #96 named asset managers a renderer internal, and the games-side lint pinned a screen importing `AssetManager` as a hard error — `apps/` had zero `useAsset` call sites because the call was impossible, not unwanted. The whole gltf story was theoretical: zero `.glb` files existed anywhere in the repo, `loadGltf()` had never executed, and a 43,945-byte GLTFLoader chunk shipped in the tactics static export as unreachable dead weight.
 
@@ -328,7 +328,7 @@ Feature issue: [#948](https://github.com/jindrichruzicka/Chimera/issues/948).
 
 **Out of scope (deferred):** No packaged-app harness. Nothing in the repo launches an electron-builder packaged app; the adoption e2e exercises the `.e2e-build` static-export layout over `chimera://`, and packaging remains a manual gate item; No animation wrapper verbs. `useModelAnimation` returns the raw `AnimationMixer` — actions, crossfades, loop modes and completion events are the caller's — and F82 took that deferral up in `useClipPlayer`; No widening of the validate-assets receiver heuristic. `const { load } = useAssetManager()` stays a documented false-negative rather than a fuzzier matcher; No multi-file gltf reference asset. The committed rig is a single self-contained `.glb`; a `.gltf` + `.bin` + texture triple exercises MIME paths the protocol now serves but no harness asserts; No StrictMode-root disposal reconciliation. A real dev double mount re-latched the manifest error through `GameShell`'s then-unconditional dispose effect — filed as its own bug ([#971](https://github.com/jindrichruzicka/Chimera/issues/971)) with the measured probe evidence, and since fixed by the deferred-cancelable dispose pinned by the "GameShell — StrictMode-root remount safety (registry mode)" tests in `renderer/components/shell/GameShell.test.tsx` — all candidates for follow-ups.
 
-### F80 — Frame-Rate Cap as Loop Pacing, Not Frame Presentation
+### F80 — Frame-Rate Cap as Loop Pacing, Not Frame Presentation `§4.22, §4.16`
 
 `FrameRateLimiter` implemented `display.targetFps` by **taking over frame presentation** — a `useFrame(cb, 1)` subscriber calling `gl.render` — and R3F allows exactly one presenter per canvas only if `internal.priority` is a lock. It is not: `subscribe` does `internal.priority = internal.priority + (priority > 0 ? 1 : 0)`, and `update()` suppresses only R3F's own automatic render while calling every subscriber unconditionally. A second `useFrame(cb, 1)` presenter — a post-processing composer, a portal/scissor renderer, any hand-rolled render-target pipeline — therefore ran every native frame alongside the cap, and **neither could suppress the other**. Subscribers sort ascending with a stable sort, so with `GameCanvas` mounting the limiter before `{children}` the engine presented first and the composer's present overwrote it: the cap did nothing, and the engine added a wasted full-scene draw at the target rate on top. Writing an engine composer would have fixed one instance of a general defect while itself becoming a competing presenter.
 
@@ -354,7 +354,7 @@ Feature issue: [#962](https://github.com/jindrichruzicka/Chimera/issues/962).
 
 **Out of scope (deferred):** No `<PostProcessing>` wrapper and no `@react-three/postprocessing` dependency. A settings-driven quality-tier wrapper is ergonomics, not the fix — the collision is solved for _every_ third-party presenter, including a hand-rolled composer, without the engine taking a dependency; a published subpath would also cost an `exports` key, a barrel-set guard sweep across the ESLint predicate, Check 17 and `package-exports-contract`, an optional peer declaration, and a `verify:pack`/`verify:publish`/`verify:scaffold` pass, inside the RC window, for a surface with zero adopters. Recommended as its own feature after 1.0.0 and purely additive under the locked 1.X.Y scheme; No engine-authored composer, effect stack, or render-target pipeline — an engine composer is itself a competing presenter; No delta clamping for `useFrame` consumers. A 30 fps cap gives tweens ~3 samples per 100 ms instead of ~12, and one long stall still yields one large delta, exactly as `clock.getDelta()` does under `'always'` — changing tween sampling semantics is a §4.21 decision; No new invariant number, no `targetFps` value-set change, and no demand-render mode. Restoring `invalidate()`-driven rendering for static scenes is a real opportunity — `frameloop="demand"` would cost nothing on a menu — but it is a separate capability with its own dirty-tracking contract and cannot coexist with a cap in the same branch; No traceability-matrix backfill. F80 appends its own rows and does not repair the index's stale Feature-to-Milestone range.
 
-### F81 — GameCanvas-Only Rendering Surface & Multi-Canvas Overlays
+### F81 — GameCanvas-Only Rendering Surface & Multi-Canvas Overlays `§4.22, §4.16`
 
 The own-`<Canvas>` escape hatch was documented but **unused** — no `<Canvas>` existed outside `GameCanvas.tsx` and renderer-internal tests — yet it cost on three axes. Three of the r3f barrel's five runtime exports (`PerfProbe`, `FrameRateLimiter`, `useEngineFrameloop`) existed only so a game owning its own root could re-wire what `GameCanvas` already wires. The undetectable `frameloop="never"`-with-no-driver black canvas (F80's documented-not-detected defect) exists only because a game can own the root. And the canvas root is the sole seam where engine-wide display settings can ever apply — the `display.targetFps` cap today, any future settings-driven knob tomorrow — so every game-owned root is a canvas the engine cannot manage.
 
@@ -378,7 +378,7 @@ Feature issue: [#975](https://github.com/jindrichruzicka/Chimera/issues/975).
 
 **Out of scope (deferred):** No post-processing wrapper and no `@react-three/postprocessing` dependency (F80's non-goal restated — the pacing fix already caps every third-party presenter). No `gl` / `dpr` / `shadows` / `style` pass-through: graphics-quality knobs are reserved for a future settings-driven quality feature — owning the root is precisely what makes engine-wide display settings possible — and `style` is withheld for token discipline (`className` + module CSS only). No demand-render (`frameloop="demand"`) mode. No removal of `FrameRateLimiter`'s half-wiring detection — the half-wired states remain physically possible inside the engine, so the self-check stays with its docs reframed as engine-internal. Renderer-**internal** tests keep using raw or fake `<Canvas>`: Invariant #127 scopes game surfaces only.
 
-### F82 — Animation Clip Sheets, Marker Scheduling & Time Dilation
+### F82 — Animation Clip Sheets, Marker Scheduling & Time Dilation `§4.40`
 
 **Status: implemented across #993–#1007 and reviewed by the feature gate (#1071), whose run is recorded in the [invariant roll-call](../executive-architecture/invariant-roll-call.md).** The engine now offers clip selection, play/stop, a loop mode and a three-layer speed stack: `useClipPlayer` on the `components/r3f` barrel takes a declarative `clip` / `loop` / `speed` and drives one `ClipPlayer` over one owned `AnimationMixer`. `useModelAnimation` is still there and still hands back a bare mixer — a game that wants to drive actions itself keeps that route — but it is no longer the only one. A root carrying BOTH is not refused: `mixerBindingRegistry` counts the claims and REPORTS a duplicate through the log bridge one frame later, while both hooks keep running. That nothing is torn down is measured in `renderer/components/r3f/__tests__/one-mixer-per-root.test.tsx`.
 
@@ -420,7 +420,7 @@ Feature issue: [#991](https://github.com/jindrichruzicka/Chimera/issues/991). Th
 
 **Out of scope (deferred):** No cross-client clip phase anchoring. The seek formula needs an absolute beat counter (eliminated above) and a renderer-visible tick rate, which no renderer registry slot supplies; two clients therefore see a swing at phases differing by network latency and a client joining mid-swing starts the clip at zero, both cosmetic by construction, and the anchor is purely additive later; No repair of the pre-existing one-action-one-tick replay assumption. A match containing a timer-firing `engine:tick`, or an `engine:undo`/`engine:redo`, is already unreplayable, and the correct fix — replacing the derived tick expectation with the recorded one — moves `ReplayPlayer.seek()`, the playback manager's tick accounting and the renderer scrub semantics together; F82's obligation is only to add no new inflation; No sprite React binding, sprite component or atlas reader in the public barrels. That clause held only until the sprite half of the feature landed: `useSpriteClipPlayer` and `AnimatedSprite` ship from the `components/r3f` barrel, and the atlas reader from `assets`, so the export it defers already happened inside F82 itself. What remains true is the adoption half — no game in the repo or the scaffold has any sprite content, and #1006 adopted the MESH half only — and the versioning consequence, which is why the clause is worth keeping rather than deleting: an additive export is additive, while narrowing a shipped frame shape is a break — see `docs/versioning-policy.md` for what each costs under the locked `1.X.Y` scheme. F89 narrowed `UseSpriteClipPlayerOptions` for exactly that reason, before `blendSeconds` ever shipped on it; No shipping realtime game. Reason (1)'s manifests did not change, so the entire simulation half — windows, the dilation countdown, `onBeat` — shipped unit-tested with no end-to-end adopter. The tactics clip-player adoption (#1006) is the RENDERER half only: tactics is `realtime: false`, so no `engine:tick` is ever dispatched on that route and the clip free-runs off the frame clock. The demonstration remains a named follow-up rather than a forced ticker; No `@chimera-engine/renderer/animation` subpath and no public barrel from F82 itself. The wider commitment this clause originally made — that the exports map, the package-exports contract, the pack probe list, Check 17's barrel regex, the games-side lint predicate and Invariant #96's count all stay unchanged inside the RC window — was **superseded by an explicit decision** to land the eighth barrel, `@chimera-engine/renderer/input` (issue #1008), before the 1.0.0 tag rather than after it; every one of those artifacts moved with it. A new subpath is additive, so the bump stays minor under the locked `1.X.Y` scheme; No `engine:set_time_scale` action and no dilation restore timer — one optional integer field plus one pure countdown, so overlapping requests are last-write-wins and nothing can stack or leak un-restored; No projection of the window registry or the restore countdown into `PlayerSnapshot`, since an open attack window reveals that an entity exists and is attacking; No reverse or ping-pong playback: nothing on the clip-backend seam models a reversing playhead, so both are refused with `RangeError` rather than clamped; No blending beyond a single crossfade verb, no state-machine or blend-tree authoring layer, and no engine-level animation-event registry slot. The first of those three was **superseded by an explicit decision** to reach that verb before the 1.0.0 tag rather than after it: F89 makes a blend declarable at a call site and once per clip in the manifest, on the same single crossfade seam. The other two stand; No trimmed or rotated atlas frames, no billboarding, and no engine-owned sprite geometry; No sub-beat gameplay windows — at the default 20 Hz the finest expressible mechanical window is one beat, and a narrower authored window is floored at one rather than zero; No `SaveFile` schema-version bump and no migration, since every new snapshot field is optional; No settings-driven animation speed, no dilation of `turnClock.deadlineMs` (which is millisecond-denominated, so slow-mo does not extend a turn timer), and no ticker catch-up or missed-tick recovery beyond an absolute next-fire target — all candidates for follow-ups.
 
-### F84 — Spatial Audio: Listener Pose, Distance Falloff & Moving Sources
+### F84 — Spatial Audio: Listener Pose, Distance Falloff & Moving Sources `§4.25`
 
 **Status: designed, not implemented.** The voice graph already contains a `PannerNode` —
 `source → voiceGain (1) → [panner] → busGain (2) → masterGain (3) → destination`, created by
@@ -497,7 +497,7 @@ payloads, so the event-options resolver cannot produce a position — widening t
 contract is a projection change, not an audio one, and is a named follow-up; No pool resize
 and no bus-graph reshape, unchanged from F74 — all candidates for a follow-up.
 
-### F85 — Music Cue Observation & Cue-Aligned Transitions
+### F85 — Music Cue Observation & Cue-Aligned Transitions `§4.25`
 
 **Status: designed, not implemented.** F74 gave music transitions everything except a sense of
 _when_. A game can crossfade two beds, but only **now**, so a swap driven by gameplay — the
@@ -572,7 +572,7 @@ existing sheets pass as they stand; No sample-accurate observation. Observation 
 frame-sampled on purpose, and anything needing sample accuracy is a _scheduled_ op — all
 candidates for a follow-up.
 
-### F86 — Variable Playback Rate
+### F86 — Variable Playback Rate `§4.25`
 
 **Status: designed, not implemented.** Every voice in the engine plays at exactly rate `1`, and
 Invariant #122 states the constraint outright — cue-relative fade timing is derived "at a fixed
@@ -628,7 +628,7 @@ per-play jitter. A game authors its own through the event-options resolver or it
 so nothing non-deterministic enters engine code; No new invariant number — #122 is amended, and
 the roll-call total does not move — all candidates for a follow-up.
 
-### F89 — Blended Clip Transitions, Finished-Clip Pose Retention & Authored Blend Durations
+### F89 — Blended Clip Transitions, Finished-Clip Pose Retention & Authored Blend Durations `§4.40`
 
 Two defects sat under F82's animation layer, and the second is the reason the first was worth
 fixing properly. Changing `clip` on `useClipPlayer` was a **hard cut** — the crossfade seam

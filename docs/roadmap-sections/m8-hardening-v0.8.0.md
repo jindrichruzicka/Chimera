@@ -29,7 +29,7 @@ tags:
 # M8 — Hardening (v0.8.0)
 
 > **Goal**: Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified. Shell pages and the lobby are fully customizable per game, and the tactics stub exercises turn-gating, stamina, AI players, and an opt-in commitment-scheme battle mode.
-> Architecture sections: §4.4, §4.6, §4.9, §4.12, §4.13, §4.14, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §8, §10, §11
+> Architecture sections: §4.4, §4.6, §4.9, §4.12, §4.13, §4.14, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §8, §10
 
 ---
 
@@ -77,7 +77,7 @@ Run 1 000-tick, 4-client soak with checksum convergence at every step. Run 10 00
 
 ---
 
-## F49 — Performance Baseline and NAT Diagnostics `§11, §6`
+## F49 — Performance Baseline and NAT Diagnostics `§6`
 
 Establish and gate: main process tick ≤ 16 ms at 20 Hz, renderer heap ≤ 32 MB. Implement connection diagnostics UI (local IP, port-forward guide). Add STUN relay extension point in `ServerConnection.ts` without core changes.
 
