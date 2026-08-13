@@ -307,13 +307,20 @@ describe('useSpriteClipPlayer drives a run of atlas cells', () => {
         expect(emit.mock.calls).toEqual([]);
     });
 
-    it('restarts from the first cell of the new clip when the clip changes', () => {
-        // `idle` outlasts the advance below and `run` does not, so a `clip-end`
-        // after the switch can only have come from the clip the hook abandoned.
+    it('restarts on the new clip’s first cell and closes the outgoing passage exactly once', () => {
+        // `run` carries a passage the advance below OPENS and does not close, so
+        // the switch happens with one passage still open. Without one there is
+        // no `passage-end` to count and no reason to read. `idle` outlasts the
+        // advance after the switch and `run` does not, so a `clip-end` in the
+        // stream can only have come from the clip the hook abandoned.
         const sheet: SpriteAnimationMetadata = {
             clips: {
-                run: { frames: [0, 1, 2, 3], durationSeconds: 1 },
-                idle: { frames: [1], durationSeconds: 8 },
+                run: {
+                    frames: [0, 1, 2, 3],
+                    durationSeconds: 1,
+                    passages: { stride: { from: 0.25, to: 0.75 } },
+                },
+                idle: { frames: [1, 3], durationSeconds: 8 },
             },
         };
         const recorder = makeRecorder();
@@ -324,20 +331,29 @@ describe('useSpriteClipPlayer drives a run of atlas cells', () => {
 
         advance(0.5);
         expect(shownCellIndex(geometry!)).toBe(2);
+        // The passage is open across the switch.
+        expect(recorder.events).toEqual([{ kind: 'passage-start', name: 'stride' }]);
+        recorder.events.length = 0;
 
         rerender({ options: { clip: 'idle', handlers: recorder.handlers }, sheet });
-        recorder.events.length = 0;
         advance(2);
 
-        // `idle` is a one-cell run over atlas cell 1 — distinct from both the
-        // cell `run` was showing and from cell 0, so neither a stale playback
-        // nor a reset-to-zero would pass here.
+        // `idle` restarts on its own first cell, atlas cell 1 — distinct from
+        // both the cell `run` was showing and from cell 0. Its run is TWO cells
+        // rather than one because a one-cell run reads as its first cell at
+        // EVERY phase, which leaves the restart unfalsifiable; with two, a
+        // playback seated far enough past zero shows atlas cell 3 instead.
         expect(shownCellIndex(geometry!)).toBe(1);
-        // And nothing of `run` is left to end. `SpriteClipBackend` holds ONE
-        // live playback and releases the previous one itself, so a player-side
-        // leak is invisible to the quad — the abandoned clip's `clip-end` is
-        // what would surface it.
-        expect(recorder.events.map((event) => event.kind)).not.toContain('clip-end');
+        // The WHOLE stream rather than a `toContain`: a SECOND `passage-end` and
+        // a stray `clip-end` each fail it. `SpriteClipBackend` holds ONE live
+        // playback and releases the previous one itself, so a player-side leak
+        // is invisible to the quad — this stream is what surfaces it. And the
+        // reason is `'clip-changed'`, not `'stopped'`: nobody asked for a stop,
+        // and the sprite backend's inability to blend does not change which of
+        // the seven closures this was.
+        expect(recorder.events).toEqual([
+            { kind: 'passage-end', name: 'stride', reason: 'clip-changed' },
+        ]);
     });
 });
 
