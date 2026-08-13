@@ -23,7 +23,7 @@
 ## Acceptance Criteria
 
 - [ ] All child task issues closed
-- [ ] §12 checklist items for this feature are green
+- [ ] The merge gate is green: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm verify:packaged-bundle`
 - [ ] Module boundary invariants upheld (no forbidden imports)
 - [ ] <Feature-specific acceptance condition>
 

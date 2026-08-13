@@ -21,7 +21,7 @@ Bootstrap the Electron entry point: create and manage the `BrowserWindow`, injec
 
 Wire the full `window.__chimera` contextBridge surface. Declare all type-safe namespace files (`game-api.ts`, `lobby-api.ts`, `saves-api.ts`, `settings-api.ts`, `system-api.ts`) and compose them in `preload/api.ts`. Enforce `nodeIntegration: false` and `contextIsolation: true`.
 
-**Carried over from F01:** verify the Electron app boots and loads the Next.js static export from `renderer/out/` — this §12 M1 checklist item could not be exercised in F01 because `preload/api.js` and a first Next.js page did not yet exist.
+**Carried over from F01:** verify the Electron app boots and loads the Next.js static export from `renderer/out/` — this could not be exercised in F01 because `preload/api.js` and a first Next.js page did not yet exist.
 
 ---
 

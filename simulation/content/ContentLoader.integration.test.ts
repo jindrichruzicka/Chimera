@@ -2,7 +2,7 @@
  * simulation/content/ContentLoader.integration.test.ts
  *
  * End-to-end round-trip test for ContentLoader + ContentDatabase against the
- * real apps/tactics/data/ directory (§12 M1 checklist).
+ * real apps/tactics/data/ directory.
  *
  * Invariants upheld:
  *   #14 — content is loaded and validated before the tick loop starts.

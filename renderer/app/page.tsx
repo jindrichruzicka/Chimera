@@ -1,6 +1,6 @@
 'use client';
 
-// Boot-smoke page (§12 checklist item "Electron boots, preload bridge wired").
+// Boot-smoke page: "Electron boots, preload bridge wired".
 // It only needs to:
 //
 //   1. Render a visible logo so the developer can see Electron loaded

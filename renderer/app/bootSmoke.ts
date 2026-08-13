@@ -4,7 +4,7 @@
 // page itself is a thin client component that wires this helper into a
 // `useEffect`.
 //
-// This is the §12 "Electron boots, preload bridge wired" boot-smoke check.
+// This is the "Electron boots, preload bridge wired" boot-smoke check.
 // When the preload bridge is live the logger records the host platform; when
 // it is missing or fails the logger records the failure, which surfaces a
 // broken bridge immediately in devtools.

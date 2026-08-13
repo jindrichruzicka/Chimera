@@ -16,7 +16,7 @@
 - [ ] <Unit test(s) pass for the new code>
 - [ ] <Contract test suite passes if a repository or interface is involved>
 - [ ] <No forbidden cross-module imports (verified by lint)>
-- [ ] <Relevant §12 checklist item is green>
+- [ ] <The command that discharges this task, and what it must print or exit>
 
 ## Invariants touched
 

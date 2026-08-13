@@ -12,11 +12,13 @@ Order: milestone → labels → feature issues → task issues.
 
 ### 1. Read architecture
 
-`docs/architecture-overview.md`:
+Read the milestone's own roadmap section, `docs/roadmap-sections/m<N>-*.md`. Where
+it carries a `> Architecture sections:` line, that line is the mapping — read
+those sections in `docs/architecture-overview.md`. Where it does not, derive the
+mapping from the `§` reference on each feature heading in that file.
 
-- M1: §4.1–4.15 (Core Engine), §12.1 checklist
-- M2: §4.16–4.25 (Multiplayer), §12.2 checklist
-- M3: §4.26–4.35 (AI & Content), §12.3 checklist
+Do not restate the mapping here: a hardcoded copy goes stale as the overview
+grows and as milestones are added.
 
 ### 2. Check existing state
 
