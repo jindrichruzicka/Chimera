@@ -205,7 +205,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
-## Invariants 81–88
+## Invariants 81–90
 
 **81.** `GameScreenRegistry.playfield` is the only required slot. All other slots are optional. A game that provides only `playfield` is a fully valid Chimera game.
 
