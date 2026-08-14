@@ -14,18 +14,24 @@ export class AssetPreloader {
     async preloadCritical(
         manifest: AssetManifest,
         onProgress?: AssetPreloadProgress,
+        onEntryFailure?: (ref: AssetRef, error: unknown) => void,
     ): Promise<void> {
-        if (onProgress === undefined) {
-            await this.assetManager.preloadCritical(manifest);
-            return;
-        }
-
-        await this.assetManager.preloadCritical(manifest, (fraction) => {
-            if (fraction < 1) {
-                onProgress(fraction);
-            }
-        });
-        onProgress(1);
+        // One call site, not one per callback shape: a second would let a
+        // forwarded argument be dropped from the branch no caller exercises and
+        // stay green. The manager's terminal `1` is filtered out so the `1`
+        // below is this wrapper's own, reported only once the run resolved.
+        await this.assetManager.preloadCritical(
+            manifest,
+            onProgress === undefined
+                ? undefined
+                : (fraction) => {
+                      if (fraction < 1) {
+                          onProgress(fraction);
+                      }
+                  },
+            onEntryFailure,
+        );
+        onProgress?.(1);
     }
 }
 

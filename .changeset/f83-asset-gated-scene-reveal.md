@@ -53,12 +53,8 @@ Properties you can rely on:
   never-releasing gate is observed; disabling it there would make its own spec pass
   vacuously.
 
-Two caveats worth knowing before you rely on the route arm:
+One caveat worth knowing before you rely on the route arm:
 
-- **The route arm stops at the first rejection.** `preloadCritical` awaits its entries in
-  sequence, so a broken ref leaves the entries after it unloaded by that run. The gate's
-  own settle-all picks up the ones in its promoted set and reports them by name; the rest
-  load on demand.
 - **The guarantee is scoped to a live, rendering client.** A seat in `state.players` with
   no mounted `SceneRouter` — a disconnect mid-transition, or an AI seat — can already
   stall the host barrier today. This change does not fix that, and the budgets are chosen

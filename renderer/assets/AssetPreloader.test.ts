@@ -198,6 +198,37 @@ describe('AssetPreloader', () => {
         expect(result.entries).toEqual([createTextureEntry(presentRef, 'critical')]);
     });
 
+    it('forwards the per-entry failure channel alongside progress', async () => {
+        // Both callbacks in ONE call, because the wrapper builds its progress
+        // filter conditionally: an argument dropped here reaches the manager as
+        // `undefined` and the caller's report goes silent while the run still
+        // resolves the same way.
+        const failingRef = buildAssetRef<TextureAsset>('tactics', 'textures/broken.webp');
+        const load = vi.fn(async (): Promise<ResolvedAsset> => {
+            throw new Error('texture 404');
+        });
+        const assetManager = new DefaultAssetManager(
+            createResolver(),
+            createAssetLoaderRegistry([{ kind: 'texture', load }]),
+        );
+        const progress: number[] = [];
+        const failed: string[] = [];
+
+        await new AssetPreloader(assetManager)
+            .preloadCritical(
+                createManifest([createTextureEntry(failingRef, 'critical')]),
+                (fraction) => progress.push(fraction),
+                (ref) => failed.push(String(ref)),
+            )
+            .catch(() => undefined);
+
+        expect(failed).toEqual([String(failingRef)]);
+        // And the wrapper's own terminal `1` is NOT reported for a run that
+        // rejected — the manager's `1` is filtered and the trailing call is
+        // never reached.
+        expect(progress).toEqual([]);
+    });
+
     it('calls onProgress(1) immediately and skips loading when manifest has no critical entries', async () => {
         const load = vi.fn();
         const assetManager = new DefaultAssetManager(

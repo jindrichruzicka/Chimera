@@ -13,6 +13,7 @@ import {
 } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi.js';
+import { createStubAssetManager } from './__test-support__/StubAssetManager.js';
 import { createAssetLoaderRegistry, type AssetLoadRequest } from './AssetLoaderRegistry';
 import { DefaultAssetManager, type AssetManager, type ResolvedAsset } from './AssetManager';
 import type { AssetResolver } from './AssetResolver';
@@ -300,6 +301,100 @@ describe('useCriticalAssetPreload', () => {
         expect(entry.source.module).not.toBe('global');
         expect(entry.error?.message).toContain('texture 404');
         expect(entry.error?.stack).toBeDefined();
+    });
+
+    it('names the failing refs in the match-level report, and warms the rest', async () => {
+        // Two critical entries with the FIRST failing, which is what makes this
+        // falsifiable: a run that abandoned the list would never load the
+        // second, and a report carrying only a cause could not say which of the
+        // two broke.
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
+        const { assetManager, loadedRefs } = createRecordingManager(async (request) => {
+            if (String(request.ref) === String(CRITICAL_REF)) {
+                throw new Error('texture 404');
+            }
+            return { id: request.url };
+        });
+
+        render(
+            <Probe
+                assetManager={assetManager}
+                assetManifest={manifestWith([
+                    textureEntry(CRITICAL_REF, 'critical'),
+                    textureEntry(SECOND_CRITICAL_REF, 'critical'),
+                ])}
+            />,
+        );
+        await settlePreload();
+
+        expect(loadedRefs).toEqual([String(CRITICAL_REF), String(SECOND_CRITICAL_REF)]);
+        expect(logs.emitCalls).toHaveLength(1);
+        const entry = logs.emitCalls[0]!;
+        expect(entry.source.module).toBe('asset-preload');
+        expect(entry.context?.['refs']).toEqual([String(CRITICAL_REF)]);
+        // The CAUSE too: an entry naming the ref but carrying a manufactured
+        // error would say what broke and never why.
+        expect(entry.error?.message).toContain('texture 404');
+        // And the entry's OWN message, which serves both this arm and the one
+        // whose rejection names no ref — so it must carry no count of its own.
+        expect(entry.message).toBe(
+            '[assets] critical asset preload failed; what it did not load comes in on demand',
+        );
+    });
+
+    it('reports a failing ref without waiting on a sibling entry that never settles', async () => {
+        // The liveness half of the settle-all, and the reason the report is
+        // per-entry rather than per-run: attempting every entry means the run
+        // itself cannot settle until the SLOWEST one does, and this arm carries
+        // no budget. One broken ref beside one unanswered fetch would otherwise
+        // reach no log at all — a strictly worse diagnostic than the abandoning
+        // run it replaced, which at least reported at the rejection.
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
+        const { assetManager } = createRecordingManager(async (request) => {
+            if (String(request.ref) === String(CRITICAL_REF)) {
+                throw new Error('texture 404');
+            }
+            return new Promise<ResolvedAsset>(() => undefined);
+        });
+
+        render(
+            <Probe
+                assetManager={assetManager}
+                assetManifest={manifestWith([
+                    textureEntry(CRITICAL_REF, 'critical'),
+                    textureEntry(SECOND_CRITICAL_REF, 'critical'),
+                ])}
+            />,
+        );
+        await settlePreload();
+
+        expect(logs.emitCalls).toHaveLength(1);
+        expect(logs.emitCalls[0]?.context?.['refs']).toEqual([String(CRITICAL_REF)]);
+    });
+
+    it('reports a rejection that is not the run’s own settle-all, and names no ref for it', async () => {
+        // The other arm of the report. A run can reject for a reason that is not
+        // a per-ref failure — a manager torn down under it, a registry that
+        // refuses the manifest — and that error names no ref, so the entry must
+        // carry none rather than an empty list a reader would take for "none
+        // failed".
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
+        const assetManager: AssetManager = {
+            ...createStubAssetManager(),
+            preloadCritical: () => Promise.reject(new Error('manifest registry gone')),
+        };
+
+        render(<Probe assetManager={assetManager} assetManifest={mixedManifest()} />);
+        await settlePreload();
+
+        expect(logs.emitCalls).toHaveLength(1);
+        const entry = logs.emitCalls[0]!;
+        expect(entry.source.module).toBe('asset-preload');
+        expect(entry.error?.message).toContain('manifest registry gone');
+        expect(entry.context).not.toHaveProperty('refs');
     });
 
     it('reports nothing when the preload rejects after the surface unmounted', async () => {

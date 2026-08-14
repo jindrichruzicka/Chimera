@@ -47,12 +47,10 @@
 //     finishes is served the SAME promise — `AssetManager.load` returns the
 //     in-flight entry — so the warm-up never costs a second fetch and never
 //     gates a frame.
-//   * **Non-fatal.** A rejected critical load is reported and dropped. The
-//     deferred on-demand path is untouched by it, so a missing asset degrades
-//     one ref instead of refusing the match. (`preloadCritical` awaits its
-//     entries in sequence and stops at the first rejection, so entries after
-//     the failing one are not preloaded by THAT run — the gate's settle-all
-//     picks up the ones in its promoted set.)
+//   * **Non-fatal.** A rejected critical load is reported — as it settles, per
+//     ref, because this arm carries no budget and the run cannot settle before
+//     its slowest entry — and dropped. The deferred on-demand path is untouched
+//     by it, so a missing asset degrades one ref instead of refusing the match.
 //
 // Architecture reference: §4.10 Asset Reference System.
 
@@ -66,7 +64,7 @@ import {
     emitRendererWarning,
     readRendererLogsApi,
 } from '../logging/rendererLogger.js';
-import type { AssetManager } from './AssetManager';
+import { type AssetManager, CriticalAssetPreloadFailedError } from './AssetManager.js';
 import { AssetPreloader, markRequiredAssetsCritical } from './AssetPreloader.js';
 
 /** Log module name, so the report is attributable rather than 'global'. */
@@ -105,19 +103,47 @@ export function startCriticalAssetPreload(
 ): AbandonCriticalAssetPreload {
     let abandoned = false;
 
-    void new AssetPreloader(assetManager).preloadCritical(assetManifest).catch((error: unknown) => {
+    const report = (error: unknown, refs?: readonly string[]): void => {
         if (abandoned) {
             return;
         }
 
         emitRendererError(
             readRendererLogsApi(),
-            '[assets] critical asset preload failed; those refs load on demand instead',
+            // Names no count: this message serves both the per-ref arm and the
+            // one whose rejection names none, and the `refs` context below is
+            // where the count actually lives.
+            '[assets] critical asset preload failed; what it did not load comes in on demand',
             error instanceof Error ? error : new Error(String(error)),
-            { gameId: assetManifest.gameId },
+            {
+                gameId: assetManifest.gameId,
+                // Named, the same way the gate's arm names its own: a reader can
+                // act on a ref and not on "something failed". Omitted, rather
+                // than sent empty, when the rejection names none — an empty list
+                // reads as "nothing failed".
+                ...(refs === undefined ? {} : { refs: [...refs] }),
+            },
             LOG_MODULE,
         );
-    });
+    };
+
+    void new AssetPreloader(assetManager)
+        // Per ENTRY, as each one settles. The run attempts all of them, so its
+        // own rejection cannot arrive before the slowest — and one that never
+        // answers would take every other ref's report with it.
+        .preloadCritical(assetManifest, undefined, (ref, error) => {
+            report(error, [String(ref)]);
+        })
+        .catch((error: unknown) => {
+            // Every per-ref failure is already reported above, so the run's own
+            // aggregate would only repeat them. What reaches here otherwise is a
+            // rejection the run raised for a reason that is not a ref's —
+            // reported, and naming none.
+            if (error instanceof CriticalAssetPreloadFailedError) {
+                return;
+            }
+            report(error);
+        });
 
     return () => {
         abandoned = true;
@@ -168,8 +194,7 @@ export const CRITICAL_ASSET_PRELOAD_BUDGET_MS = 8_000;
  * `'pending'` — still waiting; the ONLY outcome with `ready: false`.
  * `'skipped'` — no manager or no manifest, so there is nothing to wait for.
  * `'loaded'` — the preload resolved.
- * `'failed'` — the preload rejected. `preloadCritical` stops at the first
- * rejection, so this is the common shape of a broken ref, not an edge case.
+ * `'failed'` — the preload rejected.
  * `'timed-out'` — the budget elapsed first.
  */
 export type CriticalAssetPreloadOutcome = 'pending' | 'loaded' | 'failed' | 'timed-out' | 'skipped';
@@ -356,24 +381,21 @@ export function useCriticalAssetPreloadGate(
 
         // A settle-all over the PROMOTED set, chained AFTER the run above.
         //
-        // Why it is needed: `preloadCritical` stops at the first rejection and
-        // its rejection value names no ref, so it can say that something failed
-        // but never which. For a ref this run alone made critical that matters:
-        // `startCriticalAssetPreload` runs the BASE manifest and never touches
-        // it, so on a route entered with no transition running its failure
-        // reached no log at all and the reveal failed open in silence. (The
-        // scene-TRANSITION arm, `startScenePreload`, loads and reports the same
-        // declaration under `scene-preload` — but only while a transition is
-        // pending, which is the case this gate does not cover.)
+        // Why it is needed: nothing REPORTS the run above. Its rejection only
+        // settles this gate's outcome, and `startCriticalAssetPreload` — the arm
+        // that does report — runs the BASE manifest and never touches a ref this
+        // run alone made critical. So on a route entered with no transition
+        // running, a promoted ref's failure reached no log at all and the reveal
+        // failed open in silence. (The scene-TRANSITION arm, `startScenePreload`,
+        // loads and reports the same declaration under `scene-preload` — but only
+        // while a transition is pending, which is the case this gate does not
+        // cover.)
         //
         // Why it is chained rather than started alongside: the run above drives
         // the load ORDER, and a concurrent `load` here would race ahead of it.
-        // Chained, every ref that run reached is already cached or in flight, so
-        // this costs no second fetch for them. Two cases do cost one: the ref
-        // that rejected (a failed load is evicted from the in-flight map, so it
-        // is attempted once more) and any promoted ref the run abandoned after
-        // that rejection — which were never attempted at all, and are the reason
-        // this is a settle-all rather than a second look at one error.
+        // Chained, every ref is already cached or in flight, so this costs no
+        // second fetch — except for one that rejected, which is evicted from the
+        // in-flight map and so is attempted once more.
         const promoted = promotedCriticalRefs(assetManifest, requiredAssets);
         if (promoted.length > 0) {
             void criticalRun

@@ -67,9 +67,14 @@ describe('DelegatingAssetManager', () => {
 
         const manifest = { entries: [] };
         const progress = vi.fn();
-        await mgr.preloadCritical(manifest as never, progress);
+        // The failure channel is forwarded too, and asserted alongside the
+        // progress one: it is the only channel that reports a broken ref before
+        // the run settles, so a delegate that never received it would leave the
+        // caller waiting on the slowest entry for every report.
+        const entryFailure = vi.fn();
+        await mgr.preloadCritical(manifest as never, progress, entryFailure);
 
-        expect(delegate.preloadCritical).toHaveBeenCalledWith(manifest, progress);
+        expect(delegate.preloadCritical).toHaveBeenCalledWith(manifest, progress, entryFailure);
     });
 
     it('returns null for get() when no delegate is set', () => {

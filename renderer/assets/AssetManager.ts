@@ -73,9 +73,18 @@ export type ResolvedAsset<TAssetKind extends AssetKind = AssetKind> = ResolvedAs
 
 export interface AssetManager {
     registerManifest(manifest: AssetManifest): void;
+    /**
+     * Warms every `critical` entry of `manifest`.
+     *
+     * `onEntryFailure` fires as each broken ref settles, and is the only channel
+     * that reports one PROMPTLY: the run attempts every entry, so its own
+     * rejection cannot arrive before the slowest of them — and one that never
+     * answers would otherwise withhold the whole report.
+     */
     preloadCritical(
         manifest: AssetManifest,
         onProgress?: (fraction: number) => void,
+        onEntryFailure?: (ref: AssetRef, error: unknown) => void,
     ): Promise<void>;
     get<TAssetKind extends AssetKind>(ref: AssetRef<TAssetKind>): ResolvedAsset<TAssetKind> | null;
     load<TAssetKind extends AssetKind>(
@@ -100,6 +109,36 @@ export class UnknownAssetManifestEntryError extends Error {
         super(`AssetRef '${ref}' is not declared in the active AssetManifest.`);
         this.name = 'UnknownAssetManifestEntryError';
     }
+}
+
+/**
+ * What `preloadCritical` rejects with once every critical entry has settled.
+ *
+ * It names the refs, and carries the first underlying error as `cause` so the
+ * original message and stack survive the aggregation. A caller that reports as
+ * each ref settles — through `onEntryFailure` — has already named them all by
+ * the time this arrives, and uses the type to recognise that.
+ *
+ * A rejection here still means "at least one critical ref will load on demand
+ * instead" — it never means the rest were abandoned.
+ */
+export class CriticalAssetPreloadFailedError extends Error {
+    readonly refs: readonly string[];
+
+    constructor(failures: readonly { readonly ref: AssetRef; readonly error: unknown }[]) {
+        const described = failures
+            .map((failure) => `${String(failure.ref)} (${describeError(failure.error)})`)
+            .join(', ');
+        super(`${failures.length} critical asset(s) failed to preload: ${described}.`, {
+            cause: failures[0]?.error,
+        });
+        this.name = 'CriticalAssetPreloadFailedError';
+        this.refs = failures.map((failure) => String(failure.ref));
+    }
+}
+
+function describeError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
 }
 
 export class DefaultAssetManager implements AssetManager {
@@ -144,6 +183,7 @@ export class DefaultAssetManager implements AssetManager {
     async preloadCritical(
         manifest: AssetManifest,
         onProgress?: (fraction: number) => void,
+        onEntryFailure?: (ref: AssetRef, error: unknown) => void,
     ): Promise<void> {
         this.registerManifest(manifest);
         const criticalEntries = manifest.entries.filter((entry) => entry.priority === 'critical');
@@ -153,11 +193,45 @@ export class DefaultAssetManager implements AssetManager {
             return;
         }
 
+        // Settle-all: every entry is ATTEMPTED, and the failures are collected
+        // rather than thrown out of the loop. A run that stopped at the first
+        // rejection left every entry after it to load on demand, which is the
+        // pop-in `priority: 'critical'` exists to prevent.
+        //
+        // Still SEQUENTIAL, unlike `startScenePreload`'s concurrent settle-all:
+        // the defect is the abandonment, not the sequencing, and the load order
+        // this produces is observable — `criticalAssetPreload.test.tsx` pins the
+        // order the gate's chained settle-all must not overtake.
         let completed = 0;
+        const failures: { readonly ref: AssetRef; readonly error: unknown }[] = [];
         for (const entry of criticalEntries) {
-            await this.load<AssetKind>(entry.ref);
+            try {
+                await this.load<AssetKind>(entry.ref);
+            } catch (error: unknown) {
+                failures.push({ ref: entry.ref, error });
+                // Announced HERE, not at the rejection below: attempting every
+                // entry means this run cannot settle before the slowest one,
+                // and an entry that never answers would take the report with
+                // it. A caller that only wants the outcome ignores this.
+                try {
+                    onEntryFailure?.(entry.ref, error);
+                } catch {
+                    // A reporter throwing is not a reason to abandon the rest of
+                    // the list — that is the shape this loop exists to remove,
+                    // and it would also replace the refs with the reporter's own
+                    // error. Swallowed for the same reason the scene preload
+                    // swallows its progress callback's throw.
+                }
+            }
+            // Counted for a failure too: the fraction measures how much of the
+            // list has SETTLED, so a broken ref moves it on rather than
+            // stalling it one short of the end forever.
             completed += 1;
             onProgress?.(completed / criticalEntries.length);
+        }
+
+        if (failures.length > 0) {
+            throw new CriticalAssetPreloadFailedError(failures);
         }
     }
 

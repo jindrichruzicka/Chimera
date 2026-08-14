@@ -231,10 +231,13 @@ The default registry contains the built-in loaders for `texture`, `gltf-model`, 
 export interface AssetManager {
     // Register the active session manifest; load(ref) rejects refs not listed here.
     registerManifest(manifest: AssetManifest): void;
-    // Preload all 'critical' entries; resolves when done
+    // Preload all 'critical' entries; every entry is attempted, and the run
+    // resolves when they have all settled or rejects naming the ones that failed.
+    // onEntryFailure fires as each broken ref settles — see the Non-fatal bullet.
     preloadCritical(
         manifest: AssetManifest,
         onProgress?: (fraction: number) => void,
+        onEntryFailure?: (ref: AssetRef, error: unknown) => void,
     ): Promise<void>;
     // Synchronous get — returns null if not yet loaded (safe to call every frame)
     get<T extends AssetKind>(ref: AssetRef<T>): ResolvedAsset<T> | null;
@@ -274,17 +277,15 @@ The third, `useCriticalAssetPreloadGate`, differs by what the caller does with t
 the same warm-up and reports `{ ready, outcome }`, so a route can hold its REVEAL — the app-level
 fade-in, and a `RouteEntryLoadingCover` over the scene — until the assets are there. Four
 independent settle paths, because each has its own failure mode: the run resolving, the run
-REJECTING (`preloadCritical` stops at the first bad ref, so this is the common shape of a broken
-declaration), `CRITICAL_ASSET_PRELOAD_BUDGET_MS` elapsing, and a blank manager or manifest — the
+REJECTING, `CRITICAL_ASSET_PRELOAD_BUDGET_MS` elapsing, and a blank manager or manifest — the
 last computed in render rather than in an effect, so a manifest-less game is ready on its first
 render instead of waiting on a run that will never start. The gate reports under the `asset-preload-gate`
 module: the budget elapsing, as a warning; and a PROMOTED ref failing, as an error naming the
 refs. A ref already critical in the base manifest is left to `startCriticalAssetPreload`, which
 runs that manifest for the match.
 The promoted set is exactly the difference between the two arms' manifests, which is why it is the
-gate's to report. That report is a settle-all chained after the run, so a promoted ref the run
-abandoned at an earlier rejection is still attempted and still named, and so that the run keeps
-driving the load order.
+gate's to report. That report is a settle-all chained after the run rather than started alongside
+it, so the run keeps driving the load order.
 
 Its `sceneRequiredAssets` parameter is a runtime consumer of a declared
 `SceneDescriptor.requiredAssets` (Invariant #52): a route entered on an
@@ -311,9 +312,10 @@ Three further properties of that call are contractual rather than incidental:
   returns the in-flight entry — so the warm-up never costs a second fetch and never gates a frame.
 - **Non-fatal.** A rejected critical load is reported through the renderer logger and dropped;
   the deferred on-demand path is untouched, so a missing asset
-  degrades one ref instead of refusing the match. `preloadCritical` awaits its entries in sequence
-  and stops at the first rejection, so entries after the failing one are not preloaded by THAT
-  run — the gate's settle-all picks up the ones in its promoted set.
+  degrades one ref instead of refusing the match. `preloadCritical` attempts every critical entry
+  and rejects once they have all settled, so one broken ref costs the on-demand path only itself.
+  Each failure is reported as IT settles rather than at that rejection — the match-level arm has
+  no budget, so a ref that never answers would otherwise withhold every other ref's report.
 
 The scene-TRANSITION arm is a **separate** mechanism, with its own run in
 `renderer/components/scene/scenePreload.ts`, awaited by `useFadeTransition` before the barrier's

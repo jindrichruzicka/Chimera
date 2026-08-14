@@ -39,8 +39,12 @@ class DefaultDelegatingAssetManager implements DelegatingAssetManager {
     preloadCritical(
         manifest: AssetManifest,
         onProgress?: (fraction: number) => void,
+        onEntryFailure?: (ref: AssetRef, error: unknown) => void,
     ): Promise<void> {
-        return this.delegate?.preloadCritical(manifest, onProgress) ?? Promise.resolve();
+        return (
+            this.delegate?.preloadCritical(manifest, onProgress, onEntryFailure) ??
+            Promise.resolve()
+        );
     }
 
     get<TAssetKind extends AssetKind>(ref: AssetRef<TAssetKind>): ResolvedAsset<TAssetKind> | null {

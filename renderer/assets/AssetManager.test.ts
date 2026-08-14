@@ -37,6 +37,7 @@ import {
 } from './AssetLoaderRegistry';
 import {
     createAssetManager,
+    CriticalAssetPreloadFailedError,
     DefaultAssetManager,
     type AssetManager,
     type LoadedGltfAsset,
@@ -278,6 +279,204 @@ describe('DefaultAssetManager', () => {
         expect(manager.get(criticalCursor)).toEqual({
             id: 'resolved://tactics/textures/cursor.webp',
         });
+    });
+
+    it('attempts every critical entry when the FIRST one rejects, and names the failures', async () => {
+        // The degradation this closes: a run that abandoned the list at the
+        // first bad ref left every entry after it to load on demand — the
+        // pop-in `priority: 'critical'` exists to prevent — and rejected with an
+        // error naming no ref, so the report could say that something broke and
+        // never which.
+        const load = vi.fn(async (request: AssetLoadRequest): Promise<ResolvedAsset> => {
+            if (request.url.endsWith('grass.webp')) {
+                throw new Error('texture 404');
+            }
+            return { id: request.url };
+        });
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createAssetLoaderRegistry([{ kind: 'texture', load }]),
+        );
+        const criticalGrass = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        const criticalTree = buildAssetRef<TextureAsset>('tactics', 'textures/tree.webp');
+        const criticalCursor = buildAssetRef<TextureAsset>('tactics', 'textures/cursor.webp');
+        const progress: number[] = [];
+        const manifest: AssetManifest = {
+            gameId: 'tactics',
+            entries: [
+                { ref: criticalGrass, kind: 'texture', priority: 'critical' },
+                { ref: criticalTree, kind: 'texture', priority: 'critical' },
+                { ref: criticalCursor, kind: 'texture', priority: 'critical' },
+            ],
+        };
+
+        const rejection = await manager
+            .preloadCritical(manifest, (fraction) => progress.push(fraction))
+            .then(
+                () => null,
+                (error: unknown) => error,
+            );
+
+        // All THREE attempted, in manifest order — the two after the failure are
+        // what the old shape dropped.
+        expect(load.mock.calls.map((call) => call[0].ref)).toEqual([
+            criticalGrass,
+            criticalTree,
+            criticalCursor,
+        ]);
+        // The survivors are in the cache, which is the point of attempting them.
+        expect(manager.get(criticalTree)).toEqual({ id: 'resolved://tactics/textures/tree.webp' });
+        expect(manager.get(criticalCursor)).toEqual({
+            id: 'resolved://tactics/textures/cursor.webp',
+        });
+        expect(manager.get(criticalGrass)).toBeNull();
+
+        // It still REJECTS — the caller's contract is unchanged — but the
+        // rejection now names the ref that failed, and carries the cause.
+        expect(rejection).toBeInstanceOf(CriticalAssetPreloadFailedError);
+        expect((rejection as CriticalAssetPreloadFailedError).refs).toEqual([
+            String(criticalGrass),
+        ]);
+        expect((rejection as Error).message).toContain(String(criticalGrass));
+        expect((rejection as Error).message).toContain('texture 404');
+        expect((rejection as Error).cause).toBeInstanceOf(Error);
+
+        // A failed entry still SETTLES, so the fraction keeps counting against
+        // the same denominator rather than stalling at the failure.
+        expect(progress).toEqual([1 / 3, 2 / 3, 1]);
+    });
+
+    it('names every failing critical ref, not only the first', async () => {
+        // Two failures, so a report that carried `cause` alone — or only the
+        // first entry of the list — is distinguishable from one that carries
+        // the set.
+        const load = vi.fn(async (request: AssetLoadRequest): Promise<ResolvedAsset> => {
+            if (request.url.endsWith('cursor.webp')) {
+                return { id: request.url };
+            }
+            throw new Error(`missing ${request.url}`);
+        });
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createAssetLoaderRegistry([{ kind: 'texture', load }]),
+        );
+        const criticalGrass = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        const criticalCursor = buildAssetRef<TextureAsset>('tactics', 'textures/cursor.webp');
+        const criticalTree = buildAssetRef<TextureAsset>('tactics', 'textures/tree.webp');
+        const manifest: AssetManifest = {
+            gameId: 'tactics',
+            entries: [
+                { ref: criticalGrass, kind: 'texture', priority: 'critical' },
+                { ref: criticalCursor, kind: 'texture', priority: 'critical' },
+                { ref: criticalTree, kind: 'texture', priority: 'critical' },
+            ],
+        };
+
+        const rejection = (await manager.preloadCritical(manifest).then(
+            () => null,
+            (error: unknown) => error,
+        )) as CriticalAssetPreloadFailedError;
+
+        expect(rejection.refs).toEqual([String(criticalGrass), String(criticalTree)]);
+        expect(rejection.message).toContain(String(criticalTree));
+        // `cause` is the FIRST failure, not the last: with two distinct causes
+        // the difference is visible, which it is not in the single-failure case.
+        expect((rejection.cause as Error).message).toContain('grass.webp');
+    });
+
+    it('keeps attempting entries when the failure callback itself throws', async () => {
+        // The callback is on a publicly exported interface, so a game can pass
+        // one. Unguarded, a throw inside the `catch` escapes the loop and
+        // abandons every entry after the first failure — reinstating exactly
+        // the shape the settle-all removed, and rejecting with the reporter's
+        // error instead of the refs.
+        const load = vi.fn(async (request: AssetLoadRequest): Promise<ResolvedAsset> => {
+            if (request.url.endsWith('grass.webp')) {
+                throw new Error('texture 404');
+            }
+            return { id: request.url };
+        });
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createAssetLoaderRegistry([{ kind: 'texture', load }]),
+        );
+        const criticalGrass = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        const criticalTree = buildAssetRef<TextureAsset>('tactics', 'textures/tree.webp');
+
+        const rejection = await manager
+            .preloadCritical(
+                {
+                    gameId: 'tactics',
+                    entries: [
+                        { ref: criticalGrass, kind: 'texture', priority: 'critical' },
+                        { ref: criticalTree, kind: 'texture', priority: 'critical' },
+                    ],
+                },
+                undefined,
+                () => {
+                    throw new Error('reporter blew up');
+                },
+            )
+            .then(
+                () => null,
+                (error: unknown) => error,
+            );
+
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(manager.get(criticalTree)).toEqual({ id: 'resolved://tactics/textures/tree.webp' });
+        expect(rejection).toBeInstanceOf(CriticalAssetPreloadFailedError);
+        expect((rejection as Error).message).not.toContain('reporter blew up');
+    });
+
+    it('announces each failing entry as it settles, before the run itself settles', async () => {
+        // The channel a report with no budget depends on: the run attempts every
+        // entry, so its own rejection cannot arrive before the slowest one. Here
+        // the second entry never answers, and the first entry's failure is
+        // announced anyway.
+        let settleSecond: ((asset: ResolvedAsset) => void) | undefined;
+        const load = vi.fn(async (request: AssetLoadRequest): Promise<ResolvedAsset> => {
+            if (request.url.endsWith('grass.webp')) {
+                throw new Error('texture 404');
+            }
+            return new Promise<ResolvedAsset>((resolve) => {
+                settleSecond = resolve;
+            });
+        });
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createAssetLoaderRegistry([{ kind: 'texture', load }]),
+        );
+        const criticalGrass = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        const criticalTree = buildAssetRef<TextureAsset>('tactics', 'textures/tree.webp');
+        const announced: string[] = [];
+        let settled = false;
+
+        const run = manager
+            .preloadCritical(
+                {
+                    gameId: 'tactics',
+                    entries: [
+                        { ref: criticalGrass, kind: 'texture', priority: 'critical' },
+                        { ref: criticalTree, kind: 'texture', priority: 'critical' },
+                    ],
+                },
+                undefined,
+                (ref) => announced.push(String(ref)),
+            )
+            .catch(() => {
+                settled = true;
+            });
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(announced).toEqual([String(criticalGrass)]);
+        // And the run has NOT settled — which is what makes the announcement
+        // above the only thing a caller could have reported by now.
+        expect(settled).toBe(false);
+
+        settleSecond?.({ id: 'resolved://tactics/textures/tree.webp' });
+        await run;
+        expect(settled).toBe(true);
     });
 
     it('reports complete progress when a manifest has no critical entries', async () => {
