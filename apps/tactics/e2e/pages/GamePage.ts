@@ -577,6 +577,36 @@ export class GamePage {
     }
 
     /**
+     * This window's own view of a transition that has not landed, for a barrier
+     * timeout to print.
+     *
+     * The host snapshot says WHICH seat has not acked; these three say what that
+     * seat is stuck on. The ack is dispatched after the fade-out resolves and
+     * after the preload run settles, so `fade` still reading `fade-out` puts the
+     * stall in the fade, and `hold` with a partial or absent `preload` puts it in
+     * the preload run — whose own budget is a fail-open, so reaching here at all
+     * means that timer did not fire either.
+     *
+     * Never throws: it runs while a spec is already failing, and a window that
+     * cannot be read must not replace the diagnosis with its own error.
+     */
+    public async stalledTransitionState(): Promise<string> {
+        try {
+            const overlay = this.transitionOverlay;
+            if ((await overlay.count()) === 0) {
+                return 'no transition overlay mounted';
+            }
+            const [fade, preload] = await Promise.all([
+                overlay.getAttribute('data-fade-phase'),
+                overlay.getAttribute('data-preload-progress'),
+            ]);
+            return `fade=${String(fade)} preload=${String(preload)}`;
+        } catch (error: unknown) {
+            return `unreadable (${error instanceof Error ? error.message : String(error)})`;
+        }
+    }
+
+    /**
      * The board canvas's box once GameCanvas's letterbox fit has sized it.
      *
      * r3f sizes its canvas from a ResizeObserver notification, which is

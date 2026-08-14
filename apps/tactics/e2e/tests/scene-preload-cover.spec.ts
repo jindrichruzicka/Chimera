@@ -19,7 +19,7 @@ import { tacticsBundleEn } from '@chimera-engine/tactics/shell/translations/en.j
 import { test, expect } from '../fixtures/game.fixture';
 import { GamePage } from '../pages/GamePage';
 import { installRevealTimeline, readRevealTimeline } from '../helpers/reveal-timeline';
-import { SCENE_BARRIER_POLL_MS, requestScene } from '../helpers/scene-transition';
+import { expectSceneCommitted, requestScene } from '../helpers/scene-transition';
 
 /** Tactics' contributed scene — `TACTICS_ASSET_DEMO_SCENE_ID` in `apps/tactics/simulation/scenes.ts`. */
 const ASSET_DEMO_SCENE_ID = 'tactics:asset-demo';
@@ -46,15 +46,23 @@ test('covers the entering scene with the declared cover, reports a fraction, the
     const clientGame = new GamePage(clientWindow);
     // The barrier poll clears the 5 s scene-preload budget by a 10 s margin, so
     // a preload that never settles commits on the fail-open INSIDE this budget
-    // rather than reding here as a hung barrier.
-    await Promise.all([
-        expect
-            .poll(() => hostGame.activeSceneId(), { timeout: SCENE_BARRIER_POLL_MS })
-            .toBe(ASSET_DEMO_SCENE_ID),
-        expect
-            .poll(() => clientGame.activeSceneId(), { timeout: SCENE_BARRIER_POLL_MS })
-            .toBe(ASSET_DEMO_SCENE_ID),
-    ]);
+    // rather than reding here as a hung barrier. A timeout is therefore never
+    // "the preload hung" — `expectSceneCommitted` reads the host's own view of
+    // the barrier and names which half is actually late.
+    await expectSceneCommitted(
+        hostApp,
+        {
+            host: {
+                committedScene: () => hostGame.activeSceneId(),
+                stalledState: () => hostGame.stalledTransitionState(),
+            },
+            client: {
+                committedScene: () => clientGame.activeSceneId(),
+                stalledState: () => clientGame.stalledTransitionState(),
+            },
+        },
+        ASSET_DEMO_SCENE_ID,
+    );
     // The committed scene's own screen, keyed on the descriptor's
     // `defaultScreen` — proof the hop landed on tactics' screen and not on the
     // `playfield` fallback `resolveScreen` returns for an unknown key.

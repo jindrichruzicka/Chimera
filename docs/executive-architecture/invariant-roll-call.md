@@ -142,9 +142,8 @@ clip-player spec passed the suite **on a retry**. In isolation at `--retries=0` 
 6 runs, always on the same assertion. `crest` is authored at 0.5 s of a 1 s clip while the
 passage closes at phase 0.75, so a poll on the notify tally resolves a quarter-cycle before the
 passage-end reason is written, and the bare assertion on the next line read an empty attribute.
-Each mark now gets its own poll, and 8 of 8 isolated runs pass. The suite is configured
-`retries: 1`, so what a green exit code says about a spec at this failure rate is only that two
-attempts did not both fall in the same quarter-cycle.
+Each mark now gets its own poll, and 8 of 8 isolated runs pass. What a green exit code says
+about a retried spec is decided by `apps/tactics/e2e/playwright.config.ts`.
 
 ---
 

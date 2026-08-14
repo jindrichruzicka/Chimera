@@ -1061,6 +1061,20 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
             contextIsolation: true,
             sandbox: true,
             webSecurity: true,
+            // The scene barrier's ack chain runs entirely on frames and
+            // timers: each renderer awaits a frame-stepped `fadeOut()` and a
+            // timer-bounded scene preload before dispatching
+            // `engine:scene_ready`, and its rescue paths — the fade watchdog
+            // and the scene_ready retry cadence — are themselves timers.
+            // Electron's default throttles frames AND timers in an occluded
+            // window, so a player whose window is behind another acks whole
+            // throttling intervals late, and the host's own release is
+            // measured in ticks, which only an applied action advances — the
+            // hop then hangs for everyone, not just the occluded player.
+            // Disabled so an occluded client keeps servicing the
+            // authoritative protocol at full rate; the cost is that a hidden
+            // window keeps animating.
+            backgroundThrottling: false,
             preload: options.preloadPath,
             additionalArguments: [`--chimera-env=${options.env}`],
         },

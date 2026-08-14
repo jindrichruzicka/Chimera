@@ -19,7 +19,7 @@ import {
 } from '../../assets/__test-support__/StubAssetManager.js';
 import { FadeContext, FadeProvider, type FadeControl } from '../shell/FadeContext.js';
 import type * as ScenePreloadModule from './scenePreload.js';
-import { useFadeTransition } from './useFadeTransition.js';
+import { SCENE_READY_RETRY_MS, useFadeTransition } from './useFadeTransition.js';
 
 // Records every run the hook starts and counts its cancels, while DELEGATING to
 // the real `startScenePreload` — the outcomes, the budget and the progress
@@ -165,7 +165,10 @@ describe('useFadeTransition', () => {
             </React.StrictMode>,
         );
 
-        await vi.runAllTimersAsync();
+        // Bounded, under the retry cadence: `runAllTimersAsync` would spin on
+        // the cadence interval, and one elapsed cadence would legitimately
+        // re-dispatch — this pin is about the StrictMode remount alone.
+        await vi.advanceTimersByTimeAsync(64);
 
         expect(sendAction).toHaveBeenCalledOnce();
         expect(sendAction).toHaveBeenCalledWith({
@@ -308,7 +311,9 @@ describe('useFadeTransition', () => {
             </FadeProvider>,
         );
 
-        await vi.runAllTimersAsync();
+        // Bounded, under the retry cadence — `runAllTimersAsync` spins on the
+        // cadence interval, and this pin is about the EDGE retry alone.
+        await vi.advanceTimersByTimeAsync(48);
 
         expect(sendAction).toHaveBeenCalledTimes(1);
         expect(sendAction).toHaveBeenNthCalledWith(
@@ -335,7 +340,7 @@ describe('useFadeTransition', () => {
             </FadeProvider>,
         );
 
-        await vi.runAllTimersAsync();
+        await vi.advanceTimersByTimeAsync(48);
 
         expect(sendAction).toHaveBeenCalledTimes(2);
         expect(sendAction).toHaveBeenNthCalledWith(
@@ -383,6 +388,439 @@ describe('useFadeTransition', () => {
         );
 
         expect(fadeControl.fadeIn).not.toHaveBeenCalled();
+        expect(sendAction).not.toHaveBeenCalled();
+    });
+});
+
+describe('useFadeTransition — scene_ready retry cadence', () => {
+    // The ack can be LOST: the host's own ack advances the tick while a
+    // client's — stamped one tick earlier — is in flight, and the pipeline
+    // rejects the stale stamp without applying anything. Every other retry in
+    // this hook is edge-triggered on the snapshot CHANGING, and a rejected
+    // action changes nothing — in a turn-based game with no ticker, no further
+    // broadcast ever arrives, and the barrier deadlocks for every player. The
+    // cadence below is the only retry that fires on time instead of on change.
+    it('re-dispatches scene_ready on the retry cadence while the barrier stays preparing', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+        const snapshot = makeSnapshot({
+            sceneTransition: {
+                toSceneId: makeSceneId('engine:post-game'),
+                phase: 'preparing',
+                startedAtTick: 2,
+                params: {},
+                playersReady: [],
+            },
+        });
+
+        function Harness(): React.ReactElement {
+            useFadeTransition({
+                snapshot,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                fadeOutMs: 32,
+                fadeInMs: 32,
+            });
+            return <div />;
+        }
+
+        render(
+            <FadeProvider>
+                <Harness />
+            </FadeProvider>,
+        );
+
+        await vi.advanceTimersByTimeAsync(48);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+
+        // No snapshot ever arrives — the lost-ack world. Each elapsed cadence
+        // must re-send, stamped with the latest tick this client has. The
+        // boundary is walked with the constant so the pin is on the BINDING:
+        // a cadence armed with any other number reds on one of these two
+        // steps, where a bare "advance a lot" would keep passing.
+        await vi.advanceTimersByTimeAsync(SCENE_READY_RETRY_MS - 49);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(49);
+        expect(sendAction).toHaveBeenCalledTimes(2);
+        expect(sendAction).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({ type: 'engine:scene_ready', tick: snapshot.tick }),
+        );
+
+        await vi.advanceTimersByTimeAsync(SCENE_READY_RETRY_MS);
+        expect(sendAction).toHaveBeenCalledTimes(3);
+    });
+
+    // The cadence and the pins the merge gate reads it against. The literal is
+    // pinned separately from the boundary walk above: the walk kills a cadence
+    // BOUND to another number, this kills the number itself drifting.
+    it('SCENE_READY_RETRY_MS is one second, and several retries fit inside the e2e barrier poll', () => {
+        expect(SCENE_READY_RETRY_MS).toBe(1_000);
+        // 15 s is the e2e suite's SCENE_BARRIER_POLL_MS, pinned on its own
+        // side of the module boundary (scene-transition.test.ts) — an import
+        // here would breach chimera/no-game-renderer-internals in reverse.
+        expect(SCENE_READY_RETRY_MS * 3).toBeLessThan(15_000);
+    });
+
+    it('re-stamps each retry with the latest received tick', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+
+        function Harness({ snap }: { snap: PlayerSnapshot }): React.ReactElement {
+            useFadeTransition({
+                snapshot: snap,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                fadeOutMs: 32,
+                fadeInMs: 32,
+            });
+            return <div />;
+        }
+
+        const { rerender } = render(
+            <FadeProvider>
+                <Harness
+                    snap={makeSnapshot({
+                        tick: 3,
+                        sceneTransition: {
+                            toSceneId: makeSceneId('engine:post-game'),
+                            phase: 'preparing',
+                            startedAtTick: 2,
+                            params: {},
+                            playersReady: [],
+                        },
+                    })}
+                />
+            </FadeProvider>,
+        );
+
+        await vi.advanceTimersByTimeAsync(48);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+
+        // Another seat's ack advanced the tick; this seat's is still missing.
+        rerender(
+            <FadeProvider>
+                <Harness
+                    snap={makeSnapshot({
+                        tick: 5,
+                        sceneTransition: {
+                            toSceneId: makeSceneId('engine:post-game'),
+                            phase: 'preparing',
+                            startedAtTick: 2,
+                            params: {},
+                            playersReady: [playerId('other-player')],
+                        },
+                    })}
+                />
+            </FadeProvider>,
+        );
+        await vi.advanceTimersByTimeAsync(1);
+        expect(sendAction).toHaveBeenCalledTimes(2);
+
+        // The cadence retry after that must carry tick 5 — the latest
+        // received — not a tick captured when the interval was armed.
+        await vi.advanceTimersByTimeAsync(SCENE_READY_RETRY_MS);
+        expect(sendAction).toHaveBeenCalledTimes(3);
+        expect(sendAction).toHaveBeenNthCalledWith(
+            3,
+            expect.objectContaining({ type: 'engine:scene_ready', tick: 5 }),
+        );
+    });
+
+    it('arms exactly one cadence under a StrictMode root', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+        const snapshot = makeSnapshot({
+            sceneTransition: {
+                toSceneId: makeSceneId('engine:post-game'),
+                phase: 'preparing',
+                startedAtTick: 2,
+                params: {},
+                playersReady: [],
+            },
+        });
+
+        function Harness(): React.ReactElement {
+            useFadeTransition({
+                snapshot,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                fadeOutMs: 32,
+                fadeInMs: 32,
+            });
+            return <div />;
+        }
+
+        render(
+            <React.StrictMode>
+                <FadeProvider>
+                    <Harness />
+                </FadeProvider>
+            </React.StrictMode>,
+        );
+
+        await vi.advanceTimersByTimeAsync(48);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+
+        // A double-armed interval surviving the simulated remount would fire
+        // twice per cadence: three calls here instead of two.
+        await vi.advanceTimersByTimeAsync(SCENE_READY_RETRY_MS);
+        expect(sendAction).toHaveBeenCalledTimes(2);
+    });
+
+    // Broadcasts re-parse the transition, so its OBJECT identity changes on
+    // every snapshot. An interval hung on that identity is re-armed per
+    // broadcast and never reaches its cadence — under a realtime tick stream
+    // the retry would silently not exist. The cadence must survive rerenders
+    // that change nothing it is keyed on.
+    it('keeps its cadence across snapshot rerenders of the same transition', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+
+        function Harness({ snap }: { snap: PlayerSnapshot }): React.ReactElement {
+            useFadeTransition({
+                snapshot: snap,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                fadeOutMs: 32,
+                fadeInMs: 32,
+            });
+            return <div />;
+        }
+
+        const preparing = (tick: number): PlayerSnapshot =>
+            makeSnapshot({
+                tick,
+                sceneTransition: {
+                    toSceneId: makeSceneId('engine:post-game'),
+                    phase: 'preparing',
+                    startedAtTick: 2,
+                    params: {},
+                    playersReady: [],
+                },
+            });
+
+        const { rerender } = render(
+            <FadeProvider>
+                <Harness snap={preparing(3)} />
+            </FadeProvider>,
+        );
+
+        await vi.advanceTimersByTimeAsync(48);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+
+        // A broadcast every 400 ms — each advances the tick, so the EDGE
+        // retry fires too; what is asserted is that the cadence retry is
+        // STILL among the dispatches, which only holds if the rerenders did
+        // not re-arm it.
+        let tick = 3;
+        for (let step = 0; step < 3; step += 1) {
+            await vi.advanceTimersByTimeAsync(400);
+            tick += 1;
+            rerender(
+                <FadeProvider>
+                    <Harness snap={preparing(tick)} />
+                </FadeProvider>,
+            );
+        }
+        // t ≈ 1248: one cadence firing (t=1000) plus three edge retries. With
+        // the interval re-armed per rerender, only the edges fire: 4 calls.
+        expect(sendAction).toHaveBeenCalledTimes(5);
+    });
+
+    // The interval's cleanup is load-bearing, and this is its ONLY
+    // dispatch-observable killer: `fadeCompletedKey` is reset when a
+    // transition ENDS, not when the key changes, so a survivor from
+    // transition A passes its own closure's guard and would ack B before B's
+    // fade and preload ever completed. Transition-end and unmount survivors
+    // are masked by the key reset and `mountedRef` — a cleanup mutant is
+    // invisible there.
+    it('a stale cadence from a previous transition never acks the next one', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+        // Fade A completes on the spot; fade B never completes — the exact
+        // state in which only A's leaked interval could dispatch for B.
+        const fadeControl = makeFadeControl({
+            fadeOut: vi
+                .fn()
+                .mockReturnValueOnce(Promise.resolve())
+                .mockReturnValue(new Promise<void>(() => undefined)),
+        });
+
+        function Harness({ snap }: { snap: PlayerSnapshot }): React.ReactElement {
+            useFadeTransition({
+                snapshot: snap,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                fadeOutMs: 32,
+                fadeInMs: 32,
+            });
+            return <div />;
+        }
+
+        const { rerender } = render(
+            <FadeContext.Provider value={fadeControl}>
+                <Harness
+                    snap={makeSnapshot({
+                        tick: 3,
+                        sceneTransition: {
+                            toSceneId: makeSceneId('engine:post-game'),
+                            phase: 'preparing',
+                            startedAtTick: 2,
+                            params: {},
+                            playersReady: [],
+                        },
+                    })}
+                />
+            </FadeContext.Provider>,
+        );
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+
+        // A NEW transition (different key) before A ever resolved.
+        rerender(
+            <FadeContext.Provider value={fadeControl}>
+                <Harness
+                    snap={makeSnapshot({
+                        tick: 4,
+                        sceneTransition: {
+                            toSceneId: makeSceneId('tactics:asset-demo'),
+                            phase: 'preparing',
+                            startedAtTick: 4,
+                            params: {},
+                            playersReady: [],
+                        },
+                    })}
+                />
+            </FadeContext.Provider>,
+        );
+
+        await vi.advanceTimersByTimeAsync(3 * SCENE_READY_RETRY_MS);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops retrying once this player is in playersReady', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+
+        function Harness({ snap }: { snap: PlayerSnapshot }): React.ReactElement {
+            useFadeTransition({
+                snapshot: snap,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                fadeOutMs: 32,
+                fadeInMs: 32,
+            });
+            return <div />;
+        }
+
+        const { rerender } = render(
+            <FadeProvider>
+                <Harness
+                    snap={makeSnapshot({
+                        tick: 3,
+                        sceneTransition: {
+                            toSceneId: makeSceneId('engine:post-game'),
+                            phase: 'preparing',
+                            startedAtTick: 2,
+                            params: {},
+                            playersReady: [],
+                        },
+                    })}
+                />
+            </FadeProvider>,
+        );
+
+        await vi.advanceTimersByTimeAsync(48);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+
+        // The ack landed: the host broadcast a snapshot carrying this player.
+        rerender(
+            <FadeProvider>
+                <Harness
+                    snap={makeSnapshot({
+                        tick: 4,
+                        sceneTransition: {
+                            toSceneId: makeSceneId('engine:post-game'),
+                            phase: 'preparing',
+                            startedAtTick: 2,
+                            params: {},
+                            playersReady: [LOCAL_PLAYER],
+                        },
+                    })}
+                />
+            </FadeProvider>,
+        );
+
+        await vi.advanceTimersByTimeAsync(3 * SCENE_READY_RETRY_MS);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops retrying when the transition ends', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+
+        function Harness({ snap }: { snap: PlayerSnapshot }): React.ReactElement {
+            useFadeTransition({
+                snapshot: snap,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                fadeOutMs: 32,
+                fadeInMs: 32,
+            });
+            return <div />;
+        }
+
+        const { rerender } = render(
+            <FadeProvider>
+                <Harness
+                    snap={makeSnapshot({
+                        tick: 3,
+                        sceneTransition: {
+                            toSceneId: makeSceneId('engine:post-game'),
+                            phase: 'preparing',
+                            startedAtTick: 2,
+                            params: {},
+                            playersReady: [],
+                        },
+                    })}
+                />
+            </FadeProvider>,
+        );
+
+        await vi.advanceTimersByTimeAsync(48);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+
+        rerender(
+            <FadeProvider>
+                <Harness snap={makeSnapshot({ tick: 5, sceneTransition: null })} />
+            </FadeProvider>,
+        );
+
+        await vi.advanceTimersByTimeAsync(3 * SCENE_READY_RETRY_MS);
+        expect(sendAction).toHaveBeenCalledTimes(1);
+    });
+
+    // The cadence must not become a SECOND door to the ack: the barrier's
+    // meaning is "fade-out done and scene preload settled", and a retry that
+    // fired before the chain completed once would ack a readiness that never
+    // happened.
+    it('does not dispatch on the cadence while the fade has never completed', async () => {
+        vi.useFakeTimers();
+        const sendAction = vi.fn();
+
+        renderPreloadHarness({
+            fadeControl: makeFadeControl({
+                fadeOut: vi.fn().mockReturnValue(new Promise<void>(() => undefined)),
+            }),
+            sendAction,
+            assetManager: createStubAssetManager(),
+            assetManifest: stubManifest([textureRef('arena')]),
+            snapshot: makePreloadingSnapshot([]),
+        });
+
+        await vi.advanceTimersByTimeAsync(5 * SCENE_READY_RETRY_MS);
         expect(sendAction).not.toHaveBeenCalled();
     });
 });

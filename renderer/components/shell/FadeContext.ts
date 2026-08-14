@@ -41,6 +41,25 @@ export interface FadeProviderProps {
 }
 
 const FRAME_INTERVAL_MS = 16;
+
+/**
+ * How long past its nominal duration a fade may wait on animation frames
+ * before the watchdog completes it anyway.
+ *
+ * The frame callback is this animation's CLOCK — opacity advances one fixed
+ * step per DELIVERED frame — so a window whose frames stop being serviced
+ * (occluded, on a loaded machine) stops the clock with the promise pending.
+ * `useFadeTransition` awaits that promise before acknowledging a scene
+ * transition, and the host releases the barrier only when EVERY player has
+ * acknowledged — so one starved window's fade would hold the scene hop for
+ * the whole match. The watchdog bounds the promise in wall-clock time by
+ * snapping the fade to its endpoint.
+ *
+ * 250 ms: a whole fade survives down to roughly half frame rate before the
+ * watchdog beats its last frame, and the grace stays small against the 5 s
+ * scene-preload budget that sits downstream of the same await.
+ */
+export const FADE_WATCHDOG_GRACE_MS = 250;
 type AnimationFrameCallback = (time: number) => void;
 type AnimationFrameHandle = number | ReturnType<typeof setTimeout>;
 
@@ -119,6 +138,7 @@ export function FadeProvider({
                         }
                         cancelled = true;
                         cancelFrame(frameId);
+                        clearTimeout(watchdogId);
                         resolve();
                     },
                 };
@@ -136,6 +156,7 @@ export function FadeProvider({
                     opacityRef.current = nextOpacity;
 
                     if (progress >= 1) {
+                        clearTimeout(watchdogId);
                         if (activeAnimationRef.current === controller) {
                             activeAnimationRef.current = null;
                         }
@@ -145,6 +166,25 @@ export function FadeProvider({
 
                     frameId = requestFrame(step);
                 };
+
+                // The frames above are this animation's clock, and a window
+                // that stops being handed frames stops the clock with the
+                // promise pending — while a caller like the scene barrier is
+                // awaiting it on behalf of every player in the match. Fired,
+                // the watchdog snaps to the endpoint through the same
+                // `finish` a delivered last frame would reach. It is CLEARED
+                // by the last frame and by `cancel()`; a cleared timer never
+                // fires, and that is the only thing keeping a superseded
+                // fade's watchdog out of its replacement — the body
+                // deliberately re-checks nothing.
+                const watchdogId = globalThis.setTimeout(() => {
+                    cancelled = true;
+                    cancelFrame(frameId);
+                    if (activeAnimationRef.current === controller) {
+                        activeAnimationRef.current = null;
+                    }
+                    finish(targetOpacity);
+                }, durationMs + FADE_WATCHDOG_GRACE_MS);
 
                 frameId = requestFrame(step);
             });

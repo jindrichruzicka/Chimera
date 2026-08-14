@@ -18,6 +18,13 @@ describe('playwright.config', () => {
         expect(config.retries).toBe(1);
     });
 
+    // The retry stays for the trace it captures, but it no longer BUYS a pass:
+    // a run reporting `1 flaky` exited 0, and what reads this suite reads that
+    // exit code.
+    it('fails the run on a flaky test, so a retried spec cannot pass a gate silently', () => {
+        expect(config.failOnFlakyTests).toBe(true);
+    });
+
     it('sets trace on-first-retry', () => {
         expect((config.use as Record<string, unknown>)?.['trace']).toBe('on-first-retry');
     });

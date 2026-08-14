@@ -397,6 +397,7 @@ interface FakeWebPreferences {
     readonly contextIsolation?: boolean;
     readonly sandbox?: boolean;
     readonly webSecurity?: boolean;
+    readonly backgroundThrottling?: boolean;
     readonly preload?: string;
     readonly additionalArguments?: readonly string[];
 }
@@ -729,6 +730,27 @@ describe('createMainWindow', () => {
 
         const [win] = browserWindowInstances;
         expect(win?.options.webPreferences?.webSecurity).toBe(true);
+    });
+
+    // Not a preference about animation smoothness: Electron's default throttles
+    // BOTH `requestAnimationFrame` and timers once a window is occluded, and
+    // the scene barrier's whole ack chain — the frame-stepped fade, the
+    // timer-bounded preload, and the timer-based rescue paths behind them —
+    // runs under that throttle. The host's own release is measured in TICKS,
+    // which only an applied action advances, and the acks are what it is
+    // waiting for — so a throttled client slows the hop for EVERY player. The
+    // commit that introduced this carries the measurement the setting was
+    // chosen from.
+    it('constructs a BrowserWindow with backgroundThrottling: false', () => {
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+            logger: createNoopLogger(),
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.webPreferences?.backgroundThrottling).toBe(false);
     });
 
     it('constructs a BrowserWindow with nodeIntegration: false', () => {

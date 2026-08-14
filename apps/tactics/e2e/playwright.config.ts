@@ -11,6 +11,11 @@ export default defineConfig({
     fullyParallel: false,
     workers: 2,
     retries: 1,
+    // The retry is kept for the trace it captures on the first failure, not to
+    // buy a pass. A run that reported `1 flaky` on stdout still exited 0, and
+    // what reads this suite reads that exit code. With this, the retry still
+    // produces the trace AND the run reds.
+    failOnFlakyTests: true,
     reporter: [
         ['html', { outputFolder: 'playwright-report' }],
         ['junit', { outputFile: 'results/e2e.xml' }],

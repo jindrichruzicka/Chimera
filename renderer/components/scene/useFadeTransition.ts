@@ -14,6 +14,23 @@ import {
     type ScenePreloadRun,
 } from './scenePreload.js';
 
+/**
+ * How often an unacknowledged `engine:scene_ready` is re-sent while the
+ * barrier stays in `preparing`.
+ *
+ * Every other retry in this hook is edge-triggered — it fires when the
+ * snapshot CHANGES. A lost ack changes nothing: the dispatch is
+ * fire-and-forget at every hop, a rejected action is dropped without a
+ * broadcast, and in a turn-based game no ticker advances anything — so no
+ * edge ever arrives, and the barrier holds every player in the match. Only
+ * a cadence re-sends after silence.
+ *
+ * One second: several attempts fit inside the 15 s the e2e barrier poll
+ * allows even after a worst-case 5 s preload fail-open, and a lost ack
+ * costs at most one extra second over an instant nack.
+ */
+export const SCENE_READY_RETRY_MS = 1_000;
+
 export interface UseFadeTransitionOptions {
     readonly snapshot: PlayerSnapshot;
     readonly localPlayerId?: PlayerId;
@@ -291,4 +308,44 @@ export function useFadeTransition({
         transition?.phase,
         transitionKey,
     ]);
+
+    // The retry CADENCE — the re-send that fires on TIME where the effects
+    // above fire on snapshot edges. Keyed on the phase and the key, never the
+    // transition OBJECT — that identity changes on every broadcast, and
+    // re-arming per broadcast would mean the cadence never fires under a
+    // realtime tick stream.
+    useEffect(() => {
+        if (transitionKey === null || transition === undefined || transition === null) {
+            return;
+        }
+        if (transition.phase !== 'preparing' || localPlayerId === undefined) {
+            return;
+        }
+
+        const readyKey = `${transitionKey}:${localPlayerId}`;
+        const intervalId = setInterval(() => {
+            // Never before the chain has completed once: the ack MEANS
+            // "fade-out done, preload settled", and a cadence must not become
+            // a second door past that meaning. A chain that cannot complete
+            // is someone else's bounded problem — the fade watchdog and the
+            // preload budget.
+            if (fadeCompletedKey.current !== transitionKey) {
+                return;
+            }
+            // The (key, tick) dedupe records that an ack was SENT, not that
+            // it arrived. Clearing it is what lets this re-send go out when
+            // the tick has not moved — exactly the state a lost ack leaves
+            // behind, since nothing advances without it.
+            lastReadyAttempt.current = null;
+            dispatchReadyIfNeeded(readyKey);
+        }, SCENE_READY_RETRY_MS);
+
+        // Load-bearing, not hygiene: `fadeCompletedKey` is reset when a
+        // transition ENDS, not when the key changes — a survivor from
+        // transition A would pass its own closure's guard and ack B before
+        // B's fade and preload ever completed.
+        return () => {
+            clearInterval(intervalId);
+        };
+    }, [dispatchReadyIfNeeded, localPlayerId, transition?.phase, transitionKey]);
 }

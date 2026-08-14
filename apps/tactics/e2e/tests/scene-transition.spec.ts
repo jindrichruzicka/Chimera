@@ -16,7 +16,11 @@
 import { test, expect } from '../fixtures/direct-game.fixture';
 import { GamePage } from '../pages/GamePage';
 import { installRevealTimeline, readRevealTimeline } from '../helpers/reveal-timeline';
-import { SCENE_BARRIER_POLL_MS, requestScene } from '../helpers/scene-transition';
+import {
+    SCENE_BARRIER_POLL_MS,
+    expectSceneCommitted,
+    requestScene,
+} from '../helpers/scene-transition';
 
 /** The scene a running match is committed to, and the precondition for the hop. */
 const IN_MATCH_SCENE_ID = 'engine:game';
@@ -33,13 +37,25 @@ test('host scene_prepare transitions host and client into post-game', async ({
 
     await installRevealTimeline(hostWindow);
     await requestScene(hostApp, hostWindow, POST_GAME_SCENE_ID, IN_MATCH_SCENE_ID);
+    // The commit first, on its own, so a hop that never arrives reds with the
+    // host's view of which half is late rather than with a bare
+    // Expected/Received. The screen keys follow it and cannot resolve before
+    // it, so waiting on them separately costs nothing.
+    await expectSceneCommitted(
+        hostApp,
+        {
+            host: {
+                committedScene: () => hostGame.activeSceneId(),
+                stalledState: () => hostGame.stalledTransitionState(),
+            },
+            client: {
+                committedScene: () => clientGame.activeSceneId(),
+                stalledState: () => clientGame.stalledTransitionState(),
+            },
+        },
+        POST_GAME_SCENE_ID,
+    );
     await Promise.all([
-        expect
-            .poll(() => hostGame.activeSceneId(), { timeout: SCENE_BARRIER_POLL_MS })
-            .toBe(POST_GAME_SCENE_ID),
-        expect
-            .poll(() => clientGame.activeSceneId(), { timeout: SCENE_BARRIER_POLL_MS })
-            .toBe(POST_GAME_SCENE_ID),
         expect
             .poll(() => hostGame.activeScreenKey(), { timeout: SCENE_BARRIER_POLL_MS })
             .toBe('summary'),

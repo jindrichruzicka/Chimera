@@ -1,15 +1,14 @@
 /**
  * e2e/helpers/scene-transition.ts
  *
- * One driver for the two-phase scene transition (§4.18–§4.19): wait until the
- * host scene manager is sitting on the scene being LEFT, then dispatch
- * `engine:scene_prepare` toward the next one through the same
- * `window.__chimera.game.sendAction` path the game itself uses.
+ * The shared seam onto the two-phase scene transition (§4.18–§4.19): driving a
+ * hop through the same `window.__chimera.game.sendAction` path the game itself
+ * uses, and waiting for one to arrive.
  *
  * Extracted from `scene-transition.spec.ts` when a second spec started entering
- * a DIFFERENT scene through the same seam. The payload shape and the barrier
- * that precedes it are what neither spec is testing, so they belong in one
- * place rather than in two copies free to drift apart.
+ * a DIFFERENT scene through the same seam. What lives here is what neither spec
+ * is testing, so it sits in one place rather than in two copies free to drift
+ * apart.
  *
  * Architecture: §13.7 — IPC and WebSocket Test Helpers
  *
@@ -78,6 +77,155 @@ export async function readHostSnapshot(hostApp: ElectronApplication): Promise<Ho
         throw new Error('Host E2E snapshot was not available');
     }
     return snapshot;
+}
+
+/**
+ * Which half of the hop is late, read off the host's own view of the barrier.
+ *
+ * A barrier poll that times out reports `Expected <scene> / Received <scene>`
+ * and nothing else, which is true of every way a hop can fail to arrive: the
+ * prepare never landing, a renderer never acking, the host never committing and
+ * the commit never reaching a renderer are one message. Each arm below names a
+ * different one of those, so a timeout points at a suspect instead of at the
+ * barrier as a whole.
+ *
+ * Pure, and takes the snapshot rather than reading one: the arms are the part
+ * worth pinning, and the read that feeds them can fail on its own terms —
+ * `null` is that case, not an absent transition.
+ */
+export function describeSceneBarrierStall(
+    snapshot: HostSnapshotView | null,
+    toSceneId: string,
+): string {
+    if (snapshot === null) {
+        return 'the host snapshot was unreadable, so which half is late is unknown';
+    }
+
+    const transition = snapshot.sceneTransition;
+    if (transition === undefined || transition === null) {
+        // A committed transition is ERASED, so both arms here see the same
+        // absent transition; the scene id is the only thing that separates
+        // "already there" from "never started".
+        return snapshot.sceneId === toSceneId
+            ? `the host committed ${toSceneId} — a renderer has not rendered it yet`
+            : `no transition is in flight and the host is still on ${String(snapshot.sceneId)} — ` +
+                  'engine:scene_prepare never landed';
+    }
+
+    const acked = transition.playersReady ?? [];
+    switch (transition.phase) {
+        case 'preparing':
+            return acked.length === 0
+                ? 'the transition is preparing and no player has acked — every renderer is ' +
+                      'still in its fade-out or scene preload'
+                : `the transition is preparing and is waiting on an ack — acked so far: ${acked.join(', ')}`;
+        case 'ready':
+            return 'every player acked — the host has not applied engine:scene_commit';
+        case 'committing':
+            return 'the commit is in flight — the entered scene has not reached the renderers';
+        default:
+            return (
+                `the transition is in an unrecognised phase ${String(transition.phase)} — ` +
+                `acked so far: ${acked.join(', ')}`
+            );
+    }
+}
+
+/** What one window can be asked about a hop it is waiting on. */
+export interface CommittedSceneProbe {
+    /** The scene router's committed scene id — the value the barrier polls. */
+    committedScene(): Promise<string | null>;
+    /**
+     * That window's own view of a transition that has not landed, printed
+     * beside its scene when the hop never arrives. Optional: the host snapshot
+     * already names the seat that has not acked, and this is what says what
+     * that seat is stuck on. Must not throw — it runs inside a failure.
+     */
+    stalledState?(): Promise<string>;
+}
+
+/**
+ * Wait for every window to commit `toSceneId`, and say WHY if they do not.
+ *
+ * The wait itself is the same per-window `expect.poll` each spec used to write
+ * out; what this adds is the failure path. `Promise.all` rejects on the first
+ * window to time out, so at that moment the sibling's state is unknown and the
+ * host's is unread — both are gathered here and appended to the matcher's own
+ * report, which is kept so the message still says what was expected of which
+ * window.
+ */
+export async function expectSceneCommitted(
+    hostApp: ElectronApplication,
+    windows: Readonly<Record<string, CommittedSceneProbe>>,
+    toSceneId: string,
+): Promise<void> {
+    const probes = Object.entries(windows);
+    try {
+        await Promise.all(
+            probes.map(async ([, probe]) =>
+                expect
+                    .poll(() => probe.committedScene(), { timeout: SCENE_BARRIER_POLL_MS })
+                    .toBe(toSceneId),
+            ),
+        );
+    } catch (error: unknown) {
+        const stall = describeSceneBarrierStall(await readHostSnapshotOrNull(hostApp), toSceneId);
+        throw new Error(
+            `${error instanceof Error ? error.message : String(error)}\n\n` +
+                `The scene barrier did not commit ${toSceneId} within ${SCENE_BARRIER_POLL_MS} ms.\n` +
+                `Which half is late: ${stall}\n` +
+                `${await readWindowStates(probes)}`,
+            // The message is rewritten, so the matcher's own error survives only
+            // here — everything reading a failure programmatically needs it.
+            { cause: error },
+        );
+    }
+}
+
+/** {@link readHostSnapshot}, demoted to a value: a diagnosis must not throw its own error. */
+async function readHostSnapshotOrNull(
+    hostApp: ElectronApplication,
+): Promise<HostSnapshotView | null> {
+    try {
+        return await readHostSnapshot(hostApp);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * One line per window: the scene it is on, plus whatever it says about the hop
+ * it never made. `Promise.all` above rejects on the FIRST window to time out, so
+ * every window is re-read here — including the siblings, whose state at that
+ * moment is otherwise unknown. A window that cannot be read is named, never
+ * thrown from.
+ */
+async function readWindowStates(
+    probes: readonly (readonly [string, CommittedSceneProbe])[],
+): Promise<string> {
+    const lines = await Promise.all(
+        probes.map(async ([label, probe]) => {
+            let scene: string;
+            try {
+                scene = String(await probe.committedScene());
+            } catch {
+                scene = '<unreadable>';
+            }
+            // The interface asks implementors not to throw, but the diagnosis
+            // must not BET on that: a probe author's mistake here would
+            // replace the whole composed report with its own stack.
+            let stalled = '';
+            if (probe.stalledState !== undefined) {
+                try {
+                    stalled = ` ${await probe.stalledState()}`;
+                } catch {
+                    stalled = ' <stalled-state unreadable>';
+                }
+            }
+            return `  ${label}: scene=${scene}${stalled}`;
+        }),
+    );
+    return `Per window:\n${lines.join('\n')}`;
 }
 
 /**
