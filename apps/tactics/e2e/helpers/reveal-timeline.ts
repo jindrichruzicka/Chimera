@@ -19,8 +19,6 @@
  * scrim's opacity as an inline style and no CSS transition animates it, so the
  * inline value is the exact commanded one — and a computed read would force a
  * style recalc on every mutation batch, inside the very timing being measured.
- * (Playwright-driven Electron windows freeze transition clocks anyway; nothing
- * here depends on one.)
  *
  * Architecture: §13.7 — IPC and WebSocket Test Helpers
  *

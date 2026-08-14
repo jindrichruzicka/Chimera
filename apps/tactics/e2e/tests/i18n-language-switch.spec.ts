@@ -123,8 +123,8 @@ const test = electronTest.extend<I18nSwitchFixtures>({
     menuWindow: async ({ menuApp }, use) => {
         const window = await menuApp.firstWindow();
         await window.waitForLoadState('domcontentloaded');
-        // Occluded Playwright windows freeze CSS transition clocks; collapse the
-        // settings Modal / tab transitions so driving them never stalls.
+        // Collapse the settings Modal / tab transitions, so driving them never
+        // waits on a duration.
         await window.emulateMedia({ reducedMotion: 'reduce' });
         await use(window);
     },

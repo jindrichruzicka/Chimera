@@ -109,10 +109,10 @@ describe('FadeContext', () => {
     // The frame callback is the animation's CLOCK: opacity advances one fixed
     // step per DELIVERED requestAnimationFrame. `useFadeTransition` awaits the
     // returned promise before dispatching `engine:scene_ready`, so a window
-    // whose frames stop being serviced — occluded on a loaded machine — would
-    // otherwise hold the multiplayer scene barrier for EVERY player, not just
-    // its own. The watchdog bounds the promise in wall-clock time: the fade
-    // snaps to its endpoint and resolves at duration + grace.
+    // whose frames stop being serviced would otherwise hold the multiplayer
+    // scene barrier for EVERY player, not just its own. The watchdog bounds the
+    // promise in wall-clock time: the fade snaps to its endpoint and resolves
+    // at duration + grace.
     it('resolves a fade whose window is delivered no animation frames, at the watchdog', async () => {
         vi.useFakeTimers();
         // rAF EXISTS but is never serviced — the starved-window case. The

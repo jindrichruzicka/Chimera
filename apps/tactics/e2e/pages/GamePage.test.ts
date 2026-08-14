@@ -799,9 +799,8 @@ describe('GamePage', () => {
 
     it('drives a frame and re-reads the canvas box until the letterbox fit has sized it', async () => {
         // r3f sizes its canvas from a ResizeObserver notification delivered in a
-        // rendering step, and a window sitting behind another runs none until a
-        // frame is asked for — so the first read is the intrinsic 300x150
-        // `<canvas>` default, which spans none of the frustum.
+        // rendering step, so before one has run the first read is the intrinsic
+        // 300x150 `<canvas>` default, which spans none of the frustum.
         const { page, clickCalls, waitForFunctionCalls } = buildPageDouble(
             '0',
             makeProjectedSnapshot({ localX: 0 }),

@@ -610,10 +610,9 @@ export class GamePage {
      * The board canvas's box once GameCanvas's letterbox fit has sized it.
      *
      * r3f sizes its canvas from a ResizeObserver notification, which is
-     * delivered inside a rendering step — and an Electron window sitting behind
-     * another runs no rendering step until something asks for a frame. Until
-     * then the element reports the intrinsic `300x150` `<canvas>` default, which
-     * spans none of the frustum, so projecting into it clicks a tile at random.
+     * delivered inside a rendering step. Until one runs, the element reports the
+     * intrinsic `300x150` `<canvas>` default, which spans none of the frustum,
+     * so projecting into it clicks a tile at random.
      * Driving a `waitForCanvasFrame` per attempt is what unsticks it; the aspect
      * check is what tells a not-yet-configured canvas from a configured one.
      */

@@ -38,11 +38,10 @@
  * and the `notFound()` call). This spec exercises the `.e2e-build`
  * static-export layout only.
  *
- * The FIRST test awaits no motion — the pose is applied before the first report
- * — so the occluded-window frozen-transition hazard does not touch it. The
- * second one does await motion, and cannot avoid it: an advancing clip is the
- * property. An occluded window stalls the rAF chain and would time it out
- * rather than pass it falsely, which is the direction that hazard fails in.
+ * The FIRST test awaits no motion — the pose is applied before the first
+ * report. The second one does await motion, and cannot avoid it: an advancing
+ * clip is the property. A run that stopped receiving frames would time it out
+ * rather than pass it falsely.
  */
 
 import { expect, test } from '../fixtures/electron.fixture';

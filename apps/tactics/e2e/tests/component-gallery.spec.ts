@@ -299,10 +299,10 @@ test.describe('Component Gallery', () => {
         await gallery.goto();
         await expect(gallery.root).toBeVisible();
 
-        // Occluded Playwright windows never advance CSS transition clocks, so
-        // the 120ms border-color transition would stay frozen at its resting
-        // value. Reduced motion collapses the app's durations to 0ms, which
-        // both stabilises the assertion and exercises that support.
+        // Reduced motion collapses the app's durations to 0ms, so the 120ms
+        // border-color transition resolves to its end value immediately rather
+        // than being sampled mid-flight. That both stabilises the assertion and
+        // exercises the support.
         await mainWindow.emulateMedia({ reducedMotion: 'reduce' });
 
         // Pointer-select a neighbouring tab, then move by keyboard so the

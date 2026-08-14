@@ -732,15 +732,12 @@ describe('createMainWindow', () => {
         expect(win?.options.webPreferences?.webSecurity).toBe(true);
     });
 
-    // Not a preference about animation smoothness: Electron's default throttles
-    // BOTH `requestAnimationFrame` and timers once a window is occluded, and
-    // the scene barrier's whole ack chain — the frame-stepped fade, the
-    // timer-bounded preload, and the timer-based rescue paths behind them —
-    // runs under that throttle. The host's own release is measured in TICKS,
-    // which only an applied action advances, and the acks are what it is
-    // waiting for — so a throttled client slows the hop for EVERY player. The
-    // commit that introduced this carries the measurement the setting was
-    // chosen from.
+    // Not a preference about animation smoothness. The scene barrier's whole
+    // ack chain — the frame-stepped fade, the timer-bounded preload, and the
+    // timer-based rescue paths behind them — runs on the scheduling this option
+    // governs, and the host's own release is measured in TICKS, which only an
+    // applied action advances. So a client whose frames or timers are slowed
+    // slows the hop for EVERY player.
     it('constructs a BrowserWindow with backgroundThrottling: false', () => {
         createMainWindow({
             preloadPath: PRELOAD,

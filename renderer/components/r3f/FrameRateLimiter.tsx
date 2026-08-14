@@ -48,10 +48,8 @@
  *    — and neither can a registration check from `useEngineFrameloop`: R3F
  *    renders canvas children into a separate reconciler root, from CanvasImpl's
  *    own layout effect after `configure()` resolves, so the driver's mount is
- *    not observable from a same-commit effect outside the canvas. A
- *    frame-counting watchdog cannot tell a missing driver from a legitimately
- *    paused canvas either — a backgrounded window advances no frames — so it
- *    would fire on every minimised game. Documented, not guessed at.
+ *    not observable from a same-commit effect outside the canvas. Documented,
+ *    not guessed at.
  *
  * Why it must not present: R3F's `internal.priority` is a COUNTER, not a lock —
  * `subscribe` does `internal.priority = internal.priority + (priority > 0 ? 1 : 0)`,

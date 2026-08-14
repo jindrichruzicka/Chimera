@@ -47,8 +47,8 @@ const FRAME_INTERVAL_MS = 16;
  * before the watchdog completes it anyway.
  *
  * The frame callback is this animation's CLOCK — opacity advances one fixed
- * step per DELIVERED frame — so a window whose frames stop being serviced
- * (occluded, on a loaded machine) stops the clock with the promise pending.
+ * step per DELIVERED frame — so a window whose frames stop being serviced stops
+ * the clock with the promise pending.
  * `useFadeTransition` awaits that promise before acknowledging a scene
  * transition, and the host releases the barrier only when EVERY player has
  * acknowledged — so one starved window's fade would hold the scene hop for

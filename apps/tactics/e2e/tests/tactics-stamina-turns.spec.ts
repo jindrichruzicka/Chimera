@@ -30,9 +30,7 @@ test.describe('Tactics turn-gating + stamina (sequential mode)', () => {
      *
      * `prefers-reduced-motion` zeroes that token, so the mesh snaps and geometry
      * always agrees with the projected snapshot. Animation is not what this spec
-     * tests — turn-gating and stamina accounting are. (Occluded Playwright windows
-     * also freeze CSS transition clocks, the same reason the i18n spec emulates
-     * this.)
+     * tests — turn-gating and stamina accounting are.
      */
     test.beforeEach(async ({ hostWindow, clientWindow }) => {
         await hostWindow.emulateMedia({ reducedMotion: 'reduce' });

@@ -177,9 +177,8 @@ describe('waitForCanvasFrame', () => {
     });
 
     it('bounds the settle itself with the 5s inner budget', async () => {
-        // Without its own bound, a stalled rAF chain (an occluded window
-        // stops presenting) would consume the caller's whole poll budget in
-        // one settle.
+        // Without its own bound, a stalled rAF chain would consume the caller's
+        // whole poll budget in one settle.
         const { page, waitForFunctionArgs } = fakePage();
 
         await waitForCanvasFrame(page);
