@@ -322,6 +322,36 @@ promotion helper's importers are censused in
 `renderer/assets/__tests__/required-assets-producer.test.ts`. The committed-scene half of the same
 declaration is the route gate above.
 
+**A failed ref is logged once per ARM that loaded it, not once per failure.** Each arm reports the
+refs IT loaded, and two of them cover a scene's declaration — the transition run and, depending on
+the priority the base manifest gives that ref, either the route gate or the match-level run. So a
+declared ref that fails is logged under two modules on the occasions below, which is what tells the
+entries apart:
+
+| Base priority of the declared ref  | Reported by                                                               | Not reported by                                               |
+| ---------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `deferred` (promoted by the scene) | `scene-preload` at the transition, `asset-preload-gate` at the commit     | `asset-preload` — the match-level run reads the base manifest |
+| `critical`                         | `asset-preload` at the match-level run, `scene-preload` at the transition | `asset-preload-gate` — the promoted set excludes it           |
+
+The second entry on the first row is the commit's doing: `SceneManager` writes the entered scene's
+declaration onto the snapshot, which re-arms the gate over the very refs the transition arm has just
+settled. The second row is a pair the gate's exclusion never touches, so no arrangement of gate and
+match-level run makes one bad ref yield one entry. A declared ref the manifest carries NO entry for
+is the exception the table excludes: `load` rejects it before reaching a loader, the promotion adds
+no entry, and only the transition arm reports it — one entry and no fetch, with `validate-assets`
+owning the case statically (Invariant #52).
+
+Each arm also RE-LOADS the ref rather than reusing a cached rejection: a failed load is never cached
+and is evicted from `inFlightLoads`. Measured, one broken `deferred` scene-declared ref costs three
+loads across a transition and its commit — the transition arm's, the gate's promoted
+`preloadCritical`, and the gate's settle-all chained after it.
+
+Every entry is true, every arm is fail-open, and the reveal proceeds either way, so a reader is
+over-informed rather than misinformed; suppressing one would need state shared across arms that hold
+none today, and would close only one of the two rows. The counts above are pinned in
+`renderer/assets/__tests__/scene-declared-ref-failure-arms.test.tsx`, so a change that moves them
+reds there rather than quietly re-writing this table.
+
 ### Asset sessions outside a match — `GameAssetSession`
 
 The manager the hooks below read comes from `GameShell` while a match is running. Outside one — on a game-owned route that renders assets with no `GameShell` above it — the manager in context is the app-level `DelegatingAssetManager`, whose delegate only `GameShell` sets, so every load rejects `NoActiveGameSessionError`.

@@ -209,7 +209,9 @@ interface SettledCriticalPreload {
  * This set is exactly the difference between the manifest the gate runs and the
  * one `startCriticalAssetPreload` runs for the match. A ref already critical in
  * the base is deliberately excluded — the shell arm reports that one, and
- * reporting it here too would turn one bad ref into two entries.
+ * reporting it here too would add an entry for a failure that arm already emits.
+ * What the composed live path logs and loads anyway is measured in
+ * `renderer/assets/__tests__/scene-declared-ref-failure-arms.test.tsx`.
  *
  * A ref named in `requiredAssets` but absent from the manifest is also excluded:
  * the promotion does not add entries, so such a ref is never loaded by this run
