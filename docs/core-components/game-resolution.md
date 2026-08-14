@@ -28,7 +28,15 @@ Resolvers must be deterministic, idempotent, and free of host, renderer, network
 
 Once `BaseGameSnapshot.gameResult` is non-null, the match is terminal. `ActionPipeline` rejects gameplay, turn, tick, undo, and redo actions before validation or undo reconstruction can run. Rejected actions use `ActionUnauthorizedError` with reason `match_already_resolved`.
 
-`engine:sync_request` remains allowed after resolution so reconnecting clients can receive the final projected snapshot. Other match lifecycle changes, such as starting a new match or restoring a save, must happen through their owning session/runtime APIs rather than by continuing the resolved action stream.
+`engine:sync_request` remains allowed after resolution so reconnecting clients can receive the final projected snapshot, and `engine:return_to_lobby` — the host-only abandon-to-lobby reset — because it does not mutate the recorded result.
+
+The three scene actions that FINISH a transition are allowed too: `engine:scene_ready`, `engine:scene_commit` and `engine:scene_drop`. A transition can be in flight when a result lands — nothing ties `gameResult` to `sceneTransition`, and the resolver runs on the output of every reduce, including the prepare's own — and refusing them there strands it: the acks are what the host waits for, the host's own commit or drop is what clears the transition, and the barrier's timeout is counted in ticks that only an applied action advances. The set is the exported predicate `isSceneTransitionCompletionAction` in `simulation/foundation/scene-lifecycle.ts`, which both the pipeline gate and the renderer's `sendAction` wrapper consult, so the two cannot drift. `engine:scene_prepare` is deliberately excluded: a resolved match may finish the transition it is in, and may not begin another.
+
+Admitting them is necessary and not sufficient — the release still needs every seat in `state.players` to acknowledge. What happens when one of them cannot is measured in `simulation/scene/__tests__/terminal-match-transition.test.ts`.
+
+A commit that lands after a result carries the recorded `gameResult` through unchanged. `SceneDescriptor.initialize`/`teardown` may return any state and the commit spreads it, so without that the entered scene could blank a recorded result, the resolver would re-run on a null field, and gameplay would flow again into a finished match. Only `gameResult` is re-pinned — it is what the gate and the resolver key on — so a scene entered after a result still writes its own `phase`. A scene that RESOLVES a match on entry is unaffected either: the re-pin applies only when a result was already recorded.
+
+Other match lifecycle changes, such as starting a new match or restoring a save, must happen through their owning session/runtime APIs rather than by continuing the resolved action stream.
 
 ## Projection And Boundaries
 

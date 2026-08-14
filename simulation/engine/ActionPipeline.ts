@@ -16,6 +16,7 @@
  *   #43 — validate() and reduce() use only ReduceContext. No Math.random() or Date.now().
  */
 
+import { isSceneTransitionCompletionAction } from '../foundation/scene-lifecycle.js';
 import type { Logger } from '../foundation/logging.js';
 import type { ClosedAnimationWindow } from './AnimationWindow.js';
 import type {
@@ -322,12 +323,8 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // ── Terminal-match gate ───────────────────────────────────────────
         // Once a game result is recorded the authoritative match is finished.
         // Reject gameplay, turn, tick, undo, and redo actions before the
-        // undo/redo intercept can reconstruct prior state. Two exceptions stay
-        // allowed: read-only sync requests (so reconnecting clients can receive
-        // the terminal snapshot), and engine:return_to_lobby — the host-only
-        // abandon-to-lobby reset (reverse of start_game) that does not mutate the
-        // recorded result. Without it the host could never leave a finished match
-        // back to the lobby (the post-game summary's and replay's only exit).
+        // undo/redo intercept can reconstruct prior state. What stays allowed,
+        // and why each one does, is `isAllowedAfterGameResult` below.
         if (snapshot.gameResult !== null && !isAllowedAfterGameResult(action.type)) {
             throw new ActionUnauthorizedError(action.type, MATCH_ALREADY_RESOLVED_REASON);
         }
@@ -595,6 +592,22 @@ const NOOP_LOGGER: Logger = {
 
 const MATCH_ALREADY_RESOLVED_REASON = 'match_already_resolved';
 
+/**
+ * What the terminal-match gate still admits once a `gameResult` is recorded.
+ *
+ * `engine:sync_request` is read-only, so a reconnecting client can receive the
+ * terminal snapshot. `engine:return_to_lobby` is the host-only abandon-to-lobby
+ * reset (the reverse of `start_game`) and does not touch the recorded result;
+ * without it the host could never leave a finished match back to the lobby.
+ */
 function isAllowedAfterGameResult(actionType: string): boolean {
-    return actionType === 'engine:sync_request' || actionType === 'engine:return_to_lobby';
+    return (
+        actionType === 'engine:sync_request' ||
+        actionType === 'engine:return_to_lobby' ||
+        // The three that FINISH a transition already in flight — see the
+        // predicate's own contract for why refusing them is a deadlock rather
+        // than a refusal. `engine:scene_prepare` is not among them, so a
+        // resolved match still cannot BEGIN one.
+        isSceneTransitionCompletionAction(actionType)
+    );
 }

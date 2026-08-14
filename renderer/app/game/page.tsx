@@ -23,6 +23,7 @@ import {
     type EngineAction,
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import { isSceneTransitionCompletionAction } from '@chimera-engine/simulation/foundation/scene-lifecycle.js';
 import { useCriticalAssetPreloadGate } from '../../assets/criticalAssetPreload.js';
 import { useOptionalFade } from '../../components/shell/FadeContext';
 import { screenFadeMs } from '../../components/shell/screenFadeDuration';
@@ -104,7 +105,17 @@ export default function GamePage(): React.ReactElement | null {
             if (isSpectator) {
                 return;
             }
-            if (snapshot !== null && isTerminalSnapshot(snapshot)) {
+            // A resolved match stops GAMEPLAY, not the scene lifecycle. A
+            // transition can be in flight when `gameResult` lands, and its ack
+            // — dispatched from inside the shell by `useFadeTransition` — comes
+            // through this same wrapper, so dropping it here strands the host
+            // waiting on an ack no other code path sends. The pipeline's own
+            // gate reads the same predicate.
+            if (
+                snapshot !== null &&
+                isTerminalSnapshot(snapshot) &&
+                !isSceneTransitionCompletionAction(action.type)
+            ) {
                 return;
             }
 

@@ -139,8 +139,41 @@ vi.mock('../../input/useInputAction.js', () => ({
 }));
 
 const testRegistry: GameScreenRegistry = {
-    playfield: ({ snapshot }: GameScreenProps) => (
-        <div data-testid="test-playfield" data-tick={snapshot.tick} />
+    playfield: ({ snapshot, sendAction }: GameScreenProps) => (
+        <div data-testid="test-playfield" data-tick={snapshot.tick}>
+            {/* The scene barrier's ack, dispatched from inside the shell in
+                production (`useFadeTransition` inside `SceneRouter`), reaches
+                the page's wrapper the same way this does — through the
+                `sendAction` the shell was handed. */}
+            <button
+                data-testid="dispatch-scene-ready"
+                type="button"
+                onClick={() =>
+                    sendAction({
+                        type: 'engine:scene_ready',
+                        playerId: playerId('p1'),
+                        tick: snapshot.tick,
+                        payload: { playerId: 'p1' },
+                    })
+                }
+            >
+                Ack
+            </button>
+            <button
+                data-testid="dispatch-gameplay"
+                type="button"
+                onClick={() =>
+                    sendAction({
+                        type: 'game:move',
+                        playerId: playerId('p1'),
+                        tick: snapshot.tick,
+                        payload: {},
+                    })
+                }
+            >
+                Move
+            </button>
+        </div>
     ),
     hud: (props: GameHudProps) => {
         const {
@@ -618,6 +651,59 @@ describe('GamePage — action dispatch', () => {
             inputActionCallbacks.get('engine:undo')?.({ pressed: true });
             inputActionCallbacks.get('engine:redo')?.({ pressed: true });
         });
+
+        expect(mockSendAction).not.toHaveBeenCalled();
+    });
+
+    it('still dispatches the scene barrier ack after the match has resolved', async () => {
+        // The wrapper drops every action once the snapshot is terminal, which
+        // is right for gameplay and a deadlock for the barrier: a transition in
+        // flight when `gameResult` lands needs this ack to complete, and the
+        // host's release is denominated in ticks that only an applied action
+        // advances. Nothing else would ever send one.
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({
+            gameResult: { winnerIds: [playerId('p2')] },
+            phase: gamePhase('ended'),
+        });
+        renderGamePage();
+
+        fireEvent.click(await screen.findByTestId('dispatch-scene-ready'));
+
+        expect(mockSendAction).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'engine:scene_ready' }),
+        );
+    });
+
+    it('still drops a GAMEPLAY action after the match has resolved', async () => {
+        // The other side of the same line, so the fix above is a door and not a
+        // hole: only the scene lifecycle passes the terminal guard.
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({
+            gameResult: { winnerIds: [playerId('p2')] },
+            phase: gamePhase('ended'),
+        });
+        renderGamePage();
+
+        fireEvent.click(await screen.findByTestId('dispatch-gameplay'));
+
+        expect(mockSendAction).not.toHaveBeenCalled();
+    });
+
+    it('drops the scene barrier ack for a SPECTATOR even after the match resolves', async () => {
+        // The spectator gate is a different rule with a different reason
+        // (Invariant #114: no seat, so every action it could produce is
+        // structurally invalid) and the terminal-guard change must not widen
+        // it. A spectator has no seat to acknowledge for.
+        mockRole = 'spectator';
+        mockLocalPlayerId = 'watcher-1';
+        mockSnapshot = makeSnapshot({
+            gameResult: { winnerIds: [playerId('p2')] },
+            phase: gamePhase('ended'),
+        });
+        renderGamePage();
+
+        fireEvent.click(await screen.findByTestId('dispatch-scene-ready'));
 
         expect(mockSendAction).not.toHaveBeenCalled();
     });

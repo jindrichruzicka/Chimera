@@ -231,6 +231,19 @@ export class SceneManager<TState extends BaseGameSnapshot = BaseGameSnapshot> {
 
             return {
                 ...initialized,
+                // A match already resolved stays resolved across the commit.
+                // `initialize`/`teardown` may return any state and this spread
+                // takes it wholesale, so a descriptor that blanked the recorded
+                // result would rewrite it — the resolver re-runs wherever
+                // `gameResult` is null, and gameplay would flow again into a
+                // match the pipeline calls finished. Re-pinned only when a
+                // result was ALREADY recorded, so a scene that ENDS a match on
+                // entry still can.
+                //
+                // `gameResult` alone, not `phase`: it is what the terminal gate
+                // and the resolver both key on, and a scene entered after a
+                // result has a legitimate reason to write its own phase.
+                ...(state.gameResult === null ? {} : { gameResult: state.gameResult }),
                 tick: state.tick + 1,
                 sceneId: transition.toSceneId,
                 sceneDefaultScreen: nextDescriptor.defaultScreen,
