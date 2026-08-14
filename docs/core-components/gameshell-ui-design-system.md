@@ -99,16 +99,16 @@ registerRendererGame(rendererContribution);
 ### Within-Scene Screen Navigation
 
 ```typescript
-// renderer/hooks/useScreenNav.ts
+// renderer/state/uiStore.ts
 
-/** Active screen key for the current scene. Defaults to 'playfield' on scene entry. */
+/** Active screen key for the current scene. Reset on scene entry — see below. */
 export function useActiveScreen(): string;
 
 /** Navigate to a named screen. 'playfield' always returns to the primary view. */
 export function useNavigateToScreen(): (screenKey: string) => void;
 ```
 
-These hooks read/write `uiStore.activeScreenKey`. No IPC involved. `SceneRouter` resets the key to `'playfield'` on every `sceneId` change in `PlayerSnapshot`.
+These hooks read/write `uiStore.activeScreenKey`. No IPC involved. On every `sceneId` change in `PlayerSnapshot`, `SceneRouter` resets the key to the entering scene's DECLARED default screen; `'playfield'` is only the last fallback, reached when nothing declares one. The precedence is a cascade over more than one source, and it has several consumers, so read it where it is applied — `defaultScreenKey` in `renderer/components/scene/SceneRouter.tsx` — rather than from a copy here.
 
 ### GameShell Rendering Contract
 
