@@ -3,8 +3,8 @@
 // contract). Runs as a side-effect of game registry initialisation (Invariant
 // #93): each declared texture is resolved through the game-asset protocol
 // (`chimera://renderer/game-assets/...`, Invariant #97), pre-decoded through
-// the shell image-warmup seam so the first paint never flashes the system
-// cursor, and written over the engine's `--ch-cursor-<role>` token as an
+// the shell image-warmup seam so a paint that follows this run does not flash
+// the system cursor, and written over the engine's `--ch-cursor-<role>` token as an
 // inline style on the document root — which outranks the `:root` token
 // declarations without any specificity games. No declaration ⇒ strict no-op:
 // the document is left untouched, so a later cursor-less game load keeps any

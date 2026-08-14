@@ -14,8 +14,10 @@ import type {
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { GameIconSet } from '../components/ui/icons/registry.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
+import { CRITICAL_ASSET_PRELOAD_BUDGET_MS } from '../assets/criticalAssetPreload.js';
 import {
     _resetRendererGameRegistryForTest,
+    GAME_SHELL_WARMUP_BUDGET_MS,
     getRendererGameMenuCommand,
     loadRendererGame,
     loadRendererGameShell,
@@ -233,6 +235,360 @@ describe('rendererGameRegistry', () => {
         });
     });
 
+    // ── the warm-up budget ────────────────────────────────────────────────────
+    //
+    // Both loaders await a shell's fonts, preload images and cursor textures
+    // before resolving, and each of those is a `chimera://` fetch. A fetch that
+    // is answered — with bytes or with a 404 — settles, and the load either
+    // proceeds or rejects into the crash fallback. A fetch that is never
+    // answered settles neither way, and before this budget existed it held
+    // `loadRendererGame` open with no ceiling: `/game` renders nothing until the
+    // load resolves, so the player sat on the black screen the lobby→game fade
+    // left behind, past both preload budgets, forever.
+    describe('shell warm-up budget', () => {
+        /** A texture whose decode never settles — the wedge, in one class. */
+        class StalledImage {
+            public src = '';
+            public readonly decode = vi.fn((): Promise<void> => new Promise<void>(() => undefined));
+
+            public constructor() {
+                constructedImages.push(this);
+            }
+        }
+        /** A texture that decodes at once, for the healthy-path cases. */
+        class WarmImage {
+            public src = '';
+            public readonly decode = vi.fn(async (): Promise<void> => undefined);
+
+            public constructor() {
+                constructedImages.push(this);
+            }
+        }
+        /** A face whose load never settles — the same wedge, one step earlier. */
+        class StalledFontFace {
+            public readonly load = vi.fn(
+                (): Promise<unknown> => new Promise<unknown>(() => undefined),
+            );
+        }
+
+        const constructedImages: (StalledImage | WarmImage)[] = [];
+        const emitted: Record<string, unknown>[] = [];
+
+        const preloadImageShell = (): LoadedRendererGameShell =>
+            fakeShell({ preloadImages: ['fake/images/menu-hero.png'] });
+
+        function registerShell(shell: LoadedRendererGameShell): void {
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(fakeGame({ shell })),
+                loadShell: () => Promise.resolve(shell),
+            });
+        }
+
+        beforeEach(async () => {
+            vi.useFakeTimers();
+            constructedImages.length = 0;
+            emitted.length = 0;
+            vi.stubGlobal('Image', StalledImage);
+            vi.stubGlobal('FontFace', StalledFontFace);
+            vi.stubGlobal('document', {
+                documentElement: { style: { setProperty: vi.fn() } },
+                fonts: { add: vi.fn() },
+            });
+            (globalThis as Record<string, unknown>)['__chimera'] = {
+                logs: {
+                    emit: (entry: Record<string, unknown>) => {
+                        emitted.push(entry);
+                    },
+                },
+            };
+            const { resetWarmedGameImagesForTests } = await import('./GameImageWarmup');
+            const { resetLoadedGameFontsForTests } = await import('./GameFontLoader');
+            resetWarmedGameImagesForTests();
+            resetLoadedGameFontsForTests();
+        });
+
+        afterEach(() => {
+            delete (globalThis as Record<string, unknown>)['__chimera'];
+            vi.unstubAllGlobals();
+            vi.unstubAllEnvs();
+            vi.useRealTimers();
+        });
+
+        it('is five seconds', () => {
+            expect(GAME_SHELL_WARMUP_BUDGET_MS).toBe(5_000);
+        });
+
+        it('composes with the route-entry gate under the deadline the game e2e allows the canvas', () => {
+            // `/game` awaits this budget and THEN `useCriticalAssetPreloadGate`'s,
+            // so the two add up on a maximally unlucky entry. The e2e allows the
+            // canvas 15 s (`CANVAS_TIMEOUT_MS`, apps/tactics/e2e/tests/
+            // in-game-menu-leave.spec.ts). A sum equal to that consumes the whole
+            // allowance on exactly the path these fail-opens exist to rescue, and
+            // CI runners are an order of magnitude slower than a developer
+            // machine. Asserted here so a future bump to either budget reds in
+            // this file rather than as an e2e flake.
+            const GAME_CANVAS_TIMEOUT_MS = 15_000;
+
+            expect(GAME_SHELL_WARMUP_BUDGET_MS + CRITICAL_ASSET_PRELOAD_BUDGET_MS).toBeLessThan(
+                GAME_CANVAS_TIMEOUT_MS,
+            );
+        });
+
+        it('resolves loadRendererGame when a declared warm-up never settles', async () => {
+            registerShell(preloadImageShell());
+
+            const load = loadRendererGame('fake');
+            await vi.advanceTimersByTimeAsync(GAME_SHELL_WARMUP_BUDGET_MS);
+
+            await expect(load).resolves.toMatchObject({ registry: { playfield: FAKE_PLAYFIELD } });
+            // The wedge was entered rather than skipped: the budget is what
+            // released the load, not a warm-up that never ran.
+            expect(constructedImages[0]?.decode).toHaveBeenCalledTimes(1);
+        });
+
+        it('holds the load for the whole budget before failing open', async () => {
+            registerShell(preloadImageShell());
+            let resolved = false;
+            const load = loadRendererGame('fake').then(() => {
+                resolved = true;
+            });
+
+            await vi.advanceTimersByTimeAsync(GAME_SHELL_WARMUP_BUDGET_MS - 1);
+            expect(resolved).toBe(false);
+
+            await vi.advanceTimersByTimeAsync(1);
+            await load;
+            expect(resolved).toBe(true);
+        });
+
+        it('releases loadRendererGameShell on the same budget', async () => {
+            // The shell loader is the one /main-menu, /lobby and /settings await,
+            // and it runs the identical warm-up. A budget on only the game loader
+            // would leave those three routes wedgeable.
+            registerShell(preloadImageShell());
+
+            const load = loadRendererGameShell('fake');
+            await vi.advanceTimersByTimeAsync(GAME_SHELL_WARMUP_BUDGET_MS);
+
+            await expect(load).resolves.toMatchObject({ mainMenu: { buttons: [] } });
+        });
+
+        it('reports once, naming the game id and every step the wedge left undone', async () => {
+            // The steps run in sequence, so a wedged FIRST step also stops the two
+            // behind it from starting. A report naming only the step in flight
+            // would understate what did not load by two thirds.
+            registerShell(
+                fakeShell({
+                    fonts: [{ family: 'Fake', src: 'fake/fonts/fake.woff2' }],
+                    preloadImages: ['fake/images/menu-hero.png'],
+                    cursor: { default: { image: 'cursors/default.png' } },
+                }),
+            );
+
+            const load = loadRendererGame('fake');
+            await vi.advanceTimersByTimeAsync(GAME_SHELL_WARMUP_BUDGET_MS * 3);
+            await load;
+
+            expect(emitted).toHaveLength(1);
+            expect(emitted[0]).toMatchObject({
+                level: 'warn',
+                message:
+                    '[assets] game shell warm-up exceeded its budget; loading the game without it',
+                source: { process: 'renderer', module: 'game-registry' },
+                context: {
+                    gameId: 'fake',
+                    budgetMs: GAME_SHELL_WARMUP_BUDGET_MS,
+                    pending: ['fonts', 'preloadImages', 'cursor'],
+                },
+            });
+        });
+
+        it('names only the steps still outstanding when an earlier one finished', async () => {
+            // The fonts step completes, the images step wedges: the report must
+            // drop the finished one rather than list the whole declaration. The
+            // twin above covers the other direction — a report naming only the
+            // step in flight would drop the two it never let start.
+            class WarmFontFace {
+                public readonly load = vi.fn(async (): Promise<unknown> => ({}));
+            }
+            vi.stubGlobal('FontFace', WarmFontFace);
+            registerShell(
+                fakeShell({
+                    fonts: [{ family: 'Fake', src: 'fake/fonts/fake.woff2' }],
+                    preloadImages: ['fake/images/menu-hero.png'],
+                }),
+            );
+
+            const load = loadRendererGame('fake');
+            await vi.advanceTimersByTimeAsync(GAME_SHELL_WARMUP_BUDGET_MS);
+            await load;
+
+            expect(emitted[0]).toMatchObject({ context: { pending: ['preloadImages'] } });
+        });
+
+        it('does not collapse under NEXT_PUBLIC_CHIMERA_E2E', async () => {
+            // Invariant #133's clause, for the same reason it gives: the e2e build
+            // is where a never-releasing wait is observable, so a budget that
+            // shrank or vanished there would make its own spec pass vacuously.
+            // What is measured is the boundary itself under the flag set.
+            vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+            registerShell(preloadImageShell());
+            let resolved = false;
+            const load = loadRendererGame('fake').then(() => {
+                resolved = true;
+            });
+
+            await vi.advanceTimersByTimeAsync(GAME_SHELL_WARMUP_BUDGET_MS - 1);
+            expect(resolved).toBe(false);
+            expect(emitted).toHaveLength(0);
+
+            await vi.advanceTimersByTimeAsync(1);
+            await load;
+            expect(resolved).toBe(true);
+            expect(emitted).toHaveLength(1);
+        });
+
+        it('arms no budget for a shell with nothing to warm', async () => {
+            // A shell declaring no fonts, images or cursor costs what it cost
+            // before this budget existed. Asserted on the ARMING rather than on
+            // a timer count after the load: an empty step list settles in
+            // microtasks, so a budget armed and cleared inside the same load
+            // leaves a count of zero behind it either way.
+            const armed = vi.spyOn(globalThis, 'setTimeout');
+            registerFake();
+
+            await loadRendererGameShell('fake');
+
+            expect(armed).not.toHaveBeenCalled();
+            expect(emitted).toHaveLength(0);
+        });
+
+        it('gives each concurrent load its own budget', async () => {
+            // Overlapping shell loads are the ordinary case, not an edge one:
+            // /main-menu alone drives several `loadRendererGameShell` calls at
+            // once. Each run owns its own timer handle, so one run settling can
+            // never disarm another's budget and strand it unreleased. Two games
+            // with DISTINCT refs, because a shared ref is deduplicated by the
+            // warm-up's own cache and the second run would settle at once.
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(fakeGame()),
+                loadShell: () =>
+                    Promise.resolve(fakeShell({ preloadImages: ['fake/images/one.png'] })),
+            });
+            registerRendererGame({
+                gameId: 'other',
+                loadGame: () => Promise.resolve(fakeGame()),
+                loadShell: () =>
+                    Promise.resolve(fakeShell({ preloadImages: ['other/images/two.png'] })),
+            });
+
+            const first = loadRendererGameShell('fake');
+            const second = loadRendererGameShell('other');
+            await vi.advanceTimersByTimeAsync(GAME_SHELL_WARMUP_BUDGET_MS);
+
+            await expect(first).resolves.toBeDefined();
+            await expect(second).resolves.toBeDefined();
+            expect(
+                emitted.map((entry) => (entry['context'] as { gameId: string }).gameId).sort(),
+            ).toEqual(['fake', 'other']);
+            expect(vi.getTimerCount()).toBe(0);
+        });
+
+        it('loads a game that contributes no shell at all', async () => {
+            // The shape the blank scaffold ships: `loadGame` returns a registry
+            // and no `shell` key at all. The warm-up must be skipped on that
+            // path, never entered with nothing to read.
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve({ registry: { playfield: FAKE_PLAYFIELD } }),
+                loadShell: () => Promise.resolve(fakeShell()),
+            });
+            const armed = vi.spyOn(globalThis, 'setTimeout');
+
+            await expect(loadRendererGame('fake')).resolves.toMatchObject({
+                registry: { playfield: FAKE_PLAYFIELD },
+            });
+            expect(armed).not.toHaveBeenCalled();
+            expect(emitted).toHaveLength(0);
+        });
+
+        it('runs the warm-up ahead of the dev-time guards, so a rejecting one costs them', async () => {
+            // The order both loaders have always run: the asset work first, the
+            // two synchronous guards after it. A warm-up that rejects therefore
+            // reaches neither guard — measured here rather than left to a
+            // comment, because the two orders differ only in what gets warned.
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+            registerShell(
+                fakeShell({
+                    cursor: { default: { image: '/absolute/default.png' } },
+                    translations: { languages: [], bundles: { 'xx-XX': {} } },
+                }),
+            );
+
+            await expect(loadRendererGame('fake')).rejects.toThrow(
+                'Game cursor source must be a local game asset ref',
+            );
+
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('clears the budget and reports nothing when the warm-up settles in time', async () => {
+            vi.stubGlobal('Image', WarmImage);
+            registerShell(preloadImageShell());
+
+            await loadRendererGame('fake');
+
+            expect(constructedImages[0]?.decode).toHaveBeenCalledTimes(1);
+            expect(emitted).toHaveLength(0);
+            // The budget timer is cleared on the healthy path, not left to fire
+            // its warning into a load that already resolved.
+            expect(vi.getTimerCount()).toBe(0);
+        });
+
+        it('still rejects when a warm-up step fails inside the budget', async () => {
+            // A rejection is a SETTLED outcome and already reaches the player as
+            // the crash fallback. The budget bounds the wedge; it must not
+            // turn a broken declaration into a silent fail-open.
+            registerShell(fakeShell({ cursor: { default: { image: '/absolute/default.png' } } }));
+
+            await expect(loadRendererGame('fake')).rejects.toThrow(
+                'Game cursor source must be a local game asset ref',
+            );
+            expect(emitted).toHaveLength(0);
+            expect(vi.getTimerCount()).toBe(0);
+        });
+
+        it('adds no second report when a step fails after the budget already failed open', async () => {
+            // The budget releases the load, and only then does the outstanding
+            // fetch come back a failure. Nothing may re-open that: the report has
+            // been made and names the step, and a second entry would double-count
+            // one broken declaration.
+            let rejectFont: (error: Error) => void = () => undefined;
+            class DeferredFontFace {
+                public readonly load = vi.fn(
+                    (): Promise<unknown> =>
+                        new Promise<unknown>((_resolve, reject) => {
+                            rejectFont = reject;
+                        }),
+                );
+            }
+            vi.stubGlobal('FontFace', DeferredFontFace);
+            registerShell(fakeShell({ fonts: [{ family: 'Fake', src: 'fake/fonts/fake.woff2' }] }));
+
+            const load = loadRendererGame('fake');
+            await vi.advanceTimersByTimeAsync(GAME_SHELL_WARMUP_BUDGET_MS);
+            await expect(load).resolves.toMatchObject({ registry: { playfield: FAKE_PLAYFIELD } });
+
+            rejectFont(new Error('font fetch aborted'));
+            await vi.advanceTimersByTimeAsync(0);
+
+            expect(emitted).toHaveLength(1);
+            expect(emitted[0]).toMatchObject({ context: { pending: ['fonts'] } });
+        });
+    });
+
     describe('shell.translations game-contribution seam', () => {
         const EN: GameLanguage = { code: 'en-US', label: 'English' };
         const CS: GameLanguage = { code: 'cs-CZ', label: 'Čeština' };
@@ -298,6 +654,10 @@ describe('rendererGameRegistry', () => {
             expect(warnSpy).toHaveBeenCalledTimes(1);
             const [message] = warnSpy.mock.calls[0] ?? [];
             expect(String(message)).toContain('cs-CZ');
+            // The id this guard attributes the bundle to reaches it as a
+            // parameter, so a stale locale can only be reported under the game
+            // that actually contributed it.
+            expect(String(message)).toContain("game 'fake'");
         });
 
         it('does not warn when every bundle locale matches a declared language', async () => {
@@ -358,6 +718,7 @@ describe('rendererGameRegistry', () => {
             expect(warnSpy).toHaveBeenCalledTimes(1);
             const [message] = warnSpy.mock.calls[0] ?? [];
             expect(String(message)).toContain('cs-CZ');
+            expect(String(message)).toContain("game 'fake'");
         });
 
         it('a shell without translations warns nothing', async () => {
@@ -423,6 +784,9 @@ describe('rendererGameRegistry', () => {
 
             expect(warnSpy).toHaveBeenCalledTimes(1);
             expect(String(warnSpy.mock.calls[0]?.[0])).toContain('game.fake.bad');
+            // The glyph name above is the set's own key; this is the id the
+            // guard was handed, which is the part the extraction re-threaded.
+            expect(String(warnSpy.mock.calls[0]?.[0])).toContain("game 'fake'");
         });
 
         it('warns and does not throw when the icons set is not a plain object', async () => {

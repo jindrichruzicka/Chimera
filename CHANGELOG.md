@@ -20,6 +20,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A game's shell warm-up can no longer hold a route open without a ceiling. `loadRendererGame` and
+  `loadRendererGameShell` await a loaded shell's fonts, preload images and cursor textures before
+  resolving, and that wait runs BEFORE either preload budget starts — so a `chimera://` fetch that
+  was never answered parked `/game` on the black screen the lobby→game fade leaves behind, with
+  nothing able to release it. The warm-up now runs on `GAME_SHELL_WARMUP_BUDGET_MS` (5 s) and fails
+  open, reporting the game id and the steps still outstanding. The game's own dynamic `import()`
+  above it stays unbounded on its stylesheet channel and cannot fail open — an absent screen
+  registry has no degraded form — which is recorded in the asset-reference docs rather than fixed.
+
 - `AssetManifestEntry.priority: 'critical'` now preloads. `AssetPreloader` and
   `AssetManager.preloadCritical` both existed but had no caller anywhere in the renderer's runtime
   path, so a critical entry behaved exactly like a deferred one — it decoded on first use, which

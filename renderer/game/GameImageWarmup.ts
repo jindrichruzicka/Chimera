@@ -1,10 +1,12 @@
 // Warm-up loader for game-declared shell images (`LoadedRendererGameShell.
 // preloadImages`) — the image twin of GameFontLoader. Sources are local game
 // asset refs resolved onto the renderer asset protocol; each is fetched AND
-// fully decoded (`img.decode()`), so by the time a shell screen renders the
-// picture the compositor paints it in a single frame instead of streaming it
-// in progressively. Warm-up is best-effort: a broken declaration warns and
-// resolves — a decorative picture must never block the shell from loading.
+// decoded (`img.decode()`), so a shell screen rendering a warmed picture paints
+// it in a single frame instead of streaming it in progressively. Warm-up is
+// best-effort: a broken declaration warns and resolves — a decorative picture
+// must never block the shell from loading — and the registry caps how long it
+// waits on this run at all (GAME_SHELL_WARMUP_BUDGET_MS), so a picture may
+// still be decoding when the shell arrives.
 
 import { DEFAULT_RENDERER_GAME_ASSET_BASE_URL } from '../assets/AssetResolver';
 import { resolveGameShellAssetSource } from './gameShellAssetSource';

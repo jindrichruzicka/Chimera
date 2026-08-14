@@ -352,6 +352,45 @@ none today, and would close only one of the two rows. The counts above are pinne
 `renderer/assets/__tests__/scene-declared-ref-failure-arms.test.tsx`, so a change that moves them
 reds there rather than quietly re-writing this table.
 
+### Ahead of both gates — the shell warm-up, and the one wait that has no budget
+
+A route entry reaches neither gate until `loadRendererGame` has resolved, and that call awaits two
+things in order. Only one of them can be released on a fail-open budget, and the difference is
+whether the thing being waited on has a degraded form the route can render without.
+
+**The shell warm-up is bounded and fails open.** After the game's loader resolves, the registry
+awaits the loaded shell's `fonts`, `preloadImages` and `cursor` textures — three steps of
+`chimera://` fetches, run in sequence. `GAME_SHELL_WARMUP_BUDGET_MS` (5 s, `renderer/game/rendererGameRegistry.ts`)
+releases the load when they do not finish, warning under the `game-registry` module with the game id
+and the steps still outstanding — the one in flight and the ones it never let start. Failing open
+costs a frame of fallback and no more: a warmed image is a decode the first paint would have done
+anyway, and a cursor token left unwritten is the engine's stock cursor. A step that REJECTS still
+rejects the load, unchanged: that is a settled
+outcome and it already reaches the player as the crash fallback. This budget composes with the route
+gate's — 5 s + 8 s — and `rendererGameRegistry.test.ts` asserts the sum stays strictly under the
+15 s the game-route e2e allows the canvas.
+
+**The `RendererGameLoader` call above it is not bounded, and cannot be on these terms.** It is the
+game's own dynamic `import()`, and an absent `GameScreenRegistry` has no degraded form to reveal —
+the only settle a budget could add is a throw, which turns a slow module into a refused route.
+What ceiling it does have is the bundler's, and it is partial. Measured in the shipped static export
+(`apps/tactics/renderer/out/_next/static/chunks/webpack-*.js`):
+
+- the chunk `<script>` load arms a **120 s timeout** and reports the elapse through the same
+  completion path as an error, so the import REJECTS with `ChunkLoadError` rather than hanging —
+  and a rejection is already a readable outcome (the route throws into `RootErrorBoundary`, which
+  clears the app-level fade so its fallback is legible rather than hidden behind the scrim);
+- the **stylesheet sibling** of that same chunk arms no timeout at all. Its promise resolves on the
+  `<link>`'s `load` and rejects on its `error`, and settles on neither if the request is never
+  answered. This is not a channel a game has to opt into: in the export measured here the tactics
+  loader's own `import()` ensures a chunk that carries a stylesheet, and that stylesheet is
+  referenced by no exported HTML — so it is fetched at runtime, through the one handler with no
+  ceiling.
+
+So Invariant #133's promise is over ASSETS — a missing, slow or undeclared one, now including the
+shell's — and stops at the module chunk, which is code. A `chimera://` request that is never
+answered is what both halves turn on: answered with bytes or with a 404, every path above settles.
+
 ### Asset sessions outside a match — `GameAssetSession`
 
 The manager the hooks below read comes from `GameShell` while a match is running. Outside one — on a game-owned route that renders assets with no `GameShell` above it — the manager in context is the app-level `DelegatingAssetManager`, whose delegate only `GameShell` sets, so every load rejects `NoActiveGameSessionError`.

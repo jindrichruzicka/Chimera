@@ -781,13 +781,15 @@ export const gameShell: LoadedRendererGameShell = {
 `renderer/game/GameImageWarmup.ts` resolves each ref through the app protocol
 (`chimera://renderer/game-assets/<game>/images/menu-hero.png`), fetches it via an off-screen
 `Image`, and awaits `img.decode()` — the registry (`loadRendererGame` / `loadRendererGameShell`)
-awaits the warm-up alongside `loadGameFonts`, so every declared picture is fetched **and fully
-decoded** before the shell resolves. The loader deduplicates by resolved URL across shell loads.
+awaits the warm-up alongside `loadGameFonts`, so a declared picture is fetched **and decoded**
+during the load rather than on first render. The loader deduplicates by resolved URL across shell loads.
 Warm-up is best-effort: a broken ref logs a warning, is dropped from the warmed set (so a later
 load retries), and never blocks the shell.
 
 Declare only images the shell shows soon after load — the registry awaits the warm-up, so an
-oversized list delays the first shell screen.
+oversized list delays the first shell screen. That wait is bounded: `GAME_SHELL_WARMUP_BUDGET_MS`
+releases the load and reports what was still outstanding, so a fetch that is never answered costs a
+frame of fallback instead of holding the route (Invariant #133, §4.10).
 
 ### `PreloadedImage` — decode-gated rendering (§4.35 UI primitive)
 
@@ -828,8 +830,8 @@ When the game (shell) loads, the registry (`loadRendererGame` / `loadRendererGam
 shell-internal injector `renderer/game/gameCursorStyles.ts` as a side-effect of registry
 initialisation (invariant #93). For each declared role it resolves the texture through the
 game-asset protocol (`chimera://renderer/game-assets/<game>/cursors/default.png`, invariant #97),
-pre-decodes it through the §4.37.13 image warm-up seam (so the first paint never flashes the
-system cursor), and overrides the engine token on the document root:
+pre-decodes it through the §4.37.13 image warm-up seam (so a paint that follows the injection does
+not flash the system cursor), and overrides the engine token on the document root:
 
 ```
 --ch-cursor-<role>: url(<resolved-url>) <hotspot-x> <hotspot-y>, <role-fallback>

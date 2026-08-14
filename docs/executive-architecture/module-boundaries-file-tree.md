@@ -285,7 +285,7 @@ chimera/
 │   │   ├── useAnimationSheet.ts     # Model sheet, memoised on metadata IDENTITY
 │   │   └── useAsset.ts
 │   ├── game/
-│   │   ├── rendererGameRegistry.ts  # Game shell/screen/asset registration bridge
+│   │   ├── rendererGameRegistry.ts  # Game shell/screen/asset registration bridge; budgeted, fail-open shell warm-up
 │   │   ├── gameShellAssetSource.ts  # Local game-asset-ref resolver for shell fonts/images/cursors
 │   │   ├── GameFontLoader.ts        # Loads GameFontFace self-hosted fonts through the renderer protocol
 │   │   ├── GameImageWarmup.ts       # Fetch+decode warm-up for shell.preloadImages (§4.37.13)
