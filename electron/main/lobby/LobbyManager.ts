@@ -458,7 +458,7 @@ export class LobbyManager {
      * of the hosted session's `lobbyCode` (`<host>:<port>:<token>`, e.g.
      * `127.0.0.1:51234:secret`). A joined-client session (no `close`) and the
      * absence of any session both return `null`. Surfaced to the Debug
-     * Inspector's NAT diagnostics (§6, §11) via `buildNetworkDiagnostics`.
+     * Inspector's NAT diagnostics (§6) via `buildNetworkDiagnostics`.
      */
     getHostPort(): number | null {
         const session = this.session;

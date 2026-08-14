@@ -29,7 +29,7 @@ tags:
 # M8 — Hardening (v0.8.0)
 
 > **Goal**: Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified. Shell pages and the lobby are fully customizable per game, and the tactics stub exercises turn-gating, stamina, AI players, and an opt-in commitment-scheme battle mode.
-> Architecture sections: §4.4, §4.6, §4.9, §4.12, §4.13, §4.14, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §8, §10
+> Architecture sections: §4.4, §4.6, §4.9, §4.12, §4.13, §4.14, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §6, §8, §10
 
 ---
 

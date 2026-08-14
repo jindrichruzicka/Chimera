@@ -39,21 +39,32 @@
  * The top-level space is checked far more weakly, and the weakness is the point
  * at which to read the assertions rather than their names: it asks only whether
  * the overview mentions the number ANYWHERE, because the overview does not index
- * the top-level space the way it indexes §4. Two consequences, both measured
- * below: a number named only in a summary sentence passes, and `§6` passes on a
- * mention inside an Appendix B pitfalls table. What it does catch is a number
- * the overview never writes at all, which is the state the deleted rows were in.
+ * the top-level space the way it indexes §4. The consequence is measured below:
+ * a number named only in a summary sentence passes. What it does catch is a
+ * number the overview never writes at all, which is the state the deleted rows
+ * were in.
  *
- * What this does NOT see at all: a section authored on disk but never added to
- * the overview index, because the §4 comparison is matrix ↔ index and never
- * index ↔ the files themselves. `§4.15` was in that state when this was written,
- * and no assertion here re-measures it.
+ * The index ↔ files axis is checked on one general property — every index row
+ * links a file that exists — which is what makes an authored section's deletion
+ * loud rather than silent. Nothing here opened an indexed file before.
+ *
+ * It is deliberately NOT extended into a tree-wide banner assertion. Indexed
+ * files disagree about the banner: some carry none, and those that do write the
+ * section list in their own way (`§4.5 and §7`, `§ 4.1 and § 4.1a`,
+ * `§4.21 + §4.23`, `§4.16–§4.17`) against a comma-separated index cell. A
+ * banner-match assertion would fail on rows that are not defects. `§6` is
+ * checked for its banner individually instead, because its row is the one that
+ * named a section no document defined.
+ *
+ * The converse still is NOT seen: a section authored on disk but never added to
+ * the overview index. `§4.15` was in that state when this was written, and no
+ * assertion here re-measures it.
  *
  * `readFileSync` throws if a doc moves, so this guard fails loud rather than
  * passing vacuously on a renamed path.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -561,5 +572,97 @@ describe('every section a row names is reachable', () => {
 
         const unreachable = claimed.filter((token) => !overviewMentionsSection(overview, token));
         expect(unreachable, 'matrix rows naming a section the overview never writes').toEqual([]);
+    });
+});
+
+// ─── index ↔ files ────────────────────────────────────────────────────────────
+
+/** `| [core-components/x.md](core-components/x.md) | §4.1 | … |` → the link target. */
+const INDEX_ROW_LINK = /^\|\s*\[[^\]]+\]\(([^)]+)\)/;
+
+/**
+ * An index row whose Architecture Section cell is exactly `§6`.
+ *
+ * The cell is matched whole, between its pipes: `§4.6` and `§6.1` both contain
+ * the substring `§6` and neither is this section.
+ */
+function indexRowClaimsSection6(line: string): boolean {
+    return INDEX_ROW_LINK.test(line) && /\|\s*§6\s*\|/.test(line);
+}
+
+/** Every file linked from an `## Index:` row, as a repo-relative path. */
+function indexedDocPaths(markdown: string): string[] {
+    return markdown
+        .split('\n')
+        .map((line) => INDEX_ROW_LINK.exec(line)?.[1])
+        .filter((link): link is string => link !== undefined)
+        .map((link) => `docs/${link}`);
+}
+
+describe('the overview index and the files it links', () => {
+    it('reads a link target out of an index row and ignores everything else', () => {
+        // Pinned against synthetic input rather than the tree, so the extractor
+        // keeps saying what it says as rows are added.
+        expect(
+            indexedDocPaths(
+                [
+                    '| File | Architecture Section | Contents |',
+                    '| ---- | -------------------- | -------- |',
+                    '| [core-components/a.md](core-components/a.md) | §4.1 | thing |',
+                    '| §6 Client prediction | `ClientPredictor` | [F17](m3.md) |',
+                    'prose mentioning [a link](elsewhere.md)',
+                ].join('\n'),
+            ),
+        ).toEqual(['docs/core-components/a.md']);
+    });
+
+    it('links a file that exists from every index row', () => {
+        // The hole this closes: nothing else here opens an indexed file, so a
+        // section deleted from disk leaves its index row pointing at nothing and
+        // every other assertion still passes.
+        const paths = indexedDocPaths(read(OVERVIEW_DOC));
+        expect(paths.length).toBeGreaterThan(30);
+        expect(paths.filter((p) => !existsSync(path.join(ROOT, p)))).toEqual([]);
+    });
+
+    it('selects an index row by its whole section cell, not by a substring', () => {
+        // Pinned separately from the tree, where exactly one row satisfies both
+        // the exact and the sloppy form so a coarsened predicate would stay
+        // green. `§6.1` and `§4.6` both contain the substring `§6`.
+        const rows = [
+            '| [a.md](a.md) | §4.6 | a section that merely contains 6 |',
+            '| [b.md](b.md) | §6.1 | a subsection of 6 |',
+            '| [c.md](c.md) | §6 | the section itself |',
+            '| [d.md](d.md) | §4.5, §7 | a multi-section cell |',
+        ];
+        expect(rows.filter(indexRowClaimsSection6).map((r) => INDEX_ROW_LINK.exec(r)?.[1])).toEqual(
+            ['c.md'],
+        );
+    });
+
+    it('selects only rows that are index rows, not every table row with a §6 cell', () => {
+        // The predicate's other conjunct. The matrix's OWN rows put the section
+        // in the first cell and carry their links later, so a `| §6 |` cell is
+        // not by itself evidence of an index row — and the fixture above cannot
+        // see the difference, because every row in it is index-shaped.
+        const rows = [
+            '| §6 | `ClientPredictor`, `ReconcileBuffer` | [F17](m3.md), [F49](m8.md) |',
+            '| §6 | plain prose with no link at all |',
+            '| [c.md](c.md) | §6 | the section itself |',
+        ];
+        expect(rows.filter(indexRowClaimsSection6)).toEqual([
+            '| [c.md](c.md) | §6 | the section itself |',
+        ]);
+    });
+
+    it('gives §6 a document that declares itself §6', () => {
+        // The matrix's §6 row once named a section no document defined, which
+        // read as a resolved anchor and was not. A mention test cannot tell the
+        // difference, so this row is checked against the owning doc's banner.
+        const row = read(OVERVIEW_DOC).split('\n').find(indexRowClaimsSection6);
+        expect(row, 'no overview index row carries §6').toBeDefined();
+
+        const link = INDEX_ROW_LINK.exec(row ?? '')?.[1];
+        expect(read(`docs/${link ?? ''}`)).toContain('> §6 of the Chimera architecture.');
     });
 });

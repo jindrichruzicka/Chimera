@@ -205,7 +205,7 @@ export interface StartDebugBridgeOptions {
     /** Inspector window factory override — tests inject in-process fakes. */
     readonly createWindow?: () => DebugWindowLike;
     /**
-     * Connection-diagnostics source (§6, §11). Served at the bridge level — like
+     * Connection-diagnostics source (§6). Served at the bridge level — like
      * `SUBSCRIBE_LIVE`, before the session gate — so it resolves while hosting
      * in the lobby with no game running. Absent (e.g. in unit harnesses) →
      * `GET_NETWORK_DIAGNOSTICS` answers with an ERROR response.
@@ -556,7 +556,7 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
             subscribers.delete(event.sender.id);
             return { type: 'ACK' };
         }
-        // Connection diagnostics are bridge-level (§6, §11): they read host/OS
+        // Connection diagnostics are bridge-level (§6): they read host/OS
         // facts, not session state, so they resolve while hosting in the lobby
         // before any game is running — served before the session gate below.
         if (parsed.data.type === 'GET_NETWORK_DIAGNOSTICS') {

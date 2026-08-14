@@ -3,19 +3,20 @@
  *
  * Holds a bounded queue of unconfirmed `EngineAction`s submitted optimistically
  * before the authoritative snapshot arrives. On each authoritative
- * `PlayerSnapshot`, `ReconcileBuffer.reconcile()` evicts all actions whose
- * originating tick has been confirmed (`action.tick <= snapshot.tick`) and
+ * `PlayerSnapshot`, `ReconcileBuffer.reconcile()` drains the leading run of actions
+ * whose originating tick has been confirmed (`action.tick <= snapshot.tick`) and
  * replays any remaining unconfirmed actions via `ClientPredictor`, returning
  * the reconciled snapshot.
  *
- * Architecture reference: §6 — simulation/prediction/ · Client Prediction
+ * Architecture reference: §6 — simulation/engine/prediction/ · Client Prediction
  *
  * Invariants upheld:
  *   #1 — simulation/ is side-effect-free; no Node.js or Electron imports.
  *   #2 — applyAction/definition.reduce are pure — reconcile replay produces
  *         no side effects.
- *   #3 — GameSnapshot never leaves the main process; ReconcileBuffer
- *         operates on BaseGameSnapshot (PlayerSnapshot shape) only.
+ *   #3 — GameSnapshot never leaves the main process. ReconcileBuffer is
+ *         constrained to BaseGameSnapshot, the full authoritative state;
+ *         narrowing it to the projected PlayerSnapshot is deferred.
  *   #43 — No Math.random, Date.now, performance.now inside the buffer.
  *
  * Module boundaries (hard constraints):
@@ -121,7 +122,7 @@ export class ReconcileBuffer<TState extends BaseGameSnapshot = BaseGameSnapshot>
      * Reconciles the authoritative snapshot against the pending action queue.
      *
      * Steps:
-     * 1. Evict all actions whose `tick` ≤ `authoritativeSnapshot.tick`
+     * 1. Drain the leading run of actions whose `tick` ≤ `authoritativeSnapshot.tick`
      *    (these have been confirmed by the host; replaying them would
      *    double-apply them).
      * 2. Replay each remaining unconfirmed action on top of the authoritative

@@ -7,7 +7,7 @@
  * stream into the `gameStore` via `applySnapshot` / `confirmPrediction`.
  *
  * Architecture reference: §4.4 — Renderer State Stores;
- *                         §6  — simulation/prediction · Client Prediction
+ *                         §6  — simulation/engine/prediction · Client Prediction
  *
  * Module boundary rules (hard constraints):
  *  - Must NOT import `ClientPredictor` or `ReconcileBuffer` from simulation/.

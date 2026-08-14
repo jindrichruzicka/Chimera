@@ -12,7 +12,7 @@
  *   return stop; // cleanup on unmount
  *
  * Architecture reference: §4.4 — Renderer State Stores;
- *                         §6  — simulation/prediction · Client Prediction
+ *                         §6  — simulation/engine/prediction · Client Prediction
  *
  * Invariants upheld:
  *   #1  — GameSnapshot never crosses any IPC boundary; only PlayerSnapshot.

@@ -1,7 +1,7 @@
 // electron/main/network-diagnostics.ts
 //
 // Builds the `NetworkDiagnostics` snapshot for the Debug Inspector's NAT /
-// port-forward guidance (§6, §11) — the host's non-internal IPv4 addresses and
+// port-forward guidance (§6) — the host's non-internal IPv4 addresses and
 // the active hosted port.
 //
 // Design notes:

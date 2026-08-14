@@ -19,17 +19,17 @@ A lightweight floating overlay showing key performance numbers at a glance. Togg
 
 ### Metrics
 
-| Metric             | Source                                                                | Updated every  |
-| ------------------ | --------------------------------------------------------------------- | -------------- |
-| FPS                | Advanced-frame count in rolling 1 s window                            | 500 ms         |
-| Frame time avg/p95 | R3F `useFrame` `deltaSeconds`; last 120 advanced frames               | 500 ms         |
-| Sim tick           | `PlayerSnapshot.tick` from `gameStore`                                | On snapshot    |
-| Actions/sec        | Rolling count of snapshots received in last 1 s                       | 500 ms         |
-| Action round-trip  | `sendAction()` stamp → matching `onSnapshot()` tick advance           | Per own-action |
-| Network ping (ms)  | `PING`/`PONG` from `ClientTransport`, via `system.onConnectionStatus` | Every 2 s      |
-| Renderer heap (MB) | `performance.memory.usedJSHeapSize` (Chromium)                        | Every 1 s      |
-| R3F draw calls     | `gl.info.render.calls`                                                | 500 ms         |
-| R3F triangles      | `gl.info.render.triangles`                                            | 500 ms         |
+| Metric             | Source                                                                      | Updated every  |
+| ------------------ | --------------------------------------------------------------------------- | -------------- |
+| FPS                | Advanced-frame count in rolling 1 s window                                  | 500 ms         |
+| Frame time avg/p95 | R3F `useFrame` `deltaSeconds`; last 120 advanced frames                     | 500 ms         |
+| Sim tick           | `PlayerSnapshot.tick` from `gameStore`                                      | On snapshot    |
+| Actions/sec        | Rolling count of snapshots received in last 1 s                             | 500 ms         |
+| Action round-trip  | `sendAction()` stamp → matching `onSnapshot()` tick advance                 | Per own-action |
+| Network ping (ms)  | `gameStore.latencyMs`, via `perfStoreBootstrap` — no producer today, see §6 | On change      |
+| Renderer heap (MB) | `performance.memory.usedJSHeapSize` (Chromium)                              | Every 1 s      |
+| R3F draw calls     | `gl.info.render.calls`                                                      | 500 ms         |
+| R3F triangles      | `gl.info.render.triangles`                                                  | 500 ms         |
 
 Numbers display with colour markers — green / amber / red — against configurable thresholds (e.g. FPS < 30 = red).
 

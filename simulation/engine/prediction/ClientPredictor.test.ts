@@ -4,7 +4,7 @@
  * Tests written first (red phase) per TDD mandate — ClientPredictor.ts does not
  * exist yet.
  *
- * Architecture reference: §6 — simulation/prediction/ · Client Prediction
+ * Architecture reference: §6 — simulation/engine/prediction/ · Client Prediction
  * Task: F17
  *
  * Acceptance criteria:

@@ -34,7 +34,7 @@ Implement `UndoManager`, `TurnMemento`, `ActionHistory` (with `TurnMemento`-boun
 
 ---
 
-## F17 — Client Prediction `§6 simulation/prediction/`
+## F17 — Client Prediction `§6 simulation/engine/prediction/`
 
 Implement `ClientPredictor` and `ReconcileBuffer` for actions where `predictable: true`. Wire into `ipcClient.sendAction()`. Limit prediction to non-randomised, own-player-only actions. Reconcile on authoritative snapshot receipt.
 

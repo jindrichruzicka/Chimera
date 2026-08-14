@@ -4,7 +4,7 @@
  * Tests written first (red phase) per TDD mandate — ReconcileBuffer.ts does
  * not exist yet.
  *
- * Architecture reference: §6 — simulation/prediction/ · Client Prediction
+ * Architecture reference: §6 — simulation/engine/prediction/ · Client Prediction
  * Task: F18
  *
  * Acceptance criteria:
@@ -206,7 +206,7 @@ describe('ReconcileBuffer', () => {
             expect(buffer.pendingCount).toBe(0);
         });
 
-        it('evicts all confirmed entries and replays only unconfirmed ones', () => {
+        it('drains the leading run of confirmed entries and replays the rest', () => {
             const buffer = new ReconcileBuffer<TestSnapshot>();
             const predictor = makePredictor('test:move');
 

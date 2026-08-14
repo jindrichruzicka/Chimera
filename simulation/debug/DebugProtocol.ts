@@ -84,7 +84,7 @@ export interface PerfStats {
 }
 
 /**
- * Connection diagnostics for the NAT / port-forward guidance (§6, §11).
+ * Connection diagnostics for the NAT / port-forward guidance (§6).
  *
  * Sourced in `electron/main` (network/host facts are forbidden inside
  * `simulation/`); served by the bridge at the bridge level — i.e. without an

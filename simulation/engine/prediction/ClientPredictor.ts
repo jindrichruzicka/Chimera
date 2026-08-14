@@ -7,7 +7,7 @@
  * For any action where `predictable` is absent or `false`, throws
  * `NonPredictableActionError` — never silently applies unpredictable actions.
  *
- * Architecture reference: §6 — simulation/prediction/ · Client Prediction
+ * Architecture reference: §6 — simulation/engine/prediction/ · Client Prediction
  *
  * Invariants upheld:
  *   #1 — simulation/ is side-effect-free; no Node.js or Electron imports.

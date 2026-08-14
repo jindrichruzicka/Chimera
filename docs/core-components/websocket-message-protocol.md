@@ -122,7 +122,7 @@ An `ACTION` checksum mismatch produces `REJECT { reason: 'crc_mismatch' }` for t
 
 ## PING / PONG Round-Trip Latency
 
-Clients send a `PING` with `sentAt = performance.now()`. The server echoes it in a `PONG` immediately. The client computes `RTT = performance.now() - sentAt` and stores it in `PredictionStore.latencyMs`. This RTT is displayed in the `PerfHud` (§4.16).
+Clients send a `PING` with `sentAt = performance.now()`. The server echoes it in a `PONG` immediately. `WsClientTransport` computes the RTT on receipt and fires `ClientTransport.onLatencyUpdate`. Where that value goes — and where the chain currently stops — is §6.
 
 ---
 

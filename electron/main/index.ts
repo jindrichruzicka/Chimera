@@ -1577,7 +1577,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // Late-bound: `lobbyManager` is constructed below, and this closure
             // runs only at IPC-request time, by which point it is assigned. The
             // builder reads host/OS facts, so diagnostics resolve while hosting
-            // in the lobby with no game session attached (§6, §11).
+            // in the lobby with no game session attached (§6).
             getNetworkDiagnostics: () =>
                 buildNetworkDiagnostics({
                     networkInterfaces: () => networkInterfaces(),
