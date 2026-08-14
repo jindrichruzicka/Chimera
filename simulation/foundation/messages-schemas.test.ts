@@ -1024,6 +1024,46 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         }
     });
 
+    it('SNAPSHOT preserves a scene transition defaultScreen declaration', () => {
+        // The transition object is `.strict()`, so an undeclared key is an ERROR
+        // rather than a strip: without the schema line every SNAPSHOT frame from
+        // a host that emits `defaultScreen` fails to parse on every joined
+        // client. `success` is asserted alongside the value for that reason —
+        // the round-trip equality alone would read as a pass on a frame nobody
+        // could receive.
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 5,
+                viewerId: toPlayerId('p1'),
+                players: {},
+                entities: {},
+                phase: 'game',
+                sceneId: 'engine:game',
+                sceneTransition: {
+                    toSceneId: 'tactics:asset-demo',
+                    phase: 'preparing',
+                    startedAtTick: 1,
+                    params: {},
+                    playersReady: [],
+                    defaultScreen: 'asset-demo',
+                },
+                events: [],
+                gameResult: null,
+                undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
+            },
+            checksum: 42,
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'SNAPSHOT') {
+            expect(round.data.snapshot.sceneTransition).toStrictEqual(msg.snapshot.sceneTransition);
+        }
+    });
+
     it('SNAPSHOT preserves a scene transition requiredAssets declaration', () => {
         const msg = {
             type: 'SNAPSHOT' as const,

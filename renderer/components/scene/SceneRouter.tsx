@@ -165,8 +165,8 @@ interface EnteringScene {
  *
  * Resolved off `sceneTransition.toSceneId` and not `snapshot.sceneId`, which
  * stays the scene being LEFT for the whole `'preparing'` phase; and off the
- * registry's default for that scene rather than `useActiveScreen()`, which is
- * likewise still the outgoing scene's key.
+ * screen-key cascade below rather than `useActiveScreen()`, which is likewise
+ * still the outgoing scene's key.
  */
 function readEnteringScene(
     registry: GameScreenRegistry,
@@ -182,7 +182,14 @@ function readEnteringScene(
     }
 
     const sceneId = String(transition.toSceneId);
-    return { sceneId, screenKey: registry.sceneDefaultScreens?.[sceneId] ?? 'playfield' };
+    // The transition's own key first: it is the ENTERING scene's declared
+    // `SceneDescriptor.defaultScreen`, carried from the host, and it is the only
+    // source that a game registering a scene populates by construction. The
+    // registry map stays as the fallback — a host that does not emit the field
+    // must still resolve — and `'playfield'` behind it.
+    const screenKey =
+        transition.defaultScreen ?? registry.sceneDefaultScreens?.[sceneId] ?? 'playfield';
+    return { sceneId, screenKey };
 }
 
 function readSceneDefaultScreen(snapshot: PlayerSnapshot): string | undefined {

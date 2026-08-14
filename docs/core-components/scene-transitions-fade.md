@@ -73,6 +73,9 @@ interface SceneTransitionState {
     readonly playersReady: readonly PlayerId[];
     /** The entering scene's declaration, copied off its host-side descriptor. */
     readonly requiredAssets?: readonly AssetRef[];
+    /** The entering scene's `defaultScreen`, copied off the same descriptor, so a
+     *  client can resolve its loading cover before the scene commits. */
+    readonly defaultScreen?: string;
 }
 ```
 

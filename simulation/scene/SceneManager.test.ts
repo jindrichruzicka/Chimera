@@ -111,6 +111,8 @@ describe('SceneManager action definitions', () => {
 
         expect(prepared.tick).toBe(1);
         expect(prepared.sceneId).toBe(sceneId('engine:game'));
+        // A whole-object assertion, so an added field is a red rather than a
+        // silent widening.
         expect(prepared.sceneTransition).toEqual({
             toSceneId: sceneId('engine:post-game'),
             phase: 'preparing',
@@ -119,6 +121,7 @@ describe('SceneManager action definitions', () => {
             playersReady: [],
             timeoutTicks: 1_800,
             onClientTimeout: 'proceed',
+            defaultScreen: 'playfield',
         });
 
         const hostReady = pipeline.process(
@@ -383,6 +386,26 @@ describe('SceneManager required-asset carriage', () => {
         );
 
         expect(prepared.sceneTransition?.requiredAssets).toEqual([RIG, BACKDROP, RIG]);
+    });
+
+    it('carries the target scene default screen onto the pending transition', () => {
+        // The screen key is declared ONCE, on the descriptor, and the host holds
+        // the registry. Without this the renderer can only guess the entering
+        // scene's screen from its own `sceneDefaultScreens` map, which a game
+        // registering a scene has no reason to also populate — so the scene's
+        // declared loading cover was silently replaced by `'playfield'`'s.
+        const pipeline = makePipeline([
+            makeDescriptor('engine:game'),
+            { ...makeDescriptor('engine:next'), defaultScreen: 'arena-hud' },
+        ]);
+        const snapshot = makeSnapshot();
+
+        const prepared = pipeline.process(
+            snapshot,
+            action('engine:scene_prepare', snapshot, HOST, { toSceneId: 'engine:next' }),
+        );
+
+        expect(prepared.sceneTransition?.defaultScreen).toBe('arena-hud');
     });
 
     it('omits requiredAssets from the transition when the target scene declares none', () => {

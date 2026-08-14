@@ -100,6 +100,13 @@ export class SceneManager<TState extends BaseGameSnapshot = BaseGameSnapshot> {
                     timeoutTicks: descriptor.timeoutTicks ?? DEFAULT_SCENE_TRANSITION_TIMEOUT_TICKS,
                     onClientTimeout:
                         descriptor.onClientTimeout ?? DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY,
+                    // Always written, unlike `requiredAssets` below: every
+                    // descriptor declares a `defaultScreen`, so there is no
+                    // "declares none" case to omit for. It is what lets a client
+                    // resolve the ENTERING scene's loading cover — the committed
+                    // scene's key travels on `sceneDefaultScreen` instead, and
+                    // until commit the renderer has no other source for it.
+                    defaultScreen: descriptor.defaultScreen,
                     // Omitted when the scene declares none, so a transition
                     // into a scene that needs nothing keeps the shape it had
                     // before this field existed.

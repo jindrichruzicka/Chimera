@@ -277,6 +277,137 @@ describe('SceneRouter — entering scene asset cover', () => {
         });
     });
 
+    it('resolves the entering scene’s declared screen when the registry omits it', async () => {
+        // The defect: a game that registers a scene through
+        // `MainGameContribution.registerScenes` but does not ALSO list it in
+        // `GameScreenRegistry.sceneDefaultScreens` used to fall through to
+        // `'playfield'`, and with it `'playfield'`'s cover — silently replacing
+        // the cover the scene declared, for the whole wait it exists to explain.
+        // Nothing reported it: a cover still mounted, still at the same layer,
+        // rendering the engine default empty div.
+        const calls: GameLoadingScreenProps[] = [];
+        const ref = textureRef('arena');
+        const registry = {
+            ...plainRegistry(),
+            // Deliberately EMPTY for the entering scene. A game that declared
+            // the entry would resolve through the fallback and prove nothing.
+            sceneDefaultScreens: { 'engine:post-game': 'summary' },
+            loadingScreen: (props: GameLoadingScreenProps): React.ReactElement => {
+                calls.push(props);
+                return <div data-testid="recording-cover" />;
+            },
+        } satisfies GameScreenRegistry;
+
+        renderRouter(
+            makeTransitioningSnapshot([ref], {
+                toSceneId: 'tactics:asset-demo',
+                defaultScreen: 'asset-demo',
+            }),
+            registry,
+            {
+                assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+                assetManifest: stubManifest([ref]),
+            },
+        );
+
+        await screen.findByTestId('recording-cover');
+
+        expect(calls[0]).toEqual({
+            screenKey: 'asset-demo',
+            sceneId: 'tactics:asset-demo',
+            reason: 'assets',
+            progress: 0,
+        });
+    });
+
+    it('prefers the transition’s key over a registry entry that disagrees', async () => {
+        // The ORDER of the two sources, which the case above cannot see: there
+        // the map simply omits the scene, so either arm first yields the same
+        // answer. Here both name the same scene and name it DIFFERENTLY, so only
+        // the arm that wins is observable. The host's declaration has to win —
+        // the renderer-side map being able to override it is the defect class
+        // this change removes, in its disagreeing variant.
+        const calls: GameLoadingScreenProps[] = [];
+        const ref = textureRef('arena');
+        const registry = {
+            ...plainRegistry(),
+            sceneDefaultScreens: { 'tactics:asset-demo': 'stale-key' },
+            loadingScreen: (props: GameLoadingScreenProps): React.ReactElement => {
+                calls.push(props);
+                return <div data-testid="recording-cover" />;
+            },
+        } satisfies GameScreenRegistry;
+
+        renderRouter(
+            makeTransitioningSnapshot([ref], {
+                toSceneId: 'tactics:asset-demo',
+                defaultScreen: 'asset-demo',
+            }),
+            registry,
+            {
+                assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+                assetManifest: stubManifest([ref]),
+            },
+        );
+
+        await screen.findByTestId('recording-cover');
+
+        expect(calls[0]?.screenKey).toBe('asset-demo');
+    });
+
+    it('falls back to playfield when neither the transition nor the map names a screen', async () => {
+        // The last arm of the cascade, which no case above leaves absent on both
+        // sources at once, so none of them can see it.
+        const calls: GameLoadingScreenProps[] = [];
+        const ref = textureRef('arena');
+        const registry = {
+            ...plainRegistry(),
+            loadingScreen: (props: GameLoadingScreenProps): React.ReactElement => {
+                calls.push(props);
+                return <div data-testid="recording-cover" />;
+            },
+        } satisfies GameScreenRegistry;
+
+        renderRouter(
+            makeTransitioningSnapshot([ref], { toSceneId: 'tactics:asset-demo' }),
+            registry,
+            {
+                assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+                assetManifest: stubManifest([ref]),
+            },
+        );
+
+        await screen.findByTestId('recording-cover');
+
+        expect(calls[0]?.screenKey).toBe('playfield');
+    });
+
+    it('falls back to the registry map when the transition declares no screen', async () => {
+        // The other side of the same precedence. A host that predates the
+        // transition field emits no `defaultScreen`, and the registry map must
+        // still resolve the cover — so the new field is a preference, not a
+        // replacement.
+        const calls: GameLoadingScreenProps[] = [];
+        const ref = textureRef('arena');
+        const registry = {
+            ...plainRegistry(),
+            sceneDefaultScreens: { 'engine:post-game': 'summary' },
+            loadingScreen: (props: GameLoadingScreenProps): React.ReactElement => {
+                calls.push(props);
+                return <div data-testid="recording-cover" />;
+            },
+        } satisfies GameScreenRegistry;
+
+        renderRouter(makeTransitioningSnapshot([ref]), registry, {
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+        });
+
+        await screen.findByTestId('recording-cover');
+
+        expect(calls[0]?.screenKey).toBe('summary');
+    });
+
     it('feeds the measured fraction to the engine overlay and to the cover', async () => {
         const first = textureRef('arena');
         const second = textureRef('floor');
@@ -480,17 +611,22 @@ function makeTransitioningSnapshot(
         readonly tick?: number;
         readonly phase?: 'preparing' | 'ready' | 'committing';
         readonly playersReady?: readonly ReturnType<typeof playerId>[];
+        readonly toSceneId?: string;
+        readonly defaultScreen?: string;
     } = {},
 ): PlayerSnapshot {
     return makeSnapshot({
         tick: overrides.tick ?? 3,
         sceneTransition: {
-            toSceneId: makeSceneId('engine:post-game'),
+            toSceneId: makeSceneId(overrides.toSceneId ?? 'engine:post-game'),
             phase: overrides.phase ?? 'preparing',
             startedAtTick: 2,
             params: {},
             playersReady: overrides.playersReady ?? [],
             requiredAssets,
+            ...(overrides.defaultScreen === undefined
+                ? {}
+                : { defaultScreen: overrides.defaultScreen }),
         },
     });
 }

@@ -66,11 +66,9 @@ export const TacticsGameScreenRegistry: GameScreenRegistry = {
     },
     // The renderer half of each scene's default-screen declaration; the main
     // half is the descriptor's `defaultScreen` (simulation/scenes.ts), and
-    // `index.test.tsx` pins the two together for the contributed scene. Both are
-    // needed: a COMMITTED scene arrives with the descriptor's value on the
-    // snapshot, which wins the cascade, but a scene still being ENTERED has no
-    // snapshot field — `SceneRouter` resolves its preload cover's screen key
-    // through this map alone, and an unlisted scene falls back to `playfield`.
+    // `index.test.tsx` pins the two together for the contributed scene. Both
+    // cover cascades prefer a value carried from the descriptor, so this map is
+    // their fallback — see `RouteEntryLoadingCover` for the other reader.
     sceneDefaultScreens: {
         'engine:game': 'playfield',
         'engine:post-game': 'summary',

@@ -169,6 +169,13 @@ const SceneTransition = z
         // on every joined client. Measured by the round-trip case in
         // `messages-schemas.test.ts`.
         requiredAssets: z.array(z.string()).readonly().optional(),
+        // The entering scene's declared screen key, so a joined client can
+        // resolve its loading cover before the scene commits. Same `.strict()`
+        // consequence as the line above: omitting it makes every SNAPSHOT frame
+        // from a host that emits the field fail to parse on every joined
+        // client, which is what the round-trip case in `messages-schemas.test.ts`
+        // measures — it asserts `success` as well as the value.
+        defaultScreen: z.string().optional(),
     })
     .strict();
 

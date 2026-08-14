@@ -102,14 +102,21 @@ describe('TacticsGameScreenRegistry', () => {
 
     it('maps the contributed scene id to the screen key its descriptor declares', () => {
         // ONE fact, declared TWICE: on the descriptor as `defaultScreen` (main
-        // process) and in this map (renderer). After a commit the snapshot
-        // carries the descriptor's value and it WINS the cascade, so an omission
-        // here is invisible on the committed scene — but the ENTERING scene has
-        // no snapshot field of its own, and `SceneRouter` resolves the scene
-        // preload cover's screen key through this map alone. A contributed scene
-        // missing from it resolves `'playfield'`, which this game deliberately
-        // leaves uncovered, so the declared cover is silently replaced by the
-        // engine default while the preload runs.
+        // process) and in this map (renderer). Both cover cascades now prefer a
+        // value carried from the descriptor — the committed scene's on
+        // `sceneDefaultScreen`, the entering scene's on
+        // `SceneTransitionState.defaultScreen` — so this map is no longer what
+        // rescues a contributed scene from resolving `'playfield'`.
+        //
+        // What the map is still the source for: the route-entry cover before ANY
+        // commit or match boundary has written `sceneDefaultScreen` — a window
+        // this game's OTHER entries serve, since reaching this scene requires a
+        // commit that writes the key. It is also the fallback behind both
+        // cascades.
+        //
+        // So this asserts a consistency property, not a workaround: the two
+        // declarations of one screen key must not disagree, because whichever
+        // one a given path reads has to name the same screen.
         const sceneRegistry = new SceneRegistry<BaseGameSnapshot>();
         registerTacticsScenes(sceneRegistry);
         const descriptor = sceneRegistry.resolve(TACTICS_ASSET_DEMO_SCENE_ID);

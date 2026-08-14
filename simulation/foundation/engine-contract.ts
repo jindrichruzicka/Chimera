@@ -71,6 +71,24 @@ export interface SceneTransitionState {
      * what it was before the field existed.
      */
     readonly requiredAssets?: readonly AssetRef[];
+    /**
+     * The screen key the scene being entered declares in its
+     * `SceneDescriptor.defaultScreen`, copied onto the transition for the same
+     * reason `requiredAssets` is: the descriptor is host-side only, and a client
+     * needs the key before the scene is committed in order to resolve the
+     * entering scene's loading cover.
+     *
+     * Without it the renderer can only read its own
+     * `GameScreenRegistry.sceneDefaultScreens` map, which a game registering a
+     * scene has no reason to also populate, and the omission showed up only as
+     * the engine's default cover replacing the declared one.
+     *
+     * The renderer PREFERS this over its map rather than replacing it: a host
+     * that does not emit the field must still resolve through the map.
+     *
+     * Optional so a transition minted before the field existed still parses.
+     */
+    readonly defaultScreen?: string;
 }
 
 // ─── Game result ────────────────────────────────────────────────────────────
