@@ -848,7 +848,11 @@ describe('useCriticalAssetPreloadGate', () => {
         expect(registerManifest.mock.calls.every((call) => call[0] === manifest)).toBe(true);
     });
 
-    it('leaves the failure report to the GameShell arm — one report, not two', async () => {
+    it('leaves the failure report to the GameShell arm', async () => {
+        // No transition arm is mounted here, so the single entry below is this
+        // fixture's count and not the composed path's. What a scene-declared
+        // ref that fails produces across every arm that loads it is measured in
+        // `renderer/assets/__tests__/scene-declared-ref-failure-arms.test.tsx`.
         const logs = createRecordingLogsApi();
         (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
         const { assetManager } = createRecordingManager(async () => {
@@ -927,8 +931,11 @@ describe('useCriticalAssetPreloadGate', () => {
         // The other side of the split, and the case that pins WHICH refs the
         // gate owns. The scene declares BOTH refs, so a gate that reported
         // every declared ref rather than only the ones its promotion made
-        // critical would report the base-critical failure as well — one bad ref
-        // becoming two entries, which is what the split exists to prevent.
+        // critical would report the base-critical failure as well.
+        //
+        // What the arms produce together, with a transition arm mounted, is
+        // measured in
+        // `renderer/assets/__tests__/scene-declared-ref-failure-arms.test.tsx`.
         //
         // The base-critical ref is the one that fails, so the shell arm's run
         // over the BASE manifest rejects and reports. The promoted ref loads.
