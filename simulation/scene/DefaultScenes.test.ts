@@ -37,4 +37,17 @@ describe('registerDefaultScenes', () => {
 
         expect(registry.resolve(sceneId('engine:game')).defaultScreen).toBe('playfield');
     });
+
+    it('uses lobby as the lobby scene default screen', () => {
+        // The sibling of the pin above. `engine:return_to_lobby` writes this key
+        // as a literal beside the scene it enters, for the same reason it writes
+        // an empty `sceneRequiredAssets`: the reducer holds no registry. Renaming
+        // the descriptor's screen without the reducer reds here rather than
+        // rendering the wrong screen at runtime.
+        const registry = new SceneRegistry<BaseGameSnapshot>();
+
+        registerDefaultScenes(registry);
+
+        expect(registry.resolve(sceneId('engine:lobby')).defaultScreen).toBe('lobby');
+    });
 });

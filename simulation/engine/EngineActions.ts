@@ -660,6 +660,13 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
             // registry — and the engine scenes declare none
             // (`DefaultScenes.test.ts` pins that).
             sceneRequiredAssets: [],
+            // Same reset, same reason, for the screen key: `SceneRouter` prefers
+            // the snapshot value over the registry, so carrying it forward would
+            // render the abandoned scene's screen for `engine:game`. The literal
+            // is the `engine:game` descriptor's `defaultScreen`; `EngineActions.test.ts`
+            // asserts this output against `registry.resolve(...)` so a renamed
+            // descriptor reds rather than reaching the renderer.
+            sceneDefaultScreen: 'playfield',
             sceneTransition: null,
             // Carry host-authored lobby config onto the snapshot so projection
             // syncs it to every client. Preserve any prior `state.setup`
@@ -719,8 +726,11 @@ export const engineReturnToLobbyDefinition: ActionDefinition<EngineReturnToLobby
             tick: state.tick + 1,
             phase: gamePhase('lobby'),
             sceneId: sceneId('engine:lobby'),
-            // Reset with the scene, for the reason `engine:start_game` states.
+            // Both reset with the scene, for the reasons `engine:start_game`
+            // states. The screen key is the `engine:lobby` descriptor's
+            // `defaultScreen`.
             sceneRequiredAssets: [],
+            sceneDefaultScreen: 'lobby',
             sceneTransition: null,
             gameResult: null,
             entities: {},

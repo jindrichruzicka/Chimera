@@ -37,6 +37,8 @@ import { TimerManager } from './GameTimer.js';
 import type { AnimationWindowId, AnimationWindowRegistry } from './AnimationWindow.js';
 import { AnimationWindowManager } from './AnimationWindow.js';
 import type { AssetRef } from '../foundation/asset-contract.js';
+import { SceneRegistry } from '../scene/SceneRegistry.js';
+import { registerDefaultScenes } from '../scene/DefaultScenes.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
 import type { Logger } from '../foundation/logging.js';
 import { createContentDatabase } from '../content/index.js';
@@ -859,6 +861,52 @@ describe('engine:start_game definition', () => {
         expect(next.sceneRequiredAssets).toEqual([]);
     });
 
+    it('reduce resets the scene default screen with the scene it enters', () => {
+        // The sibling of the reset above, and it fails the same way:
+        // `sceneDefaultScreen` rides forward on the engine-owned base, so
+        // without an explicit write the snapshot names `engine:game` while still
+        // carrying the screen key of whatever scene the previous match ended in.
+        // `SceneRouter` prefers the snapshot value over the registry, so that
+        // stale key is what the player would see.
+        const snapshot = {
+            ...makeSnapshot(hostId),
+            sceneId: sceneId('tactics:arena'),
+            sceneDefaultScreen: 'arena-hud',
+        } satisfies BaseGameSnapshot;
+
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId] },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next.sceneId).toBe(sceneId('engine:game'));
+        expect(next.sceneDefaultScreen).toBe('playfield');
+    });
+
+    it('reduce writes the screen key the engine:game descriptor actually declares', () => {
+        // The literal assertion above is what kills the dropped write; this is
+        // what couples that literal to the registry. Without it the two sides
+        // are only ever compared to the same string in two files, so renaming
+        // the descriptor and updating the newly-failing assertion in
+        // `DefaultScenes.test.ts` would leave this reducer writing the old key
+        // with nothing red.
+        const registry = new SceneRegistry<BaseGameSnapshot>();
+        registerDefaultScenes(registry);
+
+        const next = definition().reduce(
+            makeSnapshot(hostId),
+            { playerIds: [hostId, guestId] },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next.sceneDefaultScreen).toBe(
+            registry.resolve(sceneId('engine:game')).defaultScreen,
+        );
+    });
+
     it('reduce applies initial entities and explicit first player through the game-start action', () => {
         const snapshot = makeSnapshot(hostId);
         const unit = entityId('unit-start-game-reduce');
@@ -1181,6 +1229,35 @@ describe('engine:return_to_lobby definition', () => {
 
         expect(next.sceneId).toBe(sceneId('engine:lobby'));
         expect(next.sceneRequiredAssets).toEqual([]);
+    });
+
+    it('reduce resets the scene default screen with the scene it enters', () => {
+        // Its own case rather than an extra assertion on the sibling above: the
+        // two reducers write two different literals, so one killer per write is
+        // what makes dropping either one red.
+        const snapshot = {
+            ...makePlayingSnapshot(),
+            sceneId: sceneId('tactics:arena'),
+            sceneDefaultScreen: 'arena-hud',
+        } satisfies BaseGameSnapshot;
+
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+
+        expect(next.sceneId).toBe(sceneId('engine:lobby'));
+        expect(next.sceneDefaultScreen).toBe('lobby');
+    });
+
+    it('reduce writes the screen key the engine:lobby descriptor actually declares', () => {
+        // The coupling half, as above: this is what a descriptor rename reds
+        // whatever the author does to the registry's own test.
+        const registry = new SceneRegistry<BaseGameSnapshot>();
+        registerDefaultScenes(registry);
+
+        const next = definition().reduce(makePlayingSnapshot(), {}, hostId, stubCtx);
+
+        expect(next.sceneDefaultScreen).toBe(
+            registry.resolve(sceneId('engine:lobby')).defaultScreen,
+        );
     });
 
     it('reduce clears entities, turnClock, and gameResult (abandon, not a finished match)', () => {

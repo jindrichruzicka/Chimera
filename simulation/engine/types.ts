@@ -207,7 +207,24 @@ export interface BaseGameSnapshot {
     readonly gameResult: GameResult | null;
     /** Current coarse-grained game scene (§4.18). Optional for older fixtures/saves. */
     readonly sceneId?: SceneId;
-    /** Default renderer screen key for the current scene, projected from SceneDescriptor (§4.18). Optional for older fixtures/saves. */
+    /**
+     * Default renderer screen key for the scene named by `sceneId` (§4.18).
+     *
+     * The reducers that set `sceneId` write it beside that, and only
+     * `engine:scene_commit` reads a descriptor to do so — it projects
+     * `SceneDescriptor.defaultScreen`, while `engine:start_game` and
+     * `engine:return_to_lobby` write the engine scene's key as a literal because
+     * neither holds a `SceneRegistry`. Those two literals are pinned against the
+     * descriptors in `EngineActions.test.ts`, so a renamed `defaultScreen` reds
+     * there rather than rendering the wrong screen.
+     *
+     * An omitted write does not clear the field — every one of those paths
+     * spreads a prior snapshot — so leaving it out carries the previous scene's
+     * screen key into the new one.
+     *
+     * Optional: absent until one of those reducers runs, and on older fixtures
+     * and saves.
+     */
     readonly sceneDefaultScreen?: string;
     /**
      * Refs the scene named by `sceneId` declares in its
