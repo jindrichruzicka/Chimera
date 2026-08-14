@@ -284,7 +284,7 @@ A damage action flows like this:
 
 ### C.1 Scope of This Document
 
-Everything specified in this architecture overview — §1 through §18 and Appendices A–C — constitutes the **Chimera Core Engine v1.0.0 target**. The monorepo layout described in §3 is the development vehicle for reaching that target. It is deliberately chosen for velocity: all packages share a single `tsc` build, a single test run, and a single git history, making cross-cutting interface changes cheap while the design is still evolving.
+Everything specified in this architecture overview and its appendices constitutes the **Chimera Core Engine v1.0.0 target**. The monorepo layout described in §3 is the development vehicle for reaching that target. It is deliberately chosen for velocity: all packages share a single `tsc` build, a single test run, and a single git history, making cross-cutting interface changes cheap while the design is still evolving.
 
 ### C.2 The Trigger: v1.0.0 Stability
 

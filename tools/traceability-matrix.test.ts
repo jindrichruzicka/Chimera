@@ -420,9 +420,12 @@ describe('the top-level section reader', () => {
 describe('the top-level reachability predicate', () => {
     it('counts a number written only in prose', () => {
         // This is the predicate's ceiling, stated as a fixture rather than left
-        // to be discovered: `§1 through §18` in the closing summary is enough to
-        // satisfy a hypothetical §18 row. Strengthening it means indexing the
-        // top-level space the way §4 is indexed, which no document does yet.
+        // to be discovered: a range written in prose satisfies a row naming
+        // either endpoint, whether or not the overview defines that section.
+        // The live overview no longer writes a section it does not index — that
+        // is held by tools/architecture-overview-extent.test.ts. Strengthening
+        // this predicate means indexing the top-level space the way §4 is
+        // indexed, which no document does yet.
         expect(
             overviewMentionsSection('Everything here — §1 through §18 — constitutes v1.', '18'),
         ).toBe(true);
