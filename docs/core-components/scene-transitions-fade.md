@@ -15,7 +15,7 @@ tags: [scenes, transitions, fade, scene-manager, synchronization, renderer]
 
 ### Overview
 
-Scenes are the coarse-grained context units of a match: `lobby → loading → match`, `match → intermission → next level`, `match → post-game → lobby`. Scene transitions are **host-authoritative and synchronized** — every client preloads required assets before play resumes.
+Scenes are the coarse-grained context units of a match: `lobby → loading → match`, `match → intermission → next level`, `match → post-game → lobby`. Scene transitions are **host-authoritative and synchronized**: before acknowledging, every client ATTEMPTS the entering scene's declared preload, bounded by `SCENE_PRELOAD_BUDGET_MS` and fail-open on timeout or failure. The ack is never withheld on the outcome — see the barrier section below for why a withheld ack would freeze the match rather than degrade it.
 
 Transitions are expressed as normal engine actions — deterministic, logged in `ActionHistory`, replayable, and undoable.
 
@@ -138,7 +138,7 @@ Game reducers never dispatch from inside themselves. They set a domain event in 
 export function SceneRouter(): JSX.Element;
 ```
 
-`TransitionOverlay.tsx` (engine-provided): a full-screen fade. Games can override it via the `GameScreenRegistry.transitionOverlay` slot. It renders no progress bar and no "Waiting for N player(s)…" status; see the component for what it does render.
+`TransitionOverlay.tsx` (engine-provided): a full-screen fade. Games can override it via the `GameScreenRegistry.transitionOverlay` slot. It draws no progress bar and no "Waiting for N player(s)…" status. It does receive the measured fraction and expose it as `data-preload-progress`, handed through raw so an UNMEASURED wait omits the attribute entirely rather than printing `null` or drawing an empty bar as a claim nobody measured; see the component for what it does render.
 
 #### The barrier's ack waits for the entering scene's assets
 

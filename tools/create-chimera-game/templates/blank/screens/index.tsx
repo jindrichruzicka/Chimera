@@ -1,7 +1,9 @@
 // __Game Title__'s screen registry. The renderer host reads it (via the renderer
 // loaders) to mount the game's screens. `playfield` is the only required
-// slot; add `hud`, `inGameMenu`, `gameResultBanner`, and entries under
-// `screens`/`sceneDefaultScreens` as your game grows.
+// slot; add `hud`, `inGameMenu`, `gameResultBanner`, `transitionOverlay`, the
+// loading covers `loadingScreen` and `loadingScreens`, and entries under
+// `screens`/`sceneDefaultScreens` as your game grows. Declare a cover only if
+// you want a wait explained; leaving both unset keeps the engine default.
 
 import React from 'react';
 import type { InputAction } from '@chimera-engine/renderer/input';

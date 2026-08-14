@@ -87,4 +87,37 @@ describe('Invariant #52 guarantee wording', () => {
         expect(doc).not.toContain("won't catch it"); // the interim understatement
         expect(doc).not.toContain('will flag it'); // the original unqualified overclaim
     });
+
+    it('names the runtime consumers the declaration gained, on both carriers', () => {
+        // The third phase of the same wording, and the one this ratchet exists
+        // to hold from here: `requiredAssets` was a declaration nothing read at
+        // runtime, then a declaration two arms read. #52 has to name BOTH
+        // carriers, because a reader who finds only one concludes that the other
+        // entry path — a restore or a replay landing mid-scene — is ungated.
+        const text = normalizedParagraph();
+        expect(text).toContain('SceneTransitionState.requiredAssets');
+        expect(text).toContain('BaseGameSnapshot.sceneRequiredAssets');
+        // Bounded and fail-open, so the promise is not read as a blocking one.
+        expect(text).toContain('fail-open');
+        // And the limit that survives the wiring: a runtime fetch failure is
+        // still invisible to the static tool.
+        expect(text).toContain('cannot see');
+    });
+
+    it('does not let the scene-transitions doc go back to calling the arm unwired', () => {
+        // `scene-transitions-fade.md` carried a "Not yet wired" block and a
+        // "renders no progress bar" claim while the arm was a declaration only.
+        // Both are now false, and neither may return by reword or by revert.
+        const doc = read(SCENE_FADE_DOC);
+        expect(doc).not.toContain('Not yet wired');
+        expect(doc).not.toContain('renders no progress bar');
+        // The over-claim on the other side is banned too: the ack is never
+        // withheld on the outcome, so "preloads required assets before play
+        // resumes" promises a guarantee the fail-open barrier does not make.
+        expect(doc).not.toContain('preloads required assets before play resumes');
+        // What must be there instead — the bounded, fail-open property a
+        // reader can falsify against `useFadeTransition`.
+        expect(doc).toContain('SCENE_PRELOAD_BUDGET_MS');
+        expect(doc).toContain('fail-open');
+    });
 });
