@@ -1,5 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { GROWTH_DIRECTORIES } from './__test-support__/template-contract.js';
 import { GAME_TOKENS } from './tokens.js';
@@ -144,6 +145,107 @@ describe('blank template smoke harness', () => {
         await expect(read('e2e/tsconfig.json')).resolves.toContain(
             '@chimera-engine/__game_kebab__/*',
         );
+    });
+
+    it('ships an e2e config whose retry cannot buy a green run', async () => {
+        // `retries: 1` without `failOnFlakyTests` makes Playwright print
+        // `N flaky` and exit 0, so a scaffolded suite reports a clean run for a
+        // spec that failed its first attempt. The three settle together — the
+        // retry is kept for the trace, and `on-first-retry` records nothing at
+        // all when there is no retry to take — so each is pinned by VALUE.
+        //
+        // Parsed rather than grepped, because POSITION is half of what makes
+        // each one work: `failOnFlakyTests` is declared on the config and
+        // nowhere else, so a copy nested in a `projects` entry is read by
+        // nothing and Playwright reports neither an error nor a warning, while
+        // a `retries` nested there OVERRIDES the top-level value. Reading
+        // declarations also makes the comment syntax irrelevant — a key inside
+        // a comment of any form is not a property.
+        //
+        // Parsed rather than imported, because the config's own
+        // `e2e/tsconfig.json` extends a root that exists only once the template
+        // is scaffolded, so importing it here cannot resolve.
+        const settingsOf = (source: string): ts.ObjectLiteralExpression | undefined => {
+            const parsed = ts.createSourceFile(
+                'playwright.config.ts',
+                source,
+                ts.ScriptTarget.Latest,
+                true,
+            );
+            for (const statement of parsed.statements) {
+                if (!ts.isExportAssignment(statement)) continue;
+                const call = statement.expression;
+                if (!ts.isCallExpression(call)) continue;
+                const [argument] = call.arguments;
+                if (argument !== undefined && ts.isObjectLiteralExpression(argument)) {
+                    return argument;
+                }
+            }
+            return undefined;
+        };
+
+        const valueOf = (object: ts.ObjectLiteralExpression, key: string): string | undefined => {
+            for (const property of object.properties) {
+                if (ts.isPropertyAssignment(property) && property.name.getText() === key) {
+                    return property.initializer.getText();
+                }
+            }
+            return undefined;
+        };
+
+        const nested = (object: ts.ObjectLiteralExpression, key: string) => {
+            for (const property of object.properties) {
+                if (
+                    ts.isPropertyAssignment(property) &&
+                    property.name.getText() === key &&
+                    ts.isObjectLiteralExpression(property.initializer)
+                ) {
+                    return property.initializer;
+                }
+            }
+            return undefined;
+        };
+
+        // The predicate against synthetic inputs, both ends: a key Playwright
+        // reads, and the two placements that LOOK like it in the file's text.
+        const synthetic = (body: string): ts.ObjectLiteralExpression | undefined =>
+            settingsOf(`export default defineConfig({\n${body}\n});\n`);
+        expect(valueOf(synthetic('    failOnFlakyTests: true,')!, 'failOnFlakyTests')).toBe('true');
+        expect(
+            valueOf(
+                synthetic('    projects: [{ name: "e2e", failOnFlakyTests: true }],')!,
+                'failOnFlakyTests',
+            ),
+        ).toBeUndefined();
+        expect(
+            valueOf(synthetic('    /*\n    failOnFlakyTests: true,\n    */')!, 'failOnFlakyTests'),
+        ).toBeUndefined();
+
+        const settings = settingsOf(await read('e2e/playwright.config.ts'));
+        expect(settings, 'no `export default defineConfig({…})` in the config').toBeDefined();
+
+        expect(valueOf(settings!, 'failOnFlakyTests')).toBe('true');
+        expect(valueOf(settings!, 'retries')).toBe('1');
+        expect(valueOf(nested(settings!, 'use')!, 'trace')).toBe("'on-first-retry'");
+
+        // And no project quietly takes any of them back — a project-level value
+        // wins over the top-level one, so a `use` declared there would drop the
+        // trace this config keeps its retry for. `projects` is read from the
+        // same parse, so an empty or missing array would make this vacuous —
+        // hence the count.
+        const projects = settings!.properties
+            .filter(ts.isPropertyAssignment)
+            .find((property) => property.name.getText() === 'projects')?.initializer;
+        expect(projects !== undefined && ts.isArrayLiteralExpression(projects)).toBe(true);
+        const entries = (projects as ts.ArrayLiteralExpression).elements.filter(
+            ts.isObjectLiteralExpression,
+        );
+        expect(entries.length).toBeGreaterThan(0);
+        for (const entry of entries) {
+            expect(valueOf(entry, 'failOnFlakyTests')).toBeUndefined();
+            expect(valueOf(entry, 'retries')).toBeUndefined();
+            expect(valueOf(entry, 'use')).toBeUndefined();
+        }
     });
 
     it('wires test + test:e2e scripts into the template package.json', async () => {

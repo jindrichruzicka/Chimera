@@ -11,6 +11,12 @@ export default defineConfig({
     fullyParallel: false,
     workers: 2,
     retries: 1,
+    // The retry is kept for the trace `on-first-retry` captures below, which a
+    // zero-retry run can never record — not to buy a pass. Without the flag,
+    // Playwright reports a spec that failed its first attempt as `N flaky` on
+    // stdout and still exits 0, so whatever reads this suite's exit code reads
+    // a clean run. With it, the retry still produces the trace AND the run reds.
+    failOnFlakyTests: true,
     reporter: [
         ['html', { outputFolder: 'playwright-report' }],
         ['junit', { outputFile: 'results/e2e.xml' }],
