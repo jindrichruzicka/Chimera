@@ -17,8 +17,10 @@ declares no cover is visually unchanged apart from the delayed reveal.
 
 The wait is bounded by `CRITICAL_ASSET_PRELOAD_BUDGET_MS` (8 s) and it fails open: a
 rejected critical load, an elapsed budget, and a game that declares no manifest all
-reveal the scene. Only the elapsed budget is reported, as a warning under the
-`asset-preload-gate` module.
+reveal the scene. The gate reports under the `asset-preload-gate` module: the elapsed
+budget as a warning, and a ref the scene promotion alone made critical as an error
+naming that ref. A ref already critical in the manifest is reported by the match-level
+run instead.
 
 A scene's declared `requiredAssets` gate a route entry too, read off
 `BaseGameSnapshot.sceneRequiredAssets` and promoted to critical for the run — which is

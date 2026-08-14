@@ -26,7 +26,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for the Tactics ambience beds meant a fade-in and a crossfade scheduled against buffers that had
   not arrived. The preload now runs in a commit-phase effect: non-blocking (the match renders while
   it runs, and an in-flight ref is shared with any `useAsset` that asks for it first) and non-fatal
-  (a rejected critical load is reported under the `asset-preload` module and leaves the on-demand
+  (a rejected critical load is reported through the renderer logger and leaves the on-demand
   path intact).
 
 ## [0.9.0] — 2026-07-12

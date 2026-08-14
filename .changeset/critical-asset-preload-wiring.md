@@ -26,7 +26,7 @@ Properties of that call that callers can rely on:
 - **Non-blocking.** The owning surface renders its subtree while the preload runs, and a
   child that loads the same ref first is served the same in-flight promise — the warm-up
   never costs a second fetch and never gates a frame.
-- **Non-fatal.** A rejected critical load is reported under the `asset-preload` module and
+- **Non-fatal.** A rejected critical load is reported through the renderer logger and
   dropped, leaving the deferred on-demand path intact. A teardown-time rejection (the
   owner disposing the manager it owns) reports nothing.
 

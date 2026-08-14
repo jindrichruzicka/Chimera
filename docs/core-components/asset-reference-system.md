@@ -277,10 +277,14 @@ independent settle paths, because each has its own failure mode: the run resolvi
 REJECTING (`preloadCritical` stops at the first bad ref, so this is the common shape of a broken
 declaration), `CRITICAL_ASSET_PRELOAD_BUDGET_MS` elapsing, and a blank manager or manifest — the
 last computed in render rather than in an effect, so a manifest-less game is ready on its first
-render instead of waiting on a run that will never start. Only the budget path reports, as a
-warning under the `asset-preload-gate` module; a failed ref is left to the run itself. One path is
-unreported by either arm: a ref made critical by scene promotion is loaded by the gate alone, so
-its failure shows only as the gate's `'failed'` outcome.
+render instead of waiting on a run that will never start. The gate reports under the `asset-preload-gate`
+module: the budget elapsing, as a warning; and a PROMOTED ref failing, as an error naming the
+refs. A ref already critical in the base manifest is left to `startCriticalAssetPreload`, which
+runs that manifest for the match.
+The promoted set is exactly the difference between the two arms' manifests, which is why it is the
+gate's to report. That report is a settle-all chained after the run, so a promoted ref the run
+abandoned at an earlier rejection is still attempted and still named, and so that the run keeps
+driving the load order.
 
 Its `sceneRequiredAssets` parameter is a runtime consumer of a declared
 `SceneDescriptor.requiredAssets` (Invariant #52): a route entered on an
@@ -305,10 +309,11 @@ Three further properties of that call are contractual rather than incidental:
 - **Non-blocking.** The owning surface renders its subtree while the preload runs. A child that
   loads the same ref through `useAsset` first is served the SAME promise — `AssetManager.load`
   returns the in-flight entry — so the warm-up never costs a second fetch and never gates a frame.
-- **Non-fatal.** A rejected critical load is reported through the renderer logger under the
-  `asset-preload` module and dropped; the deferred on-demand path is untouched, so a missing asset
+- **Non-fatal.** A rejected critical load is reported through the renderer logger and dropped;
+  the deferred on-demand path is untouched, so a missing asset
   degrades one ref instead of refusing the match. `preloadCritical` awaits its entries in sequence
-  and stops at the first rejection, so entries after the failing one are not preloaded either.
+  and stops at the first rejection, so entries after the failing one are not preloaded by THAT
+  run — the gate's settle-all picks up the ones in its promoted set.
 
 The scene-TRANSITION arm is a **separate** mechanism, with its own run in
 `renderer/components/scene/scenePreload.ts`, awaited by `useFadeTransition` before the barrier's

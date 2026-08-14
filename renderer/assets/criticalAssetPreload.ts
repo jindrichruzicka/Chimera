@@ -51,7 +51,8 @@
 //     deferred on-demand path is untouched by it, so a missing asset degrades
 //     one ref instead of refusing the match. (`preloadCritical` awaits its
 //     entries in sequence and stops at the first rejection, so entries after
-//     the failing one are not preloaded either.)
+//     the failing one are not preloaded by THAT run — the gate's settle-all
+//     picks up the ones in its promoted set.)
 //
 // Architecture reference: §4.10 Asset Reference System.
 
@@ -201,6 +202,42 @@ interface SettledCriticalPreload {
 }
 
 /**
+ * The refs a scene promotion alone made critical: named in `requiredAssets` and
+ * carrying a non-`critical` priority in the base manifest, so
+ * `markRequiredAssetsCritical` flipped them.
+ *
+ * This set is exactly the difference between the manifest the gate runs and the
+ * one `startCriticalAssetPreload` runs for the match. A ref already critical in
+ * the base is deliberately excluded — the shell arm reports that one, and
+ * reporting it here too would turn one bad ref into two entries.
+ *
+ * A ref named in `requiredAssets` but absent from the manifest is also excluded:
+ * the promotion does not add entries, so such a ref is never loaded by this run
+ * either. `validate-assets` owns that case statically (Invariant #52).
+ *
+ * De-duplicated, so a scene declaring the same ref twice is reported once.
+ */
+function promotedCriticalRefs(
+    manifest: AssetManifest,
+    requiredAssets: readonly AssetRef[],
+): readonly AssetRef[] {
+    const promotable = new Set(
+        manifest.entries
+            .filter((entry) => entry.priority !== 'critical')
+            .map((entry) => String(entry.ref)),
+    );
+    const seen = new Set<string>();
+    return requiredAssets.filter((ref) => {
+        const key = String(ref);
+        if (!promotable.has(key) || seen.has(key)) {
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
+}
+
+/**
  * Runs the critical preload for a ROUTE ENTRY and reports whether the route may
  * reveal yet.
  *
@@ -270,6 +307,16 @@ export function useCriticalAssetPreloadGate(
         // cleanup must leave nothing able to `setState` on a surface that is
         // gone, and nothing able to warn about a budget nobody awaits.
         let done = false;
+        // Distinct from `done`, and set by the CLEANUP ONLY. `done` is also set
+        // by whichever settle path wins, and the promoted-ref report has to
+        // survive `finish('failed')` — that is the very outcome it explains.
+        // What it must not survive is a cleanup: disposing the manager rejects
+        // every load still in flight, and that rejection is not a failure to
+        // report. React runs the cleanup on every re-arm as well as on unmount,
+        // so a run superseded mid-flight is dropped. What is measured is the
+        // unmount half — see `reports no promoted failure once the surface
+        // unmounted`.
+        let abandoned = false;
         const finish = (outcome: SettledCriticalPreload['outcome']): void => {
             if (done) {
                 return;
@@ -283,11 +330,9 @@ export function useCriticalAssetPreloadGate(
         // `finish` reads it exclusively from asynchronous callers, so the
         // binding is always initialised by then.
         const budgetTimer = setTimeout(() => {
-            // The gate reports ONLY this: a ref that fails is left to
-            // `startCriticalAssetPreload`, which runs the same manifest for the
-            // match. That leaves one path unreported — a ref this run made
-            // critical by scene promotion is loaded by no other arm, so its
-            // failure only shows as a `'failed'` outcome here.
+            // A ref that fails is left to `startCriticalAssetPreload`, which
+            // runs the same manifest for the match — except for the promoted
+            // set, which that arm never sees and the settle-all reports.
             emitRendererWarning(
                 readRendererLogsApi(),
                 '[assets] critical asset preload exceeded its budget; revealing anyway',
@@ -297,7 +342,8 @@ export function useCriticalAssetPreloadGate(
             finish('timed-out');
         }, budgetMs);
 
-        void new AssetPreloader(assetManager).preloadCritical(manifest).then(
+        const criticalRun = new AssetPreloader(assetManager).preloadCritical(manifest);
+        criticalRun.then(
             () => {
                 finish('loaded');
             },
@@ -306,8 +352,67 @@ export function useCriticalAssetPreloadGate(
             },
         );
 
+        // A settle-all over the PROMOTED set, chained AFTER the run above.
+        //
+        // Why it is needed: `preloadCritical` stops at the first rejection and
+        // its rejection value names no ref, so it can say that something failed
+        // but never which. For a ref this run alone made critical that matters:
+        // `startCriticalAssetPreload` runs the BASE manifest and never touches
+        // it, so on a route entered with no transition running its failure
+        // reached no log at all and the reveal failed open in silence. (The
+        // scene-TRANSITION arm, `startScenePreload`, loads and reports the same
+        // declaration under `scene-preload` — but only while a transition is
+        // pending, which is the case this gate does not cover.)
+        //
+        // Why it is chained rather than started alongside: the run above drives
+        // the load ORDER, and a concurrent `load` here would race ahead of it.
+        // Chained, every ref that run reached is already cached or in flight, so
+        // this costs no second fetch for them. Two cases do cost one: the ref
+        // that rejected (a failed load is evicted from the in-flight map, so it
+        // is attempted once more) and any promoted ref the run abandoned after
+        // that rejection — which were never attempted at all, and are the reason
+        // this is a settle-all rather than a second look at one error.
+        const promoted = promotedCriticalRefs(assetManifest, requiredAssets);
+        if (promoted.length > 0) {
+            void criticalRun
+                .catch(() => undefined)
+                .then(async () =>
+                    Promise.all(
+                        promoted.map(async (ref) => {
+                            try {
+                                await assetManager.load(ref);
+                                return null;
+                            } catch (error: unknown) {
+                                return { ref, error };
+                            }
+                        }),
+                    ),
+                )
+                .then((results) => {
+                    const failures = results.filter(
+                        (result): result is { ref: AssetRef; error: unknown } => result !== null,
+                    );
+                    if (abandoned || failures.length === 0) {
+                        return;
+                    }
+
+                    const first = failures[0]?.error;
+                    emitRendererError(
+                        readRendererLogsApi(),
+                        '[assets] a scene-declared asset failed to preload; the scene is revealed without it',
+                        first instanceof Error ? first : new Error(String(first)),
+                        {
+                            gameId: assetManifest.gameId,
+                            refs: failures.map((failure) => String(failure.ref)),
+                        },
+                        GATE_LOG_MODULE,
+                    );
+                });
+        }
+
         return () => {
             done = true;
+            abandoned = true;
             clearTimeout(budgetTimer);
         };
     }, [assetManager, assetManifest, budgetMs, requiredKey]);

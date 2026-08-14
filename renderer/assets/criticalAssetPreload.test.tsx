@@ -872,6 +872,180 @@ describe('useCriticalAssetPreloadGate', () => {
         expect(logs.emitCalls[0]?.source.module).toBe('asset-preload');
     });
 
+    it('reports a promoted ref that fails, which the match-level run never loads', async () => {
+        // The gap this closes. A ref that is `deferred` in the manifest and
+        // critical ONLY because this gate promoted it from
+        // `sceneRequiredAssets` is not loaded by the GameShell arm, which runs
+        // the BASE manifest, and the gate reported nothing on `'failed'` by
+        // design. On a route entered with no transition running — a restore, a
+        // replay — the reveal then failed open in silence: a scene missing an
+        // asset the scene itself declared, with no trace in the logs.
+        //
+        // Only the DEFERRED ref fails here. The base-critical one loads, so the
+        // GameShell arm's run resolves and reports nothing — which is what
+        // makes the single entry below attributable to the gate alone.
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
+        const { assetManager } = createRecordingManager(async (request) => {
+            if (String(request.ref) === String(DEFERRED_REF)) {
+                throw new Error('promoted texture 404');
+            }
+            return { id: request.url };
+        });
+        const gates: CriticalAssetPreloadGate[] = [];
+
+        render(
+            <GateProbe
+                assetManager={assetManager}
+                assetManifest={mixedManifest()}
+                sceneRequiredAssets={[DEFERRED_REF]}
+                withShellArm
+                onGate={(gate) => gates.push(gate)}
+            />,
+        );
+        await settlePreload();
+
+        // Fail-open is unchanged: the route still reveals.
+        expect(latest(gates).ready).toBe(true);
+        expect(latest(gates).outcome).toBe('failed');
+
+        expect(logs.emitCalls).toHaveLength(1);
+        const entry = logs.emitCalls[0];
+        expect(entry?.level).toBe('error');
+        expect(entry?.source.module).toBe('asset-preload-gate');
+        // The ref itself, not merely a count: `preloadCritical` rejects with the
+        // first error and names nothing, so a report that omitted the ref would
+        // leave a reader no better off than the silence it replaced.
+        expect(entry?.context?.['refs']).toEqual([String(DEFERRED_REF)]);
+        // And the CAUSE, the same way the shell arm's case pins it: an entry
+        // naming the ref but carrying a manufactured error would say what broke
+        // and never why.
+        expect(entry?.error?.message).toContain('promoted texture 404');
+    });
+
+    it('leaves a base-critical failure to the GameShell arm even when the scene declares it too', async () => {
+        // The other side of the split, and the case that pins WHICH refs the
+        // gate owns. The scene declares BOTH refs, so a gate that reported
+        // every declared ref rather than only the ones its promotion made
+        // critical would report the base-critical failure as well — one bad ref
+        // becoming two entries, which is what the split exists to prevent.
+        //
+        // The base-critical ref is the one that fails, so the shell arm's run
+        // over the BASE manifest rejects and reports. The promoted ref loads.
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
+        const { assetManager } = createRecordingManager(async (request) => {
+            if (String(request.ref) === String(CRITICAL_REF)) {
+                throw new Error('base texture 404');
+            }
+            return { id: request.url };
+        });
+
+        render(
+            <GateProbe
+                assetManager={assetManager}
+                assetManifest={mixedManifest()}
+                sceneRequiredAssets={[CRITICAL_REF, DEFERRED_REF]}
+                withShellArm
+                onGate={() => undefined}
+            />,
+        );
+        await settlePreload();
+
+        expect(logs.emitCalls).toHaveLength(1);
+        expect(logs.emitCalls[0]?.source.module).toBe('asset-preload');
+    });
+
+    it('does not let the promoted-ref settle-all overtake the run’s load order', async () => {
+        // TWO base-critical entries before the promoted one, which is what makes
+        // this falsifiable: with only one, a settle-all started alongside the run
+        // produces the same recorded sequence as one chained after it, because
+        // there is no second base ref left for the promoted load to jump. Here a
+        // concurrent settle-all yields [bed, decoration, backdrop] — the scene's
+        // own ref served before a ref the manifest itself calls critical.
+        const { assetManager, loadedRefs, settle } = createControlledManager();
+        const manifest = manifestWith([
+            textureEntry(CRITICAL_REF, 'critical'),
+            textureEntry(SECOND_CRITICAL_REF, 'critical'),
+            textureEntry(DEFERRED_REF, 'deferred'),
+        ]);
+
+        render(
+            <GateProbe
+                assetManager={assetManager}
+                assetManifest={manifest}
+                sceneRequiredAssets={[DEFERRED_REF]}
+                onGate={() => undefined}
+            />,
+        );
+        await settlePreload();
+        settle(CRITICAL_REF, 'resolve');
+        await settlePreload();
+        settle(SECOND_CRITICAL_REF, 'resolve');
+        await settlePreload();
+
+        expect(loadedRefs).toEqual([CRITICAL_REF, SECOND_CRITICAL_REF, DEFERRED_REF]);
+    });
+
+    it('reports a repeated declared ref once, not once per declaration', async () => {
+        // `sceneRequiredAssets` is a scene's declaration copied verbatim, and a
+        // descriptor may name the same ref twice — the sibling
+        // `sceneRequiredAssets` carriage test in the simulation uses exactly
+        // that shape. Without the de-duplication the same failure would be
+        // loaded and named twice in one entry.
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
+        const { assetManager } = createRecordingManager(async (request) => {
+            if (String(request.ref) === String(DEFERRED_REF)) {
+                throw new Error('promoted texture 404');
+            }
+            return { id: request.url };
+        });
+
+        render(
+            <GateProbe
+                assetManager={assetManager}
+                assetManifest={mixedManifest()}
+                sceneRequiredAssets={[DEFERRED_REF, DEFERRED_REF]}
+                onGate={() => undefined}
+            />,
+        );
+        await settlePreload();
+
+        expect(logs.emitCalls).toHaveLength(1);
+        expect(logs.emitCalls[0]?.context?.['refs']).toEqual([String(DEFERRED_REF)]);
+    });
+
+    it('reports no promoted failure once the surface unmounted', async () => {
+        // Disposing the manager rejects every load still in flight with
+        // 'Asset load was superseded by dispose.', so without the cleanup's
+        // abandon flag an ordinary teardown would report a failure that is only
+        // a teardown. The flag is separate from the settle flag because the
+        // report has to survive `finish('failed')` — that is the outcome it
+        // explains — while not surviving an unmount.
+        const logs = createRecordingLogsApi();
+        (globalThis as { __chimera?: { logs: unknown } }).__chimera = { logs };
+        const { assetManager } = createRecordingManager(async (request) => {
+            if (String(request.ref) === String(DEFERRED_REF)) {
+                throw new Error('promoted texture 404');
+            }
+            return { id: request.url };
+        });
+
+        const view = render(
+            <GateProbe
+                assetManager={assetManager}
+                assetManifest={mixedManifest()}
+                sceneRequiredAssets={[DEFERRED_REF]}
+                onGate={() => undefined}
+            />,
+        );
+        view.unmount();
+        await settlePreload();
+
+        expect(logs.emitCalls).toHaveLength(0);
+    });
+
     it('warns exactly once on the budget, and never on a load that settles', async () => {
         vi.useFakeTimers();
         const logs = createRecordingLogsApi();
