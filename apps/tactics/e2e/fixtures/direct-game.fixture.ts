@@ -28,6 +28,7 @@ import {
     test as electronTest,
     type E2eInitialRoute,
 } from './electron.fixture';
+import { openE2eWindow } from './open-window';
 import { GamePage } from '../pages/GamePage';
 
 export type E2eFirstPlayer = 'host' | 'client';
@@ -185,16 +186,14 @@ export const test = electronTest.extend<
         }
     },
 
+    // As in lobby.fixture: a launch that never produces a loaded window must say
+    // which of the pair was late and why, not just that something timed out.
     hostWindow: async ({ hostApp }, use) => {
-        const w = await hostApp.firstWindow();
-        await w.waitForLoadState('domcontentloaded');
-        await use(w);
+        await use(await openE2eWindow(hostApp, 'host'));
     },
 
     clientWindow: async ({ clientApp }, use) => {
-        const w = await clientApp.firstWindow();
-        await w.waitForLoadState('domcontentloaded');
-        await use(w);
+        await use(await openE2eWindow(clientApp, 'client'));
     },
 
     // @chimera-review: auto fixture must reference hostWindow/clientWindow to

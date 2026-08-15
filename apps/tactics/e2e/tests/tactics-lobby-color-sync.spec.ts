@@ -95,12 +95,8 @@ test.describe('Tactics lobby colour sync', () => {
         await clientLobby.expectPlayerColor(clientPlayerId, CLIENT_COLOR);
 
         // Swatches on the client reflect both synced colours (its own + the host's).
-        await expect
-            .poll(() => clientLobby.swatchBackgroundColor(hostPlayerId))
-            .toBe(HOST_SWATCH_RGB);
-        await expect
-            .poll(() => clientLobby.swatchBackgroundColor(clientPlayerId))
-            .toBe(CLIENT_SWATCH_RGB);
+        await clientLobby.expectSwatchColor(hostPlayerId, HOST_SWATCH_RGB);
+        await clientLobby.expectSwatchColor(clientPlayerId, CLIENT_SWATCH_RGB);
 
         // ── All ready → Start ─────────────────────────────────────────────────
         await hostLobby.toggleReady();

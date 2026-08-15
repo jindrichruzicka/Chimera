@@ -1,7 +1,6 @@
 import { _electron as electron, test as base, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
-import os from 'node:os';
 import path from 'path';
 import globalSetup from '../global-setup';
 import {
@@ -9,6 +8,8 @@ import {
     CHIMERA_RENDERER_PROTOCOL,
 } from '../../../../electron/main/renderer-url';
 import { inheritEnv } from './inherit-env';
+import { E2E_USER_DATA_ROOT } from './user-data-root';
+import { captureMainProcessOutput, openE2eWindow } from './open-window';
 
 export interface ElectronFixtures {
     readonly electronApp: ElectronApplication;
@@ -115,7 +116,10 @@ function createFreshE2eUserDataDir(options: E2eElectronLaunchOptions): string {
         safeUserDataSegment(role),
         safeUserDataSegment(options.port),
     ].join('-');
-    const userDataDir = path.join(os.tmpdir(), 'chimera-e2e-userdata', dirName);
+    // Under E2E_USER_DATA_ROOT, not an ad-hoc temp path: the profile outlives its
+    // app (a relaunch spec re-opens it to prove settings persisted), so the only
+    // thing that ever removes it is global-setup's per-run reap of that root.
+    const userDataDir = path.join(E2E_USER_DATA_ROOT, dirName);
 
     rmSync(userDataDir, { recursive: true, force: true });
     mkdirSync(userDataDir, { recursive: true });
@@ -203,10 +207,15 @@ export async function launchE2eElectronApplication(
 ): Promise<ElectronApplication> {
     const launchConfig = createE2eElectronLaunchConfig(options);
 
-    return electron.launch({
+    const app = await electron.launch({
         args: [...launchConfig.args],
         env: launchConfig.env,
     });
+    // Recording starts here rather than at the first window wait: an app that
+    // dies during `app.whenReady()` has written its reason to stderr and exited
+    // long before any test asks for a window.
+    captureMainProcessOutput(app);
+    return app;
 }
 
 function attachRendererConsoleCapture(page: Page, entries: RendererConsoleEntry[]): void {
@@ -258,9 +267,7 @@ export const test = base.extend<ElectronFixtures>({
     },
 
     mainWindow: async ({ electronApp }, use) => {
-        const window = await electronApp.firstWindow();
-        await window.waitForLoadState('domcontentloaded');
-        await use(window);
+        await use(await openE2eWindow(electronApp, 'main'));
     },
 });
 

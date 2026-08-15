@@ -27,6 +27,7 @@ vi.mock('./global-setup', () => ({
 
 const { createE2eElectronLaunchConfig } = await import('./fixtures/electron.fixture');
 import type { E2eElectronLaunchOptions } from './fixtures/electron.fixture';
+import { E2E_USER_DATA_ROOT } from './fixtures/user-data-root';
 
 describe('electron.fixture', () => {
     it('sets CHIMERA_E2E_INITIAL_URL when initialRoute is provided', () => {
@@ -132,5 +133,18 @@ describe('electron.fixture', () => {
         expect(hostUserDataArg).not.toBe(clientUserDataArg);
         expect(hostUserDataArg).toContain('chimera-e2e-userdata');
         expect(clientUserDataArg).toContain('chimera-e2e-userdata');
+    });
+
+    it('puts every launch profile UNDER the root global-setup reaps', () => {
+        // Nothing deletes a profile when its app closes, so the reap in
+        // global-setup is what keeps them from accumulating — and it can only
+        // reach a profile that is inside the root it removes. A launch that
+        // minted its directory somewhere else would leak past every run.
+        const config = createE2eElectronLaunchConfig({ port: '7779', role: 'host' });
+        const userDataArg = config.args.find((arg) => arg.startsWith('--user-data-dir='));
+
+        expect(userDataArg).toBe(
+            `--user-data-dir=${path.join(E2E_USER_DATA_ROOT, userDataArg?.split(path.sep).pop() ?? '')}`,
+        );
     });
 });

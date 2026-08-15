@@ -14,6 +14,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { SWATCH_READ_TEST_IDS } from './TacticsLobbyPage';
 
 const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
 
@@ -44,5 +45,23 @@ describe('TacticsLobbyPage POM — testid alignment with renderer', () => {
                 `TacticsLobbyPage.ts uses getByTestId('${testId}') but data-testid="${testId}" is absent from TacticsLobbyScreen.tsx`,
             ).toBe(true);
         }
+    });
+
+    it('every testid the in-page swatch read spells resolves in TacticsLobbyScreen.tsx', () => {
+        // `readSwatchState` runs inside `page.evaluate`, so it spells raw strings
+        // rather than calling `getByTestId` — the scan above cannot see them, and
+        // a renamed testid would leave the diagnosis reporting an empty palette
+        // or an unmounted screen that is neither.
+        const rendererSource = readFileSync(
+            path.join(workspaceRoot, 'apps/tactics/shell/TacticsLobbyScreen.tsx'),
+            'utf-8',
+        );
+
+        expect(rendererSource).toContain(`data-testid="${SWATCH_READ_TEST_IDS.screen}"`);
+        expect(rendererSource).toContain(`data-testid="${SWATCH_READ_TEST_IDS.row}"`);
+        // The per-player ids are template literals in the renderer too, so only
+        // the prefix can be matched — which is the half that can drift.
+        expect(rendererSource).toContain(`data-testid={\`${SWATCH_READ_TEST_IDS.selectPrefix}`);
+        expect(rendererSource).toContain(`data-testid={\`${SWATCH_READ_TEST_IDS.swatchPrefix}`);
     });
 });

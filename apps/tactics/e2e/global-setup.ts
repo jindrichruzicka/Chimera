@@ -5,6 +5,7 @@ import path from 'path';
 import { buildSync } from 'esbuild';
 
 import { buildAppBundles, VERIFY_PACK_NODE_MODULES_ENV } from '../electron/build-main';
+import { E2E_USER_DATA_ROOT } from './fixtures/user-data-root';
 
 /**
  * Re-exported for the e2e side's drift guard (global-setup.test.ts): the literal
@@ -76,6 +77,21 @@ export default function globalSetup(): void {
     };
 
     rmSync(e2eBuildRoot, { recursive: true, force: true });
+
+    // Every launch mints a fresh Chromium profile under this root and NOTHING
+    // removes it afterwards — a relaunch spec re-opens its closed app's profile
+    // to prove settings survived a restart, so deleting one on close would delete
+    // the state those specs assert. Reaped per run instead, here, beside the
+    // suite's other throwaway tree; left alone the root grows by one whole
+    // Chromium user directory per launch until it fills the volume.
+    //
+    // The reap must never remove a directory a LIVE app owns. Within a run that
+    // holds: this runs in the runner process before any worker spawns, and the
+    // lazy `ensureE2eBuild` path that also calls it only fires when the bundles
+    // are missing, which already means no app of this run is running. It does
+    // NOT hold across two e2e runs sharing one temp dir, whichever suite they
+    // belong to — run them one at a time.
+    rmSync(E2E_USER_DATA_ROOT, { recursive: true, force: true });
 
     // Build the engine packages (the shell dist the app re-exports), then the app's
     // OWN Next host — apps/tactics/renderer → apps/tactics/renderer/out, which the

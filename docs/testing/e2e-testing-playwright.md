@@ -37,9 +37,9 @@ All cross-process, multiplayer, and full-stack scenarios are validated through P
 ```
 apps/tactics/e2e/
 ├── playwright.config.ts
-├── *.test.ts                    # Vitest shape-checks (playwright.config, global-setup,
-│                                #   electron/game/lobby fixtures) — validate exports and
-│                                #   config values without launching Electron (deliberate)
+├── *.test.ts                    # Vitest coverage of the config and the launch/setup
+│                                #   modules (deliberate; NOT enumerated —
+│                                #   `ls apps/tactics/e2e/*.test.ts` is the census)
 ├── global-setup.ts
 ├── tsconfig.json                # Restores @chimera-engine/* path resolution for the runner
 ├── fixtures/
@@ -47,6 +47,8 @@ apps/tactics/e2e/
 │   ├── direct-game.fixture.ts   # Host/client direct-game boot helpers
 │   ├── lobby.fixture.ts         # Extends base: two instances + lobby helpers
 │   ├── game.fixture.ts          # Extends lobby: game started, tick driver wired
+│   ├── open-window.ts           # firstWindow + domcontentloaded, diagnosed on timeout
+│   ├── user-data-root.ts        # Root of the per-launch throwaway Chromium profiles
 │   └── inherit-env.ts           # Sanitised env passthrough for launched apps
 ├── pages/                       # POMs; co-located *.test.ts locator-wiring and
 │   │                            #   *.testid-alignment.test.ts renderer-testid guards where present
@@ -75,13 +77,12 @@ apps/tactics/e2e/
                                  #   `ls apps/tactics/e2e/tests/` is the census.
 ```
 
-> **Note — Vitest shape-check files in `apps/tactics/e2e/` root:** the root `*.test.ts` files
-> (`playwright.config.test.ts`, `global-setup.test.ts`, and the `electron`/`game`/`lobby`
-> fixture tests) are intentional Vitest unit tests co-located at the `apps/tactics/e2e/` root
-> (§12.3 pattern). They validate module-level exports and config values without launching
-> Electron, so failures surface in the fast Vitest run rather than only during a full E2E
-> run. Playwright's `testDir: './tests'` correctly excludes them; they are picked up by
-> Vitest's `include` glob instead.
+> **Note — Vitest files in `apps/tactics/e2e/` root:** the root `*.test.ts` files
+> are intentional Vitest unit tests co-located at the `apps/tactics/e2e/` root
+> (§12.3 pattern). They check what the config and the launch/setup modules do without
+> launching Electron, so failures surface in the fast Vitest run rather than only during a
+> full E2E run. Playwright's `testDir: './tests'` correctly excludes them; they are picked
+> up by Vitest's `include` glob instead.
 
 ---
 
@@ -120,12 +121,19 @@ export const test = base.extend<ElectronFixtures>({
         await app.close();
     },
     mainWindow: async ({ electronApp }, use) => {
-        const window = await electronApp.firstWindow();
-        await window.waitForLoadState('domcontentloaded');
-        await use(window);
+        await use(await openE2eWindow(electronApp, 'main'));
     },
 });
 ```
+
+`openE2eWindow` (`fixtures/open-window.ts`) performs the `firstWindow()` +
+`waitForLoadState('domcontentloaded')` pair for the launches these fixture
+modules own. Both calls report nothing but `Timeout 30000ms exceeded`, which is
+equally true of a main process that died at boot, one alive but stuck before its
+first `BrowserWindow`, and one whose window opened but never parsed its renderer
+entry; the helper names which. A launch a spec makes for itself — including one
+behind a spec-declared Playwright fixture — calls `firstWindow()` directly and
+gets no diagnosis.
 
 ### Multiplayer Lobby Fixture
 
@@ -152,15 +160,11 @@ export const test = electronTest.extend<LobbyFixtures>({
     },
 
     hostWindow: async ({ hostApp }, use) => {
-        const w = await hostApp.firstWindow();
-        await w.waitForLoadState('domcontentloaded');
-        await use(w);
+        await use(await openE2eWindow(hostApp, 'host'));
     },
 
     clientWindow: async ({ clientApp }, use) => {
-        const w = await clientApp.firstWindow();
-        await w.waitForLoadState('domcontentloaded');
-        await use(w);
+        await use(await openE2eWindow(clientApp, 'client'));
     },
 });
 

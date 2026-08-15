@@ -1,5 +1,6 @@
 import type { ElectronApplication, Page } from '@playwright/test';
 import { launchE2eElectronApplication, test as electronTest } from './electron.fixture';
+import { openE2eWindow } from './open-window';
 
 export interface LobbyFixtures {
     readonly hostApp: ElectronApplication;
@@ -49,16 +50,15 @@ export const test = electronTest.extend<LobbyFixtures>({
         }
     },
 
+    // The two windows go through `openE2eWindow` so a launch that never produces
+    // a loaded window says WHICH of the pair was late and why — a bare
+    // `Timeout 30000ms exceeded` here names neither.
     hostWindow: async ({ hostApp }, use) => {
-        const w = await hostApp.firstWindow();
-        await w.waitForLoadState('domcontentloaded');
-        await use(w);
+        await use(await openE2eWindow(hostApp, 'host'));
     },
 
     clientWindow: async ({ clientApp }, use) => {
-        const w = await clientApp.firstWindow();
-        await w.waitForLoadState('domcontentloaded');
-        await use(w);
+        await use(await openE2eWindow(clientApp, 'client'));
     },
 });
 
