@@ -1,4 +1,10 @@
 import { buildAssetRef, type TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import {
+    ActionUnauthorizedError,
+    StaleActionError,
+} from '@chimera-engine/simulation/engine/ActionPipeline.js';
+import { UnknownActionTypeError } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { ActionSchemaError } from '@chimera-engine/simulation/engine/StateReducer.js';
 import { CURRENT_MATCH_REPLAY_PATH } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -1861,7 +1867,9 @@ describe('Logger injection (invariant 67)', () => {
         expect(infoEntries[0]?.message).toContain('chimera:system');
     });
 
-    it('registerGameHandlers warn-logs every IPC REJECT with channel/reason/tick context', () => {
+    it('registerGameHandlers warn-logs an ENVELOPE-VALIDATION REJECT with channel/reason/tick context', () => {
+        // Named for the arm it drives: a title claiming every REJECT over a body
+        // asserting one leaves the others free to go silent.
         const sink = createMemorySink();
         const logger = createLogger({
             source: { process: 'main', module: 'root' },
@@ -1893,6 +1901,120 @@ describe('Logger injection (invariant 67)', () => {
             `ipc-validation:${GAME_SEND_ACTION_CHANNEL}`,
         );
     });
+
+    // The envelope every dispatch-refusal case below sends. Its fields are the
+    // ones the handler already holds without reading the thrown error, so no
+    // marker may be drawn from them.
+    const REFUSED_ENVELOPE = {
+        type: 'tactics:move',
+        playerId: 'p1',
+        tick: 11,
+        payload: {},
+    } as const;
+
+    // A catch narrowed to one refusal class lets the others rethrow, and a
+    // rethrow out of an `ipcMain.on` listener is dropped — so one case per
+    // class, not one case. Each `marker` is chosen to appear in its own
+    // refusal's message and nowhere else, and to be absent from
+    // `REFUSED_ENVELOPE`; the `markers` case below measures both properties
+    // rather than leaving them to this comment.
+    const PIPELINE_REFUSALS = [
+        {
+            name: 'ActionUnauthorizedError',
+            marker: 'not_your_turn',
+            build: (): Error => new ActionUnauthorizedError('tactics:move', 'not_your_turn'),
+        },
+        {
+            // Snapshot tick, not the action's: the envelope carries the action's,
+            // so a marker taken from it would also match a handler that never
+            // read the error.
+            name: 'StaleActionError',
+            marker: '7373',
+            build: (): Error => new StaleActionError(11, 7373),
+        },
+        {
+            // Deliberately NOT the envelope's `type`, for the same reason.
+            name: 'UnknownActionTypeError',
+            marker: 'tactics:not-registered',
+            build: (): Error => new UnknownActionTypeError('tactics:not-registered'),
+        },
+        {
+            name: 'ActionSchemaError',
+            marker: 'gridX must be an integer',
+            build: (): Error =>
+                new ActionSchemaError('tactics:move', new Error('gridX must be an integer')),
+        },
+    ] as const;
+
+    it('the refusal markers each match one refusal message and no field of the sent envelope', () => {
+        // What the per-class cases below rest on. Without it, a marker shared by
+        // two messages lets a case pass on another's reason, and a marker drawn
+        // from the envelope lets a case pass against a handler that never reads
+        // the thrown error at all.
+        const envelopeText = JSON.stringify(REFUSED_ENVELOPE);
+        for (const refusal of PIPELINE_REFUSALS) {
+            const matching = PIPELINE_REFUSALS.filter((other) =>
+                other.build().message.includes(refusal.marker),
+            ).map((other) => other.name);
+
+            expect(matching).toEqual([refusal.name]);
+            expect(envelopeText).not.toContain(refusal.marker);
+        }
+    });
+
+    it.each(PIPELINE_REFUSALS)(
+        'registerGameHandlers warn-logs a $name refusal of a valid envelope, pushes it to the sender, and does not throw out of the listener',
+        ({ marker, build }) => {
+            // The second rejection arm: the envelope parses, and the pipeline
+            // behind `actionDispatcher` refuses the action. A throw out of an
+            // `ipcMain.on` listener is dropped, so without the handler's own
+            // catch the refusal reaches no log and no sender.
+            const sink = createMemorySink();
+            const logger = createLogger({
+                source: { process: 'main', module: 'root' },
+                sink,
+            }).child({ module: 'game' });
+            const stub = makeGameIpcMainStub();
+            registerGameHandlers({
+                ipcMain: stub.ipcMain,
+                logger,
+                actionDispatcher: () => {
+                    throw build();
+                },
+            });
+
+            const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
+            const { event, sends } = makeGameEvent();
+            sink.clear();
+
+            expect(() => handler?.(event, { ...REFUSED_ENVELOPE })).not.toThrow();
+
+            const warns = sink.entries.filter((e) => e.level === 'warn');
+            expect(warns).toHaveLength(1);
+            const warn = warns[0];
+            expect(warn?.source).toEqual({ process: 'main', module: 'game' });
+            expect(warn?.context).toMatchObject({
+                channel: GAME_SEND_ACTION_CHANNEL,
+                tick: 11,
+                actionType: 'tactics:move',
+            });
+            // The refusal's own reason survives into the log rather than being
+            // flattened to "something threw" — that detail is what makes the
+            // entry actionable.
+            expect(String(warn?.context?.['reason'])).toContain(marker);
+            // NOT the envelope arm's prefix: the two stay distinguishable.
+            expect(String(warn?.context?.['reason'])).not.toContain('ipc-validation:');
+
+            // And the sender is told, on the same channel the envelope arm uses.
+            expect(sends).toHaveLength(1);
+            expect(sends[0]?.channel).toBe(GAME_ACTION_REJECTED_CHANNEL);
+            const rejection = sends[0]?.args[0] as ActionRejection;
+            expect(rejection.tick).toBe(11);
+            expect(rejection.actionType).toBe('tactics:move');
+            expect(rejection.reason).toContain('action-dispatch:');
+            expect(rejection.reason).toContain(marker);
+        },
+    );
 
     it('handlers default to a noop logger when none is injected (back-compat with stub tests)', () => {
         // All preceding test blocks call register*Handlers without a `logger`

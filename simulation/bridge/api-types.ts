@@ -163,12 +163,6 @@ export interface EngineAction<
  * envelope that was rejected (e.g. when the rejection comes from the
  * ActionPipeline several ticks later).
  *
- * Today's sole trigger is IPC-layer envelope validation failure
- * (`IpcRequestValidationError`). The same channel and shape are reused once the
- * full `ActionPipeline` is wired — Stage 3 validation failures and
- * unknown-action-type rejections also push on this channel, so the renderer's
- * listener contract does not churn.
- *
  * `tick` is `-1` when the request was so malformed that the tick could
  * not be recovered from the envelope.
  */

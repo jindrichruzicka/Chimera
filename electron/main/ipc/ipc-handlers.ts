@@ -480,7 +480,7 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
         // validation failure is reported back to the sender via the
         // `chimera:game:action-rejected` push channel (wire-shape mirror
         // of the §4.3 WebSocket REJECT frame). The same channel also carries
-        // ActionPipeline Stage-3 rejections, so the renderer's listener contract
+        // ActionPipeline rejections, so the renderer's listener contract
         // is uniform.
         let validatedAction: EngineAction;
         try {
@@ -509,6 +509,12 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
             throw err;
         }
 
+        // The second rejection arm: the envelope parsed, and the pipeline behind
+        // the dispatcher refused the action. Caught for the same reason the
+        // envelope arm above is — a throw out of this `on` callback is dropped,
+        // so an uncaught refusal would reach no log and no sender. The `catch`
+        // is deliberately class-agnostic; the refusal classes driven through it
+        // are in `ipc-handlers.test.ts`.
         try {
             actionDispatcher?.(validatedAction);
         } catch (err) {
