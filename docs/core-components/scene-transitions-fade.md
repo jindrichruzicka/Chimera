@@ -109,10 +109,14 @@ Clients see sceneId flip → SceneRouter swaps to defaultScreen
 type EngineReservedType =
     | 'engine:scene_prepare' // Host-only
     | 'engine:scene_ready' // Any client
-    | 'engine:scene_commit'; // Host-only
+    | 'engine:scene_commit' // Host-only
+    | 'engine:scene_drop' // Host-only
+    | 'engine:scene_expire'; // Host-only
 ```
 
 `engine:scene_prepare` and `engine:scene_commit` are rejected by `validate()` if dispatcher is not host. `engine:scene_ready` is rejected if `sceneTransition === null` or player is already in `playersReady`.
+
+`engine:scene_expire` is the host declaring its own wall-clock budget for the pending transition elapsed. It exists because the barrier waits on an ack from every seat while `engine:scene_ready` is produced only inside a mounted `SceneRouter`: a seat with no renderer — an AI seat, a disconnect mid-transition — never acks, and `timeoutTicks` cannot cover for it because a tick advances only when an action is applied. Host-only, empty payload, and rejected when no transition is pending or one has already expired. It decides nothing on its own: it sets `SceneTransitionState.expired`, which `isTransitionTimedOut` reads beside the tick budget, so the descriptor's `onClientTimeout` still chooses between committing and dropping. The clock lives in `SessionRuntime` — never in a reduce.
 
 ### SceneManager (Host-Side API)
 

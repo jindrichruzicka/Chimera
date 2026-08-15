@@ -268,17 +268,18 @@ describe('a scene transition in flight when the match resolves', () => {
         expect(committed.phase).toBe(gamePhase('ended'));
     });
 
-    it('is NOT released by the admitted set when a seat cannot ack — that exit is return_to_lobby', () => {
-        // The limit of this change, measured rather than asserted. Admitting the
-        // three completing actions releases the barrier only once EVERY seat in
-        // `state.players` acks: `engine:scene_ready` has one producer and it
-        // runs inside a mounted `SceneRouter`, so an AI seat or a disconnected
-        // one never acks. The timeout arm cannot cover for it either — it is
-        // counted in ticks, and `engine:tick` stays refused after a result.
+    it('is not released by the ACKS alone when a seat cannot send one, nor by the tick timeout', () => {
+        // Admitting the completing actions releases the barrier on acks only
+        // once EVERY seat in `state.players` sends one: `engine:scene_ready`
+        // has a single producer and it runs inside a mounted `SceneRouter`, so
+        // an AI seat or a disconnected one never acks. The tick arm cannot
+        // cover for it either — it is counted in ticks, and `engine:tick` stays
+        // refused after a result.
         //
-        // So a seat that cannot ack still holds the transition, exactly as
-        // before. What ends it is `engine:return_to_lobby`, which the gate
-        // admitted before this change too.
+        // What DOES end it is the host's own budget, through
+        // `engine:scene_expire`, measured in
+        // `simulation/scene/__tests__/unackable-seat-barrier.test.ts`;
+        // `engine:return_to_lobby` below is the other exit, and predates both.
         //
         // The DEFAULT descriptor, deliberately: a scene declaring
         // `timeoutTicks: 0` with policy `drop` is released by the admitted drop

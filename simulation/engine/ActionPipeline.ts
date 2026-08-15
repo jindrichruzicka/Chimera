@@ -604,9 +604,9 @@ function isAllowedAfterGameResult(actionType: string): boolean {
     return (
         actionType === 'engine:sync_request' ||
         actionType === 'engine:return_to_lobby' ||
-        // The three that FINISH a transition already in flight — see the
-        // predicate's own contract for why refusing them is a deadlock rather
-        // than a refusal. `engine:scene_prepare` is not among them, so a
+        // What FINISHES a transition already in flight — see the predicate's
+        // own contract for the set and for why refusing them is a deadlock
+        // rather than a refusal. `engine:scene_prepare` is not among them, so a
         // resolved match still cannot BEGIN one.
         isSceneTransitionCompletionAction(actionType)
     );

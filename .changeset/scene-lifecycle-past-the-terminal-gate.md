@@ -3,9 +3,8 @@
 '@chimera-engine/renderer': patch
 ---
 
-The three scene actions that FINISH a transition — `engine:scene_ready`, `engine:scene_commit`
-and `engine:scene_drop` — now pass the terminal-match gate, so a transition still in flight
-when a match resolves is no longer stranded by the guard itself.
+The scene actions that FINISH a transition now pass the terminal-match gate, so a transition
+still in flight when a match resolves is no longer stranded by the guard itself.
 
 Both terminal guards rejected everything once `gameResult` was recorded: the pipeline's own
 gate, and the game route's `sendAction` wrapper. Nothing ties `gameResult` to `sceneTransition`
@@ -21,9 +20,9 @@ guards consult — the renderer may not import the pipeline, and two copies of t
 drift.
 
 Admitting them is necessary and not sufficient: the release still needs every seat in
-`state.players` to acknowledge, and a seat with no mounted `SceneRouter` — an AI seat, a
-disconnected one — still holds the transition. That limit is unchanged by this release and
-measured in `simulation/scene/__tests__/terminal-match-transition.test.ts`.
+`state.players` to acknowledge, or the host's own budget to expire the transition. What a seat
+that cannot acknowledge at all does to it is measured in
+`simulation/scene/__tests__/unackable-seat-barrier.test.ts`.
 
 Also fixed, in the same path: a scene commit landing after a result now carries the recorded
 `gameResult` through unchanged. `initialize`/`teardown` may return any state and the commit

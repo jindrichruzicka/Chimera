@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it, vi } from 'vitest';
 import {
+    DEFAULT_SCENE_TRANSITION_BUDGET_MS,
     HOST_ENGINE_VERSION,
     SessionCommitmentRuntime,
     SessionRuntime,
@@ -106,6 +107,27 @@ const TEST_SESSION: SaveFile['session'] = {
         { playerId: P2, control: 'remote', slotIndex: 1 },
     ],
 };
+
+/** A save file carrying `checkpoint`, for the restore-path cases. */
+function makeRestoredSaveFile(checkpoint: BaseGameSnapshot): SaveFile {
+    return {
+        header: {
+            schemaVersion: CURRENT_SCHEMA_VERSION,
+            engineVersion: HOST_ENGINE_VERSION,
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            slotId: 'tactics/slot-1',
+            savedAt: 1,
+            turnNumber: checkpoint.turnNumber,
+            playerNames: ['Alice', 'Bob'],
+        },
+        checkpoint,
+        deltaActions: [],
+        pendingCommitments: {},
+        stagedReveals: {},
+        session: TEST_SESSION,
+    };
+}
 
 describe('SessionRuntime', () => {
     it('returns the initial snapshot from getSnapshot() before any action is applied', () => {
@@ -326,6 +348,768 @@ describe('SessionRuntime', () => {
             payload: {},
         });
         expect(runtime.getSnapshot()).toBe(dropped);
+    });
+
+    it('dispatches engine:scene_expire when its wall-clock budget elapses on a pending transition', () => {
+        // The seat that never acks. `engine:scene_ready` is produced only
+        // inside a mounted `SceneRouter`, so an AI seat or a disconnected one
+        // sends none, and `timeoutTicks` cannot cover for it — a tick advances
+        // only when an action is applied, and a turn-based match applies none
+        // while the transition is pending. The host measures the wait instead,
+        // here, where a clock is allowed to exist.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const pending = {
+                ...initial,
+                tick: 2,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'preparing' as const,
+                    startedAtTick: 0,
+                    params: {},
+                    playersReady: [P1],
+                    timeoutTicks: 1_800,
+                },
+            } satisfies BaseGameSnapshot;
+            const expired = {
+                ...pending,
+                tick: 3,
+                sceneTransition: { ...pending.sceneTransition, expired: true },
+            } satisfies BaseGameSnapshot;
+            const committed = {
+                ...expired,
+                tick: 4,
+                sceneId: sceneId('engine:post-game'),
+                sceneTransition: null,
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi
+                .fn()
+                .mockReturnValueOnce(pending)
+                .mockReturnValueOnce(expired)
+                .mockReturnValueOnce(committed);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+
+            // Nothing yet: the budget is a rescue, not a schedule.
+            expect(apply).toHaveBeenCalledTimes(1);
+            vi.advanceTimersByTime(4_999);
+            expect(apply).toHaveBeenCalledTimes(1);
+
+            vi.advanceTimersByTime(1);
+
+            expect(apply).toHaveBeenNthCalledWith(2, pending, {
+                type: 'engine:scene_expire',
+                playerId: P1,
+                tick: pending.tick,
+                payload: {},
+            });
+            // And the expiry alone releases nothing — it unblocks the commit
+            // the existing resolution path then dispatches, per the
+            // descriptor's own policy.
+            expect(apply).toHaveBeenNthCalledWith(3, expired, {
+                type: 'engine:scene_commit',
+                playerId: P1,
+                tick: expired.tick,
+                payload: {},
+            });
+            expect(runtime.getSnapshot()).toBe(committed);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('arms no expiry budget while no transition is pending, and disarms one that resolved', () => {
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const noTransition = {
+                ...initial,
+                tick: 1,
+                hostPlayerId: P1,
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi.fn().mockReturnValue(noTransition);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+            });
+
+            runtime.applyAction({
+                type: 'engine:end_turn',
+                playerId: P1,
+                tick: 0,
+                payload: {},
+            });
+
+            // The TIMER, not just the dispatch it would produce: an armed timer
+            // whose callback happens to return early is invisible in the call
+            // count, and an idle host holding one per applied action is the
+            // leak this asserts against.
+            expect(vi.getTimerCount()).toBe(0);
+
+            vi.advanceTimersByTime(60_000);
+            expect(apply).toHaveBeenCalledTimes(1);
+            expect(runtime.getSnapshot()).toBe(noTransition);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('disarms the budget once the transition it was measuring has resolved', () => {
+        // Same reason the idle case asserts the timer: after the expiry lands,
+        // the transition is waiting on the commit beside it and not on an ack,
+        // so a re-armed budget would only expire what is already expired — and
+        // would do it invisibly, since the callback returns early.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const pending = {
+                ...initial,
+                tick: 2,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'preparing' as const,
+                    startedAtTick: 0,
+                    params: {},
+                    playersReady: [P1],
+                },
+            } satisfies BaseGameSnapshot;
+            const expired = {
+                ...pending,
+                tick: 3,
+                sceneTransition: { ...pending.sceneTransition, expired: true },
+            } satisfies BaseGameSnapshot;
+            const committed = {
+                ...expired,
+                tick: 4,
+                sceneId: sceneId('engine:post-game'),
+                sceneTransition: null,
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi
+                .fn()
+                .mockReturnValueOnce(pending)
+                .mockReturnValueOnce(expired)
+                .mockReturnValueOnce(committed);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+            expect(vi.getTimerCount()).toBe(1);
+
+            vi.advanceTimersByTime(5_000);
+
+            // The expiry fired, the commit followed, and nothing is left armed.
+            expect(apply).toHaveBeenCalledTimes(3);
+            expect(vi.getTimerCount()).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('falls back to the exported default budget when none is injected', () => {
+        // Production wires no budget, so the default is the only value that
+        // ever runs in a shipped game — and every other case here injects one,
+        // which would leave it measured by nothing.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const pending = {
+                ...initial,
+                tick: 1,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'preparing' as const,
+                    startedAtTick: 0,
+                    params: {},
+                    playersReady: [P1],
+                },
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi.fn().mockReturnValue(pending);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+
+            // The VALUE, against a literal rather than against itself: it has
+            // to outlast every client-side budget that can compose beneath it —
+            // the scene preload's 5 s, the route gate's 8 s and the shell
+            // warm-up's 5 s — so a slow-but-live client is never mistaken for a
+            // seat that cannot ack. Lowering it is a decision, and this is
+            // where it has to be made rather than noticed.
+            expect(DEFAULT_SCENE_TRANSITION_BUDGET_MS).toBe(30_000);
+
+            vi.advanceTimersByTime(DEFAULT_SCENE_TRANSITION_BUDGET_MS - 1);
+            expect(apply).toHaveBeenCalledTimes(1);
+
+            vi.advanceTimersByTime(1);
+            expect(apply).toHaveBeenNthCalledWith(2, pending, {
+                type: 'engine:scene_expire',
+                playerId: P1,
+                tick: pending.tick,
+                payload: {},
+            });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('clears the armed budget when the transition resolves normally, before it can fire', () => {
+        // A transition every seat acks resolves long before the budget. The
+        // timer it armed has to go with it: left running, it would fire during
+        // the NEXT transition — and since a timer is only armed when none is
+        // outstanding, that next transition would inherit a budget already
+        // most of the way spent, and be expired early.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const pending = {
+                ...initial,
+                tick: 1,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'preparing' as const,
+                    startedAtTick: 0,
+                    params: {},
+                    playersReady: [P1],
+                },
+            } satisfies BaseGameSnapshot;
+            const settled = {
+                ...pending,
+                tick: 2,
+                sceneId: sceneId('engine:post-game'),
+                sceneTransition: null,
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi
+                .fn()
+                .mockReturnValueOnce(pending)
+                .mockReturnValueOnce(settled);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+            expect(vi.getTimerCount()).toBe(1);
+
+            runtime.applyAction({
+                type: 'engine:end_turn',
+                playerId: P1,
+                tick: 1,
+                payload: {},
+            });
+
+            expect(vi.getTimerCount()).toBe(0);
+            vi.advanceTimersByTime(60_000);
+            expect(apply).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('dispose() releases a budget armed mid-transition, and a restore arms one', () => {
+        // Two lifecycle edges the applied-action path does not cover. A session
+        // torn down mid-transition would otherwise expire it 30 s later into a
+        // pipeline nobody is listening to; and a save captured mid-transition
+        // restores a snapshot already waiting on an ack, whose budget would
+        // start only at the next action a stalled session may never see.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const pendingTransition = {
+                toSceneId: sceneId('engine:post-game'),
+                phase: 'preparing' as const,
+                startedAtTick: 0,
+                params: {},
+                playersReady: [P1],
+            };
+            const pending = {
+                ...initial,
+                tick: 1,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: pendingTransition,
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi.fn().mockReturnValue(pending);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+            expect(vi.getTimerCount()).toBe(1);
+
+            runtime.dispose();
+            expect(vi.getTimerCount()).toBe(0);
+            vi.advanceTimersByTime(60_000);
+            expect(apply).toHaveBeenCalledTimes(1);
+
+            // And the restore edge: a checkpoint that is already mid-transition
+            // arms the budget without waiting for an action.
+            runtime.applyRestoredFile({
+                header: {
+                    schemaVersion: CURRENT_SCHEMA_VERSION,
+                    engineVersion: HOST_ENGINE_VERSION,
+                    gameId: 'tactics',
+                    gameVersion: '0.1.0',
+                    slotId: 'tactics/slot-1',
+                    savedAt: 1,
+                    turnNumber: pending.turnNumber,
+                    playerNames: ['Alice', 'Bob'],
+                },
+                checkpoint: pending,
+                deltaActions: [],
+                pendingCommitments: {},
+                stagedReveals: {},
+                session: TEST_SESSION,
+            });
+            expect(vi.getTimerCount()).toBe(1);
+            runtime.dispose();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('gives a restored transition its OWN budget, not what was left of the previous one', () => {
+        // The applied-action path keeps a running timer because it is measuring
+        // the same transition. A restore can deliver a DIFFERENT one, and
+        // inheriting the remainder would expire it almost immediately —
+        // committing or dropping a scene no client has had the chance to ack,
+        // which is the failure the budget's size exists to prevent.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const transitionOf = (to: string, startedAtTick: number) => ({
+                toSceneId: sceneId(to),
+                phase: 'preparing' as const,
+                startedAtTick,
+                params: {},
+                playersReady: [P1],
+            });
+            const first = {
+                ...initial,
+                tick: 1,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: transitionOf('engine:post-game', 0),
+            } satisfies BaseGameSnapshot;
+            const restored = {
+                ...first,
+                tick: 9,
+                sceneTransition: transitionOf('engine:credits', 9),
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi.fn().mockReturnValue(first);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+            vi.advanceTimersByTime(4_000);
+
+            runtime.applyRestoredFile({
+                header: {
+                    schemaVersion: CURRENT_SCHEMA_VERSION,
+                    engineVersion: HOST_ENGINE_VERSION,
+                    gameId: 'tactics',
+                    gameVersion: '0.1.0',
+                    slotId: 'tactics/slot-1',
+                    savedAt: 1,
+                    turnNumber: restored.turnNumber,
+                    playerNames: ['Alice', 'Bob'],
+                },
+                checkpoint: restored,
+                deltaActions: [],
+                pendingCommitments: {},
+                stagedReveals: {},
+                session: TEST_SESSION,
+            });
+
+            // The 1 000 ms left of the first budget must NOT expire the
+            // restored transition.
+            vi.advanceTimersByTime(1_000);
+            expect(apply).toHaveBeenCalledTimes(1);
+
+            // Its own full budget does, counted from the restore.
+            vi.advanceTimersByTime(4_000);
+            expect(apply).toHaveBeenNthCalledWith(2, restored, {
+                type: 'engine:scene_expire',
+                playerId: P1,
+                tick: restored.tick,
+                payload: {},
+            });
+            runtime.dispose();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('resolves a restored transition that is already resolvable, without waiting for an action', () => {
+        // A save can be captured after the last ack landed, or after the budget
+        // already expired the transition. Restored, that snapshot is one the
+        // resolution path can act on immediately — and a stalled session has no
+        // next action to carry it.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const restoredReady = {
+                ...initial,
+                tick: 7,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'ready' as const,
+                    startedAtTick: 5,
+                    params: {},
+                    playersReady: [P1, P2],
+                },
+            } satisfies BaseGameSnapshot;
+            const committed = {
+                ...restoredReady,
+                tick: 8,
+                sceneId: sceneId('engine:post-game'),
+                sceneTransition: null,
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi.fn().mockReturnValue(committed);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+            });
+
+            runtime.applyRestoredFile(makeRestoredSaveFile(restoredReady));
+
+            expect(apply).toHaveBeenCalledWith(restoredReady, {
+                type: 'engine:scene_commit',
+                playerId: P1,
+                tick: restoredReady.tick,
+                payload: {},
+            });
+            expect(runtime.getSnapshot()).toBe(committed);
+            // And nothing is armed afterwards, because nothing is pending.
+            expect(vi.getTimerCount()).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('leaves a consistent runtime when the restore’s own resolve is refused', () => {
+        // The restored checkpoint can name a scene the live registry lacks, and
+        // the commit it makes resolvable is then refused. A throw here would
+        // escape a call its callers were written against as non-throwing, and
+        // would leave the snapshot swapped with the budget below unreached —
+        // so the PREVIOUS transition's timer would go on to expire the restored
+        // one.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const pendingBefore = {
+                ...initial,
+                tick: 1,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'preparing' as const,
+                    startedAtTick: 0,
+                    params: {},
+                    playersReady: [P1],
+                },
+            } satisfies BaseGameSnapshot;
+            const restoredReady = {
+                ...pendingBefore,
+                tick: 7,
+                sceneTransition: {
+                    toSceneId: sceneId('game:not-in-this-registry'),
+                    phase: 'ready' as const,
+                    startedAtTick: 5,
+                    params: {},
+                    playersReady: [P1, P2],
+                },
+            } satisfies BaseGameSnapshot;
+            const refusal = new Error('ActionUnauthorizedError: unknown_scene');
+            const apply: ApplyActionFn = vi
+                .fn()
+                .mockReturnValueOnce(pendingBefore)
+                .mockImplementation(() => {
+                    throw refusal;
+                });
+            const onExpiryError = vi.fn();
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+                onExpiryError,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+            vi.advanceTimersByTime(4_000);
+
+            expect(() =>
+                runtime.applyRestoredFile(makeRestoredSaveFile(restoredReady)),
+            ).not.toThrow();
+
+            expect(onExpiryError).toHaveBeenCalledWith(refusal);
+            expect(runtime.getSnapshot()).toBe(restoredReady);
+            // The old transition's remaining 1 000 ms must not reach the
+            // restored one: the budget below was re-armed despite the refusal.
+            const callsBefore = vi.mocked(apply).mock.calls.length;
+            vi.advanceTimersByTime(1_000);
+            expect(vi.mocked(apply).mock.calls.length).toBe(callsBefore);
+            runtime.dispose();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('reports rather than throws when the pipeline refuses the expiry it dispatches', () => {
+        // The expiry runs from a timer, which has no caller to catch a
+        // refusal. Here the expire dispatch itself is refused; the commit it
+        // would have unblocked travels the same `try`, and is refused whenever
+        // the entered scene is unknown to the live registry — which a restored
+        // checkpoint can name.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const pending = {
+                ...initial,
+                tick: 1,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'preparing' as const,
+                    startedAtTick: 0,
+                    params: {},
+                    playersReady: [P1],
+                },
+            } satisfies BaseGameSnapshot;
+            const refusal = new Error('ActionUnauthorizedError: unknown_scene');
+            const apply: ApplyActionFn = vi
+                .fn()
+                .mockReturnValueOnce(pending)
+                .mockImplementationOnce(() => {
+                    throw refusal;
+                });
+            const onExpiryError = vi.fn();
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+                onExpiryError,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+
+            expect(() => vi.advanceTimersByTime(5_000)).not.toThrow();
+            expect(onExpiryError).toHaveBeenCalledWith(refusal);
+            // The transition is untouched, so the next applied action runs the
+            // same resolution rather than the runtime retrying on its own.
+            expect(runtime.getSnapshot()).toBe(pending);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('arms ONE budget across every action applied while the transition stays pending', () => {
+        // Without the outstanding-timer check, each applied action arms another
+        // and orphans the previous handle — only the last is reachable by the
+        // disarm, and an orphan's callback nulls the field a later transition's
+        // live handle is stored in. The budget also has to measure the
+        // transition rather than the last action before it.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const pending = {
+                ...initial,
+                tick: 1,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'preparing' as const,
+                    startedAtTick: 0,
+                    params: {},
+                    playersReady: [P1],
+                },
+            } satisfies BaseGameSnapshot;
+            const stillPending = { ...pending, tick: 2 } satisfies BaseGameSnapshot;
+            const expired = {
+                ...stillPending,
+                tick: 3,
+                sceneTransition: { ...stillPending.sceneTransition, expired: true },
+            } satisfies BaseGameSnapshot;
+            const dropped = {
+                ...expired,
+                tick: 4,
+                sceneTransition: null,
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi
+                .fn()
+                .mockReturnValueOnce(pending)
+                .mockReturnValueOnce(stillPending)
+                .mockReturnValueOnce(expired)
+                .mockReturnValueOnce(dropped);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+            vi.advanceTimersByTime(3_000);
+            runtime.applyAction({ type: 'engine:end_turn', playerId: P1, tick: 1, payload: {} });
+
+            expect(vi.getTimerCount()).toBe(1);
+
+            // And it is the FIRST one still running: the remaining 2 000 ms of
+            // the original budget, not a fresh 5 000 the second action reset.
+            vi.advanceTimersByTime(2_000);
+            expect(apply).toHaveBeenNthCalledWith(3, stillPending, {
+                type: 'engine:scene_expire',
+                playerId: P1,
+                tick: stillPending.tick,
+                payload: {},
+            });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('does not re-arm the budget on a transition already expired', () => {
+        // The expiry is not always followed by a commit in the same call: a
+        // transition in `committing` is one the resolution path leaves alone.
+        // An expired transition is waiting on that commit, not on an ack, so
+        // re-arming here would expire what is already expired — and invisibly,
+        // since the callback returns early on the same flag.
+        vi.useFakeTimers();
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const expiredMidCommit = {
+                ...initial,
+                tick: 3,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'committing' as const,
+                    startedAtTick: 0,
+                    params: {},
+                    playersReady: [P1],
+                    expired: true,
+                },
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi.fn().mockReturnValue(expiredMidCommit);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+                sceneTransitionBudgetMs: 5_000,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+
+            expect(vi.getTimerCount()).toBe(0);
+            vi.advanceTimersByTime(60_000);
+            expect(apply).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('exposes the gameId from constructor options via a public getter', () => {

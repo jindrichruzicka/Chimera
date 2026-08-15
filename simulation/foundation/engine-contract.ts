@@ -60,6 +60,27 @@ export interface SceneTransitionState {
     readonly timeoutTicks?: number;
     readonly onClientTimeout?: 'proceed' | 'drop';
     /**
+     * Set by `engine:scene_expire` when the HOST declares its own budget for
+     * this transition elapsed, and read as a second way of being timed out
+     * beside `timeoutTicks`.
+     *
+     * It exists because the tick budget cannot always be reached: the barrier
+     * waits on an ack from every seat, `engine:scene_ready` is produced only
+     * inside a mounted `SceneRouter`, and a seat with no renderer — an AI seat,
+     * a disconnect mid-transition — never sends one. The tick advances only
+     * when an action is applied, so in a turn-based match nothing closes the
+     * gap and the transition holds forever.
+     *
+     * The wall clock stays OUT of the reduce: the host measures the wait and
+     * dispatches an action, and the reduce reads only this flag. What the
+     * expiry then MEANS is unchanged — the descriptor's own `onClientTimeout`
+     * still decides between committing and dropping.
+     *
+     * Omitted rather than `false` while a transition is live, so a transition
+     * that never expires keeps the shape it had before this field existed.
+     */
+    readonly expired?: boolean;
+    /**
      * The refs the scene being entered declares in its
      * `SceneDescriptor.requiredAssets` (Invariant #52), copied onto the
      * transition so a client can preload them while the transition is pending.

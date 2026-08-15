@@ -31,6 +31,7 @@ const SCENE_PREPARE_TYPE = 'engine:scene_prepare' as const;
 const SCENE_READY_TYPE = 'engine:scene_ready' as const;
 const SCENE_COMMIT_TYPE = 'engine:scene_commit' as const;
 const SCENE_DROP_TYPE = 'engine:scene_drop' as const;
+const SCENE_EXPIRE_TYPE = 'engine:scene_expire' as const;
 
 export class SceneManager<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #registry: SceneRegistry<TState>;
@@ -44,6 +45,7 @@ export class SceneManager<TState extends BaseGameSnapshot = BaseGameSnapshot> {
         registry.registerEngineAction(this.#createSceneReadyDefinition());
         registry.registerEngineAction(this.#createSceneCommitDefinition());
         registry.registerEngineAction(this.#createSceneDropDefinition());
+        registry.registerEngineAction(this.#createSceneExpireDefinition());
     }
 
     requestTransition(toSceneId: SceneId, params: SceneEnterParams = {}): ScenePreparePayload {
@@ -294,6 +296,69 @@ export class SceneManager<TState extends BaseGameSnapshot = BaseGameSnapshot> {
             };
         },
     });
+
+    /**
+     * The host declaring its own budget for the pending transition elapsed.
+     *
+     * The barrier waits on an ack from every seat in `state.players`, and
+     * `engine:scene_ready` is produced only inside a mounted `SceneRouter` — so
+     * a seat with no renderer (an AI seat; a disconnect mid-transition) never
+     * acks. `timeoutTicks` cannot cover for it, because a tick advances only
+     * when an action is applied and a turn-based match applies none while the
+     * transition is pending.
+     *
+     * So the wait is measured where a clock is allowed to exist — the host
+     * runtime — and its outcome enters the simulation as an action like any
+     * other. This one does NOT decide what the expiry means: it sets a flag
+     * that `isTransitionTimedOut` reads, and the descriptor's own
+     * `onClientTimeout` still chooses between committing and dropping, exactly
+     * as it does when the tick budget elapses on its own.
+     *
+     * Carries no payload, for the reason `engine:scene_ready` carries only
+     * `{ playerId }`: nothing about any client's load may enter authoritative
+     * state.
+     */
+    readonly #createSceneExpireDefinition = (): ActionDefinition<SceneCommitPayload, TState> => ({
+        type: SCENE_EXPIRE_TYPE,
+
+        parsePayload(raw): SceneCommitPayload {
+            if (Object.keys(raw).length > 0) {
+                throw new TypeError(
+                    'engine:scene_expire payload must be an empty object; ' +
+                        `received ${JSON.stringify(raw)}.`,
+                );
+            }
+            return {};
+        },
+
+        validate: (_payload, state, dispatcherId): ValidationResult => {
+            if (!isHost(state, dispatcherId)) {
+                return { ok: false, reason: 'host_only' };
+            }
+            const transition = state.sceneTransition;
+            if (transition === undefined || transition === null) {
+                return { ok: false, reason: 'no_transition' };
+            }
+            if (transition.expired === true) {
+                return { ok: false, reason: 'already_expired' };
+            }
+            return { ok: true };
+        },
+
+        reduce(state): TState {
+            const transition = state.sceneTransition;
+            if (transition === undefined || transition === null) {
+                return state;
+            }
+            return {
+                ...state,
+                tick: state.tick + 1,
+                // Only the flag: the acks already collected stand, and the
+                // phase is left to the commit or drop this unblocks.
+                sceneTransition: { ...transition, expired: true },
+            };
+        },
+    });
 }
 
 function parseParams(raw: unknown): SceneEnterParams {
@@ -336,10 +401,23 @@ function areAllPlayersReady(
     return Object.keys(state.players).every((rawPlayerId) => readySet.has(playerId(rawPlayerId)));
 }
 
-function isTransitionTimedOut(
+/**
+ * Whether the transition's wait is over — by either of the two budgets.
+ *
+ * `timeoutTicks` is the simulation's own, and it can be unreachable: a tick
+ * advances only when an action is applied, so a barrier waiting on a seat that
+ * cannot ack never closes the gap. `expired` is the host's, set through
+ * `engine:scene_expire` once its wall clock has run out. Both feed the same
+ * `onClientTimeout` branch, so an expiry means whatever the descriptor already
+ * said a timeout means.
+ */
+export function isTransitionTimedOut(
     state: Readonly<BaseGameSnapshot>,
     transition: Readonly<SceneTransitionState>,
 ): boolean {
+    if (transition.expired === true) {
+        return true;
+    }
     const timeoutTicks = Math.max(
         0,
         transition.timeoutTicks ?? DEFAULT_SCENE_TRANSITION_TIMEOUT_TICKS,

@@ -25,9 +25,12 @@
  * or drop is what clears it, and the barrier's tick-denominated timeout cannot
  * elapse because `engine:tick` stays refused.
  *
- * Admitting them is necessary and not sufficient. What the release still
- * requires of the seats, and what happens when one of them cannot ack at all,
- * is measured in `simulation/scene/__tests__/terminal-match-transition.test.ts`.
+ * Admitting them is necessary and not sufficient: the release still needs every
+ * seat to acknowledge, or the host's own budget to expire the transition. What
+ * the acks alone do is measured in
+ * `simulation/scene/__tests__/terminal-match-transition.test.ts`, and what
+ * happens when a seat cannot acknowledge at all in
+ * `simulation/scene/__tests__/unackable-seat-barrier.test.ts`.
  *
  * `engine:scene_prepare` is deliberately absent: a resolved match may FINISH the
  * transition it is in, and may not BEGIN another.
@@ -36,6 +39,10 @@ export function isSceneTransitionCompletionAction(actionType: string): boolean {
     return (
         actionType === 'engine:scene_ready' ||
         actionType === 'engine:scene_commit' ||
-        actionType === 'engine:scene_drop'
+        actionType === 'engine:scene_drop' ||
+        // The host declaring its own budget elapsed. It only unblocks the
+        // commit or drop beside it, so refusing it after a result would strand
+        // the very transitions those two were admitted to finish.
+        actionType === 'engine:scene_expire'
     );
 }

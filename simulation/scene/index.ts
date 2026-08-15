@@ -6,5 +6,5 @@ export {
     sceneId,
 } from './SceneRegistry.js';
 export type { SceneCommitPayload, ScenePreparePayload, SceneReadyPayload } from './SceneManager.js';
-export { SceneManager } from './SceneManager.js';
+export { isTransitionTimedOut, SceneManager } from './SceneManager.js';
 export { registerDefaultScenes } from './DefaultScenes.js';

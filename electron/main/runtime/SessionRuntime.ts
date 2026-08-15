@@ -40,10 +40,8 @@ import {
     type SaveFile,
     type SaveSessionManifest,
 } from '@chimera-engine/simulation/persistence/index.js';
-import {
-    DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY,
-    DEFAULT_SCENE_TRANSITION_TIMEOUT_TICKS,
-} from '@chimera-engine/simulation/scene/SceneRegistry.js';
+import { DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY } from '@chimera-engine/simulation/scene/SceneRegistry.js';
+import { isTransitionTimedOut } from '@chimera-engine/simulation/scene/index.js';
 import {
     CommitmentVerificationError,
     DefaultCommitmentScheme,
@@ -237,7 +235,46 @@ export interface SessionRuntimeOptions {
      * `deriveSessionManifest`, the same heuristic the v5→v6 migration uses.
      */
     readonly getSessionManifest?: () => SaveSessionManifest | null;
+    /**
+     * How long the host waits on a pending scene transition before declaring
+     * its own budget elapsed, in wall-clock milliseconds.
+     *
+     * The barrier needs an ack from every seat and `engine:scene_ready` is
+     * produced only inside a mounted `SceneRouter`, so a seat with no renderer
+     * never sends one; `SceneTransitionState.timeoutTicks` cannot cover for it,
+     * because a tick advances only when an action is applied. The wait is
+     * measured HERE rather than in the reduce, which stays pure (Invariants
+     * #2 / #42 / #43).
+     *
+     * Generous because it has to outlast the client budgets beneath it, and a
+     * transition whose seats can all ack settles far below it. Where a seat
+     * CANNOT — a match with an AI seat, which is a shipped configuration — the
+     * acks never complete the barrier, so this budget is not a rescue but the
+     * release path, and every scene hop in such a match costs it in full.
+     * A game that adds a transition should choose its own value with that case
+     * in mind.
+     */
+    readonly sceneTransitionBudgetMs?: number;
+    /**
+     * Reports a scene-expiry the pipeline refused.
+     *
+     * The expiry runs from a timer, which has no caller to catch a refusal, so
+     * the runtime swallows one to keep it off the main process's uncaught path.
+     * This is where it goes instead; the composition root wires it to the host
+     * logger. Defaults to a no-op for tests that do not read it.
+     */
+    readonly onExpiryError?: (error: unknown) => void;
 }
+
+/**
+ * The default for {@link SessionRuntimeOptions.sceneTransitionBudgetMs}.
+ *
+ * 30 s, and above every client-side budget it has to outlast: the scene
+ * preload's 5 s, the route gate's 8 s and the shell warm-up's 5 s can compose
+ * on one client without this firing first, so a slow-but-live client is never
+ * mistaken for a seat that cannot ack.
+ */
+export const DEFAULT_SCENE_TRANSITION_BUDGET_MS = 30_000;
 
 /**
  * In-memory holder for the live snapshot of a single hosted session.
@@ -253,6 +290,10 @@ export class SessionRuntime {
     private readonly commitments: CommitmentRuntimePort;
     private readonly staging: RevealStagingPort;
     private readonly getSessionManifest: () => SaveSessionManifest | null;
+    private readonly sceneTransitionBudgetMs: number;
+    /** Armed while a transition is pending and the host has not expired it. */
+    private sceneExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+    private readonly onExpiryError: (error: unknown) => void;
 
     constructor(options: SessionRuntimeOptions) {
         this.snapshot = options.initialSnapshot;
@@ -263,6 +304,9 @@ export class SessionRuntime {
         this.commitments = options.commitmentRuntime ?? new SessionCommitmentRuntime();
         this.staging = options.revealStaging ?? new RevealStaging();
         this.getSessionManifest = options.getSessionManifest ?? ((): null => null);
+        this.sceneTransitionBudgetMs =
+            options.sceneTransitionBudgetMs ?? DEFAULT_SCENE_TRANSITION_BUDGET_MS;
+        this.onExpiryError = options.onExpiryError ?? ((): void => undefined);
     }
 
     /** The game identifier for this session (e.g. `'tactics'`). */
@@ -287,6 +331,7 @@ export class SessionRuntime {
     applyAction(action: ActionEnvelope): void {
         this.snapshot = this.applyActionFn(this.snapshot, action);
         this.resolveTimedOutOrReadySceneTransition();
+        this.armOrDisarmSceneExpiry();
     }
 
     /**
@@ -325,12 +370,13 @@ export class SessionRuntime {
             return;
         }
 
-        const timeoutTicks = Math.max(
-            0,
-            transition.timeoutTicks ?? DEFAULT_SCENE_TRANSITION_TIMEOUT_TICKS,
-        );
-        const timedOut = this.snapshot.tick - transition.startedAtTick >= timeoutTicks;
-        if (!timedOut) {
+        // The simulation's own predicate, not a copy of its arithmetic: it now
+        // answers for two budgets — the tick one and the host-declared expiry —
+        // and a second copy here would honour whichever it happened to know
+        // about. The dispatch below still has to pass that same check inside
+        // `validate`, so a divergence would show up only as an action the host
+        // sends and the pipeline refuses.
+        if (!isTransitionTimedOut(this.snapshot, transition)) {
             return;
         }
 
@@ -341,6 +387,93 @@ export class SessionRuntime {
         }
 
         this.dispatchHostSceneAction('engine:scene_commit', hostPlayerId);
+    }
+
+    /**
+     * Keeps the host's wall-clock budget matched to whether a transition is
+     * actually waiting on someone.
+     *
+     * Armed only while one is pending and unexpired — a transition that has
+     * already been expired is waiting on the commit or drop beside it, not on
+     * an ack, so a second timer would only re-expire it. Disarmed on every
+     * other shape, including a session that never transitions at all, so an
+     * idle host holds no timer.
+     *
+     * Re-armed rather than left running when a NEW transition starts, so the
+     * budget measures the transition in front of it and not the one before.
+     */
+    private armOrDisarmSceneExpiry(): void {
+        const transition = this.snapshot.sceneTransition;
+        const waiting =
+            transition !== undefined &&
+            transition !== null &&
+            transition.expired !== true &&
+            this.snapshot.hostPlayerId !== undefined;
+
+        if (!waiting) {
+            this.disarmSceneExpiry();
+            return;
+        }
+        if (this.sceneExpiryTimer !== null) {
+            return;
+        }
+        this.sceneExpiryTimer = setTimeout(() => {
+            this.sceneExpiryTimer = null;
+            this.expirePendingSceneTransition();
+        }, this.sceneTransitionBudgetMs);
+        // A host waiting on a barrier must not be the reason the process
+        // cannot exit.
+        this.sceneExpiryTimer.unref?.();
+    }
+
+    private disarmSceneExpiry(): void {
+        if (this.sceneExpiryTimer !== null) {
+            clearTimeout(this.sceneExpiryTimer);
+            this.sceneExpiryTimer = null;
+        }
+    }
+
+    /**
+     * The budget fired: tell the simulation, and let the existing resolution
+     * path decide what the expiry MEANS.
+     *
+     * `applyAction` runs `resolveTimedOutOrReadySceneTransition` straight
+     * after, which now sees a timed-out transition and dispatches the commit or
+     * the drop the descriptor's own `onClientTimeout` asks for — the same
+     * branch the tick budget uses.
+     */
+    private expirePendingSceneTransition(): void {
+        const transition = this.snapshot.sceneTransition;
+        const hostPlayerId = this.snapshot.hostPlayerId;
+        if (
+            transition === undefined ||
+            transition === null ||
+            transition.expired === true ||
+            hostPlayerId === undefined
+        ) {
+            return;
+        }
+
+        try {
+            this.applyAction({
+                type: 'engine:scene_expire',
+                playerId: hostPlayerId,
+                tick: this.snapshot.tick,
+                payload: {},
+            });
+        } catch (error: unknown) {
+            // A timer callback has no caller at all, so an escaping throw is an
+            // uncaught main-process exception. The pipeline refuses the commit
+            // this expiry unblocks whenever the entered scene is unknown to the
+            // live registry, which a restored checkpoint can name, and a
+            // descriptor's own `initialize` may throw for its own reasons.
+            //
+            // Swallowed rather than retried: the transition is left exactly as
+            // it was, so the next applied action runs the same resolution
+            // again. Reported, because a rescue that cannot complete is a
+            // diagnosis a silent catch would destroy.
+            this.onExpiryError(error);
+        }
     }
 
     private dispatchHostSceneAction(
@@ -358,8 +491,12 @@ export class SessionRuntime {
     /**
      * Replace the live snapshot from a previously persisted save.
      * Called by `SaveManager.restoreFromSave(...)` consumers (the load flow)
-     * so the running session reflects the loaded state without going through
-     * the pipeline (Invariant #24).
+     * so the running session reflects the loaded state.
+     *
+     * The snapshot itself is replaced directly rather than through an action
+     * (Invariant #24). A restored checkpoint whose scene transition is already
+     * resolvable does dispatch the commit or drop that resolves it, since that
+     * is authoritative state no direct assignment may invent.
      */
     applyRestoredFile(file: SaveFile): void {
         this.snapshot = file.checkpoint;
@@ -369,6 +506,42 @@ export class SessionRuntime {
         // `?? {}` guards an in-memory file that predates the field; the migrator
         // guarantees on-disk presence.
         this.staging.restore(file.stagedReveals ?? {});
+        // A save can be captured while a transition is pending, so the restored
+        // snapshot can arrive already waiting on an ack — or already resolvable,
+        // if the budget fired or the last ack landed before the save was taken.
+        // Both halves are done here as well as after an applied action, or a
+        // restored session would sit on whichever the next action happened to
+        // reach, and a stalled one sees no next action at all.
+        try {
+            this.resolveTimedOutOrReadySceneTransition();
+        } catch (error: unknown) {
+            // Caught for the reason the timer path catches: this dispatch can
+            // be refused — a restored checkpoint may name a scene the live
+            // registry lacks — and a restore that threw here would leave the
+            // snapshot swapped, the budget below unreached, and its caller
+            // holding a half-applied load. Reported instead, with the
+            // transition left pending for the budget to expire.
+            this.onExpiryError(error);
+        }
+        // DISARMED first, unlike the applied-action path: that path keeps the
+        // running timer because it is measuring the same transition, while a
+        // restore can deliver a DIFFERENT one. Left running, the restored
+        // transition would inherit whatever was left of the old budget — down
+        // to nothing — and be expired before any client could ack it.
+        this.disarmSceneExpiry();
+        this.armOrDisarmSceneExpiry();
+    }
+
+    /**
+     * Releases what this runtime holds outside its own snapshot.
+     *
+     * Only the scene-expiry budget today. Without it a session torn down
+     * mid-transition leaves a live timer that fires into a dead session — the
+     * broadcast is swallowed, but the recorder logs a failure for an action
+     * nobody asked for.
+     */
+    dispose(): void {
+        this.disarmSceneExpiry();
     }
 
     verifyReveal(reveal: CommitmentReveal): unknown {

@@ -1070,9 +1070,9 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
             // Electron's option throttles "animations and timers when the page
             // becomes background" (its own typings) and the default is on.
             // Disabled here because that is scheduling this app would rather
-            // not have applied to the ack chain: the host's release is measured
-            // in ticks, which only an applied action advances, so one client's
-            // late ack holds the hop for every player rather than only itself.
+            // not have applied to the ack chain: one client's late ack holds
+            // the hop for every player rather than only itself, until the
+            // host's own transition budget expires it.
             // What a backgrounded window does in practice is a platform
             // question and not restated here. The cost is that a hidden window
             // keeps animating.
@@ -2156,6 +2156,18 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 applyAction: processAction,
                 commitmentRuntime: sessionCommitmentRuntime,
                 getSessionManifest,
+                // The runtime resolves a scene transition from two places with
+                // no caller to catch a refusal — a timer callback, and the
+                // restore — so it swallows one rather than let it reach the
+                // main process's uncaught path. This is where it surfaces
+                // instead. Named for the transition rather than for either
+                // path, since both arrive here.
+                onExpiryError: (error: unknown) => {
+                    logger.error(
+                        'hosted session: a scene-transition resolution was refused',
+                        error instanceof Error ? error : new Error(String(error)),
+                    );
+                },
             });
             activeSession = sessionRuntime;
             if (metadata.e2eHooks !== undefined) {
@@ -2985,6 +2997,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     clearTimeout(pendingSeatHandoffTimer);
                     pendingSeatHandoffTimer = null;
                 }
+                // Releases the runtime's own scene-transition budget, so a
+                // session torn down mid-transition cannot expire it afterwards
+                // into a pipeline nobody is listening to.
+                sessionRuntime.dispose();
                 unsubJoined();
                 unsubLeft();
                 unsubAction();

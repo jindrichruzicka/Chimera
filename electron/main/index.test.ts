@@ -5126,6 +5126,30 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         expect(perspectiveSaves.value).toHaveLength(0);
     });
 
+    it('host teardown disposes the session runtime, so no timer it armed survives the session', async () => {
+        // `SessionRuntime` arms a wall-clock budget while a scene transition is
+        // pending. Left running past teardown it fires into a session nobody is
+        // listening to — the broadcast is swallowed, the recorder logs a
+        // failure for an action nobody asked for. The runtime's own `dispose()`
+        // is separately pinned; this is the wiring that makes it happen.
+        await main(makeTestContributions());
+        const hostId = playerId('host-disposed');
+
+        const cleanup = getLobbyOptions().onSessionHosted?.(makeHostTransport(), {
+            hostId,
+            maxPlayers: 2,
+        });
+        // Spied on the prototype, since the runtime is constructed inside the
+        // hosted-session closure and never handed out.
+        const dispose = vi.spyOn(SessionRuntime.prototype, 'dispose');
+
+        cleanup?.();
+        await flush();
+
+        expect(dispose).toHaveBeenCalledTimes(1);
+        dispose.mockRestore();
+    });
+
     it('client egress: starts on first snapshot, records, and persists for the client viewerId only on explicit save', async () => {
         await main(makeTestContributions());
         const options = getLobbyOptions();
