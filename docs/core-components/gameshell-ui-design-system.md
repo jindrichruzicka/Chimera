@@ -445,7 +445,7 @@ The executable contract is `renderer/components/ui/focusStyles.test.ts`.
 
 ### Component Gallery (`/component-gallery/`)
 
-`renderer/app/component-gallery/` is a **development and E2E-only** visual fixture for the §4.35 primitive library. It is gated by `isGalleryEnabled()` (active in any non-production `NODE_ENV` — i.e. `development`, `test`, or any value other than `production` — and when `NEXT_PUBLIC_CHIMERA_E2E=1` regardless of environment) and is not part of the production navigation tree.
+`renderer/app/component-gallery/` is a visual fixture for the §4.35 primitive library, and is not part of the production navigation tree. It is gated by `isGalleryEnabled()` ([`galleryGate.ts`](../../renderer/app/component-gallery/galleryGate.ts)), which reads one build-time flag: the gallery is enabled in every launch — dev, a plain `next build`, E2E — except one built with `NEXT_PUBLIC_CHIMERA_PACKAGED=1`. The module header carries the reason that flag is the signal.
 
 The gallery covers all six §4.35 primitive categories — **Actions**, **Overlays**, **Containers**, **Forms**, **Feedback**, and **Typography** — each rendered as a named section. The top-level category navigation is implemented with `Tabs` (from the Containers category), making the gallery the primary live demonstration of that component. The gallery also includes a **Toasts** dev tab for exercising the §4.30 `toastStore` and `ToastHost` stack.
 

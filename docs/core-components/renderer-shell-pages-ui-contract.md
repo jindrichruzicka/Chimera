@@ -34,14 +34,14 @@ Game renderer surfaces may also consume the public component-library barrels und
 load game customization only through renderer registry helpers, and never import game screen modules
 or token overrides directly.
 
-| Page path                         | Purpose                                                             | Game-owned?                     |
-| --------------------------------- | ------------------------------------------------------------------- | ------------------------------- |
-| `renderer/app/main-menu/`         | Title screen, entry point                                           | Engine-owned; game-customizable |
-| `renderer/app/lobby/`             | Route-backed modal for host/join/leave multiplayer lobby            | Partly\*                        |
-| `renderer/app/settings/`          | Engine + game settings UI                                           | Engine-owned; game-customizable |
-| `renderer/app/saves/`             | Save-slot browser                                                   | No                              |
-| `renderer/app/(loading)/`         | Transition placeholder between scenes                               | No                              |
-| `renderer/app/component-gallery/` | Design-system gallery (dev/E2E only); gated by `isGalleryEnabled()` | No                              |
+| Page path                         | Purpose                                                  | Game-owned?                     |
+| --------------------------------- | -------------------------------------------------------- | ------------------------------- |
+| `renderer/app/main-menu/`         | Title screen, entry point                                | Engine-owned; game-customizable |
+| `renderer/app/lobby/`             | Route-backed modal for host/join/leave multiplayer lobby | Partly\*                        |
+| `renderer/app/settings/`          | Engine + game settings UI                                | Engine-owned; game-customizable |
+| `renderer/app/saves/`             | Save-slot browser                                        | No                              |
+| `renderer/app/(loading)/`         | Transition placeholder between scenes                    | No                              |
+| `renderer/app/component-gallery/` | Design-system gallery; gated by `isGalleryEnabled()`     | No                              |
 
 \* The lobby page loads game-specific configuration from `LobbyConfig` for host/join requests, but
 its chrome (dialog, tabs, buttons, layout, player list) is engine-owned. Game token overrides are
