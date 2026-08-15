@@ -118,6 +118,7 @@ function captureEmits(): { readonly entries: unknown[] } {
 afterEach(() => {
     delete (globalThis as Record<string, unknown>)['__chimera'];
     vi.useRealTimers();
+    vi.unstubAllEnvs();
 });
 
 // ── the budget ────────────────────────────────────────────────────────────────
@@ -315,6 +316,32 @@ describe('startScenePreload outcomes', () => {
         // budget and then onto it is what makes this about that constant rather
         // than about "some timer eventually fires".
         vi.useFakeTimers();
+        const { assetManager } = buildManager({ [String(ref('a'))]: 'hang' });
+        const seen: ScenePreloadOutcome[] = [];
+
+        const run = startScenePreload({
+            assetManager,
+            assetManifest: manifest([entry(ref('a'))]),
+            requiredAssets: [ref('a')],
+        });
+        void run.settled.then((outcome) => seen.push(outcome));
+
+        await vi.advanceTimersByTimeAsync(SCENE_PRELOAD_BUDGET_MS - 1);
+        expect(seen).toEqual([]);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(seen).toEqual(['timeout']);
+    });
+
+    it('does not collapse under NEXT_PUBLIC_CHIMERA_E2E', async () => {
+        // Invariant #133's clause, for the same reason it gives: the e2e build
+        // is where a never-releasing gate is observed, so a budget that shrank
+        // or vanished there would make its own spec pass vacuously. What is
+        // measured is the boundary itself under the flag set — the edit the
+        // clause forbids is a runtime read that shortens the wait when the
+        // flag is '1'.
+        vi.useFakeTimers();
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
         const { assetManager } = buildManager({ [String(ref('a'))]: 'hang' });
         const seen: ScenePreloadOutcome[] = [];
 

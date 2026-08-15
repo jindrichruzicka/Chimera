@@ -593,6 +593,79 @@ describe('SessionRuntime', () => {
         }
     });
 
+    it('does not collapse under NEXT_PUBLIC_CHIMERA_E2E, nor under CHIMERA_E2E', () => {
+        // Invariant #133's closing clause, for the host's own budget: the e2e
+        // build is where a never-releasing barrier is observed, so a budget
+        // that shrank or vanished there would make its own spec pass
+        // vacuously. The invariant names NEXT_PUBLIC_CHIMERA_E2E; the main
+        // process additionally receives plain CHIMERA_E2E at every e2e launch
+        // (the E2eSessionRuntime wiring flag), which is the read a shortcut
+        // here would actually reach for — so both are set, and a collapse
+        // guarded on either reds on the boundary asserts below.
+        vi.useFakeTimers();
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+        vi.stubEnv('CHIMERA_E2E', '1');
+        try {
+            const initial = makeSnapshot(0, [P1, P2]);
+            const pending = {
+                ...initial,
+                tick: 1,
+                hostPlayerId: P1,
+                sceneId: sceneId('engine:game'),
+                sceneTransition: {
+                    toSceneId: sceneId('engine:post-game'),
+                    phase: 'preparing' as const,
+                    startedAtTick: 0,
+                    params: {},
+                    playersReady: [P1],
+                },
+            } satisfies BaseGameSnapshot;
+            const expired = {
+                ...pending,
+                tick: 2,
+                sceneTransition: { ...pending.sceneTransition, expired: true },
+            } satisfies BaseGameSnapshot;
+            const committed = {
+                ...expired,
+                tick: 3,
+                sceneId: sceneId('engine:post-game'),
+                sceneTransition: null,
+            } satisfies BaseGameSnapshot;
+            const apply: ApplyActionFn = vi
+                .fn()
+                .mockReturnValueOnce(pending)
+                .mockReturnValueOnce(expired)
+                .mockReturnValueOnce(committed);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: initial,
+                applyAction: apply,
+            });
+
+            runtime.applyAction({
+                type: 'engine:scene_ready',
+                playerId: P1,
+                tick: 0,
+                payload: { playerId: P1 },
+            });
+
+            vi.advanceTimersByTime(DEFAULT_SCENE_TRANSITION_BUDGET_MS - 1);
+            expect(apply).toHaveBeenCalledTimes(1);
+
+            vi.advanceTimersByTime(1);
+            expect(apply).toHaveBeenNthCalledWith(2, pending, {
+                type: 'engine:scene_expire',
+                playerId: P1,
+                tick: pending.tick,
+                payload: {},
+            });
+        } finally {
+            vi.unstubAllEnvs();
+            vi.useRealTimers();
+        }
+    });
+
     it('clears the armed budget when the transition resolves normally, before it can fire', () => {
         // A transition every seat acks resolves long before the budget. The
         // timer it armed has to go with it: left running, it would fire during

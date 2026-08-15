@@ -182,6 +182,11 @@ where a never-releasing gate is observable is unevenly held, which is worth reco
 than smoothing over: ONE of the four has a dedicated test with the flag set —
 `rendererGameRegistry.test.ts` › does not collapse under `NEXT_PUBLIC_CHIMERA_E2E`, measuring
 the warm-up boundary — and the other three hold it by construction alone. Filed as #1123.
+Since measured and closed (#1123): the other three budgets now carry the same boundary test in
+their own files, each confirmed to red when its own budget is collapsed under the flag; the
+host's also sets plain `CHIMERA_E2E`, the flag the main process actually receives at an e2e
+launch — `NEXT_PUBLIC_*` is inlined into the renderer bundle at the Next build and is not what
+a main-process shortcut would read.
 `/replays/player`'s `isReady` still excludes the gate's answer, and the engine's default cover is
 byte-identical to the `<div data-testid="scene-screen-loading" />` the Suspense site rendered
 before the slots existed.

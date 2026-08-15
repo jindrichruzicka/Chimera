@@ -118,6 +118,7 @@ afterEach(() => {
     Reflect.deleteProperty(globalThis, '__chimera');
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
 });
 
 describe('startCriticalAssetPreload', () => {
@@ -589,6 +590,37 @@ describe('useCriticalAssetPreloadGate', () => {
             await vi.advanceTimersByTimeAsync(CRITICAL_ASSET_PRELOAD_BUDGET_MS - 1);
         });
         expect(latest(gates).ready).toBe(false);
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1);
+        });
+
+        expect(latest(gates)).toEqual({ ready: true, outcome: 'timed-out' });
+    });
+
+    it('does not collapse under NEXT_PUBLIC_CHIMERA_E2E', async () => {
+        // Invariant #133's clause, for the same reason it gives: the e2e build
+        // is where a never-releasing gate is observed, so a budget that shrank
+        // or vanished there would make its own spec pass vacuously. What is
+        // measured is the boundary itself under the flag set — the edit the
+        // clause forbids is a runtime read that shortens the wait when the
+        // flag is '1'.
+        vi.useFakeTimers();
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+        const gates: CriticalAssetPreloadGate[] = [];
+        const { assetManager } = createControlledManager();
+
+        render(
+            <GateProbe
+                assetManager={assetManager}
+                assetManifest={mixedManifest()}
+                onGate={(gate) => gates.push(gate)}
+            />,
+        );
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(CRITICAL_ASSET_PRELOAD_BUDGET_MS - 1);
+        });
+        expect(latest(gates)).toEqual({ ready: false, outcome: 'pending' });
 
         await act(async () => {
             await vi.advanceTimersByTimeAsync(1);
