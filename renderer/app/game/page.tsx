@@ -297,18 +297,21 @@ export default function GamePage(): React.ReactElement | null {
     // an opaque scrim; every other path keeps a structurally inert latch.
     const registry = loadedGame?.registry;
     const coverHoldMs = registry === undefined ? 0 : resolveLoadingCoverHoldMs(registry);
-    const coverShown =
-        shellReady &&
-        !sceneReady &&
-        registry !== undefined &&
-        snapshot !== null &&
-        isRouteCoverGameDeclared(registry, snapshot) &&
-        !(fade !== null && fade.opacity >= 1);
+    const scrimOpaque = fade !== null && fade.opacity >= 1;
+    const routeCoverDeclared =
+        registry !== undefined && snapshot !== null && isRouteCoverGameDeclared(registry, snapshot);
+    const coverShown = shellReady && !sceneReady && routeCoverDeclared && !scrimOpaque;
     const coverHeld = useMinimumVisibleHold(coverShown, coverHoldMs);
     // The reveal waits for max(gate settle, shown + minimum) — except a waiting
     // restore, whose abortable overlay sits UNDER the cover and must surface
     // immediately (the same reason it widens `sceneReady` above).
     const revealReady = sceneReady && (!coverHeld || restoreWaiting);
+    // What SceneRouter's code hold must know and cannot derive (its inner
+    // FadeProvider shadows the app-level fade): something VISIBLE sits above
+    // the shell's own covers — this route's cover window when it renders a
+    // game-declared form (the engine placeholder is an empty transparent
+    // layer), or the opaque scrim.
+    const sceneCoverOccluded = (!revealReady && routeCoverDeclared) || scrimOpaque;
 
     // App-level screen fade: once the game is actually here AND its critical
     // assets have settled (plus any minimum-visible remainder), ease in from
@@ -388,6 +391,7 @@ export default function GamePage(): React.ReactElement | null {
                 {...(process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1'
                     ? { fadeOutMs: 0, fadeInMs: 0 }
                     : {})}
+                sceneCoverOccluded={sceneCoverOccluded}
                 onUndo={() =>
                     dispatchGameAction(snapshot, resolvedPlayerId, 'engine:undo', { steps: 1 })
                 }

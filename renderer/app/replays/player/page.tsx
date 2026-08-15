@@ -348,15 +348,22 @@ function ReplayPlayerView(): React.ReactElement {
     // out the remainder: `isReady` below is never widened by the hold.
     const registry = loadedGame?.registry;
     const coverHoldMs = registry === undefined ? 0 : resolveLoadingCoverHoldMs(registry);
+    const routeCoverDeclared =
+        registry !== undefined && snapshot !== null && isRouteCoverGameDeclared(registry, snapshot);
     const coverShown =
         info !== null &&
         snapshot !== null &&
         loadedGame !== null &&
         assetManager !== null &&
         !criticalAssets.ready &&
-        registry !== undefined &&
-        isRouteCoverGameDeclared(registry, snapshot);
+        routeCoverDeclared;
     const coverHeld = useMinimumVisibleHold(coverShown, coverHoldMs);
+    // This route cover's mounted window, threaded to SceneRouter (which cannot
+    // see this page-local state) as occlusion — but only when the cover renders
+    // a game-declared form; the engine placeholder is an empty transparent
+    // layer that occludes nothing.
+    const routeCoverUp = !(criticalAssets.ready && !coverHeld);
+    const sceneCoverOccluded = routeCoverUp && routeCoverDeclared;
 
     const handlePlay = React.useCallback(() => {
         setIsPlaying(true);
@@ -493,15 +500,16 @@ function ReplayPlayerView(): React.ReactElement {
                     canEndTurn={false}
                     leaveGame={handleLeaveReplay}
                     localPlayerId={info.viewerId as PlayerSnapshot['viewerId']}
+                    sceneCoverOccluded={sceneCoverOccluded}
                 />
                 {/*
                  * Inside the already-`position: relative` playfield wrapper, so
                  * the cover spans the recorded frame and leaves the transport
                  * controls above it reachable.
                  */}
-                {criticalAssets.ready && !coverHeld ? null : (
+                {routeCoverUp ? (
                     <RouteEntryLoadingCover registry={loadedGame.registry} snapshot={snapshot} />
-                )}
+                ) : null}
             </div>
         </main>
     );

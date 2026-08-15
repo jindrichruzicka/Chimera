@@ -10,14 +10,18 @@ import type {
     GameScreenComponent,
     GameScreenProps,
     GameScreenRegistry,
+    SceneLoadingReason,
     SendAction,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import { useActiveScreen, useUiStore } from '../../state/uiStore.js';
+import { resolveLoadingCoverHoldMs } from './loadingCoverHold.js';
+import { resolveLoadingScreen } from './resolveLoadingScreen.js';
 import { SceneLoadingFallback } from './SceneLoadingFallback.js';
 import { TransitionOverlay } from './TransitionOverlay.js';
 import { useFadeTransition } from './useFadeTransition.js';
+import { useMinimumVisibleHold } from './useMinimumVisibleHold.js';
 
 export interface SceneRouterProps {
     readonly registry: GameScreenRegistry;
@@ -31,6 +35,15 @@ export interface SceneRouterProps {
     readonly fadeInMs?: number;
     /** The active game's manifest, for the entering scene's asset preload. */
     readonly assetManifest?: AssetManifest;
+    /**
+     * True while an OUTER cover or the opaque app-level scrim sits above this
+     * router — the route-entry cover's mounted window, or the screen fade at
+     * full black. Not derivable in here: the route cover's state is local to
+     * the page, and `GameShell` mounts an inner `FadeProvider` that shadows the
+     * app-level fade context below it. While `true`, the minimum-visible hold
+     * never arms — nobody saw the cover it would be flooring (§4.36).
+     */
+    readonly sceneCoverOccluded?: boolean;
 }
 
 export function SceneRouter({
@@ -44,6 +57,7 @@ export function SceneRouter({
     fadeOutMs,
     fadeInMs,
     assetManifest,
+    sceneCoverOccluded = false,
 }: SceneRouterProps): React.ReactElement {
     const activeScreenKey = useActiveScreen();
     const sceneId = snapshot.sceneId ?? 'engine:game';
@@ -72,6 +86,96 @@ export function SceneRouter({
     const Screen = resolveScreen(registry, activeScreenKey);
     const Overlay = registry.transitionOverlay;
     const enteringScene = readEnteringScene(registry, snapshot, preloadProgress);
+
+    // ── Minimum-visible held layer (§4.36) ────────────────────────────────────
+    //
+    // Both cover drops here are events the hold must not delay: the transition
+    // cover unmounts on a host-side commit (`readEnteringScene` answers `null`
+    // before it ever reads the fraction) and a Suspense fallback unmounts the
+    // instant its chunk resolves. So when a cover whose minimum has not elapsed
+    // would drop, ONE held-layer slot re-renders the same resolved cover — the
+    // held COPY below, snapshotted during covered renders, since the commit
+    // render can no longer compute it — until the remainder elapses.
+    // `useFadeTransition` above is deliberately untouched: the ack, both fade
+    // channels and the progress protocol are what "nothing host-visible moves"
+    // means (Invariant #133).
+    const holdMs = resolveLoadingCoverHoldMs(registry);
+    // Whether the Suspense fallback is currently mounted, reported by the
+    // wrapper around the fallback JSX (state, not a ref: the fallback's unmount
+    // is exactly the drop the held layer must re-render across, so it has to
+    // schedule a render).
+    const [fallbackMounted, setFallbackMounted] = React.useState(false);
+    const transitionPending =
+        snapshot.sceneTransition !== undefined && snapshot.sceneTransition !== null;
+    const liveCoverShown =
+        !sceneCoverOccluded &&
+        (enteringScene !== null
+            ? isCascadeDeclared(registry, enteringScene.screenKey)
+            : fallbackMounted && isCascadeDeclared(registry, activeScreenKey));
+    // One visual wait gets one clock. Covers can CHAIN inside a single wait —
+    // the commit-time sequence swaps the transition cover for the Suspense
+    // fallback across two effect flushes, and the latch re-stamps on that
+    // re-show — so the epoch below remembers when the wait's FIRST cover rose
+    // and shrinks the latch's hold to the remainder. The latch re-times a
+    // holdMs change from its current stamp, which lands the release exactly at
+    // epoch start + minimum; a fresh wait (previous one fully released) resets
+    // the epoch to the full minimum.
+    const [epochHoldMs, setEpochHoldMs] = React.useState(holdMs);
+    const epochStartRef = React.useRef<number | null>(null);
+    const coverHeld = useMinimumVisibleHold(liveCoverShown, epochHoldMs);
+    React.useEffect(() => {
+        // A wait's epoch ends when its hold fully releases — and also when a
+        // NEW transition supersedes it before its own cover has risen: the
+        // superseded layer is dropped immediately, but the superseding cover
+        // is a new wait and keeps its own full minimum, never the old
+        // remainder.
+        if (!coverHeld || (transitionPending && !liveCoverShown)) {
+            epochStartRef.current = null;
+            return;
+        }
+        if (!liveCoverShown) {
+            return;
+        }
+        if (epochStartRef.current === null) {
+            epochStartRef.current = performance.now();
+            setEpochHoldMs(holdMs);
+        } else {
+            setEpochHoldMs(Math.max(0, holdMs - (performance.now() - epochStartRef.current)));
+        }
+    }, [coverHeld, liveCoverShown, holdMs, transitionPending]);
+    // The held COPY: the last covered render's resolution, written render-phase
+    // (the same mirror pattern as the page's fadeRef) so the commit render that
+    // drops the live cover can still paint it.
+    const heldCoverRef = React.useRef<HeldCover | null>(null);
+    if (enteringScene !== null) {
+        heldCoverRef.current = {
+            sceneId: enteringScene.sceneId,
+            screenKey: enteringScene.screenKey,
+            reason: 'assets',
+            progress: preloadProgress,
+        };
+    } else if (fallbackMounted) {
+        heldCoverRef.current = {
+            sceneId: String(sceneId),
+            screenKey: activeScreenKey,
+            reason: 'code',
+            progress: null,
+        };
+    }
+    const heldCover = heldCoverRef.current;
+    // At most one cover layer at a time: a live entering-scene cover renders
+    // instead of the held layer, a NEW transition supersedes it before its own
+    // cover has even risen (the incoming fade-out owns the screen), a mounted
+    // fallback is itself the cover, and an outer cover above makes holding
+    // pointless.
+    const showHeldLayer =
+        coverHeld &&
+        !liveCoverShown &&
+        !transitionPending &&
+        !fallbackMounted &&
+        !sceneCoverOccluded &&
+        heldCover !== null;
+
     // WITHHELD, not passed as `null`: the contract reads an absent prop as "no
     // preload is running" and a `null` one as "running, but unmeasured", and the
     // hook only ever reports a number for a run that measures something.
@@ -94,13 +198,15 @@ export function SceneRouter({
         >
             <React.Suspense
                 fallback={
-                    <SceneLoadingFallback
-                        registry={registry}
-                        screenKey={activeScreenKey}
-                        sceneId={String(sceneId)}
-                        reason="code"
-                        progress={null}
-                    />
+                    <FallbackLifetimeReporter onMountedChange={setFallbackMounted}>
+                        <SceneLoadingFallback
+                            registry={registry}
+                            screenKey={activeScreenKey}
+                            sceneId={String(sceneId)}
+                            reason="code"
+                            progress={null}
+                        />
+                    </FallbackLifetimeReporter>
                 }
             >
                 <Screen {...screenProps} />
@@ -120,7 +226,7 @@ export function SceneRouter({
              * `aria-hidden="true"` and drop the preset's `role="status"` out of
              * the accessibility tree entirely.
              */}
-            {enteringScene !== null && (
+            {enteringScene !== null ? (
                 <div data-testid="scene-preload-cover" style={preloadCoverLayerStyle}>
                     <SceneLoadingFallback
                         registry={registry}
@@ -130,9 +236,71 @@ export function SceneRouter({
                         progress={preloadProgress}
                     />
                 </div>
-            )}
+            ) : showHeldLayer && heldCover !== null ? (
+                /*
+                 * The held layer: the SAME cascade resolution the dropped cover
+                 * rendered, kept for the minimum's remainder. A sibling at the
+                 * same layer as the live cover above — never a child of an
+                 * overlay, whose aria-hidden would drop the preset's
+                 * role="status" out of the accessibility tree.
+                 */
+                <div data-testid="scene-held-cover" style={preloadCoverLayerStyle}>
+                    <SceneLoadingFallback
+                        registry={registry}
+                        screenKey={heldCover.screenKey}
+                        sceneId={heldCover.sceneId}
+                        reason={heldCover.reason}
+                        progress={heldCover.progress}
+                    />
+                </div>
+            ) : null}
         </div>
     );
+}
+
+/** The held copy of a dropped cover: what it resolved, and its last fraction. */
+interface HeldCover {
+    readonly sceneId: string;
+    readonly screenKey: string;
+    readonly reason: SceneLoadingReason;
+    readonly progress: number | null;
+}
+
+/**
+ * Whether the cascade resolves a GAME-DECLARED cover form for `screenKey` —
+ * anything but `undefined` (the engine's empty placeholder) and the `'none'`
+ * opt-out. The hold arms only for a cover the game chose to show: an empty
+ * placeholder held on screen is a wait with no explanation.
+ */
+function isCascadeDeclared(registry: GameScreenRegistry, screenKey: string): boolean {
+    const cover = resolveLoadingScreen(registry, screenKey);
+    return cover !== undefined && cover !== 'none';
+}
+
+interface FallbackLifetimeReporterProps {
+    readonly onMountedChange: (mounted: boolean) => void;
+    readonly children: React.ReactNode;
+}
+
+/**
+ * Stamps the Suspense cover's lifetime for the hold above: mounted on effect
+ * flush, unmounted on cleanup. A component-form cover that is itself lazy
+ * stamps at THIS wrapper's mount regardless — the inner placeholder frame it
+ * may paint first is accepted. Renders its children unchanged, so the
+ * fallback's content reaches the accessibility tree exactly as it did before
+ * the wrapper existed.
+ */
+function FallbackLifetimeReporter({
+    onMountedChange,
+    children,
+}: FallbackLifetimeReporterProps): React.ReactElement {
+    useEffect(() => {
+        onMountedChange(true);
+        return () => {
+            onMountedChange(false);
+        };
+    }, [onMountedChange]);
+    return <>{children}</>;
 }
 
 /**

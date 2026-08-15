@@ -114,7 +114,11 @@ vi.mock('../gameAssetSession.js', () => ({
 vi.mock('../../components/shell/GameShell', async () => {
     const react = await import('react');
     return {
-        GameShell: () => react.createElement('div', { 'data-testid': 'mock-game-shell' }),
+        GameShell: (props: { sceneCoverOccluded?: boolean }) =>
+            react.createElement('div', {
+                'data-testid': 'mock-game-shell',
+                'data-scene-cover-occluded': String(props.sceneCoverOccluded),
+            }),
     };
 });
 
@@ -644,6 +648,55 @@ describe('GamePage minimum-visible hold', () => {
 
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
         expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports its cover and scrim to GameShell's sceneCoverOccluded, released with the reveal", async () => {
+        // The inner code hold (SceneRouter) must not arm under the route cover
+        // or the opaque scrim; the page owns both signals, so it threads them.
+        await mountUnderFakeTimers(makeFade(0));
+        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await settlePreload();
+        // Settled, but the hold still keeps the route cover up: still occluded.
+        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(HOLD_MS);
+        });
+        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('false');
+    });
+
+    it('does not report occlusion for an undeclared route cover under a transparent scrim', async () => {
+        // The engine-placeholder route cover is an empty transparent layer —
+        // nothing sits visually above the router, so a declared Suspense cover
+        // beneath must keep its own hold.
+        loadRendererGameMock.mockResolvedValue({
+            registry: makeRegistry({
+                sceneDefaultScreens: { 'engine:game': 'playfield' },
+                loadingScreenMinVisibleMs: HOLD_MS,
+            }),
+            assetManifest: manifestWithCritical(),
+        });
+        await mountUnderFakeTimers(makeFade(0));
+
+        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('false');
+    });
+
+    it('keeps sceneCoverOccluded true on the faded entry even after its reveal', async () => {
+        await mountUnderFakeTimers(makeFade(1));
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await settlePreload();
+
+        // The route cover dropped with the settle, but the scrim this harness
+        // pins at opacity 1 still paints over the subtree.
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
     });
 
     it('releases the reveal for a waiting restore even with a hold pending', async () => {

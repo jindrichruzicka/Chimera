@@ -125,6 +125,14 @@ interface GameShellRegistryProps {
     readonly leaveGame?: LeaveGame;
     readonly fadeOutMs?: number;
     readonly fadeInMs?: number;
+    /**
+     * True while an outer cover or the opaque app-level scrim sits above this
+     * shell — threaded through to `SceneRouter`, whose minimum-visible hold
+     * must not arm for a cover nobody saw (§4.36). The shell cannot derive it:
+     * the route cover's state is page-local, and the inner `FadeProvider`
+     * mounted below shadows the app-level fade context.
+     */
+    readonly sceneCoverOccluded?: boolean;
     readonly onUndo?: () => void | Promise<void>;
     readonly onRedo?: () => void | Promise<void>;
     readonly onEndTurn?: () => void | Promise<void>;
@@ -163,6 +171,7 @@ function RegistryGameShell({
     leaveGame,
     fadeOutMs,
     fadeInMs,
+    sceneCoverOccluded,
     onUndo,
     onRedo,
     onEndTurn,
@@ -222,6 +231,7 @@ function RegistryGameShell({
                             {...(fadeOutMs === undefined ? {} : { fadeOutMs })}
                             {...(fadeInMs === undefined ? {} : { fadeInMs })}
                             {...(assetManifest === undefined ? {} : { assetManifest })}
+                            {...(sceneCoverOccluded === undefined ? {} : { sceneCoverOccluded })}
                         />
                     </GameShellFrame>
                     <InGameMenuHost

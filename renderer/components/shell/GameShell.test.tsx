@@ -41,8 +41,10 @@ import {
     GameShell,
     type GameHudProps,
     type GameScreenProps,
+    type GameScreenRegistry,
     type GameResultBannerProps,
 } from './GameShell';
+import type { GameScreenComponent } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 
 const eventAudioPlayerSpy = vi.fn(
     (_props: { readonly binding: Readonly<Record<string, unknown>> }) => null,
@@ -1798,5 +1800,82 @@ describe('GameShell — scene preload manifest forwarding (registry mode)', () =
             ),
         );
         expect(promoted).toHaveLength(1);
+    });
+});
+
+describe('GameShell minimum-visible hold occlusion threading', () => {
+    function makeControlledScreen(testId: string): {
+        readonly Screen: React.LazyExoticComponent<React.ComponentType<GameScreenProps>>;
+        resolve(): void;
+    } {
+        let resolveModule: (() => void) | undefined;
+        const Screen = React.lazy(
+            () =>
+                new Promise<{ default: React.ComponentType<GameScreenProps> }>((res) => {
+                    resolveModule = () => {
+                        res({ default: () => <div data-testid={testId} /> });
+                    };
+                }),
+        );
+        return { Screen, resolve: () => resolveModule?.() };
+    }
+
+    function holdRegistry(Screen: GameScreenComponent<GameScreenProps>): GameScreenRegistry {
+        return {
+            playfield: Screen,
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: 60_000,
+        };
+    }
+
+    async function resolveAndFlush(resolve: () => void): Promise<void> {
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            await new Promise((r) => {
+                setTimeout(r, 0);
+            });
+        });
+    }
+
+    it('holds a resolved code cover when nothing above occludes it (control)', async () => {
+        const { Screen, resolve } = makeControlledScreen('lazy-playfield');
+
+        renderWithAudio(
+            <GameShell
+                registry={holdRegistry(Screen)}
+                snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                fadeOutMs={0}
+                fadeInMs={0}
+            />,
+        );
+        await resolveAndFlush(resolve);
+
+        expect(screen.getByTestId('lazy-playfield')).toBeTruthy();
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+    });
+
+    it('forwards sceneCoverOccluded to SceneRouter, so an occluded cover holds nothing', async () => {
+        const { Screen, resolve } = makeControlledScreen('lazy-playfield');
+
+        renderWithAudio(
+            <GameShell
+                registry={holdRegistry(Screen)}
+                snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                fadeOutMs={0}
+                fadeInMs={0}
+                sceneCoverOccluded={true}
+            />,
+        );
+        await resolveAndFlush(resolve);
+
+        expect(screen.getByTestId('lazy-playfield')).toBeTruthy();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
     });
 });

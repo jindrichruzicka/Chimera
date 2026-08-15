@@ -635,6 +635,7 @@ interface RouterOptions {
     readonly fadeDurationMs?: number;
     readonly assetManager?: AssetManager;
     readonly assetManifest?: ReturnType<typeof stubManifest>;
+    readonly sceneCoverOccluded?: boolean;
 }
 
 function renderRouter(
@@ -666,6 +667,9 @@ function wrapRouter(
                         {...(options.assetManifest === undefined
                             ? {}
                             : { assetManifest: options.assetManifest })}
+                        {...(options.sceneCoverOccluded === undefined
+                            ? {}
+                            : { sceneCoverOccluded: options.sceneCoverOccluded })}
                     />
                 </FadeProvider>
             </AssetManagerContext.Provider>
@@ -732,3 +736,518 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
         ...overrides,
     };
 }
+
+// ── Minimum-visible held layer (§4.36, loadingScreenMinVisibleMs) ──────────────
+
+const MIN_VISIBLE_MS = 400;
+
+/** Advance fake time inside act, flushing the microtask chain along the way. */
+async function tickMs(ms: number): Promise<void> {
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+    });
+}
+
+/** A cover reporting every prop, so the held copy's content is assertable. */
+function makeFullReportingCover(): (props: GameLoadingScreenProps) => React.ReactElement {
+    return (props: GameLoadingScreenProps): React.ReactElement => (
+        <div
+            data-testid="reporting-cover"
+            data-progress={String(props.progress)}
+            data-reason={props.reason}
+            data-screen-key={props.screenKey}
+        />
+    );
+}
+
+/** A REAL React.lazy screen whose module resolution the test owns. */
+function makeControlledScreen(testId: string): {
+    readonly Screen: React.LazyExoticComponent<React.ComponentType<GameScreenProps>>;
+    resolve(): void;
+} {
+    let resolveModule: (() => void) | undefined;
+    const Screen = React.lazy(
+        () =>
+            new Promise<{ default: React.ComponentType<GameScreenProps> }>((res) => {
+                resolveModule = () => {
+                    res({ default: () => <div data-testid={testId} /> });
+                };
+            }),
+    );
+    return { Screen, resolve: () => resolveModule?.() };
+}
+
+describe('SceneRouter — minimum-visible held layer', () => {
+    beforeEach(() => {
+        // `performance` faked so the latch's monotonic stamp advances with the
+        // timers; `requestAnimationFrame` faked so the fade's frame clock does
+        // too (frames land on 16ms ticks — the fade-out completes at T=16 and
+        // the preload cover rises there).
+        vi.useFakeTimers({
+            toFake: [
+                'setTimeout',
+                'clearTimeout',
+                'performance',
+                'requestAnimationFrame',
+                'cancelAnimationFrame',
+            ],
+        });
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    function heldRegistry(overrides: Partial<GameScreenRegistry> = {}): GameScreenRegistry {
+        return {
+            ...plainRegistry(),
+            loadingScreen: makeFullReportingCover(),
+            loadingScreenMinVisibleMs: MIN_VISIBLE_MS,
+            ...overrides,
+        };
+    }
+
+    it('holds the transition cover past the commit with its last measured fraction', async () => {
+        const first = textureRef('arena');
+        const second = textureRef('floor');
+        const assetManager = createStubAssetManager({
+            [String(first)]: 'deferred',
+            [String(second)]: 'deferred',
+        });
+        const assetManifest = stubManifest([first, second]);
+        // A non-default key for the entering scene, so the held copy carrying
+        // the ENTERING scene's resolution (not a 'playfield' fallback) shows.
+        const registry = heldRegistry({
+            sceneDefaultScreens: { 'engine:post-game': 'summary' },
+        });
+        const options = { assetManager, assetManifest };
+
+        const { rerender } = renderRouter(
+            makeTransitioningSnapshot([first, second]),
+            registry,
+            options,
+        );
+        await tickMs(16); // fade-out completes; cover rises at T=16
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await act(async () => {
+            assetManager.settleDeferred(first);
+            await Promise.resolve();
+        });
+        await tickMs(0);
+        expect(screen.getByTestId('reporting-cover').dataset['progress']).toBe('0.5');
+
+        await tickMs(84); // T=100
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        // The live cover dropped WITH the commit; the held copy stands in its
+        // place, same resolution, last measured fraction — snapshotted from the
+        // covered renders, since the commit render can no longer compute it.
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        const held = screen.getByTestId('scene-held-cover');
+        const heldCover = within(held).getByTestId('reporting-cover');
+        expect(heldCover.dataset['progress']).toBe('0.5');
+        expect(heldCover.dataset['reason']).toBe('assets');
+        expect(heldCover.dataset['screenKey']).toBe('summary');
+
+        // The transition lifecycle beneath is NOT deferred: the engine overlay
+        // unmounted with the commit, the whole time the held layer stands. (The
+        // fade/ack half of that claim is structural — useFadeTransition.ts is
+        // unmodified on this branch.)
+        await tickMs(299); // T=399... release lands at T=416 (rise 16 + 400)
+        expect(screen.queryByTestId('transition-overlay')).toBeNull();
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+
+        await tickMs(16); // T=415
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(1); // T=416
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('drops the transition cover with the commit when the minimum has already elapsed', async () => {
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
+        const assetManifest = stubManifest([ref]);
+        const registry = heldRegistry();
+        const options = { assetManager, assetManifest };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await tickMs(MIN_VISIBLE_MS + 100); // T=516 > 416
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('keeps the held preset cover in the accessibility tree', async () => {
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
+        const assetManifest = stubManifest([ref]);
+        const registry = heldRegistry({ loadingScreen: 'spinner' });
+        const options = { assetManager, assetManifest };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16);
+
+        await tickMs(84);
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        const held = screen.getByTestId('scene-held-cover');
+        expect(within(held).getByRole('status')).toBeTruthy();
+    });
+
+    it('holds a resolved Suspense cover as the held layer with the screen running underneath', async () => {
+        const { Screen, resolve } = makeControlledScreen('resolved-screen');
+        const registry = heldRegistry({ playfield: Screen });
+
+        renderRouter(makeSnapshot(), registry, {});
+        await tickMs(0); // fallback mounts; rise stamps at T=0
+        expect(screen.getByTestId('reporting-cover').dataset['reason']).toBe('code');
+
+        await tickMs(100);
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        // The screen mounted the moment its chunk resolved — the hold covers
+        // sight, never mount — and the held copy renders reason="code".
+        expect(screen.getByTestId('resolved-screen')).toBeTruthy();
+        const held = screen.getByTestId('scene-held-cover');
+        const heldCover = within(held).getByTestId('reporting-cover');
+        expect(heldCover.dataset['reason']).toBe('code');
+        expect(heldCover.dataset['progress']).toBe('null');
+
+        await tickMs(MIN_VISIBLE_MS - 100 - 1); // T=399
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(1); // T=400
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        expect(screen.getByTestId('resolved-screen')).toBeTruthy();
+    });
+
+    it('drops a Suspense cover immediately when its chunk outlives the minimum', async () => {
+        const { Screen, resolve } = makeControlledScreen('resolved-screen');
+        const registry = heldRegistry({ playfield: Screen });
+
+        renderRouter(makeSnapshot(), registry, {});
+        await tickMs(0);
+        await tickMs(MIN_VISIBLE_MS + 100);
+
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        expect(screen.getByTestId('resolved-screen')).toBeTruthy();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('arms nothing for a screen that never suspends', async () => {
+        renderRouter(makeSnapshot(), heldRegistry(), {});
+        await tickMs(0);
+        await tickMs(MIN_VISIBLE_MS);
+
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        expect(screen.getByTestId('playfield-screen')).toBeTruthy();
+    });
+
+    it('never arms a code hold under an outer cover', async () => {
+        const { Screen, resolve } = makeControlledScreen('resolved-screen');
+        const registry = heldRegistry({ playfield: Screen });
+
+        renderRouter(makeSnapshot(), registry, { sceneCoverOccluded: true });
+        await tickMs(0);
+        await tickMs(100);
+
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        // The route cover (or the opaque scrim) sat above the fallback for its
+        // whole lifetime: nobody saw it, so nothing is held.
+        expect(screen.getByTestId('resolved-screen')).toBeTruthy();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('a new transition supersedes the held layer, and its cover then stands alone', async () => {
+        const { Screen, resolve } = makeControlledScreen('resolved-screen');
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'hang' });
+        const assetManifest = stubManifest([ref]);
+        const registry = heldRegistry({ playfield: Screen });
+        const options = { assetManager, assetManifest };
+
+        const { rerender } = renderRouter(makeSnapshot(), registry, options);
+        await tickMs(0);
+        await tickMs(100);
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(50); // T=150: held layer standing (release due at 400)
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+
+        await act(async () => {
+            rerender(wrapRouter(makeTransitioningSnapshot([ref]), registry, options));
+            await Promise.resolve();
+        });
+
+        // Dropped IMMEDIATELY — the incoming fade-out owns the screen — even
+        // though the new transition's own cover has not risen yet.
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+
+        await tickMs(16); // the entering-scene cover rises
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('an occluded fallback never stamps the clock — releasing the occlusion resurrects nothing', async () => {
+        // The arming conjunct, not just the display one: under the occluded
+        // route cover the fallback rises and its chunk resolves; if that rise
+        // stamped the latch, dropping the occlusion inside the phantom minimum
+        // would surface a stale code cover over an already-revealed screen.
+        const { Screen, resolve } = makeControlledScreen('resolved-screen');
+        const registry = heldRegistry({ playfield: Screen });
+
+        const { rerender } = renderRouter(makeSnapshot(), registry, {
+            sceneCoverOccluded: true,
+        });
+        await tickMs(0);
+        await tickMs(100);
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0); // chunk resolved at T=100, still occluded
+
+        await act(async () => {
+            rerender(wrapRouter(makeSnapshot(), registry, { sceneCoverOccluded: false }));
+            await Promise.resolve();
+        });
+
+        expect(screen.getByTestId('resolved-screen')).toBeTruthy();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        await tickMs(50);
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('a second wait in the same mount gets its own full minimum', async () => {
+        const first = makeControlledScreen('first-screen');
+        const second = makeControlledScreen('second-screen');
+        const registry = heldRegistry({
+            playfield: first.Screen,
+            screens: { 'tech-tree': second.Screen },
+        });
+
+        renderRouter(makeSnapshot(), registry, {});
+        await tickMs(0); // wait 1 rises at T=0
+        await tickMs(100);
+        await act(async () => {
+            first.resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0);
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(300); // T=400: wait 1 fully released
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+
+        await tickMs(100); // T=500
+        act(() => {
+            useUiStore.getState().navigateToScreen('tech-tree');
+        });
+        await tickMs(0); // wait 2 rises at T=500
+        await tickMs(50);
+        await act(async () => {
+            second.resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0); // resolved at T=550
+
+        // Wait 2's release lands at ITS rise + minimum (500 + 400 = 900) — a
+        // stale epoch from wait 1 would shrink it to nothing.
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(349); // T=899
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(1); // T=900
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it("a superseding transition's cover keeps its own full minimum", async () => {
+        // The supersession drops the OLD held layer immediately; it must not
+        // also bill the NEW wait for the old one's elapsed time — a cover
+        // rising just before the old release would land gets an
+        // approaching-zero floor, the exact flash the minimum exists to stop.
+        const { Screen, resolve } = makeControlledScreen('resolved-screen');
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
+        const assetManifest = stubManifest([ref]);
+        const registry = heldRegistry({ playfield: Screen });
+        const options = { assetManager, assetManifest };
+
+        const { rerender } = renderRouter(makeSnapshot(), registry, options);
+        await tickMs(0); // wait 1 rises at T=0
+        await tickMs(100);
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(50); // T=150: wait 1's held layer standing
+
+        await act(async () => {
+            rerender(wrapRouter(makeTransitioningSnapshot([ref]), registry, options));
+            await Promise.resolve();
+        });
+        await tickMs(16); // T=166: the superseding cover rises
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await tickMs(34); // T=200
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        // Release lands at the NEW rise + minimum (166 + 400 = 566), from both
+        // sides — never at the old wait's remainder.
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(365); // T=565
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(1); // T=566
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('the commit-time chunk suspend chains onto the transition cover’s clock', async () => {
+        const { Screen: EnteringScreen, resolve } = makeControlledScreen('entering-screen');
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
+        const assetManifest = stubManifest([ref]);
+        const registry = heldRegistry({
+            screens: { summary: EnteringScreen },
+        });
+        const options = { assetManager, assetManifest };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16); // preload cover rises at T=16
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await tickMs(84); // T=100
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeSnapshot({
+                        tick: 5,
+                        sceneId: makeSceneId('engine:post-game'),
+                        sceneTransition: null,
+                        ...({ sceneDefaultScreen: 'summary' } as Partial<PlayerSnapshot>),
+                    }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        // The entering screen's chunk is cold: the Suspense fallback covers,
+        // alone — the held layer must NOT double it.
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        expect(screen.getAllByTestId('reporting-cover')).toHaveLength(1);
+
+        await tickMs(100); // T=200
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        // One wait, one clock: the release lands at T=416 (the transition
+        // cover's rise + minimum), NOT 200 + minimum.
+        expect(screen.getByTestId('entering-screen')).toBeTruthy();
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        expect(screen.getAllByTestId('reporting-cover')).toHaveLength(1);
+
+        await tickMs(215); // T=415
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(1); // T=416
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it.each([
+        ['the engine placeholder', {}],
+        ["the per-key 'none' opt-out", { loadingScreens: { summary: 'none' } }],
+    ])('holds nothing when the cascade resolves %s', async (_name, overrides) => {
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
+        const assetManifest = stubManifest([ref]);
+        const registry: GameScreenRegistry = {
+            ...plainRegistry(),
+            loadingScreenMinVisibleMs: MIN_VISIBLE_MS,
+            sceneDefaultScreens: { 'engine:post-game': 'summary' },
+            ...(overrides as Partial<GameScreenRegistry>),
+        };
+        const options = { assetManager, assetManifest };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await tickMs(84);
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('renders byte-identically to today under the e2e env collapse', async () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
+        const assetManifest = stubManifest([ref]);
+        const registry = heldRegistry();
+        const options = { assetManager, assetManifest };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await tickMs(84);
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+});

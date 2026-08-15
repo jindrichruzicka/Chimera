@@ -38,11 +38,13 @@ vi.mock('../../../components/shell/GameShell', () => ({
         content,
         leaveGame,
         assetManager,
+        sceneCoverOccluded,
     }: {
         snapshot?: PlayerSnapshot;
         content?: GameContent;
         leaveGame?: () => void;
         assetManager?: { dispose(): void };
+        sceneCoverOccluded?: boolean;
     }) => {
         // Mirrors Invariant #21 in the double: GameShell is the unique disposer
         // of the manager its host route injects, and the route disposes nothing.
@@ -54,6 +56,7 @@ vi.mock('../../../components/shell/GameShell', () => ({
                 data-testid="game-shell"
                 data-tick={snapshot?.tick ?? 'none'}
                 data-content={content === undefined ? 'none' : JSON.stringify(content)}
+                data-scene-cover-occluded={String(sceneCoverOccluded)}
             >
                 {/* Surfaces the in-game-menu leave so the player's `handleLeaveReplay`
                     navigation can be exercised without the real shell UI. */}
@@ -794,6 +797,40 @@ describe('ReplayPlayerPage minimum-visible hold', () => {
         });
 
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+    });
+
+    it("reports its mounted cover to GameShell's sceneCoverOccluded, released with the drop", async () => {
+        installHoldGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
+        });
+        await mountUnderFakeTimers();
+        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('true');
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await act(async () => {
+            managerDouble.settle();
+            await Promise.resolve();
+        });
+        // Settled inside the minimum: the held route cover still occludes.
+        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('true');
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(REPLAY_HOLD_MS);
+        });
+        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('false');
+    });
+
+    it('does not report occlusion for an undeclared route cover', async () => {
+        // The engine placeholder is an empty transparent layer: nothing sits
+        // visually above the shell, so its inner covers keep their own hold.
+        installHoldGame({ screens: {}, loadingScreenMinVisibleMs: REPLAY_HOLD_MS });
+        await mountUnderFakeTimers();
+
+        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('false');
     });
 
     it('arms no hold for the engine placeholder cover', async () => {
