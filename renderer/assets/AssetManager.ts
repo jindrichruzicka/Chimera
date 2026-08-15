@@ -141,6 +141,25 @@ function describeError(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * A game can pass this callback through the public `AssetManager` interface. In
+ * the loop below, an escaping throw abandons every critical entry after the one
+ * being reported — the pop-in `priority: 'critical'` exists to prevent — and
+ * rejects with the reporter's error instead of the refs that failed. On the
+ * empty-list return, a throw rejects a run that had nothing to load. Swallowed
+ * per call, so a reporter that breaks once still hears the rest of the run.
+ */
+function reportPreloadProgress(
+    onProgress: ((fraction: number) => void) | undefined,
+    fraction: number,
+): void {
+    try {
+        onProgress?.(fraction);
+    } catch {
+        // Intentionally swallowed; see above.
+    }
+}
+
 export class DefaultAssetManager implements AssetManager {
     private readonly loadedAssets = new Map<string, unknown>();
     private readonly inFlightLoads = new Map<string, Promise<unknown>>();
@@ -189,7 +208,7 @@ export class DefaultAssetManager implements AssetManager {
         const criticalEntries = manifest.entries.filter((entry) => entry.priority === 'critical');
 
         if (criticalEntries.length === 0) {
-            onProgress?.(1);
+            reportPreloadProgress(onProgress, 1);
             return;
         }
 
@@ -227,7 +246,7 @@ export class DefaultAssetManager implements AssetManager {
             // list has SETTLED, so a broken ref moves it on rather than
             // stalling it one short of the end forever.
             completed += 1;
-            onProgress?.(completed / criticalEntries.length);
+            reportPreloadProgress(onProgress, completed / criticalEntries.length);
         }
 
         if (failures.length > 0) {

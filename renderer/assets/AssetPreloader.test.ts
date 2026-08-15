@@ -229,6 +229,97 @@ describe('AssetPreloader', () => {
         expect(progress).toEqual([]);
     });
 
+    it("resolves a successful run whose caller throws on the wrapper's own terminal report", async () => {
+        // The terminal `1` is this wrapper's own call, made after the manager
+        // resolved, so no guard inside the manager covers it: unguarded, a run
+        // in which every critical ref loaded rejects with the caller's error.
+        // The callback throws ONLY on `1`, so the manager-side guard is not what
+        // this case exercises.
+        const load = vi.fn(
+            async (request: AssetLoadRequest): Promise<ResolvedAsset> => ({ id: request.url }),
+        );
+        const assetManager = new DefaultAssetManager(
+            createResolver(),
+            createAssetLoaderRegistry([{ kind: 'texture', load }]),
+        );
+        const criticalGrass = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        const criticalCursor = buildAssetRef<TextureAsset>('tactics', 'textures/cursor.webp');
+        const progress: number[] = [];
+
+        const rejection = await new AssetPreloader(assetManager)
+            .preloadCritical(
+                createManifest([
+                    createTextureEntry(criticalGrass, 'critical'),
+                    createTextureEntry(criticalCursor, 'critical'),
+                ]),
+                (fraction) => {
+                    progress.push(fraction);
+                    if (fraction === 1) {
+                        throw new Error('cover blew up');
+                    }
+                },
+            )
+            .then(
+                () => null,
+                (error: unknown) => error,
+            );
+
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(progress).toEqual([0.5, 1]);
+        expect(rejection).toBeNull();
+    });
+
+    it('resolves when a manager reports progress unguarded and the caller throws on it', async () => {
+        // The filtered forward runs INSIDE the manager, so this wrapper is only
+        // as safe as the manager it was handed. `AssetManager` is an interface a
+        // game can implement, so the guard lives here too — this manager double
+        // calls the forwarded callback with no guard of its own, and the caller
+        // throws only on the fraction it forwards.
+        const manager: AssetManager = {
+            registerManifest: vi.fn(),
+            async preloadCritical(_manifest, onProgress): Promise<void> {
+                onProgress?.(0.5);
+                onProgress?.(1);
+            },
+            get(): null {
+                return null;
+            },
+            getManifestMetadata(): unknown {
+                return undefined;
+            },
+            async load(): Promise<never> {
+                throw new Error('AssetPreloader should not load assets directly.');
+            },
+            dispose: vi.fn(),
+        };
+        const progress: number[] = [];
+
+        const rejection = await new AssetPreloader(manager)
+            .preloadCritical(
+                createManifest([
+                    createTextureEntry(
+                        buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp'),
+                        'critical',
+                    ),
+                ]),
+                (fraction) => {
+                    progress.push(fraction);
+                    if (fraction < 1) {
+                        throw new Error('cover blew up');
+                    }
+                },
+            )
+            .then(
+                () => null,
+                (error: unknown) => error,
+            );
+
+        expect(rejection).toBeNull();
+        // The terminal report still happens: the guard swallows one call, it
+        // does not abandon the rest of the wrapper's work.
+        expect(progress).toEqual([0.5, 1]);
+    });
+
     it('calls onProgress(1) immediately and skips loading when manifest has no critical entries', async () => {
         const load = vi.fn();
         const assetManager = new DefaultAssetManager(

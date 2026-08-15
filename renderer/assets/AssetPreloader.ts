@@ -16,6 +16,21 @@ export class AssetPreloader {
         onProgress?: AssetPreloadProgress,
         onEntryFailure?: (ref: AssetRef, error: unknown) => void,
     ): Promise<void> {
+        // Guarded here as well as inside the manager, on both calls. The
+        // terminal `1` is this wrapper's own — made after the run resolved, so
+        // no manager guard covers it, and unguarded it rejects a preload in
+        // which every ref loaded. The forwarded one runs inside whichever
+        // `AssetManager` this wrapper was handed, and that is an interface a
+        // game can implement. Swallowed per call: a reporter that breaks once
+        // still hears the rest of the run.
+        const report = (fraction: number): void => {
+            try {
+                onProgress?.(fraction);
+            } catch {
+                // Intentionally swallowed; see above.
+            }
+        };
+
         // One call site, not one per callback shape: a second would let a
         // forwarded argument be dropped from the branch no caller exercises and
         // stay green. The manager's terminal `1` is filtered out so the `1`
@@ -26,12 +41,12 @@ export class AssetPreloader {
                 ? undefined
                 : (fraction) => {
                       if (fraction < 1) {
-                          onProgress(fraction);
+                          report(fraction);
                       }
                   },
             onEntryFailure,
         );
-        onProgress?.(1);
+        report(1);
     }
 }
 

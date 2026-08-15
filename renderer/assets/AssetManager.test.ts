@@ -428,6 +428,141 @@ describe('DefaultAssetManager', () => {
         expect((rejection as Error).message).not.toContain('reporter blew up');
     });
 
+    it('attempts every critical entry when the progress callback itself throws', async () => {
+        // The sibling hazard to the failure callback above, on the same loop and
+        // through the same publicly exported interface: unguarded, the first
+        // report's throw escapes the loop, abandons every entry after it, and
+        // rejects a run in which nothing actually failed to load.
+        const load = vi.fn(
+            async (request: AssetLoadRequest): Promise<ResolvedAsset> => ({ id: request.url }),
+        );
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createAssetLoaderRegistry([{ kind: 'texture', load }]),
+        );
+        const criticalGrass = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        const criticalTree = buildAssetRef<TextureAsset>('tactics', 'textures/tree.webp');
+        const criticalCursor = buildAssetRef<TextureAsset>('tactics', 'textures/cursor.webp');
+        const reported: number[] = [];
+
+        const rejection = await manager
+            .preloadCritical(
+                {
+                    gameId: 'tactics',
+                    entries: [
+                        { ref: criticalGrass, kind: 'texture', priority: 'critical' },
+                        { ref: criticalTree, kind: 'texture', priority: 'critical' },
+                        { ref: criticalCursor, kind: 'texture', priority: 'critical' },
+                    ],
+                },
+                (fraction) => {
+                    reported.push(fraction);
+                    throw new Error('progress meter blew up');
+                },
+            )
+            .then(
+                () => null,
+                (error: unknown) => error,
+            );
+
+        // All three attempted, in manifest order — the two after the first
+        // report are what an escaping throw dropped.
+        expect(load.mock.calls.map((call) => call[0].ref)).toEqual([
+            criticalGrass,
+            criticalTree,
+            criticalCursor,
+        ]);
+        expect(manager.get(criticalCursor)).toEqual({
+            id: 'resolved://tactics/textures/cursor.webp',
+        });
+        // Every report is still ATTEMPTED after one throws — the guard swallows
+        // per call rather than muting the callback for the rest of the run.
+        expect(reported).toEqual([1 / 3, 2 / 3, 1]);
+        // And the run resolves: no ref failed, so there is nothing to reject
+        // with, least of all the callback's own error.
+        expect(rejection).toBeNull();
+    });
+
+    it('rejects with the failing refs, not the progress callback error, when both throw', async () => {
+        // Distinguishes "swallowed" from "replaced the rejection": with a broken
+        // ref AND a throwing reporter, the aggregate is the only correct answer.
+        const load = vi.fn(async (request: AssetLoadRequest): Promise<ResolvedAsset> => {
+            if (request.url.endsWith('grass.webp')) {
+                throw new Error('texture 404');
+            }
+            return { id: request.url };
+        });
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createAssetLoaderRegistry([{ kind: 'texture', load }]),
+        );
+        const criticalGrass = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        const criticalTree = buildAssetRef<TextureAsset>('tactics', 'textures/tree.webp');
+
+        const rejection = await manager
+            .preloadCritical(
+                {
+                    gameId: 'tactics',
+                    entries: [
+                        { ref: criticalGrass, kind: 'texture', priority: 'critical' },
+                        { ref: criticalTree, kind: 'texture', priority: 'critical' },
+                    ],
+                },
+                () => {
+                    throw new Error('progress meter blew up');
+                },
+            )
+            .then(
+                () => null,
+                (error: unknown) => error,
+            );
+
+        expect(load).toHaveBeenCalledTimes(2);
+        expect(rejection).toBeInstanceOf(CriticalAssetPreloadFailedError);
+        expect((rejection as CriticalAssetPreloadFailedError).refs).toEqual([
+            String(criticalGrass),
+        ]);
+        expect((rejection as Error).message).not.toContain('progress meter blew up');
+    });
+
+    it('resolves when the progress callback throws on a manifest with no critical entries', async () => {
+        // The early-return site reports the terminal `1` outside the loop, so the
+        // loop's guard does not cover it: a throw here rejects a run that had
+        // nothing to load and could not have failed.
+        const load = vi.fn();
+        const manager = new DefaultAssetManager(
+            createResolver(),
+            createAssetLoaderRegistry([{ kind: 'texture', load }]),
+        );
+        const reported: number[] = [];
+
+        const rejection = await manager
+            .preloadCritical(
+                {
+                    gameId: 'tactics',
+                    entries: [
+                        {
+                            ref: buildAssetRef<TextureAsset>('tactics', 'textures/tree.webp'),
+                            kind: 'texture',
+                            priority: 'deferred',
+                        },
+                    ],
+                },
+                (fraction) => {
+                    reported.push(fraction);
+                    throw new Error('progress meter blew up');
+                },
+            )
+            .then(
+                () => null,
+                (error: unknown) => error,
+            );
+
+        expect(load).not.toHaveBeenCalled();
+        expect(reported).toEqual([1]);
+        expect(rejection).toBeNull();
+    });
+
     it('announces each failing entry as it settles, before the run itself settles', async () => {
         // The channel a report with no budget depends on: the run attempts every
         // entry, so its own rejection cannot arrive before the slowest one. Here
