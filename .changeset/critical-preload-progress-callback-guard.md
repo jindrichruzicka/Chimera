@@ -14,7 +14,7 @@ no-critical-entries return, where a throw rejected a run that had nothing to loa
 abandonment shape the settle-all removed, reachable through the sibling of the callback it
 guarded.
 
-`AssetPreloader.preloadCritical` guards both of its own calls too. Its terminal `1` runs after
+`AssetPreloader.preloadCritical` guards its own calls too. Its terminal `1` runs after
 the manager resolved, so no guard inside the manager covers it, and its filtered forward runs
 inside whichever `AssetManager` the wrapper was handed.
 

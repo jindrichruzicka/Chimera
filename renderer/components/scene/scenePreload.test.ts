@@ -227,6 +227,24 @@ describe('startScenePreload outcomes', () => {
         await expect(run.settled).resolves.toBe('skipped');
     });
 
+    it('still skips when the progress callback throws on the not-measured report', async () => {
+        // Unguarded, this throw escapes `startScenePreload` itself: the call
+        // never returns, so the caller is left holding no run at all — not even
+        // one that resolves an outcome.
+        const { assetManager } = buildManager();
+
+        const run = startScenePreload({
+            assetManager,
+            assetManifest: manifest([entry(ref('a'))]),
+            requiredAssets: [],
+            onProgress: () => {
+                throw new Error('a cover blew up');
+            },
+        });
+
+        await expect(run.settled).resolves.toBe('skipped');
+    });
+
     it('loads when every declared ref resolves', async () => {
         const { assetManager } = buildManager();
 

@@ -131,12 +131,31 @@ export function startScenePreload({
     // waiting on, so it is dropped.
     let finished = false;
 
+    // `onProgress` is a game's code, and BOTH of this function's calls to it go
+    // through here. The not-measured one below is made before this function has
+    // returned, so an escaping throw takes the call itself down and leaves the
+    // caller with no run to await. The per-ref one runs inside the settle-all's
+    // `finally`, where a throw rejects the settle-all and leaves nothing to
+    // resolve the run: the scene would wait out the entire budget with its
+    // assets already loaded. A game's cover throwing is not a reason to hold
+    // the reveal, so both are swallowed and the gate stays fail-open.
+    const report = (fraction: number): void => {
+        if (cancelled || finished) {
+            return;
+        }
+        try {
+            onProgress?.(fraction);
+        } catch {
+            // Intentionally swallowed; see above.
+        }
+    };
+
     const inputs: ScenePreloadInputs = { assetManager, assetManifest, requiredAssets };
     if (!scenePreloadMeasuresProgress(inputs)) {
         // Synchronous, and with NO manifest re-registration: a transition into a
         // scene that declares nothing must cost exactly what it cost before this
         // gate existed, down to the microtask.
-        onProgress?.(1);
+        report(1);
         return { settled: Promise.resolve('skipped'), cancel: () => undefined };
     }
     const measuredManager = inputs.assetManager;
@@ -153,21 +172,6 @@ export function startScenePreload({
     let completed = 0;
     let failures = 0;
     let lastError: unknown;
-
-    const report = (fraction: number): void => {
-        if (cancelled || finished) {
-            return;
-        }
-        try {
-            onProgress?.(fraction);
-        } catch {
-            // A game's cover throwing is not a reason to hold the reveal. This
-            // callback runs inside the per-ref `finally`, so an escaping throw
-            // rejects the settle-all and leaves nothing to resolve the run —
-            // the scene would then wait out the entire budget with its assets
-            // already loaded. Swallowed here so the gate stays fail-open.
-        }
-    };
 
     // Settle-all, not stop-at-first-rejection: a run that abandons the rest of
     // the list at the first bad ref releases the reveal with every later ref
