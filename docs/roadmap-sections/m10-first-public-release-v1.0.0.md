@@ -783,6 +783,123 @@ so the exports map, the package-exports contract and Invariant #96's eight-barre
 unchanged; No docs-site sync, since the published docs live in a separate repository — all
 candidates for a follow-up.
 
+### F90 — Minimum Visible Time for Loading Covers `§4.36, §4.18–§4.19, §4.10`
+
+**Status: designed, not implemented.** A loading cover that appears and vanishes inside
+~100 ms reads as a flicker, not an explanation. F83 made every cover's lifetime exactly the
+wait it stands in for, and on fast hardware that wait is often shorter than the time a
+player needs to register that anything was shown — a spinner that flashes for two frames is
+worse UX than no spinner at all. F90 adds one optional registry knob,
+`GameScreenRegistry.loadingScreenMinVisibleMs`: once a cover has actually been shown, it
+stays on screen at least that long; a load that outlives the minimum changes nothing.
+Absent or `0` keeps today's behaviour byte-for-byte — no timer is armed at all, not a
+`setTimeout(0)` whose flush would reorder the reveal.
+
+**The knob is a minimum VISIBLE time, not a minimum wait, and visibility is the arming
+condition.** The hold arms only at the moment a cover the player can actually see renders:
+the F83 cascade must resolve a game-declared form — a component, a preset, `{ message }`
+or `{ image }` — and the cover must not be occluded. It never forces a cover onto a path
+that would not have shown one (the route-entry gate's skipped short-circuit settles on
+first render, coverless, and stays instant), it never arms on `'none'` or on the engine's
+empty placeholder, and it never arms on a cover nobody sees: on the faded lobby→game
+entry the app-level screen-fade scrim paints OVER the route cover — `AppShell` wraps every
+route's content in its own `z-index: var(--ch-z-raised)` stacking context, so the cover's
+`--ch-z-loading-hud` is local to that context while the scrim is a sibling at
+`--ch-z-screen-fade` — which means the player watches the scrim, not the cover, and a
+mount-stamped hold would extend a black screen. The route arm therefore stamps `shown`
+only where the cover is actually visible — a direct `/game` boot with no opaque scrim, and
+`/replays/player`, whose entry has no fade at all — and the faded entry path stays
+byte-identical to today. One visual wait gets one clock: a hold never arms for a cover
+occluded by the scrim or by another cover layer, so stacked surfaces cannot chain two
+minimums onto one wait. The `restoreWaiting` widening is untouched: a save-restore parked
+on `/game` must surface its abortable overlay, and a cosmetic hold does not get to delay a
+modal the player has to see.
+
+**Nothing host-visible moves, by construction rather than by discipline.** The
+scene-transition arm dispatches `engine:scene_ready`, and the host barrier waits for every
+player — a minimum inserted before the ack would serialize one client's cosmetic
+preference onto every seat in the match and falsify the retry cadence's meaning ("fade-out
+done, preload settled"). F90 never edits that path at all: `useFadeTransition`, the ack,
+both fade channels and the progress protocol (`0` at a measured start, `null` at the end)
+ship unchanged, pinned by their existing suites passing unmodified. The deferral cannot
+live there anyway — the transition cover's unmount is driven by `sceneTransition` leaving
+the snapshot (`readEnteringScene` answers `null` before it ever reads the progress
+fraction), a host-side event this feature does not delay. So the hold is a **held copy at
+the render site**: when the commit would drop a cover whose minimum has not elapsed,
+`SceneRouter` keeps rendering the same resolved cover with its last measured fraction as
+its own state, at `--ch-z-loading-hud`, over the scene fade-in already running beneath it,
+until the remainder elapses. A new transition supersedes a held copy immediately — the
+incoming fade-out owns the screen, and the superseded cover simply drops. On the
+route-entry arm everything is client-local already: the gate settles on its four paths
+untouched, and the hold sits in the consumer between `criticalAssets.ready` and the
+reveal — the gate hook itself does not learn to lie about `ready`.
+
+**The Suspense site shares the same held-layer machinery, and it is the site that flashes
+most.** A code-split screen chunk on a warm disk resolves in tens of milliseconds, and a
+plain `<Suspense fallback>` unmounts the instant it does — nothing outside the fallback
+knows the cover was ever up. So a mount-report wrapper around the fallback stamps the
+cover's lifetime, and when the chunk resolves early, the same one held-layer slot
+`SceneRouter` uses for the transition arm keeps the resolved cover up for the remainder,
+`reason="code"`, over a screen that mounts and runs underneath. At most one cover layer
+renders at a time: an entering-scene cover supersedes a lingering code hold, and a code
+hold never arms while another cover or the opaque scrim sits above the fallback (the
+lobby→game playfield chunk suspends behind the route cover, and that wait already has its
+clock). A component-form cover that is itself lazy stamps at wrapper mount regardless —
+the inner placeholder frame it may paint first is accepted and documented. Every site
+keeps F83's rule: the hold covers the sight of a screen, it never gates a mount
+(Invariants #21, #133), and the held layer renders the SAME cascade resolution the
+fallback rendered — a one-clause Invariant #88 amendment sanctions the re-render site.
+
+**Under `NEXT_PUBLIC_CHIMERA_E2E` the minimum collapses to `0`, following the reveal
+delays and not the budgets.** Invariant #133 forbids the four release budgets to collapse
+under e2e because they are what guarantees a gate releases; the minimum is the opposite
+object — a floor on cover visibility rather than a release budget, a deliberate delay like
+`screenFadeMs()`, which already returns `0` there so that specs on a frozen-clock window
+never wait on cosmetics. It does NOT collapse under `prefers-reduced-motion`: a motionless
+cover holding for half a second is not motion, and reduced motion already zeroes the
+fades — which makes the flash it exists to fix strictly worse there. The resolver reads
+the env at call time, so the collapse is testable with a stubbed env at the use site.
+Validation is warn-never-throw at registration, like the existing `loadingScreens` key
+checks: a negative or non-finite value warns and holds nothing, and a value above
+`SCENE_PRELOAD_BUDGET_MS` warns and is honored — the knob is the game's own foot-gun, but
+the honest bound must be stated where #133 states the budgets': with a minimum declared,
+the reveal lands at `max(settle-or-budget, shown + minimum)`, both terms finite, a fixed
+timer that always fires. #133's liveness story gains one self-contained amending sentence
+rather than a new number.
+
+| Task                                                                                           | Issue |
+| ---------------------------------------------------------------------------------------------- | ----- |
+| Add loadingScreenMinVisibleMs to the game-screen contract with its resolver and validation     | [#1127](https://github.com/jindrichruzicka/Chimera/issues/1127) |
+| Implement the useMinimumVisibleHold latch primitive                                            | [#1128](https://github.com/jindrichruzicka/Chimera/issues/1128) |
+| Arm the visibility-gated hold on the route-entry reveal's two consumers                        | [#1129](https://github.com/jindrichruzicka/Chimera/issues/1129) |
+| Hold the transition and Suspense covers past their release as SceneRouter's held layer         | [#1130](https://github.com/jindrichruzicka/Chimera/issues/1130) |
+| Adopt the minimum in tactics, amend Invariants #133 and #88, sweep the docs, cut the changeset | [#1131](https://github.com/jindrichruzicka/Chimera/issues/1131) |
+| F90 feature review and merge gate                                                              | [#1132](https://github.com/jindrichruzicka/Chimera/issues/1132) |
+
+Feature issue: [#1126](https://github.com/jindrichruzicka/Chimera/issues/1126).
+
+**Out of scope (deferred):** No per-key minimum map — one registry-wide knob; a per-key
+override mirroring `loadingScreens` is purely additive later; No delay-before-show. The
+classic anti-flash pair is "show only if the wait exceeds X, then hold at least Y"; F90
+lands only the hold, because a delayed show re-opens the question of what stands in front
+of the wait meanwhile — that is a second feature with its own blank-screen trade-off; No
+hold on the engine's empty placeholder or `'none'`, and no hold on an occluded cover —
+stated above as rules rather than listed here as options; No hold on the engine-owned
+loading surfaces outside the cover cascade — the replay player's pre-ready "Loading
+replay…" status block is a loading screen that can flash, and it is deliberately outside
+the registry knob's reach; No clamp of an over-budget minimum — warned, honored, and the
+`max(settle-or-budget, shown + minimum)` bound documented where the budgets are; No change
+to tactics' cover topology — the per-key-only declaration is what keeps F83's "covers this
+key and no other" falsifiable and the `hud-layout` negative control green, so the adoption
+exercises the `asset-demo` covers and leaves the rest of the game coverless on purpose; No
+dilation interplay — the minimum is wall-clock milliseconds, like every fade and budget on
+these paths, and the F82 time-scale multiplier paces content, not chrome; No e2e spec
+observing the hold, which collapses under `NEXT_PUBLIC_CHIMERA_E2E` by design — the proof
+is fake-timer unit and integration coverage, and the existing preload-gate and scene-cover
+specs stay green unmodified as the no-regression control; No change to any of the four
+release budgets, to any settle path, or to the `engine:scene_ready` dispatch timing — all
+candidates for a follow-up.
+
 ---
 
 ## Cross-References
