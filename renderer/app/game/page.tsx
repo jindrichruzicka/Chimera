@@ -28,7 +28,12 @@ import { useCriticalAssetPreloadGate } from '../../assets/criticalAssetPreload.j
 import { useOptionalFade } from '../../components/shell/FadeContext';
 import { screenFadeMs } from '../../components/shell/screenFadeDuration';
 import { GameShell } from '../../components/shell/GameShell';
-import { RouteEntryLoadingCover } from '../../components/scene/RouteEntryLoadingCover';
+import { resolveLoadingCoverHoldMs } from '../../components/scene/loadingCoverHold.js';
+import {
+    isRouteCoverGameDeclared,
+    RouteEntryLoadingCover,
+} from '../../components/scene/RouteEntryLoadingCover';
+import { useMinimumVisibleHold } from '../../components/scene/useMinimumVisibleHold.js';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
 import { useRendererGameAssetManager } from '../gameAssetSession.js';
@@ -283,19 +288,41 @@ export default function GamePage(): React.ReactElement | null {
     // reveal through a restore wait hides the only control that can abort it.
     const sceneReady = shellReady && (criticalAssets.ready || restoreWaiting);
 
+    // The minimum-visible hold (§4.36). Visibility is the arming condition: on
+    // the faded lobby→game entry the app scrim paints OVER the route cover —
+    // AppShell wraps the route subtree in its own stacking context, so the
+    // cover's z-index is local while the scrim is a sibling above it — and a
+    // mount-stamped hold would extend a black screen. So `shown` rises only for
+    // a cover that is mounted, resolves a game-declared form, and is not under
+    // an opaque scrim; every other path keeps a structurally inert latch.
+    const registry = loadedGame?.registry;
+    const coverHoldMs = registry === undefined ? 0 : resolveLoadingCoverHoldMs(registry);
+    const coverShown =
+        shellReady &&
+        !sceneReady &&
+        registry !== undefined &&
+        snapshot !== null &&
+        isRouteCoverGameDeclared(registry, snapshot) &&
+        !(fade !== null && fade.opacity >= 1);
+    const coverHeld = useMinimumVisibleHold(coverShown, coverHoldMs);
+    // The reveal waits for max(gate settle, shown + minimum) — except a waiting
+    // restore, whose abortable overlay sits UNDER the cover and must surface
+    // immediately (the same reason it widens `sceneReady` above).
+    const revealReady = sceneReady && (!coverHeld || restoreWaiting);
+
     // App-level screen fade: once the game is actually here AND its critical
-    // assets have settled, ease in from the black overlay that the lobby→game
-    // transition faded to. Latched so it fires once per entry, and re-armed if
-    // we drop back out of the ready state.
+    // assets have settled (plus any minimum-visible remainder), ease in from
+    // the black overlay that the lobby→game transition faded to. Latched so it
+    // fires once per entry, and re-armed if we drop back out of the ready state.
     //
-    // The deps are `[sceneReady]` alone: `leavingRef.current` is a ref (never
+    // The deps are `[revealReady]` alone: `leavingRef.current` is a ref (never
     // reactive) and `snapshot.phase` is not listed, so a SUPPRESSED fade-in is
     // never retried once the suppressing condition clears. That is safe because
     // each suppressor ends by leaving this route — a leave navigates away, and
     // the phase:'lobby' window ends at /lobby, which fades itself in. Widening
     // the deps would instead resurrect the fade-out a leave just performed.
     React.useEffect(() => {
-        if (!sceneReady) {
+        if (!revealReady) {
             fadedInRef.current = false;
             return;
         }
@@ -304,7 +331,7 @@ export default function GamePage(): React.ReactElement | null {
         }
         fadedInRef.current = true;
         void fadeRef.current?.fadeIn(screenFadeMs());
-    }, [sceneReady]);
+    }, [revealReady]);
 
     if (snapshot === null) {
         return null;
@@ -380,7 +407,7 @@ export default function GamePage(): React.ReactElement | null {
              * left standing at --ch-z-loading-hud sits above every modal and
              * toast for the rest of the match.
              */}
-            {sceneReady ? null : (
+            {revealReady ? null : (
                 <RouteEntryLoadingCover registry={loadedGame.registry} snapshot={snapshot} />
             )}
         </>

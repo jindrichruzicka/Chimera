@@ -32,7 +32,12 @@ import type {
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useCriticalAssetPreloadGate } from '../../../assets/criticalAssetPreload.js';
 import { useLeaveGame } from '../../../bridge/useLeaveGame';
-import { RouteEntryLoadingCover } from '../../../components/scene/RouteEntryLoadingCover';
+import { resolveLoadingCoverHoldMs } from '../../../components/scene/loadingCoverHold.js';
+import {
+    isRouteCoverGameDeclared,
+    RouteEntryLoadingCover,
+} from '../../../components/scene/RouteEntryLoadingCover';
+import { useMinimumVisibleHold } from '../../../components/scene/useMinimumVisibleHold.js';
 import { GameShell } from '../../../components/shell/GameShell';
 import { ReplayControls } from '../../../components/replay/ReplayControls';
 import { parseReplayKind } from '../../../components/replay/replayKind';
@@ -336,6 +341,23 @@ function ReplayPlayerView(): React.ReactElement {
     // unit falls back to the default colour, so the replay would render all-blue.
     const gameContent = useGameContent(info?.gameId ?? null);
 
+    // The minimum-visible hold (§4.36). This route has no entry fade, so unlike
+    // /game the cover is never occluded and `shown` stamps at cover mount —
+    // still only for a game-declared cover form; the engine placeholder and the
+    // 'none' opt-out keep the latch structurally inert. Only the COVER waits
+    // out the remainder: `isReady` below is never widened by the hold.
+    const registry = loadedGame?.registry;
+    const coverHoldMs = registry === undefined ? 0 : resolveLoadingCoverHoldMs(registry);
+    const coverShown =
+        info !== null &&
+        snapshot !== null &&
+        loadedGame !== null &&
+        assetManager !== null &&
+        !criticalAssets.ready &&
+        registry !== undefined &&
+        isRouteCoverGameDeclared(registry, snapshot);
+    const coverHeld = useMinimumVisibleHold(coverShown, coverHoldMs);
+
     const handlePlay = React.useCallback(() => {
         setIsPlaying(true);
     }, []);
@@ -477,7 +499,7 @@ function ReplayPlayerView(): React.ReactElement {
                  * the cover spans the recorded frame and leaves the transport
                  * controls above it reachable.
                  */}
-                {criticalAssets.ready ? null : (
+                {criticalAssets.ready && !coverHeld ? null : (
                     <RouteEntryLoadingCover registry={loadedGame.registry} snapshot={snapshot} />
                 )}
             </div>

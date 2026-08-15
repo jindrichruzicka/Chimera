@@ -302,19 +302,21 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
 });
 
 // ── Cases ──────────────────────────────────────────────────────────────────────
 
 describe('GamePage reveal gate', () => {
-    // Both entry shapes, because the route reads NEITHER `opacity` nor `phase`
-    // off the fade — it only calls `fadeIn`. So a cold direct boot, whose scrim
-    // is already transparent (`FadeProvider` starts at 0), takes exactly the
-    // same path as a lobby→game hop that faded out: the fade-in is withheld
-    // either way, and on the cold boot it conceals nothing, leaving the
-    // route-entry cover as the only thing between the player and a half-loaded
-    // scene. That is a stated limitation of gating on the fade, not an accident.
+    // Both entry shapes. With no declared minimum the hold is structurally
+    // inert, so a cold direct boot, whose scrim is already transparent
+    // (`FadeProvider` starts at 0), takes exactly the same path as a lobby→game
+    // hop that faded out: the fade-in is withheld either way, and on the cold
+    // boot it conceals nothing, leaving the route-entry cover as the only thing
+    // between the player and a half-loaded scene. The route reads `opacity`
+    // only to arm the minimum-visible hold (the describe below) — never to
+    // choose a reveal path.
     it.each([
         ['a hop that faded out to black', 1],
         ['a cold boot whose scrim is already transparent', 0],
@@ -514,5 +516,150 @@ describe('GamePage reveal gate', () => {
             [CRITICAL_REF, 'critical'],
             [DEFERRED_REF, 'critical'],
         ]);
+    });
+});
+
+// ── Minimum-visible hold (loadingScreenMinVisibleMs) ───────────────────────────
+
+const HOLD_MS = 400;
+
+/**
+ * The hold cases run under fake timers (with `performance` faked so the
+ * latch's monotonic stamp advances with them), where `waitFor` cannot poll —
+ * so the mount flush is an explicit zero-advance, the pattern of the budget
+ * case above.
+ */
+async function mountUnderFakeTimers(fade: FadeControl): Promise<ReturnType<typeof render>> {
+    const view = renderGame(fade);
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId('mock-game-shell')).toBeInTheDocument();
+    expect(harness.preloadCritical).toHaveBeenCalled();
+    return view;
+}
+
+function installHoldRegistry(overrides: Partial<GameScreenRegistry> = {}): void {
+    loadRendererGameMock.mockResolvedValue({
+        registry: makeRegistry({
+            sceneDefaultScreens: { 'engine:game': 'playfield' },
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: HOLD_MS,
+            ...overrides,
+        }),
+        assetManifest: manifestWithCritical(),
+    });
+}
+
+describe('GamePage minimum-visible hold', () => {
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+        installHoldRegistry();
+    });
+
+    it('holds the cover and the fade-in until the minimum when the preload settles early', async () => {
+        const view = await mountUnderFakeTimers(makeFade(0));
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await settlePreload();
+
+        // Settled inside the minimum: the reveal is DEFERRED, both halves.
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+        expect(fadeIn).not.toHaveBeenCalled();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(HOLD_MS - 100 - 1);
+        });
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+        expect(fadeIn).not.toHaveBeenCalled();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1);
+        });
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+
+        // The latch is preserved across the held release: later renders never
+        // fire a second fade-in.
+        mockSnapshot = makeSnapshot({ tick: 6 });
+        await rerenderGame(view, makeFade(0));
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('reveals immediately when the preload outlives the minimum', async () => {
+        await mountUnderFakeTimers(makeFade(0));
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(HOLD_MS + 100);
+        });
+        await settlePreload();
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('arms no hold on the faded entry — an occluded cover extends nothing', async () => {
+        // The lobby→game hop: the app scrim is opaque OVER the route subtree,
+        // so the cover, though mounted, is not something the player has seen. A
+        // mount-stamped hold here extends a black screen.
+        await mountUnderFakeTimers(makeFade(1));
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await settlePreload();
+
+        // Reveal AT settle, exactly as with no minimum declared.
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        ['the engine placeholder (no declared cover)', { loadingScreen: undefined }],
+        ["the per-key 'none' opt-out", { loadingScreens: { playfield: 'none' } } as const],
+    ])('arms no hold when the cascade resolves %s', async (_name, overrides) => {
+        installHoldRegistry(overrides as Partial<GameScreenRegistry>);
+        await mountUnderFakeTimers(makeFade(0));
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await settlePreload();
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('collapses the minimum under NEXT_PUBLIC_CHIMERA_E2E', async () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+        await mountUnderFakeTimers(makeFade(0));
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await settlePreload();
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('releases the reveal for a waiting restore even with a hold pending', async () => {
+        const view = await mountUnderFakeTimers(makeFade(0));
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await settlePreload();
+        expect(fadeIn).not.toHaveBeenCalled(); // hold pending until t=400
+
+        mockRestore = { state: 'waiting' };
+        await rerenderGame(view, makeFade(0));
+
+        // RestoreWaitingOverlay sits under the cover; a hold that outwaited it
+        // would hide the only control that can abort the restore.
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
     });
 });

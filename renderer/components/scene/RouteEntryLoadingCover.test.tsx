@@ -10,7 +10,7 @@ import type {
     GameScreenRegistry,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { I18nProvider } from '../../i18n/I18nProvider.js';
-import { RouteEntryLoadingCover } from './RouteEntryLoadingCover.js';
+import { isRouteCoverGameDeclared, RouteEntryLoadingCover } from './RouteEntryLoadingCover.js';
 
 const Playfield = (_props: GameScreenProps): null => null;
 
@@ -125,5 +125,53 @@ describe('RouteEntryLoadingCover', () => {
 
         const layer = screen.getByTestId('route-entry-loading-cover');
         expect(layer.style[property as unknown as number]).toBe(value);
+    });
+});
+
+describe('isRouteCoverGameDeclared', () => {
+    const CoverComponent = (_props: GameLoadingScreenProps): null => null;
+
+    it('is false when the cascade resolves nothing — the engine placeholder is not a declared form', () => {
+        expect(isRouteCoverGameDeclared(makeRegistry(), makeSnapshot())).toBe(false);
+    });
+
+    it("is false when the route's key resolves the 'none' opt-out", () => {
+        const registry = makeRegistry({
+            loadingScreen: 'spinner',
+            loadingScreens: { playfield: 'none' },
+        });
+        expect(isRouteCoverGameDeclared(registry, makeSnapshot())).toBe(false);
+    });
+
+    it.each([
+        ['a preset string', 'spinner' as const],
+        ['a static message', { message: 'loading' }],
+        ['a component', CoverComponent],
+    ])('is true for %s declared registry-wide', (_form, cover) => {
+        expect(
+            isRouteCoverGameDeclared(makeRegistry({ loadingScreen: cover }), makeSnapshot()),
+        ).toBe(true);
+    });
+
+    it("resolves through the ROUTE's key chain, not a fixed 'playfield'", () => {
+        // The snapshot's declared default screen wins the chain; its per-key
+        // entry says 'none' while 'playfield' declares a cover — so a predicate
+        // hardwired to 'playfield' answers true where the route's cover is the
+        // opt-out.
+        const registry = makeRegistry({
+            loadingScreen: 'spinner',
+            loadingScreens: { briefing: 'none' },
+        });
+        const snapshot = makeSnapshot({ sceneDefaultScreen: 'briefing' });
+        expect(isRouteCoverGameDeclared(registry, snapshot)).toBe(false);
+    });
+
+    it("falls back to the registry's per-scene default screen for the key", () => {
+        const registry = makeRegistry({
+            sceneDefaultScreens: { 'engine:custom': 'briefing' },
+            loadingScreens: { briefing: 'progress' },
+        });
+        const snapshot = makeSnapshot({ sceneId: makeSceneId('engine:custom') });
+        expect(isRouteCoverGameDeclared(registry, snapshot)).toBe(true);
     });
 });

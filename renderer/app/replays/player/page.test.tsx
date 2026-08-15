@@ -185,6 +185,7 @@ afterEach(() => {
     resetGameContentCache();
     vi.restoreAllMocks();
     vi.useRealTimers();
+    vi.unstubAllEnvs();
 });
 
 describe('ReplayPlayerPage', () => {
@@ -707,5 +708,107 @@ describe('ReplayPlayerPage asset reveal gate', () => {
         // One manager, one disposal: the gate must not have made the route swap
         // managers mid-flight, and its own teardown must not add a second owner.
         expect(managerDouble.dispose).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('ReplayPlayerPage minimum-visible hold', () => {
+    const REPLAY_HOLD_MS = 400;
+
+    function installHoldGame(registry: Record<string, unknown>): void {
+        loadRendererGameMock.mockResolvedValue({
+            registry,
+            assetManifest: CRITICAL_MANIFEST,
+        });
+    }
+
+    /**
+     * The hold cases run under fake timers (`performance` faked so the latch's
+     * monotonic stamp advances with them), where `waitFor` cannot poll — the
+     * mount flush is an explicit zero-advance.
+     */
+    async function mountUnderFakeTimers(): Promise<void> {
+        render(<ReplayPlayerPage />);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(screen.getByTestId('game-shell')).toBeInTheDocument();
+    }
+
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+        installReplayBridge(makeBridge());
+    });
+
+    it('holds a declared cover to the minimum boundary after the preload settles', async () => {
+        installHoldGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
+        });
+        await mountUnderFakeTimers();
+        // No entry fade on this route, so the hold arms at cover mount (t=0).
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await act(async () => {
+            managerDouble.settle();
+            await Promise.resolve();
+        });
+
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(REPLAY_HOLD_MS - 100 - 1);
+        });
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1);
+        });
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        // The transport controls stayed the route's the whole time: `isReady`
+        // is not widened by the hold.
+        expect(screen.getByRole('button', { name: /step forward/i })).toBeInTheDocument();
+    });
+
+    it('collapses the minimum under NEXT_PUBLIC_CHIMERA_E2E', async () => {
+        // The collapse must be pinned at THIS use site: the resolver's own unit
+        // tests cannot fail for a route that stops calling it.
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+        installHoldGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
+        });
+        await mountUnderFakeTimers();
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await act(async () => {
+            managerDouble.settle();
+            await Promise.resolve();
+        });
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+    });
+
+    it('arms no hold for the engine placeholder cover', async () => {
+        installHoldGame({ screens: {}, loadingScreenMinVisibleMs: REPLAY_HOLD_MS });
+        await mountUnderFakeTimers();
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        await act(async () => {
+            managerDouble.settle();
+            await Promise.resolve();
+        });
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
     });
 });

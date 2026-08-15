@@ -27,6 +27,7 @@ import React from 'react';
 import type { CSSProperties } from 'react';
 import type { PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { GameScreenRegistry } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
+import { resolveLoadingScreen } from './resolveLoadingScreen.js';
 import { SceneLoadingFallback } from './SceneLoadingFallback.js';
 
 export interface RouteEntryLoadingCoverProps {
@@ -34,6 +35,43 @@ export interface RouteEntryLoadingCoverProps {
     readonly registry: GameScreenRegistry;
     /** The snapshot the route mounted its shell with; the scene being entered. */
     readonly snapshot: PlayerSnapshot;
+}
+
+/** The scene and screen key this cover stands in for — the route's own cascade. */
+export interface RouteCoverTarget {
+    readonly sceneId: string;
+    readonly screenKey: string;
+}
+
+/**
+ * The route-owned screen-key chain the header above states — hoisted so the
+ * route pages can ask about the cover this component would resolve without
+ * duplicating the cascade.
+ */
+export function resolveRouteCoverTarget(
+    registry: GameScreenRegistry,
+    snapshot: PlayerSnapshot,
+): RouteCoverTarget {
+    const sceneId = String(snapshot.sceneId ?? 'engine:game');
+    const screenKey =
+        snapshot.sceneDefaultScreen ?? registry.sceneDefaultScreens?.[sceneId] ?? 'playfield';
+    return { sceneId, screenKey };
+}
+
+/**
+ * Whether this route's cover resolves a GAME-DECLARED form (§4.36): anything
+ * the cascade yields except `undefined` (the engine's empty placeholder) and
+ * the `'none'` opt-out. The minimum-visible hold arms only for a cover the
+ * game chose to show — an empty placeholder held on screen is a wait with no
+ * explanation.
+ */
+export function isRouteCoverGameDeclared(
+    registry: GameScreenRegistry,
+    snapshot: PlayerSnapshot,
+): boolean {
+    const { screenKey } = resolveRouteCoverTarget(registry, snapshot);
+    const cover = resolveLoadingScreen(registry, screenKey);
+    return cover !== undefined && cover !== 'none';
 }
 
 // A layer, so each axis earns its place: `absolute`/`inset` fill the route's own
@@ -53,9 +91,7 @@ export function RouteEntryLoadingCover({
     registry,
     snapshot,
 }: RouteEntryLoadingCoverProps): React.ReactElement {
-    const sceneId = String(snapshot.sceneId ?? 'engine:game');
-    const screenKey =
-        snapshot.sceneDefaultScreen ?? registry.sceneDefaultScreens?.[sceneId] ?? 'playfield';
+    const { sceneId, screenKey } = resolveRouteCoverTarget(registry, snapshot);
 
     return (
         <div data-testid="route-entry-loading-cover" style={coverLayerStyle}>
