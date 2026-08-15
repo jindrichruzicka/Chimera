@@ -867,8 +867,8 @@ the reveal lands at `max(settle-or-budget, shown + minimum)`, both terms finite,
 timer that always fires. #133's liveness story gains one self-contained amending sentence
 rather than a new number.
 
-| Task                                                                                           | Issue |
-| ---------------------------------------------------------------------------------------------- | ----- |
+| Task                                                                                           | Issue                                                           |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | Add loadingScreenMinVisibleMs to the game-screen contract with its resolver and validation     | [#1127](https://github.com/jindrichruzicka/Chimera/issues/1127) |
 | Implement the useMinimumVisibleHold latch primitive                                            | [#1128](https://github.com/jindrichruzicka/Chimera/issues/1128) |
 | Arm the visibility-gated hold on the route-entry reveal's two consumers                        | [#1129](https://github.com/jindrichruzicka/Chimera/issues/1129) |

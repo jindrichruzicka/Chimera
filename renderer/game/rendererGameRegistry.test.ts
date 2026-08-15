@@ -15,6 +15,7 @@ import type {
 import type { GameIconSet } from '../components/ui/icons/registry.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
 import { CRITICAL_ASSET_PRELOAD_BUDGET_MS } from '../assets/criticalAssetPreload.js';
+import { SCENE_PRELOAD_BUDGET_MS } from '../components/scene/scenePreload.js';
 import {
     _resetRendererGameRegistryForTest,
     GAME_SHELL_WARMUP_BUDGET_MS,
@@ -911,6 +912,102 @@ describe('rendererGameRegistry', () => {
 
             await expect(loadRendererGame('fake')).resolves.toBeDefined();
             expect(warnSpy).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('registry.loadingScreenMinVisibleMs validation (§4.36)', () => {
+        let warnSpy: ReturnType<typeof vi.spyOn>;
+
+        beforeEach(() => {
+            warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        });
+
+        afterEach(() => {
+            warnSpy.mockRestore();
+        });
+
+        function registerMinimum(loadingScreenMinVisibleMs: number): void {
+            const game = fakeGame({
+                registry: { playfield: FAKE_PLAYFIELD, loadingScreenMinVisibleMs },
+            });
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(game),
+                loadShell: () => Promise.resolve(game.shell ?? fakeShell()),
+            });
+        }
+
+        it('warns once, naming the field, for a negative minimum — and still loads', async () => {
+            registerMinimum(-250);
+
+            await expect(loadRendererGame('fake')).resolves.toBeDefined();
+
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            expect(String(warnSpy.mock.calls[0]?.[0])).toContain('loadingScreenMinVisibleMs');
+        });
+
+        it('warns once for a NaN minimum', async () => {
+            registerMinimum(Number.NaN);
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            expect(String(warnSpy.mock.calls[0]?.[0])).toContain('loadingScreenMinVisibleMs');
+        });
+
+        it('warns once for an Infinity minimum, as invalid rather than merely over budget', async () => {
+            registerMinimum(Number.POSITIVE_INFINITY);
+
+            await loadRendererGame('fake');
+
+            // The invalid-value warn, not the over-budget one: dropping the
+            // finiteness conjunct would send Infinity down the budget branch.
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            expect(String(warnSpy.mock.calls[0]?.[0])).toContain('finite');
+            expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('budget');
+        });
+
+        it('warns once for a minimum above SCENE_PRELOAD_BUDGET_MS and honors it unclamped', async () => {
+            registerMinimum(SCENE_PRELOAD_BUDGET_MS + 1);
+
+            const game = await loadRendererGame('fake');
+
+            expect(warnSpy).toHaveBeenCalledTimes(1);
+            expect(String(warnSpy.mock.calls[0]?.[0])).toContain('budget');
+            expect(game.registry.loadingScreenMinVisibleMs).toBe(SCENE_PRELOAD_BUDGET_MS + 1);
+        });
+
+        it('does not warn at exactly SCENE_PRELOAD_BUDGET_MS — only above the budget', async () => {
+            registerMinimum(SCENE_PRELOAD_BUDGET_MS);
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('does not warn for a positive in-budget minimum', async () => {
+            registerMinimum(400);
+
+            const game = await loadRendererGame('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
+            expect(game.registry.loadingScreenMinVisibleMs).toBe(400);
+        });
+
+        it("does not warn for zero — the explicit today's-behaviour value", async () => {
+            registerMinimum(0);
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
+        });
+
+        it('warns nothing when the registry declares no minimum', async () => {
+            registerFake();
+
+            await loadRendererGame('fake');
+
+            expect(warnSpy).not.toHaveBeenCalled();
         });
     });
 

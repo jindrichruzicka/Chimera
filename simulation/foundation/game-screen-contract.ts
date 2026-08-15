@@ -223,6 +223,19 @@ export interface GameScreenRegistry {
      * {@link GameScreenRegistry.loadingScreen}.
      */
     readonly loadingScreens?: Readonly<Record<string, GameLoadingScreen>>;
+    /**
+     * Minimum time in milliseconds a loading cover the player can see stays on
+     * screen (§4.36). Once such a cover has been shown, it stays at least this
+     * long — a wait that outlives the minimum changes nothing; a shorter one
+     * keeps the cover up for the remainder instead of flashing it.
+     *
+     * The hold arms only when the cover cascade resolves a game-declared cover
+     * form — never on `'none'`, the engine's empty placeholder, or a cover
+     * occluded by an opaque layer above it — so it floors what a player
+     * actually saw, never a surface nobody could see. Absent or `0` is today's
+     * behaviour: no timer is armed anywhere.
+     */
+    readonly loadingScreenMinVisibleMs?: number;
     readonly eventAudioBinding?: GameEventAudioBinding;
 }
 

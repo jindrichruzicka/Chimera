@@ -13,6 +13,7 @@ import type {
     GameLanguage,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import { SCENE_PRELOAD_BUDGET_MS } from '../components/scene/scenePreload.js';
 import type { GameIconSet } from '../components/ui/icons/registry.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
 import type { InputAction } from '../input/InputAction.js';
@@ -234,6 +235,31 @@ function warnOnUnknownLoadingScreenKeys(gameId: string, registry: GameScreenRegi
     }
 }
 
+/**
+ * Light, dev-time validation of a game's declared minimum-visible cover time
+ * (§4.36). Like the sibling guards this is a typo-catching safety net, never a
+ * hard error, and it never rewrites the registry. Warns once for a value that
+ * is not a finite non-negative number (the resolver treats it as 0), and warns
+ * once — honoring the value, never clamping it — for a minimum above
+ * `SCENE_PRELOAD_BUDGET_MS`: a cosmetic knob above a release budget quietly
+ * becomes the player's worst-case wait, which deserves a sentence at
+ * registration rather than silence.
+ */
+function warnOnInvalidLoadingScreenMinVisible(gameId: string, registry: GameScreenRegistry): void {
+    const declared = registry.loadingScreenMinVisibleMs;
+    if (typeof declared !== 'number' || !Number.isFinite(declared) || declared < 0) {
+        console.warn(
+            `[chimera] game '${gameId}' declares loadingScreenMinVisibleMs = ${String(declared)}, which is not a finite non-negative number of milliseconds; the hold resolver treats it as 0.`,
+        );
+        return;
+    }
+    if (declared > SCENE_PRELOAD_BUDGET_MS) {
+        console.warn(
+            `[chimera] game '${gameId}' declares loadingScreenMinVisibleMs = ${declared}ms, above the ${SCENE_PRELOAD_BUDGET_MS}ms scene preload budget; the minimum is honored unclamped, so a visible cover can now outlive the wait it stands in for.`,
+        );
+    }
+}
+
 /** Log module name, so a warm-up report is attributable rather than 'global'. */
 const WARM_UP_LOG_MODULE = 'game-registry';
 
@@ -386,6 +412,9 @@ export async function loadRendererGame(gameId: string): Promise<LoadedRendererGa
     const game = await loader();
     if (game.registry.loadingScreens !== undefined) {
         warnOnUnknownLoadingScreenKeys(gameId, game.registry);
+    }
+    if (game.registry.loadingScreenMinVisibleMs !== undefined) {
+        warnOnInvalidLoadingScreenMinVisible(gameId, game.registry);
     }
     if (game.shell !== undefined) {
         await applyLoadedShell(gameId, game.shell);

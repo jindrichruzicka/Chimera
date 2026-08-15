@@ -373,6 +373,33 @@ describe('GameScreenRegistry loading-cover slots', () => {
     });
 });
 
+// ─── GameScreenRegistry.loadingScreenMinVisibleMs ─────────────────────────────
+
+describe('GameScreenRegistry.loadingScreenMinVisibleMs', () => {
+    it('is optional — a registry without it is valid and reads undefined (Invariant #81)', () => {
+        const registry: GameScreenRegistry = { playfield };
+        expect(registry.loadingScreenMinVisibleMs).toBeUndefined();
+    });
+
+    it('accepts a number of milliseconds beside the cover slots it floors', () => {
+        const registry: GameScreenRegistry = {
+            playfield,
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: 400,
+        };
+        expect(registry.loadingScreenMinVisibleMs).toBe(400);
+    });
+
+    it('rejects a non-number at compile time', () => {
+        const registry: GameScreenRegistry = {
+            playfield,
+            // @ts-expect-error: the minimum is milliseconds as a number, not a duration string
+            loadingScreenMinVisibleMs: '400ms',
+        };
+        expect(registry.loadingScreenMinVisibleMs).toBe('400ms');
+    });
+});
+
 // ─── GameScreenRegistry.transitionOverlay / TransitionOverlayProps ────────────
 
 describe('GameScreenRegistry.transitionOverlay', () => {
