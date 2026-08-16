@@ -1959,6 +1959,161 @@ describe('DefaultAudioManager — setListener', () => {
     });
 });
 
+// ─── setVoicePosition — moving sources (#121, #126) ─────────────────────────────
+//
+// Written test-first against a manager with no setVoicePosition at all, so every
+// case below began red as "setVoicePosition is not a function". These pin the three
+// voice phases the verb must be safe in — live (ramp), loading (park on the record,
+// last write wins), and gone (silent no-op) — plus the non-spatial refusal and the
+// #116 gain silence.
+
+describe('DefaultAudioManager — setVoicePosition', () => {
+    async function playSpatialVoice(): Promise<{
+        readonly context: FakeAudioContext;
+        readonly manager: DefaultAudioManager;
+        readonly handle: AudioHandle;
+        readonly panner: FakePannerNode;
+    }> {
+        const { assetManager, context, manager } = createManager();
+        const ref = audioRef('audio/sfx/mover.ogg');
+        assetManager.resolve(ref, createAudioBuffer('mover'));
+        const handle = manager.play(ref, { spatial: { position: [0, 0, 0] } });
+        await flushAudioLoad();
+        return { context, manager, handle, panner: expectPanner(context, 0) };
+    }
+
+    it('ramps a live spatial voice to the new position by default, never stepping', async () => {
+        const { manager, handle, panner } = await playSpatialVoice();
+
+        manager.setVoicePosition(handle, [4, 5, 6]);
+
+        expect(panner.positionX.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 4,
+            time: 10.0625,
+        });
+        expect(panner.positionY.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 5,
+            time: 10.0625,
+        });
+        expect(panner.positionZ.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 6,
+            time: 10.0625,
+        });
+    });
+
+    it('sets instead of ramping when immediate is passed', async () => {
+        const { manager, handle, panner } = await playSpatialVoice();
+
+        manager.setVoicePosition(handle, [4, 5, 6], { immediate: true });
+
+        expect(panner.positionX.calls.at(-1)).toEqual({
+            method: 'setValueAtTime',
+            value: 4,
+            time: 10,
+        });
+        expect(
+            panner.positionX.calls.filter((call) => call.method === 'linearRampToValueAtTime'),
+        ).toEqual([]);
+    });
+
+    it('parks a move on a loading voice and applies it at t0, last write winning', async () => {
+        const { assetManager, context, manager } = createManager();
+        const ref = audioRef('audio/sfx/early.ogg');
+        const deferred = assetManager.defer(ref);
+        const handle = manager.play(ref, { spatial: { position: [0, 0, 0] } });
+
+        manager.setVoicePosition(handle, [1, 1, 1]);
+        manager.setVoicePosition(handle, [2, 2, 2]);
+        deferred.resolve(createAudioBuffer('early'));
+        await flushAudioLoad();
+
+        // One slot, applied at t0 — the second call SUPERSEDED the first rather than
+        // queueing behind it, so the value 1 was never written anywhere.
+        const panner = expectPanner(context, 0);
+        expect(panner.positionX.calls.at(-1)).toEqual({
+            method: 'setValueAtTime',
+            value: 2,
+            time: 10,
+        });
+        for (const call of panner.positionX.calls) {
+            expect(call.value).not.toBe(1);
+        }
+    });
+
+    it('is a no-op with exactly one warning on a non-spatial voice, creating no panner', async () => {
+        const { assetManager, context, manager } = createManager();
+        const ref = audioRef('audio/sfx/plain.ogg');
+        assetManager.resolve(ref, createAudioBuffer('plain'));
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.setVoicePosition(handle, [1, 2, 3]);
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(context.createdPannerNodes).toHaveLength(0);
+        expect(handle.valid).toBe(true);
+    });
+
+    it('is a silent no-op on an invalid or released handle, matching stop and fadeTo', async () => {
+        const { manager, handle } = await playSpatialVoice();
+        const warn = spyOnWarn();
+
+        manager.stop(handle);
+        expect(() => manager.setVoicePosition(handle, [1, 2, 3])).not.toThrow();
+
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('drops a move with a non-finite component on any axis with one warning, writing nothing', async () => {
+        // One fixture per axis, so each conjunct of the finite guard has its own
+        // killer — a single bad-x fixture would let a dropped y or z check ship.
+        const { manager, handle, panner } = await playSpatialVoice();
+        const warn = spyOnWarn();
+        const axes = [panner.positionX, panner.positionY, panner.positionZ];
+        const writesBefore = axes.map((param) => param.calls.length);
+
+        manager.setVoicePosition(handle, [Number.NaN, 0, 0]);
+        manager.setVoicePosition(handle, [0, Number.NaN, 0]);
+        manager.setVoicePosition(handle, [0, 0, Number.POSITIVE_INFINITY]);
+
+        expect(warn).toHaveBeenCalledTimes(3);
+        expect(axes.map((param) => param.calls.length)).toEqual(writesBefore);
+    });
+
+    it('refuses a non-spatial voice before validating or parking anything', async () => {
+        // A non-finite position on a NON-spatial voice must warn exactly once — the
+        // refusal returns before the finite guard, so a dropped return would warn
+        // twice and park a pending position on a record the parking doc promises
+        // stays null.
+        const { assetManager, manager } = createManager();
+        const ref = audioRef('audio/sfx/flat.ogg');
+        assetManager.resolve(ref, createAudioBuffer('flat'));
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.setVoicePosition(handle, [Number.NaN, 0, 0]);
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('non-spatial');
+    });
+
+    it('writes no gain stage on any path (#116)', async () => {
+        const { context, manager, handle } = await playSpatialVoice();
+        const gains = [0, 1, 2, 3, 4].map((index) => expectGain(context, index));
+        const callsBefore = gains.map((gain) => gain.gain.calls.length);
+
+        manager.setVoicePosition(handle, [4, 5, 6]);
+        manager.setVoicePosition(handle, [7, 8, 9], { immediate: true });
+
+        expect(gains.map((gain) => gain.gain.calls.length)).toEqual(callsBefore);
+    });
+});
+
 // ─── dynamic cue validation — resolve, clamp, drop at startVoice (#117, #118) ───
 
 describe('DefaultAudioManager — dynamic cue validation', () => {
@@ -4894,6 +5049,7 @@ describe('AudioHandle — public shape', () => {
             'source',
             'gainNode',
             'pannerNode',
+            'pendingPosition',
             'position',
             'spatial',
             'sequence',

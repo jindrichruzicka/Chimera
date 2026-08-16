@@ -122,14 +122,21 @@ export interface AudioListenerPose {
     readonly up?: AudioPosition;
 }
 
-export interface SetListenerOptions {
+/** Options shared by the positional verbs — `setListener` and `setVoicePosition`. */
+export interface PositionalWriteOptions {
     /**
-     * Set the pose instead of ramping to it — for a teleport or a camera cut, where
-     * the default anti-zipper ramp would smear a deliberate discontinuity into an
-     * audible sweep.
+     * Set the position instead of ramping to it — for a teleport or a camera cut,
+     * where the default anti-zipper ramp would smear a deliberate discontinuity into
+     * an audible sweep.
      */
     readonly immediate?: boolean;
 }
+
+/** {@link PositionalWriteOptions} under the listener verb's name. */
+export type SetListenerOptions = PositionalWriteOptions;
+
+/** {@link PositionalWriteOptions} under the voice-move verb's name. */
+export type SetVoicePositionOptions = PositionalWriteOptions;
 
 /** An {@link AudioListenerPose} with every default filled and every component finite. */
 export interface ResolvedListenerPose {

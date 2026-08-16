@@ -81,6 +81,12 @@ export interface AudioManager {
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
     /** Set the app's ONE listener pose — game-supplied, never camera-derived. Feature-detected AudioParam path with a setPosition/setOrientation fallback; ramps unless { immediate: true }. */
     setListener(pose: AudioListenerPose, opts?: SetListenerOptions): void;
+    /** Move a spatial voice's source. Live: ramped (or immediate). Loading: parked on the record, applied at t0, last write wins (Invariant #121). Non-spatial: no-op + one warning. Invalid handle: silent no-op. */
+    setVoicePosition(
+        handle: AudioHandle,
+        position: AudioPosition,
+        opts?: SetVoicePositionOptions,
+    ): void;
     /** Dispose all active sources and clear the pool. Called by `Providers` at app shutdown (Invariant #64). */
     dispose(): void;
 }

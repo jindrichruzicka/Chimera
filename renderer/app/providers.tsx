@@ -181,6 +181,9 @@ function createNoopAudioManager(): AudioManager {
         setListener(): void {
             return;
         },
+        setVoicePosition(): void {
+            return;
+        },
         dispose(): void {
             return;
         },

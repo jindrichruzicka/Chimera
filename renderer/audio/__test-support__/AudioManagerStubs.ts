@@ -15,6 +15,7 @@ export function createAudioManagerSpy(): AudioManager {
         stopAll: vi.fn(),
         duck: vi.fn(),
         setListener: vi.fn(),
+        setVoicePosition: vi.fn(),
         dispose: vi.fn(),
     };
 }
@@ -39,6 +40,8 @@ export function createAudioManagerStub(): AudioManager {
         duck(): void {},
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         setListener(): void {},
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        setVoicePosition(): void {},
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         dispose(): void {},
     };

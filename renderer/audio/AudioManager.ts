@@ -22,6 +22,7 @@ import {
     type ResolvedListenerPose,
     type ResolvedSpatialSpec,
     type SetListenerOptions,
+    type SetVoicePositionOptions,
     type SpatialOptions,
 } from './Spatial';
 
@@ -120,6 +121,26 @@ export interface AudioManager {
      * its default with one warning, and never a throw into the caller.
      */
     setListener(pose: AudioListenerPose, opts?: SetListenerOptions): void;
+    /**
+     * Move a spatial voice's source after it starts — the panner position is
+     * otherwise written once, at the voice's real start (§4.25). Ramped over the
+     * anti-zipper window by default; `{ immediate: true }` sets, for a teleport.
+     *
+     * Safe in every voice phase. A voice still loading has no panner yet, so the
+     * position is parked on its record and applied at `t0` — one slot, a later call
+     * superseding an earlier one, the same discipline the pending fades follow
+     * (Invariant #121). An invalid or released handle is a silent no-op, exactly as
+     * `stop`/`fadeOut`/`fadeTo` — voice ids are minted monotonically, so a stale
+     * handle can never name a live record. A voice that was never spatial is a no-op
+     * with one warning: a panner cannot be inserted into a running chain without a
+     * reconnect, and silently promoting the voice would change its audible level
+     * mid-play.
+     */
+    setVoicePosition(
+        handle: AudioHandle,
+        position: AudioPosition,
+        opts?: SetVoicePositionOptions,
+    ): void;
     dispose(): void;
 }
 
@@ -165,6 +186,13 @@ interface VoiceRecord {
     /** The resolved spatial spec, already validated by the static tier — or `null` for
      * an ordinary voice. Lives here and never on {@link AudioHandle} (Invariant #126). */
     readonly spatial: ResolvedSpatialSpec | null;
+    /**
+     * A move requested before `startVoice`, consumed at `t0` in place of the spec's
+     * position — one slot with last-write-wins, the pending-fade discipline of
+     * Invariant #121 extended to position. Always `null` on a non-spatial voice:
+     * the verb refuses those before parking anything.
+     */
+    pendingPosition: AudioPosition | null;
     readonly sequence: number;
     /**
      * The voice's SETTLED ceiling: the gain a `fadeTo` last named as absolute, or
@@ -445,6 +473,7 @@ export class DefaultAudioManager implements AudioManager {
             loop: opts.loopRegion !== undefined || (opts.loop ?? false),
             loopRequested: opts.loop ?? false,
             spatial,
+            pendingPosition: null,
             sequence: this.nextSequence,
             volume: clampUnit(opts.volume ?? DEFAULT_VOLUME),
             ceilingHold: null,
@@ -790,6 +819,52 @@ export class DefaultAudioManager implements AudioManager {
         }
 
         setListenerPoseLegacy(listener, resolved);
+    }
+
+    public setVoicePosition(
+        handle: AudioHandle,
+        position: AudioPosition,
+        opts: SetVoicePositionOptions = {},
+    ): void {
+        const record = this.voices.get(handle.id);
+        if (record === undefined) {
+            // Silent, matching stop/fadeOut/fadeTo: ids are minted monotonically, so
+            // a stale handle can never name a live record.
+            return;
+        }
+
+        if (record.spatial === null) {
+            console.warn(
+                'Audio setVoicePosition called on a non-spatial voice; ignoring the call — a panner cannot be inserted into a running chain, and promoting the voice would change its audible level mid-play.',
+            );
+            return;
+        }
+
+        const [x, y, z] = position;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+            // No default to degrade to here — the voice's CURRENT position is the
+            // panner's own state, so the move is dropped whole rather than half-moved.
+            console.warn(
+                `Audio setVoicePosition position [${x}, ${y}, ${z}] has a non-finite component; dropping the move.`,
+            );
+            return;
+        }
+
+        const pannerNode = record.pannerNode;
+        if (pannerNode === null) {
+            // Still loading: the panner does not exist yet, so the position is parked
+            // and consumed by startVoice at t0 — one slot, last write wins
+            // (Invariant #121).
+            record.pendingPosition = position;
+            return;
+        }
+
+        setPannerPosition(
+            pannerNode,
+            position,
+            this.audioContext.currentTime,
+            opts.immediate ?? false,
+        );
     }
 
     public dispose(): void {
@@ -1158,7 +1233,11 @@ export class DefaultAudioManager implements AudioManager {
         const pannerNode = this.audioContext.createPanner();
         record.pannerNode = pannerNode;
         configurePannerFromSpec(pannerNode, record.spatial);
-        setPannerPosition(pannerNode, record.spatial.position, this.audioContext.currentTime);
+        // A move parked while the voice loaded supersedes the authored start position
+        // (Invariant #121); the slot is cleared as it is consumed, like the fades'.
+        const startPosition = record.pendingPosition ?? record.spatial.position;
+        record.pendingPosition = null;
+        setPannerPosition(pannerNode, startPosition, this.audioContext.currentTime, true);
         gainNode.connect(pannerNode);
         pannerNode.connect(busGainNode);
     }
@@ -2220,8 +2299,7 @@ function configurePannerFromSpec(pannerNode: PannerNode, spec: ResolvedSpatialSp
 
 /**
  * Seconds a RAMPED positional write travels over — the anti-zipper window shared by
- * every positional `AudioParam` write that is not anchoring a fresh voice (the
- * listener pose today). A step change
+ * every positional `AudioParam` write that is not anchoring a fresh voice. A step change
  * to a position modulates the panner's gains discontinuously, which is audible as a
  * zipper/click; a ramp this short is not audible as movement. A power-of-two
  * fraction (2^-4 = 62.5 ms), so `now + POSITIONAL_RAMP_SECONDS` is exact in double
@@ -2297,21 +2375,24 @@ function setListenerPoseLegacy(listener: AudioListener, pose: ResolvedListenerPo
 }
 
 /**
- * Write a panner's position at a voice's start — immediate, since there is nothing
- * audible yet to zipper. Takes the same feature-detected path as the listener pose,
- * so a platform without positional `AudioParam`s reaches its deprecated
- * `setPosition` for both.
+ * Write a panner's position — immediate at a voice's start (nothing audible yet to
+ * zipper) and for a teleport, ramped over the anti-zipper window when a live source
+ * moves. Takes the same feature-detected path as the listener pose, so a platform
+ * without positional `AudioParam`s reaches its deprecated `setPosition` for both.
+ * The legacy verb has no ramp to offer, so a ramped move degrades to a step there —
+ * the platform's own limitation, not a new behaviour.
  */
 function setPannerPosition(
     pannerNode: PannerNode,
     position: AudioPosition,
     currentTime: number,
+    immediate: boolean,
 ): void {
     const params = [pannerNode.positionX, pannerNode.positionY, pannerNode.positionZ];
     if (params.every(isWritableAudioParam)) {
         try {
             params.forEach((param, index) => {
-                writePositionalParam(param, position[index] ?? 0, currentTime, true);
+                writePositionalParam(param, position[index] ?? 0, currentTime, immediate);
             });
             return;
         } catch {

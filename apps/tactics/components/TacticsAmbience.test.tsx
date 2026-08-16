@@ -63,6 +63,7 @@ function createManagerDouble(): {
         stopAll: vi.fn(),
         duck: vi.fn(),
         setListener: vi.fn(),
+        setVoicePosition: vi.fn(),
         dispose: vi.fn(),
     };
 
