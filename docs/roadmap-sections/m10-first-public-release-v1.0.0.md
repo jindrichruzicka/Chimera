@@ -616,9 +616,9 @@ candidates for a follow-up.
 
 **Status: designed, not implemented.** Every voice in the engine plays at exactly rate `1`, and
 Invariant #122 states the constraint outright — cue-relative fade timing is derived "at a fixed
-`playbackRate` of 1". The practical cost is the machine-gun effect: `apps/tactics` binds `step`
-to every move and `swordHit` to every attack, and each replay is bit-identical, which is what
-makes repeated SFX read as a defect rather than as a footstep. F86 adds `PlayOptions.rate`,
+`playbackRate` of 1". The practical cost is the machine-gun effect: `apps/tactics` plays `step`
+for every move and `swordHit` for every attack the local player makes, and each replay is
+bit-identical, which is what makes repeated SFX read as a defect rather than as a footstep. F86 adds `PlayOptions.rate`,
 **immutable for the life of the voice**, plus a `rateFromSemitones` helper so the `2 ** (n/12)`
 constant appears in one place. This is resampling, so **rate and pitch move together**, and the
 option is named `rate` rather than `pitch` so the type does not promise a time-stretch it does

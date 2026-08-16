@@ -2,7 +2,13 @@
 
 import React, { useState } from 'react';
 import { GameCanvas, type OrthographicCameraConfig } from '@chimera-engine/renderer/components/r3f';
+import {
+    useAudioManager,
+    useSpatialAudio,
+    type AudioPosition,
+} from '@chimera-engine/renderer/audio';
 import { useTranslate } from '@chimera-engine/renderer/i18n';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import type { GameScreenProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import {
     TACTICS_ATTACK_ACTION,
@@ -19,7 +25,9 @@ import {
     type TacticsGridPoint,
     type TacticsSceneUnit,
     type TacticsSelectionIntent,
+    type TacticsWorldPoint,
 } from '../components/tacticsSceneModel.js';
+import { tacticsAudioRefs } from '../asset-manifest.js';
 import { tacticsGridCoordinate } from '../simulation/actions.js';
 import { applyBuffer } from '../simulation/commitment/buffer.js';
 import { bufferHasAttack, type BufferedTacticsAction } from '../simulation/commitment/contract.js';
@@ -94,6 +102,75 @@ const TACTICS_GAME_CANVAS_CAMERA = {
     frustum: TACTICS_CAMERA_BOUNDS,
 } as const satisfies OrthographicCameraConfig;
 
+// Spatial band for the board's positioned SFX, in board world units: full
+// volume within a tile of the listener, and — under the engine's 'linear'
+// default — silent past the board's long diagonal.
+const TACTICS_SFX_FULL_VOLUME_DISTANCE = 1;
+const TACTICS_SFX_FALLOFF_DISTANCE = 6;
+const TACTICS_STEP_VOLUME = 0.45;
+const TACTICS_SWORD_HIT_VOLUME = 0.65;
+
+/**
+ * The listener's resting anchor: the board CENTRE the camera looks AT — taken
+ * from `TACTICS_CAMERA_LOOK_AT`, and deliberately NOT `TACTICS_CAMERA_POSITION`.
+ * The camera hangs twelve world units above the board looking straight down; a
+ * listener bound to it would put every sound ~12 units away and pan the whole
+ * board through a near-vertical axis. The pose is what the player listens FROM
+ * — do not "fix" this to the camera.
+ */
+const TACTICS_BOARD_CENTRE_FOCUS: TacticsWorldPoint = {
+    x: TACTICS_CAMERA_LOOK_AT[0],
+    y: TACTICS_CAMERA_LOOK_AT[1],
+    z: TACTICS_CAMERA_LOOK_AT[2],
+};
+
+/** The last positioned SFX, mirrored into the DOM — audio is unobservable to Playwright. */
+interface PositionedSfxMarker {
+    readonly ref: string;
+    readonly position: AudioPosition;
+}
+
+/**
+ * The board's spatial-audio seam: anchors the one app listener at the board
+ * focus and mirrors the observable facts into hidden DOM markers, the way
+ * `TacticsAmbience` mirrors `data-track`. A component of its own so its hooks
+ * mount only once the board has a playable scene (past the loading/empty
+ * fallbacks), keeping the parent's hook order unconditional.
+ */
+function TacticsBoardSpatialAudio({
+    focus,
+    lastPlayed,
+}: {
+    readonly focus: TacticsWorldPoint;
+    readonly lastPlayed: PositionedSfxMarker | null;
+}): React.ReactElement {
+    const { setListener } = useSpatialAudio();
+
+    React.useEffect(() => {
+        // Keyed on the focus — which moves on selection, never continuously —
+        // so the pose is written per focus change, not per frame or per render.
+        setListener({ position: [focus.x, focus.y, focus.z] });
+    }, [setListener, focus.x, focus.y, focus.z]);
+
+    return (
+        <>
+            <span
+                data-testid="tactics-audio-listener"
+                data-position={`${focus.x},${focus.y},${focus.z}`}
+                hidden
+            />
+            {lastPlayed !== null && (
+                <span
+                    data-testid="tactics-audio-sfx"
+                    data-ref={lastPlayed.ref}
+                    data-position={lastPlayed.position.join(',')}
+                    hidden
+                />
+            )}
+        </>
+    );
+}
+
 // The minimap's own module-level camera (one stable config per mount): the
 // same top-down world framing as the board camera, on the overlay canvas.
 const TACTICS_MINIMAP_CAMERA = {
@@ -112,10 +189,12 @@ export function TacticsDemoBoard({
     reveal,
 }: GameScreenProps): React.ReactElement | null {
     const t = useTranslate();
+    const audioManager = useAudioManager();
     // Interpret the generic content prop into this game's colour hex maps. Empty
     // until content loads, so the resolvers fall back to the default hexes.
     const palette = paletteFromCollections(content ?? {});
     const [selectedUnitId, setSelectedUnitId] = useState<TacticsSceneUnit['id'] | null>(null);
+    const [lastPositionedSfx, setLastPositionedSfx] = useState<PositionedSfxMarker | null>(null);
 
     // Commitment battle mode: move/attack/reveal selections are buffered locally
     // (never dispatched) and shown as an optimistic view until the player commits.
@@ -198,6 +277,49 @@ export function TacticsDemoBoard({
         );
     }
 
+    const playPositionedSfx = (
+        ref: AssetRef<AudioClipAsset>,
+        volume: number,
+        world: TacticsWorldPoint,
+    ): void => {
+        const position: AudioPosition = [world.x, world.y, world.z];
+        audioManager.play(ref, {
+            bus: 'sfx',
+            volume,
+            spatial: {
+                position,
+                fullVolumeDistance: TACTICS_SFX_FULL_VOLUME_DISTANCE,
+                falloffDistance: TACTICS_SFX_FALLOFF_DISTANCE,
+            },
+        });
+        setLastPositionedSfx({ ref: String(ref), position });
+    };
+
+    // Step and sword-hit play HERE, at the intent site, positioned at the ACTING
+    // unit's world position — the intent knows the actor, which the { type }-only
+    // GameEvent cannot carry. Their entries left TACTICS_EVENT_AUDIO_BINDING so
+    // nothing double-plays; reveal stays event-driven there.
+    const playIntentSfx = (intent: TacticsSelectionIntent): void => {
+        const actorId =
+            intent.type === 'attack-unit'
+                ? intent.attackerId
+                : intent.type === 'move-unit'
+                  ? intent.unitId
+                  : null;
+        if (actorId === null) {
+            return;
+        }
+        const actor = units.find((unit) => unit.id === actorId);
+        if (actor === undefined) {
+            return;
+        }
+        if (intent.type === 'attack-unit') {
+            playPositionedSfx(tacticsAudioRefs.swordHit, TACTICS_SWORD_HIT_VOLUME, actor.world);
+            return;
+        }
+        playPositionedSfx(tacticsAudioRefs.step, TACTICS_STEP_VOLUME, actor.world);
+    };
+
     const handleIntent = (intent: TacticsSelectionIntent): void => {
         if (!isBoardInteractive) {
             return;
@@ -216,11 +338,24 @@ export function TacticsDemoBoard({
         if (isCommitment) {
             // Buffer locally — never dispatched to the host until commit/reveal.
             // The kernel re-validates against the optimistic view (stamina, etc.),
-            // so an illegal action is simply not buffered.
-            appendBufferedAction(toOptimisticBase(snapshot), buffered, localPlayerId);
+            // so an illegal action is simply not buffered — and plays no sound:
+            // the SFX is the optimistic move's audio half, gated on the same
+            // append result the view is.
+            const appended = appendBufferedAction(
+                toOptimisticBase(snapshot),
+                buffered,
+                localPlayerId,
+            );
+            if (appended.ok) {
+                playIntentSfx(intent);
+            }
             setSelectedUnitId(null);
             return;
         }
+
+        // Sequential mode plays at dispatch: the host validates asynchronously, so
+        // the sound is optimistic feedback for the action just sent.
+        playIntentSfx(intent);
 
         // Sequential mode: dispatch straight to the host (unchanged behaviour).
         // The buffered payload is structurally a plain object; the brand types
@@ -271,6 +406,8 @@ export function TacticsDemoBoard({
 
     const boardColor = resolveTacticsBoardColor(snapshot.setup, palette.boardColorHex);
     const revealedTurn = parseRevealedTurn(reveal);
+    const selectedUnit = units.find((unit) => unit.id === selectedUnitId);
+    const listenerFocus = selectedUnit?.world ?? TACTICS_BOARD_CENTRE_FOCUS;
 
     return (
         <div aria-label={t(BOARD_KEYS.ariaLabel)} style={boardSceneStyle}>
@@ -332,6 +469,7 @@ export function TacticsDemoBoard({
                     />
                 </GameCanvas>
             </div>
+            <TacticsBoardSpatialAudio focus={listenerFocus} lastPlayed={lastPositionedSfx} />
         </div>
     );
 }

@@ -22,19 +22,51 @@ import {
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import type { CommitmentId } from '@chimera-engine/simulation/foundation/commitment-contract.js';
 import { I18nProvider } from '@chimera-engine/renderer/i18n';
+import { AudioManagerProvider, type AudioManager } from '@chimera-engine/renderer/audio';
 import { tacticsBundleEn } from '../shell/translations/en.js';
+import { tacticsAudioRefs } from '../asset-manifest.js';
+import { gridToWorldPoint } from '../components/tacticsSceneModel.js';
+import { TACTICS_CAMERA_POSITION } from '../components/tacticsCamera.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
 import { useCommitmentBuffer } from '../components/useCommitmentBuffer';
 
 // The board renders its fallback aria-labels + the reveal overlay through
-// useTranslate() (throws outside a provider). Wrap every render in the English
-// Tactics bundle so `game.tactics.*` resolve to the pre-tokenisation text.
+// useTranslate() (throws outside a provider), and reaches the audio manager
+// through useAudioManager()/useSpatialAudio() (same rule). Wrap every render in
+// the English Tactics bundle and a fresh audio-manager double.
 function EnProviders({ children }: { readonly children: React.ReactNode }): React.ReactElement {
-    return <I18nProvider gameOverride={tacticsBundleEn}>{children}</I18nProvider>;
+    return (
+        <I18nProvider gameOverride={tacticsBundleEn}>
+            <AudioManagerProvider audioManager={audioManager}>{children}</AudioManagerProvider>
+        </I18nProvider>
+    );
 }
 
 const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
     baseRender(ui, { wrapper: EnProviders });
+
+function makeAudioManagerDouble(): AudioManager {
+    return {
+        play: vi.fn((ref: unknown) => ({
+            id: 'board-test-handle',
+            ref,
+            bus: 'sfx',
+            priority: 0,
+            valid: true,
+        })) as unknown as AudioManager['play'],
+        stop: vi.fn(),
+        fadeOut: vi.fn(),
+        fadeTo: vi.fn(),
+        crossfade: vi.fn(),
+        stopAll: vi.fn(),
+        duck: vi.fn(),
+        setListener: vi.fn(),
+        setVoicePosition: vi.fn(),
+        dispose: vi.fn(),
+    };
+}
+
+let audioManager = makeAudioManagerDouble();
 
 // Colour hexes now arrive via the generic `content` prop (loaded from the content
 // database). Mirrors apps/tactics/data/{player,board}-colors. Hexes are lifted to
@@ -198,6 +230,7 @@ afterEach(() => {
     minimapCalls.length = 0;
     unitPrimitiveUnits.length = 0;
     useCommitmentBuffer.getState().reset();
+    audioManager = makeAudioManagerDouble();
 });
 
 function makeSnapshot(
@@ -207,6 +240,8 @@ function makeSnapshot(
         readonly includeSetup?: boolean;
         readonly commitment?: boolean;
         readonly localCommitted?: boolean;
+        /** Off-axis grid placements exist so world-tuple axis swaps cannot hide behind zeros. */
+        readonly localUnitAt?: { readonly x: number; readonly y: number };
     } = {},
 ): PlayerSnapshot {
     const viewerId = playerId('p1');
@@ -214,7 +249,14 @@ function makeSnapshot(
     const unitId = entityId(TACTICS_DEFAULT_UNIT_ID_VALUE);
     const enemyUnitId = entityId('unit-2');
     const entities: Record<string, ProjectedUnitFixture> = {
-        [unitId]: { id: unitId, kind: 'unit', ownerId: viewerId, x: 0, y: 0, hp: 1 },
+        [unitId]: {
+            id: unitId,
+            kind: 'unit',
+            ownerId: viewerId,
+            x: options.localUnitAt?.x ?? 0,
+            y: options.localUnitAt?.y ?? 0,
+            hp: 1,
+        },
     };
 
     if (options.includeEnemy ?? true) {
@@ -345,7 +387,15 @@ describe('TacticsDemoBoard', () => {
         }
         const order = [...scene.children].map((child) => child.getAttribute('data-testid'));
 
-        expect(order).toEqual(['tactics-r3f-canvas', 'tactics-reveal', 'tactics-minimap']);
+        // The trailing audio-listener marker is a HIDDEN span, not a positioned
+        // overlay — it sits in the enumeration only because the order is pinned
+        // exactly.
+        expect(order).toEqual([
+            'tactics-r3f-canvas',
+            'tactics-reveal',
+            'tactics-minimap',
+            'tactics-audio-listener',
+        ]);
         expect(screen.getByTestId('tactics-reveal')).toHaveStyle({ position: 'absolute' });
     });
 
@@ -578,6 +628,222 @@ describe('TacticsDemoBoard', () => {
         expect(sendAction).toHaveBeenCalledOnce();
         expect(localUnit).toHaveAttribute('data-selected', 'false');
         expect(opponentUnit).toHaveAttribute('data-selected', 'false');
+    });
+
+    it('plays sword-hit positionally at the attacking unit world position', () => {
+        // The expected position comes from the same gridToWorldPoint the board's
+        // units array is parsed through, so the assertion pins the COUPLING —
+        // the sound plays where the acting unit renders.
+        const localPlayerId = playerId('p1');
+        const attackerWorld = gridToWorldPoint({ x: 0, y: 0 });
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={localPlayerId}
+                sendAction={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+        fireEvent.click(screen.getByTestId('tactics-unit-unit-2'));
+
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+        expect(audioManager.play).toHaveBeenCalledWith(tacticsAudioRefs.swordHit, {
+            bus: 'sfx',
+            volume: 0.65,
+            spatial: {
+                position: [attackerWorld.x, attackerWorld.y, attackerWorld.z],
+                fullVolumeDistance: 1,
+                falloffDistance: 6,
+            },
+        });
+    });
+
+    it('plays step positionally at the moving unit world position', () => {
+        const localPlayerId = playerId('p1');
+        const moverWorld = gridToWorldPoint({ x: 0, y: 0 });
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={localPlayerId}
+                sendAction={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+        expect(audioManager.play).toHaveBeenCalledWith(tacticsAudioRefs.step, {
+            bus: 'sfx',
+            volume: 0.45,
+            spatial: {
+                position: [moverWorld.x, moverWorld.y, moverWorld.z],
+                fullVolumeDistance: 1,
+                falloffDistance: 6,
+            },
+        });
+    });
+
+    it('plays the buffered action positionally in commitment mode too', () => {
+        const localPlayerId = playerId('p1');
+        const moverWorld = gridToWorldPoint({ x: 0, y: 0 });
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ commitment: true })}
+                localPlayerId={localPlayerId}
+                sendAction={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+
+        // The optimistic view moves the unit at buffer time; the sound is that
+        // feedback's audio half and must not wait for the reveal.
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+        expect(audioManager.play).toHaveBeenCalledWith(
+            tacticsAudioRefs.step,
+            expect.objectContaining({
+                spatial: expect.objectContaining({
+                    position: [moverWorld.x, moverWorld.y, moverWorld.z],
+                }),
+            }),
+        );
+    });
+
+    it('anchors the listener at the board centre, which is not the camera position', () => {
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(audioManager.setListener).toHaveBeenCalledTimes(1);
+        const pose = vi.mocked(audioManager.setListener).mock.calls[0]?.[0];
+        expect(pose?.position).toEqual([1, 0, 0]);
+        expect(pose?.position).not.toEqual([...TACTICS_CAMERA_POSITION]);
+        expect(screen.getByTestId('tactics-audio-listener')).toHaveAttribute(
+            'data-position',
+            '1,0,0',
+        );
+    });
+
+    it('moves the listener to the selected unit and back, keyed on the focus', () => {
+        const attackerWorld = gridToWorldPoint({ x: 0, y: 0 });
+
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+
+        expect(audioManager.setListener).toHaveBeenCalledTimes(2);
+        expect(vi.mocked(audioManager.setListener).mock.calls[1]?.[0]?.position).toEqual([
+            attackerWorld.x,
+            attackerWorld.y,
+            attackerWorld.z,
+        ]);
+
+        // A rerender with the SAME focus writes nothing — the pose is keyed on
+        // the focus, never per render.
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        expect(audioManager.setListener).toHaveBeenCalledTimes(2);
+    });
+
+    it('pins the world-tuple axis order with an off-axis acting unit', () => {
+        // Grid (1, -1) — adjacent to the enemy at (1, 0), so the attack intent
+        // resolves — maps to world (1, 0, -1): distinct x and z components, so a
+        // y/z swap in the play position, the listener pose, or the DOM marker
+        // cannot hide behind the zeros every on-axis fixture carries
+        // (gridToWorldPoint maps grid.y onto world Z, the classic confusion).
+        const actorWorld = gridToWorldPoint({ x: 1, y: -1 });
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 1, y: -1 } })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+
+        expect(vi.mocked(audioManager.setListener).mock.calls.at(-1)?.[0]?.position).toEqual([
+            1, 0, -1,
+        ]);
+
+        fireEvent.click(screen.getByTestId('tactics-unit-unit-2'));
+
+        expect(audioManager.play).toHaveBeenCalledWith(
+            tacticsAudioRefs.swordHit,
+            expect.objectContaining({
+                spatial: expect.objectContaining({
+                    position: [actorWorld.x, actorWorld.y, actorWorld.z],
+                }),
+            }),
+        );
+        expect(screen.getByTestId('tactics-audio-sfx')).toHaveAttribute('data-position', '1,0,-1');
+    });
+
+    it('does not play the SFX when the commitment kernel rejects the append', () => {
+        // The SFX is the optimistic move's audio half, gated on the same append
+        // result the view is — a rejected action moves nothing and sounds like
+        // nothing. The store's append is stubbed to reject so the gate itself is
+        // what this pins, independent of which kernel rule rejected.
+        const originalAppend = useCommitmentBuffer.getState().append;
+        try {
+            useCommitmentBuffer.setState({
+                append: () => ({ ok: false, reason: 'stubbed rejection' }),
+            });
+
+            render(
+                <TacticsDemoBoard
+                    snapshot={makeSnapshot({ commitment: true })}
+                    localPlayerId={playerId('p1')}
+                    sendAction={vi.fn()}
+                />,
+            );
+            fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+            fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+
+            expect(audioManager.play).not.toHaveBeenCalled();
+        } finally {
+            useCommitmentBuffer.setState({ append: originalAppend });
+        }
+    });
+
+    it('mirrors the last positioned SFX into the DOM for the e2e', () => {
+        const attackerWorld = gridToWorldPoint({ x: 0, y: 0 });
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        expect(screen.queryByTestId('tactics-audio-sfx')).toBeNull();
+
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+        fireEvent.click(screen.getByTestId('tactics-unit-unit-2'));
+
+        const marker = screen.getByTestId('tactics-audio-sfx');
+        expect(marker).toHaveAttribute('data-ref', String(tacticsAudioRefs.swordHit));
+        expect(marker).toHaveAttribute(
+            'data-position',
+            [attackerWorld.x, attackerWorld.y, attackerWorld.z].join(','),
+        );
     });
 
     it('buffers a move locally in commitment mode instead of dispatching to the host', () => {
@@ -872,11 +1138,13 @@ describe('TacticsDemoBoard', () => {
                 ]}
                 locale="cs-CZ"
             >
-                <TacticsDemoBoard
-                    snapshot={makeSnapshot()}
-                    localPlayerId={localPlayerId}
-                    sendAction={sendAction}
-                />
+                <AudioManagerProvider audioManager={audioManager}>
+                    <TacticsDemoBoard
+                        snapshot={makeSnapshot()}
+                        localPlayerId={localPlayerId}
+                        sendAction={sendAction}
+                    />
+                </AudioManagerProvider>
             </I18nProvider>,
         );
 

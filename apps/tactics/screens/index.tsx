@@ -1,11 +1,7 @@
 import React from 'react';
 import type { InputAction } from '@chimera-engine/renderer/input';
 import type { GameScreenRegistry } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
-import {
-    TACTICS_ATTACK_ACTION,
-    TACTICS_MOVE_UNIT_ACTION,
-    TACTICS_REVEAL_TILE_ACTION,
-} from '../simulation/actions.js';
+import { TACTICS_REVEAL_TILE_ACTION } from '../simulation/actions.js';
 import { tacticsAudioRefs } from '../asset-manifest.js';
 import { SCENE_KEYS } from '../shell/translations/keys.js';
 // Side-effect import: redefines --ch-* tokens for the Tactics visual language.
@@ -20,17 +16,11 @@ const TacticsInGameMenu = React.lazy(() => import('./TacticsInGameMenu.js'));
 // Invariant #87: every screen registered here must be wrapped in React.lazy.
 const TacticsPostGameSummary = React.lazy(() => import('./TacticsPostGameSummary.js'));
 
+// Step and sword-hit are NOT here: the demo board plays them itself, positioned
+// at the acting unit's world position — its intent site knows the actor, which
+// the { type }-only GameEvent cannot carry. An entry on both paths would
+// double-play; only reveal stays event-driven.
 const TACTICS_EVENT_AUDIO_BINDING = {
-    [TACTICS_MOVE_UNIT_ACTION]: {
-        ref: tacticsAudioRefs.step,
-        bus: 'sfx',
-        volume: 0.45,
-    },
-    [TACTICS_ATTACK_ACTION]: {
-        ref: tacticsAudioRefs.swordHit,
-        bus: 'sfx',
-        volume: 0.65,
-    },
     [TACTICS_REVEAL_TILE_ACTION]: {
         ref: tacticsAudioRefs.reveal,
         bus: 'sfx',

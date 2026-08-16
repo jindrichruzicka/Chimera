@@ -13,11 +13,15 @@ import { TACTICS_INPUT_ACTIONS, TacticsGameScreenRegistry } from './index.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('TacticsGameScreenRegistry', () => {
-    it('declares event audio bindings for core tactics action events', () => {
+    it('binds only the event audio the board does not play at explicit call sites', () => {
+        // The board plays step and sword-hit POSITIONALLY at its own intent site —
+        // the intent knows the acting unit, which the { type }-only GameEvent cannot
+        // carry — so those entries must NOT also live here: an entry on both paths
+        // would double-play every action. The exact key set is the pin.
         expect(TacticsGameScreenRegistry.eventAudioBinding).toBeDefined();
-        expect(TacticsGameScreenRegistry.eventAudioBinding?.['tactics:move_unit']).toBeDefined();
-        expect(TacticsGameScreenRegistry.eventAudioBinding?.['tactics:attack']).toBeDefined();
-        expect(TacticsGameScreenRegistry.eventAudioBinding?.['tactics:reveal_tile']).toBeDefined();
+        expect(Object.keys(TacticsGameScreenRegistry.eventAudioBinding ?? {})).toEqual([
+            'tactics:reveal_tile',
+        ]);
     });
 
     it('declares every event audio ref in the tactics asset manifest', () => {
