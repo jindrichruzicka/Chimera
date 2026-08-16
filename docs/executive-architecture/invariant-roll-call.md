@@ -201,6 +201,47 @@ shape, a spec that passed in isolation and turned out to be a real product deadl
 the trigger recorded there as unestablished. #1121 carries the per-attempt failure list and what
 each attempt failed on; this record does not restate it.
 
+### F90 feature-review gate (#1132)
+
+Run in full on the gate's own branch, base `main` @ `c4d095df`, 2026-08-16. Every step below is
+the result at this tree.
+
+| Step              | Command                                                    | Result                                     |
+| ----------------- | ---------------------------------------------------------- | ------------------------------------------ |
+| Format            | `pnpm format:check`                                        | **exit 0**                                 |
+| Lint              | `pnpm lint`                                                | **exit 0**                                 |
+| Typecheck         | `pnpm typecheck`                                           | **exit 0**                                 |
+| Unit tests        | `pnpm test`                                                | **exit 0 — 11 687 passed, 2 todo**         |
+| Packaged bundle   | `pnpm verify:packaged-bundle`                              | **exit 0**                                 |
+| Invariant checker | `.claude/skills/invariants/scripts/check-invariants.sh`    | **exit 0**                                 |
+| Checker self-test | `.claude/skills/invariants/tests/check-invariants.test.sh` | **144 / 144 pass**                         |
+| Asset validation  | `pnpm validate:assets`                                     | **exit 0 — 17 refs checked**               |
+| Changeset policy  | `pnpm verify:changeset-policy`                             | **exit 0**                                 |
+| Version alignment | `pnpm verify:version-alignment`                            | **exit 0**                                 |
+| Scaffold          | `pnpm verify:scaffold`                                     | **exit 0**                                 |
+| E2E               | `pnpm test:e2e`                                            | **exit 0 — 150 passed, 0 `flaky` matches** |
+
+The unit-test figure is the SUM of the seven per-package runs (simulation 2 298, ai 173,
+networking 300, renderer 4 074, electron 3 140, tactics 977, tools 725), not the tail line —
+`pnpm test` ends with the tools run, whose own total is what a casual read picks up.
+
+Rows #88 and #133 are what this gate ratifies, both amended rather than renumbered, so the
+coverage summary above is unchanged and re-derives from the ledger. The child acceptance
+criteria of #1127–#1131 were re-verified against the MERGED tree, not their close-out claims:
+the thirteen carrying suites re-ran green together — 365 tests — on this base.
+
+The by-construction proof holds measured, not asserted: across the whole F90 arc
+(`9815564d..main`) `useFadeTransition.ts` and `useFadeTransition.test.tsx` have ZERO commits —
+the `engine:scene_ready` ack, both fade channels and the progress protocol are byte-identical
+to pre-F90 — and the four no-regression e2e specs (`asset-preload-gate`, `scene-preload-cover`,
+`scene-transition`, `hud-layout`) also have zero commits over the same range while passing in
+the 150 above with no retried spec.
+
+The asymmetry #133's amended sentence states is what the tests carry: the minimum-visible hold
+collapses to 0 under `NEXT_PUBLIC_CHIMERA_E2E` — pinned at the resolver (call-time read,
+stub-after-import) and at both route use sites — while the four release budgets keep their
+no-collapse boundary tests from #1123. A deliberate delay collapses where a gate must not.
+
 ---
 
 ## The roll-call — all 133 invariants
