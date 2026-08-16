@@ -118,6 +118,133 @@ describe('EventAudioPlayer', () => {
         expect(audioManager.play).toHaveBeenLastCalledWith(WIN_REF, {});
     });
 
+    it('merges resolver output over the static fields, leaving omitted keys static', async () => {
+        const audioManager = createAudioManagerSpy();
+        const binding: EventAudioBinding = {
+            'combat:hit': {
+                ref: HIT_REF,
+                bus: 'sfx',
+                volume: 0.5,
+                options: () => ({ volume: 0.9, priority: 7 }),
+            },
+        };
+
+        renderPlayer(binding, audioManager);
+        useGameStore
+            .getState()
+            .applySnapshot(makeSnapshot({ tick: 2, events: [{ type: 'combat:hit' }] }));
+
+        await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(1));
+        // The resolver's volume wins over the static 0.5, its priority arrives at all
+        // (the static entry has no such field), and the bus it OMITTED stays static.
+        expect(audioManager.play).toHaveBeenCalledWith(HIT_REF, {
+            bus: 'sfx',
+            volume: 0.9,
+            priority: 7,
+        });
+    });
+
+    it('lets the resolver move the bus while the static volume stands', async () => {
+        const audioManager = createAudioManagerSpy();
+        const binding: EventAudioBinding = {
+            'combat:hit': {
+                ref: HIT_REF,
+                bus: 'sfx',
+                volume: 0.5,
+                options: () => ({ bus: 'voice' }),
+            },
+        };
+
+        renderPlayer(binding, audioManager);
+        useGameStore
+            .getState()
+            .applySnapshot(makeSnapshot({ tick: 2, events: [{ type: 'combat:hit' }] }));
+
+        await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(1));
+        expect(audioManager.play).toHaveBeenCalledWith(HIT_REF, { bus: 'voice', volume: 0.5 });
+    });
+
+    it("invokes the resolver once per occurrence with that occurrence's event", async () => {
+        const audioManager = createAudioManagerSpy();
+        const resolver = vi.fn(() => ({}));
+        const binding: EventAudioBinding = {
+            'combat:hit': { ref: HIT_REF, options: resolver },
+            'match:won': { ref: WIN_REF },
+        };
+
+        // The batch HEAD deliberately has a different type from the resolver's
+        // entry: a player that hands every resolver the batch's first event — instead
+        // of each occurrence's own — would pass a fixture whose head shares the type.
+        renderPlayer(binding, audioManager);
+        useGameStore.getState().applySnapshot(
+            makeSnapshot({
+                tick: 2,
+                events: [{ type: 'match:won' }, { type: 'combat:hit' }, { type: 'combat:hit' }],
+            }),
+        );
+
+        await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(3));
+        // Once per OCCURRENCE of its own entry's event — not per batch, not for the
+        // other entry's event.
+        expect(resolver).toHaveBeenCalledTimes(2);
+        expect(resolver).toHaveBeenNthCalledWith(1, { type: 'combat:hit' });
+        expect(resolver).toHaveBeenNthCalledWith(2, { type: 'combat:hit' });
+    });
+
+    it('contains a throwing resolver: one warning, static fallback, the batch still plays', async () => {
+        const audioManager = createAudioManagerSpy();
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const binding: EventAudioBinding = {
+            'combat:hit': {
+                ref: HIT_REF,
+                bus: 'sfx',
+                volume: 0.5,
+                options: () => {
+                    throw new Error('resolver exploded');
+                },
+            },
+            'match:won': { ref: WIN_REF },
+        };
+
+        renderPlayer(binding, audioManager);
+        useGameStore.getState().applySnapshot(
+            makeSnapshot({
+                tick: 2,
+                events: [{ type: 'combat:hit' }, { type: 'match:won' }],
+            }),
+        );
+
+        await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(2));
+        expect(audioManager.play).toHaveBeenNthCalledWith(1, HIT_REF, {
+            bus: 'sfx',
+            volume: 0.5,
+        });
+        expect(audioManager.play).toHaveBeenNthCalledWith(2, WIN_REF, {});
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not forward the reserved rate override into play options', async () => {
+        // `rate` is carried by the overrides type for the coming playback-rate
+        // feature, but nothing in PlayOptions consumes it yet — forwarding it as an
+        // excess property would ship an unvalidated field the day PlayOptions grows
+        // one. The exact-argument assert is what proves the key is absent.
+        const audioManager = createAudioManagerSpy();
+        const binding: EventAudioBinding = {
+            'combat:hit': {
+                ref: HIT_REF,
+                options: () => ({ rate: 1.5, volume: 0.4 }),
+            },
+        };
+
+        renderPlayer(binding, audioManager);
+        useGameStore
+            .getState()
+            .applySnapshot(makeSnapshot({ tick: 2, events: [{ type: 'combat:hit' }] }));
+
+        await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(1));
+        expect(audioManager.play).toHaveBeenCalledWith(HIT_REF, { volume: 0.4 });
+    });
+
     it('restarts playback indexing when the snapshot event list shrinks', async () => {
         const audioManager = createAudioManagerSpy();
         const binding: EventAudioBinding = {

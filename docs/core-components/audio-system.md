@@ -123,11 +123,13 @@ export type EventAudioBinding = {
         ref: AssetRef<AudioClipAsset>;
         bus?: AudioBusId;
         volume?: number;
+        /** Per-occurrence overrides, merged OVER the static fields; sim-safe primitives only. */
+        options?: (event: GameEvent) => EventAudioOverrides;
     };
 };
 ```
 
-Games declare their event-to-audio map as pure data. The engine's `<EventAudioPlayer>` component reads `events: GameEvent[]` from `gameStore` and calls `AudioManager.play()` for each entry it recognises.
+Games declare their event-to-audio map (the shape is type-pinned in `renderer/audio/EventAudioBinding.test.ts`). The engine's `<EventAudioPlayer>` component reads `events: GameEvent[]` from `gameStore` and calls `AudioManager.play()` for each entry it recognises. An entry's optional `options` resolver runs once per event occurrence and its result merges over the static `bus`/`volume` (an omitted key leaves the static value); `EventAudioOverrides` is defined sim-side (`simulation/foundation/game-screen-contract.ts`) over primitives only — it can vary `volume`, `priority` or `bus`, never a position, and a throwing resolver is contained with one warning while the static entry plays.
 
 ---
 

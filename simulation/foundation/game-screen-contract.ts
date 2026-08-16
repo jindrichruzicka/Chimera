@@ -1,6 +1,6 @@
 import type { EngineAction, GameResult, PlayerId } from './engine-contract.js';
 import type { CommitmentReveal } from './commitment-contract.js';
-import type { PlayerSnapshot } from './snapshot-contract.js';
+import type { GameEvent, PlayerSnapshot } from './snapshot-contract.js';
 import type { AssetRef, AudioClipAsset } from './asset-contract.js';
 import type { GameContent } from './game-content-contract.js';
 import type * as React from 'react';
@@ -182,6 +182,25 @@ export interface GameHudProps extends GameScreenProps {
     readonly saveGame?: (label: string) => void;
 }
 
+/**
+ * Per-occurrence play overrides an event-audio {@link GameEventAudioBinding.options}
+ * resolver returns, merged OVER the entry's static fields — an omitted key leaves
+ * the static value in place.
+ *
+ * A narrow, sim-safe subset of primitives, deliberately: this contract lives
+ * sim-side and flows sim → renderer, never the reverse, so it names no renderer
+ * type — not the play options, not a cue, not a spatial spec. `bus` is a
+ * string-literal union that coincides with the renderer's bus ids without naming
+ * them. `rate` is reserved for a playback-rate override: the engine's event-audio
+ * player drops it rather than forwarding an unvalidated field.
+ */
+export interface EventAudioOverrides {
+    readonly bus?: 'master' | 'music' | 'sfx' | 'voice';
+    readonly volume?: number;
+    readonly priority?: number;
+    readonly rate?: number;
+}
+
 export type GameEventAudioBinding = Readonly<
     Record<
         string,
@@ -189,6 +208,17 @@ export type GameEventAudioBinding = Readonly<
             readonly ref: AssetRef<AudioClipAsset>;
             readonly bus?: 'master' | 'music' | 'sfx' | 'voice';
             readonly volume?: number;
+            /**
+             * Vary the play per occurrence: called by the engine's event-audio
+             * player once for each occurrence of this entry's event, and its
+             * result merged over the static fields above. It receives the
+             * {@link GameEvent} the contract has — `{ type }` and nothing else —
+             * so it cannot produce a position; positioned event SFX use explicit
+             * call sites instead. Pure config: it receives no dispatcher, and a
+             * throw is contained by the player — one warning, the static fields
+             * play.
+             */
+            readonly options?: (event: GameEvent) => EventAudioOverrides;
         }
     >
 >;
