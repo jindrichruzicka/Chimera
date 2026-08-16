@@ -290,10 +290,69 @@ class FakeGainNode extends FakeAudioNode {
     }
 }
 
+/**
+ * Models the panner ATTRIBUTES at `createPanner()`'s own defaults — `distanceModel`
+ * starts at the platform's `'inverse'`, so "the engine wrote `'linear'`" is
+ * distinguishable from "nobody wrote anything". Every attribute assignment is also
+ * logged, because the pinned `panningModel` value EQUALS the platform default: only
+ * the write log can tell the pin from a dropped write.
+ */
 class FakePannerNode extends FakeAudioNode {
     public readonly positionX = new FakeAudioParam();
     public readonly positionY = new FakeAudioParam();
     public readonly positionZ = new FakeAudioParam();
+    public readonly attributeWrites: { readonly name: string; readonly value: unknown }[] = [];
+
+    private storedPanningModel: PanningModelType = 'equalpower';
+    private storedDistanceModel: DistanceModelType = 'inverse';
+    private storedRefDistance = 1;
+    private storedMaxDistance = 10000;
+    private storedRolloffFactor = 1;
+
+    public get panningModel(): PanningModelType {
+        return this.storedPanningModel;
+    }
+
+    public set panningModel(value: PanningModelType) {
+        this.attributeWrites.push({ name: 'panningModel', value });
+        this.storedPanningModel = value;
+    }
+
+    public get distanceModel(): DistanceModelType {
+        return this.storedDistanceModel;
+    }
+
+    public set distanceModel(value: DistanceModelType) {
+        this.attributeWrites.push({ name: 'distanceModel', value });
+        this.storedDistanceModel = value;
+    }
+
+    public get refDistance(): number {
+        return this.storedRefDistance;
+    }
+
+    public set refDistance(value: number) {
+        this.attributeWrites.push({ name: 'refDistance', value });
+        this.storedRefDistance = value;
+    }
+
+    public get maxDistance(): number {
+        return this.storedMaxDistance;
+    }
+
+    public set maxDistance(value: number) {
+        this.attributeWrites.push({ name: 'maxDistance', value });
+        this.storedMaxDistance = value;
+    }
+
+    public get rolloffFactor(): number {
+        return this.storedRolloffFactor;
+    }
+
+    public set rolloffFactor(value: number) {
+        this.attributeWrites.push({ name: 'rolloffFactor', value });
+        this.storedRolloffFactor = value;
+    }
 }
 
 class FakeAudioBufferSourceNode extends FakeAudioNode {
@@ -1394,6 +1453,165 @@ describe('DefaultAudioManager — static spatial validation', () => {
         expect(String(warn.mock.calls[0]?.[0])).toBe(
             'Audio spatial fullVolumeDistance -3 is negative or not finite; rejecting play().',
         );
+    });
+});
+
+// ─── panner configuration — the resolved spec written onto the node (#116) ──────
+//
+// Written test-first against a `connectVoice` that created the panner and set only
+// its position, leaving every distance attribute on the `createPanner()` defaults —
+// so the authored-exact, linear-default, hard-cutoff and panningModel-write cases
+// were each red. The two parity cases (gain writes, duck/fade) are green fences by
+// design: they bound the change at the #116 line rather than drive it, and are the
+// standing spy against the wrong implementation (JS attenuation multiplied into
+// stage 1).
+
+describe('DefaultAudioManager — panner configuration', () => {
+    it('writes the resolved spec onto the panner exactly as authored', async () => {
+        const { assetManager, context, manager } = createManager();
+        const ref = audioRef('audio/sfx/spec.ogg');
+        assetManager.resolve(ref, createAudioBuffer('spec'));
+
+        manager.play(ref, {
+            spatial: {
+                position: [1, -2, 3],
+                fullVolumeDistance: 2.5,
+                falloffDistance: 40,
+                falloff: 'exponential',
+                rolloffFactor: 0.5,
+            },
+        });
+        await flushAudioLoad();
+
+        const panner = expectPanner(context, 0);
+        expect(panner.distanceModel).toBe('exponential');
+        expect(panner.refDistance).toBe(2.5);
+        expect(panner.maxDistance).toBe(40);
+        expect(panner.rolloffFactor).toBe(0.5);
+    });
+
+    it('defaults the distance model to linear, overriding the platform inverse default', async () => {
+        const { assetManager, context, manager } = createManager();
+        const ref = audioRef('audio/sfx/near.ogg');
+        assetManager.resolve(ref, createAudioBuffer('near'));
+
+        manager.play(ref, { spatial: { position: [0, 0, 0] } });
+        await flushAudioLoad();
+
+        // The fake starts at the platform's 'inverse', so this read proves a WRITE —
+        // and the log below proves the other defaults were written too, which their
+        // values alone cannot (they equal the platform's).
+        const panner = expectPanner(context, 0);
+        expect(panner.distanceModel).toBe('linear');
+        expect(panner.attributeWrites.map((write) => write.name).sort()).toEqual([
+            'distanceModel',
+            'maxDistance',
+            'panningModel',
+            'refDistance',
+            'rolloffFactor',
+        ]);
+    });
+
+    it('pins panningModel to equalpower even though nothing can author it', async () => {
+        const { assetManager, context, manager } = createManager();
+        const ref = audioRef('audio/sfx/pan.ogg');
+        assetManager.resolve(ref, createAudioBuffer('pan'));
+
+        manager.play(ref, { spatial: { position: [4, 0, -4] } });
+        await flushAudioLoad();
+
+        // The pin equals the platform default, so only the write log distinguishes
+        // "pinned" from "left to drift with the platform". The unconfigurability half
+        // is a `keyof SpatialOptions` type pin in Spatial.test.ts, gated by tsc.
+        const panner = expectPanner(context, 0);
+        expect(panner.attributeWrites).toContainEqual({
+            name: 'panningModel',
+            value: 'equalpower',
+        });
+        expect(panner.panningModel).toBe('equalpower');
+    });
+
+    it('realises the authored hard cutoff on the panner as the epsilon band', async () => {
+        const { assetManager, context, manager } = createManager();
+        const ref = audioRef('audio/sfx/cutoff.ogg');
+        assetManager.resolve(ref, createAudioBuffer('cutoff'));
+
+        manager.play(ref, {
+            spatial: { position: [0, 0, 0], fullVolumeDistance: 5, falloffDistance: 5 },
+        });
+        await flushAudioLoad();
+
+        const panner = expectPanner(context, 0);
+        expect(panner.refDistance).toBe(5);
+        expect(panner.maxDistance).toBe(5.0001220703125);
+    });
+
+    it('writes exactly the gain automation a non-spatial play writes, and no gain stage from the spatial path (#116)', async () => {
+        // Two managers configured identically, one spatial voice against one plain
+        // one. Spatial attenuation is the panner's own gain, so the stage-1 logs must
+        // be byte-identical and no bus or master gain may see a single extra call —
+        // the wrong implementation (JS attenuation into stage 1) fails both asserts.
+        const plain = createManager();
+        const positioned = createManager();
+        const ref = audioRef('audio/sfx/parity.ogg');
+        plain.assetManager.resolve(ref, createAudioBuffer('parity'));
+        positioned.assetManager.resolve(ref, createAudioBuffer('parity'));
+
+        const busCallsBefore = [0, 1, 2, 3].map(
+            (index) => expectGain(positioned.context, index).gain.calls.length,
+        );
+
+        plain.manager.play(ref, { volume: 0.6 });
+        positioned.manager.play(ref, {
+            spatial: { position: [2, 0, 7], fullVolumeDistance: 1, falloffDistance: 20 },
+            volume: 0.6,
+        });
+        await flushAudioLoad();
+
+        const plainVoiceGain = expectGain(plain.context, 4);
+        const positionedVoiceGain = expectGain(positioned.context, 4);
+        expect(positionedVoiceGain.gain.calls).toEqual(plainVoiceGain.gain.calls);
+        expect(
+            [0, 1, 2, 3].map((index) => expectGain(positioned.context, index).gain.calls.length),
+        ).toEqual(busCallsBefore);
+    });
+
+    it('ducks the bus and fades the voice identically with a panner in the chain (#116)', async () => {
+        const plain = createManager();
+        const positioned = createManager();
+        const ref = audioRef('audio/sfx/dodge.ogg');
+        plain.assetManager.resolve(ref, createAudioBuffer('dodge'));
+        positioned.assetManager.resolve(ref, createAudioBuffer('dodge'));
+
+        const plainHandle = plain.manager.play(ref, { volume: 0.8 });
+        const positionedHandle = positioned.manager.play(ref, {
+            spatial: { position: [1, 1, 1] },
+            volume: 0.8,
+        });
+        await flushAudioLoad();
+
+        // Captured BEFORE the duck and fade, so the unchanged-counts asserts below
+        // say those verbs wrote nothing — captured after, they would compare a number
+        // to itself.
+        const positionedPanner = expectPanner(positioned.context, 0);
+        const configWrites = positionedPanner.attributeWrites.length;
+        const positionWrites = positionedPanner.positionX.calls.length;
+
+        plain.manager.duck('sfx', 0.3, 500);
+        positioned.manager.duck('sfx', 0.3, 500);
+        plain.manager.fadeOut(plainHandle, { overMs: 200 });
+        positioned.manager.fadeOut(positionedHandle, { overMs: 200 });
+
+        // Same bus automation, same stage-1 ramp — and the fade touches no panner
+        // attribute or position param, so the distance curve cannot fight it.
+        expect(expectGain(positioned.context, 2).gain.calls).toEqual(
+            expectGain(plain.context, 2).gain.calls,
+        );
+        expect(expectGain(positioned.context, 4).gain.calls).toEqual(
+            expectGain(plain.context, 4).gain.calls,
+        );
+        expect(positionedPanner.attributeWrites.length).toBe(configWrites);
+        expect(positionedPanner.positionX.calls.length).toBe(positionWrites);
     });
 });
 

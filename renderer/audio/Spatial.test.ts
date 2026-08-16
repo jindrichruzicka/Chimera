@@ -23,7 +23,7 @@
  * so no single axis check can stand in for the other two.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import { resolveSpatialSpec, type SpatialOptions } from './Spatial';
 
@@ -40,6 +40,19 @@ function rejectionWarning(options: SpatialOptions): string | null {
     expect(resolution.kind).toBe('rejected');
     return resolution.kind === 'rejected' ? resolution.warning : null;
 }
+
+describe('SpatialOptions', () => {
+    it('exposes exactly the five authored fields — panningModel is not one of them', () => {
+        // The panning model is PINNED to 'equalpower' where the panner is configured;
+        // this closed key set is what keeps it (and any other panner attribute)
+        // unauthorable. Erased at runtime, so tsc is the gate that enforces it — the
+        // runtime assert only anchors the case.
+        expectTypeOf<keyof SpatialOptions>().toEqualTypeOf<
+            'position' | 'fullVolumeDistance' | 'falloffDistance' | 'falloff' | 'rolloffFactor'
+        >();
+        expect(resolveSpatialSpec({ position: ORIGIN }).kind).toBe('resolved');
+    });
+});
 
 describe('resolveSpatialSpec', () => {
     it('resolves an only-position spec to the platform defaults under the engine linear model', () => {

@@ -1093,6 +1093,7 @@ export class DefaultAudioManager implements AudioManager {
 
         const pannerNode = this.audioContext.createPanner();
         record.pannerNode = pannerNode;
+        configurePannerFromSpec(pannerNode, record.spatial);
         setPannerPosition(pannerNode, record.spatial.position, this.audioContext.currentTime);
         gainNode.connect(pannerNode);
         pannerNode.connect(busGainNode);
@@ -2125,6 +2126,32 @@ function disconnectNode(node: AudioNode): void {
     } catch {
         // Disconnecting an already-detached node may throw; teardown remains best-effort.
     }
+}
+
+/**
+ * Write the resolved spatial spec onto the panner, field for field — the resolver
+ * already mapped the authored options into the panner's own vocabulary, so nothing
+ * here computes anything. Every distance attribute is written unconditionally, the
+ * `distanceModel` included: the ENGINE default is `'linear'` while `createPanner()`
+ * starts at `'inverse'`, so leaving an attribute to the platform would silently ship
+ * the divergence this feature exists to avoid (see {@link SpatialOptions.falloff}).
+ *
+ * `panningModel` is PINNED to `'equalpower'` rather than resolved from anything:
+ * {@link SpatialOptions} deliberately cannot name it. HRTF costs convolution per voice
+ * against a 32-voice pool and buys little for a top-down or side-on camera, so the pin
+ * is written explicitly — never left to the platform default it happens to equal —
+ * and the option surface keeps it unauthorable.
+ *
+ * Spatial attenuation is the panner's own gain, sitting between stage 1 and stage 2 of
+ * the voice chain: nothing here writes any gain-stage `AudioParam`, so every fade,
+ * duck and cue op behaves identically with a panner in the chain (Invariant #116).
+ */
+function configurePannerFromSpec(pannerNode: PannerNode, spec: ResolvedSpatialSpec): void {
+    pannerNode.panningModel = 'equalpower';
+    pannerNode.distanceModel = spec.distanceModel;
+    pannerNode.refDistance = spec.refDistance;
+    pannerNode.maxDistance = spec.maxDistance;
+    pannerNode.rolloffFactor = spec.rolloffFactor;
 }
 
 function setPannerPosition(
