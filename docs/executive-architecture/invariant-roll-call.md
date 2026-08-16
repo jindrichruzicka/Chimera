@@ -9,7 +9,7 @@ tags: [invariants, review-gate, audit, roll-call, hardening]
 > Review gate for the **architecture invariants hardening** set. This is the
 > merge-readiness record: it ratifies the whole hardening set, captures the full quality-gate
 > run, and — the artifact the original part-by-part audit lacked — classifies **every one of the
-> 133** [architecture invariants](architecture-invariants.md) by **how it is actually held up**.
+> 134** [architecture invariants](architecture-invariants.md) by **how it is actually held up**.
 >
 > Related: [Architecture Invariants](architecture-invariants.md) · [Module Boundaries](module-boundaries-file-tree.md)
 
@@ -242,6 +242,80 @@ collapses to 0 under `NEXT_PUBLIC_CHIMERA_E2E` — pinned at the resolver (call-
 stub-after-import) and at both route use sites — while the four release budgets keep their
 no-collapse boundary tests from #1123. A deliberate delay collapses where a gate must not.
 
+### F84 feature-review gate (#1133)
+
+Run in full on the gate's own branch, base `main` @ `46eba2f5`, 2026-08-16. Every step below is
+the result at this tree.
+
+| Step              | Command                                                    | Result                                     |
+| ----------------- | ---------------------------------------------------------- | ------------------------------------------ |
+| Format            | `pnpm format:check`                                        | **exit 0**                                 |
+| Lint              | `pnpm lint`                                                | **exit 0**                                 |
+| Typecheck         | `pnpm typecheck`                                           | **exit 0**                                 |
+| Unit tests        | `pnpm test`                                                | **exit 0 — 11 760 passed, 2 todo**         |
+| Packaged bundle   | `pnpm verify:packaged-bundle`                              | **exit 0**                                 |
+| Invariant checker | `.claude/skills/invariants/scripts/check-invariants.sh`    | **exit 0**                                 |
+| Checker self-test | `.claude/skills/invariants/tests/check-invariants.test.sh` | **144 / 144 pass**                         |
+| Asset validation  | `pnpm validate:assets`                                     | **exit 0 — 17 refs checked**               |
+| Changeset policy  | `pnpm verify:changeset-policy`                             | **exit 0**                                 |
+| Version alignment | `pnpm verify:version-alignment`                            | **exit 0**                                 |
+| Scaffold          | `pnpm verify:scaffold`                                     | **exit 0**                                 |
+| E2E               | `pnpm test:e2e`                                            | **exit 0 — 151 passed, 0 `flaky` matches** |
+
+The unit-test figure is the SUM of the seven per-package runs (simulation 2 298, ai 173,
+networking 300, renderer 4 139, electron 3 140, tactics 985, tools 725), not the tail line.
+`spatial-audio.spec.ts` — the one spec F84 adds — was also isolated at `--retries=0
+--repeat-each=5 --workers=1`: **5 / 5**, so the suite figure above is not covering a retry. The
+nine suites carrying the feature (`Spatial`, `AudioManager`, `useSpatialAudio`, `useSound`,
+`EventAudioBinding`, `audio-barrel-side-effects`, `EventAudioPlayer`, `TacticsDemoBoard`,
+tactics `screens/index`) re-ran green together on this base — **374 tests**.
+
+Row **#134** is what this gate ratifies, and it is code-verified: what it asserts is which NODE
+a write lands on, which no grep or lint rule can observe. Every test its evidence column names
+was confirmed to exist verbatim. **#116 was re-verified rather than amended, and that is
+measured rather than asserted**: across the whole F84 arc (`8b7b872c..46eba2f5`) the only
+content `architecture-invariants.md` gained is the `## Invariants 91–134` heading and the new
+#134 body — no existing invariant's text, #116's included, was touched.
+**Invariant #96's barrel count is likewise unchanged by construction**:
+`renderer/__tests__/package-exports-contract.test.ts`, every `package.json` and the whole
+invariants skill have ZERO commits over that range, so the spatial surface demonstrably widened
+an existing barrel rather than minting a subpath.
+
+The coverage summary above was re-derived from the 134 ledger rows at this tree, not edited by
+eye: 49 enforced-by / 77 code-verified / 8 doc-only, numbering complete and duplicate-free over
+1–134, automatic coverage 126 / 134 = 94%. The summary block itself was already correct;
+**three further copies of the old total were not**, which is why the sweep ran over every
+phrasing of the count rather than the table alone — the opening blockquote ("every one of the
+**133**"), the spot-audit's "every one of the 133 resolves to", and the cross-reference line
+"the 133 numbered rules". The dated figures inside the F82 / F83 / F90 sections above are left
+alone: those record what was true at those gates. Separately, **#134 was missing from
+`architecture-invariants.md`'s own Thematic Index** — the body and the `## Invariants 91–134`
+heading landed without the `Audio playback (§4.25)` row gaining it, so the new rule was
+unreachable through the index that lists every other audio invariant. Added here.
+
+**What the feature review found that no per-task review could.** F84's tactics adoption removed
+`step` and `swordHit` from `TACTICS_EVENT_AUDIO_BINDING` (so nothing double-plays) and replays
+them at `TacticsDemoBoard`'s intent site (so they carry the acting unit's position). Each half
+is correct alone. Composed, they lose a seat: `apps/tactics` `filterEvents` returns
+`events` unfiltered, so **every** client had been receiving every move and attack event and
+playing that event's verb — while only the acting client reaches an intent site. An opponent's move
+and attack are therefore now **silent**, and in commitment mode the actor's own SFX moved
+earlier (buffer time) while the reveal plays neither verb for either seat. `reveal` stays
+event-driven and stays audible to both. #1036's third acceptance criterion — "each SFX plays
+exactly once per event" — does not hold on the merged tree and was **amended rather than
+re-ticked**; the loss is named in F84's roadmap deferral clause and filed as
+[#1134](https://github.com/jindrichruzicka/Chimera/issues/1134).
+
+Two further gaps are recorded rather than fixed. **`setVoicePosition` ships with no game
+adopter** — it is unit-tested and reachable from the barrel, but the identifier appears nowhere
+in `apps/tactics` outside that game's own test files, because tactics units teleport between
+tiles; no acceptance criterion required an adopter, so the moving-source third of the feature
+has tests but no production evidence, unlike the pose and the distance band. And the
+roadmap's consolidated F74 deferral paragraph claimed the cue-reactive `MusicDirector` half and
+variable playback rate had **landed** as F85 and F86 — both are `Status: designed, not
+implemented` in that same file, and the sentence was wrong from the day it was written, since
+none of the three had landed then. Corrected here to state each one's actual status.
+
 ---
 
 ## The roll-call — every invariant
@@ -418,7 +492,7 @@ concrete test.
   (no manifest carried `metadata`), now reaches production input: `apps/tactics/asset-manifest.ts`
   carries two sheets, and a cue moved out of range there fails `pnpm validate:assets`.
 
-No coverage gap was found: every one of the 133 resolves to a mechanical guard or a real test,
+No coverage gap was found: every one of the 134 resolves to a mechanical guard or a real test,
 except the 8 architectural principles honestly marked doc-only.
 
 ## Checker firing proof
@@ -502,7 +576,7 @@ Each guard-repair shipped a test that fails without its fix:
 
 ## Cross-references
 
-- [Architecture Invariants](architecture-invariants.md) — the 133 numbered rules.
+- [Architecture Invariants](architecture-invariants.md) — the 134 numbered rules.
 - [Module Boundaries](module-boundaries-file-tree.md) — the file tree these boundary checks defend.
 - Checker: `.claude/skills/invariants/scripts/check-invariants.sh` (Checks 1–32) and its self-test
   `.claude/skills/invariants/tests/check-invariants.test.sh`.

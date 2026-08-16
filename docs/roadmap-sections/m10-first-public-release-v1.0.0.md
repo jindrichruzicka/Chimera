@@ -210,17 +210,18 @@ global cue registries — all candidates for a follow-up.
 
 Three entries this list originally carried were **taken up inside M10 rather than
 deferred past it**, and are recorded here so the deferral and the milestone do not
-tell two different stories. **3D / spatial panning** landed as **F84** — with
+tell two different stories. **3D / spatial panning** **landed** as **F84** — with
 **HRTF** specifically still deferred, since `panningModel` is pinned to
 `'equalpower'`, and with source cones, occlusion and reverb zones still out with the
-rest of the DSP list. The **cue-reactive half of `MusicDirector`** landed as
-**F85**, which adds the primitive that layer would have been built on — a music
-transition that waits for an authored cue — while the layer itself (named slots,
-stem stacks, in-flight retarget, a global cue registry) stays deferred. And
-**variable playback rate** landed as **F86**, as resampling, so rate and pitch move
-together; pitch-**preserving** time-stretch and live mid-voice rate changes stay
-deferred, and the option is named `rate` rather than `pitch` so the type does not
-promise the one it does not do.
+rest of the DSP list. The **cue-reactive half of `MusicDirector`** is **F85**, still
+_designed, not implemented_ per its section below: it adds the primitive that layer
+would have been built on — a music transition that waits for an authored cue — while
+the layer itself (named slots, stem stacks, in-flight retarget, a global cue
+registry) stays deferred either way. And **variable playback rate** is **F86**, also
+_designed, not implemented_, as resampling, so rate and pitch move together;
+pitch-**preserving** time-stretch and live mid-voice rate changes stay deferred, and
+the option is named `rate` rather than `pitch` so the type does not promise the one
+it does not do.
 
 ### F75 — Standalone-Reachable Font Self-Hosting Tooling `§4.37`
 
@@ -535,8 +536,18 @@ doppler, which is no longer in the Web Audio spec and has nothing to implement; 
 camera-derived listener pose and no engine-owned r3f binding component — the pose is the
 game's, for the reason the section above measures; No typed, projection-gated `GameEvent`
 payloads, so the event-options resolver cannot produce a position — widening the event
-contract is a projection change, not an audio one, and is a named follow-up; No pool resize
-and no bus-graph reshape, unchanged from F74 — all candidates for a follow-up.
+contract is a projection change, not an audio one. What that deferral **cost**, measured at
+this tree rather than predicted: `filterEvents` in `apps/tactics` returns every event to every
+seat, so the two entries the adoption removed from `TACTICS_EVENT_AUDIO_BINDING` had been
+playing on **both** clients, and playing them at the intent site instead makes an opponent's
+move and attack **silent** — audible positioning bought for one seat at the price of the
+other's feedback. `reveal` stays event-driven and so stays audible to both. Filed as
+[#1134](https://github.com/jindrichruzicka/Chimera/issues/1134); No game adopter for
+`setVoicePosition`. The moving-source verb ships unit-tested and reachable from the barrel,
+but nothing in `apps/tactics` moves a live voice — the board's units teleport between tiles —
+so that third of the feature has tests but no production evidence, unlike the listener pose
+and the distance band; No pool resize and no bus-graph reshape, unchanged from F74 — all
+candidates for a follow-up.
 
 ### F85 — Music Cue Observation & Cue-Aligned Transitions `§4.25`
 
@@ -585,16 +596,16 @@ becomes a `crossfadeAtCue` at the same `loopEnd` the loop already uses, and the 
 becomes a **timing** one — the mirrored bed marker must not change at the turn boundary and
 must change afterwards.
 
-| Task                                                                                             | Issue                                                           |
-| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Add the voice playhead reader and secondsUntilCue                                                | [#1038](https://github.com/jindrichruzicka/Chimera/issues/1038) |
-| Add the pure cue marker scheduler                                                                | [#1039](https://github.com/jindrichruzicka/Chimera/issues/1039) |
-| Wire the on-demand rAF cue sampler and AudioManager.observeCues                                  | [#1040](https://github.com/jindrichruzicka/Chimera/issues/1040) |
-| Let startVoice start a voice at a future context time                                            | [#1041](https://github.com/jindrichruzicka/Chimera/issues/1041) |
-| Add crossfadeAtCue and fadeOutAtCue with their fail-soft branches                                | [#1042](https://github.com/jindrichruzicka/Chimera/issues/1042) |
-| Add useAudioCues and export the cue surface from the audio barrel                                | [#1043](https://github.com/jindrichruzicka/Chimera/issues/1043) |
-| Adopt the cue-aligned ambience swap in tactics with an e2e                                       | [#1044](https://github.com/jindrichruzicka/Chimera/issues/1044) |
-| Author Invariants #133/#134, sweep the docs and roadmap F85, cut the changeset and open the gate | [#1045](https://github.com/jindrichruzicka/Chimera/issues/1045) |
+| Task                                                                                                       | Issue                                                           |
+| ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Add the voice playhead reader and secondsUntilCue                                                          | [#1038](https://github.com/jindrichruzicka/Chimera/issues/1038) |
+| Add the pure cue marker scheduler                                                                          | [#1039](https://github.com/jindrichruzicka/Chimera/issues/1039) |
+| Wire the on-demand rAF cue sampler and AudioManager.observeCues                                            | [#1040](https://github.com/jindrichruzicka/Chimera/issues/1040) |
+| Let startVoice start a voice at a future context time                                                      | [#1041](https://github.com/jindrichruzicka/Chimera/issues/1041) |
+| Add crossfadeAtCue and fadeOutAtCue with their fail-soft branches                                          | [#1042](https://github.com/jindrichruzicka/Chimera/issues/1042) |
+| Add useAudioCues and export the cue surface from the audio barrel                                          | [#1043](https://github.com/jindrichruzicka/Chimera/issues/1043) |
+| Adopt the cue-aligned ambience swap in tactics with an e2e                                                 | [#1044](https://github.com/jindrichruzicka/Chimera/issues/1044) |
+| Author the cue-observation invariants, sweep the docs and roadmap F85, cut the changeset and open the gate | [#1045](https://github.com/jindrichruzicka/Chimera/issues/1045) |
 
 Feature issue: [#1028](https://github.com/jindrichruzicka/Chimera/issues/1028).
 
@@ -776,9 +787,8 @@ window verification, so it was filed as a follow-up and landed under
 section was F82's outstanding follow-up, not F89's scope, and it landed afterwards under
 [#1096](https://github.com/jindrichruzicka/Chimera/issues/1096) as
 [`docs/core-components/animation-system.md`](../core-components/animation-system.md), covering both
-features' surface; No new numbered invariant. #133 and
-#134 are reserved by F85, so the posing-action release rule ships as a named module-header rule,
-the way Rule SPEED-NON-NEGATIVE and Rule STEP-BOUNDED already do; No
+features' surface; No new numbered invariant — the posing-action release rule ships as a named
+module-header rule, the way Rule SPEED-NON-NEGATIVE and Rule STEP-BOUNDED already do; No
 `@chimera-engine/renderer/animation` subpath — both blend surfaces ride already-exported types,
 so the exports map, the package-exports contract and Invariant #96's eight-barrel count are
 unchanged; No docs-site sync, since the published docs live in a separate repository — all
