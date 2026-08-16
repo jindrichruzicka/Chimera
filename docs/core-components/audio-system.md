@@ -92,7 +92,7 @@ export interface AudioManager {
 }
 ```
 
-A component gets the manager from `useAudioManager()` and never from a module-level import (Invariant #84); `GameShell` and `<EventAudioPlayer>` use it directly. `renderer/audio` builds two hooks on it:
+A component gets the manager from `useAudioManager()` and never from a module-level import (Invariant #84); `GameShell` and `<EventAudioPlayer>` use it directly. `renderer/audio` builds its hooks on it:
 
 ```typescript
 // renderer/audio/useSound.ts — start a sound
@@ -101,6 +101,10 @@ export function useSound(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): () 
 // renderer/audio/useMusicTrack.ts — act on a voice already playing
 export type AudioTrackControls = Pick<AudioManager, 'fadeOut' | 'fadeTo' | 'crossfade'>;
 export function useMusicTrack(): AudioTrackControls;
+
+// renderer/audio/useSpatialAudio.ts — the spatial verbs
+export type SpatialAudioControls = Pick<AudioManager, 'setListener' | 'setVoicePosition'>;
+export function useSpatialAudio(): SpatialAudioControls;
 ```
 
 `useSound` memoizes its callback on **every** `PlayOptions` field, so a rerender that changes only `fadeIn` still plays the new fade. `AudioTrackControls` carries the three live-handle verbs and nothing else, taken from `AudioManager` by `Pick` rather than restated — the handle names the voice, so one control object serves however many voices a component holds.

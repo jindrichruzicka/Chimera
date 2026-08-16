@@ -9,10 +9,11 @@
  * `useSound` and `useMusicTrack` were unreachable from `apps/<game>/` and the
  * feature had no adopter. This barrel is that subpath.
  *
- * What it exports is the calling surface and nothing else: the three hooks a game
- * uses (`useSound` to start a voice, `useMusicTrack` for the live-handle verbs,
- * `useAudioManager` for the manager itself — Invariant #84 makes the context hook
- * the only sanctioned way to reach it), the provider those hooks read from, the two exported
+ * What it exports is the calling surface and nothing else: the hooks a game uses
+ * (`useSound` to start a voice, `useMusicTrack` for the live-handle verbs,
+ * `useSpatialAudio` for the listener pose and moving sources, `useAudioManager` for
+ * the manager itself — Invariant #84 makes the context hook the only sanctioned way
+ * to reach it), the provider those hooks read from, the two exported
  * constants a caller names (`MUSIC_PRIORITY`, `DEFAULT_FADE_CURVE`), and the option
  * and handle types the calls take. `AudioManagerProvider` is here because a
  * hook a game may call is only half of what the game needs: its component tests
@@ -35,6 +36,7 @@
 
 export { useSound } from './useSound';
 export { useMusicTrack, type AudioTrackControls } from './useMusicTrack';
+export { useSpatialAudio, type SpatialAudioControls } from './useSpatialAudio';
 export { useAudioManager } from './AudioManagerContext.js';
 export { AudioManagerProvider, type AudioManagerProviderProps } from './AudioManagerProvider.js';
 
@@ -56,3 +58,15 @@ export type {
     FadeToSpec,
     LoopRegion,
 } from './Cue';
+
+// The spatial OPTION surface only. The resolution internals (`resolveSpatialSpec`,
+// the resolved-spec shapes, the defaults and the hard-cutoff epsilon) stay behind
+// the barrel: a game authors options, and the panner vocabulary is the engine's.
+export type {
+    AudioListenerPose,
+    AudioPosition,
+    DistanceFalloff,
+    SetListenerOptions,
+    SetVoicePositionOptions,
+    SpatialOptions,
+} from './Spatial';

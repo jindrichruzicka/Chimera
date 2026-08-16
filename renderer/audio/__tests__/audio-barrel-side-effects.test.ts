@@ -36,17 +36,24 @@ import * as audioBarrel from '../index';
 import type {
     AudioBusId,
     AudioHandle,
+    AudioListenerPose,
     AudioManager,
     AudioManagerProviderProps,
+    AudioPosition,
     AudioTrackControls,
     CrossfadeOptions,
     Cue,
+    DistanceFalloff,
     FadeCurve,
     FadeInSpec,
     FadeOutSpec,
     FadeToSpec,
     LoopRegion,
     PlayOptions,
+    SetListenerOptions,
+    SetVoicePositionOptions,
+    SpatialAudioControls,
+    SpatialOptions,
 } from '../index';
 
 /**
@@ -61,17 +68,24 @@ import type {
 interface BarrelTypeSurface {
     readonly busId: AudioBusId;
     readonly handle: AudioHandle;
+    readonly listenerPose: AudioListenerPose;
     readonly manager: AudioManager;
     readonly providerProps: AudioManagerProviderProps;
+    readonly position: AudioPosition;
     readonly trackControls: AudioTrackControls;
     readonly crossfade: CrossfadeOptions;
     readonly cue: Cue;
     readonly curve: FadeCurve;
+    readonly distanceFalloff: DistanceFalloff;
     readonly fadeIn: FadeInSpec;
     readonly fadeOut: FadeOutSpec;
     readonly fadeTo: FadeToSpec;
     readonly loopRegion: LoopRegion;
     readonly play: PlayOptions;
+    readonly setListenerOpts: SetListenerOptions;
+    readonly setVoicePositionOpts: SetVoicePositionOptions;
+    readonly spatialControls: SpatialAudioControls;
+    readonly spatial: SpatialOptions;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -136,10 +150,11 @@ describe('@chimera-engine/renderer/audio barrel', () => {
             'useAudioManager',
             'useMusicTrack',
             'useSound',
+            'useSpatialAudio',
         ]);
     });
 
-    it('pulls in exactly ten modules, one of them a store', async () => {
+    it('pulls in exactly eleven modules, one of them a store', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist. A denylist only rejects the subsystems whoever
@@ -169,6 +184,7 @@ describe('@chimera-engine/renderer/audio barrel', () => {
             'audio/index.ts',
             'audio/useMusicTrack.ts',
             'audio/useSound.ts',
+            'audio/useSpatialAudio.ts',
             'state/settingsStore.ts',
         ]);
 
