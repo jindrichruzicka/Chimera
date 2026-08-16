@@ -14,10 +14,11 @@ had no way to put it on screen. That gap is closed.
 
 **New on `@chimera-engine/renderer/components/r3f`:**
 
-- `AnimatedSprite` — the whole path as one element: `<AnimatedSprite sheet={ref} clip="run"
-loop="loop" />` resolves the ref, measures the atlas, plays the clip and fires its marks. Also
-  takes `speed`, `handlers`, `timeScale`, `position`, `rotation`, `scale`, `renderOrder`,
-  `visible`, and `children` to replace the default unlit material.
+- `AnimatedSprite` — the whole path as one element:
+  `<AnimatedSprite sheet={ref} clip="run" loop="loop" />` resolves the ref, measures the atlas,
+  plays the clip and fires its marks. Also takes `speed`, `handlers`, `timeScale`, `position`,
+  `rotation`, `scale`, `renderOrder`, `visible`, and `children` to replace the default unlit
+  material.
 - `useSpriteClipPlayer(atlas, geometry, sheet, options)` — the seam under it, for a game that
   owns its own mesh and material.
 - The types `AnimatedSpriteProps` and `UseSpriteClipPlayerOptions`.

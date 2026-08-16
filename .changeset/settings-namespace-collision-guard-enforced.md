@@ -9,9 +9,10 @@ engine namespace keys, then filtered that already-cleaned list _for_ those same 
 was always empty and `SettingsNamespaceCollisionError` could only ever fire for a duplicate `gameId`.
 A game whose defaults shadowed `audio`, `display`, `gameplay` or `controls` registered silently.
 
-Matching on the key name alone cannot express the invariant. `GameSettingsSchema<T extends
-EngineSettings>` means every game's `defaults` legitimately _contains_ all four reserved keys —
-games spread `...ENGINE_DEFAULTS` — so a name match would reject every real game, including the
+Matching on the key name alone cannot express the invariant.
+`GameSettingsSchema<T extends EngineSettings>` means every game's `defaults` legitimately
+_contains_ all four reserved keys — games spread `...ENGINE_DEFAULTS` — so a name match would
+reject every real game, including the
 shipped tactics schema. The guard instead requires each reserved namespace to arrive **intact**:
 present, a plain object, owning every engine sub-key for that namespace. Hijacking the name for a
 game-specific value, supplying a partial namespace, and omitting one are all rejected by the same
