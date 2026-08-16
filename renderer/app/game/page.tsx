@@ -407,9 +407,10 @@ export default function GamePage(): React.ReactElement | null {
              * A SIBLING of the shell, not a wrapper around it: the shell has to
              * mount for its manager to be disposed (Invariant #21), so what the
              * gate withholds is the sight of it. Rendered last so it paints over
-             * the scene it covers, and dropped on every settle path — a cover
-             * left standing at --ch-z-loading-hud sits above every modal and
-             * toast for the rest of the match.
+             * the scene it covers, and dropped on every settle path — after the
+             * minimum-visible remainder when one is armed, but always on a
+             * fixed timer — because a cover left standing at --ch-z-loading-hud
+             * sits above every modal and toast for the rest of the match.
              */}
             {revealReady ? null : (
                 <RouteEntryLoadingCover registry={loadedGame.registry} snapshot={snapshot} />

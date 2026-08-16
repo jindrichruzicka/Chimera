@@ -15,19 +15,25 @@ tags: [renderer, react, game-screen-registry, contexts, design-tokens, code-spli
 
 ### Overview
 
-`GameShell.tsx` renders the match experience without knowing which game it is rendering. The contract between a game and the engine is `GameScreenRegistry`: a typed object mapping slot names to React component types.
+`GameShell.tsx` renders the match experience without knowing which game it is rendering. The contract between a game and the engine is `GameScreenRegistry`: a typed object of slots — mostly React component types, plus the loading-cover forms, the audio binding and one timing knob. The authoritative shape lives in `simulation/foundation/game-screen-contract.ts`; the block below is its summary.
 
 ### GameScreenRegistry Interface
 
 ```typescript
-// renderer/components/shell/GameShell.tsx (exported for game packages to satisfy)
+// simulation/foundation/game-screen-contract.ts (re-exported from GameShell.tsx)
 
 export interface GameScreenRegistry {
     readonly playfield: React.ComponentType; // Required — primary gameplay view
     readonly hud?: React.ComponentType<GameHudProps>; // Optional game-defined game HUD
     readonly screens?: Readonly<Record<string, React.ComponentType>>; // Named full-screen panels
+    readonly sceneDefaultScreens?: Readonly<Record<string, string>>; // sceneId → default screen key
     readonly transitionOverlay?: React.ComponentType; // Optional; engine default used when absent
     readonly gameResultBanner?: React.ComponentType<GameResultBannerProps>; // Optional winner display
+    readonly inGameMenu?: React.ComponentType<InGameMenuProps> | 'none'; // Escape menu; 'none' opts out
+    readonly loadingScreen?: GameLoadingScreen; // Registry-wide loading cover (§4.36)
+    readonly loadingScreens?: Readonly<Record<string, GameLoadingScreen>>; // Per-screen-key covers
+    readonly loadingScreenMinVisibleMs?: number; // Floor on a SHOWN cover's visibility (§4.36)
+    readonly eventAudioBinding?: GameEventAudioBinding; // Action event → audio clip
 }
 
 export interface GameHudProps extends GameScreenProps {
@@ -840,12 +846,20 @@ The same cover has a second site, `RouteEntryLoadingCover`, which is not a Suspe
 
 Its third site is the scene TRANSITION cover, rendered by `SceneRouter` from the moment a MEASURED preload run starts — which is on the far side of the fade-out, so the cover never pops over a scene still on screen — until the transition ends (§4.18–§4.19). A transition with nothing to preload shows no cover at all. Two placement rules are load-bearing: it is a SIBLING of the overlay branch, because that branch renders `TransitionOverlay` only when the game supplies no `transitionOverlay` — nested inside it, the cover would be unreachable for exactly the games that do; and it is never `TransitionOverlay`'s child, whose `aria-hidden="true"` would strip a preset's `role="status"` out of the accessibility tree. It resolves the ENTERING scene — `sceneTransition.toSceneId`, and for the screen key `sceneTransition.defaultScreen ?? registry.sceneDefaultScreens[sceneId] ?? 'playfield'` — because `snapshot.sceneId` and `useActiveScreen()` both still describe the scene being left.
 
+### Minimum Visible Time (`loadingScreenMinVisibleMs`)
+
+One optional registry-wide knob floors how long a SHOWN cover stays up: once the cascade resolves a game-declared cover form and that cover is actually visible, it stays at least `loadingScreenMinVisibleMs` (tactics declares 400 ms). A wait that outlives the minimum changes nothing, and an absent or `0` value keeps every path byte-identical to the knobless engine. `resolveLoadingCoverHoldMs` (`renderer/components/scene/loadingCoverHold.ts`) is the single resolver: `0` for absent/zero/negative/non-finite declarations, `0` under `NEXT_PUBLIC_CHIMERA_E2E === '1'` read at call time — the hold is a deliberate delay like the screen fades, never a release budget (Invariant #133) — and deliberately NOT collapsed under `prefers-reduced-motion`, where zeroed fades make a sub-perceptual cover flash strictly worse. `useMinimumVisibleHold` is the shared delayed-release latch beneath every consumer.
+
+Visibility is the arming condition. The hold arms only for a cover the player can see: never for the engine's empty placeholder or a `'none'` resolution, and never while something opaque paints over the cover. On the faded lobby→game entry the app scrim covers the whole route subtree (`AppShell` wraps routes in their own stacking context, so the cover's z-index is local while the scrim is a sibling above), so that entry stays on the un-floored path; `SceneRouter` receives the same fact as its `sceneCoverOccluded` prop, threaded from the page through `GameShell`, because the shell's inner `FadeProvider` shadows the app-level fade context below it.
+
+The two cover-site families implement the floor differently. The route-entry sites defer the reveal itself: `/game`'s latched app-level fade-in plus its cover drop, and `/replays/player`'s cover drop, each wait for max(gate settle, shown + minimum) — `restoreWaiting` bypasses the hold, and replay `isReady` is never widened. The `SceneRouter` sites cannot defer their drops — the transition cover unmounts on a host-side commit and a Suspense fallback unmounts the instant its chunk resolves — so the router keeps ONE held-layer slot: the same cascade resolution the dropped cover rendered (with its last measured fraction, or `reason="code"`), snapshotted during covered renders and re-rendered as a sibling layer at the cover z-index until the remainder elapses. One visual wait gets one clock: covers that chain inside a single wait (a commit whose entering screen's chunk suspends) share the first cover's clock, while a superseding transition starts a new wait with its own full minimum, and at most one cover layer is in the DOM at a time. A component-form cover that is itself lazy stamps at the fallback wrapper's mount regardless — the inner placeholder frame it may paint first is accepted.
+
 ### Invariants
 
-| #   | Rule                                                                                                                                                 |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #87 | Every screen component exported from `apps/<name>/screens/index.ts` must be wrapped in `React.lazy()`. Eager static imports defeat the bundle split. |
-| #88 | `GameShell` wraps every active screen in `<React.Suspense>`. No game screen may assume it renders without a Suspense ancestor.                       |
+| #   | Rule                                                                                                                                                                                                                                                      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #87 | Every screen component exported from `apps/<name>/screens/index.ts` must be wrapped in `React.lazy()`. Eager static imports defeat the bundle split.                                                                                                      |
+| #88 | `GameShell` wraps every active screen in `<React.Suspense>`. No game screen may assume it renders without a Suspense ancestor. The minimum-visible held layer may re-render the fallback's SAME cascade resolution as a sibling for the hold's remainder. |
 
 ---
 

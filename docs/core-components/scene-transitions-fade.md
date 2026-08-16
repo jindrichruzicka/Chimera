@@ -150,6 +150,8 @@ export function SceneRouter(): JSX.Element;
 
 The ack fires on **all four** preload outcomes — `loaded`, `failed`, `timeout`, `skipped`. Withholding it on a bad disk would freeze the match rather than degrade it: the host waits for every player, evaluates `timeoutTicks` only when an action is applied, and a turn-based game has no ticker to apply one.
 
+The minimum-visible cover hold (§4.36) changes none of this: `useFadeTransition` owns the ack and is untouched by it, so the fade-out, the preload run, the progress protocol and the `engine:scene_ready` dispatch are byte-identical with or without a declared minimum. The hold is a held COPY at the render site — when the commit drops the transition cover before its minimum has elapsed, `SceneRouter` re-renders the same cascade resolution with its last measured fraction as a sibling layer for the remainder — so nothing host-visible moves, by construction.
+
 A run is abandoned by **cancellation, never disposal** (Invariant #21 — the manager is borrowed). Cancelling is not the transition effect's cleanup: that effect depends on the parsed `sceneTransition` object and re-runs on every state frame, so a remote player's ack alone would kill the local run. The two cancel sites are an unmount-only effect and an explicit transition-identity check.
 
 Progress is a plain `useState` in `SceneRouter`, fed by the hook's `onPreloadProgress` and handed to `TransitionOverlay`, to a game-supplied overlay, and to the transition's loading cover — the third cover site (§4.36), rendered as a SIBLING of the overlay branch. It is not in `uiStore` (a module singleton two mounted routers would cross-talk through) and not on `FadeControl` (also mounted app-level, where no scene preload exists).

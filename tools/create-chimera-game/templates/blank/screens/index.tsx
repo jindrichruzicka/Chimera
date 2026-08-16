@@ -4,6 +4,8 @@
 // loading covers `loadingScreen` and `loadingScreens`, and entries under
 // `screens`/`sceneDefaultScreens` as your game grows. Declare a cover only if
 // you want a wait explained; leaving both unset keeps the engine default.
+// `loadingScreenMinVisibleMs` keeps a shown cover up at least that long, so a
+// fast load reads as a beat instead of a flicker.
 
 import React from 'react';
 import type { InputAction } from '@chimera-engine/renderer/input';

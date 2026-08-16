@@ -29,8 +29,10 @@
 //     pair can never be mismatched.
 //   * `useCriticalAssetPreloadGate` runs the same warm-up and REPORTS when it
 //     settles, for a route that holds its reveal — the app-level fade-in, a
-//     route-entry cover — until the assets are there. It holds back no MOUNT:
-//     see its JSDoc for why Invariant #21 forbids that.
+//     route-entry cover — on the answer (plus, when the game declares a
+//     loadingScreenMinVisibleMs, a shown cover's remainder; the routes own
+//     that wait, §4.36). It holds back no MOUNT: see its JSDoc for why
+//     Invariant #21 forbids that.
 //
 // Three properties are load-bearing, each for a reason invisible at the call
 // site:
@@ -178,7 +180,9 @@ export function useCriticalAssetPreload(
 
 /**
  * How long a route entry may hold its REVEAL waiting on the critical preload
- * before it is shown anyway.
+ * before the gate settles it open anyway. (A shown cover's minimum-visible
+ * remainder can still run past the settle — that wait is the route's, bounded
+ * by its own timer, §4.36.)
  *
  * 8 s, and generous on purpose: this budget is a rescue, not a schedule. It is
  * the wait a player absorbs when a critical ref is missing or a decode wedges,
@@ -271,8 +275,9 @@ function promotedCriticalRefs(
  * The third entry point of this module, and the only one that answers a
  * question rather than only starting work: `GameShell`'s arm warms the same
  * manifest and reports failures, and this one exists so the surrounding route
- * can hold its reveal — the app-level fade-in, a cover — until the warm-up has
- * settled. Both arms are cheap together: every ref after the first resolves
+ * can hold its reveal — the app-level fade-in, a cover — on this answer (the
+ * route may add a shown cover's minimum-visible remainder on top, §4.36).
+ * Both arms are cheap together: every ref after the first resolves
  * through the manager's `loadedAssets`/`inFlightLoads`, and re-registering an
  * equivalent manifest evicts nothing.
  *

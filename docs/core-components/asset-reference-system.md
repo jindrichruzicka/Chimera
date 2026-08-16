@@ -275,7 +275,9 @@ be unreachable by every remaining dispose path.
 
 The third, `useCriticalAssetPreloadGate`, differs by what the caller does with the ANSWER: it runs
 the same warm-up and reports `{ ready, outcome }`, so a route can hold its REVEAL — the app-level
-fade-in, and a `RouteEntryLoadingCover` over the scene — until the assets are there. Four
+fade-in, and a `RouteEntryLoadingCover` over the scene — until the assets are there; with a
+declared `loadingScreenMinVisibleMs`, the reveal lands at max(settle-or-budget, shown + minimum) —
+a floor on a SHOWN cover's visibility, never a widening of any budget here (§4.36, Invariant #133). Four
 independent settle paths, because each has its own failure mode: the run resolving, the run
 REJECTING, `CRITICAL_ASSET_PRELOAD_BUDGET_MS` elapsing, and a blank manager or manifest — the
 last computed in render rather than in an effect, so a manifest-less game is ready on its first

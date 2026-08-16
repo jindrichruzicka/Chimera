@@ -84,5 +84,10 @@ export const TacticsGameScreenRegistry: GameScreenRegistry = {
     loadingScreens: {
         'asset-demo': { message: SCENE_KEYS.assetDemoLoading },
     },
+    // Once a cover the player can see has been shown, it stays at least this
+    // long (§4.36) — a floor against the sub-perceptual flash of a fast load,
+    // never a delay added to a slow one. Registry-wide by design; with the
+    // per-key-only topology above it floors the asset-demo covers.
+    loadingScreenMinVisibleMs: 400,
     gameResultBanner: TacticsGameResultBanner,
 };

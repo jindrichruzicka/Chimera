@@ -785,7 +785,11 @@ candidates for a follow-up.
 
 ### F90 — Minimum Visible Time for Loading Covers `§4.36, §4.18–§4.19, §4.10`
 
-**Status: designed, not implemented.** A loading cover that appears and vanishes inside
+**Status: implemented across #1127–#1131; the feature gate is #1132.** The contract field,
+resolver and registration warns landed with #1127, the `useMinimumVisibleHold` latch with
+#1128, the visibility-gated route-entry arms with #1129, `SceneRouter`'s held layer with
+#1130, and tactics' 400 ms adoption plus the Invariant #133/#88 amendments with #1131.
+A loading cover that appears and vanishes inside
 ~100 ms reads as a flicker, not an explanation. F83 made every cover's lifetime exactly the
 wait it stands in for, and on fast hardware that wait is often shorter than the time a
 player needs to register that anything was shown — a spinner that flashes for two frames is

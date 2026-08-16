@@ -135,6 +135,14 @@ describe('TacticsGameScreenRegistry', () => {
         expect(cover).toEqual({ message: 'game.tactics.scene.assetDemoLoading' });
     });
 
+    it('declares a 400 ms minimum visible time for its covers', () => {
+        // One registry-wide knob; the cover topology stays per-key-only, so
+        // what this floors in practice is the asset-demo covers — and that
+        // per-key-only shape is what keeps "covers this key and no other"
+        // falsifiable below.
+        expect(TacticsGameScreenRegistry.loadingScreenMinVisibleMs).toBe(400);
+    });
+
     it('declares NO registry-wide loading cover', () => {
         // The load-bearing half of the pair: this game opts ONE screen key in,
         // and declares no fallback covering every other screen.
