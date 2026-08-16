@@ -14,10 +14,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('TacticsGameScreenRegistry', () => {
     it('binds only the event audio the board does not play at explicit call sites', () => {
-        // The board plays step and sword-hit POSITIONALLY at its own intent site —
-        // the intent knows the acting unit, which the { type }-only GameEvent cannot
-        // carry — so those entries must NOT also live here: an entry on both paths
-        // would double-play every action. The exact key set is the pin.
+        // The board plays step and sword-hit POSITIONALLY, derived from the delta
+        // between the projections it receives — a { type }-only GameEvent carries
+        // no position, and the delta names the unit an event cannot. Those entries
+        // must NOT also live here: an entry on both paths would double-play every
+        // action. The exact key set is the pin.
         expect(TacticsGameScreenRegistry.eventAudioBinding).toBeDefined();
         expect(Object.keys(TacticsGameScreenRegistry.eventAudioBinding ?? {})).toEqual([
             'tactics:reveal_tile',

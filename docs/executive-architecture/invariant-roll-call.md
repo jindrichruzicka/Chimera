@@ -294,17 +294,19 @@ heading landed without the `Audio playback (§4.25)` row gaining it, so the new 
 unreachable through the index that lists every other audio invariant. Added here.
 
 **What the feature review found that no per-task review could.** F84's tactics adoption removed
-`step` and `swordHit` from `TACTICS_EVENT_AUDIO_BINDING` (so nothing double-plays) and replays
-them at `TacticsDemoBoard`'s intent site (so they carry the acting unit's position). Each half
-is correct alone. Composed, they lose a seat: `apps/tactics` `filterEvents` returns
+`step` and `swordHit` from `TACTICS_EVENT_AUDIO_BINDING` (so nothing double-plays) and replayed
+them at `TacticsDemoBoard`'s intent site (so they carried the acting unit's position). Each half
+was correct alone. Composed, they lost a seat: `apps/tactics` `filterEvents` returns
 `events` unfiltered, so **every** client had been receiving every move and attack event and
 playing that event's verb — while only the acting client reaches an intent site. An opponent's move
-and attack are therefore now **silent**, and in commitment mode the actor's own SFX moved
-earlier (buffer time) while the reveal plays neither verb for either seat. `reveal` stays
-event-driven and stays audible to both. #1036's third acceptance criterion — "each SFX plays
-exactly once per event" — does not hold on the merged tree and was **amended rather than
-re-ticked**; the loss is named in F84's roadmap deferral clause and filed as
-[#1134](https://github.com/jindrichruzicka/Chimera/issues/1134).
+and attack were therefore **silent** at that tree, and in commitment mode the actor's own SFX
+moved earlier (buffer time) while the reveal played neither verb for either seat. `reveal`
+stays event-driven and stays audible to both. #1036's third acceptance criterion — "each SFX
+plays exactly once per event" — did not hold on the merged tree and was **amended rather than
+re-ticked**; the loss was named in F84's roadmap deferral clause and filed as
+[#1134](https://github.com/jindrichruzicka/Chimera/issues/1134), which repaid it by deriving
+each positioned SFX from the delta between received projections instead: one writer, each seat
+playing from what it actually received, and the event contract untouched.
 
 Two further gaps are recorded rather than fixed. **`setVoicePosition` ships with no game
 adopter** — it is unit-tested and reachable from the barrel, but the identifier appears nowhere

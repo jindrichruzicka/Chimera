@@ -27,6 +27,7 @@ import {
     type TacticsSelectionIntent,
     type TacticsWorldPoint,
 } from '../components/tacticsSceneModel.js';
+import { resolveTacticsSfxCues, type TacticsSfxCue } from '../components/tacticsSfxDelta.js';
 import { tacticsAudioRefs } from '../asset-manifest.js';
 import { tacticsGridCoordinate } from '../simulation/actions.js';
 import { applyBuffer } from '../simulation/commitment/buffer.js';
@@ -130,27 +131,79 @@ interface PositionedSfxMarker {
     readonly position: AudioPosition;
 }
 
+/** The clip and level each derived cue plays at. */
+const TACTICS_SFX_FOR_CUE = {
+    move: { ref: tacticsAudioRefs.step, volume: TACTICS_STEP_VOLUME },
+    hit: { ref: tacticsAudioRefs.swordHit, volume: TACTICS_SWORD_HIT_VOLUME },
+} as const satisfies Record<
+    TacticsSfxCue['kind'],
+    { readonly ref: AssetRef<AudioClipAsset>; readonly volume: number }
+>;
+
 /**
  * The board's spatial-audio seam: anchors the one app listener at the board
- * focus and mirrors the observable facts into hidden DOM markers, the way
- * `TacticsAmbience` mirrors `data-track`. A component of its own so its hooks
- * mount only once the board has a playable scene (past the loading/empty
- * fallbacks), keeping the parent's hook order unconditional.
+ * focus, plays the positioned SFX the latest projection owes, and mirrors the
+ * observable facts into hidden DOM markers, the way `TacticsAmbience` mirrors
+ * `data-track`. A component of its own so its hooks mount only once the board
+ * has a playable scene (past the loading/empty fallbacks), keeping the parent's
+ * hook order unconditional.
+ *
+ * `units` is the AUTHORITATIVE projection, never the optimistic view the board
+ * renders: a buffered commitment action is not a fact about the match until the
+ * reveal applies it, so it stays silent while it moves the unit on screen.
  */
 function TacticsBoardSpatialAudio({
     focus,
-    lastPlayed,
+    units,
+    tick,
 }: {
     readonly focus: TacticsWorldPoint;
-    readonly lastPlayed: PositionedSfxMarker | null;
+    readonly units: readonly TacticsSceneUnit[];
+    readonly tick: number;
 }): React.ReactElement {
+    const audioManager = useAudioManager();
     const { setListener } = useSpatialAudio();
+    const [lastPlayed, setLastPlayed] = useState<PositionedSfxMarker | null>(null);
+    // The projection the cues are measured against. A ref, not state: it is the
+    // effect's own bookkeeping, and re-rendering on it would say nothing new.
+    const previousRef = React.useRef<{
+        readonly tick: number;
+        readonly units: readonly TacticsSceneUnit[];
+    }>({ tick, units });
 
     React.useEffect(() => {
         // Keyed on the focus — which moves on selection, never continuously —
         // so the pose is written per focus change, not per frame or per render.
         setListener({ position: [focus.x, focus.y, focus.z] });
     }, [setListener, focus.x, focus.y, focus.z]);
+
+    React.useEffect(() => {
+        const previous = previousRef.current;
+        previousRef.current = { tick, units };
+
+        // Only a tick that moved FORWARD is a turn the player watched happen. A
+        // restored save, an undo, or a re-projection onto a new seat can move
+        // every unit at once with no turn behind it; those re-baseline in
+        // silence rather than firing a burst of steps.
+        if (tick <= previous.tick) {
+            return;
+        }
+
+        for (const cue of resolveTacticsSfxCues(previous.units, units)) {
+            const { ref, volume } = TACTICS_SFX_FOR_CUE[cue.kind];
+            const position: AudioPosition = [cue.world.x, cue.world.y, cue.world.z];
+            audioManager.play(ref, {
+                bus: 'sfx',
+                volume,
+                spatial: {
+                    position,
+                    fullVolumeDistance: TACTICS_SFX_FULL_VOLUME_DISTANCE,
+                    falloffDistance: TACTICS_SFX_FALLOFF_DISTANCE,
+                },
+            });
+            setLastPlayed({ ref: String(ref), position });
+        }
+    }, [audioManager, tick, units]);
 
     return (
         <>
@@ -189,12 +242,19 @@ export function TacticsDemoBoard({
     reveal,
 }: GameScreenProps): React.ReactElement | null {
     const t = useTranslate();
-    const audioManager = useAudioManager();
     // Interpret the generic content prop into this game's colour hex maps. Empty
     // until content loads, so the resolvers fall back to the default hexes.
     const palette = paletteFromCollections(content ?? {});
     const [selectedUnitId, setSelectedUnitId] = useState<TacticsSceneUnit['id'] | null>(null);
-    const [lastPositionedSfx, setLastPositionedSfx] = useState<PositionedSfxMarker | null>(null);
+
+    // The projection as received, before any optimistic buffer is laid over it.
+    // This is what the positioned SFX are derived from — see
+    // `TacticsBoardSpatialAudio`. Memoised so a re-render that changed neither
+    // the entities nor the seat hands the effect the same list it already has.
+    const authoritativeUnits = React.useMemo(
+        () => parseTacticsSceneUnits(snapshot.entities, localPlayerId),
+        [snapshot.entities, localPlayerId],
+    );
 
     // Commitment battle mode: move/attack/reveal selections are buffered locally
     // (never dispatched) and shown as an optimistic view until the player commits.
@@ -277,49 +337,6 @@ export function TacticsDemoBoard({
         );
     }
 
-    const playPositionedSfx = (
-        ref: AssetRef<AudioClipAsset>,
-        volume: number,
-        world: TacticsWorldPoint,
-    ): void => {
-        const position: AudioPosition = [world.x, world.y, world.z];
-        audioManager.play(ref, {
-            bus: 'sfx',
-            volume,
-            spatial: {
-                position,
-                fullVolumeDistance: TACTICS_SFX_FULL_VOLUME_DISTANCE,
-                falloffDistance: TACTICS_SFX_FALLOFF_DISTANCE,
-            },
-        });
-        setLastPositionedSfx({ ref: String(ref), position });
-    };
-
-    // Step and sword-hit play HERE, at the intent site, positioned at the ACTING
-    // unit's world position — the intent knows the actor, which the { type }-only
-    // GameEvent cannot carry. Their entries left TACTICS_EVENT_AUDIO_BINDING so
-    // nothing double-plays; reveal stays event-driven there.
-    const playIntentSfx = (intent: TacticsSelectionIntent): void => {
-        const actorId =
-            intent.type === 'attack-unit'
-                ? intent.attackerId
-                : intent.type === 'move-unit'
-                  ? intent.unitId
-                  : null;
-        if (actorId === null) {
-            return;
-        }
-        const actor = units.find((unit) => unit.id === actorId);
-        if (actor === undefined) {
-            return;
-        }
-        if (intent.type === 'attack-unit') {
-            playPositionedSfx(tacticsAudioRefs.swordHit, TACTICS_SWORD_HIT_VOLUME, actor.world);
-            return;
-        }
-        playPositionedSfx(tacticsAudioRefs.step, TACTICS_STEP_VOLUME, actor.world);
-    };
-
     const handleIntent = (intent: TacticsSelectionIntent): void => {
         if (!isBoardInteractive) {
             return;
@@ -338,24 +355,15 @@ export function TacticsDemoBoard({
         if (isCommitment) {
             // Buffer locally — never dispatched to the host until commit/reveal.
             // The kernel re-validates against the optimistic view (stamina, etc.),
-            // so an illegal action is simply not buffered — and plays no sound:
-            // the SFX is the optimistic move's audio half, gated on the same
-            // append result the view is.
-            const appended = appendBufferedAction(
-                toOptimisticBase(snapshot),
-                buffered,
-                localPlayerId,
-            );
-            if (appended.ok) {
-                playIntentSfx(intent);
-            }
+            // so an illegal action is simply not buffered. Nothing is played
+            // here: a buffered action is not yet a fact about the match, and
+            // `TacticsBoardSpatialAudio` derives every cue from the authoritative
+            // projection, so the turn becomes audible — to both seats — at the
+            // reveal that applies it.
+            appendBufferedAction(toOptimisticBase(snapshot), buffered, localPlayerId);
             setSelectedUnitId(null);
             return;
         }
-
-        // Sequential mode plays at dispatch: the host validates asynchronously, so
-        // the sound is optimistic feedback for the action just sent.
-        playIntentSfx(intent);
 
         // Sequential mode: dispatch straight to the host (unchanged behaviour).
         // The buffered payload is structurally a plain object; the brand types
@@ -469,7 +477,11 @@ export function TacticsDemoBoard({
                     />
                 </GameCanvas>
             </div>
-            <TacticsBoardSpatialAudio focus={listenerFocus} lastPlayed={lastPositionedSfx} />
+            <TacticsBoardSpatialAudio
+                focus={listenerFocus}
+                units={authoritativeUnits}
+                tick={snapshot.tick}
+            />
         </div>
     );
 }

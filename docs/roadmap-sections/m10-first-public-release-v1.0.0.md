@@ -511,8 +511,8 @@ until F86 lands a consumer) but **cannot** produce a position; widening
 `GameEvent` with an opaque payload would push uninspected data through
 `StateProjector.project()`, which is a projection-contract change (Invariants #3/#8/#98) and
 not an audio one. Positioned event SFX therefore use explicit call sites, and **Tactics** is
-the reference adopter: board SFX played at the acting unit's position, with the listener
-anchored at the board focus and a comment at the call site saying why it is not the camera.
+the reference adopter, with the listener anchored at the board focus and a comment saying why
+it is not the camera.
 
 | Task                                                                                       | Issue                                                           |
 | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -537,12 +537,21 @@ camera-derived listener pose and no engine-owned r3f binding component — the p
 game's, for the reason the section above measures; No typed, projection-gated `GameEvent`
 payloads, so the event-options resolver cannot produce a position — widening the event
 contract is a projection change, not an audio one. What that deferral **cost**, measured at
-this tree rather than predicted: `filterEvents` in `apps/tactics` returns every event to every
-seat, so the two entries the adoption removed from `TACTICS_EVENT_AUDIO_BINDING` had been
-playing on **both** clients, and playing them at the intent site instead makes an opponent's
-move and attack **silent** — audible positioning bought for one seat at the price of the
-other's feedback. `reveal` stays event-driven and so stays audible to both. Filed as
-[#1134](https://github.com/jindrichruzicka/Chimera/issues/1134); No game adopter for
+the F84 tree rather than predicted: `filterEvents` in `apps/tactics` returns every event to
+every seat, so the two entries the adoption removed from `TACTICS_EVENT_AUDIO_BINDING` had
+been playing on **both** clients, and playing them at the intent site instead made an
+opponent's move and attack **silent** — audible positioning bought for one seat at the price
+of the other's feedback. That loss was repaid in
+[#1134](https://github.com/jindrichruzicka/Chimera/issues/1134) **without** taking the
+deferral back: the board now derives each positioned SFX from the delta between the
+projections it receives, so both seats play from what they actually got, the event contract
+is untouched, and a cue is owed per changed unit rather than per indistinguishable
+`{ type }`. What that costs against the intent site, each pinned in
+`apps/tactics/screens/TacticsDemoBoard.test.tsx` or
+`apps/tactics/components/tacticsSfxDelta.test.ts`: a hit is positioned on the defender, a unit
+entering the projection through a proximity reveal is silent, and every seat now hears its own
+action when the projection returns rather than at the click. `reveal` stays event-driven and
+audible to both throughout; No game adopter for
 `setVoicePosition`. The moving-source verb ships unit-tested and reachable from the barrel,
 but nothing in `apps/tactics` moves a live voice — the board's units teleport between tiles —
 so that third of the feature has tests but no production evidence, unlike the listener pose
@@ -629,8 +638,8 @@ candidates for a follow-up.
 **Status: designed, not implemented.** Every voice in the engine plays at exactly rate `1`, and
 Invariant #122 states the constraint outright — cue-relative fade timing is derived "at a fixed
 `playbackRate` of 1". The practical cost is the machine-gun effect: `apps/tactics` plays `step`
-for every move and `swordHit` for every attack the local player makes, and each replay is
-bit-identical, which is what makes repeated SFX read as a defect rather than as a footstep. F86 adds `PlayOptions.rate`,
+for every move and `swordHit` for every attack it can see, whichever seat acted, and each replay
+is bit-identical, which is what makes repeated SFX read as a defect rather than as a footstep. F86 adds `PlayOptions.rate`,
 **immutable for the life of the voice**, plus a `rateFromSemitones` helper so the `2 ** (n/12)`
 constant appears in one place. This is resampling, so **rate and pitch move together**, and the
 option is named `rate` rather than `pitch` so the type does not promise a time-stretch it does

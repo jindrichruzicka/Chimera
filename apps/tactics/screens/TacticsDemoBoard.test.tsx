@@ -242,6 +242,12 @@ function makeSnapshot(
         readonly localCommitted?: boolean;
         /** Off-axis grid placements exist so world-tuple axis swaps cannot hide behind zeros. */
         readonly localUnitAt?: { readonly x: number; readonly y: number };
+        /** The opponent's tile, for deltas that move a unit the viewer does not own. */
+        readonly enemyUnitAt?: { readonly x: number; readonly y: number };
+        /** The viewer's own hp, for deltas where the opponent's blow lands on it. */
+        readonly localUnitHp?: number;
+        /** The tick the projection carries; a delta is voiced only as this advances. */
+        readonly tick?: number;
     } = {},
 ): PlayerSnapshot {
     const viewerId = playerId('p1');
@@ -255,7 +261,7 @@ function makeSnapshot(
             ownerId: viewerId,
             x: options.localUnitAt?.x ?? 0,
             y: options.localUnitAt?.y ?? 0,
-            hp: 1,
+            hp: options.localUnitHp ?? 1,
         },
     };
 
@@ -264,8 +270,8 @@ function makeSnapshot(
             id: enemyUnitId,
             kind: 'unit',
             ownerId: opponentId,
-            x: 1,
-            y: 0,
+            x: options.enemyUnitAt?.x ?? 1,
+            y: options.enemyUnitAt?.y ?? 0,
             hp: 1,
         };
     }
@@ -276,7 +282,7 @@ function makeSnapshot(
     };
 
     return {
-        tick: 7,
+        tick: options.tick ?? 7,
         viewerId,
         players: {
             [viewerId]: { id: viewerId, ...(options.localCommitted ? { committed: true } : {}) },
@@ -630,48 +636,60 @@ describe('TacticsDemoBoard', () => {
         expect(opponentUnit).toHaveAttribute('data-selected', 'false');
     });
 
-    it('plays sword-hit positionally at the attacking unit world position', () => {
-        // The expected position comes from the same gridToWorldPoint the board's
-        // units array is parsed through, so the assertion pins the COUPLING —
-        // the sound plays where the acting unit renders.
-        const localPlayerId = playerId('p1');
-        const attackerWorld = gridToWorldPoint({ x: 0, y: 0 });
+    it('plays sword-hit with its own level and band, on the unit that took the blow', () => {
+        // The whole options object, not `objectContaining`: the clip, the level
+        // and the distance band are per-cue-kind, so an entry that swapped its
+        // volume or band with the other kind's would satisfy any partial match.
+        // The position comes from the same gridToWorldPoint the board's units are
+        // parsed through, so the assertion pins the COUPLING — the sound plays
+        // where the unit renders.
+        const defenderWorld = gridToWorldPoint({ x: 0, y: 0 });
 
-        render(
+        const { rerender } = render(
             <TacticsDemoBoard
-                snapshot={makeSnapshot()}
-                localPlayerId={localPlayerId}
+                snapshot={makeSnapshot({ localUnitHp: 2 })}
+                localPlayerId={playerId('p1')}
                 sendAction={vi.fn()}
             />,
         );
-        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
-        fireEvent.click(screen.getByTestId('tactics-unit-unit-2'));
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitHp: 1, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
 
         expect(audioManager.play).toHaveBeenCalledTimes(1);
         expect(audioManager.play).toHaveBeenCalledWith(tacticsAudioRefs.swordHit, {
             bus: 'sfx',
             volume: 0.65,
             spatial: {
-                position: [attackerWorld.x, attackerWorld.y, attackerWorld.z],
+                position: [defenderWorld.x, defenderWorld.y, defenderWorld.z],
                 fullVolumeDistance: 1,
                 falloffDistance: 6,
             },
         });
     });
 
-    it('plays step positionally at the moving unit world position', () => {
-        const localPlayerId = playerId('p1');
-        const moverWorld = gridToWorldPoint({ x: 0, y: 0 });
+    it('plays step with its own level and band, on the tile the unit reached', () => {
+        // The other fork of the same table, asserted whole for the same reason.
+        const moverWorld = gridToWorldPoint({ x: 0, y: 1 });
 
-        render(
+        const { rerender } = render(
             <TacticsDemoBoard
                 snapshot={makeSnapshot()}
-                localPlayerId={localPlayerId}
+                localPlayerId={playerId('p1')}
                 sendAction={vi.fn()}
             />,
         );
-        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
-        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
 
         expect(audioManager.play).toHaveBeenCalledTimes(1);
         expect(audioManager.play).toHaveBeenCalledWith(tacticsAudioRefs.step, {
@@ -683,33 +701,6 @@ describe('TacticsDemoBoard', () => {
                 falloffDistance: 6,
             },
         });
-    });
-
-    it('plays the buffered action positionally in commitment mode too', () => {
-        const localPlayerId = playerId('p1');
-        const moverWorld = gridToWorldPoint({ x: 0, y: 0 });
-
-        render(
-            <TacticsDemoBoard
-                snapshot={makeSnapshot({ commitment: true })}
-                localPlayerId={localPlayerId}
-                sendAction={vi.fn()}
-            />,
-        );
-        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
-        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
-
-        // The optimistic view moves the unit at buffer time; the sound is that
-        // feedback's audio half and must not wait for the reveal.
-        expect(audioManager.play).toHaveBeenCalledTimes(1);
-        expect(audioManager.play).toHaveBeenCalledWith(
-            tacticsAudioRefs.step,
-            expect.objectContaining({
-                spatial: expect.objectContaining({
-                    position: [moverWorld.x, moverWorld.y, moverWorld.z],
-                }),
-            }),
-        );
     });
 
     it('anchors the listener at the board centre, which is not the camera position', () => {
@@ -762,17 +753,14 @@ describe('TacticsDemoBoard', () => {
         expect(audioManager.setListener).toHaveBeenCalledTimes(2);
     });
 
-    it('pins the world-tuple axis order with an off-axis acting unit', () => {
-        // Grid (1, -1) — adjacent to the enemy at (1, 0), so the attack intent
-        // resolves — maps to world (1, 0, -1): distinct x and z components, so a
+    it('pins the world-tuple axis order with an off-axis unit', () => {
+        // Grid (1, -1) maps to world (1, 0, -1): distinct x and z components, so a
         // y/z swap in the play position, the listener pose, or the DOM marker
         // cannot hide behind the zeros every on-axis fixture carries
         // (gridToWorldPoint maps grid.y onto world Z, the classic confusion).
-        const actorWorld = gridToWorldPoint({ x: 1, y: -1 });
-
-        render(
+        const { rerender } = render(
             <TacticsDemoBoard
-                snapshot={makeSnapshot({ localUnitAt: { x: 1, y: -1 } })}
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 0 } })}
                 localPlayerId={playerId('p1')}
                 sendAction={vi.fn()}
             />,
@@ -780,53 +768,77 @@ describe('TacticsDemoBoard', () => {
         fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
 
         expect(vi.mocked(audioManager.setListener).mock.calls.at(-1)?.[0]?.position).toEqual([
-            1, 0, -1,
+            0, 0, 0,
         ]);
 
-        fireEvent.click(screen.getByTestId('tactics-unit-unit-2'));
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 1, y: -1 }, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
 
         expect(audioManager.play).toHaveBeenCalledWith(
-            tacticsAudioRefs.swordHit,
+            tacticsAudioRefs.step,
             expect.objectContaining({
-                spatial: expect.objectContaining({
-                    position: [actorWorld.x, actorWorld.y, actorWorld.z],
-                }),
+                spatial: expect.objectContaining({ position: [1, 0, -1] }),
             }),
         );
         expect(screen.getByTestId('tactics-audio-sfx')).toHaveAttribute('data-position', '1,0,-1');
     });
 
-    it('does not play the SFX when the commitment kernel rejects the append', () => {
-        // The SFX is the optimistic move's audio half, gated on the same append
-        // result the view is — a rejected action moves nothing and sounds like
-        // nothing. The store's append is stubbed to reject so the gate itself is
-        // what this pins, independent of which kernel rule rejected.
-        const originalAppend = useCommitmentBuffer.getState().append;
-        try {
-            useCommitmentBuffer.setState({
-                append: () => ({ ok: false, reason: 'stubbed rejection' }),
-            });
+    it('plays nothing for a buffered commitment move until the reveal lands', () => {
+        // AC: the pre-reveal buffer play cannot leak an opponent's secret actions,
+        // because there is no pre-reveal play at all. A buffered action never
+        // reaches the host, so the AUTHORITATIVE projection is unchanged and owes
+        // no cue — the optimistic view moves the unit on screen and nothing else.
+        const localPlayerId = playerId('p1');
 
-            render(
-                <TacticsDemoBoard
-                    snapshot={makeSnapshot({ commitment: true })}
-                    localPlayerId={playerId('p1')}
-                    sendAction={vi.fn()}
-                />,
-            );
-            fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
-            fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ commitment: true })}
+                localPlayerId={localPlayerId}
+                sendAction={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
 
-            expect(audioManager.play).not.toHaveBeenCalled();
-        } finally {
-            useCommitmentBuffer.setState({ append: originalAppend });
-        }
+        // The move IS buffered — without this the silence below would be the
+        // silence of an action that never happened.
+        expect(useCommitmentBuffer.getState().buffer).toHaveLength(1);
+        expect(audioManager.play).not.toHaveBeenCalled();
+
+        // The reveal: the host applies both seats' turns and the projection
+        // finally moves. Only now is the turn audible — and to both seats, since
+        // each derives from the projection it received.
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({
+                    commitment: true,
+                    localUnitAt: { x: 0, y: 1 },
+                    enemyUnitAt: { x: 1, y: 1 },
+                    tick: 8,
+                })}
+                localPlayerId={localPlayerId}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(vi.mocked(audioManager.play).mock.calls).toHaveLength(2);
+        expect(
+            vi
+                .mocked(audioManager.play)
+                .mock.calls.map((call) => [String(call[0]), call[1]?.spatial?.position]),
+        ).toEqual([
+            [String(tacticsAudioRefs.step), [0, 0, 1]],
+            [String(tacticsAudioRefs.step), [1, 0, 1]],
+        ]);
     });
 
     it('mirrors the last positioned SFX into the DOM for the e2e', () => {
-        const attackerWorld = gridToWorldPoint({ x: 0, y: 0 });
-
-        render(
+        const { rerender } = render(
             <TacticsDemoBoard
                 snapshot={makeSnapshot()}
                 localPlayerId={playerId('p1')}
@@ -835,14 +847,276 @@ describe('TacticsDemoBoard', () => {
         );
         expect(screen.queryByTestId('tactics-audio-sfx')).toBeNull();
 
-        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
-        fireEvent.click(screen.getByTestId('tactics-unit-unit-2'));
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitHp: 0, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
 
         const marker = screen.getByTestId('tactics-audio-sfx');
         expect(marker).toHaveAttribute('data-ref', String(tacticsAudioRefs.swordHit));
-        expect(marker).toHaveAttribute(
-            'data-position',
-            [attackerWorld.x, attackerWorld.y, attackerWorld.z].join(','),
+        expect(marker).toHaveAttribute('data-position', '0,0,0');
+    });
+
+    it("plays an opponent's move on the observing client, which reaches no intent site", () => {
+        // The defect this branch closes. `filterEvents` returns every event to
+        // every seat, so both clients had been playing both verbs; moving the play
+        // to the intent site left the observer — who never dispatches — silent.
+        // Here the viewer p1 does nothing at all and still hears p2's unit.
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        expect(audioManager.play).not.toHaveBeenCalled();
+
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ enemyUnitAt: { x: 2, y: -1 }, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+        expect(audioManager.play).toHaveBeenCalledWith(
+            tacticsAudioRefs.step,
+            expect.objectContaining({
+                spatial: expect.objectContaining({ position: [2, 0, -1] }),
+            }),
+        );
+    });
+
+    it("plays an opponent's attack on the observing client, positioned on the unit hit", () => {
+        // The other half of the same restoration. The viewer owns the defender, so
+        // its hp drop is visible to it by construction — the case that holds even
+        // under fog of war.
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitHp: 2, isMyTurn: false })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitHp: 1, isMyTurn: false, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+        expect(audioManager.play).toHaveBeenCalledWith(
+            tacticsAudioRefs.swordHit,
+            expect.objectContaining({
+                bus: 'sfx',
+                spatial: expect.objectContaining({ position: [0, 0, 0] }),
+            }),
+        );
+    });
+
+    it('plays a dispatched move exactly once on the acting client', () => {
+        // The double-play the binding entries were removed to prevent. The click
+        // dispatches and sounds nothing; the projection that comes back sounds
+        // once. One writer, so a verb cannot be owed by two paths.
+        const sendAction = vi.fn();
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={sendAction}
+            />,
+        );
+
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+
+        expect(sendAction).toHaveBeenCalledTimes(1);
+        expect(audioManager.play).not.toHaveBeenCalled();
+
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={sendAction}
+            />,
+        );
+
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not re-voice a move on the next tick that changed nothing', () => {
+        // Three snapshots, because the baseline is only observable across TWO
+        // delta steps: a fixture that stops after the first cue reads the mount
+        // projection and the moved one and can never tell whether the baseline
+        // advanced. Frozen at mount, this unit's step would fire again on every
+        // later tick forever.
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ tick: 7 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+
+        // A later turn that moved nobody — the opponent passed, say.
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 9 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('carries a same-tick re-projection into the baseline the next tick reads', () => {
+        // The silent branch still has to record what it saw. If the same-tick
+        // projection is dropped instead of baselined, the next advance measures
+        // against a tree two projections old and voices a move no turn produced.
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ tick: 7 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 7 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        expect(audioManager.play).not.toHaveBeenCalled();
+
+        // Same units, tick finally advances. Nothing moved since the projection
+        // above, so nothing is owed.
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(audioManager.play).not.toHaveBeenCalled();
+    });
+
+    it('follows the tick back down when a rewind leaves the board untouched', () => {
+        // A restore to an earlier tick that happens to reach the same board: the
+        // entity map comes back referentially identical, so the parsed unit list
+        // is unchanged and only the TICK moved. The baseline has to follow it
+        // anyway — otherwise the next real move is measured against a tick from
+        // the future and silently swallowed.
+        const base = makeSnapshot({ tick: 9 });
+        const rewound: PlayerSnapshot = { ...base, tick: 4 };
+
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={base}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        rerender(
+            <TacticsDemoBoard
+                snapshot={rewound}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        expect(audioManager.play).not.toHaveBeenCalled();
+
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 5 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('stays silent when a re-projection moves a unit on the SAME tick', () => {
+        // The boundary case of the guard, which a strictly-lower fixture cannot
+        // reach: the comparison is inclusive, so a tick that merely repeats is
+        // not a turn. Only a fixture exactly ON the boundary kills the `<=` → `<`
+        // mutant.
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ tick: 7 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 2, y: 1 }, tick: 7 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(audioManager.play).not.toHaveBeenCalled();
+    });
+
+    it('re-baselines without sounding when the tick does not advance', () => {
+        // A restored save, an undo, or a re-projection for a new seat can move
+        // every unit at once without a turn having been played. Voicing those
+        // would fire a burst of steps for a board the player never watched move,
+        // so the delta is read only as the tick moves forward.
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ tick: 9 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 3, y: -2 }, tick: 4 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(audioManager.play).not.toHaveBeenCalled();
+
+        // The rewound tree is the new baseline, so play resumes from it rather
+        // than replaying the jump the moment the tick next moves.
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 3, y: -1 }, tick: 5 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        expect(audioManager.play).toHaveBeenCalledTimes(1);
+        expect(audioManager.play).toHaveBeenCalledWith(
+            tacticsAudioRefs.step,
+            expect.objectContaining({
+                spatial: expect.objectContaining({ position: [3, 0, -1] }),
+            }),
         );
     });
 

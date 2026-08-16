@@ -735,6 +735,29 @@ export class GamePage {
         }
     }
 
+    /**
+     * Block until THIS window's projection shows an opponent unit standing on
+     * `grid`. The mirror of {@link waitForProjectedOwnedUnitAt} for the seat that
+     * did not act: a spec driving one window and asserting the other needs a
+     * state that ENDED on the observing side, because an assertion about what the
+     * observer has not shown yet passes trivially before its projection arrives.
+     */
+    public async waitForProjectedOpponentUnitAt(grid: TacticsGridPoint): Promise<void> {
+        try {
+            await expect
+                .poll(() => this.isProjectedOpponentUnitAt(grid), {
+                    timeout: PROJECTED_SNAPSHOT_TIMEOUT_MS,
+                })
+                .toBe(true);
+        } catch (error) {
+            const snapshot = await this.readCurrentSnapshot();
+            throw new Error(
+                `Timed out waiting for an opponent tactics primitive at (${grid.x}, ${grid.y}). ${summarizeTacticsSnapshot(snapshot)}`,
+                { cause: error },
+            );
+        }
+    }
+
     private async waitForProjectedUnitDefeated(unitId: string): Promise<void> {
         try {
             await expect
@@ -755,6 +778,22 @@ export class GamePage {
         const snapshot = await this.readCurrentSnapshot();
         const localUnit = findLocalUnitInSnapshot(snapshot);
         return localUnit?.x === grid.x && localUnit.y === grid.y;
+    }
+
+    private async isProjectedOpponentUnitAt(grid: TacticsGridPoint): Promise<boolean> {
+        const snapshot = await this.readCurrentSnapshot();
+        return listProjectedUnits(snapshot).some((unit) => {
+            // `hp > 0` for the same reason every sibling unit-at-tile predicate
+            // here carries it: a defeated unit keeps its entity and its tile (the
+            // reducer clamps hp rather than deleting), so without it a wait for a
+            // unit STANDING somewhere would return on a corpse.
+            return (
+                unit.ownerId !== snapshot.viewerId &&
+                unit.hp > 0 &&
+                unit.x === grid.x &&
+                unit.y === grid.y
+            );
+        });
     }
 
     private async isProjectedUnitDefeated(unitId: string): Promise<boolean> {

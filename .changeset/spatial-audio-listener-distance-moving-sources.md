@@ -31,6 +31,6 @@ Event-driven SFX gain a per-occurrence seam: `GameEventAudioBinding` entries acc
 `options?: (event) => EventAudioOverrides`, a sim-side primitives-only overrides type
 merged over the static fields, contained per event when it throws. It cannot produce a
 position; positioned event SFX use explicit call sites, and Tactics is the reference
-adopter — board SFX at the acting unit's world position with the listener anchored at
-the board focus, never the camera. No spatial code path writes any gain stage
+adopter — positioned board SFX with the listener anchored at the board focus, never the
+camera. No spatial code path writes any gain stage
 (Invariant #116 re-verified; the spatial rules are new Invariant #134).

@@ -17,9 +17,9 @@ const TacticsInGameMenu = React.lazy(() => import('./TacticsInGameMenu.js'));
 const TacticsPostGameSummary = React.lazy(() => import('./TacticsPostGameSummary.js'));
 
 // Step and sword-hit are NOT here: the demo board plays them itself, positioned
-// at the acting unit's world position — its intent site knows the actor, which
-// the { type }-only GameEvent cannot carry. An entry on both paths would
-// double-play; only reveal stays event-driven.
+// from the delta between the projections it receives — a { type }-only GameEvent
+// carries no position, and cannot say WHICH unit moved when several did. An entry
+// on both paths would double-play; only reveal stays event-driven.
 const TACTICS_EVENT_AUDIO_BINDING = {
     [TACTICS_REVEAL_TILE_ACTION]: {
         ref: tacticsAudioRefs.reveal,
