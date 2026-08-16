@@ -83,6 +83,7 @@ function createSilentAudioManager(): AudioManager {
         crossfade: () => handle,
         stopAll: vi.fn(),
         duck: vi.fn(),
+        setListener: vi.fn(),
         dispose: vi.fn(),
     };
 }

@@ -15,9 +15,13 @@ import type {
 } from './Cue';
 
 import {
+    resolveListenerPose,
     resolveSpatialSpec,
+    type AudioListenerPose,
     type AudioPosition,
+    type ResolvedListenerPose,
     type ResolvedSpatialSpec,
+    type SetListenerOptions,
     type SpatialOptions,
 } from './Spatial';
 
@@ -100,6 +104,22 @@ export interface AudioManager {
     ): AudioHandle;
     stopAll(bus?: AudioBusId): void;
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
+    /**
+     * Set the app's ONE listener pose — where the ears are (§4.25). The pose is the
+     * game's to supply and the engine never derives it from a camera: what the player
+     * listens FROM (the focused unit, the board centre, the cursor) is a different
+     * concept from what a camera looks at from. There is exactly one listener per
+     * app, shared by every canvas — an overlay canvas must not move it.
+     *
+     * Omitted `forward`/`up` write the Web Audio defaults (`-Z` / `+Y`), so a game
+     * that sets nothing keeps exactly today's origin-relative panning. Updates ramp
+     * over a short anti-zipper window; `{ immediate: true }` sets instead, for a
+     * teleport or a camera cut where a ramp would smear the discontinuity into an
+     * audible sweep. Fail-soft throughout: a feature-detected `AudioParam` path with
+     * a `setPosition`/`setOrientation` fallback, a non-finite component degrading to
+     * its default with one warning, and never a throw into the caller.
+     */
+    setListener(pose: AudioListenerPose, opts?: SetListenerOptions): void;
     dispose(): void;
 }
 
@@ -726,6 +746,50 @@ export class DefaultAudioManager implements AudioManager {
         }
 
         this.getBus(bus).duck(duckedVolume, durationMs);
+    }
+
+    public setListener(pose: AudioListenerPose, opts: SetListenerOptions = {}): void {
+        if (this.disposed) {
+            return;
+        }
+
+        const resolved = resolveListenerPose(pose);
+        if (resolved.degraded) {
+            console.warn(
+                'Audio setListener pose has a non-finite component; writing the default component in its place.',
+            );
+        }
+
+        const listener = this.audioContext.listener;
+        const now = this.audioContext.currentTime;
+        const immediate = opts.immediate ?? false;
+        const params = [
+            listener.positionX,
+            listener.positionY,
+            listener.positionZ,
+            listener.forwardX,
+            listener.forwardY,
+            listener.forwardZ,
+            listener.upX,
+            listener.upY,
+            listener.upZ,
+        ];
+        const values = [...resolved.position, ...resolved.forward, ...resolved.up];
+        if (params.every(isWritableAudioParam)) {
+            try {
+                params.forEach((param, index) => {
+                    writePositionalParam(param, values[index] ?? 0, now, immediate);
+                });
+                return;
+            } catch {
+                // Present but unusable on this platform — degrade to the legacy path,
+                // exactly as an absent param does. The legacy write below re-states the
+                // WHOLE pose, so any params already written before the throw are simply
+                // written again rather than left disagreeing with the rest.
+            }
+        }
+
+        setListenerPoseLegacy(listener, resolved);
     }
 
     public dispose(): void {
@@ -2154,15 +2218,116 @@ function configurePannerFromSpec(pannerNode: PannerNode, spec: ResolvedSpatialSp
     pannerNode.rolloffFactor = spec.rolloffFactor;
 }
 
+/**
+ * Seconds a RAMPED positional write travels over — the anti-zipper window shared by
+ * every positional `AudioParam` write that is not anchoring a fresh voice (the
+ * listener pose today). A step change
+ * to a position modulates the panner's gains discontinuously, which is audible as a
+ * zipper/click; a ramp this short is not audible as movement. A power-of-two
+ * fraction (2^-4 = 62.5 ms), so `now + POSITIONAL_RAMP_SECONDS` is exact in double
+ * precision and tests pin ramp ends against literals.
+ */
+const POSITIONAL_RAMP_SECONDS = 2 ** -4;
+
+/**
+ * Feature-detect one positional `AudioParam`. The DOM lib types these as always
+ * present, but runtimes differ — older WebKit listeners carry only the deprecated
+ * verbs — so presence AND all three methods the writes use are checked; a
+ * half-present shim degrades to the legacy path exactly like a missing param.
+ */
+function isWritableAudioParam(value: AudioParam | undefined): value is AudioParam {
+    return (
+        typeof value?.setValueAtTime === 'function' &&
+        typeof value.linearRampToValueAtTime === 'function' &&
+        typeof value.cancelScheduledValues === 'function'
+    );
+}
+
+/**
+ * One positional `AudioParam` write: cancel prior automation, then ramp to `value`
+ * over {@link POSITIONAL_RAMP_SECONDS} — or set it at `now` when `immediate`, for a
+ * teleport where a ramp would smear the discontinuity into an audible sweep.
+ *
+ * The ramp anchors at `param.value`, which cannot see a write made in this same turn
+ * — the staleness the GAIN tier goes to lengths to cap ({@link rampDeparture}).
+ * Positional params tolerate it: a stale anchor puts the ramp's START a hair off
+ * while its END lands exactly, no curve derives waypoints from the departure here,
+ * and the next quantum's rendered position converges on the target regardless.
+ */
+function writePositionalParam(
+    param: AudioParam,
+    value: number,
+    now: number,
+    immediate: boolean,
+): void {
+    param.cancelScheduledValues(now);
+    if (immediate) {
+        param.setValueAtTime(value, now);
+        return;
+    }
+    param.setValueAtTime(param.value, now);
+    param.linearRampToValueAtTime(value, now + POSITIONAL_RAMP_SECONDS);
+}
+
+/**
+ * The deprecated listener verbs, for platforms without positional `AudioParam`s.
+ * Both wrapped: `setPosition`/`setOrientation` may themselves be missing or throw,
+ * and `setListener` promises never to throw into the caller — a platform with no
+ * writable path at all degrades to a silent no-op, there being nothing left to
+ * degrade to.
+ */
+function setListenerPoseLegacy(listener: AudioListener, pose: ResolvedListenerPose): void {
+    const legacyListener = listener as AudioListener & {
+        readonly setPosition?: (x: number, y: number, z: number) => void;
+        readonly setOrientation?: (
+            x: number,
+            y: number,
+            z: number,
+            upX: number,
+            upY: number,
+            upZ: number,
+        ) => void;
+    };
+    try {
+        legacyListener.setPosition?.(...pose.position);
+        legacyListener.setOrientation?.(...pose.forward, ...pose.up);
+    } catch {
+        // Nothing left to degrade to; the pose is dropped rather than thrown.
+    }
+}
+
+/**
+ * Write a panner's position at a voice's start — immediate, since there is nothing
+ * audible yet to zipper. Takes the same feature-detected path as the listener pose,
+ * so a platform without positional `AudioParam`s reaches its deprecated
+ * `setPosition` for both.
+ */
 function setPannerPosition(
     pannerNode: PannerNode,
     position: AudioPosition,
     currentTime: number,
 ): void {
-    const [positionX, positionY, positionZ] = position;
-    pannerNode.positionX.setValueAtTime(positionX, currentTime);
-    pannerNode.positionY.setValueAtTime(positionY, currentTime);
-    pannerNode.positionZ.setValueAtTime(positionZ, currentTime);
+    const params = [pannerNode.positionX, pannerNode.positionY, pannerNode.positionZ];
+    if (params.every(isWritableAudioParam)) {
+        try {
+            params.forEach((param, index) => {
+                writePositionalParam(param, position[index] ?? 0, currentTime, true);
+            });
+            return;
+        } catch {
+            // Present but unusable — fall through to the deprecated verb.
+        }
+    }
+
+    const legacyPanner = pannerNode as PannerNode & {
+        readonly setPosition?: (x: number, y: number, z: number) => void;
+    };
+    try {
+        legacyPanner.setPosition?.(...position);
+    } catch {
+        // A panner with no writable position stays at the origin rather than throwing
+        // out of startVoice.
+    }
 }
 
 function createAudioContext(): AudioContext {

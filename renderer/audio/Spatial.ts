@@ -105,6 +105,88 @@ export const DEFAULT_DISTANCE_FALLOFF: DistanceFalloff = 'linear';
 export const DEFAULT_ROLLOFF_FACTOR = 1;
 
 /**
+ * The listener's pose — where the EARS are, as distinct from where a camera looks
+ * from. Always supplied by the game and never derived from a camera by the engine:
+ * a top-down camera twelve units above a board would put every sound twelve units
+ * away and pan the whole board through a near-vertical axis. Plain tuples by design,
+ * so nothing here can depend on a renderer object existing.
+ *
+ * The default pose is the Web Audio default — origin, forward `-Z`, up `+Y` — so a
+ * game that sets nothing keeps exactly the platform's own behaviour.
+ */
+export interface AudioListenerPose {
+    readonly position: AudioPosition;
+    /** Where the listener faces. Default `[0, 0, -1]` — the Web Audio default. */
+    readonly forward?: AudioPosition;
+    /** The listener's up vector. Default `[0, 1, 0]` — the Web Audio default. */
+    readonly up?: AudioPosition;
+}
+
+export interface SetListenerOptions {
+    /**
+     * Set the pose instead of ramping to it — for a teleport or a camera cut, where
+     * the default anti-zipper ramp would smear a deliberate discontinuity into an
+     * audible sweep.
+     */
+    readonly immediate?: boolean;
+}
+
+/** An {@link AudioListenerPose} with every default filled and every component finite. */
+export interface ResolvedListenerPose {
+    readonly position: AudioPosition;
+    readonly forward: AudioPosition;
+    readonly up: AudioPosition;
+    /** Whether any authored component was non-finite and degraded to its default. */
+    readonly degraded: boolean;
+}
+
+/** The Web Audio default listener position — the origin. */
+export const DEFAULT_LISTENER_POSITION: AudioPosition = [0, 0, 0];
+/** The Web Audio default listener facing — `-Z`. */
+export const DEFAULT_LISTENER_FORWARD: AudioPosition = [0, 0, -1];
+/** The Web Audio default listener up vector — `+Y`. */
+export const DEFAULT_LISTENER_UP: AudioPosition = [0, 1, 0];
+
+/**
+ * Fill an authored pose's defaults and degrade every non-finite component to its
+ * default COMPONENT — never the whole vector, so an authored pose with one bad axis
+ * keeps its other two, and never a write-through, so `NaN` cannot reach an
+ * `AudioParam`. The caller owns the one warning `degraded` asks for.
+ */
+export function resolveListenerPose(pose: AudioListenerPose): ResolvedListenerPose {
+    const position = sanitizeVector(pose.position, DEFAULT_LISTENER_POSITION);
+    const forward = sanitizeVector(
+        pose.forward ?? DEFAULT_LISTENER_FORWARD,
+        DEFAULT_LISTENER_FORWARD,
+    );
+    const up = sanitizeVector(pose.up ?? DEFAULT_LISTENER_UP, DEFAULT_LISTENER_UP);
+    return {
+        position: position.vector,
+        forward: forward.vector,
+        up: up.vector,
+        degraded: position.degraded || forward.degraded || up.degraded,
+    };
+}
+
+function sanitizeVector(
+    vector: AudioPosition,
+    defaults: AudioPosition,
+): { readonly vector: AudioPosition; readonly degraded: boolean } {
+    const [x, y, z] = vector;
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+        return { vector, degraded: false };
+    }
+    return {
+        vector: [
+            Number.isFinite(x) ? x : defaults[0],
+            Number.isFinite(y) ? y : defaults[1],
+            Number.isFinite(z) ? z : defaults[2],
+        ],
+        degraded: true,
+    };
+}
+
+/**
  * Resolve an authored {@link SpatialOptions} to a {@link ResolvedSpatialSpec}, or to
  * the rejection `play()` warns with. Synchronous and side-effect free — the static
  * validation tier (Invariant #117).

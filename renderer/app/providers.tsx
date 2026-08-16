@@ -178,6 +178,9 @@ function createNoopAudioManager(): AudioManager {
         duck(): void {
             return;
         },
+        setListener(): void {
+            return;
+        },
         dispose(): void {
             return;
         },

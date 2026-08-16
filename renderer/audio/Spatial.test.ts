@@ -25,7 +25,7 @@
 
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
-import { resolveSpatialSpec, type SpatialOptions } from './Spatial';
+import { resolveListenerPose, resolveSpatialSpec, type SpatialOptions } from './Spatial';
 
 const ORIGIN: SpatialOptions['position'] = [0, 0, 0];
 
@@ -51,6 +51,42 @@ describe('SpatialOptions', () => {
             'position' | 'fullVolumeDistance' | 'falloffDistance' | 'falloff' | 'rolloffFactor'
         >();
         expect(resolveSpatialSpec({ position: ORIGIN }).kind).toBe('resolved');
+    });
+});
+
+describe('resolveListenerPose', () => {
+    it('defaults forward and up to the Web Audio pose', () => {
+        expect(resolveListenerPose({ position: [3, 0, -2] })).toEqual({
+            position: [3, 0, -2],
+            forward: [0, 0, -1],
+            up: [0, 1, 0],
+            degraded: false,
+        });
+    });
+
+    it('passes an authored orientation through verbatim', () => {
+        expect(
+            resolveListenerPose({ position: [1, 2, 3], forward: [1, 0, 0], up: [0, 0, 1] }),
+        ).toEqual({ position: [1, 2, 3], forward: [1, 0, 0], up: [0, 0, 1], degraded: false });
+    });
+
+    it('degrades each non-finite component to its default component, keeping the finite ones', () => {
+        // Component-wise, not whole-vector: an authored pose with one bad axis keeps
+        // its other two, and each default comes from the SAME slot of the default
+        // vector — the forward default's y is 0 while the up default's y is 1.
+        expect(
+            resolveListenerPose({
+                position: [Number.NaN, 7, 8],
+                forward: [2, Number.POSITIVE_INFINITY, -3],
+            }),
+        ).toEqual({ position: [0, 7, 8], forward: [2, 0, -3], up: [0, 1, 0], degraded: true });
+
+        expect(resolveListenerPose({ position: ORIGIN, up: [0, Number.NaN, 0.5] })).toEqual({
+            position: [0, 0, 0],
+            forward: [0, 0, -1],
+            up: [0, 1, 0.5],
+            degraded: true,
+        });
     });
 });
 

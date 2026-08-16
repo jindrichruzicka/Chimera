@@ -88,8 +88,8 @@ describe('useMusicTrack', () => {
         // `AudioManager` is structurally assignable to `AudioTrackControls`, so a body of
         // `return audioManager;` typechecks AND delegates correctly — every other case in
         // this file passes on it. What it also hands the component is `play`, `stop`,
-        // `stopAll`, `duck` and `dispose`, so the narrowing is a runtime property that
-        // only this assertion holds.
+        // `stopAll`, `duck`, `setListener` and `dispose`, so the narrowing is a runtime
+        // property that only this assertion holds.
         const audioManager = createAudioManagerSpy();
         const { result } = renderHook(() => useMusicTrack(), {
             wrapper: createWrapper(audioManager),

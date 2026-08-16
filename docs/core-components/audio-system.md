@@ -79,6 +79,8 @@ export interface AudioManager {
     stopAll(bus?: AudioBusId): void;
     /** Duck a bus to duckedVolume for durationMs, then restore. */
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
+    /** Set the app's ONE listener pose — game-supplied, never camera-derived. Feature-detected AudioParam path with a setPosition/setOrientation fallback; ramps unless { immediate: true }. */
+    setListener(pose: AudioListenerPose, opts?: SetListenerOptions): void;
     /** Dispose all active sources and clear the pool. Called by `Providers` at app shutdown (Invariant #64). */
     dispose(): void;
 }

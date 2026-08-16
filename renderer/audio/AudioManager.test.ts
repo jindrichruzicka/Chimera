@@ -111,6 +111,7 @@ import {
 } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AssetManager, ResolvedAsset } from '../assets/AssetManager';
+import type { AudioListenerPose } from './Spatial';
 import { useSettingsStore } from '../state/settingsStore';
 import {
     createAudioManager,
@@ -118,6 +119,7 @@ import {
     MUSIC_PRIORITY,
     scheduleGainRamp,
     type AudioHandle,
+    type AudioManager,
     type AudioManagerOptions,
     type PlayOptions,
     type VoicePhase,
@@ -355,6 +357,79 @@ class FakePannerNode extends FakeAudioNode {
     }
 }
 
+/** Models the modern listener: nine positional AudioParams plus the deprecated verbs. */
+class FakeAudioListener {
+    public readonly positionX = new FakeAudioParam();
+    public readonly positionY = new FakeAudioParam();
+    public readonly positionZ = new FakeAudioParam();
+    public readonly forwardX = new FakeAudioParam();
+    public readonly forwardY = new FakeAudioParam();
+    public readonly forwardZ = new FakeAudioParam();
+    public readonly upX = new FakeAudioParam();
+    public readonly upY = new FakeAudioParam();
+    public readonly upZ = new FakeAudioParam();
+    public readonly setPosition = vi.fn();
+    public readonly setOrientation = vi.fn();
+}
+
+/** Models the pre-AudioParam platforms: only the deprecated verbs exist. */
+class LegacyFakeAudioListener {
+    public readonly setPosition = vi.fn();
+    public readonly setOrientation = vi.fn();
+}
+
+/** A shimmed param: settable but not rampable — no `linearRampToValueAtTime`. */
+class HalfPresentFakeAudioParam {
+    public value = 1;
+    public readonly calls: ScheduledGainCall[] = [];
+
+    public cancelScheduledValues(time: number): this {
+        this.calls.push({ method: 'cancelScheduledValues', time });
+        return this;
+    }
+
+    public setValueAtTime(value: number, time: number): this {
+        this.value = value;
+        this.calls.push({ method: 'setValueAtTime', value, time });
+        return this;
+    }
+}
+
+/**
+ * Models a platform whose listener params EXIST but cannot ramp. The detect must
+ * treat this exactly like a missing param — zero param writes, the whole pose on the
+ * legacy verbs — rather than letting the first ramp call throw halfway through.
+ */
+class HalfPresentFakeAudioListener {
+    public readonly positionX = new HalfPresentFakeAudioParam();
+    public readonly positionY = new HalfPresentFakeAudioParam();
+    public readonly positionZ = new HalfPresentFakeAudioParam();
+    public readonly forwardX = new HalfPresentFakeAudioParam();
+    public readonly forwardY = new HalfPresentFakeAudioParam();
+    public readonly forwardZ = new HalfPresentFakeAudioParam();
+    public readonly upX = new HalfPresentFakeAudioParam();
+    public readonly upY = new HalfPresentFakeAudioParam();
+    public readonly upZ = new HalfPresentFakeAudioParam();
+    public readonly setPosition = vi.fn();
+    public readonly setOrientation = vi.fn();
+}
+
+/** A panner from the same pre-AudioParam platforms — attributes, but no position params. */
+class LegacyFakePannerNode extends FakeAudioNode {
+    /** Arms the deprecated verb to refuse, modelling a platform with no writable path. */
+    public throwOnSetPosition = false;
+    public readonly setPosition = vi.fn(() => {
+        if (this.throwOnSetPosition) {
+            throw new Error('setPosition is unsupported on this platform.');
+        }
+    });
+    public panningModel: PanningModelType = 'equalpower';
+    public distanceModel: DistanceModelType = 'inverse';
+    public refDistance = 1;
+    public maxDistance = 10000;
+    public rolloffFactor = 1;
+}
+
 class FakeAudioBufferSourceNode extends FakeAudioNode {
     public buffer: AudioBuffer | null = null;
     public loop = false;
@@ -383,8 +458,16 @@ class FakeAudioContext {
     public failNextStopSchedule = false;
     /** Hands out {@link FakeQuantizedAudioParam} gains — the spec-faithful `value`. */
     public quantizedGainParams = false;
+    /** Hands out {@link LegacyFakePannerNode}s — the pre-AudioParam platforms. */
+    public legacyPanners = false;
+    /** With {@link legacyPanners}: arms each created panner's deprecated verb to refuse. */
+    public legacyPannersThrowOnSetPosition = false;
+    /** Swappable so a test can model a pre-AudioParam or half-present platform's listener. */
+    public listener: FakeAudioListener | LegacyFakeAudioListener | HalfPresentFakeAudioListener =
+        new FakeAudioListener();
     public readonly createdGainNodes: FakeGainNode[] = [];
     public readonly createdPannerNodes: FakePannerNode[] = [];
+    public readonly createdLegacyPannerNodes: LegacyFakePannerNode[] = [];
     public readonly createdSources: FakeAudioBufferSourceNode[] = [];
     public readonly destination = asAudioNode<AudioDestinationNode>(new FakeAudioNode());
     public readonly close = vi.fn((): Promise<void> => Promise.resolve());
@@ -405,6 +488,12 @@ class FakeAudioContext {
     }
 
     public createPanner(): PannerNode {
+        if (this.legacyPanners) {
+            const legacyNode = new LegacyFakePannerNode();
+            legacyNode.throwOnSetPosition = this.legacyPannersThrowOnSetPosition;
+            this.createdLegacyPannerNodes.push(legacyNode);
+            return asAudioNode<PannerNode>(legacyNode);
+        }
         const node = new FakePannerNode();
         this.createdPannerNodes.push(node);
         return asAudioNode<PannerNode>(node);
@@ -1612,6 +1701,261 @@ describe('DefaultAudioManager — panner configuration', () => {
         );
         expect(positionedPanner.attributeWrites.length).toBe(configWrites);
         expect(positionedPanner.positionX.calls.length).toBe(positionWrites);
+    });
+});
+
+// ─── setListener — the one shared listener pose (§4.25) ─────────────────────────
+//
+// Written test-first against a manager with no setListener at all, so every case
+// below began red as "setListener is not a function" (the type pin at tsc). The pose
+// is the GAME's: the parameter is held to plain tuples by the type pin, and the
+// structural half — the audio module graph importing neither 'three' nor
+// '@react-three/fiber' — is pinned by __tests__/audio-barrel-side-effects.test.ts.
+
+describe('DefaultAudioManager — setListener', () => {
+    function modernListener(context: FakeAudioContext): FakeAudioListener {
+        if (!(context.listener instanceof FakeAudioListener)) {
+            throw new Error('Expected the modern fake listener.');
+        }
+        return context.listener;
+    }
+
+    function listenerParams(listener: FakeAudioListener): FakeAudioParam[] {
+        return [
+            listener.positionX,
+            listener.positionY,
+            listener.positionZ,
+            listener.forwardX,
+            listener.forwardY,
+            listener.forwardZ,
+            listener.upX,
+            listener.upY,
+            listener.upZ,
+        ];
+    }
+
+    it('writes all nine pose params on the AudioParam path, exactly as passed', () => {
+        const { context, manager } = createManager();
+        const listener = modernListener(context);
+
+        manager.setListener({ position: [1, 2, 3], forward: [0, 1, 0], up: [1, 0, 0] });
+
+        const finals: readonly (readonly [FakeAudioParam, number])[] = [
+            [listener.positionX, 1],
+            [listener.positionY, 2],
+            [listener.positionZ, 3],
+            [listener.forwardX, 0],
+            [listener.forwardY, 1],
+            [listener.forwardZ, 0],
+            [listener.upX, 1],
+            [listener.upY, 0],
+            [listener.upZ, 0],
+        ];
+        for (const [param, value] of finals) {
+            expect(param.calls.at(-1)).toEqual({
+                method: 'linearRampToValueAtTime',
+                value,
+                time: 10.0625,
+            });
+        }
+        expect(listener.setPosition).not.toHaveBeenCalled();
+        expect(listener.setOrientation).not.toHaveBeenCalled();
+    });
+
+    it('omitting forward and up writes the Web Audio defaults', () => {
+        const { context, manager } = createManager();
+        const listener = modernListener(context);
+
+        manager.setListener({ position: [5, 0, 5] });
+
+        expect(listener.forwardX.calls.at(-1)).toMatchObject({ value: 0 });
+        expect(listener.forwardY.calls.at(-1)).toMatchObject({ value: 0 });
+        expect(listener.forwardZ.calls.at(-1)).toMatchObject({ value: -1 });
+        expect(listener.upX.calls.at(-1)).toMatchObject({ value: 0 });
+        expect(listener.upY.calls.at(-1)).toMatchObject({ value: 1 });
+        expect(listener.upZ.calls.at(-1)).toMatchObject({ value: 0 });
+    });
+
+    it('ramps over the anti-zipper window by default, cancelling prior automation first', () => {
+        const { context, manager } = createManager();
+        const listener = modernListener(context);
+
+        manager.setListener({ position: [9, 0, 0] });
+
+        // The fake param's initial `value` of 1 is the ramp's anchor — the write
+        // sequence is cancel, re-anchor at the reported value, ramp to the target.
+        expect(listener.positionX.calls).toEqual([
+            { method: 'cancelScheduledValues', time: 10 },
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'linearRampToValueAtTime', value: 9, time: 10.0625 },
+        ]);
+    });
+
+    it('sets instead of ramping when immediate is passed', () => {
+        const { context, manager } = createManager();
+        const listener = modernListener(context);
+
+        manager.setListener({ position: [9, 0, 0] }, { immediate: true });
+
+        expect(listener.positionX.calls).toEqual([
+            { method: 'cancelScheduledValues', time: 10 },
+            { method: 'setValueAtTime', value: 9, time: 10 },
+        ]);
+        for (const param of listenerParams(listener)) {
+            expect(param.calls.filter((call) => call.method === 'linearRampToValueAtTime')).toEqual(
+                [],
+            );
+        }
+    });
+
+    it('warns once and writes the default component for a non-finite one, never NaN', () => {
+        const { context, manager } = createManager();
+        const listener = modernListener(context);
+        const warn = spyOnWarn();
+
+        manager.setListener({ position: [Number.NaN, 2, 3], forward: [0, Number.NaN, -1] });
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(listener.positionX.calls.at(-1)).toMatchObject({ value: 0 });
+        expect(listener.positionY.calls.at(-1)).toMatchObject({ value: 2 });
+        expect(listener.forwardY.calls.at(-1)).toMatchObject({ value: 0 });
+        for (const param of listenerParams(listener)) {
+            for (const call of param.calls) {
+                if (call.value !== undefined) {
+                    expect(Number.isFinite(call.value)).toBe(true);
+                }
+            }
+        }
+    });
+
+    it('falls back to setPosition/setOrientation when the positional params are absent', () => {
+        const { context, manager } = createManager();
+        const legacy = new LegacyFakeAudioListener();
+        context.listener = legacy;
+
+        manager.setListener({ position: [1, 2, 3] });
+
+        expect(legacy.setPosition).toHaveBeenCalledWith(1, 2, 3);
+        expect(legacy.setOrientation).toHaveBeenCalledWith(0, 0, -1, 0, 1, 0);
+    });
+
+    it('falls back to the legacy verbs when a positional param write throws', () => {
+        const { context, manager } = createManager();
+        const listener = modernListener(context);
+        vi.spyOn(listener.positionX, 'setValueAtTime').mockImplementation(() => {
+            throw new Error('positional params are unsupported on this platform.');
+        });
+
+        expect(() => manager.setListener({ position: [4, 5, 6] })).not.toThrow();
+        expect(listener.setPosition).toHaveBeenCalledWith(4, 5, 6);
+        expect(listener.setOrientation).toHaveBeenCalledWith(0, 0, -1, 0, 1, 0);
+    });
+
+    it('swallows a legacy verb that throws — the pose is dropped, never thrown', () => {
+        const { context, manager } = createManager();
+        const legacy = new LegacyFakeAudioListener();
+        legacy.setPosition.mockImplementation(() => {
+            throw new Error('setPosition is unsupported on this platform.');
+        });
+        context.listener = legacy;
+
+        expect(() => manager.setListener({ position: [1, 2, 3] })).not.toThrow();
+    });
+
+    it('treats a half-present param shim as absent: no param writes, the legacy verbs get the pose', () => {
+        // Params that can set but not ramp. The detect tier — not the throw-catch
+        // tier — must route this to the legacy path: zero param writes, so the pose
+        // cannot be left half-written across nine params.
+        const { context, manager } = createManager();
+        const shim = new HalfPresentFakeAudioListener();
+        context.listener = shim;
+
+        manager.setListener({ position: [1, 2, 3] });
+
+        const shimParams = [
+            shim.positionX,
+            shim.positionY,
+            shim.positionZ,
+            shim.forwardX,
+            shim.forwardY,
+            shim.forwardZ,
+            shim.upX,
+            shim.upY,
+            shim.upZ,
+        ];
+        for (const param of shimParams) {
+            expect(param.calls).toEqual([]);
+        }
+        expect(shim.setPosition).toHaveBeenCalledWith(1, 2, 3);
+        expect(shim.setOrientation).toHaveBeenCalledWith(0, 0, -1, 0, 1, 0);
+    });
+
+    it('keeps a spatial voice playing when the legacy panner setPosition throws', async () => {
+        // Without the panner catch the throw would surface through startVoice's load
+        // chain and release the voice — a silent no-play. The voice must instead play
+        // on, unpositioned at the platform's origin default.
+        const { assetManager, context, manager } = createManager();
+        context.legacyPanners = true;
+        context.legacyPannersThrowOnSetPosition = true;
+        const ref = audioRef('audio/sfx/stubborn.ogg');
+        assetManager.resolve(ref, createAudioBuffer('stubborn'));
+
+        const handle = manager.play(ref, { spatial: { position: [1, 1, 1] } });
+        await flushAudioLoad();
+
+        expect(handle.valid).toBe(true);
+        expect(expectSource(context, 0).start).toHaveBeenCalledOnce();
+    });
+
+    it('routes the panner position through the same legacy path on a param-less platform', async () => {
+        const { assetManager, context, manager } = createManager();
+        context.legacyPanners = true;
+        const ref = audioRef('audio/sfx/legacy.ogg');
+        assetManager.resolve(ref, createAudioBuffer('legacy'));
+
+        manager.play(ref, { spatial: { position: [1, -2, 3] } });
+        await flushAudioLoad();
+
+        const panner = context.createdLegacyPannerNodes[0];
+        expect(panner).toBeDefined();
+        expect(panner?.setPosition).toHaveBeenCalledWith(1, -2, 3);
+    });
+
+    it('leaves the listener untouched until setListener is called', async () => {
+        const { assetManager, context, manager } = createManager();
+        const listener = modernListener(context);
+        const ref = audioRef('audio/sfx/near.ogg');
+        assetManager.resolve(ref, createAudioBuffer('near'));
+
+        manager.play(ref, { spatial: { position: [1, 1, 1] } });
+        await flushAudioLoad();
+
+        for (const param of listenerParams(listener)) {
+            expect(param.calls).toEqual([]);
+        }
+        expect(listener.setPosition).not.toHaveBeenCalled();
+        expect(listener.setOrientation).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op after dispose', () => {
+        const { context, manager } = createManager();
+        const listener = modernListener(context);
+
+        manager.dispose();
+        manager.setListener({ position: [1, 2, 3] });
+
+        for (const param of listenerParams(listener)) {
+            expect(param.calls).toEqual([]);
+        }
+        expect(listener.setPosition).not.toHaveBeenCalled();
+    });
+
+    it('takes the pose as plain tuples — nothing camera-shaped fits the parameter', () => {
+        expectTypeOf<
+            Parameters<AudioManager['setListener']>[0]
+        >().toEqualTypeOf<AudioListenerPose>();
+        expectTypeOf<keyof AudioListenerPose>().toEqualTypeOf<'position' | 'forward' | 'up'>();
+        expect(typeof createManager().manager.setListener).toBe('function');
     });
 });
 
