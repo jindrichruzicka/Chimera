@@ -462,17 +462,17 @@ Feature issue: [#1016](https://github.com/jindrichruzicka/Chimera/issues/1016).
 
 ### F84 — Spatial Audio: Listener Pose, Distance Falloff & Moving Sources `§4.25`
 
-**Status: designed, not implemented.** The voice graph already contains a `PannerNode` —
-`source → voiceGain (1) → [panner] → busGain (2) → masterGain (3) → destination`, created by
-`connectVoice` whenever `PlayOptions.position` is present — and it has never been usable.
-It is written **once**, at `startVoice`, and **nothing in the repo has ever set
-`AudioContext.listener`**, so every positioned voice plays panned relative to the world
-origin under Chrome's `createPanner()` defaults (`distanceModel: 'inverse'`,
-`refDistance: 1`, `maxDistance: 10000`). There is no way to move a source after it starts,
-no way to say how far full volume reaches, and no way to say where the ears are. F84 turns
-that stub into an authored spatial layer and stays deliberately small: HRTF, source cones,
-occlusion, reverb zones and doppler are all non-goals, and `panningModel` is pinned to
-`'equalpower'`.
+**Status: implemented across #1030–#1036; the feature gate is
+[#1133](https://github.com/jindrichruzicka/Chimera/issues/1133).** Before F84 the voice
+graph's `PannerNode` — `source → voiceGain (1) → [panner] →
+busGain (2) → masterGain (3) → destination`, created by `connectVoice` — had never been
+usable: the position was written once, at `startVoice`, nothing in the repo had ever set
+`AudioContext.listener`, and every positioned voice played panned relative to the world
+origin under Chrome's `createPanner()` defaults. There was no way to move a source after it
+started, no way to say how far full volume reached, and no way to say where the ears were.
+F84 turned that stub into an authored spatial layer (`PlayOptions.spatial`) and stayed
+deliberately small: HRTF, source cones, occlusion, reverb zones and doppler are all
+non-goals, and `panningModel` is pinned to `'equalpower'`.
 
 **The listener is not the camera, and that is the load-bearing decision rather than an
 omission.** `apps/tactics` renders its board with `TACTICS_CAMERA_POSITION = [1, 12, 0]` — a
@@ -505,7 +505,8 @@ attenuation in JS and multiplying it into stage 1, would break #116 and make eve
 the distance curve. One event-side seam lands here too: `EventAudioBinding` is a static
 `{ ref, bus?, volume? }` map, so it gains an optional per-event options resolver. It receives
 the `GameEvent` the contract actually has — `{ readonly type: string }` and nothing else — so
-it can vary rate, volume, priority and bus but **cannot** produce a position; widening
+it can vary volume, priority and bus (`rate` is typed and reserved, dropped by the player
+until F86 lands a consumer) but **cannot** produce a position; widening
 `GameEvent` with an opaque payload would push uninspected data through
 `StateProjector.project()`, which is a projection-contract change (Invariants #3/#8/#98) and
 not an audio one. Positioned event SFX therefore use explicit call sites, and **Tactics** is
@@ -521,7 +522,7 @@ anchored at the board focus and a comment at the call site saying why it is not 
 | Add useSpatialAudio and export the spatial surface from the audio barrel                   | [#1034](https://github.com/jindrichruzicka/Chimera/issues/1034) |
 | Add the per-event options resolver to the event-audio binding                              | [#1035](https://github.com/jindrichruzicka/Chimera/issues/1035) |
 | Adopt spatial audio in tactics with a positioned SFX and a non-camera listener             | [#1036](https://github.com/jindrichruzicka/Chimera/issues/1036) |
-| Author Invariant #132, sweep the docs and roadmap F84, cut the changeset and open the gate | [#1037](https://github.com/jindrichruzicka/Chimera/issues/1037) |
+| Author Invariant #134, sweep the docs and roadmap F84, cut the changeset and open the gate | [#1037](https://github.com/jindrichruzicka/Chimera/issues/1037) |
 
 Feature issue: [#1027](https://github.com/jindrichruzicka/Chimera/issues/1027).
 

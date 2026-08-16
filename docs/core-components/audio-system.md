@@ -434,11 +434,81 @@ What the gate settled is worth recording, because only one of the three was book
 
 ---
 
+## Spatial Audio
+
+The spatial layer (F84) turns the panner stub into an authored surface: an explicit
+listener pose, an authored distance falloff, and moving sources. `panningModel` is
+pinned to `'equalpower'` and is not authorable; HRTF, source cones, occlusion, reverb
+and doppler are non-goals.
+
+### The listener is not the camera
+
+The engine never derives the listener pose from a camera, and that is the load-bearing
+decision rather than an omission: a top-down camera hangs many world units above the
+action, so a listener bound to it would put every sound that far away and pan the whole
+scene through a near-vertical axis. The pose is always supplied by the game — what the
+player is _listening from_ (the focused unit, the board centre, the cursor) as distinct
+from what the camera is _looking at from_. There is exactly **one** listener per app,
+shared by every canvas; an overlay canvas must not move it. The default pose is the Web
+Audio default — origin, forward `-Z`, up `+Y` — so a game that sets nothing keeps
+exactly the platform's own behaviour. `setListener` writes a feature-detected
+`AudioParam` path (falling back to the deprecated `setPosition`/`setOrientation`),
+ramps over a short anti-zipper window unless `{ immediate: true }`, and degrades a
+non-finite component to its default component with one warning.
+
+### Distance mapping
+
+`SpatialOptions` maps onto the panner's own vocabulary with no arithmetic of the
+engine's own:
+
+| Authored (`SpatialOptions`) | Panner attribute | Default                                                       |
+| --------------------------- | ---------------- | ------------------------------------------------------------- |
+| `fullVolumeDistance`        | `refDistance`    | `1` (the platform's)                                          |
+| `falloffDistance`           | `maxDistance`    | `10000` (the platform's)                                      |
+| `falloff`                   | `distanceModel`  | **`'linear'` — the engine's, not the platform's `'inverse'`** |
+| `rolloffFactor`             | `rolloffFactor`  | `1` (the platform's)                                          |
+
+**The `'linear'` default deliberately diverges from the Web Audio default of
+`'inverse'`.** Only the linear model reaches zero at `maxDistance`; `'inverse'` and
+`'exponential'` clamp the _distance_ there and hold a non-zero gain at every distance
+beyond it. Shipping the platform default would make `falloffDistance` name a radius
+that silences nothing. The other two models stay selectable, asymptotic behaviour and
+all.
+
+### The static distance tier
+
+Distances need no decode, so — by the same provenance rule Invariant #117 applies to
+cues — an already-invalid spec rejects **synchronously inside `play()`**: an invalid
+handle and one warning, before any voice slot is reserved and before any load starts.
+Validation runs on the RESOLVED pair, so a bound left to its platform default
+participates, and the warning prints the resolved values.
+
+### Edge cases
+
+| Input                                            | Outcome                                                                                                                                                                                         |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `falloffDistance < fullVolumeDistance`           | Static reject: invalid handle, one warning, no slot reserved                                                                                                                                    |
+| `falloffDistance === fullVolumeDistance`         | Authored hard cutoff, realised as the narrowest expressible band via a named power-of-two epsilon — a CUTOFF only under `'linear'`; the asymptotic models hold their clamped gain past the band |
+| `fullVolumeDistance: 0`                          | Accepted — attenuation begins at the source                                                                                                                                                     |
+| Negative or non-finite distance/rolloffFactor    | Static reject (no dynamic tier to defer to — nothing a decode reveals makes `NaN` a radius)                                                                                                     |
+| Non-finite position component in `play()`        | Static reject                                                                                                                                                                                   |
+| Non-finite listener/`setVoicePosition` component | Listener: degrades to the default component, one warning. Voice move: dropped whole, one warning — the panner's current position is its own state                                               |
+| `setVoicePosition` on a `'loading'` voice        | Parked on the record, applied at `t0`, last write wins (Invariant #121's pending discipline)                                                                                                    |
+| `setVoicePosition` on a non-spatial voice        | No-op with one warning — a panner cannot be inserted into a running chain                                                                                                                       |
+| `setVoicePosition` on a released handle          | Silent no-op, matching `stop`/`fadeTo`                                                                                                                                                          |
+
+Spatial attenuation is the panner's own gain, sitting between stage 1 and stage 2 of
+the voice chain: no spatial code path writes any gain stage, so ducking, bus volume and
+every fade behave identically with a panner in the chain (Invariant #116 re-verified,
+not amended; the spatial rules are Invariant #134).
+
+---
+
 ## Invariants
 
 The engine-wide rules this section is governed by — **#63** (the simulation never
-produces audio) and **#64** (`AudioManager` lifecycle ownership) — and the
-cue/fade/crossfade rules **#116–#126** live in
+produces audio) and **#64** (`AudioManager` lifecycle ownership) — the
+cue/fade/crossfade rules **#116–#126**, and the spatial rule **#134** live in
 [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md).
 
 ---
