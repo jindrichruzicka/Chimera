@@ -51,7 +51,7 @@ export interface PlayOptions {
     bus?: AudioBusId; // Default: 'sfx'
     loop?: boolean; // Default: false
     volume?: number; // [0, 1]; multiplied with bus gain
-    position?: Vector3Tuple; // If present, played as spatial (THREE.PositionalAudio)
+    spatial?: SpatialOptions; // If present, played through a PannerNode; statically validated at play()
     priority?: number; // Preemption rank when the pool is full — see Voice Pool; music passes MUSIC_PRIORITY
 
     // Cue extensions — see Cue, Fade & Crossfade Extensions below.
@@ -207,7 +207,7 @@ export interface LoopRegion {
 }
 
 export interface PlayOptions {
-    // existing — bus, loop, volume, position, priority ... (unchanged)
+    // existing — bus, loop, volume, priority ... (unchanged)
     readonly from?: Cue; // play-from-cue → start(when, offsetSec). Default 'start' (0).
     readonly to?: Cue; // play-to-cue. Non-loop: buffer window. Loop: elapsed play duration.
     readonly loopRegion?: LoopRegion; // → source.loopStart/loopEnd; IMPLIES loop = true.

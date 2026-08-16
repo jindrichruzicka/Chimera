@@ -139,7 +139,7 @@ describe('@chimera-engine/renderer/audio barrel', () => {
         ]);
     });
 
-    it('pulls in exactly nine modules, one of them a store', async () => {
+    it('pulls in exactly ten modules, one of them a store', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // EXHAUSTIVE, not a denylist. A denylist only rejects the subsystems whoever
@@ -164,6 +164,7 @@ describe('@chimera-engine/renderer/audio barrel', () => {
             'audio/AudioManager.ts',
             'audio/AudioManagerContext.ts',
             'audio/AudioManagerProvider.tsx',
+            'audio/Spatial.ts',
             'audio/audioCueSheet.ts',
             'audio/index.ts',
             'audio/useMusicTrack.ts',

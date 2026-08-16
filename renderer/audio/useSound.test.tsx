@@ -14,6 +14,13 @@ import {
     type PlayOptions,
 } from './AudioManager';
 import type { FadeCurve } from './Cue';
+import {
+    DEFAULT_DISTANCE_FALLOFF,
+    DEFAULT_FALLOFF_DISTANCE,
+    DEFAULT_FULL_VOLUME_DISTANCE,
+    DEFAULT_ROLLOFF_FACTOR,
+    type DistanceFalloff,
+} from './Spatial';
 import { createAudioManagerSpy } from './__test-support__/AudioManagerStubs.js';
 import { useSound } from './useSound.js';
 
@@ -37,6 +44,12 @@ const NON_DEFAULT_FADE_CURVE: FadeCurve =
 const ALTERNATE_FADE_CURVE: FadeCurve =
     DEFAULT_FADE_CURVE === 'equalPower' ? 'exponential' : 'equalPower';
 
+/** The falloff pair, derived exactly as the curve pair above and for the same reason. */
+const NON_DEFAULT_FALLOFF: DistanceFalloff =
+    DEFAULT_DISTANCE_FALLOFF === 'linear' ? 'inverse' : 'linear';
+const ALTERNATE_FALLOFF: DistanceFalloff =
+    DEFAULT_DISTANCE_FALLOFF === 'exponential' ? 'inverse' : 'exponential';
+
 /**
  * One pair of options per {@link PlayOptions} field, each side carrying that field ALONE
  * so the pair moves nothing else. `Record<keyof PlayOptions, ...>` requires every key, so
@@ -46,7 +59,7 @@ const ALTERNATE_FADE_CURVE: FadeCurve =
  * checked claim rather than a promise.
  *
  * Field granularity only: one pair moves one field, so the SUB-key structure of
- * `position`, `loopRegion` and `fadeIn` is pinned by the cases that walk them component
+ * `spatial`, `loopRegion` and `fadeIn` is pinned by the cases that walk them component
  * by component.
  *
  * Both sides of a pair sit inside one bucket of every coarsening a key could apply —
@@ -62,7 +75,10 @@ const KEYED_FIELDS = {
     bus: [{ bus: 'music' }, { bus: 'voice' }],
     loop: [{ loop: false }, { loop: true }],
     volume: [{ volume: 0.2 }, { volume: 0.3 }],
-    position: [{ position: [0.1, 0.2, 0.3] }, { position: [0.1, 0.2, 0.4] }],
+    spatial: [
+        { spatial: { position: [0.1, 0.2, 0.3] } },
+        { spatial: { position: [0.1, 0.2, 0.4] } },
+    ],
     priority: [{ priority: 4.1 }, { priority: 4.2 }],
     from: [{ from: 1.1 }, { from: 1.2 }],
     to: [{ to: 8.1 }, { to: 8.2 }],
@@ -390,26 +406,27 @@ describe('useSound', () => {
         expect(result.current).toBe(initialPlay);
     });
 
-    it('returns a stable play callback when position values are unchanged', () => {
+    it('returns a stable play callback when spatial values are unchanged', () => {
         const audioManager = createAudioManagerSpy();
         const { result, rerender } = renderHook(({ ref, opts }) => useSound(ref, opts), {
             initialProps: {
                 ref: SOUND_REF,
-                opts: { position: [1, 2, 3] } satisfies PlayOptions,
+                opts: { spatial: { position: [1, 2, 3] } } satisfies PlayOptions,
             },
             wrapper: createWrapper(audioManager),
         });
         const initialPlay = result.current;
 
+        // A freshly created but equal spatial object must not churn the callback.
         rerender({
             ref: SOUND_REF,
-            opts: { position: [1, 2, 3] } satisfies PlayOptions,
+            opts: { spatial: { position: [1, 2, 3] } } satisfies PlayOptions,
         });
 
         expect(result.current).toBe(initialPlay);
     });
 
-    it('updates the play callback when any one position axis changes', () => {
+    it('updates the play callback when any one spatial position axis changes', () => {
         // Three keys, so three moves. A pair that shifts more than one axis leaves the
         // others unproven, and a dropped axis is silent: the sound simply keeps playing
         // where it was until some other axis moves.
@@ -423,21 +440,137 @@ describe('useSound', () => {
             () => AudioHandle,
             { ref: AssetRef<AudioClipAsset>; opts: PlayOptions }
         >(({ ref, opts }) => useSound(ref, opts), {
-            initialProps: { ref: SOUND_REF, opts: { position: [0.1, 0.2, 0.3] } },
+            initialProps: { ref: SOUND_REF, opts: { spatial: { position: [0.1, 0.2, 0.3] } } },
             wrapper: createWrapper(audioManager),
         });
 
         const afterX = result.current;
-        rerender({ ref: SOUND_REF, opts: { position: [0.4, 0.2, 0.3] } });
+        rerender({ ref: SOUND_REF, opts: { spatial: { position: [0.4, 0.2, 0.3] } } });
         expect(result.current).not.toBe(afterX);
 
         const afterY = result.current;
-        rerender({ ref: SOUND_REF, opts: { position: [0.4, 0.1, 0.3] } });
+        rerender({ ref: SOUND_REF, opts: { spatial: { position: [0.4, 0.1, 0.3] } } });
         expect(result.current).not.toBe(afterY);
 
         const afterZ = result.current;
-        rerender({ ref: SOUND_REF, opts: { position: [0.4, 0.1, 0.2] } });
+        rerender({ ref: SOUND_REF, opts: { spatial: { position: [0.4, 0.1, 0.2] } } });
         expect(result.current).not.toBe(afterZ);
+    });
+
+    it('updates the play callback when any one spatial distance field changes', () => {
+        // Four more sub-keys beside the three axes, each moved alone. The falloff step
+        // moves between two NON-default models, so the key is proven keyed by VALUE
+        // rather than by whether it is the default one — the same discipline the
+        // fade-curve walk applies.
+        const audioManager = createAudioManagerSpy();
+        const position = [0.1, 0.2, 0.3] as const;
+        const { result, rerender } = renderHook<
+            () => AudioHandle,
+            { ref: AssetRef<AudioClipAsset>; opts: PlayOptions }
+        >(({ ref, opts }) => useSound(ref, opts), {
+            initialProps: {
+                ref: SOUND_REF,
+                opts: {
+                    spatial: {
+                        position,
+                        fullVolumeDistance: 2.1,
+                        falloffDistance: 8.1,
+                        falloff: NON_DEFAULT_FALLOFF,
+                        rolloffFactor: 1.1,
+                    },
+                },
+            },
+            wrapper: createWrapper(audioManager),
+        });
+
+        const afterFullVolume = result.current;
+        rerender({
+            ref: SOUND_REF,
+            opts: {
+                spatial: {
+                    position,
+                    fullVolumeDistance: 2.2,
+                    falloffDistance: 8.1,
+                    falloff: NON_DEFAULT_FALLOFF,
+                    rolloffFactor: 1.1,
+                },
+            },
+        });
+        expect(result.current).not.toBe(afterFullVolume);
+
+        const afterFalloffDistance = result.current;
+        rerender({
+            ref: SOUND_REF,
+            opts: {
+                spatial: {
+                    position,
+                    fullVolumeDistance: 2.2,
+                    falloffDistance: 8.2,
+                    falloff: NON_DEFAULT_FALLOFF,
+                    rolloffFactor: 1.1,
+                },
+            },
+        });
+        expect(result.current).not.toBe(afterFalloffDistance);
+
+        const afterFalloff = result.current;
+        rerender({
+            ref: SOUND_REF,
+            opts: {
+                spatial: {
+                    position,
+                    fullVolumeDistance: 2.2,
+                    falloffDistance: 8.2,
+                    falloff: ALTERNATE_FALLOFF,
+                    rolloffFactor: 1.1,
+                },
+            },
+        });
+        expect(result.current).not.toBe(afterFalloff);
+
+        const afterRolloff = result.current;
+        rerender({
+            ref: SOUND_REF,
+            opts: {
+                spatial: {
+                    position,
+                    fullVolumeDistance: 2.2,
+                    falloffDistance: 8.2,
+                    falloff: ALTERNATE_FALLOFF,
+                    rolloffFactor: 1.2,
+                },
+            },
+        });
+        expect(result.current).not.toBe(afterRolloff);
+    });
+
+    it('keeps a stable play callback between omitted and explicit default spatial fields', () => {
+        // The defaults are shared constants rather than copies, so equivalent authored
+        // specs collapse to one callback — the coupling the imported names prove.
+        const audioManager = createAudioManagerSpy();
+        const { result, rerender } = renderHook<
+            () => AudioHandle,
+            { ref: AssetRef<AudioClipAsset>; opts: PlayOptions }
+        >(({ ref, opts }) => useSound(ref, opts), {
+            initialProps: { ref: SOUND_REF, opts: { spatial: { position: [1, 2, 3] } } },
+            wrapper: createWrapper(audioManager),
+        });
+        const initialPlay = result.current;
+
+        rerender({
+            ref: SOUND_REF,
+            opts: {
+                spatial: {
+                    position: [1, 2, 3],
+                    fullVolumeDistance: DEFAULT_FULL_VOLUME_DISTANCE,
+                    falloffDistance: DEFAULT_FALLOFF_DISTANCE,
+                    falloff: DEFAULT_DISTANCE_FALLOFF,
+                    rolloffFactor: DEFAULT_ROLLOFF_FACTOR,
+                },
+            },
+        });
+
+        expect(result.current).toBe(initialPlay);
     });
 
     it('updates the play callback when the provider supplies a different manager', () => {

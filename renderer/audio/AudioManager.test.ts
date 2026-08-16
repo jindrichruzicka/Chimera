@@ -7,7 +7,10 @@
  *   #116 — every fade, crossfade and cue op writes exclusively to a voice's own
  *          stage-1 gain; the bus and master gains are never written by one.
  *   #117 — provenance-scoped two-tier cue validation; `loopRegion` implies `loop`;
- *          a looping `to` bounds elapsed play duration, not a buffer wrap.
+ *          a looping `to` bounds elapsed play duration, not a buffer wrap. Spatial
+ *          distances join the static tier by the same provenance rule: they need no
+ *          decode, so an already-invalid spec rejects synchronously inside `play()`
+ *          (the resolver's own case matrix lives in `Spatial.test.ts`).
  *   #118 — cue resolution is fail-soft: it never throws into a caller, an
  *          unresolvable load-bearing anchor abandons with one warning, end-point
  *          cues clamp, and a post-clamp-collapsed window is dropped.
@@ -512,7 +515,7 @@ describe('DefaultAudioManager', () => {
         const ref = audioRef('audio/sfx/located.ogg');
         assetManager.resolve(ref, createAudioBuffer('located'));
 
-        manager.play(ref, { bus: 'sfx', position: [1, -2, 3], volume: 0.7 });
+        manager.play(ref, { bus: 'sfx', spatial: { position: [1, -2, 3] }, volume: 0.7 });
         await flushAudioLoad();
 
         const source = expectSource(context, 0);
@@ -1254,6 +1257,142 @@ describe('DefaultAudioManager — static cue validation', () => {
 
         expect(String(warn.mock.calls[0]?.[0])).toBe(
             'Audio loop region [6s, 3s] is already out of order; rejecting play().',
+        );
+    });
+});
+
+// ─── static spatial validation — synchronous reject at play() (#117) ────────────
+//
+// `resolveSpatialSpec`'s own case matrix lives in `Spatial.test.ts`; these pin the
+// `play()` WIRING — the reject returns before any slot is reserved or load started,
+// prints exactly one warning, and an accepted spec still reaches the panner.
+
+describe('DefaultAudioManager — static spatial validation', () => {
+    it('rejects inverted distances at play() without reserving a voice (#117)', async () => {
+        // poolSize 1: every code path that reaches reserveVoiceSlot() preempts the
+        // live voice. A static reject returns BEFORE it, so the incumbent survives —
+        // that survival is how "no voice reserved" is observable from outside.
+        const { assetManager, context, manager } = createManager({ poolSize: 1 });
+        const liveRef = audioRef('audio/music/theme.ogg');
+        const rejectedRef = audioRef('audio/sfx/rejected.ogg');
+        assetManager.resolve(liveRef, createAudioBuffer('theme', 10));
+        assetManager.resolve(rejectedRef, createAudioBuffer('rejected', 10));
+        const liveHandle = manager.play(liveRef, { priority: 0 });
+        await flushAudioLoad();
+        const liveSource = expectSource(context, 0);
+        const warn = spyOnWarn();
+
+        const rejected = manager.play(rejectedRef, {
+            priority: 99,
+            spatial: { position: [0, 0, 0], fullVolumeDistance: 5, falloffDistance: 2 },
+        });
+
+        expect(rejected.valid).toBe(false);
+        expect(liveHandle.valid).toBe(true);
+        expect(liveSource.stop).not.toHaveBeenCalled();
+        expect(assetManager.loadCalls).toEqual([liveRef]);
+        expect(warn).toHaveBeenCalledTimes(1);
+
+        await flushAudioLoad();
+
+        expect(context.createdSources).toHaveLength(1);
+    });
+
+    it('accepts equal distances as an authored hard cutoff (#117)', async () => {
+        const { assetManager, context, manager } = createManager();
+        const ref = audioRef('audio/sfx/cutoff.ogg');
+        assetManager.resolve(ref, createAudioBuffer('cutoff'));
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, {
+            spatial: { position: [1, 2, 3], fullVolumeDistance: 4, falloffDistance: 4 },
+        });
+
+        expect(handle.valid).toBe(true);
+        expect(assetManager.loadCalls).toEqual([ref]);
+        expect(warn).not.toHaveBeenCalled();
+
+        await flushAudioLoad();
+
+        expect(context.createdPannerNodes).toHaveLength(1);
+    });
+
+    it('accepts a fullVolumeDistance of zero', async () => {
+        const { assetManager, manager } = createManager();
+        const ref = audioRef('audio/sfx/point.ogg');
+        assetManager.resolve(ref, createAudioBuffer('point'));
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, {
+            spatial: { position: [0, 0, 0], fullVolumeDistance: 0, falloffDistance: 6 },
+        });
+
+        expect(handle.valid).toBe(true);
+        expect(assetManager.loadCalls).toEqual([ref]);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('rejects a negative or non-finite distance rather than coercing it (#117)', () => {
+        const { assetManager, manager, ref } = createCuedManager();
+        const warn = spyOnWarn();
+
+        expect(
+            manager.play(ref, { spatial: { position: [0, 0, 0], fullVolumeDistance: -1 } }).valid,
+        ).toBe(false);
+        expect(
+            manager.play(ref, { spatial: { position: [0, 0, 0], falloffDistance: Number.NaN } })
+                .valid,
+        ).toBe(false);
+        expect(
+            manager.play(ref, {
+                spatial: { position: [0, 0, 0], falloffDistance: Number.POSITIVE_INFINITY },
+            }).valid,
+        ).toBe(false);
+        expect(assetManager.loadCalls).toEqual([]);
+        expect(warn).toHaveBeenCalledTimes(3);
+    });
+
+    it('rejects a non-finite position component and a negative rolloffFactor on the same static path (#117)', () => {
+        const { assetManager, manager, ref } = createCuedManager();
+        const warn = spyOnWarn();
+
+        expect(manager.play(ref, { spatial: { position: [Number.NaN, 0, 0] } }).valid).toBe(false);
+        expect(
+            manager.play(ref, { spatial: { position: [0, 0, 0], rolloffFactor: -1 } }).valid,
+        ).toBe(false);
+        expect(assetManager.loadCalls).toEqual([]);
+        expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('creates no panner and validates nothing when spatial is omitted', async () => {
+        const { context, manager, ref } = createCuedManager();
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        expect(handle.valid).toBe(true);
+        expect(context.createdPannerNodes).toHaveLength(0);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('names the offending values in each spatial rejection warning (#117)', () => {
+        const { manager, ref } = createCuedManager();
+        const warn = spyOnWarn();
+
+        manager.play(ref, {
+            spatial: { position: [0, 0, 0], fullVolumeDistance: 5, falloffDistance: 2 },
+        });
+
+        expect(String(warn.mock.calls[0]?.[0])).toBe(
+            'Audio spatial distance band [5, 2] is already out of order; rejecting play().',
+        );
+
+        warn.mockClear();
+        manager.play(ref, { spatial: { position: [0, 0, 0], fullVolumeDistance: -3 } });
+
+        expect(String(warn.mock.calls[0]?.[0])).toBe(
+            'Audio spatial fullVolumeDistance -3 is negative or not finite; rejecting play().',
         );
     });
 });
@@ -4194,6 +4333,7 @@ describe('AudioHandle — public shape', () => {
             'gainNode',
             'pannerNode',
             'position',
+            'spatial',
             'sequence',
             'volume',
         ]) {

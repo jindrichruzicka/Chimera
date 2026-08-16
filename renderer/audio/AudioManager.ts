@@ -14,15 +14,27 @@ import type {
     LoopRegion,
 } from './Cue';
 
-export type { AudioBusId } from './AudioBus';
+import {
+    resolveSpatialSpec,
+    type AudioPosition,
+    type ResolvedSpatialSpec,
+    type SpatialOptions,
+} from './Spatial';
 
-type AudioPosition = readonly [number, number, number];
+export type { AudioBusId } from './AudioBus';
 
 export interface PlayOptions {
     readonly bus?: AudioBusId;
     readonly loop?: boolean;
     readonly volume?: number;
-    readonly position?: AudioPosition;
+    /**
+     * Play the voice positionally, through a `PannerNode` between its stage-1 gain and
+     * the bus. Statically validated inside `play()`: distances need no decode, so an
+     * already-invalid spec is rejected synchronously — an invalid handle and one
+     * warning, before any voice is reserved (Invariant #117). See {@link SpatialOptions}
+     * for what rejects.
+     */
+    readonly spatial?: SpatialOptions;
     /**
      * Rank against the other voices when the pool is saturated: any voice already fading
      * out is reclaimed first, then the lowest priority among the rest, and no class of
@@ -130,7 +142,9 @@ interface VoiceRecord {
      * takes an IMPLIED loop down with it, but must not discard an explicit one.
      */
     readonly loopRequested: boolean;
-    readonly position: AudioPosition | null;
+    /** The resolved spatial spec, already validated by the static tier — or `null` for
+     * an ordinary voice. Lives here and never on {@link AudioHandle} (Invariant #126). */
+    readonly spatial: ResolvedSpatialSpec | null;
     readonly sequence: number;
     /**
      * The voice's SETTLED ceiling: the gain a `fadeTo` last named as absolute, or
@@ -386,6 +400,20 @@ export class DefaultAudioManager implements AudioManager {
             return handle;
         }
 
+        // The spatial half of the same static tier: distances are synchronously
+        // knowable, so an already-invalid spec rejects here by the same provenance
+        // rule — before any slot is reserved, with one warning (Invariant #117).
+        let spatial: ResolvedSpatialSpec | null = null;
+        if (opts.spatial !== undefined) {
+            const resolution = resolveSpatialSpec(opts.spatial);
+            if (resolution.kind === 'rejected') {
+                console.warn(resolution.warning);
+                handle.invalidate();
+                return handle;
+            }
+            spatial = resolution.spec;
+        }
+
         this.reserveVoiceSlot();
         if (this.voices.size >= this.poolSize) {
             handle.invalidate();
@@ -396,7 +424,7 @@ export class DefaultAudioManager implements AudioManager {
             handle,
             loop: opts.loopRegion !== undefined || (opts.loop ?? false),
             loopRequested: opts.loop ?? false,
-            position: opts.position ?? null,
+            spatial,
             sequence: this.nextSequence,
             volume: clampUnit(opts.volume ?? DEFAULT_VOLUME),
             ceilingHold: null,
@@ -1058,14 +1086,14 @@ export class DefaultAudioManager implements AudioManager {
         const busGainNode = this.getBus(record.handle.bus).gainNode;
         source.connect(gainNode);
 
-        if (record.position === null) {
+        if (record.spatial === null) {
             gainNode.connect(busGainNode);
             return;
         }
 
         const pannerNode = this.audioContext.createPanner();
         record.pannerNode = pannerNode;
-        setPannerPosition(pannerNode, record.position, this.audioContext.currentTime);
+        setPannerPosition(pannerNode, record.spatial.position, this.audioContext.currentTime);
         gainNode.connect(pannerNode);
         pannerNode.connect(busGainNode);
     }

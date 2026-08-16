@@ -7,6 +7,12 @@ import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/conten
 import { DEFAULT_FADE_CURVE, type AudioHandle, type PlayOptions } from './AudioManager';
 import { useAudioManager } from './AudioManagerContext.js';
 import type { Cue } from './Cue';
+import {
+    DEFAULT_DISTANCE_FALLOFF,
+    DEFAULT_FALLOFF_DISTANCE,
+    DEFAULT_FULL_VOLUME_DISTANCE,
+    DEFAULT_ROLLOFF_FACTOR,
+} from './Spatial';
 
 const DEFAULT_BUS = 'sfx';
 const DEFAULT_LOOP = false;
@@ -42,9 +48,17 @@ export function useSound(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): () 
             opts?.loop ?? DEFAULT_LOOP,
             opts?.volume ?? DEFAULT_VOLUME,
             opts?.priority ?? DEFAULT_PRIORITY,
-            opts?.position?.[0],
-            opts?.position?.[1],
-            opts?.position?.[2],
+            // An absent `spatial` cannot collide with an authored one: the three axis
+            // keys are `undefined` only then. The distance keys default through the
+            // SHARED constants — not copies — so an omitted field and its explicit
+            // default name one callback.
+            opts?.spatial?.position[0],
+            opts?.spatial?.position[1],
+            opts?.spatial?.position[2],
+            opts?.spatial?.fullVolumeDistance ?? DEFAULT_FULL_VOLUME_DISTANCE,
+            opts?.spatial?.falloffDistance ?? DEFAULT_FALLOFF_DISTANCE,
+            opts?.spatial?.falloff ?? DEFAULT_DISTANCE_FALLOFF,
+            opts?.spatial?.rolloffFactor ?? DEFAULT_ROLLOFF_FACTOR,
             cueDependency(opts?.from),
             cueDependency(opts?.to),
             cueDependency(opts?.loopRegion?.start),
