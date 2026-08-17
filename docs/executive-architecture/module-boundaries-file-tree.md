@@ -351,25 +351,11 @@ chimera/
 │   ├── desync-logger.ts             # Snapshot diff log for debugging
 │   └── migrate-save.ts              # CLI: run SaveMigrator against a save file
 │
-└── apps/tactics/e2e/                # Playwright end-to-end test suite (owned by the tactics consumer app)
-    ├── playwright.config.ts
-    ├── fixtures/
-    │   ├── electron.fixture.ts
-    │   ├── lobby.fixture.ts
-    │   └── game.fixture.ts
-    ├── pages/                       # Page Object Models
-    ├── helpers/
-    │   ├── ipc-spy.ts
-    │   ├── ws-inspector.ts
-    │   ├── snapshot-assert.ts
-    │   └── tick-driver.ts
-    └── tests/
-        ├── lobby.spec.ts
-        ├── game-flow.spec.ts
-        ├── undo-redo.spec.ts
-        ├── obfuscation.spec.ts
-        ├── reconnect.spec.ts
-        └── multiplayer-soak.spec.ts
+└── apps/tactics/e2e/                # Playwright end-to-end test suite (owned by the tactics consumer app).
+                                     #   Deliberately NOT expanded here — the suite's tree is
+                                     #   §13.3 of ../testing/e2e-testing-playwright.md, and one
+                                     #   directory described in two places is one description
+                                     #   nobody opens when the directory changes.
 ```
 
 ---
@@ -389,4 +375,5 @@ chimera/
 - [Electron Shell and IPC Bridge](../core-components/electron-shell-ipc-bridge.md) — `electron/` in detail
 - [Simulation Core](../core-components/simulation-core-action-pipeline.md) — `simulation/engine/` in detail
 - [Renderer State Stores](../core-components/renderer-state-stores.md) — `renderer/state/` in detail
+- [Playwright E2E](../testing/e2e-testing-playwright.md) — §13.3 carries the `apps/tactics/e2e/` tree
 - [Spectator Mode Contract](../core-components/spectator-mode-contract.md) — read-only spectators, the join classifier, and perspective projection (F72)

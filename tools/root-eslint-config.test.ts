@@ -44,6 +44,7 @@ import {
 } from 'typescript';
 import type { Node, ObjectLiteralExpression, PropertyAssignment, SourceFile } from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { LEVEL_WIDTH, parseTreeRow } from './__test-support__/annotated-file-tree.js';
 
 const workspaceRoot = path.resolve(import.meta.dirname, '..');
 const rootConfigPath = path.join(workspaceRoot, 'eslint.config.mjs');
@@ -311,27 +312,21 @@ describe('module-boundaries file tree', () => {
         'utf8',
     ).split('\n');
 
-    /** One nesting level in the annotated file tree is four columns wide. */
-    const LEVEL_WIDTH = 4;
-    const TREE_LINE = /^(?<gutter>[│ ]*)[├└]── (?<name>\S+)/u;
-
     interface TreeEntry {
         readonly index: number;
         readonly column: number;
         readonly name: string;
     }
 
+    // The row grammar and the level width come from __test-support__ because a second
+    // guard (tools/e2e-file-tree-single-source.test.ts) walks this same tree with a
+    // different traversal. The traversals differ on purpose; what they must not differ
+    // on is which lines are entries and how wide a level is.
     function treeEntries(): readonly TreeEntry[] {
         return fileTree.flatMap((line, index) => {
-            const groups = TREE_LINE.exec(line)?.groups;
-            if (groups === undefined) return [];
-            return [
-                {
-                    index,
-                    column: (groups['gutter'] ?? '').length,
-                    name: (groups['name'] ?? '').replace(/\/$/u, ''),
-                },
-            ];
+            const row = parseTreeRow(line);
+            if (row === undefined) return [];
+            return [{ index, column: row.column, name: row.name }];
         });
     }
 

@@ -43,6 +43,8 @@ apps/tactics/e2e/
 ├── global-setup.ts
 ├── tsconfig.json                # Restores @chimera-engine/* path resolution for the runner
 ├── fixtures/
+│   ├── *.test.ts                # Vitest coverage of the modules beside them, as at the
+│   │                            #   root above (NOT enumerated — `ls` is the census)
 │   ├── electron.fixture.ts      # Base: launch / close one ElectronApplication
 │   ├── direct-game.fixture.ts   # Host/client direct-game boot helpers
 │   ├── lobby.fixture.ts         # Extends base: two instances + lobby helpers
@@ -51,7 +53,8 @@ apps/tactics/e2e/
 │   ├── user-data-root.ts        # Root of the per-launch throwaway Chromium profiles
 │   └── inherit-env.ts           # Sanitised env passthrough for launched apps
 ├── pages/                       # POMs; co-located *.test.ts locator-wiring and
-│   │                            #   *.testid-alignment.test.ts renderer-testid guards where present
+│   │                            #   *.testid-alignment.test.ts renderer-testid guards where present.
+│   │                            #   A selection, not a census — `ls apps/tactics/e2e/pages/` is that.
 │   ├── MainMenuPage.ts
 │   ├── LobbyPage.ts             # POM: host/join/ready/start/leave/close
 │   ├── TacticsLobbyPage.ts      # extends LobbyPage: AI seats, colors, commitment toggle
@@ -62,7 +65,8 @@ apps/tactics/e2e/
 │   ├── ChatPanelPage.ts
 │   ├── ComponentGalleryPage.ts
 │   └── SettingsPage.ts
-├── helpers/
+├── helpers/                     # Also a selection rather than a census —
+│   │                            #   `ls apps/tactics/e2e/helpers/` is that.
 │   ├── ipc-spy.ts               # Read main-process state via electronApp.evaluate()
 │   ├── ws-inspector.ts          # Tap raw WebSocket frames
 │   ├── snapshot-assert.ts       # assertNoLeakedFields(), assertTickAdvanced(), assertChecksumMatch()
