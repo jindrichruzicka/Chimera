@@ -13,10 +13,20 @@ import { GAME_TOKENS } from './tokens.js';
  * ONE root.
  *
  * These assertions read the REAL `templates/blank/e2e/` sources rather than running
- * them: the template tree is tokenised and excluded from this repo's Vitest collection.
- * Wherever the claim is about which argument a call receives, the file is inspected
- * through the TypeScript AST — `rmSync` reaching the root as a bare substring says
- * nothing about the position it reaches it in.
+ * them, and reading is the ceiling here rather than a shortcut: the template's
+ * `e2e/tsconfig.json` extends `../../../tsconfig.json`, which is the root of the
+ * SCAFFOLDED app and exists in no checkout of this repo, so Vitest cannot transform
+ * these modules at all.
+ *
+ * `verify:scaffold` does emit the template and run its suite, but that suite —
+ * `templates/blank/e2e/tests/boot-smoke.spec.ts` — is a single spec asserting the
+ * preload bridge, and makes no assertion about a profile directory's name. So a green
+ * scaffold run says nothing about what is checked here.
+ *
+ * Which is why the reading goes through the TypeScript AST rather than the text. A
+ * bare substring says nothing about the position it is found in: `rmSync` reaching the
+ * root, a counter incremented by zero or under an `if`, and a comment naming a value
+ * all read the same as the thing itself.
  */
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const templateE2eDir = path.join(repoRoot, 'tools/create-chimera-game/templates/blank/e2e');
@@ -26,8 +36,16 @@ const engineRootModule = path.join(repoRoot, 'apps/tactics/e2e/fixtures/user-dat
 /** The exported binding both sides of the contract must agree on. */
 const ROOT_BINDING = 'E2E_USER_DATA_ROOT';
 
-/** What makes one launch's profile directory name differ from the next one's. */
+/** What separates two launches inside ONE worker process. */
 const LAUNCH_COUNTER_BINDING = 'userDataLaunchCounter';
+
+/**
+ * What separates two launches in DIFFERENT worker processes.
+ *
+ * The counter cannot do this job: it restarts at zero in each worker, so two workers'
+ * first launches carry the same count. The template's config runs more than one worker.
+ */
+const PROCESS_DIFFERENTIATOR = 'process.pid';
 
 async function parseFile(file: string): Promise<ts.SourceFile> {
     const source = await readFile(file, 'utf8');
@@ -62,9 +80,9 @@ function callsTo(source: ts.SourceFile, callee: string): string[][] {
     return found;
 }
 
-/** The initializer of the first declaration of `name` in the file, whatever its kind. */
-function initializerOf(source: ts.SourceFile, name: string): ts.Expression | undefined {
-    let found: ts.Expression | undefined;
+/** The first declaration of `name` in the file, whatever its kind. */
+function declarationOf(source: ts.SourceFile, name: string): ts.VariableDeclaration | undefined {
+    let found: ts.VariableDeclaration | undefined;
     const walk = (node: ts.Node): void => {
         if (
             found === undefined &&
@@ -72,12 +90,25 @@ function initializerOf(source: ts.SourceFile, name: string): ts.Expression | und
             ts.isIdentifier(node.name) &&
             node.name.text === name
         ) {
-            found = node.initializer;
+            found = node;
         }
         ts.forEachChild(node, walk);
     };
     walk(source);
     return found;
+}
+
+/** The initializer of the first declaration of `name` in the file, whatever its kind. */
+function initializerOf(source: ts.SourceFile, name: string): ts.Expression | undefined {
+    return declarationOf(source, name)?.initializer;
+}
+
+/** Whether `node` sits anywhere inside `ancestor`. */
+function isInside(node: ts.Node, ancestor: ts.Node): boolean {
+    for (let at = node.parent as ts.Node | undefined; at !== undefined; at = at.parent) {
+        if (at === ancestor) return true;
+    }
+    return false;
 }
 
 /**
@@ -100,8 +131,130 @@ function contains(outer: readonly string[], inner: readonly string[]): boolean {
     return outer.length <= inner.length && outer.every((segment, i) => segment === inner[i]);
 }
 
-/** Whether the file ever advances `name` — `name++`, `++name` or `name += …`. */
-function advances(source: ts.SourceFile, name: string): boolean {
+/** `a.b.c` rebuilt from the node's own names, or undefined if it is not a plain access. */
+function accessPath(node: ts.Node): string | undefined {
+    if (ts.isIdentifier(node)) return node.text;
+    if (!ts.isPropertyAccessExpression(node)) return undefined;
+    const base = accessPath(node.expression);
+    return base === undefined ? undefined : `${base}.${node.name.text}`;
+}
+
+/**
+ * The bindings `node` reads, each property access also yielding its prefixes — so a
+ * `process.pid.toString()` call reports `process.pid` and `process`.
+ *
+ * Rebuilt from names rather than taken with `getText()`, because `getText()` spans the
+ * trivia inside a node: a `// process.pid goes here` left where the read used to be
+ * satisfies any search over that text while contributing nothing to the value.
+ *
+ * The KEY half of an access is deliberately not walked. `options.port` reads `options`;
+ * `port` there is a property name, and reporting it as a binding would let an unrelated
+ * `const port` elsewhere in the file answer for a value this expression never touches.
+ */
+function valuesRead(node: ts.Node): string[] {
+    const found: string[] = [];
+    const walk = (child: ts.Node): void => {
+        const access = accessPath(child);
+        if (access !== undefined) found.push(access);
+        if (ts.isPropertyAccessExpression(child)) {
+            walk(child.expression); // the object, never `child.name`
+            return;
+        }
+        ts.forEachChild(child, walk);
+    };
+    walk(node);
+    return found;
+}
+
+/**
+ * {@link valuesRead}, following each local name to what it was declared from.
+ *
+ * Without the follow, the check would pin one shape of the expression rather than what
+ * it is built out of: hoisting a read into a `const` above is the same derivation and
+ * would look like the value having disappeared.
+ *
+ * `within` bounds which declarations may be followed, and the bound is the difference
+ * between the two things this file asks about. A value that CHANGES has to be sampled
+ * where it is used: `const tag = counter.toString()` at module scope runs once, at
+ * import, so following it out of the function would report a counter that is read
+ * per-launch when it is read once ever. A value that is fixed for the life of the
+ * process does not care where it was read, so its follow is unbounded.
+ */
+function readsBehind(source: ts.SourceFile, node: ts.Node, within?: ts.Node): string[] {
+    const seen = new Set<string>();
+    const expand = (from: ts.Node): void => {
+        for (const value of valuesRead(from)) {
+            if (seen.has(value)) continue;
+            seen.add(value);
+            const declared = declarationOf(source, value);
+            if (declared?.initializer === undefined) continue;
+            if (within !== undefined && !isInside(declared, within)) continue;
+            expand(declared.initializer);
+        }
+    };
+    expand(node);
+    return [...seen];
+}
+
+/** The nearest function `node` sits inside, or undefined at the top level. */
+function enclosingFunction(node: ts.Node): ts.Node | undefined {
+    for (let at = node.parent as ts.Node | undefined; at !== undefined; at = at.parent) {
+        if (ts.isFunctionLike(at)) return at;
+    }
+    return undefined;
+}
+
+/** Whether anything between `node` and `scope` decides whether `node` runs at all. */
+function branchesAbove(node: ts.Node, scope: ts.Node): boolean {
+    for (
+        let at = node.parent as ts.Node | undefined;
+        at !== undefined && at !== scope;
+        at = at.parent
+    ) {
+        if (
+            ts.isIfStatement(at) ||
+            ts.isConditionalExpression(at) ||
+            ts.isSwitchStatement(at) ||
+            ts.isTryStatement(at) ||
+            ts.isIterationStatement(at, true) ||
+            // Short-circuits only: in `cond && (name += 1)` the right operand runs some
+            // of the time. An `=` or a comma decides nothing and must not read as a
+            // branch, or a rewrite that preserves the behaviour would red this.
+            (ts.isBinaryExpression(at) &&
+                [
+                    ts.SyntaxKind.AmpersandAmpersandToken,
+                    ts.SyntaxKind.BarBarToken,
+                    ts.SyntaxKind.QuestionQuestionToken,
+                ].includes(at.operatorToken.kind))
+        ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Whether `name` is moved in the same function that builds `target`, ahead of it, and
+ * not inside a branch.
+ *
+ * Each conjunct answers a way the counter stays put while still reading as a counter,
+ * and each was reachable on its own:
+ *
+ *   - the operator has to move it (`name++`, `++name`, `name += n`);
+ *   - the amount has to be non-zero — `name += 0` is an increment by inspection;
+ *   - it has to be in the function that builds the name, not a sibling nobody calls;
+ *   - it has to come before the name is built, so the name samples the advanced value.
+ *     This is deliberately stricter than uniqueness needs — advancing afterwards still
+ *     yields distinct names — because it is what separates an increment that precedes
+ *     the read from one parked below the `return`;
+ *   - it must not sit under an `if`, a ternary, a loop or a short-circuit, which decide
+ *     whether it runs.
+ *
+ * What this does NOT establish is that the statement is reached on every call — an
+ * early `return` above it would still freeze the counter.
+ */
+function advancesBefore(source: ts.SourceFile, name: string, target: ts.Node): boolean {
+    const scope = enclosingFunction(target);
     let found = false;
     const walk = (node: ts.Node): void => {
         const bumps =
@@ -111,8 +264,18 @@ function advances(source: ts.SourceFile, name: string): boolean {
         const adds =
             ts.isBinaryExpression(node) &&
             node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
-            node.left.getText() === name;
-        if (bumps || adds) found = true;
+            node.left.getText() === name &&
+            ts.isNumericLiteral(node.right) &&
+            Number(node.right.text) !== 0;
+        if (
+            (bumps || adds) &&
+            scope !== undefined &&
+            enclosingFunction(node) === scope &&
+            node.getStart() < target.getStart() &&
+            !branchesAbove(node, scope)
+        ) {
+            found = true;
+        }
         ts.forEachChild(node, walk);
     };
     walk(source);
@@ -159,19 +322,31 @@ describe('blank template — throwaway Chromium profiles', () => {
         expect(segments.length).toBeGreaterThan(1);
 
         // …and that inner segment has to differ per launch, or two launches share one
-        // directory and the same wipe hits a live app. The launch counter is what makes
-        // it differ, so the segment is required to be derived from it.
+        // directory and the same wipe hits a live app. Two launches can collide in two
+        // independent ways, so the segment has to carry a differentiator for each.
         const perLaunch = segments.slice(1);
         expect(perLaunch).not.toContain(ROOT_BINDING);
-        const derivations = perLaunch.map((segment) =>
-            (initializerOf(fixture, segment)?.getText() ?? segment).includes(
-                LAUNCH_COUNTER_BINDING,
-            ),
-        );
-        expect(derivations).toContain(true);
-        // …and the counter has to actually move. Frozen, it names one directory for
-        // every launch in the process, and the wipe below lands on a live app's profile.
-        expect(advances(fixture, LAUNCH_COUNTER_BINDING)).toBe(true);
+        // One segment today. Asserted so the two arms below, which are measured against
+        // it, cannot quietly start describing only part of the name.
+        expect(perLaunch).toHaveLength(1);
+        const nameNode = initializerOf(fixture, perLaunch[0] ?? '');
+        expect(nameNode).toBeDefined();
+        const nameScope = enclosingFunction(nameNode!);
+        expect(nameScope).toBeDefined();
+
+        // Same process, later launch: the counter separates them. It has to be read
+        // INSIDE the function that builds the name — a read hoisted to module scope
+        // runs once, at import, and would hand every launch the same count…
+        expect(readsBehind(fixture, nameNode!, nameScope)).toContain(LAUNCH_COUNTER_BINDING);
+        // …and it has to move where it can affect this name: same function, ahead of
+        // it, outside any branch. Sitting still, it names one directory for every launch
+        // in the process and the wipe below lands on a live app's profile.
+        expect(advancesBefore(fixture, LAUNCH_COUNTER_BINDING, nameNode!)).toBe(true);
+
+        // Different processes, same launch index: the counter cannot help, because it
+        // restarts at zero in each worker. Something per-process has to reach the name —
+        // and being fixed for the life of the process, it may be read from anywhere.
+        expect(readsBehind(fixture, nameNode!)).toContain(PROCESS_DIFFERENTIATOR);
     });
 
     it('clears and creates only its own profile directory, never the shared root', async () => {
