@@ -22,7 +22,9 @@ export function useInteractionContext(): { isBlocked: boolean } {
     if (ctx === null) {
         throw new Error(
             'useInteractionContext must be called inside an <InteractionBlocker> provider. ' +
-                'Wrap your game content with <InteractionBlocker> before using pointer interactions.',
+                '<GameCanvas> mounts one around its children, so this usually means the ' +
+                'call is outside a GameCanvas subtree; move it inside, or wrap the ' +
+                'subtree in your own <InteractionBlocker> to narrow blocking.',
         );
     }
     return ctx;

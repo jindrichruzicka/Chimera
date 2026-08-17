@@ -924,6 +924,88 @@ specs stay green unmodified as the no-regression control; No change to any of th
 release budgets, to any settle path, or to the `engine:scene_ready` dispatch timing — all
 candidates for a follow-up.
 
+### F91 — Tween, Camera & Pointer-Interaction Surface on the r3f Barrel `§4.21, §4.22, §4.23`
+
+**Status: implemented across #1137–#1138; the feature issue is
+[#1136](https://github.com/jindrichruzicka/Chimera/issues/1136).** RC testing found six
+documented engine APIs that no adopter could import. The code all shipped —
+`renderer/tsconfig.build.json` includes the whole package, so `dist/hooks/useCamera.js` and
+`dist/utils/curves.js` were already in the tarball — but the `exports` map lists eight
+barrels plus `./shell/*` and `./styles/*.css`, with no `./hooks`, no `./utils` and no
+wildcard. `useTween`, `useTweenCallback`, `useCamera`, the curve primitives,
+`useGameInteraction` and `InteractionBlocker` were documented as engine API in §4.21–§4.23,
+the traceability matrix and the changelog, and unreachable from every installed package.
+
+**The door, not the code.** Nothing about the six modules changed. What changed is that
+`components/r3f` now names them. That barrel rather than a ninth, because Invariant #96
+names `renderer/hooks/` as an internal **and** states the escape in the same sentence —
+"whatever a barrel re-exports is legal through that barrel". A `./hooks` subpath would have
+contradicted a named clause of #96; re-exporting through `components/r3f` is the mechanism
+#96 blesses, and that barrel already did it for `useAnimationTimeScale`. The four hooks are
+also useless away from a canvas, so it is where a caller is already looking; the five curve
+functions are **not** Canvas-bound — `renderer/utils/curves.ts` imports nothing and calls no
+React hook, which `r3f-barrel-side-effects.test.ts` measures — and ride along because they
+are what a caller passes to the hooks, which is the whole reason they ship as values and not
+only as the `EasingFn` type. So the barrel set stays at **eight** and the specifier-keyed guards — the exports
+map, `package-exports-contract`, Check 17's `RENDERER_BARREL_RE`, the
+`no-game-renderer-internals` predicate, `PROBE_SUBPATHS` — are all untouched, because every
+one of them already names `components/r3f`.
+
+Opening a symbol cannot open a path, because `no-game-renderer-internals` compares the import
+SOURCE and never sees the imported names. `renderer/utils/curves.js` joined
+`renderer/hooks/useCamera.js` as an invalid fixture. No fixture had named `renderer/utils/`
+before, so that one case is what closes `renderer/utils/*` against a rule that mistakenly
+allowed the prefix. Which fixtures kill which mutants is the rule test's business and is not restated
+here.
+
+**Two of the six were worse than unreachable.** `useGameInteraction` calls
+`useInteractionContext`, which throws without an `<InteractionBlocker>` ancestor
+(Invariant #83) — and nothing in the repo mounted one: not the shell, not `GameCanvas`, not
+tactics. The hook had zero non-test importers and would have thrown for every caller,
+so exporting it alone would have shipped a hook that cannot be called. `GameCanvas` now
+mounts the provider on every role, from **inside** its `<Canvas>`: the children that call
+the hook are r3f children, so providing the context there needs no assumption about whether
+React context crosses the r3f reconciler boundary.
+
+**What that cost, stated rather than absorbed.** The barrel's import graph went 34 → 43
+modules and its store edges three → four. The fourth is `state/gameStore.ts`, which the
+side-effect test's own header had recorded as deliberately avoided — it builds its singleton
+at module scope, so an edge constructs the game store in every consumer of the barrel. That
+paragraph is rewritten rather than renumbered, because what it prices is a CHOICE between
+two homes for one float (the dilation multiplier, which is why it was written) and not a
+prohibition: `snapshot.sceneTransition` lives in `gameStore` and has no cheaper home. The
+module-scope cost is real and unchanged; it buys a `useGameInteraction` that does not throw.
+`react-dom` is the one new external, and it is `useCamera`'s alone — `animateTo` calls
+`flushSync` so the tween re-renders with the new duration before `start()` runs. It was
+already a peer dependency.
+
+**Claims the sweep caught, including one already false.**
+[`camera-system.md`](../core-components/camera-system.md) said the r3f barrel "exports no
+other runtime component" — written 2026-08-05 in `bb413348`, while `AnimatedSprite`, a
+runtime component, was exported 2026-08-12 in `091a05f5`. Stale on `main` before F91 touched
+it; its intent was "no other canvas **root**", and it now says that. Two further sentences —
+in the same file and in
+[`performance-hud-device-info.md`](../core-components/performance-hud-device-info.md) —
+inferred "`GameCanvas` mounts it, THEREFORE it is not exported", an inference
+`InteractionBlocker` now falsifies by being both. Both are restated on the real reason: a
+second `PerfProbe` double-publishes and a second `FrameRateLimiter` fights over one clock,
+whereas nesting a second `InteractionBlocker` is a legitimate way to narrow blocking.
+
+**Not in scope.** No ninth barrel and no `exports` key, per the above; No raw
+`InteractionContext` export — the `assets` and `input` barrels publish a provider plus its
+`useX()` accessor and never the context object, and this one follows them, so a nested
+provider still gets its value from a component; No re-export of `Vector3Tuple` from
+`useCamera`, since it and `GameCanvas` re-export the one declaration in
+`renderer/types/r3f-types.ts` and a second statement is a duplicate identifier rather than a
+widening; No tactics gameplay adoption — the adopter proof is `verify:scaffold`'s
+compile-only seam plant, which names the new symbols from a real standalone install and so
+proves resolution through the packed `exports` map rather than through the workspace, which
+a tactics screen would not; No e2e spec, the pointer-gating proof being the three-snapshot
+`GameCanvas` unit test (the unblocked read on mount is the store's initial state, which a
+provider that never subscribed would report just as well — the transition back is what
+proves the subscription is live); No `useFadeTransition` export, which is shell-only and
+stays internal — all candidates for a follow-up.
+
 ---
 
 ## Cross-References

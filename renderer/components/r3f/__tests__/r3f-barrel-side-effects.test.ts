@@ -5,9 +5,10 @@
  * the `ui` and `audio` barrels each ship a test of this shape; the r3f barrel
  * had none until `useModelAnimation` joined it.
  *
- * **What it drags in.** The graph reaches THREE stores (`perfStore` via
+ * **What it drags in.** The graph reaches FOUR stores (`perfStore` via
  * `PerfProbe`, `settingsStore` via `selectTargetFps`, `timeScaleStore` via
- * `useAnimationTimeScale`), the renderer log bridge, part of
+ * `useAnimationTimeScale`, `gameStore` via `InteractionBlocker`), the renderer
+ * log bridge, part of
  * `renderer/animation/`, and part of `renderer/assets/` (attribution recorded at
  * the module-set assertion below, which is the enumeration) — recorded
  * decisions, not drift. The `assets/` edge is `AnimatedSprite`'s: an element
@@ -18,17 +19,27 @@
  * every `ModelInstance` import here is TYPE-ONLY. What this test measures is the
  * import GRAPH, not what evaluating it does.
  *
- * **Why the third store edge is `animation/timeScaleStore.ts` and not
- * `gameStore`.** The dilation multiplier has to live somewhere both the shell
- * (which holds the snapshot) and the animation layer (which paces against it)
- * can reach. `gameStore` already holds the snapshot, so reading the permille
+ * **Why the dilation multiplier lives in `animation/timeScaleStore.ts` and not
+ * in `gameStore`.** The multiplier has to live somewhere both the shell (which
+ * holds the snapshot) and the animation layer (which paces against it) can
+ * reach. `gameStore` already holds the snapshot, so reading the permille
  * straight off it looks free — but `renderer/state/gameStore.ts` builds its
- * singleton at module scope, so an edge to it from anything in THIS graph
- * would construct the game store in every consumer of the r3f barrel,
- * including ones that never mount a match. A one-float store in
- * `renderer/animation/` costs one more edge here and nothing at all at
- * runtime. Recorded here the way the `perfStore` and `settingsStore` edges
- * are.
+ * singleton at module scope, so an edge to it constructs the game store in
+ * every consumer of the barrel, including ones that never mount a match. A
+ * one-float store in `renderer/animation/` costs one more edge here and nothing
+ * at all at runtime, so it is still the cheaper of the two.
+ *
+ * That was once also the reason NOTHING in this graph reached `gameStore`.
+ * It is not any more, and the distinction matters: what the paragraph above
+ * prices is a CHOICE between two homes for one float, not a prohibition. F91
+ * made `GameCanvas` mount `<InteractionBlocker>`, which reads
+ * `snapshot.sceneTransition` — a fact that lives in `gameStore` and nowhere
+ * else, with no cheaper home to move it to. So `state/gameStore.ts` is the
+ * FOURTH store edge, accepted deliberately and recorded here the way the other
+ * three are. The module-scope construction cost is real and unchanged; it buys
+ * a `useGameInteraction` that does not throw in every game that calls it
+ * (Invariant #83), which the alternative — a provider each game mounts by hand,
+ * which no game did — did not.
  *
  * **The exported surface.** Pinned as a closed set below; the types by
  * `BarrelTypeSurface` (removal-only, via typecheck).
@@ -66,6 +77,13 @@ import type {
     ClipEndEvent,
     UseSpriteClipPlayerOptions,
     AnimatedSpriteProps,
+    EasingFn,
+    TweenState,
+    TweenCallbackHandlers,
+    CameraController,
+    CameraAnimationTarget,
+    CameraAnimationCancelReason,
+    InteractionHandlers,
 } from '../index';
 
 /** The barrel's TYPE surface — see the audio sibling for why each is named. */
@@ -100,6 +118,17 @@ interface BarrelTypeSurface {
     readonly passageEnd: PassageEndEvent;
     readonly passageEndReason: PassageEndReason;
     readonly clipEnd: ClipEndEvent;
+    // §4.21/§4.22/§4.23. Each is named because a game that factors a handler or
+    // a controller out of a call site has to annotate it, and neither
+    // `renderer/hooks/` nor `renderer/utils/` is an importable subpath
+    // (Invariant #96) — the same reason the marker event types above are named.
+    readonly easing: EasingFn;
+    readonly tween: TweenState;
+    readonly tweenCallbacks: TweenCallbackHandlers;
+    readonly cameraController: CameraController;
+    readonly cameraTarget: CameraAnimationTarget;
+    readonly cameraCancelReason: CameraAnimationCancelReason;
+    readonly interaction: InteractionHandlers;
 }
 
 /**
@@ -209,29 +238,54 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         expect(typeSurface).toBeUndefined();
 
         // The runtime surface is the GameCanvas root, the Canvas-bound animation
-        // hooks for both halves, and the one element (AnimatedSprite) that
-        // packages the sprite half; the barrel header (index.ts) records why the
-        // wiring modules are not public.
+        // hooks for both halves, the one element (AnimatedSprite) that packages
+        // the sprite half, and — since F91 — the tween, camera, curve and
+        // pointer-interaction surface §4.21/§4.22/§4.23 document; the barrel
+        // header (index.ts) records why the wiring modules are not public.
+        //
+        // The five curve functions are values, not types: they are what a caller
+        // PASSES to useTween/useCamera, so a barrel that exported only EasingFn
+        // would leave every caller stuck with the `linear` default.
+        //
+        // InteractionContext is deliberately absent. The assets and input
+        // barrels export a Provider plus its useX() accessor and never the raw
+        // context object; this one follows them, so a nested provider still gets
+        // its value from a component rather than hand-built.
         expect(Object.keys(r3fBarrel).sort()).toEqual([
             'AnimatedSprite',
+            'CameraAnimationCancelled',
             'GameCanvas',
+            'InteractionBlocker',
+            'easeIn',
+            'easeInOut',
+            'easeOut',
+            'lerp',
+            'linear',
             'useAnimationTimeScale',
+            'useCamera',
             'useClipPlayer',
+            'useGameInteraction',
+            'useInteractionContext',
             'useModelAnimation',
             'useSpriteClipPlayer',
+            'useTween',
+            'useTweenCallback',
         ]);
     });
 
-    it('pulls in exactly thirty-four modules — three stores, the log bridge, both animation halves, and no clone seam', async () => {
+    it('pulls in exactly forty-three modules — four stores, the log bridge, both animation halves, and no clone seam', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
-        // EXHAUSTIVE, not a denylist (see the audio sibling for why). The three
+        // EXHAUSTIVE, not a denylist (see the audio sibling for why). The four
         // store edges are real: PerfProbe publishes into perfStore, both
         // FrameRateLimiter and useEngineFrameloop read settings.display.targetFps
-        // through the one shared selectTargetFps module, and both clip players
+        // through the one shared selectTargetFps module, both clip players
         // read the dilation multiplier out of timeScaleStore through
-        // useAnimationTimeScale (see the header for why that store and not
-        // gameStore). rendererLogger is the fourth recorded edge:
+        // useAnimationTimeScale (see the header for why the multiplier lives
+        // there and not on the snapshot), and InteractionBlocker — which
+        // GameCanvas mounts around every canvas child — reads
+        // snapshot.sceneTransition out of gameStore. rendererLogger is the fifth
+        // recorded edge:
         // FrameRateLimiter reports a half-wired canvas,
         // mainCanvasRegistry a duplicate role="main" pair, mixerBindingRegistry
         // a root carrying two mixer-owning hooks, and both clip players a
@@ -251,6 +305,16 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // cameraFit is GameCanvas's own fit-policy geometry, and being pure
         // arithmetic it adds no edge of its own — no store, no bridge, no
         // external package.
+        // The four `hooks/` modules and `utils/curves.ts` are F91's: the
+        // tween/camera/interaction surface a game reaches through this barrel,
+        // since neither directory is an importable subpath (Invariant #96).
+        // `bridge/useSendAction.ts` rides in on useGameInteraction and is the
+        // one to read twice — a BRIDGE in the graph, not a store. It reaches
+        // perfStore, which was already here via PerfProbe, so it adds no store
+        // edge; what it does add is a read of `globalThis.__chimera.game`, which
+        // is a host seam rather than an import, so no module records it.
+        // `utils/curves.ts` is the whole of §4.21's maths and imports nothing at
+        // all — it is a leaf in every sense.
         const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
         expect(dirAndFile).toEqual([
             'animation/ClipBackend.ts',
@@ -269,14 +333,21 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'assets/useAnimationSheet.ts',
             'assets/useAsset.ts',
             'assets/useSpriteAtlas.ts',
+            'bridge/useSendAction.ts',
+            'hooks/useCamera.ts',
+            'hooks/useGameInteraction.ts',
+            'hooks/useTween.ts',
+            'hooks/useTweenCallback.ts',
             'logging/rendererLogger.ts',
             'perf/PerfProbe.tsx',
             'perf/perfStore.ts',
             'r3f/AnimatedSprite.tsx',
             'r3f/FrameRateLimiter.tsx',
             'r3f/GameCanvas.tsx',
+            'r3f/InteractionBlocker.tsx',
             'r3f/cameraFit.ts',
             'r3f/index.ts',
+            'r3f/interactionContext.ts',
             'r3f/mainCanvasRegistry.ts',
             'r3f/mixerBindingRegistry.ts',
             'r3f/selectTargetFps.ts',
@@ -286,7 +357,9 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             'r3f/useModelAnimation.ts',
             'r3f/useOwnedMixer.ts',
             'r3f/useSpriteClipPlayer.ts',
+            'state/gameStore.ts',
             'state/settingsStore.ts',
+            'utils/curves.ts',
         ]);
 
         // The clone seam's own module, named directly: the SkeletonUtils
@@ -304,6 +377,12 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
         // see `is the sole SkeletonUtils importer under renderer/` below.
         expect(importsRuntime(externals, 'three')).toBe(true);
         expect(importsRuntime(externals, '@react-three/fiber')).toBe(true);
+        // react-dom is F91's one new external, and it is `useCamera`'s alone:
+        // animateTo calls flushSync so useTweenCallback re-renders with the new
+        // duration and easing BEFORE start() runs. Already a peer dependency, so
+        // it costs the manifest nothing — recorded because a graph that stopped
+        // reaching it would mean that ordering had been dropped.
+        expect(importsRuntime(externals, 'react-dom')).toBe(true);
         expect(externals.has('three/examples/jsm/utils/SkeletonUtils.js')).toBe(false);
         expect(importsRuntime(externals, '@chimera-engine/ai')).toBe(false);
         expect(importsRuntime(externals, '@chimera-engine/networking')).toBe(false);
@@ -367,11 +446,57 @@ describe('@chimera-engine/renderer/components/r3f barrel', () => {
             ['..', 'useClipPlayback.ts'],
             ['..', 'useSpriteClipPlayer.ts'],
             ['..', 'AnimatedSprite.tsx'],
+            ['..', 'InteractionBlocker.tsx'],
+            ['..', 'interactionContext.ts'],
             ['../../../animation', 'useAnimationTimeScale.ts'],
+            ['../../../hooks', 'useTween.ts'],
+            ['../../../hooks', 'useTweenCallback.ts'],
+            ['../../../hooks', 'useCamera.ts'],
+            ['../../../hooks', 'useGameInteraction.ts'],
+            ['../../../bridge', 'useSendAction.ts'],
             ['../../shell/perf', 'PerfProbe.tsx'],
         ] as const) {
             const source = readFileSync(resolve(__dirname, dir, moduleFile), 'utf8');
             expect(source.split('\n')[0], moduleFile).toBe(`'use client';`);
+        }
+
+        // `utils/curves.ts` ships from this barrel too and deliberately carries
+        // NO directive: it is five arithmetic functions and a type, imports
+        // nothing, and calls no React hook, so it is not a client boundary —
+        // matching the assets barrel's class-only modules. Asserted rather than
+        // left to the list above being short, because an omission and a decision
+        // read identically in a list.
+        //
+        // Matched as a DIRECTIVE rather than as the substring `'use client'`:
+        // the quoted-string form would pass a file carrying `"use client";`,
+        // which is the same directive to every bundler and leaves the guard true
+        // while the property is false. (`format:check` also rewrites double to
+        // single quotes, but that is prettier holding the property, not this.)
+        const curves = readFileSync(resolve(__dirname, '../../../utils/curves.ts'), 'utf8');
+        expect(curves).not.toMatch(/^\s*(['"])use client\1\s*;?/mu);
+        // Imports NOTHING — not react, not anything. The docs and the roadmap
+        // both say so as the reason these five functions may ship from an
+        // otherwise Canvas-bound barrel, so it is measured here rather than
+        // asserted there. `not.toContain('react')` alone would leave the
+        // sentence resting on one forbidden name out of all of them.
+        expect(curves).not.toMatch(/^\s*import\b/mu);
+        expect(curves).not.toMatch(/\brequire\s*\(/u);
+        expect(curves).not.toContain('react');
+
+        // The four stores this graph reaches carry no directive either, and that
+        // is a convention rather than four oversights — a store is not a client
+        // boundary; the component that subscribes to it is. Measured as a SET so
+        // the list above stays honestly shorter than "every module in the
+        // graph": `gameStore` is newly in the graph, and a reader comparing the
+        // two lists would otherwise have to guess whether it was considered.
+        for (const storeModule of [
+            '../../../state/gameStore.ts',
+            '../../../state/settingsStore.ts',
+            '../../shell/perf/perfStore.ts',
+            '../../../animation/timeScaleStore.ts',
+        ]) {
+            const source = readFileSync(resolve(__dirname, storeModule), 'utf8');
+            expect(source, storeModule).not.toMatch(/^\s*(['"])use client\1\s*;?/mu);
         }
     });
 });

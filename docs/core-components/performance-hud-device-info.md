@@ -70,9 +70,11 @@ export function PerfHud(): JSX.Element | null;
 `PerfProbe` is mounted by `GameCanvas` inside its R3F `<Canvas>` root — on the
 `role="main"` canvas (the default) only; a `role="overlay"` canvas mounts no
 probe (two concurrent mains are reported, not prevented — §4.22). It is not
-exported from the r3f barrel: `GameCanvas` is the only canvas root a game
-mounts (Invariant #127), so probe placement is engine wiring, never a game
-step. The probe writes FPS, frame-time, draw-call, and triangle samples into
+exported from the r3f barrel, and the reason is that a second probe on one
+canvas would double-publish into `perfStore` — not merely that `GameCanvas`
+mounts it. `GameCanvas` also mounts `InteractionBlocker`, which the barrel does
+export, because nesting a second one is a legitimate way to narrow blocking
+(§4.23). The probe writes FPS, frame-time, draw-call, and triangle samples into
 `perfStore`; `PerfHud` reads those samples from shell chrome without calling R3F
 hooks outside a canvas.
 

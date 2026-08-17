@@ -259,9 +259,9 @@ chimera/
 │   │   │   ├── index.ts             # Public barrel
 │   │   │   └── ChatPanel.tsx        # In-match chat UI; see §4.29
 │   │   ├── ui/                      # PUBLIC UI primitive library (Tier 1); barrel: @chimera-engine/renderer/components/ui (includes <LanguageSelector>, §4.39)
-│   │   └── r3f/                     # Reusable R3F building blocks; PUBLIC barrel: @chimera-engine/renderer/components/r3f (curated: the GameCanvas root — the only canvas root a game mounts, Invariant #127 — plus useModelAnimation, useClipPlayer, useSpriteClipPlayer, AnimatedSprite, useAnimationTimeScale and the curated types)
-│   │       ├── index.ts             # Public barrel (exports GameCanvas + useModelAnimation + useClipPlayer + useSpriteClipPlayer + AnimatedSprite + useAnimationTimeScale + the curated types; PerfProbe/FrameRateLimiter/useEngineFrameloop/useOwnedMixer/useClipPlayback/mainCanvasRegistry/mixerBindingRegistry are engine wiring and stay unexported)
-│   │       ├── GameCanvas.tsx       # <Canvas> root; declarative `camera` prop (preset | explicit config); role="main"|"overlay" — mounts FrameRateLimiter always, PerfProbe on the main canvas only — and owns the frameloop prop from useEngineFrameloop(); see §4.22
+│   │   └── r3f/                     # Reusable R3F building blocks; PUBLIC barrel: @chimera-engine/renderer/components/r3f (curated: the GameCanvas root — the only canvas root a game mounts, Invariant #127 — plus useModelAnimation, useClipPlayer, useSpriteClipPlayer, AnimatedSprite, useAnimationTimeScale, the tween/camera/curve surface re-exported from hooks/ and utils/, the pointer-interaction pair plus InteractionBlocker, and the curated types)
+│   │       ├── index.ts             # Public barrel (exports GameCanvas + useModelAnimation + useClipPlayer + useSpriteClipPlayer + AnimatedSprite + useAnimationTimeScale + useTween/useTweenCallback/useCamera/CameraAnimationCancelled + lerp/linear/easeIn/easeOut/easeInOut + useGameInteraction/useInteractionContext/InteractionBlocker + the curated types; PerfProbe/FrameRateLimiter/useEngineFrameloop/useOwnedMixer/useClipPlayback/mainCanvasRegistry/mixerBindingRegistry are engine wiring and stay unexported)
+│   │       ├── GameCanvas.tsx       # <Canvas> root; declarative `camera` prop (preset | explicit config); role="main"|"overlay" — mounts FrameRateLimiter and InteractionBlocker always, PerfProbe on the main canvas only — and owns the frameloop prop from useEngineFrameloop(); see §4.22
 │   │       ├── FrameRateLimiter.tsx # Loop DRIVER for display.targetFps: one rAF chain calling advance(); registers no useFrame and never presents; see §4.22
 │   │       ├── useEngineFrameloop.ts # Canvas-FREE hook returning the frameloop prop that canvas needs ('never' capped, 'always' uncapped); see §4.22
 │   │       ├── InteractionBlocker.tsx  # Context provider; see §4.23
@@ -334,14 +334,15 @@ chimera/
 │   │   └── SettingsLanguageSelector.tsx  # Store-connected wrapper for the settings Language field (§4.39)
 │   ├── logging/
 │   │   └── rendererLogger.ts        # see §4.27
-│   ├── utils/
-│   │   └── curves.ts                # Pure math: lerp, easeIn, easeOut, easeInOut; see §4.21
-│   ├── hooks/
+│   ├── utils/                       # INTERNAL directory; curves.ts is re-exported by the components/r3f barrel
+│   │   └── curves.ts                # Pure math: lerp, linear, easeIn, easeOut, easeInOut, EasingFn; see §4.21
+│   ├── hooks/                       # INTERNAL directory; the first four are re-exported by the components/r3f barrel
 │   │   ├── useTween.ts              # see §4.21
 │   │   ├── useTweenCallback.ts      # see §4.21
 │   │   ├── useCamera.ts             # see §4.22
 │   │   ├── useGameInteraction.ts    # see §4.23
-│   │   └── useFadeTransition.ts     # see §4.19
+│   │   ├── useReplayApi.ts          # Shell-only, NOT re-exported; see §4.28
+│   │   └── useSavesApi.ts           # Shell-only, NOT re-exported; see §4.11
 │   └── bridge/
 │       └── ipcClient.ts             # Wraps window.__chimera, typed
 │

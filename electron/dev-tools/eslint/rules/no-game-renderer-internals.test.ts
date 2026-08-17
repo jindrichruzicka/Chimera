@@ -56,6 +56,17 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `import { useModelAnimation } from '@chimera-engine/renderer/components/r3f';`,
         },
         {
+            // Documentation, not coverage: the rule compares `source ===` and
+            // never sees the imported names, so other fixtures on this exact
+            // specifier already cover everything this one can fail on. It is
+            // kept because the symbols are the interesting part for a reader —
+            // `useCamera` lives in `renderer/hooks/` and `easeOut` in
+            // `renderer/utils/`, and the invalid cases reject exactly those two
+            // directories by specifier.
+            filename: 'apps/tactics/screens/TacticsBoard.tsx',
+            code: `import { useCamera, useTween, easeOut } from '@chimera-engine/renderer/components/r3f';`,
+        },
+        {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
             code: `import { Button } from '@chimera-engine/renderer/components/ui/index.ts';`,
         },
@@ -461,9 +472,20 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
-            // Renderer hooks are internal; games receive props, not hooks.
+            // `renderer/hooks/` exposes only its barrel; deep file imports stay
+            // forbidden — exactly as for `assets/AssetManager.js` above, and for
+            // the same reason. `useCamera` is public through `components/r3f`;
+            // this spelling of the same symbol is still an internal, because the
+            // rule is on the specifier and never on where the symbol lives.
             filename: 'apps/tactics/screens/TacticsBoard.tsx',
             code: `import { useCamera } from '@chimera-engine/renderer/hooks/useCamera.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // The curve primitives take the same shape: public through the
+            // barrel, forbidden through `renderer/utils/`.
+            filename: 'apps/tactics/screens/TacticsBoard.tsx',
+            code: `import { easeOut } from '@chimera-engine/renderer/utils/curves.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {

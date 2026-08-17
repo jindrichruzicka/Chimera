@@ -790,6 +790,7 @@ describe('verifyScaffold', () => {
             '@chimera-engine/renderer/components/r3f',
             '@chimera-engine/renderer/input',
             '@chimera-engine/simulation/content/AssetRef.js',
+            '@chimera-engine/simulation/bridge/api-types.js',
         ]);
         // Every symbol is pinned in a form its own usage sites cannot satisfy:
         // the trailing comma of a multi-symbol import block, or the braces of a
@@ -807,13 +808,33 @@ describe('verifyScaffold', () => {
             'AssetManagerProvider,',
             'useModelInstance,',
             'type ModelInstance,',
-            '{ useModelAnimation }',
+            'useModelAnimation,',
             'InputManagerProvider,',
             'useInputAction,',
             'useInputManager,',
             'type InputAction,',
             'type InputActionId,',
             'type InputEvent,',
+            // §4.21/§4.22/§4.23, public through the r3f barrel since F91.
+            // `EngineAction` is why `buildAction` is a named arrow
+            // rather than an inline one: as an inline argument its usage site
+            // ends `as EngineAction,` — trailing comma and all — which would
+            // satisfy this pin with the import deleted.
+            'useTween,',
+            'useTweenCallback,',
+            'useCamera,',
+            'useGameInteraction,',
+            'useInteractionContext,',
+            'InteractionBlocker,',
+            'CameraAnimationCancelled,',
+            'easeInOut,',
+            'lerp,',
+            'type EasingFn,',
+            'type TweenState,',
+            'type CameraController,',
+            'type InteractionHandlers,',
+            'EntityId,',
+            'EngineAction,',
         ]) {
             expect(PROBE_SEAM_PLANT.source).toContain(symbol);
         }

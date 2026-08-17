@@ -306,13 +306,23 @@ import { Button, Card, Heading } from '@chimera-engine/renderer/components/ui/in
 import { ChatPanel } from '@chimera-engine/renderer/components/chat';
 
 // Tier 3 — the engine GameCanvas root (the only canvas root a game mounts,
-// Invariant #127) and its Canvas-bound hooks (§4.16, §4.22):
+// Invariant #127), its Canvas-bound hooks, and the curve functions those hooks
+// take as arguments (§4.16, §4.21, §4.22, §4.23, and §4.40 in
+// animation-system.md). The tween/camera/curve and
+// pointer-interaction names live in `renderer/hooks/` and `renderer/utils/`,
+// which stay internal DIRECTORIES — this barrel is the specifier that
+// publishes them:
 import {
     GameCanvas,
     useModelAnimation,
     useClipPlayer,
     useSpriteClipPlayer,
     AnimatedSprite,
+    useTween,
+    useCamera,
+    easeInOut,
+    useGameInteraction,
+    InteractionBlocker,
 } from '@chimera-engine/renderer/components/r3f';
 
 // Tier 4 — the game-registration seam, called by the renderer composition root:
@@ -341,7 +351,12 @@ IPC bridges, `renderer/hooks/`, stylesheets, `components/shell/`, or an
 individual file behind a barrel — `assets/AssetManager.js` as much as
 `components/ui/Button.js` — only the barrels above. The rule is on
 the import specifier, not on the kind of symbol: whatever a barrel re-exports is legal
-through it (`components/ui` re-exports `EscapeStackProvider` from `components/shell/`). Token overrides remain the mechanism for game
+through it (`components/ui` re-exports `EscapeStackProvider` from `components/shell/`;
+`components/r3f` re-exports `useCamera` from `hooks/` and `easeInOut` from `utils/`).
+That is why `renderer/hooks/` appears in the forbidden list above while `useCamera`
+appears in Tier 3 — `@chimera-engine/renderer/hooks/useCamera.js` is a violation and
+`useCamera` from the barrel is not, and both statements are about the specifier rather
+than the symbol. Token overrides remain the mechanism for game
 visual customization.
 
 ### 4.35.1 Chat Component (`renderer/components/chat/`)

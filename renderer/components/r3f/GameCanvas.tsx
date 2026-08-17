@@ -6,6 +6,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { PerfProbe } from '../shell/perf/PerfProbe';
 import { FrameRateLimiter } from './FrameRateLimiter';
+import { InteractionBlocker } from './InteractionBlocker';
 import {
     DEFAULT_CAMERA_FIT,
     expandFrustumToAspect,
@@ -219,7 +220,16 @@ export function GameCanvas({
                 {role === 'main' ? <PerfProbe /> : null}
                 <FrameRateLimiter />
                 {fit === 'expand' ? <ExpandCameraToCanvas config={config} /> : null}
-                {children}
+                {/*
+                 * Pointer gating for everything the game renders (§4.23). Mounted
+                 * INSIDE the `<Canvas>` rather than around it: the children that
+                 * call `useGameInteraction` are r3f children, so providing the
+                 * context here needs no assumption about whether React context
+                 * crosses the r3f reconciler boundary. Every role gets one — the
+                 * value is read from one store, so an overlay would compute the
+                 * same `isBlocked` a main does.
+                 */}
+                <InteractionBlocker>{children}</InteractionBlocker>
             </Canvas>
         </div>
     );

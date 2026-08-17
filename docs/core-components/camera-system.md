@@ -15,7 +15,7 @@ tags: [camera, r3f, animation, renderer, three-js]
 
 React Three Fiber provides full camera control via `useThree()`, `three`'s `PerspectiveCamera`/`OrthographicCamera`, and `@react-three/drei`'s `<CameraControls>`. Camera state lives entirely inside the R3F Canvas tree — **never** in the simulation.
 
-`GameCanvas` is exported from the public r3f barrel (`@chimera-engine/renderer/components/r3f`, Invariant #96) and is the **only canvas root a game mounts** (Invariant #127 — the barrel exports no other runtime component, and `chimera/no-raw-r3f-canvas` plus mechanical Check 32 ban the raw r3f `Canvas` binding from game code). It mounts `FrameRateLimiter` inside its `<Canvas>` root — and `PerfProbe` too on the `role="main"` canvas (the default); a `role="overlay"` canvas (minimap, preview) mounts no probe, so the perf HUD keeps measuring the main scene (§4.16). It also owns the `frameloop` **prop** on that root, taking it from `useEngineFrameloop()`.
+`GameCanvas` is exported from the public r3f barrel (`@chimera-engine/renderer/components/r3f`, Invariant #96) and is the **only canvas root a game mounts** (Invariant #127 — the barrel exports no other canvas root, and `chimera/no-raw-r3f-canvas` plus mechanical Check 32 ban the raw r3f `Canvas` binding from game code). It mounts `FrameRateLimiter` inside its `<Canvas>` root — and `PerfProbe` too on the `role="main"` canvas (the default); a `role="overlay"` canvas (minimap, preview) mounts no probe, so the perf HUD keeps measuring the main scene (§4.16). It wraps its children in `<InteractionBlocker>` on every role, which is what makes `useGameInteraction` usable without a game-mounted provider (§4.23). It also owns the `frameloop` **prop** on that root, taking it from `useEngineFrameloop()`.
 
 ### The render loop and the frame-rate cap
 
@@ -248,6 +248,22 @@ const OPEN_WORLD_CAMERA = { ...BOARD_CAMERA, fit: 'expand' } as const satisfies 
 ---
 
 ## CameraController Interface
+
+`useCamera` and everything in its signature are public through the same barrel as `GameCanvas`:
+
+```typescript
+import {
+    useCamera,
+    CameraAnimationCancelled,
+    type CameraController,
+    type CameraAnimationTarget,
+    type CameraAnimationCancelReason,
+    type Vector3Tuple,
+    type EasingFn,
+} from '@chimera-engine/renderer/components/r3f';
+```
+
+The path in the code block below is where the module **lives**. `renderer/hooks/` is an internal directory — `@chimera-engine/renderer/hooks/useCamera.js` is an Invariant #96 violation, and the barrel is the only route in.
 
 ```typescript
 // renderer/hooks/useCamera.ts

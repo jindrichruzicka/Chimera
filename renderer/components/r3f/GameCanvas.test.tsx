@@ -17,6 +17,10 @@ import type {
     PerspectiveCameraConfig,
 } from './GameCanvas';
 import { useSettingsStore } from '../../state/settingsStore';
+import { useGameStore } from '../../state/gameStore';
+import { useInteractionContext } from './InteractionBlocker';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
+import type { SceneId } from '@chimera-engine/simulation/foundation/engine-contract.js';
 
 const perfProbeSpy = vi.hoisted(() => vi.fn());
 
@@ -1691,6 +1695,90 @@ describe('GameCanvas camera fit policy', () => {
         expect(camera.worldToLocal(framed.clone()).x).not.toBeCloseTo(local.x, 3);
     });
 });
+
+describe('GameCanvas pointer-interaction gating (§4.23)', () => {
+    // The real `gameStore` singleton, not a mock: what these tests measure is
+    // that the provider GameCanvas mounts is wired to the store the IPC client
+    // writes, which a mocked selector would assert nothing about.
+    afterEach(() => {
+        useGameStore.getState().reset();
+    });
+
+    it.each(['main', 'overlay'] as const)(
+        'reaches a %s canvas child with the interaction context',
+        (role) => {
+            // Before GameCanvas mounted the provider this threw — useInteractionContext
+            // has a null default and refuses to guess (Invariant #83) — so
+            // `useGameInteraction` was unusable in every game, with or without one.
+            render(
+                <GameCanvas camera="isometric" role={role}>
+                    <InteractionProbe />
+                </GameCanvas>,
+            );
+
+            expect(screen.getByTestId('interaction-probe')).toHaveTextContent('false');
+        },
+    );
+
+    it('blocks while a scene transition is in flight and unblocks once it clears', () => {
+        render(
+            <GameCanvas camera="isometric">
+                <InteractionProbe />
+            </GameCanvas>,
+        );
+        expect(screen.getByTestId('interaction-probe')).toHaveTextContent('false');
+
+        // Three snapshots, not two: the unblocked read above is the store's
+        // INITIAL state, which a provider that never subscribed would report just
+        // as well. The transition back to `false` is what proves the subscription
+        // is live in both directions rather than latched on first render.
+        act(() => {
+            useGameStore.getState().applySnapshot(snapshotWithTransition(activeTransition()));
+        });
+        expect(screen.getByTestId('interaction-probe')).toHaveTextContent('true');
+
+        act(() => {
+            useGameStore.getState().applySnapshot(snapshotWithTransition(null));
+        });
+        expect(screen.getByTestId('interaction-probe')).toHaveTextContent('false');
+    });
+});
+
+/** Reads the context a canvas child sees, so a missing provider throws here. */
+function InteractionProbe(): React.ReactElement {
+    const { isBlocked } = useInteractionContext();
+    return <div data-testid="interaction-probe">{String(isBlocked)}</div>;
+}
+
+/**
+ * A `PlayerSnapshot` carrying just the three fields this path reads:
+ * `applySnapshot` takes `tick` and `undoMeta`, and the blocker's selector takes
+ * `sceneTransition`. The rest of the contract is irrelevant here, so the partial
+ * is widened ONCE at the return rather than per field — and the parameter is
+ * typed off `PlayerSnapshot` rather than as a local shape, which is what keeps
+ * the field name and the `SceneTransitionState` contract checked. An `as never`
+ * here would compile against a transition object that no longer exists.
+ */
+function snapshotWithTransition(
+    sceneTransition: PlayerSnapshot['sceneTransition'],
+): PlayerSnapshot {
+    return {
+        tick: 1,
+        sceneTransition,
+        undoMeta: { canUndo: false, canRedo: false },
+    } as unknown as PlayerSnapshot;
+}
+
+/** An in-flight transition — the shape `sceneTransition` actually carries. */
+function activeTransition(): NonNullable<PlayerSnapshot['sceneTransition']> {
+    return {
+        toSceneId: 'scene-b' as SceneId,
+        phase: 'preparing',
+        startedAtTick: 1,
+        params: {},
+        playersReady: [],
+    };
+}
 
 /** The inline-style property names set on `element`, sorted. */
 function declaredStyleKeys(element: HTMLElement): string[] {

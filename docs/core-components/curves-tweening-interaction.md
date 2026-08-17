@@ -9,6 +9,35 @@ tags: [animation, tweening, curves, interaction, r3f, renderer]
 > §4.21 + §4.23 of the Chimera architecture.
 > Related: [Camera System](camera-system.md) · [Scene Transitions & Fade](scene-transitions-fade.md) · [Simulation Core](simulation-core-action-pipeline.md)
 
+## How a game imports all of this
+
+The public surface of this page is reached through one specifier — `InteractionContext`, documented below at §4.23, is the exception and stays internal:
+
+```typescript
+import {
+    useTween,
+    useTweenCallback,
+    useGameInteraction,
+    InteractionBlocker,
+    useInteractionContext,
+    lerp,
+    linear,
+    easeIn,
+    easeOut,
+    easeInOut,
+    type EasingFn,
+    type TweenState,
+    type TweenCallbackHandlers,
+    type InteractionHandlers,
+} from '@chimera-engine/renderer/components/r3f';
+```
+
+The source paths named in the code blocks below say where each module **lives**, never how to import it. `renderer/hooks/` and `renderer/utils/` are internal directories — `@chimera-engine/renderer/hooks/useTween.js` is an Invariant #96 violation, and the barrel above is the only route.
+
+Why the r3f barrel rather than a barrel of their own: Invariant #96 names `renderer/hooks/` as an internal **and** states the escape in the same sentence — whatever a barrel re-exports is legal through that barrel — so a `./hooks` or `./utils` subpath would contradict a named clause of the invariant, while re-exporting through `components/r3f` is the mechanism it blesses. The hooks are also useless away from a canvas (`useTween`/`useTweenCallback` drive off `useFrame`, `useCamera` reads `useThree`, `useGameInteraction` returns `ThreeEvent` handlers), so the r3f barrel is where a caller is already looking. The curve primitives are the exception and are not Canvas-bound at all — `renderer/utils/curves.ts` imports nothing and calls no React hook, which `r3f-barrel-side-effects.test.ts` measures. They ship here because they are what a caller **passes** to those hooks, not because of what they are.
+
+The raw `InteractionContext` is deliberately **not** exported: like the `assets` and `input` barrels, this one publishes a provider plus its `useX()` accessor and never the context object.
+
 ---
 
 ## 4.21 Curves and Tweening
@@ -153,17 +182,17 @@ return (
 ### InteractionBlocker Context
 
 ```typescript
-// renderer/components/r3f/InteractionBlocker.tsx
+// The context and its accessor live in renderer/components/r3f/interactionContext.ts
+// — a plain .ts file, so non-JSX renderer modules can import them without the
+// jsx tsconfig flag. InteractionBlocker.tsx re-exports both.
 
 export const InteractionContext = createContext<{ isBlocked: boolean } | null>(null);
 
-export function useInteractionContext(): { isBlocked: boolean } {
-    const context = useContext(InteractionContext);
-    if (context === null) {
-        throw new Error('useInteractionContext must be called inside an <InteractionBlocker> provider.');
-    }
-    return context;
-}
+// Throws when called with no provider above it (Invariant #83). The refusal text
+// is not transcribed here — read it at the source, which is where it changes.
+export function useInteractionContext(): { isBlocked: boolean };
+
+// renderer/components/r3f/InteractionBlocker.tsx
 
 export function InteractionBlocker({ children }: { children: ReactNode }) {
     const sceneTransition = useGameStore(s => s.snapshot?.sceneTransition);
@@ -178,6 +207,14 @@ export function InteractionBlocker({ children }: { children: ReactNode }) {
 Also blocked during: network reconnection/resync, opponent's turn (optional per-game configuration).
 
 When `isBlocked`, `onClick` is a no-op but hover state continues updating (prevents highlight artifacts during transitions).
+
+#### Who mounts the provider
+
+**`GameCanvas` does**, on every `role`, wrapping its children from inside its `<Canvas>` (§4.22). A game therefore calls `useGameInteraction` on any canvas child without mounting anything — which is the point: `useInteractionContext` has a null default and throws rather than guessing (Invariant #83), so before the engine provided one, the hook threw for every caller.
+
+Inside the `<Canvas>` rather than around it, because the children that call the hook are r3f children — providing the context there needs no assumption about whether React context crosses the r3f reconciler boundary.
+
+`InteractionBlocker` is exported from the r3f barrel anyway. Nesting a second provider is the supported way to **narrow** blocking over a subtree; the raw `InteractionContext` is not exported, so a nested provider still gets its value from a component rather than hand-built.
 
 ### Hover State Rule
 

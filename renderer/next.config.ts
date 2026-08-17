@@ -109,6 +109,28 @@ const nextConfig: NextConfig = {
             // complete one.
             '@chimera-engine/renderer/i18n': path.join(root, 'renderer/i18n'),
             '@chimera-engine/renderer/input': path.join(root, 'renderer/input'),
+            // REASONED, and the two halves of the reasoning are separately
+            // measured — but NOT confirmed in a browser, unlike the two lines
+            // above. Say which is which: what was measured is that
+            // `@chimera-engine/renderer/components/r3f` resolves to
+            // `renderer/dist/components/r3f/index.js` (a `createRequire` probe
+            // from this directory) and that `renderer/dist/state/gameStore.js`
+            // builds its own module-scope `createGameStore()` singleton. What
+            // was not run is a preview with a game surface on screen.
+            //
+            // The failure this prevents is SILENT, which is why it is not left
+            // for someone to hit: since F91 the r3f barrel graph reaches four
+            // module-level stores — `gameStore` (via the `InteractionBlocker`
+            // GameCanvas mounts), `settingsStore` (via `selectTargetFps`),
+            // `perfStore` (via `PerfProbe`) and `timeScaleStore`. A game surface
+            // resolves all four through dist while `ipcClient`, the Settings UI
+            // and `PerfHud` write and read the source copies, so nothing throws
+            // the way the `input` duplication did — pointer blocking simply never
+            // engages, the frame cap never applies, and the perf HUD stays empty.
+            // Only the `gameStore` edge is F91's, as the sentence above says; the
+            // other three were already in this graph and this line fixes them too.
+            // Which edges exist is held by `r3f-barrel-side-effects.test.ts`.
+            '@chimera-engine/renderer/components/r3f': path.join(root, 'renderer/components/r3f'),
             // `renderer/**` source must name no game. The renderer pulls in
             // the active game's renderer contribution through this synthetic,
             // build-selected specifier — the renderer twin of how `package.json`

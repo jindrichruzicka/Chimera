@@ -146,9 +146,11 @@ function isPublicChatBarrelImport(source: string): boolean {
     );
 }
 
-// The R3F engine barrel (Invariant #96): the GameCanvas root (role="main" |
-// "overlay") plus its Canvas-bound hooks and the curated types (the barrel's
-// own test pins the exact set).
+// The R3F engine barrel (Invariant #96). Its contents are not enumerated here:
+// the barrel's own test pins the exact set, and this rule cannot see them
+// anyway — it matches the import SOURCE and never the imported names, which is
+// why re-exporting from `renderer/hooks/` and `renderer/utils/` opens the
+// barrel without opening either directory.
 function isPublicR3fBarrelImport(source: string): boolean {
     return (
         source === '@chimera-engine/renderer/components/r3f' ||
