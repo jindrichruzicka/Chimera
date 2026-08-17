@@ -37,6 +37,18 @@ These boundaries are **hard constraints**. Any violation is a BLOCK finding at r
 
 ## Annotated File Tree
 
+A **selection**, not an inventory: it draws the files worth annotating for a reader
+working out which module owns what, and a file arriving without a row here is not a
+defect. `ls` is the census for any directory below.
+
+What it draws must be where it says, though — in a boundary document a row naming the
+wrong module is worse than a missing row, because it answers the question incorrectly.
+`tools/module-boundaries-file-tree.test.ts` resolves every row against the repo.
+
+Two kinds of row describe a shape rather than a path and are exempt from that check:
+a **placeholder** segment in angle brackets — `apps/<game>/`, `<subsystem>` — stands in
+for a value the reader supplies, and `…` marks rows deliberately elided.
+
 ```
 chimera/
 ├── electron/                        # Electron shell
@@ -53,8 +65,7 @@ chimera/
 │   │   │   ├── LobbyManager.ts      # Owns the active MultiplayerProvider; lifecycle + IPC wiring
 │   │   │   ├── joinClassifier.ts    # Pure classifyJoin(): running-match join → player | spectator | reject (Invariant #114)
 │   │   │   └── SpectatorRegistry.ts # Host-local spectatorId → followedSeatId ledger; never in snapshot/saves/replays (Invariant #114)
-│   │   ├── runtime/                 # Simulation host and live-game runtime infrastructure
-│   │   │   ├── SimulationHost.ts    # Hosts sim tick loop; calls AgentManager.tickAll() after each tick
+│   │   ├── runtime/                 # Live-game runtime infrastructure: tick driving, session lifecycle, broadcast
 │   │   │   ├── RealtimeTicker.ts    # Wall-clock beat driver for manifest.realtime games; host starts/stops per match (§4.2.1)
 │   │   │   ├── SessionRuntime.ts    # Manages session lifecycle: setup, teardown, player assignment
 │   │   │   ├── HostSessionPipeline.ts # Orchestrates pings, broadcasts, heartbeat loop during active session
@@ -62,7 +73,7 @@ chimera/
 │   │   ├── saves/                   # Game save persistence via repository pattern
 │   │   │   ├── SaveManager.ts       # IPC handler; uses SaveRepository to handle save/load/list/delete
 │   │   │   ├── FileSaveRepository.ts      # Default: userData/saves/<game-id>/; atomic .tmp rename
-│   │   │   ├── InMemorySaveRepository.ts  # In-memory double; used by E2E fixtures for clean state
+│   │   │   ├── CompressedSaveSerializer.ts # zlib gzip wrapper around JsonSaveSerializer
 │   │   │   └── SavesIpcAdapter.ts   # Adapter that bridges SaveRepository to IPC
 │   │   ├── settings/                # Application settings persistence
 │   │   │   ├── SettingsManager.ts   # IPC handler; uses FileSettingsRepository for get/update/reset
@@ -85,19 +96,20 @@ chimera/
 │   │   ├── test-support/            # Asset-fact readers for a GAME's own unit tests, published at the `@chimera-engine/electron/test-support` SUBPATH (never a bin): `assetPathForRef`, `readWavFacts`, `readGlbDocument`. Framework-free — no `vitest` import, so it stays publishable; a malformed container raises `MalformedAssetFileError`
 │   │   └── validate-assets/         # CI: the AssetRef/GameFontFace/cue-sheet build gate — enforces Invariants #22/#52/#97/#125; see §4.10
 │   ├── preload/
-│   │   ├── api.ts                   # Composes the following namespaces below into window.__chimera
+│   │   ├── api.ts                   # The composition root for window.__chimera
 │   │   ├── api-types.ts             # Type-only module: ChimeraAPI, ChimeraExtensions, all namespace interfaces
-│   │   ├── extensions-api.ts        # registerExtension() + buildExtensionsApi() — extension registration infrastructure
-│   │   ├── game-api.ts              # window.__chimera.game — action dispatch + snapshot stream
-│   │   ├── lobby-api.ts             # window.__chimera.lobby — host/join/leave/discover
-│   │   ├── saves-api.ts             # window.__chimera.saves — slot list/save/load/delete
-│   │   ├── settings-api.ts          # window.__chimera.settings — get/update/reset/onChange
-│   │   ├── profile-api.ts           # window.__chimera.profile — local profile + lobby directory
-│   │   ├── replay-api.ts            # window.__chimera.replay — export/load/playback
-│   │   ├── chat-api.ts              # window.__chimera.chat — send / onMessage
-│   │   ├── logs-api.ts              # window.__chimera.logs — renderer forwards structured logs to main
-│   │   ├── system-api.ts            # window.__chimera.system — connection status, platform, quit
-│   │   └── debug-api.ts             # debug-only: window.__chimeraDebug surface (Inspector Window only)
+│   │   ├── debug-api.ts             # debug-only: window.__chimeraDebug surface (Inspector Window only)
+│   │   └── apis/                    # One module per namespace; a selection is drawn
+│   │       ├── extensions-api.ts    # registerExtension() + buildExtensionsApi() — extension registration infrastructure
+│   │       ├── game-api.ts          # window.__chimera.game — action dispatch + snapshot stream
+│   │       ├── lobby-api.ts         # window.__chimera.lobby — host/join/leave/discover
+│   │       ├── saves-api.ts         # window.__chimera.saves — slot list/save/load/delete
+│   │       ├── settings-api.ts      # window.__chimera.settings — get/update/reset/onChange
+│   │       ├── profile-api.ts       # window.__chimera.profile — local profile + lobby directory
+│   │       ├── replay-api.ts        # window.__chimera.replay — export/load/playback
+│   │       ├── chat-api.ts          # window.__chimera.chat — send / onMessage
+│   │       ├── logs-api.ts          # window.__chimera.logs — renderer forwards structured logs to main
+│   │       └── system-api.ts        # window.__chimera.system — connection status, platform, quit
 │
 ├── ai/                              # Pure TS AI framework — zero DOM, zero React, zero network
 │   ├── engine/
@@ -112,18 +124,20 @@ chimera/
 │   └── index.ts                     # Public API of ai engine
 │
 ├── simulation/                      # Pure TS, zero DOM, zero React, zero network
+│   ├── host/                        # Session-scoped agent wiring, free of Electron / AI / networking deps
+│   │   ├── SimulationHost.ts        # Drives an AgentCoordinator lifecycle: registerAgent, afterTick, onGameStart/End
+│   │   └── AgentCoordinator.ts      # The port SimulationHost drives; ai/'s AgentManager implements it, so the
+│   │                                #   dependency edge points inward and simulation/ stays the leaf (Invariant #1)
 │   ├── engine/
-│   │   ├── GameState.ts             # BaseGameSnapshot — base state shape all games extend
-│   │   ├── ActionEnvelope.ts        # EngineAction generic envelope; TypedAction<T,P> helper
+│   │   ├── types.ts                 # BaseGameSnapshot — base state shape all games extend
 │   │   ├── ActionRegistry.ts        # Registry: type string → ActionDefinition plus GameDefinition startup hooks
 │   │   ├── ActionPipeline.ts        # Template Method: parsePayload → validate → reduce (invariant)
 │   │   ├── EngineActions.ts         # Reserved engine ActionDefinitions: undo, redo, end_turn, sync, tick
 │   │   ├── StateReducer.ts          # Delegates to ActionRegistry — no game-specific switch statements
-│   │   ├── ActionHistory.ts         # Append-only log, pruned to the most recent TurnMemento window
-│   │   ├── TurnMemento.ts           # Saves full snapshots at each player's turn-start
-│   │   ├── UndoManager.ts           # Undo/redo stack via memento + event log replay
+│   │   ├── UndoManager.ts           # Undo/redo stack via memento + event log replay. Declares TurnMemento
+│   │   │                            #   (full snapshot at each player's turn-start) and ActionHistory
+│   │   │                            #   (append-only log, pruned to the most recent TurnMemento window)
 │   │   ├── SimulationClock.ts       # Advances `tick` per applied action
-│   │   ├── StateBroadcaster.ts      # Projects snapshot per player; calls HostTransport.sendSnapshot()
 │   │   ├── DeterministicRng.ts      # Seeded PRNG derived from (snapshot.seed, tick); passed via ReduceContext
 │   │   ├── GameTimer.ts             # Tick-based deterministic timer registry; TimerManager helper; see §4.20
 │   │   ├── FixedPoint.ts            # Q32.32 fixed-point integer math (mul, div, sqrt, sin, cos); see §4.31
@@ -146,28 +160,25 @@ chimera/
 │   │   ├── dev-fixture-contract.ts  # Dev-harness fixture schemas (DevScenario, DevAnnounce) + pure helpers; see §4.32
 │   │   ├── game-manifest-contract.ts # GameManifest + resolvers; see §4.2.1
 │   │   ├── game-screen-contract.ts  # GameScreenRegistry, GameHudProps, GameEventAudioBinding
+│   │   ├── engine-contract.ts       # EngineAction envelope + TypedAction<T,P>; the reduce-time contract
 │   │   └── …                        # The remaining shared contracts (messages, chat, lobby, logging, snapshot, …)
 │   ├── persistence/                 # Save/load — pure serialisation logic, zero FS/IPC deps
 │   │   ├── SaveFile.ts              # SaveFile schema: checkpoint snapshot + delta action log + metadata
 │   │   ├── SaveSerializer.ts        # Strategy interface: serialize(SaveFile) / deserialize(string)
 │   │   ├── JsonSaveSerializer.ts    # Default: pretty JSON (human-readable, debuggable)
-│   │   ├── CompressedSaveSerializer.ts # zlib gzip wrapper around JsonSaveSerializer
+│   │   ├── InMemorySaveRepository.ts # In-memory double; used by E2E fixtures for clean state
 │   │   └── SaveMigrator.ts          # Applies versioned migrations when loading an older save schema
 │   ├── settings/                    # Settings schema and merge logic — zero DOM, zero IPC deps
 │   │   ├── SettingsSchema.ts        # EngineSettings base interface; GameSettingsSchema<T> generic
 │   │   ├── SettingsMerger.ts        # Layered merge: engine defaults ← game defaults ← user overrides
 │   │   └── SettingsRepository.ts   # Repository interface: load / save / reset per game-id
 │   ├── profile/                     # Client-local player identity (§4.24) — pure schema + sanitisation, zero IO
-│   │   ├── ProfileSchema.ts         # EngineProfile base (displayName, avatar, locale); GameProfileSchema<T> generic
-│   │   ├── ProfileSanitizer.ts      # Host-side admission: size caps, schema, image content check
-│   │   └── ProfileRepository.ts     # Repository interface: load / save / listLocalSlots
+│   │   ├── ProfileSchema.ts         # EngineProfile base (displayName, avatar, locale); GameProfileSchema<T> generic; declares ProfileRepository (load / save / listLocalSlots)
+│   │   └── ProfileSanitizer.ts      # Host-side admission: size caps, schema, image content check
 │   ├── replay/                      # Deterministic replay format (§4.28) — pure serialisation, zero IO
 │   │   ├── ReplayFile.ts            # ReplayFile schema: seed + ActionHistory + metadata
 │   │   ├── ReplaySerializer.ts      # Strategy: serialize / deserialize; JSON + gzip variants
 │   │   └── ReplayPlayer.ts          # Feeds actions back through ActionPipeline at configurable speed
-│   ├── input/                       # Input action schema (§4.26) — shared between renderer and settings
-│   │   ├── InputAction.ts           # InputAction ID namespaces (engine:*, game:*); registry contract
-│   │   └── InputBindingSchema.ts    # EngineBindings base; GameBindingSchema<T> generic; default bindings
 │   ├── debug/                       # Debug-mode only — gate folds to false in packaged builds; graph pruned, not shipped
 │   │   ├── SnapshotRingBuffer.ts    # Observer: records last N full GameSnapshots after each ActionPipeline step
 │   │   ├── SnapshotInspector.ts     # Facade: query API — get/reconstruct/diff snapshots; project to a PlayerId
@@ -211,9 +222,11 @@ chimera/
 │
 ├── networking/                      # Adapter between simulation and transport
 │   └── provider/
-│       ├── MultiplayerProvider.ts   # Interface: hostLobby() → HostedSession; joinLobby() → JoinedSession
-│       ├── HostTransport.ts         # Interface: sendSnapshot, broadcastLobbyState, onActionReceived, onPlayerJoined/Left + onSpectateTargetUpdate (Invariant #115)
-│       ├── ClientTransport.ts       # Interface: sendAction, onSnapshotReceived, onLobbyStateChanged, onDisconnected + sendSpectateTarget (Invariant #115)
+│       ├── MultiplayerProvider.ts   # Interface: hostLobby() → HostedSession; joinLobby() → JoinedSession.
+│       │                            #   Also declares HostTransport (sendSnapshot, broadcastLobbyState,
+│       │                            #   onActionReceived, onPlayerJoined/Left, onSpectateTargetUpdate) and
+│       │                            #   ClientTransport (sendAction, onSnapshotReceived, onLobbyStateChanged,
+│       │                            #   onDisconnected, sendSpectateTarget) — Invariant #115
 │       ├── spectator-policy.ts       # Shared DEFAULT_MAX_SPECTATORS admission cap (both providers, Invariant #114)
 │       ├── local/                   # LocalWebSocketProvider — default; fully encapsulated
 │       │   ├── LocalWebSocketProvider.ts
@@ -226,8 +239,8 @@ chimera/
 │   ├── app/                         # Next.js App Router pages
 │   │   ├── layout.tsx
 │   │   ├── page.tsx                 # Main menu entry
+│   │   ├── game/page.tsx            # Thin shell: mounts GameShell
 │   │   ├── lobby/page.tsx
-│   │   ├── match/page.tsx           # Thin shell: mounts GameShell
 │   │   ├── settings/page.tsx
 │   │   └── debug/page.tsx           # debug-only: server gate — notFound() in packaged builds; UI in DebugInspectorClient.tsx
 │   ├── components/
@@ -264,8 +277,7 @@ chimera/
 │   │       ├── GameCanvas.tsx       # <Canvas> root; declarative `camera` prop (preset | explicit config); role="main"|"overlay" — mounts FrameRateLimiter and InteractionBlocker always, PerfProbe on the main canvas only — and owns the frameloop prop from useEngineFrameloop(); see §4.22
 │   │       ├── FrameRateLimiter.tsx # Loop DRIVER for display.targetFps: one rAF chain calling advance(); registers no useFrame and never presents; see §4.22
 │   │       ├── useEngineFrameloop.ts # Canvas-FREE hook returning the frameloop prop that canvas needs ('never' capped, 'always' uncapped); see §4.22
-│   │       ├── InteractionBlocker.tsx  # Context provider; see §4.23
-│   │       └── primitives/          # Shared meshes / materials
+│   │       └── InteractionBlocker.tsx  # Context provider; see §4.23
 │   ├── state/
 │   │   ├── gameStore.ts             # Zustand: receives PlayerSnapshot from IPC
 │   │   ├── lobbyStore.ts
@@ -304,6 +316,8 @@ chimera/
 │   │   ├── useSound.ts
 │   │   └── useMusicTrack.ts         # Live-handle verbs (fadeOut/fadeTo/crossfade) bound to the manager
 │   ├── input/                       # Keyboard / gamepad input layer (§4.26); public barrel: @chimera-engine/renderer/input
+│   │   ├── InputAction.ts           # InputAction ID namespaces (engine:*, game:*); registry contract
+│   │   ├── InputBindingSchema.ts    # EngineBindings base; GameBindingSchema<T> generic; default bindings
 │   │   ├── index.ts                 # Public barrel — its header names the surface and what stays internal
 │   │   ├── InputManagerProvider.tsx # Publishes a manager to the tree below it; app/providers.tsx mounts the live one
 │   │   ├── InputManager.ts
@@ -347,9 +361,7 @@ chimera/
 │       └── ipcClient.ts             # Wraps window.__chimera, typed
 │
 ├── tools/
-│   ├── dev-server.ts                # Hot-reload dev harness
-│   ├── desync-logger.ts             # Snapshot diff log for debugging
-│   └── migrate-save.ts              # CLI: run SaveMigrator against a save file
+│   └── dev-server.ts                # Hot-reload dev harness
 │
 └── apps/tactics/e2e/                # Playwright end-to-end test suite (owned by the tactics consumer app).
                                      #   Deliberately NOT expanded here — the suite's tree is
@@ -362,7 +374,7 @@ chimera/
 
 ## Key Invariants Referenced Here
 
-- **Invariant #2** — `simulation/` has zero runtime dependencies on React, DOM, or networking.
+- **Invariant #1** — `simulation/` has zero runtime dependencies on React, DOM, or networking.
 - **Module boundary (§3)** — the renderer never imports game packages; `AssetManager` included.
 - **Invariant #48** — `GameShell.tsx` must never import from any `apps/*` game path.
 

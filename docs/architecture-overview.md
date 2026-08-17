@@ -17,7 +17,7 @@ tags: [architecture, index, chimera, engine, overview, invariants, ipc, simulati
 | File                                                                                                           | Contents                                                                                                     |
 | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | [executive-architecture/system-overview-and-context.md](executive-architecture/system-overview-and-context.md) | §1 Executive Architecture Decision (process boundary table), §2 System Context Diagram, key invariants #1–#4 |
-| [executive-architecture/module-boundaries-file-tree.md](executive-architecture/module-boundaries-file-tree.md) | §3 Naming conventions, Module Boundary Table, full annotated file tree for all packages                      |
+| [executive-architecture/module-boundaries-file-tree.md](executive-architecture/module-boundaries-file-tree.md) | §3 Naming conventions, Module Boundary Table, annotated file tree (a selection, not an inventory)            |
 | [executive-architecture/architecture-invariants.md](executive-architecture/architecture-invariants.md)         | All Invariants with thematic index, verbatim with section back-references                                    |
 
 ---
