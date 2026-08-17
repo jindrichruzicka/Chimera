@@ -117,8 +117,8 @@ function createFreshE2eUserDataDir(options: E2eElectronLaunchOptions): string {
         safeUserDataSegment(options.port),
     ].join('-');
     // Under E2E_USER_DATA_ROOT, not an ad-hoc temp path: the profile outlives its
-    // app (a relaunch spec re-opens it to prove settings persisted), so the only
-    // thing that ever removes it is global-setup's per-run reap of that root.
+    // app (a relaunch spec re-opens it to prove settings persisted), and
+    // global-setup's per-run reap of that root can only reach a profile put inside it.
     const userDataDir = path.join(E2E_USER_DATA_ROOT, dirName);
 
     rmSync(userDataDir, { recursive: true, force: true });

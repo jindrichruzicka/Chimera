@@ -1,10 +1,10 @@
 import { _electron as electron, test as base, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import globalSetup from '../global-setup';
 import { inheritEnv } from './inherit-env';
+import { E2E_USER_DATA_ROOT } from './user-data-root';
 
 export interface ElectronFixtures {
     readonly electronApp: ElectronApplication;
@@ -58,7 +58,10 @@ function createFreshE2eUserDataDir(options: E2eElectronLaunchOptions): string {
         userDataLaunchCounter.toString(),
         safeUserDataSegment(options.port),
     ].join('-');
-    const userDataDir = path.join(os.tmpdir(), 'chimera-e2e-userdata', dirName);
+    // Under E2E_USER_DATA_ROOT, never an ad-hoc temp path: the profile outlives its
+    // app (nothing deletes it on close), and `global-setup`'s per-run reap of that
+    // root can only reach a profile this side put inside it.
+    const userDataDir = path.join(E2E_USER_DATA_ROOT, dirName);
 
     rmSync(userDataDir, { recursive: true, force: true });
     mkdirSync(userDataDir, { recursive: true });

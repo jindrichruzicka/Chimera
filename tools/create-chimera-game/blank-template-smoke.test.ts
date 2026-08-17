@@ -139,6 +139,9 @@ describe('blank template smoke harness', () => {
         await expect(read('e2e/fixtures/inherit-env.ts')).resolves.toContain(
             'ELECTRON_RUN_AS_NODE',
         );
+        await expect(read('e2e/fixtures/user-data-root.ts')).resolves.toContain(
+            'E2E_USER_DATA_ROOT',
+        );
         await expect(read('e2e/global-setup.ts')).resolves.toContain('buildAppBundles');
         await expect(read('e2e/playwright.config.ts')).resolves.toContain('electron-e2e');
         // The runner resolution shim names the app's own package, tokenised.
@@ -699,6 +702,7 @@ describe('blank template smoke harness', () => {
             'e2e/tests/boot-smoke.spec.ts',
             'e2e/fixtures/electron.fixture.ts',
             'e2e/fixtures/inherit-env.ts',
+            'e2e/fixtures/user-data-root.ts',
             'e2e/global-setup.ts',
             'e2e/playwright.config.ts',
             'e2e/tsconfig.json',

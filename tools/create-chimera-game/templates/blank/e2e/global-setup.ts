@@ -5,6 +5,7 @@ import path from 'node:path';
 import { buildSync } from 'esbuild';
 
 import { buildAppBundles } from '../electron/build-main';
+import { E2E_USER_DATA_ROOT } from './fixtures/user-data-root';
 
 /**
  * Playwright global setup — runs once before all E2E tests.
@@ -45,6 +46,18 @@ export default function globalSetup(): void {
     };
 
     rmSync(e2eBuildRoot, { recursive: true, force: true });
+
+    // Every launch mints a fresh Chromium profile under this root and NOTHING removes
+    // it afterwards. Reaped per run instead, here, beside the suite's other throwaway
+    // tree; left alone the root grows by one whole Chromium user directory per launch
+    // until it fills the volume.
+    //
+    // The reap must never remove a directory a LIVE app owns. Within a run that holds:
+    // this runs in the runner process before any worker spawns, and the lazy build
+    // check in the launch fixture only calls it when the bundles are missing, which
+    // already means no app of this run is running. It does NOT hold across two runs of
+    // this suite sharing one temp dir — run them one at a time.
+    rmSync(E2E_USER_DATA_ROOT, { recursive: true, force: true });
 
     execSync('pnpm build:packages', { cwd: root, stdio: 'inherit' });
     execSync('pnpm exec next build apps/__game_kebab__/renderer', {
