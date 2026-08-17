@@ -1,5 +1,12 @@
 # @chimera-engine/networking
 
+## 1.0.0-rc.7
+
+### Patch Changes
+
+- Updated dependencies [46eba2f]
+    - @chimera-engine/simulation@1.0.0-rc.7
+
 ## 1.0.0-rc.6
 
 ### Minor Changes
