@@ -11,8 +11,8 @@
  * simulation determinism (Invariant #43 applies to reducers).
  *
  * Invariants upheld:
- *   #2  — no Node.js or Electron imports; `globalThis.crypto` is a Web API
- *         global (same justification as SaveChecksum).
+ *   #1  — simulation/ has no Node.js or Electron imports; `globalThis.crypto` is
+ *         a Web API global (same justification as SaveChecksum).
  *   #59 — seats carry raw ids and control kinds only, no profile data.
  */
 

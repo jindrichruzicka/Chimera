@@ -10,10 +10,11 @@
  * Architecture reference: §4.7
  *
  * Invariants upheld:
- *   #1  — ActionPipeline is the sole mutation point; no raw action object bypasses it.
- *   #2  — Stage order is immutable; no hooks can reorder or skip stages.
- *   #3  — simulation/ is side-effect-free; no Node.js or Electron imports.
+ *   #1  — simulation/ is side-effect-free; no Node.js or Electron imports.
+ *   #12 — Step order is invariant: parse before validate, validate before reduce.
+ *          Games supply strategies; no hook can reorder or skip a step.
  *   #43 — validate() and reduce() use only ReduceContext. No Math.random() or Date.now().
+ *   Sole mutation point — no raw action object bypasses ActionPipeline.
  */
 
 import { isSceneTransitionCompletionAction } from '../foundation/scene-lifecycle.js';

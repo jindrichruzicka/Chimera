@@ -8,7 +8,7 @@
  *
  * Architecture reference: §4.11 — Save / Load Persistence
  *
- * Invariant #1: GameSnapshot never leaves the main process — saveStore holds
+ * Invariant #3: GameSnapshot never leaves the main process — saveStore holds
  * only SaveSlotMeta (metadata), never GameSnapshot or SaveFile content.
  */
 

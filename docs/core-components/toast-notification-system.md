@@ -47,6 +47,8 @@ export interface Toast {
 | `warning` | 6 000 ms |
 | `error`   | 8 000 ms |
 
+These defaults are the single source of truth for display lifetime. A call site passes an explicit `durationMs` only for an exceptional case, and says why in a code comment.
+
 ---
 
 ## ToastStore (Zustand)
@@ -121,9 +123,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 ## Invariant
 
-| #   | Rule                                                                                                                                                                                                                                                                         |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #74 | `ToastHost` is mounted as a sibling of `RootErrorBoundary`, never inside it. Severity-to-duration defaults are the single source of truth for display lifetime — individual call sites must not invent arbitrary durations except for exceptional cases with a code comment. |
+| #   | Rule                                                                                                                                                                                                            |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #74 | `toastStore` is renderer-only state. Toast contents are never derived from `GameSnapshot`, `PlayerSnapshot`, or `SaveFile`. Toasts are transient surfaces for the local viewer; another player never sees them. |
 
 ---
 

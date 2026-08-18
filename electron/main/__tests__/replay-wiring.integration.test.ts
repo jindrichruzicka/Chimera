@@ -10,7 +10,7 @@
  * Invariants verified:
  *   #3/#71 — only the `EngineAction` payload is recorded; never a GameSnapshot.
  *   #42    — the recorded tick is the action's tick at the time it was applied.
- *   #25 (spirit) — a replay failure never propagates to the live pipeline.
+ *   Replay isolation — a replay failure never propagates to the live pipeline.
  */
 
 import { mkdtemp, rm, readdir } from 'fs/promises';

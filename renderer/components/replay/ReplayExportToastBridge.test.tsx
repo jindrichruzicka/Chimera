@@ -43,7 +43,8 @@ describe('ReplayExportToastBridge', () => {
         expect(queue).toHaveLength(1);
         expect(queue[0]!.severity).toBe('success');
         expect(queue[0]!.title).toBe('Replay saved');
-        // Invariant #74: static content — the pushed path is not surfaced.
+        // Invariant #74: toast contents are never derived from a `SaveFile` or a
+        // snapshot — the pushed path is not surfaced.
         expect(queue[0]!.body).toBeUndefined();
     });
 

@@ -51,7 +51,7 @@ export interface AnimationWindowRecord {
     readonly id: AnimationWindowId;
     /** The entity the window belongs to. */
     readonly ownerId: EntityId;
-    /** Beats the window still has left. Always an integer (Invariants #42/#44). */
+    /** Beats the window still has left. Always an integer (Invariant #44). */
     readonly remainingBeats: number;
     /** Integer/`FixedPoint` state carried alongside the window while it is open. */
     readonly payload: AnimationWindowPayload;
@@ -123,11 +123,11 @@ function toClosed(record: AnimationWindowRecord, reason: WindowCloseReason): Clo
     return { id: record.id, ownerId: record.ownerId, payload: record.payload, reason };
 }
 
-/** Reject a duration that is not a positive integer (Invariants #42/#44). */
+/** Reject a duration that is not a positive integer (Invariant #44). */
 function assertPositiveIntegerBeats(durationBeats: number, id: AnimationWindowId): void {
     if (!Number.isInteger(durationBeats) || durationBeats <= 0) {
         throw new RangeError(
-            `AnimationWindowManager.open: durationBeats for window "${id}" is ${String(durationBeats)} — it must be a positive integer (Invariants #42/#44).`,
+            `AnimationWindowManager.open: durationBeats for window "${id}" is ${String(durationBeats)} — it must be a positive integer (Invariant #44).`,
         );
     }
 }

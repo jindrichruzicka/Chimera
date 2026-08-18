@@ -9,7 +9,7 @@
  * Architecture reference: §4.11
  *
  * Invariants upheld:
- *   #2 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
+ *   #1 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
  *   #44 — No float fields participate in equality or arithmetic; all arithmetic
  *          fields in BaseGameSnapshot are integers (upheld by the engine types).
  */

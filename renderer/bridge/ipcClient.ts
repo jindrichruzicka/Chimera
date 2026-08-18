@@ -16,11 +16,11 @@
  *    stay in simulation/.
  *
  * Invariants upheld:
- *  #1  — `GameSnapshot` never crosses the IPC boundary; only `PlayerSnapshot`.
- *  #3  — Renderer never writes simulation state directly; all writes go
- *          through `sendAction()` → IPC → `ActionPipeline`.
- *  #4  — `addPrediction` and `confirmPrediction` are `// ipcClient only`;
- *          components never call them.
+ *  #3  — `GameSnapshot` never crosses the IPC boundary; only `PlayerSnapshot`.
+ *  #4  — Renderer never writes simulation state directly; all writes go
+ *          through `sendAction()` → IPC → `ActionPipeline`. `addPrediction`
+ *          and `confirmPrediction` are `// ipcClient only`; components never
+ *          call them.
  */
 
 import type {

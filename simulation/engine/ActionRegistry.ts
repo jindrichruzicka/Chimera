@@ -5,9 +5,9 @@
  * Architecture reference: §4.7
  *
  * Invariants upheld:
- *   #2 — The engine: namespace is reserved exclusively for EngineActions.
- *         Game plugins cannot shadow reserved engine actions.
- *   #3 — simulation/ is side-effect-free; no Node.js or Electron imports.
+ *   #1 — simulation/ is side-effect-free; no Node.js or Electron imports.
+ *   #11 — The engine: namespace is reserved exclusively for EngineActions.
+ *          Game plugins cannot shadow reserved engine actions.
  */
 
 import type { ClosedAnimationWindow } from './AnimationWindow.js';

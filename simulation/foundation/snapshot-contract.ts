@@ -54,7 +54,7 @@ export interface GameEvent {
  * Projected game state for the active viewer.
  * Canonical: simulation/snapshot.ts.
  *
- * Invariant #1: GameSnapshot never crosses any IPC boundary. Only PlayerSnapshot does.
+ * Invariant #3: GameSnapshot never crosses any IPC boundary. Only PlayerSnapshot does.
  */
 export interface PlayerSnapshot {
     readonly tick: number;
@@ -109,7 +109,7 @@ export interface PlayerSnapshot {
  * as `PlayerSnapshot`. The renderer-facing {@link PlayerSnapshot} above mirrors
  * this shape with richer field types.
  *
- * INVARIANT #1: This is the ONLY snapshot type allowed to cross boundaries.
+ * INVARIANT #3: This is the ONLY snapshot type allowed to cross boundaries.
  * GameSnapshot (the full authoritative state) must never appear here.
  */
 export interface WirePlayerSnapshot {

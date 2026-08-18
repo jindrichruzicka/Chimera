@@ -9,7 +9,7 @@
  * Task: F11-T01
  *
  * Invariants covered:
- *   #1 — LobbyManager only handles PlayerSnapshot; never references GameSnapshot.
+ *   #3 — LobbyManager only handles PlayerSnapshot; never references GameSnapshot.
  *   #67 — LobbyManager constructed with injected Logger; no console.* calls.
  */
 

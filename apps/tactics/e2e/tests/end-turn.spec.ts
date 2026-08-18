@@ -9,7 +9,7 @@
  *   - Turn transfer: client move succeeds after host ends turn (host goes first)
  *   - Turn transfer (client-first): host move succeeds after client ends turn (client goes first)
  *
- * Invariant #8: engine:end_turn goes through the normal ActionPipeline —
+ * Pipeline path: engine:end_turn reaches state only through ActionPipeline —
  * the spec verifies button state and history clearing, proving the implementation
  * follows the deterministic state machine.
  *

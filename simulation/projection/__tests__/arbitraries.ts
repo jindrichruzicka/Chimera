@@ -146,7 +146,7 @@ export function arbitraryPlayerState(pid: PlayerId): Arbitrary<ArbitraryPlayerSt
  *   - Two distinct players (IDs drawn from `arbitraryPlayerId()`).
  *   - Up to eight entities distributed across both owners and all three
  *     visibility scopes.
- *   - Integer `tick`, `seed`, and `turnNumber` (Invariants #42/#44).
+ *   - Integer `tick`, `seed`, and `turnNumber` (Invariant #44).
  *   - Empty `events` and `timers` (sufficient for projection smoke tests).
  *
  * The `entities` record is built with positional keys (`e0`, `e1`, …) to

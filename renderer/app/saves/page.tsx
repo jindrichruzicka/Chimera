@@ -14,7 +14,7 @@
  * wired by SaveStoreBootstrap, so no refetch happens here.
  *
  * Invariants:
- *   #1 — GameSnapshot never leaves the main process; this page reads only
+ *   #3 — GameSnapshot never leaves the main process; this page reads only
  *         SaveSlotMeta from saveStore, never raw SaveFile or GameSnapshot.
  *   #4 — The renderer reads state; all writes go through `window.__chimera`.
  *   #74 — Toast titles are static literals carrying no save metadata.

@@ -11,7 +11,7 @@
  * Architecture reference: §4.11
  *
  * Invariants upheld:
- *   #2 — simulation/ has zero Node.js imports. This file is in electron/main/.
+ *   #1 — simulation/ has zero Node.js imports. This file is in electron/main/.
  */
 
 import { promisify } from 'node:util';

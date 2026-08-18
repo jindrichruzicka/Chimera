@@ -20,7 +20,7 @@
  * Architecture reference: §4.28
  *
  * Invariants upheld:
- *   #2  — simulation/ is side-effect-free; no FS or Electron imports.
+ *   #1  — simulation/ is side-effect-free; no FS or Electron imports.
  *   #71 — replay files carry the full identity triple; load rejects mismatches.
  */
 

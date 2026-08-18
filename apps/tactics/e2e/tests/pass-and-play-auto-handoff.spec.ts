@@ -11,7 +11,8 @@
  *        the only cross-boundary state type.
  *   #4 — PlayerSnapshot.isMyTurn drives turn ownership at the renderer edge;
  *        the renderer reads state, never writes it.
- *   #8 — Each host-window view is a projected PlayerSnapshot for the active seat.
+ *   #8 — Each host-window view is a StateProjector.project() output for the
+ *        active seat, never a GameSnapshot read directly.
  */
 import { test, expect } from '../fixtures/direct-game.fixture';
 import { GamePage } from '../pages/GamePage';

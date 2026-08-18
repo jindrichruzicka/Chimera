@@ -13,7 +13,8 @@
  * Invariants verified:
  *   #2 — tick driver does not inject state; it only advances the clock via the
  *        registered hook, leaving reduce()/applyAction() pure.
- *   #6 — Actions triggered by tick dispatch still go through full ActionPipeline.
+ *   Pipeline path — actions triggered by tick dispatch still reach state only
+ *        through ActionPipeline.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';

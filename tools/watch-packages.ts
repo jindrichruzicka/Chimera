@@ -16,12 +16,12 @@
  * `workspace:*` symlinks, re-emitting a package's `dist/` is picked up by the
  * consumer app with no manual relink.
  *
- * Invariants upheld:
- *   #1 — `tsc -b` derives its rebuild order from the existing acyclic, inward
- *        reference graph ([`tsconfig.build.json`](../tsconfig.build.json)); this
- *        tool adds no reference edge, so the simulation-purity DAG is preserved.
- *   #2 — Lives in `tools/`; imports only the sibling CSS-copy helper and node
- *        builtins — never `renderer/`, `simulation/`, `ai/`, or an app module.
+ * Properties upheld:
+ *   Package DAG — `tsc -b` derives its rebuild order from the existing acyclic,
+ *        inward reference graph ([`tsconfig.build.json`](../tsconfig.build.json));
+ *        this tool adds no reference edge, so the simulation-purity DAG is preserved.
+ *   Module boundary — lives in `tools/`; imports only the sibling CSS-copy helper and
+ *        node builtins — never `renderer/`, `simulation/`, `ai/`, or an app module.
  *
  * Usage (not invoked directly in unit tests; run via `pnpm build:watch` / `pnpm dev`):
  *   tsx tools/watch-packages.ts

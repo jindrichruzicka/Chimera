@@ -180,12 +180,12 @@ Pass-and-play multi-seat handoff is driven by the host's projected `PlayerSnapsh
 
 ## Invariants
 
-| #   | Rule                                                                                                                                                                                                          |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #59 | Profile data (avatar, display name, locale, game-defined fields) is never stored in `GameSnapshot`, `PlayerSnapshot`, or `SaveFile`.                                                                          |
-| #60 | `ProfileRepository` persists only the local machine's profiles. Remote clients' profiles live only in the in-memory `PlayerDirectory` for the lobby lifetime.                                                 |
-| #61 | `ProfileSanitizer.admit()` is the mandatory gate between inbound `JOIN`/`PROFILE_UPDATE` and `PlayerDirectory`. A failed admission results in a `REJECT` — raw attestation never reaches any other subsystem. |
-| #62 | Profile updates over side-channel are rate-limited. The host enforces the limit; clients surface excess rejections as non-fatal UI warnings only.                                                             |
+| #   | Rule                                                                                                                                                                                                                                                                            |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #59 | Profile data (avatar, display name, locale, game-defined fields) is never stored in `GameSnapshot`, `PlayerSnapshot`, or `SaveFile`.                                                                                                                                            |
+| #60 | `ProfileRepository` persists only the local machine's profiles. Remote clients' profiles live only in the in-memory `PlayerDirectory` for the lobby lifetime.                                                                                                                   |
+| #61 | `ProfileSanitizer.admit()` is the mandatory gate between inbound `JOIN`/`PROFILE_UPDATE` and `PlayerDirectory`. A failed admission results in a `REJECT` — raw attestation never reaches any other subsystem.                                                                   |
+| #62 | Profile changes travel out-of-band from the `ActionPipeline`. `PROFILE_UPDATE` is not an `EngineAction`, does not advance `tick`, and takes no part in undo/redo or save/load. A renderer component reads profile data from the profile directory, never from `PlayerSnapshot`. |
 
 ---
 

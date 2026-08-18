@@ -15,9 +15,9 @@
  *                         §6  — simulation/engine/prediction · Client Prediction
  *
  * Invariants upheld:
- *   #1  — GameSnapshot never crosses any IPC boundary; only PlayerSnapshot.
- *   #3  — Renderer never writes simulation state directly; writes go via ipcClient.
- *   #4  — addPrediction / confirmPrediction are ipcClient only — components
+ *   #3  — GameSnapshot never crosses any IPC boundary; only PlayerSnapshot.
+ *   #4  — Renderer never writes simulation state directly; writes go via ipcClient.
+ *          addPrediction / confirmPrediction are ipcClient only — components
  *          must never call them directly.
  */
 

@@ -6,7 +6,7 @@
  * `captureSaveFile`'s fallback.
  *
  * Invariants upheld:
- *   #2 — simulation/ is side-effect-free; no FS or Electron imports here.
+ *   #1 — simulation/ is side-effect-free; no FS or Electron imports here.
  */
 
 import { describe, expect, it } from 'vitest';

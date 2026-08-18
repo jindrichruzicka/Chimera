@@ -21,7 +21,7 @@
  * Architecture: §4.11 — Save / Load · §4.7 — ActionPipeline host bootstrap.
  *
  * Invariants upheld:
- *   #1  — `BaseGameSnapshot` never crosses the IPC boundary; only
+ *   #3  — `BaseGameSnapshot` never crosses the IPC boundary; only
  *          `SaveFile.header` / `SaveSlotMeta` ever leave the host.
  *   #25 — `captureSaveFile` is an out-of-band host call; it never
  *          re-enters the pipeline as a synthetic `engine:save` action.

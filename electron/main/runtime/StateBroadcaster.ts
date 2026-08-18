@@ -15,7 +15,7 @@
  *   #3  — Sends only PlayerSnapshot through HostTransport.
  *   #8  — StateProjector.project() is the mandatory outbound snapshot gate;
  *          StateBroadcaster never reads GameSnapshot fields directly.
- *   #39 — Zero imports from networking/provider/local/, ws, or DOM APIs.
+ *   #47 — Zero imports from networking/provider/local/, ws, or DOM APIs.
  *   #67 — Constructed with injected Logger child; no console.* calls.
  */
 

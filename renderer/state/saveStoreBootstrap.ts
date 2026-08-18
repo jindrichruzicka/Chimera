@@ -18,7 +18,7 @@
  *
  * Architecture reference: §4.11 — Save / Load Persistence
  *
- * Invariant #1: SaveSlotMeta (not GameSnapshot) is what crosses IPC.
+ * Invariant #3: GameSnapshot never crosses IPC; the renderer receives SaveSlotMeta.
  */
 
 import type { SavesAPI, Unsubscribe } from '@chimera-engine/simulation/bridge/api-types.js';

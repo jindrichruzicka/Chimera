@@ -14,9 +14,12 @@
  *     before the result is returned to callers.
  *
  * Invariants upheld:
- *   #2 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
- *   #44 — SaveFileHeaderSchema enforces integer constraints on schemaVersion,
- *          savedAt, and turnNumber; CheckpointSchema enforces tick and seed.
+ *   #1 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
+ *   #44 — CheckpointSchema requires integers for the persisted snapshot fields
+ *          (tick, seed); floating-point is forbidden in simulation state.
+ *   Header integrality — SaveFileHeaderSchema requires the same of schemaVersion,
+ *          savedAt and turnNumber. Those are file metadata rather than simulation
+ *          state, so the ledger states no rule about them.
  */
 
 import { z } from 'zod';

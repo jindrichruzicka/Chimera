@@ -28,7 +28,7 @@ export type CommitmentId = string & { readonly __brand: 'CommitmentId' };
  * (§4.6 / §8). Save files persist pending envelopes so verification can resume
  * after reload.
  *
- * Invariant #44: `revealedAt` is a tick integer — never a float.
+ * Invariant #44: `revealedAt` is a tick integer — floating-point is forbidden.
  */
 export interface CommitmentEnvelope {
     readonly id: CommitmentId;

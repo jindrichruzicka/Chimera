@@ -14,7 +14,8 @@
  * The IPC/perf bootstrap effects no-op here: globalThis.__chimera is left unset
  * so they early-return, and the bootstrap functions are mocked.
  *
- * Invariant #1: only PlayerSnapshot.phase is consumed for routing decisions.
+ * Invariant #3: only PlayerSnapshot.phase is consumed for routing decisions;
+ * GameSnapshot never crosses the IPC boundary.
  */
 
 import { act, cleanup, render } from '@testing-library/react';

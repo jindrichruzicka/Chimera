@@ -187,7 +187,7 @@ describe('arbitraryGameSnapshot', () => {
         );
     });
 
-    it('satisfies BaseGameSnapshot integer invariants (#42/#44)', () => {
+    it('satisfies BaseGameSnapshot integer invariants (#44)', () => {
         assert(
             property(arbitraryGameSnapshot(), (snapshot) => {
                 return (
@@ -309,7 +309,7 @@ describe('arbitraryGameSnapshotWithCommittedEntity', () => {
         );
     });
 
-    it('satisfies BaseGameSnapshot integer invariants (#42/#44)', () => {
+    it('satisfies BaseGameSnapshot integer invariants (#44)', () => {
         assert(
             property(arbitraryGameSnapshotWithCommittedEntity(), ({ snapshot }) => {
                 return (

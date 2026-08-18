@@ -101,7 +101,7 @@ interface SavesAPI {
      * (F68 #826). The event is a slim projection —
      * `{ state: 'waiting' | 'ready' | 'cancelled' | 'failed', gameId,
      * matchId, lobbyCode?, pendingSeats }` — never a `SaveFile` or
-     * snapshot (Invariant #1); `lobbyCode` is present only while
+     * snapshot (Invariant #3); `lobbyCode` is present only while
      * `waiting`, and `pendingSeats` carries raw seat `PlayerId`s only
      * (Invariant #59). The channel is push-only with no pull twin:
      * a listener registered mid-restore sees only future transitions

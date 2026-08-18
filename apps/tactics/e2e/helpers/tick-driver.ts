@@ -11,8 +11,8 @@
  * Invariants upheld:
  *   #2 — tick driver does not inject state; it only advances the clock via the
  *        registered hook. reduce()/applyAction() remain pure.
- *   #6 — Actions triggered by tick dispatch go through the full ActionPipeline
- *        validation path inside the main process.
+ *   Pipeline path — actions triggered by tick dispatch reach state only through
+ *        ActionPipeline in the main process.
  *
  * Module boundary: must NOT import from electron/main/, simulation/, or networking/.
  * ElectronApplication is the only external import — it is a Playwright test type.

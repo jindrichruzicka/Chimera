@@ -35,13 +35,15 @@
  * that imports an undeclared module and asserts the scan FAILS. If that slips through,
  * the self-test exits non-zero — the gate is not trustworthy.
  *
- * Invariants upheld:
- *   #1  — depcheck asserts each package's declared deps cover its real runtime imports,
- *         keeping the inward `@chimera-engine/*` DAG honest (no undeclared cross-edge masked
- *         by root hoisting).
- *   #2  — lives in `tools/`; imports only node builtins + the side-effect-free
- *         `verify-shared` + the `typescript` pre-processor — never a package or app.
- *   #47 — publint guards that each package publishes exactly its public `exports`/`files`.
+ * Properties upheld:
+ *   Package DAG — depcheck asserts each package's declared deps cover its real runtime
+ *         imports, keeping the inward `@chimera-engine/*` DAG honest (no undeclared
+ *         cross-edge masked by root hoisting).
+ *   Public surface — publint guards that each package publishes exactly its public
+ *         `exports`/`files`.
+ *   Module boundary — lives in `tools/`; imports only node builtins + the
+ *         side-effect-free `verify-shared` + the `typescript` pre-processor — never a
+ *         package or app.
  *
  * Usage (run via `pnpm verify:publish` / `pnpm verify:publish:selftest`):
  *   tsx tools/verify-publish.ts            # positive gate

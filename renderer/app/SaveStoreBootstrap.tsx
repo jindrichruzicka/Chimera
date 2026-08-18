@@ -11,7 +11,7 @@
  * Architecture reference: §4.11 — Save / Load Persistence
  *
  * Invariants upheld:
- *   Invariant #1 — Only SaveSlotMeta (never GameSnapshot) crosses the IPC boundary.
+ *   Invariant #3 — Only SaveSlotMeta (never GameSnapshot) crosses the IPC boundary.
  */
 
 import { useEffect } from 'react';

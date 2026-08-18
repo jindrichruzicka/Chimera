@@ -11,7 +11,7 @@
  * run-on-import side effect (the gates' CLI entries fire on any non-VITEST import).
  * `verify-pack.ts` re-exports these so its existing test surface is unchanged.
  *
- * Invariant #2: lives in `tools/`; imports only node builtins — never a package/app.
+ * Module boundary: lives in `tools/`; imports only node builtins — never a package/app.
  */
 
 import path from 'node:path';

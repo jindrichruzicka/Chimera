@@ -11,7 +11,7 @@
  * Architecture: §4.14 — Pluggable Multiplayer Provider
  *
  * Invariants upheld:
- *   #2 — networking/provider/ has zero imports from renderer/ or electron/
+ *   Package boundary — networking/provider/ has zero imports from renderer/ or electron/
  *   Module boundary — networking/provider/local/ must not be imported from here
  */
 

@@ -15,7 +15,7 @@
  * Architecture: §4.3 — WebSocket Message Protocol
  *
  * Invariants upheld:
- *   #1  — SNAPSHOT / LOBBY_STATE carry PlayerSnapshot, not GameSnapshot.
+ *   #3  — SNAPSHOT / LOBBY_STATE carry PlayerSnapshot, not GameSnapshot.
  *         GameSnapshot never leaves the host process.
  *   This module has zero runtime imports from electron/, renderer/,
  *         or any DOM API. Import-type-only from simulation/ and networking/.
@@ -167,7 +167,7 @@ export type ClientMessage =
  *                 was admitted as a seated 'player' or a read-only 'spectator'
  *                 (Invariant #114); absent ⇒ 'player' for old hosts.
  * - SNAPSHOT      Full projected PlayerSnapshot for the receiving client.
- *                 GameSnapshot NEVER appears here (Invariant #1).
+ *                 GameSnapshot NEVER appears here (Invariant #3).
  * - TICK          Tiny authoritative clock update for idle ticks where no
  *                 projected state changed.
  * - DELTA         Incremental event stream optimisation. Placeholder for now —

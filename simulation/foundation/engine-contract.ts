@@ -163,7 +163,7 @@ export type TypedAction<T extends string, P extends object> = EngineAction<T, P>
  * of `EngineAction` with default loose type parameters. ActionPipeline receives
  * only `ActionEnvelope`s; stage 2 (parse) produces the typed payload for game code.
  *
- * INVARIANT #1: No raw `{ type, payload }` objects may enter the pipeline —
+ * Inbound payload: no raw `{ type, payload }` object may enter the pipeline —
  * callers must build an `ActionEnvelope` (including `playerId` and `tick`).
  */
 export type ActionEnvelope = EngineAction<string, Record<string, unknown>>;

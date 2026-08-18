@@ -15,7 +15,7 @@
  * Invariants upheld:
  *   Rule 1 — SimulationClock.now() reads snapshot.tick only; never calls
  *             Date.now(), performance.now(), or any wall-clock source.
- *   #2     — No host I/O (setInterval/setTimeout) in simulation/.
+ *   #1     — No host I/O (setInterval/setTimeout) in simulation/.
  *   #43    — No Math.random() or Date.now() inside simulation/.
  */
 

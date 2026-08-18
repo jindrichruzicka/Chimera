@@ -9,7 +9,7 @@
  * Architecture reference: §4.28
  *
  * Invariants upheld:
- *   #2  — simulation/ is side-effect-free; no FS or Electron imports.
+ *   #1  — simulation/ is side-effect-free; no FS or Electron imports.
  *   #41 — Passes the identical contract test suite as FileReplayRepository.
  */
 

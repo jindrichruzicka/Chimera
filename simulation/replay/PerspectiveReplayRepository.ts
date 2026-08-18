@@ -18,7 +18,7 @@
  * Architecture reference: §4.28
  *
  * Invariants upheld:
- *   #2  — simulation/ is side-effect-free; no FS or Electron imports.
+ *   #1  — simulation/ is side-effect-free; no FS or Electron imports.
  *   #41 — InMemoryPerspectiveReplayRepository passes the identical contract test
  *           suite as FilePerspectiveReplayRepository.
  *   #98 — files hold only projected PlayerSnapshots for a single locked viewerId;

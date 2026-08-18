@@ -19,9 +19,10 @@
  *                         §6  — simulation/engine/prediction · Client Prediction
  *
  * Invariants upheld:
- *   #1  — Only PlayerSnapshot (never GameSnapshot) crosses the IPC boundary.
- *   #4  — addPrediction / confirmPrediction are called only via ipcClient
- *          (bootstrapGameStore wires this); components never call them.
+ *   #3  — Only PlayerSnapshot (never GameSnapshot) crosses the IPC boundary.
+ *   #4  — The renderer reads state and never writes it directly: addPrediction /
+ *          confirmPrediction are called only via ipcClient (bootstrapGameStore
+ *          wires this); components never call them.
  */
 
 import { useEffect, useRef } from 'react';

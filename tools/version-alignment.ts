@@ -23,11 +23,12 @@
  *   tsx tools/version-alignment.ts             # positive gate (over real package.json files)
  *   tsx tools/version-alignment.ts --self-test # negative gate (must detect synthetic drift)
  *
- * Invariants upheld:
- *   #1  — the whole inward `@chimera-engine/*` DAG (+ the initializer) ships one compatible
- *         version; a matching `1.X.*` is the compatibility promise, never a masked skew.
- *   #2  — lives in `tools/`; the pure surface imports only node builtins; the CLI entry
- *         lazy-imports `node:fs`/`node:path` — never a package or app.
+ * Properties upheld:
+ *   Package DAG — the whole inward `@chimera-engine/*` DAG (+ the initializer) ships
+ *         one compatible version; a matching `1.X.*` is the compatibility promise,
+ *         never a masked skew.
+ *   Module boundary — lives in `tools/`; the pure surface imports only node builtins;
+ *         the CLI entry lazy-imports `node:fs`/`node:path` — never a package or app.
  */
 
 // ── Types ────────────────────────────────────────────────────────────────────────

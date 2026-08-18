@@ -9,7 +9,7 @@
  * Architecture: §13.7 — IPC and WebSocket Test Helpers
  *
  * Invariants upheld:
- *   #6  — Interceptor is purely read-only; it never injects or modifies frames.
+ *   Read-only — the interceptor never injects or modifies frames.
  *
  * Module boundary: must NOT import from electron/main/, simulation/, or networking/.
  * ElectronApplication is the only external import — it is a Playwright test type.

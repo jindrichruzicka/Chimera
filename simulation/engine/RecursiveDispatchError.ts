@@ -10,7 +10,7 @@
  * Architecture reference: §4.7, §4.20
  *
  * Invariants upheld:
- *   #43 — simulation/ is side-effect-free; no Node.js or Electron imports.
+ *   #1  — simulation/ is side-effect-free; no Node.js or Electron imports.
  *   #89 — ctx.dispatch() nesting depth is bounded; exceeding causes RecursiveDispatchError.
  */
 

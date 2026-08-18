@@ -9,9 +9,11 @@
  * Architecture references: §4.2, §4.7
  *
  * Invariants upheld:
- *   #1 — ActionEnvelope is the exclusive inbound IPC payload for game actions.
- *   #2 — All mutating game logic is driven by actions through the pipeline.
- *   #3 — simulation/ is side-effect-free; no Node.js or Electron imports.
+ *   #1 — simulation/ is side-effect-free; no Node.js or Electron imports.
+ *   #42 — The simulation is action-driven: all mutating game logic reaches state
+ *         through ActionPipeline.process().
+ *   Inbound payload — ActionEnvelope is the exclusive inbound IPC payload for game
+ *         actions.
  */
 
 import type { DeterministicRng } from './DeterministicRng.js';
@@ -145,10 +147,10 @@ export type GameResolution =
 /**
  * Full authoritative game state.
  *
- * INVARIANT #1: GameSnapshot NEVER leaves the main process.
+ * INVARIANT #3: GameSnapshot NEVER leaves the main process.
  * Only `PlayerSnapshot` (produced by StateProjector) crosses any boundary.
  *
- * All arithmetic fields are integers (invariant #42/#44). Floats are reserved
+ * All arithmetic fields are integers (invariant #44). Floats are reserved
  * for the renderer (camera, animation). `seed` is the base RNG seed; the
  * per-action RNG is derived from `(seed, tick)` inside ActionPipeline.
  *
@@ -170,11 +172,11 @@ export interface BaseGameSnapshot {
      *
      * Used by:
      *   - `ActionHistoryEntry.turnNumber` so each history entry is stamped with
-     *     the turn during which it was recorded (Invariants #42/#44 — integer).
+     *     the turn during which it was recorded (Invariant #44 — integer).
      *   - `ActionHistory.pruneTo(snapshot.turnNumber - TURN_MEMENTO_RETENTION)`
      *     so the bounded retention window measures turns, not ticks.
      *
-     * Always an integer (Invariants #42/#44). Initial state must set this to
+     * Always an integer (Invariant #44). Initial state must set this to
      * 0 explicitly; there is no implicit default.
      */
     readonly turnNumber: number;
@@ -280,7 +282,7 @@ export interface BaseGameSnapshot {
      * distinct from `PlayerSnapshot.commitments` (the separately-projected envelope
      * hash map peers see). The player's actual buffered actions are NEVER stored
      * here either — they stay host-local in the reveal-staging store (Invariants
-     * #3/#8). Integer values only (#42/#44). Absent for games or turn modes that
+     * #3/#8). Integer values only (#44). Absent for games or turn modes that
      * do not use commitments.
      */
     readonly committedTurns?: Readonly<Record<PlayerId, number>>;
@@ -293,7 +295,7 @@ export interface BaseGameSnapshot {
      *
      * The ONE dilation field that is PROJECTED: `StateProjector.project()`
      * passes it through verbatim, the wire schema declares it and saves carry
-     * it. Always an integer (Invariants #42/#44), enforced at the wire and save
+     * it. Always an integer (Invariant #44), enforced at the wire and save
      * trust boundaries by `z.number().int()`.
      *
      * Optional and backward-compatible: absent on every snapshot written before
@@ -308,7 +310,7 @@ export interface BaseGameSnapshot {
      *
      * HOST-ONLY: not projected and not declared on the wire, so the current
      * scale is the only dilation state a viewer is told — never the schedule
-     * that will change it. Always an integer (Invariants #42/#44).
+     * that will change it. Always an integer (Invariant #44).
      */
     readonly timeScaleRestoreBeats?: number;
     /**
@@ -335,7 +337,7 @@ export interface BaseGameSnapshot {
  * configured). Game code receives only `ReduceContext.undoManager` which
  * exposes the narrower query-only surface (`canUndo` / `canRedo`).
  *
- * Invariant #12: each pipeline stage receives only the context it needs.
+ * Context narrowing: each pipeline stage receives only the context it needs.
  */
 export interface UndoContext {
     readonly undoManager?: {
@@ -369,7 +371,7 @@ export interface UndoContext {
  * `TURN_MEMENTO_RETENTION` turns is enforced in production without requiring
  * a host wrapper.
  *
- * Invariant #12: each pipeline stage receives only the context it needs.
+ * Context narrowing: each pipeline stage receives only the context it needs.
  */
 export interface HistoryContext {
     readonly history?: {
@@ -421,8 +423,8 @@ export const toViewerSnapshot = (projected: Readonly<Record<string, unknown>>): 
  * `canRedo(viewerId)`. Defaults to `false` for both fields when `undoManager`
  * is absent from `PipelineContext`.
  *
- * Invariant #7: `undoMeta` is derived at broadcast time — it is NOT stored
- * on `GameSnapshot`.
+ * Derived, not stored: `undoMeta` is computed at broadcast time — it is NOT
+ * stored on `GameSnapshot`.
  */
 export interface UndoMeta {
     readonly canUndo: boolean;
@@ -442,7 +444,7 @@ export interface UndoMeta {
  *   - `StateProjector.project()` is the sole mandatory gate for outbound snapshots.
  *   - `undoMeta` is computed once by the projector, not redundantly in the pipeline.
  *
- * Invariant #12: each pipeline stage receives only the context it needs.
+ * Context narrowing: each pipeline stage receives only the context it needs.
  */
 export interface BroadcastContext {
     readonly broadcast?: (snapshot: Readonly<BaseGameSnapshot>, to: PlayerId) => void;
@@ -460,7 +462,7 @@ export interface BroadcastContext {
  * authoritative action — and on the stage-3 undo/redo intercept path also skip
  * the history append. The debug bridge catches all errors inside its observer.
  *
- * Invariant #12: each pipeline stage receives only the context it needs.
+ * Context narrowing: each pipeline stage receives only the context it needs.
  */
 export interface DebugContext {
     readonly debugObserver?: (tick: number, snapshot: Readonly<BaseGameSnapshot>) => void;
@@ -478,8 +480,7 @@ export interface DebugContext {
  * Game code NEVER receives `PipelineContext` directly — it receives the
  * narrower `ReduceContext` from which game-agnostic fields are stripped.
  *
- * Invariant #12: `ActionPipeline` steps — each stage receives only the narrow
- * context it needs.
+ * Context narrowing: `ActionPipeline` hands each stage only the context it needs.
  * Invariant #2: `applyAction`/`definition.reduce` are pure — game code always
  * receives `ReduceContext`, never `PipelineContext`.
  */
@@ -516,8 +517,8 @@ export interface ValidationResult {
  * Public game-facing context handed to `ActionDefinition.validate()` and
  * `ActionDefinition.reduce()`.
  *
- * This interface is the ISP-compliant narrow surface for game code (§4.7,
- * Invariant #12). It intentionally excludes engine-internal fields such as
+ * This interface is the ISP-compliant narrow surface for game code (§4.7). It
+ * intentionally excludes engine-internal fields such as
  * `dispatch`. Adding fields requires a dedicated invariant in
  * docs/executive-architecture/architecture-invariants.md.
  *

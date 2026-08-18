@@ -10,10 +10,10 @@
  * Architecture: §4.14 — Pluggable Multiplayer Provider
  *
  * Invariants upheld:
- *   #1 — GameSnapshot never leaves main process; only PlayerSnapshot crosses
+ *   #3 — GameSnapshot never leaves main process; only PlayerSnapshot crosses
  *        wire boundaries through HostTransport.sendSnapshot / onSnapshotReceived.
- *   #2 — networking/provider/ has zero imports from renderer/ or electron/.
- *        PlayerId and EngineAction are sourced from simulation/.
+ *   Package boundary — networking/provider/ has zero imports from renderer/ or
+ *        electron/. PlayerId and EngineAction are sourced from simulation/.
  *   networking boundary — networking/provider/local/ must not be imported from
  *        outside that directory; this file contains only the abstract surface.
  */

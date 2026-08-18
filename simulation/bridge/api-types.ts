@@ -1073,7 +1073,7 @@ export interface LobbyDiscoveryAPI {
 /**
  * Slim projection of the host's session-restore lifecycle pushed over
  * `chimera:saves:restore-status` (§4.11). Never carries a
- * `SaveFile`/`GameSnapshot` (Invariant #1); `pendingSeats` holds raw seat
+ * `SaveFile`/`GameSnapshot` (Invariant #3); `pendingSeats` holds raw seat
  * PlayerIds only — no profile data (Invariant #59).
  */
 export interface RestoreStatusEvent {

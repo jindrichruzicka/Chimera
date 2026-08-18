@@ -9,7 +9,7 @@
  * Architecture: §4.14 — Pluggable Multiplayer Provider / LobbyManager
  *
  * Invariants upheld:
- *   #1  — Only PlayerSnapshot crosses transport boundaries; this module never
+ *   #3  — Only PlayerSnapshot crosses transport boundaries; this module never
  *          references GameSnapshot.
  *   #67 — Constructed with an injected Logger child; no console.* calls.
  */

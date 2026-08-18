@@ -82,7 +82,7 @@ function withoutRestoreBeats<TState extends BaseGameSnapshot>(state: TState): TS
  * dropped when this one names none. Nothing accumulates.
  *
  * @throws RangeError when `durationBeats` is present and is not a positive
- *         integer (Invariants #42/#44).
+ *         integer (Invariant #44).
  */
 export function applyTimeScale<TState extends BaseGameSnapshot>(
     state: TState,
@@ -92,7 +92,7 @@ export function applyTimeScale<TState extends BaseGameSnapshot>(
 
     if (durationBeats !== undefined && (!Number.isInteger(durationBeats) || durationBeats <= 0)) {
         throw new RangeError(
-            `applyTimeScale: durationBeats is ${String(durationBeats)} — it must be a positive integer (Invariants #42/#44).`,
+            `applyTimeScale: durationBeats is ${String(durationBeats)} — it must be a positive integer (Invariant #44).`,
         );
     }
 

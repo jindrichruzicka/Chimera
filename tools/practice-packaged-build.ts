@@ -27,7 +27,7 @@
  * from tools/verify-scaffold.ts so the emitted bytes match the gate exactly. The package list +
  * tarball parser are imported from the side-effect-free `verify-shared` to avoid drift.
  *
- * Invariant #2: lives in `tools/`; imports node builtins + the side-effect-free sibling
+ * Module boundary: lives in `tools/`; imports node builtins + the side-effect-free sibling
  * `verify-shared` only (never a `@chimera-engine/*` package).
  *
  * NOT a gate: it has no `--self-test` and is excluded from `test`/`lint` gating semantics; it is a

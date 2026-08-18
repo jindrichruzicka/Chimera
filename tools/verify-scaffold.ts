@@ -51,14 +51,17 @@
  * invoked explicitly via `pnpm verify:scaffold` / `pnpm verify:scaffold:selftest`.
  *
  * Invariants upheld:
- *   #1  — a GENERATED consumer composes the acyclic, inward `@chimera-engine/*` DAG end-to-end.
- *   #2  — lives in `tools/`; imports node builtins + the side-effect-free `verify-shared` and the
- *         sibling `create-chimera-game/standalone` pure synthesizers (no `@chimera-engine/*`).
- *   #47 — the generated app resolves `@chimera-engine/*` ONLY through public `exports` (tarballs +
- *         a node_modules-resolving vitest config), never an internal subpath.
  *   #96 — a dropped re-export among the symbols `PROBE_SEAM_PLANT` and `PROBE_LINT_PLANTS`
  *         name surfaces as a scaffold smoke failure, as does one among the symbols the
  *         template's own sources name.
+ *   Package DAG — a GENERATED consumer composes the acyclic, inward
+ *         `@chimera-engine/*` DAG end-to-end.
+ *   Public surface — the generated app resolves `@chimera-engine/*` ONLY through
+ *         public `exports` (tarballs + a node_modules-resolving vitest config), never
+ *         an internal subpath.
+ *   Module boundary — lives in `tools/`; imports node builtins + the side-effect-free
+ *         `verify-shared` and the sibling `create-chimera-game/standalone` pure
+ *         synthesizers (no `@chimera-engine/*`).
  */
 
 import path from 'node:path';

@@ -1853,7 +1853,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 initialPlayerIds,
             );
 
-            // 32-bit unsigned mask keeps `seed` an integer (Invariant #42).
+            // 32-bit unsigned mask keeps `seed` an integer (Invariant #44).
             // Captured once so the same value seeds both the live snapshot and
             // the replay header (replay reconstructs initial state from it).
             const sessionSeed = Date.now() >>> 0;

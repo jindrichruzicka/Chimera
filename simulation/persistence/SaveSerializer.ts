@@ -11,7 +11,7 @@
  * Architecture reference: §4.11
  *
  * Invariants upheld:
- *   #2 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
+ *   #1 — simulation/ is side-effect-free; no Node.js FS or Electron imports.
  */
 
 import type { SaveFile } from './SaveFile.js';

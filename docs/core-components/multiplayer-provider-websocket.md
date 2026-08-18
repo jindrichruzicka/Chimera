@@ -89,6 +89,8 @@ interface BrowsableProvider {
 function isBrowsable(p: MultiplayerProvider): p is MultiplayerProvider & BrowsableProvider;
 ```
 
+The side channel is typed shut: `sendSideChannel()` accepts a `SideChannelMessage` variant and nothing else, so no `EngineAction` or `PlayerSnapshot` can travel over it. A new out-of-band channel is a new variant of that union, never a new payload shape on an existing one.
+
 ---
 
 ## LobbyManager (electron/main)
@@ -213,13 +215,12 @@ const lobbyManager = new LobbyManager(multiplayerProvider);
 
 ## Invariants
 
-| #   | Rule                                                                                                                                                                                    |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #37 | `MultiplayerProvider` is injected into `LobbyManager`. `LobbyManager` never imports `LocalWebSocketProvider` by name.                                                                   |
-| #38 | `HostTransport.sendSideChannel()` / `ClientTransport.sendSideChannel()` carry only `SideChannelMessage` variants. No `EngineAction` or `PlayerSnapshot` may flow over the side channel. |
-| #39 | `StateBroadcaster` and `MessageRouter` depend only on `HostTransport`/`ClientTransport` interfaces. They have no imports from `networking/server/` or `networking/client/`.             |
-| #40 | `networking/provider/local/` may only import from within `local/`. It must not import engine or renderer internals.                                                                     |
-| #41 | `InMemorySaveRepository` must pass the identical contract test suite as `FileSaveRepository`.                                                                                           |
+| #   | Rule                                                                                                                                                                                                                            |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #38 | `MultiplayerProvider` is injected into `LobbyManager`. `LobbyManager` never imports `LocalWebSocketProvider` by name.                                                                                                           |
+| #39 | `StateBroadcaster` and `MessageRouter` depend only on `HostTransport`/`ClientTransport` interfaces. They have no imports from `networking/server/` or `networking/client/`.                                                     |
+| #41 | `InMemorySaveRepository` must pass the identical contract test suite as `FileSaveRepository`.                                                                                                                                   |
+| #47 | `StateBroadcaster`, `MessageRouter`, `LobbyManager` and `SaveManager` must not import from `networking/provider/local/`. Cross-module communication goes through `MultiplayerProvider`, `HostTransport`, and `ClientTransport`. |
 
 ---
 

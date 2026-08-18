@@ -6,7 +6,7 @@
  * TDD cycle: written first — RED before the source file exists.
  *
  * Invariants upheld:
- *   #2 — CompressedSaveSerializer lives in electron/main/saves/ so that
+ *   #1 — CompressedSaveSerializer lives in electron/main/saves/ so that
  *          Node.js (node:zlib, node:util) imports stay outside simulation/.
  */
 

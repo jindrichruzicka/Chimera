@@ -5,7 +5,7 @@
  * Tests written first (RED before implementation).
  *
  * Invariants upheld:
- *   #2  — simulation/ is side-effect-free; no FS or Electron imports.
+ *   #1  — simulation/ is side-effect-free; no FS or Electron imports.
  *   #71 — load rejects replays whose identity triple is unknown.
  */
 

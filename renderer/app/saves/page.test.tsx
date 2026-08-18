@@ -7,7 +7,7 @@
  *
  * Architecture reference: §4.11 — Save / Load Persistence
  *
- * Invariant #1: GameSnapshot never leaves the main process — page reads only
+ * Invariant #3: GameSnapshot never leaves the main process — page reads only
  *   SaveSlotMeta from saveStore, never raw SaveFile or GameSnapshot.
  * Invariant #74: toast titles are static literals (asserted by exact equality).
  */

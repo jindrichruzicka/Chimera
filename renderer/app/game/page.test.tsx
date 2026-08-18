@@ -9,7 +9,7 @@
 // Task: Extract match UI into renderer/app/game/page.tsx
 //
 // Invariants upheld:
-//   #1  — Only PlayerSnapshot (never GameSnapshot) enters the store mock.
+//   #3  — Only PlayerSnapshot (never GameSnapshot) enters the store mock.
 //   #48 — GameShell is game-agnostic; game/page receives renderer game
 //          modules from renderer/game/rendererGameRegistry.
 //   #80 — Verified by the playfield being injected via registry prop.
@@ -1074,7 +1074,8 @@ describe('GamePage — in-game save', () => {
 
         fireEvent.click(await screen.findByTestId('hud-save'));
 
-        // Invariant #74: static literal title, no save metadata.
+        // Invariant #74: the title is a static literal — toast contents are never
+        // derived from `SaveFile`.
         await waitFor(() => {
             expect(useToastStore.getState().queue).toContainEqual(
                 expect.objectContaining({ severity: 'success', title: 'Game saved' }),

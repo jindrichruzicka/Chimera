@@ -426,7 +426,8 @@ describe('GameTimer integration — save round-trip serialization', () => {
         expect(result.timers['complex-timer' as TimerId]?.payload).toEqual(complexPayload);
     });
 
-    // Invariant #54: "serialises, loads, replays" — covers the serialisation clause.
+    // Invariant #54: covers the "serialised, loaded, and replayed" clause of the
+    // GameTimer rule.
     it('produces identical results when replayed from a JSON-serialized snapshot', () => {
         const originalSnapshot = makeSnapshot({
             timers: {

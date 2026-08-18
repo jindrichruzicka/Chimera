@@ -22,7 +22,8 @@
  * newest `SESSION_TICKET_CAP` entries.
  *
  * Invariants upheld:
- *   #59/#60 — opaque ids only, this machine's own tickets only.
+ *   Opaque ids — a ticket carries opaque ids, never player profile data, and this
+ *             store persists only the local machine's own tickets.
  */
 
 import * as fs from 'fs/promises';

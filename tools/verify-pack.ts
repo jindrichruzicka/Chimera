@@ -35,16 +35,18 @@
  * surface is gate-checked by the import probe (step 5) rather than re-rendered.
  *
  * Invariants upheld:
- *   #1  — the acyclic, inward package DAG survives packaging (npm resolves the tarball
- *         graph in dependency order); validated end-to-end against the real artifact.
- *   #2  — lives in `tools/`; imports no package or app module (node builtins and the
- *         side-effect-free `verify-shared` only).
- *   #47 — orchestration resolves ONLY through each package's public `exports`, never an
- *         internal subpath (no `workspace:*` symlink fallback inside the throwaway).
  *   #96 — `PROBE_SUBPATHS` completeness is derived from the `exports` map of the
  *         packed renderer manifest (`missingProbeSubpaths`): a renderer exports key
  *         with no probe entry fails the gate; wildcard keys are covered by concrete
  *         representative entries.
+ *   Package DAG — the acyclic, inward package DAG survives packaging (npm resolves
+ *         the tarball graph in dependency order); validated end-to-end against the
+ *         real artifact.
+ *   Public surface — orchestration resolves ONLY through each package's public
+ *         `exports`, never an internal subpath (no `workspace:*` symlink fallback
+ *         inside the throwaway).
+ *   Module boundary — lives in `tools/`; imports no package or app module (node
+ *         builtins and the side-effect-free `verify-shared` only).
  *
  * Usage (run via `pnpm verify:pack` / `pnpm verify:pack:selftest`, not in unit tests):
  *   tsx tools/verify-pack.ts            # positive gate

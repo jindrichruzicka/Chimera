@@ -18,7 +18,8 @@
  * Architecture: §4.6/§8 — State Projection · docs/security-trust/tactics-commitment-battle-mode.md
  *
  * Invariants upheld:
- *   #2  — host names no game; tactics logic reaches it only through this hook.
+ *   #107 — the host names no game: simulation/ defines no per-game token, and
+ *          tactics logic reaches it only through this hook.
  *   #3 / #8 — the buffer never lands on the snapshot; only the envelope hash
  *          (pre-reveal) and the verified reveal (post-commit) cross the boundary.
  */

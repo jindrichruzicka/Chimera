@@ -1860,9 +1860,10 @@ export interface RegisterChatHandlersOptions {
  * Invariant #5: channel constants come from `preload/apis/chat-api.ts`; there is
  * no parallel list in this file to drift out of sync.
  *
- * Invariant #72/#73: these handlers never touch the simulation; `send` routes
- * through the mandatory `ChatRelay` gate via the injected `sendChat` port — there
- * is no bypass.
+ * Invariant #72/#73: a `CHAT` message is not an `EngineAction` — it never advances
+ * `tick` and these handlers never touch the simulation; `send` routes through the
+ * mandatory `ChatRelay` gate via the injected `sendChat` port, and there is no
+ * bypass.
  */
 export function registerChatHandlers(options: RegisterChatHandlersOptions): void {
     const { ipcMain, sendChat, history, mute, unmute } = options;

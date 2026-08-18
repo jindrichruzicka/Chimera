@@ -6,22 +6,21 @@
  * Defines `ActionDefinition` entries for the engine-reserved action types:
  * `engine:tick`, `engine:end_turn`, `engine:start_game`, `engine:return_to_lobby`,
  * `engine:save`, `engine:load`, `engine:undo`, `engine:redo`, and
- * `engine:sync_request`. These are the only callers of the engine-internal
- * `registerEngineAction()` bypass on `ActionRegistry`.
+ * `engine:sync_request`. They reach `ActionRegistry` through the engine-internal
+ * `registerEngineAction()` bypass, which game and renderer code must never call.
  *
  * Architecture reference: §4.2, §4.7
  *
  * Invariants upheld:
- *   #2 — Engine reserved actions are the only mechanism for cross-cutting
- *         tick/turn lifecycle mutations. EngineActions is the sole caller of
- *         ActionRegistry.registerEngineAction().
- *   #3 — simulation/ is side-effect-free; no Node.js or Electron imports.
+ *   #1 — simulation/ is side-effect-free; no Node.js or Electron imports.
  *   #7 — engine:undo and engine:redo are EngineAction types; they enter the
  *         pipeline normally. There is no side-door undo path.
  *   #11 — The engine: namespace is reserved; definitions are registered only
  *          via registerEngineAction().
  *   #43 — validate() and reduce() use only ReduceContext. No Math.random() or
  *          Date.now() calls.
+ *   Engine-only registrar — ActionRegistry.registerEngineAction() is engine
+ *          -internal; game and renderer code never call it.
  */
 
 import type {
@@ -48,7 +47,8 @@ const EMPTY_CLOSED: readonly ClosedAnimationWindow[] = Object.freeze([]);
 /**
  * Payload for `engine:tick`.
  * `seed` is the per-tick RNG seed derived by the host at tick advance time.
- * All arithmetic fields are integers (Invariant #42).
+ * All arithmetic fields are integers (Invariants #44/#75 — a payload carries no
+ * floating-point value).
  *
  * Plain interface — no `Record<string, unknown>` intersection required now that
  * `TPayload extends object` is the constraint on `ActionDefinition`.
@@ -77,7 +77,8 @@ export interface EngineSaveLoadPayload {
 /**
  * Payload for `engine:undo` and `engine:redo`.
  * `steps` is the number of actions to undo/redo; defaults to 1 if absent.
- * Must be a positive integer when present (Invariant #42).
+ * Must be a positive integer when present (Invariants #44/#75 — a payload carries
+ * no floating-point value).
  */
 export interface EngineUndoRedoPayload {
     readonly steps: number;
@@ -262,7 +263,7 @@ export const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
     type: 'engine:tick',
 
     parsePayload(raw: Readonly<Record<string, unknown>>): EngineTickPayload {
-        // Invariant #42: all arithmetic state fields must be integers. The seed
+        // Invariant #44: all arithmetic state fields must be integers. The seed
         // is the base for the DeterministicRng, so non-integer, NaN, Infinity,
         // and -Infinity values must be rejected at the boundary. Number.isInteger
         // returns false for all of them (and false for non-numbers generally).
@@ -951,9 +952,8 @@ export const engineSyncRequestDefinition: ActionDefinition<EngineSyncRequestPayl
  * are registered at engine initialisation. Add new engine action definitions
  * here — never register them ad-hoc from outside this module.
  *
- * INVARIANT: Only `registerEngineActions()` (below) may iterate this array and
- * call `registry.registerEngineAction()`. Game code and renderer code must
- * never touch this path.
+ * `registerEngineActions()` (below) is what iterates this array. Game code and
+ * renderer code must never touch this path.
  */
 export const EngineActions: readonly ActionDefinition<object>[] = [
     engineTickDefinition,
@@ -977,8 +977,8 @@ export const EngineActions: readonly ActionDefinition<object>[] = [
  * Calling it twice on the same registry is safe (last write wins — same as
  * any other registration).
  *
- * This is the ONLY caller of `registry.registerEngineAction()`. Game code
- * and renderer code must never call `registerEngineAction()` directly.
+ * Game code and renderer code must never call `registry.registerEngineAction()`
+ * directly — `register()` is their path.
  *
  * Generic over `TState extends BaseGameSnapshot` so that a concrete-snapshot
  * registry (e.g. `ActionRegistry<TacticsSnapshot>`) can be passed without a
