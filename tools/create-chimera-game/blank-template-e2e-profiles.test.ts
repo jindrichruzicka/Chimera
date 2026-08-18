@@ -26,7 +26,18 @@ import { GAME_TOKENS } from './tokens.js';
  * Which is why the reading goes through the TypeScript AST rather than the text. A
  * bare substring says nothing about the position it is found in: `rmSync` reaching the
  * root, a counter incremented by zero or under an `if`, and a comment naming a value
- * all read the same as the thing itself.
+ * all read the same as the thing itself. Names reached while following a derivation are
+ * resolved innermost scope outwards, so a declaration planted at module scope cannot
+ * answer for a name the expression binds closer to hand. The two entry points that
+ * look a name up cold — `userDataDir`, and the root binding in a `user-data-root`
+ * module — are still first-match over the file.
+ *
+ * Where the reading stops, stated rather than left to be discovered: it establishes
+ * that a value REACHES the name, never what the value is once it gets there.
+ * `(userDataLaunchCounter * 0).toString()` reads the counter, in the right scope, from
+ * a counter that advances correctly — and yields the same segment every launch. Closing
+ * that would mean evaluating the expression, and enumerating the arithmetic that
+ * annihilates a value instead is a list with no end. Nothing here rejects it.
  */
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const templateE2eDir = path.join(repoRoot, 'tools/create-chimera-game/templates/blank/e2e');
@@ -103,6 +114,155 @@ function initializerOf(source: ts.SourceFile, name: string): ts.Expression | und
     return declarationOf(source, name)?.initializer;
 }
 
+/** Every name a binding name introduces — an identifier, or each leaf of a pattern. */
+function namesBound(name: ts.BindingName): string[] {
+    if (ts.isIdentifier(name)) return [name.text];
+    return name.elements.flatMap((element) =>
+        ts.isBindingElement(element) ? namesBound(element.name) : [],
+    );
+}
+
+/**
+ * "Bound here, but with no single initializer this name's value comes from" — a
+ * destructured element, a function or class declaration, an import. What matters is not
+ * what those forms initialise to; it is that they BIND, and so must stop a search rather
+ * than let it continue outward.
+ */
+const OPAQUE = 'opaque';
+type Binding = ts.VariableDeclaration | typeof OPAQUE;
+
+/** What a scope binds, as `name → the declaration to follow, or {@link OPAQUE}`. */
+function bindingsIn(scope: ts.Node): Map<string, Binding> {
+    const bound = new Map<string, Binding>();
+    const add = (name: string, binding: Binding): void => {
+        if (!bound.has(name)) bound.set(name, binding);
+    };
+    const addDeclarations = (list: ts.VariableDeclarationList): void => {
+        for (const declaration of list.declarations) {
+            for (const name of namesBound(declaration.name)) {
+                add(name, ts.isIdentifier(declaration.name) ? declaration : OPAQUE);
+            }
+        }
+    };
+
+    const statements = ts.isSourceFile(scope) || ts.isBlock(scope) ? scope.statements : [];
+    for (const statement of statements) {
+        if (ts.isVariableStatement(statement)) addDeclarations(statement.declarationList);
+        else if (
+            ts.isForStatement(statement) ||
+            ts.isForOfStatement(statement) ||
+            ts.isForInStatement(statement)
+        ) {
+            const initializer = statement.initializer;
+            if (initializer !== undefined && ts.isVariableDeclarationList(initializer)) {
+                addDeclarations(initializer);
+            }
+        } else if (
+            (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+            statement.name !== undefined
+        ) {
+            add(statement.name.text, OPAQUE);
+        } else if (ts.isImportDeclaration(statement)) {
+            const clause = statement.importClause;
+            if (clause?.name !== undefined) add(clause.name.text, OPAQUE);
+            const named = clause?.namedBindings;
+            if (named !== undefined && ts.isNamedImports(named)) {
+                for (const element of named.elements) add(element.name.text, OPAQUE);
+            }
+            if (named !== undefined && ts.isNamespaceImport(named)) add(named.name.text, OPAQUE);
+        }
+    }
+    if (ts.isCatchClause(scope) && scope.variableDeclaration !== undefined) {
+        for (const name of namesBound(scope.variableDeclaration.name)) add(name, OPAQUE);
+    }
+    return bound;
+}
+
+/**
+ * What `name` refers to at `at`, resolved innermost scope outwards.
+ *
+ * `'parameter'` and OPAQUE are distinct answers from "not found", and that is the whole
+ * point: answering "not found" for a name that IS bound here lets the search continue
+ * outward and pick up a module-level `const` of the same name. That is not hypothetical
+ * — the launch fixture reads `options.port`, `options` is a parameter, and a module
+ * `const options` planted beside it would otherwise answer for it. A destructured
+ * `const { port } = options` is the same hazard in a different spelling.
+ */
+function bindingFor(name: string, at: ts.Node): Binding | 'parameter' | undefined {
+    for (let scope = at.parent as ts.Node | undefined; scope !== undefined; scope = scope.parent) {
+        if (ts.isFunctionLike(scope)) {
+            const bound = scope.parameters.some((parameter) =>
+                namesBound(parameter.name).includes(name),
+            );
+            if (bound) return 'parameter';
+        }
+        const declared = bindingsIn(scope).get(name);
+        if (declared !== undefined) return declared;
+    }
+    return undefined;
+}
+
+/**
+ * Every read `from` reaches, following each name to the declaration it resolves to.
+ *
+ * The visited set holds NODES, not source positions. A property access and the
+ * identifier it starts with begin at the same offset — `n.toString` and its `n` both
+ * report the position of the `n` — so keying on position lets the outer path claim the
+ * slot and cancel the follow of the very name it is built from.
+ *
+ * `within` bounds which declarations may be followed; see the callers for why the two
+ * arms want different bounds.
+ */
+function derivationReads(from: ts.Node, within?: ts.Node): { path: string; at: ts.Node }[] {
+    const reads: { path: string; at: ts.Node }[] = [];
+    const expanded = new Set<ts.Node>();
+    const expand = (node: ts.Node): void => {
+        for (const read of valuesRead(node)) {
+            reads.push(read);
+            if (expanded.has(read.at)) continue;
+            expanded.add(read.at);
+            const declaration = declarationToFollow(read.path, read.at);
+            if (declaration?.initializer === undefined) continue;
+            if (within !== undefined && !isInside(declaration, within)) continue;
+            expand(declaration.initializer);
+        }
+    };
+    expand(from);
+    return reads;
+}
+
+/**
+ * The earliest place `name` is read while building `from`.
+ *
+ * This is the point the value is SAMPLED, which is what an advance has to precede — and
+ * it is not the same node as the expression that uses it. With the segment built into a
+ * `const` above, the sample is up there; inlined, it is at the argument. Measuring
+ * against the argument either way would accept an advance that runs after the value was
+ * already taken.
+ */
+function earliestReadOf(name: string, from: ts.Node, within?: ts.Node): ts.Node | undefined {
+    return derivationReads(from, within)
+        .filter((read) => read.path === name)
+        .reduce<ts.Node | undefined>(
+            (earliest, read) =>
+                earliest === undefined || read.at.getStart() < earliest.getStart()
+                    ? read.at
+                    : earliest,
+            undefined,
+        );
+}
+
+/**
+ * The declaration to follow for `name` at `at` — undefined when the name is unbound, is
+ * a parameter, or is bound by a form with no single initializer behind it.
+ */
+function declarationToFollow(name: string, at: ts.Node): ts.VariableDeclaration | undefined {
+    const binding = bindingFor(name, at);
+    return binding === undefined || binding === 'parameter' || binding === OPAQUE
+        ? undefined
+        : binding;
+}
+
 /** Whether `node` sits anywhere inside `ancestor`. */
 function isInside(node: ts.Node, ancestor: ts.Node): boolean {
     for (let at = node.parent as ts.Node | undefined; at !== undefined; at = at.parent) {
@@ -151,11 +311,13 @@ function accessPath(node: ts.Node): string | undefined {
  * `port` there is a property name, and reporting it as a binding would let an unrelated
  * `const port` elsewhere in the file answer for a value this expression never touches.
  */
-function valuesRead(node: ts.Node): string[] {
-    const found: string[] = [];
+function valuesRead(node: ts.Node): { path: string; at: ts.Node }[] {
+    const found: { path: string; at: ts.Node }[] = [];
     const walk = (child: ts.Node): void => {
         const access = accessPath(child);
-        if (access !== undefined) found.push(access);
+        // The site travels with the name: the same spelling means different things in
+        // different scopes, so resolving it later needs to know where it was read.
+        if (access !== undefined) found.push({ path: access, at: child });
         if (ts.isPropertyAccessExpression(child)) {
             walk(child.expression); // the object, never `child.name`
             return;
@@ -180,20 +342,30 @@ function valuesRead(node: ts.Node): string[] {
  * per-launch when it is read once ever. A value that is fixed for the life of the
  * process does not care where it was read, so its follow is unbounded.
  */
-function readsBehind(source: ts.SourceFile, node: ts.Node, within?: ts.Node): string[] {
-    const seen = new Set<string>();
-    const expand = (from: ts.Node): void => {
-        for (const value of valuesRead(from)) {
-            if (seen.has(value)) continue;
-            seen.add(value);
-            const declared = declarationOf(source, value);
-            if (declared?.initializer === undefined) continue;
-            if (within !== undefined && !isInside(declared, within)) continue;
-            expand(declared.initializer);
-        }
+function readsBehind(node: ts.Node, within?: ts.Node): string[] {
+    return [...new Set(derivationReads(node, within).map((read) => read.path))];
+}
+
+/**
+ * Whether `amount` is a non-zero numeric literal, or a name that resolves to one.
+ *
+ * The step is often spelled as a named constant, which is the same step by another
+ * name; refusing that would be the guard pinning one spelling. Anything it cannot
+ * resolve to a literal — a computed step, a call — is refused rather than assumed, so
+ * the failure direction is a red on an unfamiliar spelling, never a green on a
+ * standstill.
+ */
+function nonZeroAmount(amount: ts.Expression): boolean {
+    const resolve = (value: ts.Expression, seen: Set<number>): boolean => {
+        if (ts.isNumericLiteral(value)) return Number(value.text) !== 0;
+        if (!ts.isIdentifier(value)) return false;
+        // `const A = B; const B = A;` would otherwise recurse until the stack gives out.
+        if (seen.has(value.getStart())) return false;
+        seen.add(value.getStart());
+        const declaration = declarationToFollow(value.text, value);
+        return declaration?.initializer !== undefined && resolve(declaration.initializer, seen);
     };
-    expand(node);
-    return [...seen];
+    return resolve(amount, new Set<number>());
 }
 
 /** The nearest function `node` sits inside, or undefined at the top level. */
@@ -265,8 +437,7 @@ function advancesBefore(source: ts.SourceFile, name: string, target: ts.Node): b
             ts.isBinaryExpression(node) &&
             node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
             node.left.getText() === name &&
-            ts.isNumericLiteral(node.right) &&
-            Number(node.right.text) !== 0;
+            nonZeroAmount(node.right);
         if (
             (bumps || adds) &&
             scope !== undefined &&
@@ -311,9 +482,8 @@ describe('blank template — throwaway Chromium profiles', () => {
 
         const userDataDir = initializerOf(fixture, 'userDataDir');
         expect(userDataDir !== undefined && ts.isCallExpression(userDataDir)).toBe(true);
-        const segments = (userDataDir as ts.CallExpression).arguments.map((argument) =>
-            argument.getText(),
-        );
+        const args = [...(userDataDir as ts.CallExpression).arguments];
+        const segments = args.map((argument) => argument.getText());
 
         expect(segments[0]).toBe(ROOT_BINDING);
         // A profile must be a directory INSIDE the root, never the root itself: the
@@ -324,29 +494,34 @@ describe('blank template — throwaway Chromium profiles', () => {
         // …and that inner segment has to differ per launch, or two launches share one
         // directory and the same wipe hits a live app. Two launches can collide in two
         // independent ways, so the segment has to carry a differentiator for each.
-        const perLaunch = segments.slice(1);
-        expect(perLaunch).not.toContain(ROOT_BINDING);
+        const perLaunch = args.slice(1);
+        expect(perLaunch.map((argument) => argument.getText())).not.toContain(ROOT_BINDING);
         // One segment today. Asserted so the two arms below, which are measured against
         // it, cannot quietly start describing only part of the name.
         expect(perLaunch).toHaveLength(1);
-        const nameNode = initializerOf(fixture, perLaunch[0] ?? '');
-        expect(nameNode).toBeDefined();
-        const nameScope = enclosingFunction(nameNode!);
+        // The ARGUMENT node, not a name looked back up: the segment is usually a `const`
+        // built above, but inlining that expression here is the same name and must not
+        // read as the segment having vanished.
+        const nameNode = perLaunch[0]!;
+        const nameScope = enclosingFunction(nameNode);
         expect(nameScope).toBeDefined();
 
         // Same process, later launch: the counter separates them. It has to be read
         // INSIDE the function that builds the name — a read hoisted to module scope
         // runs once, at import, and would hand every launch the same count…
-        expect(readsBehind(fixture, nameNode!, nameScope)).toContain(LAUNCH_COUNTER_BINDING);
-        // …and it has to move where it can affect this name: same function, ahead of
-        // it, outside any branch. Sitting still, it names one directory for every launch
-        // in the process and the wipe below lands on a live app's profile.
-        expect(advancesBefore(fixture, LAUNCH_COUNTER_BINDING, nameNode!)).toBe(true);
+        expect(readsBehind(nameNode, nameScope)).toContain(LAUNCH_COUNTER_BINDING);
+        // …and it has to move where it can affect this name: same function, ahead of the
+        // point the value is SAMPLED, outside any branch. Sitting still, it names one
+        // directory for every launch in the process and the wipe below lands on a live
+        // app's profile.
+        const sampledAt = earliestReadOf(LAUNCH_COUNTER_BINDING, nameNode, nameScope);
+        expect(sampledAt).toBeDefined();
+        expect(advancesBefore(fixture, LAUNCH_COUNTER_BINDING, sampledAt!)).toBe(true);
 
         // Different processes, same launch index: the counter cannot help, because it
         // restarts at zero in each worker. Something per-process has to reach the name —
         // and being fixed for the life of the process, it may be read from anywhere.
-        expect(readsBehind(fixture, nameNode!)).toContain(PROCESS_DIFFERENTIATOR);
+        expect(readsBehind(nameNode)).toContain(PROCESS_DIFFERENTIATOR);
     });
 
     it('clears and creates only its own profile directory, never the shared root', async () => {
