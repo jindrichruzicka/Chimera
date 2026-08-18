@@ -26,11 +26,17 @@ import { GAME_TOKENS } from './tokens.js';
  * Which is why the reading goes through the TypeScript AST rather than the text. A
  * bare substring says nothing about the position it is found in: `rmSync` reaching the
  * root, a counter incremented by zero or under an `if`, and a comment naming a value
- * all read the same as the thing itself. Names reached while following a derivation are
- * resolved innermost scope outwards, so a declaration planted at module scope cannot
- * answer for a name the expression binds closer to hand. The two entry points that
- * look a name up cold — `userDataDir`, and the root binding in a `user-data-root`
- * module — are still first-match over the file.
+ * all read the same as the thing itself.
+ *
+ * A NAME says as little on its own. Names are therefore resolved innermost scope
+ * outwards — see {@link statementsOf} for the scoping that walk models and what it
+ * leaves to the handlers that own it — and what the launch counter must satisfy is
+ * stated about the BINDING the name reaches rather than about the spelling: the read
+ * must reach a declaration that outlives a call (see {@link persistentBindingOf}), and
+ * the advance must move that same declaration. Spelling alone would accept a
+ * function-local `let` shadowing the module counter, which mints one directory name
+ * for every launch. The two entry points that look a name up cold — `userDataDir`, and
+ * the root binding in a `user-data-root` module — are still first-match over the file.
  *
  * Where the reading stops, stated rather than left to be discovered: it establishes
  * that a value REACHES the name, never what the value is once it gets there.
@@ -131,6 +137,32 @@ function namesBound(name: ts.BindingName): string[] {
 const OPAQUE = 'opaque';
 type Binding = ts.VariableDeclaration | typeof OPAQUE;
 
+/**
+ * The statements `scope` holds directly, or none if it holds no scope of its own.
+ *
+ * `ts.isBlock` is not the test: a switch's `CaseBlock` and a namespace's `ModuleBlock`
+ * both answer false to it, so keying on `isBlock` alone reports "nothing bound here"
+ * for a `const` declared in either and lets the search walk out to a same-named
+ * declaration further up. `CaseBlock` carries `clauses` rather than statements, and a
+ * switch's clauses share ONE scope — `case 1: const a = …` is visible from `case 2:` —
+ * so they are flattened here rather than read as scopes of their own.
+ *
+ * The walk is an approximation of JavaScript scoping, not an implementation of it. See
+ * `name resolution — the scopes a search stops at` for the answers it is held to. One
+ * divergence is named here because it is the class the two arms above close: a `var`
+ * belongs to the function around it, is not hoisted here, and so a `var` in a nested
+ * block reads as bound in that block while a read elsewhere in the same function walks
+ * past it. Parameters and a `catch` clause's variable are not statements and are
+ * handled where they sit, by {@link bindingFor} and by the caller below.
+ */
+function statementsOf(scope: ts.Node): readonly ts.Statement[] {
+    if (ts.isSourceFile(scope) || ts.isBlock(scope) || ts.isModuleBlock(scope)) {
+        return scope.statements;
+    }
+    if (ts.isCaseBlock(scope)) return scope.clauses.flatMap((clause) => [...clause.statements]);
+    return [];
+}
+
 /** What a scope binds, as `name → the declaration to follow, or {@link OPAQUE}`. */
 function bindingsIn(scope: ts.Node): Map<string, Binding> {
     const bound = new Map<string, Binding>();
@@ -145,8 +177,7 @@ function bindingsIn(scope: ts.Node): Map<string, Binding> {
         }
     };
 
-    const statements = ts.isSourceFile(scope) || ts.isBlock(scope) ? scope.statements : [];
-    for (const statement of statements) {
+    for (const statement of statementsOf(scope)) {
         if (ts.isVariableStatement(statement)) addDeclarations(statement.declarationList);
         else if (
             ts.isForStatement(statement) ||
@@ -161,6 +192,16 @@ function bindingsIn(scope: ts.Node): Map<string, Binding> {
             (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
             statement.name !== undefined
         ) {
+            add(statement.name.text, OPAQUE);
+        } else if (
+            (ts.isEnumDeclaration(statement) || ts.isModuleDeclaration(statement)) &&
+            ts.isIdentifier(statement.name)
+        ) {
+            // Filed as bindings the search must stop at, exactly as a function or class
+            // declaration is. Refusing is the conservative direction: a name reaching
+            // one of these reds rather than answering with a declaration further up.
+            add(statement.name.text, OPAQUE);
+        } else if (ts.isImportEqualsDeclaration(statement)) {
             add(statement.name.text, OPAQUE);
         } else if (ts.isImportDeclaration(statement)) {
             const clause = statement.importClause;
@@ -200,6 +241,40 @@ function bindingFor(name: string, at: ts.Node): Binding | 'parameter' | undefine
         if (declared !== undefined) return declared;
     }
     return undefined;
+}
+
+/**
+ * The declaration `name` resolves to at `at`, when that declaration outlives a call of
+ * `minting` — the function whose every invocation must land on a different directory.
+ * Undefined otherwise.
+ *
+ * A counter has to survive between launches, and every binding introduced INSIDE the
+ * function that mints the name is created afresh on each call: a `let` in its body, a
+ * `let` in a block within it, its own parameter. Each of those mints the same segment
+ * every launch, so the launch's wipe of its own profile directory lands on the previous
+ * launch's LIVE profile — the hazard this file exists to prevent.
+ *
+ * Outliving the call is the property, and MODULE scope is only one way to have it: a
+ * closure factory holding the counter in an enclosing function keeps it across calls
+ * just as well, so requiring module scope specifically would pin a spelling rather than
+ * the rule. Anything with no single declaration behind it — a parameter, an import, a
+ * function name — is refused rather than assumed, so an unfamiliar spelling reds
+ * instead of passing.
+ *
+ * What this establishes is the declaration's POSITION, never that the frame holding it
+ * is shared between launches. A factory whose result is used once — `makeMinter()(…)`
+ * per launch — puts the counter outside the minting function and still restarts it
+ * every time. That sits alongside the other gap the header records rather than closing
+ * it: nothing here evaluates what a value becomes at run time.
+ */
+function persistentBindingOf(
+    name: string,
+    at: ts.Node,
+    minting: ts.Node,
+): ts.VariableDeclaration | undefined {
+    const binding = bindingFor(name, at);
+    if (binding === undefined || binding === 'parameter' || binding === OPAQUE) return undefined;
+    return isInside(binding, minting) ? undefined : binding;
 }
 
 /**
@@ -406,14 +481,17 @@ function branchesAbove(node: ts.Node, scope: ts.Node): boolean {
 }
 
 /**
- * Whether `name` is moved in the same function that builds `target`, ahead of it, and
- * not inside a branch.
+ * Whether `binding` is moved in the same function that builds `target`, ahead of it,
+ * and not inside a branch.
  *
  * Each conjunct answers a way the counter stays put while still reading as a counter,
  * and each was reachable on its own:
  *
  *   - the operator has to move it (`name++`, `++name`, `name += n`);
  *   - the amount has to be non-zero — `name += 0` is an increment by inspection;
+ *   - the moved name has to RESOLVE to that binding, not merely be spelled like it: a
+ *     `let` of the same name in a block alongside soaks up the advance while the name
+ *     is still built from the counter that never moved;
  *   - it has to be in the function that builds the name, not a sibling nobody calls;
  *   - it has to come before the name is built, so the name samples the advanced value.
  *     This is deliberately stricter than uniqueness needs — advancing afterwards still
@@ -425,21 +503,41 @@ function branchesAbove(node: ts.Node, scope: ts.Node): boolean {
  * What this does NOT establish is that the statement is reached on every call — an
  * early `return` above it would still freeze the counter.
  */
-function advancesBefore(source: ts.SourceFile, name: string, target: ts.Node): boolean {
+function advancesBefore(
+    source: ts.SourceFile,
+    binding: ts.VariableDeclaration,
+    target: ts.Node,
+): boolean {
     const scope = enclosingFunction(target);
+    // `bindingsIn` files a destructured declaration as OPAQUE, so a binding reaching
+    // here always names a plain identifier; the fallback refuses rather than assumes.
+    const name = ts.isIdentifier(binding.name) ? binding.name.text : undefined;
+    /** The identifier a `++` or a `+=` writes to, or undefined for anything else. */
+    const movedIdentifier = (node: ts.Node): ts.Identifier | undefined => {
+        const written =
+            (ts.isPostfixUnaryExpression(node) || ts.isPrefixUnaryExpression(node)) &&
+            node.operator === ts.SyntaxKind.PlusPlusToken
+                ? node.operand
+                : ts.isBinaryExpression(node) &&
+                    node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken
+                  ? node.left
+                  : undefined;
+        return written !== undefined && ts.isIdentifier(written) ? written : undefined;
+    };
     let found = false;
     const walk = (node: ts.Node): void => {
+        // The identifier itself rather than its `getText()`: it is resolved below, and
+        // a resolution needs the node the name was read at. The amount is resolved only
+        // once the name matches — `nonZeroAmount` follows declarations, and every `+=`
+        // in the file would otherwise pay for that.
+        const moved = movedIdentifier(node);
         const bumps =
-            (ts.isPostfixUnaryExpression(node) || ts.isPrefixUnaryExpression(node)) &&
-            node.operator === ts.SyntaxKind.PlusPlusToken &&
-            node.operand.getText() === name;
-        const adds =
-            ts.isBinaryExpression(node) &&
-            node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
-            node.left.getText() === name &&
-            nonZeroAmount(node.right);
+            moved !== undefined &&
+            moved.text === name &&
+            bindingFor(moved.text, moved) === binding &&
+            (!ts.isBinaryExpression(node) || nonZeroAmount(node.right));
         if (
-            (bumps || adds) &&
+            bumps &&
             scope !== undefined &&
             enclosingFunction(node) === scope &&
             node.getStart() < target.getStart() &&
@@ -451,6 +549,45 @@ function advancesBefore(source: ts.SourceFile, name: string, target: ts.Node): b
     };
     walk(source);
     return found;
+}
+
+/**
+ * The first thing wrong with how the per-launch counter reaches the name, as an exact
+ * string so a fixture asserts which one rather than a count. Empty is the pass.
+ *
+ * Reporting stops at the first conjunct that fails, because each one is what makes the
+ * next question askable: there is no binding to check until the counter is read, and no
+ * advance to attribute until the binding is known.
+ *
+ * Passing here does not mean two launches get two names — see the header for what this
+ * file reads and where the reading stops.
+ *
+ * `nameNode` is the expression that becomes the per-launch path segment and `nameScope`
+ * the function that builds it — the call whose every invocation must land on a
+ * different directory.
+ */
+function counterProblems(source: ts.SourceFile, nameNode: ts.Node, nameScope: ts.Node): string[] {
+    // It has to be read INSIDE the function that builds the name — a read hoisted to
+    // module scope runs once, at import, and would hand every launch the same count.
+    const sampledAt = earliestReadOf(LAUNCH_COUNTER_BINDING, nameNode, nameScope);
+    if (sampledAt === undefined) {
+        return ['the launch counter is never read while the name is built'];
+    }
+
+    // …and the name it is read under has to reach a binding that survives between
+    // launches, not one minted afresh on every call.
+    const counter = persistentBindingOf(LAUNCH_COUNTER_BINDING, sampledAt, nameScope);
+    if (counter === undefined) {
+        return ['the launch counter resolves to no binding that outlives a call'];
+    }
+
+    // …and THAT binding has to move where it can affect this name: same function, ahead
+    // of the point the value is SAMPLED, outside any branch. Sitting still, it names one
+    // directory for every launch in the process and the launch's own wipe lands on a
+    // live app's profile.
+    return advancesBefore(source, counter, sampledAt)
+        ? []
+        : ['the launch counter is not advanced through that binding before it is read'];
 }
 
 describe('blank template — throwaway Chromium profiles', () => {
@@ -506,17 +643,8 @@ describe('blank template — throwaway Chromium profiles', () => {
         const nameScope = enclosingFunction(nameNode);
         expect(nameScope).toBeDefined();
 
-        // Same process, later launch: the counter separates them. It has to be read
-        // INSIDE the function that builds the name — a read hoisted to module scope
-        // runs once, at import, and would hand every launch the same count…
-        expect(readsBehind(nameNode, nameScope)).toContain(LAUNCH_COUNTER_BINDING);
-        // …and it has to move where it can affect this name: same function, ahead of the
-        // point the value is SAMPLED, outside any branch. Sitting still, it names one
-        // directory for every launch in the process and the wipe below lands on a live
-        // app's profile.
-        const sampledAt = earliestReadOf(LAUNCH_COUNTER_BINDING, nameNode, nameScope);
-        expect(sampledAt).toBeDefined();
-        expect(advancesBefore(fixture, LAUNCH_COUNTER_BINDING, sampledAt!)).toBe(true);
+        // Same process, later launch: the counter separates them.
+        expect(counterProblems(fixture, nameNode, nameScope!)).toEqual([]);
 
         // Different processes, same launch index: the counter cannot help, because it
         // restarts at zero in each worker. Something per-process has to reach the name —
@@ -576,5 +704,322 @@ describe('blank template — throwaway Chromium profiles', () => {
             templateRoot!.join('/').includes(candidate),
         );
         expect(token).toBeDefined();
+    });
+});
+
+/** A synthetic source, parsed the same way the template's files are. */
+const parse = (source: string): ts.SourceFile =>
+    ts.createSourceFile('probe.ts', source, ts.ScriptTarget.Latest, true);
+
+/**
+ * The LAST identifier spelled `name` in the file — the read site a scope fixture asks
+ * about, placed last so the declarations it must resolve against precede it.
+ */
+function lastReadOf(source: ts.SourceFile, name: string): ts.Identifier {
+    let found: ts.Identifier | undefined;
+    const walk = (node: ts.Node): void => {
+        if (ts.isIdentifier(node) && node.text === name) found = node;
+        ts.forEachChild(node, walk);
+    };
+    walk(source);
+    if (found === undefined) throw new Error(`no read of ${name} in the probe`);
+    return found;
+}
+
+describe('name resolution — the scopes a search stops at', () => {
+    it('resolves a name to the declaration in the nearest enclosing block', () => {
+        // Positive control: without it, a resolver that always answered with the
+        // innermost thing it saw would satisfy the fixtures below.
+        const source = parse(
+            [
+                'const target = 1;',
+                'function f() {',
+                '    const target = 2;',
+                '    return target;',
+                '}',
+            ].join('\n'),
+        );
+        const resolved = bindingFor('target', lastReadOf(source, 'target'));
+        expect(resolved).not.toBe(OPAQUE);
+        expect((resolved as ts.VariableDeclaration).initializer?.getText()).toBe('2');
+    });
+
+    it('resolves a const declared in an unbraced switch case, not one outside it', () => {
+        // A `switch`'s clauses share ONE scope, and it is a `CaseBlock` rather than a
+        // `Block` — so a resolver keyed on `Block` answers "not found" here and walks
+        // out to the module declaration of the same name. Declared in the SECOND
+        // clause and read from the third, so what is pinned is the shared scope and
+        // not a clause happening to hold its own — a walk that read only the first
+        // clause would answer with the module declaration here.
+        const source = parse(
+            [
+                'const target = 1;',
+                'function f(a) {',
+                '    switch (a) {',
+                '        case 1:',
+                '            break;',
+                '        case 2:',
+                '            const target = 2;',
+                '            break;',
+                '        case 3:',
+                '            return target;',
+                '    }',
+                '}',
+            ].join('\n'),
+        );
+        const resolved = bindingFor('target', lastReadOf(source, 'target'));
+        expect(resolved).not.toBe(OPAQUE);
+        expect((resolved as ts.VariableDeclaration).initializer?.getText()).toBe('2');
+    });
+
+    it('resolves a const declared in a namespace body, not one outside it', () => {
+        // The same defect in the other spelling: a `ModuleBlock` is not a `Block`.
+        const source = parse(
+            [
+                'const target = 1;',
+                'namespace N {',
+                '    const target = 2;',
+                '    export const used = target;',
+                '}',
+            ].join('\n'),
+        );
+        const resolved = bindingFor('target', lastReadOf(source, 'target'));
+        expect(resolved).not.toBe(OPAQUE);
+        expect((resolved as ts.VariableDeclaration).initializer?.getText()).toBe('2');
+    });
+
+    it('stops at an enum that binds the name rather than reaching past it', () => {
+        // An enum binds a value name. Not stopping here lets the module `const` answer
+        // for a name the function has already taken — the hazard OPAQUE exists for.
+        const source = parse(
+            [
+                'const target = 1;',
+                'function f() {',
+                '    enum target { A }',
+                '    return target;',
+                '}',
+            ].join('\n'),
+        );
+        expect(bindingFor('target', lastReadOf(source, 'target'))).toBe(OPAQUE);
+    });
+
+    it('stops at a namespace that binds the name rather than reaching past it', () => {
+        const source = parse(
+            [
+                'const target = 1;',
+                'function f() {',
+                '    namespace target { export const x = 1; }',
+                '    return target;',
+                '}',
+            ].join('\n'),
+        );
+        expect(bindingFor('target', lastReadOf(source, 'target'))).toBe(OPAQUE);
+    });
+
+    it('stops at an import-equals binding', () => {
+        // The one import form the named/default/namespace arms do not cover.
+        const source = parse(['import target = require("x");'].join('\n'));
+        expect(bindingsIn(source).get('target')).toBe(OPAQUE);
+    });
+});
+
+describe('the launch counter — the checker', () => {
+    /** A probe in the launch fixture's shape; `body` is the function that builds the name. */
+    const probe = (body: string): ts.SourceFile =>
+        parse(
+            [
+                'let userDataLaunchCounter = 0;',
+                'function createFreshE2eUserDataDir(options) {',
+                body,
+                '    const userDataDir = path.join(E2E_USER_DATA_ROOT, dirName);',
+                '    return userDataDir;',
+                '}',
+            ].join('\n'),
+        );
+
+    const BUILDS_THE_NAME =
+        "    const dirName = [process.pid.toString(), userDataLaunchCounter.toString()].join('-');";
+
+    const problemsIn = (source: ts.SourceFile): string[] => {
+        const userDataDir = initializerOf(source, 'userDataDir') as ts.CallExpression;
+        const nameNode = userDataDir.arguments[1]!;
+        return counterProblems(source, nameNode, enclosingFunction(nameNode)!);
+    };
+
+    it('reports nothing for a module counter advanced before the name is built', () => {
+        // Positive control, and the template's own shape.
+        expect(
+            problemsIn(probe(['    userDataLaunchCounter += 1;', BUILDS_THE_NAME].join('\n'))),
+        ).toEqual([]);
+    });
+
+    it('catches a counter that is never read while the name is built', () => {
+        expect(
+            problemsIn(
+                probe(
+                    [
+                        '    userDataLaunchCounter += 1;',
+                        "    const dirName = [process.pid.toString()].join('-');",
+                    ].join('\n'),
+                ),
+            ),
+        ).toEqual(['the launch counter is never read while the name is built']);
+    });
+
+    it('catches a counter that is read but never advanced', () => {
+        expect(problemsIn(probe(BUILDS_THE_NAME))).toEqual([
+            'the launch counter is not advanced through that binding before it is read',
+        ]);
+    });
+
+    it('catches a function-local counter that shadows the module one', () => {
+        // Every launch mints the same segment, so launch 2's wipe of its own profile
+        // directory deletes launch 1's LIVE profile. Both arms match on the spelling
+        // alone, so both accept this: the read is inside the function, the advance is
+        // ahead of it, and neither asks which binding either one reached.
+        expect(
+            problemsIn(
+                probe(
+                    [
+                        '    let userDataLaunchCounter = 0;',
+                        '    userDataLaunchCounter += 1;',
+                        BUILDS_THE_NAME,
+                    ].join('\n'),
+                ),
+            ),
+        ).toEqual(['the launch counter resolves to no binding that outlives a call']);
+    });
+
+    it('catches a counter read once at module scope rather than per launch', () => {
+        // A read hoisted above the function runs once, at import, so every launch
+        // carries the count the module had then. The follow is bounded to the minting
+        // function precisely so this reads as the counter not being sampled here.
+        const source = parse(
+            [
+                'let userDataLaunchCounter = 0;',
+                'const launchTag = userDataLaunchCounter.toString();',
+                'function createFreshE2eUserDataDir(options) {',
+                '    userDataLaunchCounter += 1;',
+                "    const dirName = [process.pid.toString(), launchTag].join('-');",
+                '    const userDataDir = path.join(E2E_USER_DATA_ROOT, dirName);',
+                '    return userDataDir;',
+                '}',
+            ].join('\n'),
+        );
+        expect(problemsIn(source)).toEqual([
+            'the launch counter is never read while the name is built',
+        ]);
+    });
+
+    it('catches a counter handed in as a parameter', () => {
+        // A parameter is minted afresh on every call exactly as a local `let` is, and
+        // it is a binding the resolver answers 'parameter' for rather than "not found".
+        const source = parse(
+            [
+                'let userDataLaunchCounter = 0;',
+                'function createFreshE2eUserDataDir(options, userDataLaunchCounter) {',
+                '    userDataLaunchCounter += 1;',
+                BUILDS_THE_NAME,
+                '    const userDataDir = path.join(E2E_USER_DATA_ROOT, dirName);',
+                '    return userDataDir;',
+                '}',
+            ].join('\n'),
+        );
+        expect(problemsIn(source)).toEqual([
+            'the launch counter resolves to no binding that outlives a call',
+        ]);
+    });
+
+    it('catches a plain assignment in place of an advance', () => {
+        // `= 1` sets the counter to the same value on every call, so every launch mints
+        // one directory name. Only the operator conjunct can see it: the name resolves
+        // to the counter, ahead of the read, in the minting function, under no branch.
+        expect(
+            problemsIn(probe(['    userDataLaunchCounter = 1;', BUILDS_THE_NAME].join('\n'))),
+        ).toEqual(['the launch counter is not advanced through that binding before it is read']);
+    });
+
+    it('catches an advance by zero', () => {
+        // An increment by inspection only. Resolving the amount is what separates it
+        // from a real one.
+        expect(
+            problemsIn(probe(['    userDataLaunchCounter += 0;', BUILDS_THE_NAME].join('\n'))),
+        ).toEqual(['the launch counter is not advanced through that binding before it is read']);
+    });
+
+    it('catches an advance parked below the point the value is sampled', () => {
+        // Distinct names would still come out, but the first launch would carry the
+        // count the module started at — and this is what separates an advance that
+        // precedes the read from one parked below the return.
+        expect(
+            problemsIn(probe([BUILDS_THE_NAME, '    userDataLaunchCounter += 1;'].join('\n'))),
+        ).toEqual(['the launch counter is not advanced through that binding before it is read']);
+    });
+
+    it('catches an advance that only runs some of the time', () => {
+        // Under an `if`, two launches taking the false branch mint one directory name.
+        expect(
+            problemsIn(
+                probe(
+                    ['    if (options.port) userDataLaunchCounter += 1;', BUILDS_THE_NAME].join(
+                        '\n',
+                    ),
+                ),
+            ),
+        ).toEqual(['the launch counter is not advanced through that binding before it is read']);
+    });
+
+    it('catches an advance sitting in a function nobody on this path calls', () => {
+        // Same module binding, moved somewhere the minting call never reaches.
+        const source = parse(
+            [
+                'let userDataLaunchCounter = 0;',
+                'function unrelated() { userDataLaunchCounter += 1; }',
+                'function createFreshE2eUserDataDir(options) {',
+                BUILDS_THE_NAME,
+                '    const userDataDir = path.join(E2E_USER_DATA_ROOT, dirName);',
+                '    return userDataDir;',
+                '}',
+            ].join('\n'),
+        );
+        expect(problemsIn(source)).toEqual([
+            'the launch counter is not advanced through that binding before it is read',
+        ]);
+    });
+
+    it('catches an advance that moves a different binding of the same name', () => {
+        // The read reaches the module counter and the advance moves a block-local one,
+        // so the counter the name is built from never moves. Requiring the binding to
+        // outlive a call cannot see this: the READ resolves correctly.
+        expect(
+            problemsIn(
+                probe(
+                    [
+                        '    { let userDataLaunchCounter = 0; userDataLaunchCounter += 1; }',
+                        BUILDS_THE_NAME,
+                    ].join('\n'),
+                ),
+            ),
+        ).toEqual(['the launch counter is not advanced through that binding before it is read']);
+    });
+
+    it('accepts a counter held by an enclosing function rather than the module', () => {
+        // The property is that the binding OUTLIVES a call, not that it sits at module
+        // scope: a closure factory keeps the counter across calls just as well, and
+        // refusing it would pin one spelling of the rule.
+        const source = parse(
+            [
+                'function makeMinter() {',
+                '    let userDataLaunchCounter = 0;',
+                '    return function createFreshE2eUserDataDir(options) {',
+                '        userDataLaunchCounter += 1;',
+                BUILDS_THE_NAME,
+                '        const userDataDir = path.join(E2E_USER_DATA_ROOT, dirName);',
+                '        return userDataDir;',
+                '    };',
+                '}',
+            ].join('\n'),
+        );
+        expect(problemsIn(source)).toEqual([]);
     });
 });
