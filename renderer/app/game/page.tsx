@@ -11,7 +11,7 @@
 // Module boundary tree: renderer/app/game/page.tsx # Thin shell: mounts GameShell
 //
 // Invariants upheld:
-//   #1  — Only PlayerSnapshot (never GameSnapshot) is consumed here.
+//   #3  — Only PlayerSnapshot (never GameSnapshot) is consumed here.
 //   #48 — GameShell is game-agnostic; this route delegates game-specific
 //          registry resolution to renderer/game/rendererGameRegistry.
 //   #80 — GameShell never imports from apps/*; the registry is passed as data.

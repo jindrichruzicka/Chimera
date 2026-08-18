@@ -324,7 +324,7 @@ Do **not** mix a body-level `registerExtension()` call and `import './api.js'` i
 
 ## Key Invariants
 
-- **Invariant #1** — `GameSnapshot` never leaves the main process. Only `PlayerSnapshot` crosses boundaries.
+- **Invariant #3** — `GameSnapshot` never leaves the main process. Only `PlayerSnapshot` crosses boundaries.
 - **Invariant #5** — All IPC methods are declared in `ipc-handlers.ts` and exposed only through `preload/api.ts`.
 - **Invariant #6** — Network messages are validated before they touch the simulation.
 - **Invariant #79** — Extensions registry is frozen before `contextBridge.exposeInMainWorld`.

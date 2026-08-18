@@ -397,8 +397,8 @@ export default MoveEntityAction;
 
 ## Key Invariants
 
-- **Invariant #1** — `GameSnapshot` never leaves main process; only `PlayerSnapshot` crosses boundaries.
-- **Invariant #2** — `simulation/` has zero runtime dependencies on React, DOM, or networking.
+- **Invariant #1** — `simulation/` has zero runtime dependencies on React, DOM, or networking.
+- **Invariant #3** — `GameSnapshot` never leaves main process; only `PlayerSnapshot` crosses boundaries.
 - **Invariant #7** — `engine:undo` and `engine:redo` go through the normal `ActionPipeline`; no side-door.
 - **Invariant #10** — All game action types are registered in `ActionRegistry` before tick loop starts.
 - **Invariant #11** — The `engine:` namespace is reserved; games must not use it.

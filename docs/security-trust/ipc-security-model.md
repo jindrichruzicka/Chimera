@@ -61,15 +61,14 @@ When adding or modifying a namespace, follow all six steps:
 
 ## Relevant Invariants
 
-| #       | Rule                                                                                         |
-| ------- | -------------------------------------------------------------------------------------------- |
-| #1      | `GameSnapshot` never leaves the host's main process.                                         |
-| #3      | `GameSnapshot` never crosses any process or network boundary.                                |
-| #4      | The renderer reads state; it never writes state directly.                                    |
-| #5      | All IPC methods are declared in `ipc-handlers.ts` and exposed only through `preload/api.ts`. |
-| #6      | Network messages are validated before they touch the simulation.                             |
-| #27–#29 | Debug namespace is absent in production; `webContents.id` validated on every debug IPC call. |
-| #95     | `getCurrentSnapshot()` is read-only and returns only `PlayerSnapshot / null`.                |
+| #       | Rule                                                                                                                                     |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| #3      | `GameSnapshot` never leaves the host's main process; `PlayerSnapshot` is the only state type that crosses a process or network boundary. |
+| #4      | The renderer reads state; it never writes state directly.                                                                                |
+| #5      | All IPC methods are declared in `ipc-handlers.ts` and exposed only through `preload/api.ts`.                                             |
+| #6      | Network messages are validated before they touch the simulation.                                                                         |
+| #27–#29 | Debug namespace is absent in production; `webContents.id` validated on every debug IPC call.                                             |
+| #95     | `getCurrentSnapshot()` is read-only and returns only `PlayerSnapshot / null`.                                                            |
 
 ---
 
