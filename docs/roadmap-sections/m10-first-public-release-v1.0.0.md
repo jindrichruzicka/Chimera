@@ -816,8 +816,8 @@ player needs to register that anything was shown — a spinner that flashes for 
 worse UX than no spinner at all. F90 adds one optional registry knob,
 `GameScreenRegistry.loadingScreenMinVisibleMs`: once a cover has actually been shown, it
 stays on screen at least that long; a load that outlives the minimum changes nothing.
-Absent or `0` keeps today's behaviour byte-for-byte — no timer is armed at all, not a
-`setTimeout(0)` whose flush would reorder the reveal.
+Absent or `0` arms no hold — not even a `setTimeout(0)` whose flush would reorder the
+reveal.
 
 **The knob is a minimum VISIBLE time, not a minimum wait, and visibility is the arming
 condition.** The hold arms only at the moment a cover the player can actually see renders:
@@ -829,15 +829,37 @@ empty placeholder, and it never arms on a cover nobody sees: on the faded lobby�
 entry the app-level screen-fade scrim paints OVER the route cover — `AppShell` wraps every
 route's content in its own `z-index: var(--ch-z-raised)` stacking context, so the cover's
 `--ch-z-loading-hud` is local to that context while the scrim is a sibling at
-`--ch-z-screen-fade` — which means the player watches the scrim, not the cover, and a
-mount-stamped hold would extend a black screen. The route arm therefore stamps `shown`
-only where the cover is actually visible — a direct `/game` boot with no opaque scrim, and
-`/replays/player`, whose entry has no fade at all — and the faded entry path stays
-byte-identical to today. One visual wait gets one clock: a hold never arms for a cover
+`--ch-z-screen-fade` — which means the player watches the scrim, not the cover, for as
+long as the scrim is there, and a mount-stamped hold would extend a black screen. The
+route arm therefore stamps `shown` only where the cover is actually visible — a direct
+`/game` boot with no opaque scrim, `/replays/player`, whose entry has no fade at all, and
+(since the reveal grace below) a faded `/game` entry from the moment it clears its own
+scrim. One visual wait gets one clock: a hold never arms for a cover
 occluded by the scrim or by another cover layer, so stacked surfaces cannot chain two
 minimums onto one wait. The `restoreWaiting` widening is untouched: a save-restore parked
 on `/game` must surface its abortable overlay, and a cosmetic hold does not get to delay a
 modal the player has to see.
+
+**Amended after RC testing: the faded entry now reaches that arming condition instead of
+being excluded from it.** As shipped, F90's guard was correct and its consequence was that
+`loadingScreen` and `loadingScreenMinVisibleMs` were structurally inert on lobby→game — the
+only path a player takes into a match — because the fade-in that clears the entry scrim was
+itself gated on the reveal, so the scrim stayed opaque for the whole wait and `shown` never
+rose. Measured on 1.0.0-rc.7 with a scaffolded game declaring `'spinner'` and a 2000 ms
+minimum: the cover mounted, dropped 476 ms later at the settle, and the scrim read opacity 1
+at every sample across its life. The fix does not remove the guard — a mount-stamped hold
+really would extend a black screen. It decides visibility on how long the wait turns out to
+be: `ROUTE_COVER_REVEAL_GRACE_MS` (350 ms, `renderer/assets/criticalAssetPreload.ts`) runs a
+fixed timer over a wait spent under an opaque scrim, and if the wait is still going when it
+fires the route eases its own scrim off — the entry's one fade-in, brought forward — and the
+floor stamps from that clear. A wait that settles first still pays nothing the player can
+see: the scrim stays black, the cover is dropped unseen, and the entry spends its one
+fade-in at the reveal exactly as before. The minimum is what opts an entry in, so a declared cover
+with no declared minimum stays on the unchanged path, and since the floor itself collapses
+under `NEXT_PUBLIC_CHIMERA_E2E` the grace is disarmed there by its own arming condition, so
+the unit suites are what carry it. A cover the player saw then
+leaves on a fade over the scene beneath it rather than a cut, which costs one fade instead
+of returning through black for two.
 
 **Nothing host-visible moves, by construction rather than by discipline.** The
 scene-transition arm dispatches `engine:scene_ready`, and the host barrier waits for every

@@ -43,10 +43,11 @@ function ReportingCover(props: GameLoadingScreenProps): React.ReactElement {
 function renderCover(
     registry: GameScreenRegistry,
     snapshot: PlayerSnapshot,
+    exit: { exiting?: boolean; exitMs?: number } = {},
 ): ReturnType<typeof render> {
     return render(
         <I18nProvider>
-            <RouteEntryLoadingCover registry={registry} snapshot={snapshot} />
+            <RouteEntryLoadingCover registry={registry} snapshot={snapshot} {...exit} />
         </I18nProvider>,
     );
 }
@@ -125,6 +126,44 @@ describe('RouteEntryLoadingCover', () => {
 
         const layer = screen.getByTestId('route-entry-loading-cover');
         expect(layer.style[property as unknown as number]).toBe(value);
+    });
+
+    // The exit ramp (§4.36). The transition is declared for the cover's whole
+    // life, not only while it is leaving, so the ramp is one property change
+    // against a declaration the rendered style already carries.
+    it('declares the exit transition while the cover is still up', () => {
+        renderCover(makeRegistry(), makeSnapshot(), { exitMs: 200 });
+
+        const layer = screen.getByTestId('route-entry-loading-cover');
+        expect(layer.style.transition).toBe('opacity 200ms var(--ch-easing-standard)');
+        expect(layer.style.opacity).toBe('');
+    });
+
+    it('drives opacity to 0 while exiting', () => {
+        renderCover(makeRegistry(), makeSnapshot(), { exiting: true, exitMs: 200 });
+
+        const layer = screen.getByTestId('route-entry-loading-cover');
+        expect(layer.style.opacity).toBe('0');
+        expect(layer.style.transition).toBe('opacity 200ms var(--ch-easing-standard)');
+    });
+
+    it.each([
+        ['no exit props at all', {}],
+        ['an exitMs of 0 — the e2e and reduced-motion value', { exitMs: 0 }],
+    ])('writes neither transition nor opacity for %s', (_name, exit) => {
+        renderCover(makeRegistry(), makeSnapshot(), exit);
+
+        const layer = screen.getByTestId('route-entry-loading-cover');
+        expect(layer.style.transition).toBe('');
+        expect(layer.style.opacity).toBe('');
+    });
+
+    it('still hides an exiting cover when the duration is inert', () => {
+        // A caller that flips `exiting` with no usable duration gets the cut,
+        // never a cover left standing at full opacity above every modal.
+        renderCover(makeRegistry(), makeSnapshot(), { exiting: true, exitMs: 0 });
+
+        expect(screen.getByTestId('route-entry-loading-cover').style.opacity).toBe('0');
     });
 });
 

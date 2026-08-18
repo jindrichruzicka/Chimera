@@ -264,6 +264,8 @@ chimera/
 │   │   │   ├── resolveLoadingScreen.ts   # loadingScreens[key] ?? loadingScreen cascade; see §4.36
 │   │   │   ├── loadingCoverHold.ts  # Resolves loadingScreenMinVisibleMs into the hold consumers arm; e2e-collapsed at call time; see §4.36
 │   │   │   ├── useMinimumVisibleHold.ts  # Delayed-release latch: a shown cover stays up at least holdMs; see §4.36
+│   │   │   ├── useRouteCoverRevealGrace.ts  # Fixed timer after which a route entry still waiting on black reveals its cover; see §4.36
+│   │   │   ├── useCoverExitRamp.ts  # Keeps a cover the player saw mounted for its fade-out over the scene; see §4.36
 │   │   │   ├── useFadeTransition.ts # Drives the fade around a scene transition and acks scene_ready; see §4.18
 │   │   │   ├── scenePreload.ts      # Budgeted, fail-open warm-up of a scene's requiredAssets; see §4.10
 │   │   │   └── FadeContext.ts       # Re-export of the shell fade context for scene-local consumers

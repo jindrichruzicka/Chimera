@@ -37,8 +37,10 @@ import {
     isRouteCoverGameDeclared,
     RouteEntryLoadingCover,
 } from '../../../components/scene/RouteEntryLoadingCover';
+import { useCoverExitRamp } from '../../../components/scene/useCoverExitRamp.js';
 import { useMinimumVisibleHold } from '../../../components/scene/useMinimumVisibleHold.js';
 import { GameShell } from '../../../components/shell/GameShell';
+import { screenFadeMs } from '../../../components/shell/screenFadeDuration';
 import { ReplayControls } from '../../../components/replay/ReplayControls';
 import { parseReplayKind } from '../../../components/replay/replayKind';
 import { loadRendererGame, type LoadedRendererGame } from '../../../game/rendererGameRegistry';
@@ -346,6 +348,15 @@ function ReplayPlayerView(): React.ReactElement {
     // still only for a game-declared cover form; the engine placeholder and the
     // 'none' opt-out keep the latch structurally inert. Only the COVER waits
     // out the remainder: `isReady` below is never widened by the hold.
+    //
+    // Deliberately WITHOUT /game's `scrimOpaque` conjunct and the reveal grace
+    // that makes it recoverable. Adding the conjunct alone would silently stop
+    // flooring a cover the moment some future path arrived here on black; adding
+    // the grace with it would put a `fadeIn` on a route that owns no fade, where
+    // it could cancel the fade-out `GameStoreBootstrap` runs when a replay's
+    // Leave broadcasts a lobby snapshot — and a cancelled fade resolves its
+    // promise early, so the navigation would land mid-ramp. Both halves belong
+    // to whoever gives this route an entry fade.
     const registry = loadedGame?.registry;
     const coverHoldMs = registry === undefined ? 0 : resolveLoadingCoverHoldMs(registry);
     const routeCoverDeclared =
@@ -358,12 +369,29 @@ function ReplayPlayerView(): React.ReactElement {
         !criticalAssets.ready &&
         routeCoverDeclared;
     const coverHeld = useMinimumVisibleHold(coverShown, coverHoldMs);
-    // This route cover's mounted window, threaded to SceneRouter (which cannot
-    // see this page-local state) as occlusion — but only when the cover renders
-    // a game-declared form; the engine placeholder is an empty transparent
-    // layer that occludes nothing.
     const routeCoverUp = !(criticalAssets.ready && !coverHeld);
-    const sceneCoverOccluded = routeCoverUp && routeCoverDeclared;
+    // A cover the player saw leaves on a fade over the replay already rendering
+    // beneath it, the same exit /game gives its own (§4.36). Collapses to a cut
+    // under the e2e flag and under reduced motion, where `screenFadeMs()` is 0.
+    //
+    // Read at render because the ramp arms on the render that RELEASES the
+    // cover, where no "is a cover up" term is true any more. `screenFadeMs()`
+    // allocates a MediaQueryList per call, so the term short-circuits wherever
+    // no cover can be involved. Kept as the simpler of the two, the alternative
+    // being a duration the hook pulls through a callback at the one render that
+    // needs it.
+    const coverExitMs = routeCoverDeclared ? screenFadeMs() : 0;
+    const { mounted: coverMounted, exiting: coverExiting } = useCoverExitRamp(
+        routeCoverUp,
+        coverShown,
+        coverExitMs,
+    );
+    // This route cover's mounted window, threaded to SceneRouter (which cannot
+    // see this page-local state) as occlusion — the exit ramp included, since a
+    // cover still painting is still something above the shell's own covers —
+    // but only when the cover renders a game-declared form; the engine
+    // placeholder is an empty transparent layer that occludes nothing.
+    const sceneCoverOccluded = coverMounted && routeCoverDeclared;
 
     const handlePlay = React.useCallback(() => {
         setIsPlaying(true);
@@ -507,8 +535,13 @@ function ReplayPlayerView(): React.ReactElement {
                  * the cover spans the recorded frame and leaves the transport
                  * controls above it reachable.
                  */}
-                {routeCoverUp ? (
-                    <RouteEntryLoadingCover registry={loadedGame.registry} snapshot={snapshot} />
+                {coverMounted ? (
+                    <RouteEntryLoadingCover
+                        registry={loadedGame.registry}
+                        snapshot={snapshot}
+                        {...(coverExitMs > 0 ? { exitMs: coverExitMs } : {})}
+                        {...(coverExiting ? { exiting: true } : {})}
+                    />
                 ) : null}
             </div>
         </main>

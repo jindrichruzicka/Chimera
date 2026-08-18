@@ -35,6 +35,20 @@ export interface RouteEntryLoadingCoverProps {
     readonly registry: GameScreenRegistry;
     /** The snapshot the route mounted its shell with; the scene being entered. */
     readonly snapshot: PlayerSnapshot;
+    /**
+     * Fade this cover out rather than showing it: set while its exit ramp runs
+     * (§4.36). The caller unmounts the cover when the ramp ends.
+     */
+    readonly exiting?: boolean;
+    /**
+     * How long that ramp lasts, in milliseconds — `screenFadeMs()` at the call
+     * sites, so it is `0` under the e2e flag and under reduced motion.
+     *
+     * Supplied for the cover's whole life, not only while `exiting`, so the
+     * ramp is one property change against a declaration already in the
+     * rendered style. `exiting` then moves opacity and nothing else.
+     */
+    readonly exitMs?: number;
 }
 
 /** The scene and screen key this cover stands in for — the route's own cascade. */
@@ -90,11 +104,23 @@ const coverLayerStyle: CSSProperties = {
 export function RouteEntryLoadingCover({
     registry,
     snapshot,
+    exiting,
+    exitMs,
 }: RouteEntryLoadingCoverProps): React.ReactElement {
     const { sceneId, screenKey } = resolveRouteCoverTarget(registry, snapshot);
+    // Composed rather than mutated: with neither exit prop supplied it carries
+    // exactly the layer object's properties and nothing more, so a caller that
+    // never fades renders what it rendered before these props existed.
+    const layerStyle: CSSProperties = {
+        ...coverLayerStyle,
+        ...(exitMs === undefined || !(exitMs > 0)
+            ? {}
+            : { transition: `opacity ${exitMs}ms var(--ch-easing-standard)` }),
+        ...(exiting === true ? { opacity: 0 } : {}),
+    };
 
     return (
-        <div data-testid="route-entry-loading-cover" style={coverLayerStyle}>
+        <div data-testid="route-entry-loading-cover" style={layerStyle}>
             <SceneLoadingFallback
                 registry={registry}
                 screenKey={screenKey}

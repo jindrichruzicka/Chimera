@@ -29,8 +29,12 @@ import type { AssetManifest } from '@chimera-engine/simulation/content/AssetMani
 import type { AssetRef, TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import { buildAssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
 import type { AssetManager } from '../../assets/AssetManager';
-import { CRITICAL_ASSET_PRELOAD_BUDGET_MS } from '../../assets/criticalAssetPreload.js';
+import {
+    CRITICAL_ASSET_PRELOAD_BUDGET_MS,
+    ROUTE_COVER_REVEAL_GRACE_MS,
+} from '../../assets/criticalAssetPreload.js';
 import { FadeContext, type FadeControl } from '../../components/shell/FadeContext';
+import { SCREEN_FADE_FAST_MS } from '../../components/shell/screenFadeDuration';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { useUiStore } from '../../state/uiStore';
 import GamePage from './page';
@@ -583,8 +587,14 @@ describe('GamePage minimum-visible hold', () => {
         await act(async () => {
             await vi.advanceTimersByTimeAsync(1);
         });
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
         expect(fadeIn).toHaveBeenCalledTimes(1);
+        // Released — and this cover was visible for its whole life (the scrim
+        // this case pins at 0), so it leaves on its exit ramp rather than a cut.
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
+        });
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
 
         // The latch is preserved across the held release: later renders never
         // fire a second fade-in.
@@ -601,18 +611,25 @@ describe('GamePage minimum-visible hold', () => {
         });
         await settlePreload();
 
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        // Nothing is DEFERRED: the fade-in is released with the settle, and the
+        // cover only outlives it for its exit ramp.
         expect(fadeIn).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
+        });
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
     });
 
-    it('arms no hold on the faded entry — an occluded cover extends nothing', async () => {
+    it('arms no hold on a faded entry younger than the reveal grace', async () => {
         // The lobby→game hop: the app scrim is opaque OVER the route subtree,
         // so the cover, though mounted, is not something the player has seen. A
-        // mount-stamped hold here extends a black screen.
+        // mount-stamped hold here extends a black screen. Scoped to the window
+        // before the grace deliberately — past it the route clears its own
+        // scrim and the cover IS floored, which the grace describe below owns.
         await mountUnderFakeTimers(makeFade(1));
 
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
+            await vi.advanceTimersByTimeAsync(ROUTE_COVER_REVEAL_GRACE_MS - 1);
         });
         await settlePreload();
 
@@ -666,6 +683,13 @@ describe('GamePage minimum-visible hold', () => {
         await act(async () => {
             await vi.advanceTimersByTimeAsync(HOLD_MS);
         });
+        // The cover is on its exit ramp, still painting: the inner router must
+        // not surface a held layer under it yet.
+        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
+        });
         expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('false');
     });
 
@@ -714,5 +738,279 @@ describe('GamePage minimum-visible hold', () => {
         // would hide the only control that can abort the restore.
         expect(fadeIn).toHaveBeenCalledTimes(1);
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+    });
+});
+
+// ── Reveal grace (ROUTE_COVER_REVEAL_GRACE_MS) ─────────────────────────────────
+
+/**
+ * A fade double whose `fadeIn` actually clears the scrim, so `scrimOpaque` can
+ * fall the way it does in the app. `makeFade` above is a fixed reading and
+ * cannot: the route's own fade-in is what falsifies its arming condition.
+ *
+ * The clear is instant rather than ramped. Nothing the route reads distinguishes
+ * the two — the floor stamps when the scrim stops being fully opaque, which is
+ * the ramp's first frame either way — and an instant clear keeps these cases off
+ * the animation-frame clock.
+ */
+function StatefulFadeGame({ initialOpacity }: { initialOpacity: number }): React.ReactElement {
+    const [opacity, setOpacity] = React.useState(initialOpacity);
+    const control = React.useMemo<FadeControl>(
+        () => ({
+            phase: opacity >= 1 ? 'hold' : 'idle',
+            opacity,
+            setPhase: vi.fn(),
+            fadeOut: async (durationMs?: number): Promise<void> => {
+                fadeOut(durationMs);
+                setOpacity(1);
+            },
+            fadeIn: async (durationMs?: number): Promise<void> => {
+                fadeIn(durationMs);
+                setOpacity(0);
+            },
+        }),
+        [opacity],
+    );
+
+    return (
+        <I18nProvider>
+            <FadeContext.Provider value={control}>
+                <GamePage />
+            </FadeContext.Provider>
+        </I18nProvider>
+    );
+}
+
+async function mountFadedEntry(initialOpacity = 1): Promise<ReturnType<typeof render>> {
+    const view = render(<StatefulFadeGame initialOpacity={initialOpacity} />);
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByTestId('mock-game-shell')).toBeInTheDocument();
+    expect(harness.preloadCritical).toHaveBeenCalled();
+    return view;
+}
+
+async function advance(ms: number): Promise<void> {
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+    });
+}
+
+describe('GamePage route-cover reveal grace', () => {
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+        installHoldRegistry();
+    });
+
+    it('holds the entry scrim over the mounted cover until the grace elapses', async () => {
+        await mountFadedEntry();
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS - 1);
+
+        expect(fadeIn).not.toHaveBeenCalled();
+        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
+    });
+
+    it('clears the scrim at the grace and floors the cover from that moment', async () => {
+        await mountFadedEntry();
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS - 1);
+        expect(fadeIn).not.toHaveBeenCalled();
+
+        await advance(1);
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+
+        // The gate settles the instant the cover becomes visible: the floor is
+        // stamped from the scrim clear, so the whole minimum is still owed.
+        await settlePreload();
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await advance(HOLD_MS - 1);
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await advance(1);
+        // Released — and now on its exit ramp rather than cut.
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+        await advance(SCREEN_FADE_FAST_MS);
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+    });
+
+    it('fires exactly one fade-in for the entry — the grace one, none at the reveal', async () => {
+        await mountFadedEntry();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS);
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+
+        await settlePreload();
+        await advance(HOLD_MS);
+        await advance(SCREEN_FADE_FAST_MS);
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('fires one fade-in when the settle and the grace land in the same commit', async () => {
+        // The two effects are declared reveal-first, so a commit that rises
+        // both must find the latch already taken by the time the grace effect
+        // runs. Nothing else in this file drives both into one flush.
+        await mountFadedEntry();
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS - 1);
+        expect(fadeIn).not.toHaveBeenCalled();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1);
+            harness.settle('resolve');
+            await Promise.resolve();
+        });
+
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('reveals the cover on a wait that never settles at all', async () => {
+        // The grace timer reads nothing but the clock, so a critical ref that
+        // never resolves cannot leave the entry on black until the 8 s budget.
+        await mountFadedEntry();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS);
+
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+        expect(harness.preloadCritical).toHaveBeenCalledTimes(1);
+    });
+
+    it('arms no grace on an entry whose scrim was never opaque', async () => {
+        // A direct /game boot starts transparent, so its cover is visible from
+        // mount and the floor already stamps there. The grace times a wait spent
+        // on BLACK: arming it here would fade in over an entry that never faded
+        // out, and burn the entry's one fade-in on a no-op.
+        await mountFadedEntry(0);
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
+
+        expect(fadeIn).not.toHaveBeenCalled();
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+    });
+
+    it('arms no grace for a declared cover with no declared minimum', async () => {
+        // The knob that floors a shown cover is what opts the entry into
+        // showing one: without it, revealing could flash a cover with nothing
+        // holding it up.
+        loadRendererGameMock.mockResolvedValue({
+            registry: makeRegistry({
+                sceneDefaultScreens: { 'engine:game': 'playfield' },
+                loadingScreen: 'spinner',
+            }),
+            assetManifest: manifestWithCritical(),
+        });
+        await mountFadedEntry();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
+
+        expect(fadeIn).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['the engine placeholder (no declared cover)', { loadingScreen: undefined }],
+        ["the per-key 'none' opt-out", { loadingScreens: { playfield: 'none' } } as const],
+    ])('arms no grace when the cascade resolves %s', async (_name, overrides) => {
+        installHoldRegistry(overrides as Partial<GameScreenRegistry>);
+        await mountFadedEntry();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
+
+        expect(fadeIn).not.toHaveBeenCalled();
+    });
+
+    it('leaves the scrim alone for a leave that started before the grace elapsed', async () => {
+        mockLeavingToMainMenu = true;
+        await mountFadedEntry();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
+
+        // The leave owns the black it is fading through; a reveal here would
+        // undo the fade-out the leave just performed.
+        expect(fadeIn).not.toHaveBeenCalled();
+    });
+
+    it("leaves the scrim alone while a phase:'lobby' snapshot is returning the route", async () => {
+        mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
+        await mountFadedEntry();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
+
+        expect(fadeIn).not.toHaveBeenCalled();
+    });
+
+    it('a waiting restore releases the reveal before the grace can run', async () => {
+        mockRestore = { state: 'waiting' };
+        await mountFadedEntry();
+
+        // The abortable overlay sits UNDER the cover: the reveal is released at
+        // once, and the cover is cut rather than ramped so nothing fades over it.
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops a cover the scrim hid for its whole life without a ramp', async () => {
+        // The warm entry, unchanged: settled well inside the grace, so the
+        // cover was never seen and there is nothing to fade out of.
+        await mountFadedEntry();
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS - 100);
+        await settlePreload();
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps sceneCoverOccluded true across the whole exit ramp', async () => {
+        // The inner router must not surface a held layer under a cover that is
+        // still painting, however faintly.
+        await mountFadedEntry();
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS);
+        await settlePreload();
+        // Before the release the cover is opaque, and already carries the
+        // transition it will need: the ramp is one property change against a
+        // declaration the rendered style already has.
+        const shownCover = screen.getByTestId('route-entry-loading-cover');
+        expect(shownCover.style.opacity).toBe('');
+        expect(shownCover.style.transition).toBe(
+            `opacity ${SCREEN_FADE_FAST_MS}ms var(--ch-easing-standard)`,
+        );
+
+        await advance(HOLD_MS);
+
+        // Released: still mounted, now driven to transparent over the scene.
+        expect(screen.getByTestId('route-entry-loading-cover').style.opacity).toBe('0');
+        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
+
+        await advance(SCREEN_FADE_FAST_MS);
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('false');
+    });
+
+    it('the e2e flag disarms the grace through the floor it arms on', async () => {
+        // The join, not either half: the flag collapses the minimum to 0, which
+        // fails `coverWaitUnseen`'s floor conjunct, so no grace fires. Measured
+        // on a wait deliberately left PENDING past the grace — asserting only
+        // after a settle cannot tell an armed grace from a disarmed one, since
+        // both end with one fade-in and no cover.
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+        await mountFadedEntry();
+
+        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
+        expect(fadeIn).not.toHaveBeenCalled();
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await settlePreload();
+
+        // And the cut, not the ramp: `screenFadeMs()` is 0 under the same flag.
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(fadeIn).toHaveBeenCalledTimes(1);
     });
 });

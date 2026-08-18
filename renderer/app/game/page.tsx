@@ -24,7 +24,10 @@ import {
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { isSceneTransitionCompletionAction } from '@chimera-engine/simulation/foundation/scene-lifecycle.js';
-import { useCriticalAssetPreloadGate } from '../../assets/criticalAssetPreload.js';
+import {
+    ROUTE_COVER_REVEAL_GRACE_MS,
+    useCriticalAssetPreloadGate,
+} from '../../assets/criticalAssetPreload.js';
 import { useOptionalFade } from '../../components/shell/FadeContext';
 import { screenFadeMs } from '../../components/shell/screenFadeDuration';
 import { GameShell } from '../../components/shell/GameShell';
@@ -33,7 +36,9 @@ import {
     isRouteCoverGameDeclared,
     RouteEntryLoadingCover,
 } from '../../components/scene/RouteEntryLoadingCover';
+import { useCoverExitRamp } from '../../components/scene/useCoverExitRamp.js';
 import { useMinimumVisibleHold } from '../../components/scene/useMinimumVisibleHold.js';
+import { useRouteCoverRevealGrace } from '../../components/scene/useRouteCoverRevealGrace.js';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
 import { useRendererGameAssetManager } from '../gameAssetSession.js';
@@ -295,23 +300,60 @@ export default function GamePage(): React.ReactElement | null {
     // mount-stamped hold would extend a black screen. So `shown` rises only for
     // a cover that is mounted, resolves a game-declared form, and is not under
     // an opaque scrim; every other path keeps a structurally inert latch.
+    //
+    // What makes that reachable on the faded entry is the grace below: the
+    // route clears its OWN scrim once the wait has proved long, rather than the
+    // reveal being the only thing that ever clears it.
     const registry = loadedGame?.registry;
     const coverHoldMs = registry === undefined ? 0 : resolveLoadingCoverHoldMs(registry);
     const scrimOpaque = fade !== null && fade.opacity >= 1;
     const routeCoverDeclared =
         registry !== undefined && snapshot !== null && isRouteCoverGameDeclared(registry, snapshot);
+    // The wait the player is spending on black: the shell is mounted, the gate
+    // has not settled, the cascade resolves a cover the game declared, a floor
+    // is declared to keep that cover up once shown — the knob that floors a
+    // shown cover is what opts an entry into showing one — and the entry scrim
+    // is still painting over all of it.
+    const coverWaitUnseen =
+        shellReady && !sceneReady && routeCoverDeclared && coverHoldMs > 0 && scrimOpaque;
+    const coverRevealRequested = useRouteCoverRevealGrace(
+        coverWaitUnseen,
+        ROUTE_COVER_REVEAL_GRACE_MS,
+    );
     const coverShown = shellReady && !sceneReady && routeCoverDeclared && !scrimOpaque;
     const coverHeld = useMinimumVisibleHold(coverShown, coverHoldMs);
     // The reveal waits for max(gate settle, shown + minimum) — except a waiting
     // restore, whose abortable overlay sits UNDER the cover and must surface
     // immediately (the same reason it widens `sceneReady` above).
     const revealReady = sceneReady && (!coverHeld || restoreWaiting);
+    // A cover the player saw leaves on a fade over the scene already rendering
+    // beneath it, which costs one fade instead of returning through black for
+    // two. A waiting restore takes the cut instead: the overlay that aborts it
+    // is below the cover, and "immediately" is the whole point of that release.
+    //
+    // Read at render because the ramp arms on the render that RELEASES the
+    // cover, where no "is a cover up" term is true any more. `screenFadeMs()`
+    // allocates a MediaQueryList per call, so the term short-circuits wherever
+    // no cover can be involved. Kept as the simpler of the two, the alternative
+    // being a duration the hook pulls through a callback at the one render that
+    // needs it.
+    const coverExitMs = restoreWaiting || !routeCoverDeclared ? 0 : screenFadeMs();
+    const { mounted: coverMounted, exiting: coverExiting } = useCoverExitRamp(
+        !revealReady,
+        coverShown,
+        coverExitMs,
+    );
     // What SceneRouter's code hold must know and cannot derive (its inner
     // FadeProvider shadows the app-level fade): something VISIBLE sits above
-    // the shell's own covers — this route's cover window when it renders a
-    // game-declared form (the engine placeholder is an empty transparent
-    // layer), or the opaque scrim.
-    const sceneCoverOccluded = (!revealReady && routeCoverDeclared) || scrimOpaque;
+    // the shell's own covers — this route's cover for as long as it is mounted,
+    // the exit ramp included, when it renders a game-declared form (the engine
+    // placeholder is an empty transparent layer), or the opaque scrim.
+    //
+    // Covering the ramp has a price: a transition cover committed inside those
+    // milliseconds arms no minimum of its own. Taken deliberately — it is the
+    // same trade the scrim already makes, and the alternative surfaces a held
+    // layer under a cover that is still painting.
+    const sceneCoverOccluded = (coverMounted && routeCoverDeclared) || scrimOpaque;
 
     // App-level screen fade: once the game is actually here AND its critical
     // assets have settled (plus any minimum-visible remainder), ease in from
@@ -335,6 +377,25 @@ export default function GamePage(): React.ReactElement | null {
         fadedInRef.current = true;
         void fadeRef.current?.fadeIn(screenFadeMs());
     }, [revealReady]);
+
+    // The same fade-in, brought forward by the grace: the wait proved long, so
+    // the cover already mounted becomes something the player can see. Its own
+    // effect rather than another term in the one above, because it must not
+    // touch that latch's lifecycle — this condition is falsified by the very
+    // fade it starts (the scrim stops being opaque), and a shared level-trigger
+    // would re-arm the latch and fade in a second time at the reveal. Acting
+    // only on the rise leaves `revealReady` the sole owner of the re-arm, and
+    // the same two suppressors apply for the same reasons.
+    React.useEffect(() => {
+        if (!coverRevealRequested) {
+            return;
+        }
+        if (fadedInRef.current || leavingRef.current || snapshot?.phase === 'lobby') {
+            return;
+        }
+        fadedInRef.current = true;
+        void fadeRef.current?.fadeIn(screenFadeMs());
+    }, [coverRevealRequested]);
 
     if (snapshot === null) {
         return null;
@@ -408,13 +469,19 @@ export default function GamePage(): React.ReactElement | null {
              * mount for its manager to be disposed (Invariant #21), so what the
              * gate withholds is the sight of it. Rendered last so it paints over
              * the scene it covers, and dropped on every settle path — after the
-             * minimum-visible remainder when one is armed, but always on a
-             * fixed timer — because a cover left standing at --ch-z-loading-hud
-             * sits above every modal and toast for the rest of the match.
+             * minimum-visible remainder when one is armed, and after the exit
+             * ramp when the player saw it, but always on fixed timers — because
+             * a cover left standing at --ch-z-loading-hud sits above every modal
+             * and toast for the rest of the match.
              */}
-            {revealReady ? null : (
-                <RouteEntryLoadingCover registry={loadedGame.registry} snapshot={snapshot} />
-            )}
+            {coverMounted ? (
+                <RouteEntryLoadingCover
+                    registry={loadedGame.registry}
+                    snapshot={snapshot}
+                    {...(coverExitMs > 0 ? { exitMs: coverExitMs } : {})}
+                    {...(coverExiting ? { exiting: true } : {})}
+                />
+            ) : null}
         </>
     );
 }

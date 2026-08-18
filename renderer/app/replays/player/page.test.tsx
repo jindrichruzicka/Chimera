@@ -79,6 +79,7 @@ vi.mock('next/navigation', () => ({
 
 import { I18nProvider } from '../../../i18n/I18nProvider';
 import { EscapeStackProvider } from '../../../components/shell/EscapeStack';
+import { SCREEN_FADE_FAST_MS } from '../../../components/shell/screenFadeDuration';
 import { useUiStore } from '../../../state/uiStore';
 import { resetGameContentCache } from '../../../state/useGameContent';
 import ReplayPlayerPage from './page';
@@ -770,6 +771,11 @@ describe('ReplayPlayerPage minimum-visible hold', () => {
         await act(async () => {
             await vi.advanceTimersByTimeAsync(1);
         });
+        // Released, and now on its exit ramp rather than cut — this route's
+        // cover is visible for its whole life.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
+        });
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
         // The transport controls stayed the route's the whole time: `isReady`
         // is not widened by the hold.
@@ -821,6 +827,13 @@ describe('ReplayPlayerPage minimum-visible hold', () => {
         await act(async () => {
             await vi.advanceTimersByTimeAsync(REPLAY_HOLD_MS);
         });
+        // Still painting, however faintly: the inner router must not surface a
+        // held layer under a cover that is mid-ramp.
+        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('true');
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
+        });
         expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('false');
     });
 
@@ -831,6 +844,57 @@ describe('ReplayPlayerPage minimum-visible hold', () => {
         await mountUnderFakeTimers();
 
         expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('false');
+    });
+
+    it('fades a seen cover out over the replay instead of cutting it', async () => {
+        installHoldGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
+        });
+        await mountUnderFakeTimers();
+        // The transition is carried for the cover's whole life, so the ramp is
+        // one property change against a declaration already in the style.
+        const cover = screen.getByTestId('route-entry-loading-cover');
+        expect(cover.style.transition).toBe(
+            `opacity ${SCREEN_FADE_FAST_MS}ms var(--ch-easing-standard)`,
+        );
+        expect(cover.style.opacity).toBe('');
+
+        await act(async () => {
+            managerDouble.settle();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(REPLAY_HOLD_MS);
+        });
+
+        expect(screen.getByTestId('route-entry-loading-cover').style.opacity).toBe('0');
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
+        });
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+    });
+
+    it('cuts rather than fades under NEXT_PUBLIC_CHIMERA_E2E', async () => {
+        // The ramp is a deliberate delay: it collapses at the flag exactly like
+        // the minimum above it, so no spec waits a cover out.
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+        installHoldGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
+        });
+        await mountUnderFakeTimers();
+        expect(screen.getByTestId('route-entry-loading-cover').style.transition).toBe('');
+
+        await act(async () => {
+            managerDouble.settle();
+            await Promise.resolve();
+        });
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
     });
 
     it('arms no hold for the engine placeholder cover', async () => {
