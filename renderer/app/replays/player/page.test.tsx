@@ -1032,14 +1032,14 @@ describe('ReplayPlayerPage loading beat', () => {
         // The axis that separates this route's resolver from the hold it
         // replaced: an ABSENT declaration is a default-length beat here, not no
         // beat at all. Every other fixture in this describe declares a minimum,
-        // so without this the two resolvers are indistinguishable at this site.
+        // so without this a floor of zero is indistinguishable from the default.
         installBeatGame({ screens: {}, loadingScreen: 'spinner' });
         managerDouble.settleOnCall = true;
         await mountUnderFakeTimers();
 
         // Read the cover's OPACITY, not its presence: it stays mounted through
         // the closing leg, so a zero floor is still on screen at this instant
-        // and a presence check cannot tell the two resolvers apart. Held at
+        // and a presence check cannot tell a floored cover from an unfloored one. Held at
         // full opacity is what only a floor still running produces.
         await step(SCREEN_FADE_FAST_MS + 60);
         expect(screen.getByTestId('route-entry-loading-cover').style.opacity).toBe('1');

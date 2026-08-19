@@ -2,7 +2,7 @@
 //
 // The reusable delayed-release latch behind the minimum-visible loading-cover
 // hold (§4.36). The hold duration itself comes from
-// `resolveLoadingCoverHoldMs`; this hook only latches.
+// `resolveLoadingBeatFloorMs`; this hook only latches.
 //
 // Timer discipline follows ToastHost: `window.setTimeout` held in a ref,
 // cancelled on unmount. JS-driven timing like the screen fades — no `--ch-*`

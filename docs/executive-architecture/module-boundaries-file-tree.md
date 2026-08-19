@@ -262,7 +262,7 @@ chimera/
 │   │   │   ├── EngineLoadingPreset.tsx   # The engine's own cover forms (spinner / progress / message / image); see §4.36
 │   │   │   ├── LoadingBeatCover.tsx  # The beat's opaque cover, portaled above the curtain on a route; see §4.36
 │   │   │   ├── resolveLoadingScreen.ts   # loadingScreens[key] ?? loadingScreen cascade, and the route-owned screen-key chain; see §4.36
-│   │   │   ├── loadingCoverHold.ts  # Resolves loadingScreenMinVisibleMs into the hold consumers arm and the beat's floor; e2e-collapsed at call time; see §4.36
+│   │   │   ├── loadingCoverHold.ts  # Resolves loadingScreenMinVisibleMs into a cover floor; e2e-collapsed at call time; see §4.36
 │   │   │   ├── useLoadingBeat.ts    # Sequences black → cover → black → reveal for one surface; see §4.36
 │   │   │   ├── useMinimumVisibleHold.ts  # Delayed-release latch: a shown cover stays up at least holdMs; see §4.36
 │   │   │   ├── useFadeTransition.ts # Drives the fade around a scene transition and acks scene_ready; see §4.18

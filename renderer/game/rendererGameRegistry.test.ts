@@ -946,6 +946,26 @@ describe('rendererGameRegistry', () => {
             expect(String(warnSpy.mock.calls[0]?.[0])).toContain('loadingScreenMinVisibleMs');
         });
 
+        it('tells the author what an invalid minimum actually resolves to', async () => {
+            // An invalid declaration falls back to the engine default, and the
+            // warn has to say so: one that misreports the outcome sends the
+            // author looking for a cover that is on screen the whole time.
+            //
+            // Asserted on the OUTCOME the author acts on, not on the whole
+            // sentence: pinning the prose verbatim makes every rewording a
+            // failing test without making any of them a wrong one. The opt-down
+            // is named too, because it is the only way to ask for no floor and
+            // an author reading this warn is looking for exactly that.
+            registerMinimum(-250);
+
+            await loadRendererGame('fake');
+
+            const message = String(warnSpy.mock.calls[0]?.[0]);
+            expect(message).toContain('engine default');
+            expect(message).toContain('Declare 0');
+            expect(message).not.toContain('as 0');
+        });
+
         it('warns once for a NaN minimum', async () => {
             registerMinimum(Number.NaN);
 

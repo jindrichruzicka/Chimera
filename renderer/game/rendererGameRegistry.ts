@@ -239,7 +239,9 @@ function warnOnUnknownLoadingScreenKeys(gameId: string, registry: GameScreenRegi
  * Light, dev-time validation of a game's declared minimum-visible cover time
  * (§4.36). Like the sibling guards this is a typo-catching safety net, never a
  * hard error, and it never rewrites the registry. Warns once for a value that
- * is not a finite non-negative number (the resolver treats it as 0), and warns
+ * is not a finite non-negative number (the floor resolver falls back to the
+ * engine default; a declared `0` is valid and opts down to gate-settle-only),
+ * and warns
  * once — honoring the value, never clamping it — for a minimum above
  * `SCENE_PRELOAD_BUDGET_MS`: a cosmetic knob above a release budget quietly
  * becomes the player's worst-case wait, which deserves a sentence at
@@ -249,13 +251,13 @@ function warnOnInvalidLoadingScreenMinVisible(gameId: string, registry: GameScre
     const declared = registry.loadingScreenMinVisibleMs;
     if (typeof declared !== 'number' || !Number.isFinite(declared) || declared < 0) {
         console.warn(
-            `[chimera] game '${gameId}' declares loadingScreenMinVisibleMs = ${String(declared)}, which is not a finite non-negative number of milliseconds; the hold resolver treats it as 0.`,
+            `[chimera] game '${gameId}' declares loadingScreenMinVisibleMs = ${String(declared)}, which is not a finite non-negative number of milliseconds; the floor resolver falls back to the engine default. Declare 0 to opt down to gate-settle-only.`,
         );
         return;
     }
     if (declared > SCENE_PRELOAD_BUDGET_MS) {
         console.warn(
-            `[chimera] game '${gameId}' declares loadingScreenMinVisibleMs = ${declared}ms, above the ${SCENE_PRELOAD_BUDGET_MS}ms scene preload budget; the minimum is honored unclamped, so a visible cover can now outlive the wait it stands in for.`,
+            `[chimera] game '${gameId}' declares loadingScreenMinVisibleMs = ${declared}ms, above the ${SCENE_PRELOAD_BUDGET_MS}ms scene preload budget; the floor is honored unclamped, so the loading screen can outlive the wait it explains.`,
         );
     }
 }

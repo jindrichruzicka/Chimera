@@ -16,7 +16,7 @@ import type {
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import { useActiveScreen, useUiStore } from '../../state/uiStore.js';
-import { resolveLoadingCoverHoldMs } from './loadingCoverHold.js';
+import { resolveLoadingBeatFloorMs } from './loadingCoverHold.js';
 import { resolveLoadingScreen } from './resolveLoadingScreen.js';
 import { SceneLoadingFallback } from './SceneLoadingFallback.js';
 import { TransitionOverlay } from './TransitionOverlay.js';
@@ -102,7 +102,9 @@ export function SceneRouter({
     // the progress protocol are what that phrase covers, and they are carried
     // by `useFadeTransition.test.tsx`'s ack suite (Invariant #133). The reveal
     // is the one thing this file defers, at the `coverUp` term below.
-    const holdMs = resolveLoadingCoverHoldMs(registry);
+    // The same floor every other cover site arms, so the knob means one thing
+    // wherever a cover is raised.
+    const holdMs = resolveLoadingBeatFloorMs(registry);
     // Whether the Suspense fallback is currently mounted, reported by the
     // wrapper around the fallback JSX (state, not a ref: the fallback's unmount
     // is exactly the drop the held layer must re-render across, so it has to

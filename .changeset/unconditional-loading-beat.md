@@ -28,9 +28,9 @@ blacked, or an exit's `await` returning mid-ramp and navigating over a half-fade
 bare `fadeOut`/`fadeIn` pair is deliberately left driving the provider directly and is not
 gated by a claim, so every existing caller is unchanged.
 
-`resolveLoadingBeatFloorMs` joins `resolveLoadingCoverHoldMs` in
-`renderer/components/scene/loadingCoverHold.ts` rather than replacing it, so no live path
-changes behaviour in this change. It differs in one respect: an absent or unusable declaration
+`resolveLoadingBeatFloorMs` lands in `renderer/components/scene/loadingCoverHold.ts` beside the
+resolver it later replaces, so no live path changes behaviour in this change. It differs in one
+respect: an absent or unusable declaration
 resolves to `DEFAULT_LOADING_BEAT_FLOOR_MS` instead of to nothing, because a beat bounded only
 by its own two fades is sub-perceptual under `prefers-reduced-motion`, where those fades are
 cuts. A declared `0` still resolves to `0` — the explicit opt-down to gate-settle-only. It

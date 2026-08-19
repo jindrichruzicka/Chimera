@@ -29,5 +29,5 @@ the same release as this change: the exit ramp it adds
 is gone from both routes, so a seen cover no longer leaves on a fade over the scene beneath it
 but through the beat's own black; and the two hooks it names, along with the `exiting` /
 `exitMs` props it gives `RouteEntryLoadingCover`, no longer exist.
-The minimum-visible hold and `resolveLoadingCoverHoldMs` survive for `SceneRouter`'s own cover
-sites, which have not adopted the beat.
+The minimum-visible hold survives for `SceneRouter`'s own cover sites, which have not adopted
+the beat.

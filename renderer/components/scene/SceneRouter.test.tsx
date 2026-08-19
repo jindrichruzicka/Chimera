@@ -25,6 +25,7 @@ import {
 import { I18nProvider } from '../../i18n/I18nProvider.js';
 import { useUiStore } from '../../state/uiStore.js';
 import { FadeContext, FadeProvider, type FadeControl } from '../shell/FadeContext.js';
+import { DEFAULT_LOADING_BEAT_FLOOR_MS } from './loadingCoverHold.js';
 import { SceneRouter } from './SceneRouter.js';
 
 const LOCAL_PLAYER = playerId('local-player');
@@ -999,6 +1000,95 @@ describe('SceneRouter — minimum-visible held layer', () => {
         await tickMs(0);
         await tickMs(MIN_VISIBLE_MS + 100);
 
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        expect(screen.getByTestId('resolved-screen')).toBeTruthy();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('floors a declared cover with the engine default when no minimum is declared', async () => {
+        // An absent declaration arms the engine default here, the same floor
+        // a route entry arms.
+        //
+        // Read 1 ms BELOW and 1 ms ABOVE it rather than by waiting it out: a
+        // site that armed no floor drops the cover on the first tick, so a case
+        // checking only the far side would pass against one.
+        const { Screen, resolve } = makeControlledScreen('resolved-screen');
+        const registry: GameScreenRegistry = {
+            ...plainRegistry(),
+            playfield: Screen,
+            loadingScreen: makeFullReportingCover(),
+        };
+
+        renderRouter(makeSnapshot(), registry, {});
+        await tickMs(0);
+
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        // The chunk resolved immediately; the cover is held anyway.
+        expect(screen.getByTestId('resolved-screen')).toBeTruthy();
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+
+        await tickMs(DEFAULT_LOADING_BEAT_FLOOR_MS - 1);
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(1);
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it.each([
+        ['a declared minimum this site must not round to the default', 1_200],
+        ['a declared minimum shorter than the default', 120],
+    ])('reads %s off the registry', async (_label, declared) => {
+        // The discrimination the rest of this suite cannot make: its fixtures
+        // declare 400 ms, which is numerically the engine default, so a router
+        // that threw the declaration away and always took the default would
+        // satisfy every one of them. Both values here are chosen to differ from
+        // it — one longer, one shorter, so neither a floor nor a ceiling on the
+        // default can pass — and each is read on BOTH sides of its own release.
+        const { Screen, resolve } = makeControlledScreen('resolved-screen');
+        const registry: GameScreenRegistry = {
+            ...plainRegistry(),
+            playfield: Screen,
+            loadingScreen: makeFullReportingCover(),
+            loadingScreenMinVisibleMs: declared,
+        };
+
+        renderRouter(makeSnapshot(), registry, {});
+        await tickMs(0);
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        await tickMs(declared - 1);
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        await tickMs(1);
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('honours a declared 0 as the opt-down, never rounding it up to the default', async () => {
+        // `0` is the one declaration that must NOT reach the fallback: it is how
+        // a game says "show the cover, but only for as long as the load runs".
+        // Folding it in with the absent case is the mutant.
+        const { Screen, resolve } = makeControlledScreen('resolved-screen');
+        const registry: GameScreenRegistry = {
+            ...plainRegistry(),
+            playfield: Screen,
+            loadingScreen: makeFullReportingCover(),
+            loadingScreenMinVisibleMs: 0,
+        };
+
+        renderRouter(makeSnapshot(), registry, {});
+        await tickMs(0);
         await act(async () => {
             resolve();
             await Promise.resolve();

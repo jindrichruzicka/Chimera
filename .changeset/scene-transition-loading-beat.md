@@ -56,8 +56,6 @@ written, being consumed but retained by pre-release mode.
 Invariant #133's beat sequence is narrowed to the route entries in the same pass, because this
 site is not yet the same machine. It passes through the same black and defers on the same terms,
 but it keeps its own sequencer (`useMinimumVisibleHold` plus the epoch, rather than
-`useLoadingBeat`), floors its cover with `resolveLoadingCoverHoldMs` — absent declaration → 0,
-against the route default of 400 ms — and raises no cover at all for a transition whose preload
-measures nothing. Stating one universal over both sites would assert a floor one of them does
-not apply, so the invariant now names the divergence instead. Converging the two is a follow-up:
-`resolveLoadingCoverHoldMs` has exactly one caller left, which is the seam it will be done at.
+`useLoadingBeat`) and raises no cover at all for a transition whose preload measures nothing.
+Stating one universal over both sites would assert a SEQUENCE one of them does not run, so the
+invariant names the divergence instead. Converging the sequencers is a follow-up.
