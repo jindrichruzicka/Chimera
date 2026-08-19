@@ -1028,6 +1028,113 @@ provider that never subscribed would report just as well — the transition back
 proves the subscription is live); No `useFadeTransition` export, which is shell-only and
 stays internal — all candidates for a follow-up.
 
+### F92 — Unconditional Loading Beat for Game-Load Presentation `§4.36, §4.10, §4.18–§4.19, §4.33`
+
+**Status: planned; the feature issue is
+[#1145](https://github.com/jindrichruzicka/Chimera/issues/1145).** Measured on 1.0.0-rc.7
+with a scaffolded game declaring `'spinner'` and a 5000 ms minimum over one critical 464 KB
+model, the pair could not deliver the thing it exists for. On a normal run the beat did not
+happen: the model settled in ~150 ms, the route cover mounted at ~180 ms and was dropped
+unseen at ~340 ms, and the floor never armed. Delaying the fetch by three seconds made the
+cover appear and serve its full minimum. So the mechanism was working as written, and what
+it was written to do is the wrong thing: a loading screen carries the tips a player reads
+while waiting, and on the hardware that reads them fastest it did not appear.
+
+**The floor's arming condition and the cover's opacity are one defect wearing two faces.**
+The cover layer paints no background — neither `RouteEntryLoadingCover`'s layer nor the
+engine presets declare one — so what the engine renders is a glyph over whatever stands
+behind it. The black a player sees during a load is the app-level scrim, a sibling above the
+whole route subtree. F90 then made visibility the floor's arming condition, correctly, since
+flooring a cover nobody can see only extends a black screen; and the route-cover reveal grace
+made a faded entry reach that condition by easing the scrim off mid-wait. But the scrim is
+what hides everything — so the act that made the cover visible also revealed the canvas, the
+HUD and, at the settle, the model, which is why the reported sequence is spinner, then
+spinner beside the model, then no spinner. A cover that paints nothing cannot be shown
+without showing the scene it was meant to stand in for. F92 therefore replaces both
+mechanisms rather than tuning either: the cover becomes an opaque surface, and the beat
+becomes unconditional on a RESOLVED cover instead of conditional on a visible one.
+
+**The curtain never opens for the beat.** The presentation is four legs — black, the cover,
+black, the reveal — and the app scrim holds opacity 1 across all of them. The loading cover
+is an opaque full-viewport layer that fades in ABOVE that held curtain, holds, and fades back
+out to it; the curtain's single closing fade-in is the reveal, and it reveals the scene and
+the HUD together. The property `screen-fade-overlay` at opacity 0 means REVEALED survives
+untouched — the e2e waits already written against it keep their meaning instead of going
+green over a screen the beat is still covering. A cover that fades around a curtain would
+have inverted that predicate silently, and tactics declares no route cover, so the regression
+would have shipped invisible until the first adopter game.
+
+**The HUD mounts at the reveal.** The deferral covers the HUD row and the in-game menu host —
+what a player would otherwise watch assemble itself beside a spinner.
+`PerfHud`, the debug toggle, input-action registration, the time-scale bridge and
+the audio delegate keep their current mount timing: deferring the delegate re-opens the
+silent-music-bed defect its own comment records, and the shell itself mounts on the commit it
+mounts on today, because it is the unique disposer of a page-injected `AssetManager`
+(Invariant #21). The canvas subtree mounts under the curtain on purpose, so shader compile
+and the first GPU upload are paid while the screen is black rather than at the reveal. The
+HUD row mounts one commit BEFORE the closing fade-in, so the grid re-layout it causes settles
+while the curtain is still opaque.
+
+**Nothing host-visible moves, and the proof becomes a pin rather than a non-edit.** F90
+shipped without editing `useFadeTransition` at all; F92 edits it, because the
+scene-transition surface adopts the beat too and the reveal fade-in is what moves. What does
+not move is everything upstream of it: the fade-out, the preload run, the four-outcome ack,
+the retry cadence and the progress protocol. A minimum inserted before `engine:scene_ready`
+would serialise one client's cosmetic preference onto every seat in the match, so the
+dispatch is asserted identical with a zero floor, a large floor, and a reveal that never
+fires. The beat reads `gate.ready` rather than the settle outcome, so the four paths,
+failures included, reveal alike.
+
+**The knob keeps its name and loses its condition.** `loadingScreenMinVisibleMs` still sets
+how long the cover stays up, but it no longer decides WHETHER a beat happens — declaring a
+cover form is what does that. A cover declared with no minimum resolves to an engine default
+floor rather than to nothing, since a beat bounded only by its own fades would flash under
+reduced motion, where the fades collapse to cuts; a declared `0` remains the explicit
+opt-down to gate-settle-only. The collapse asymmetry Invariant #133 states is unchanged:
+every deliberate delay in the beat arrives through `screenFadeMs()` or
+`resolveLoadingCoverHoldMs`, both of which return `0` under `NEXT_PUBLIC_CHIMERA_E2E`, and
+the sequencer takes both as inputs rather than reading the environment itself — while the
+release budgets keep their no-collapse rule. This takes up the "delay-before-show" pair F90
+deferred as a second feature with its own blank-screen trade-off, and answers that trade-off
+with the black legs: what stands in front of the wait meanwhile is the curtain already there.
+
+**And it reverses F90's unit-only posture.** F90 recorded that no e2e spec observes the hold,
+because the hold collapses under the flag. What survives that collapse is not duration but
+structure — which layers are mounted while the gate runs, and in what order the phases commit
+— so the beat is observable in the recorded reveal timeline with every delay at zero. The
+specs whose predicates the beat abolishes are rewritten; `scene-transition` and `hud-layout`
+stay as the surviving no-regression controls, the latter because tactics' playfield stays
+coverless on purpose and so keeps "a game gets no cover it did not ask for" falsifiable.
+
+| Task                                                                                     | Issue                                                           |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Author the F92 roadmap section and traceability rows                                     | [#1146](https://github.com/jindrichruzicka/Chimera/issues/1146) |
+| Implement the useLoadingBeat sequencer, FadeControl claim sessions and the default floor | [#1147](https://github.com/jindrichruzicka/Chimera/issues/1147) |
+| Add the GameShell hudMounted seam with the game-hud-slot and reveal-phase markers        | [#1148](https://github.com/jindrichruzicka/Chimera/issues/1148) |
+| Adopt the loading beat on the /game entry and decommission the reveal grace              | [#1149](https://github.com/jindrichruzicka/Chimera/issues/1149) |
+| Adopt the loading beat on the replay player and delete the cover exit ramp               | [#1150](https://github.com/jindrichruzicka/Chimera/issues/1150) |
+| Adopt the loading beat on scene transitions and delete the held-layer machinery          | [#1151](https://github.com/jindrichruzicka/Chimera/issues/1151) |
+| Sweep docs, scaffold and registry warns to the beat semantics and finalize the changeset | [#1152](https://github.com/jindrichruzicka/Chimera/issues/1152) |
+| F92 feature review and merge gate                                                        | [#1153](https://github.com/jindrichruzicka/Chimera/issues/1153) |
+
+Feature issue: [#1145](https://github.com/jindrichruzicka/Chimera/issues/1145).
+
+**Out of scope (deferred):** No change to `engine:scene_ready` dispatch timing, to the host
+barrier, or to any of the four release budgets — the beat sits strictly downstream of the ack
+and adds no release path; No per-key minimum map, unchanged from F90 — one registry-wide
+knob, with the per-key `'none'` opt-out already able to subtract a surface from the beat; No
+beat on the engine-owned loading surfaces outside the cover cascade, so the replay player's
+pre-ready status block stays outside the registry knob's reach exactly as F90 left it; No
+change to tactics' cover topology — the playfield stays coverless so the `hud-layout` negative
+control keeps proving a game gets no cover it did not ask for, and the `asset-demo` key stays
+the game's declared cover; No new `GameScreenRegistry` field, since the arming change is what
+the existing slots now mean; No deferral of the canvas mount behind the curtain, which would
+trade the warm-up this feature buys for a stutter at the
+reveal; No Escape-openable menu during the beat — the in-game menu host is deferred with the
+HUD, and the gate's own budget bounds how long it can be unavailable; No dilation interplay,
+unchanged from F90 — every leg is wall-clock milliseconds, like the fades and the budgets
+beside them — all candidates for a follow-up.
+
 ---
 
 ## Cross-References
