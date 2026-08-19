@@ -230,12 +230,17 @@ coverage summary above is unchanged and re-derives from the ledger. The child ac
 criteria of #1127–#1131 were re-verified against the MERGED tree, not their close-out claims:
 the thirteen carrying suites re-ran green together — 365 tests — on this base.
 
-The by-construction proof holds measured, not asserted: across the whole F90 arc
-(`9815564d..main`) `useFadeTransition.ts` and `useFadeTransition.test.tsx` have ZERO commits —
-the `engine:scene_ready` ack, both fade channels and the progress protocol are byte-identical
-to pre-F90 — and the four no-regression e2e specs (`asset-preload-gate`, `scene-preload-cover`,
-`scene-transition`, `hud-layout`) also have zero commits over the same range while passing in
-the 150 above with no retried spec.
+The by-construction proof held measured, not asserted, at the tree this gate ran on: over
+`9815564d..8b2ce0e5` `useFadeTransition.ts` and `useFadeTransition.test.tsx` had zero commits,
+and the four no-regression e2e specs (`asset-preload-gate`, `scene-preload-cover`,
+`scene-transition`, `hud-layout`) also had zero commits over that range while passing in the
+150 above with no retried spec.
+
+That range is written as a fixed endpoint rather than `main`, because a moving endpoint turns a
+gate record into a claim later work silently falsifies — which is what happened: F92 changed the
+fade-IN channel of `useFadeTransition` deliberately (§4.36, Invariant #133). What survives is the
+part the proof was protecting, and it is carried by that file's own ack suite rather than by a
+commit count: the `engine:scene_ready` dispatch, the fade-OUT leg and the progress protocol.
 
 The asymmetry #133's amended sentence states is what the tests carry: the minimum-visible hold
 collapses to 0 under `NEXT_PUBLIC_CHIMERA_E2E` — pinned at the resolver (call-time read,

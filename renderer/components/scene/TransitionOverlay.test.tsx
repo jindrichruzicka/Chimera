@@ -26,15 +26,50 @@ const fadeControl: FadeControl = {
     }),
 };
 
+/** The curtain fully down: nothing to paint, whatever the snapshot says. */
+const transparentFade: FadeControl = { ...fadeControl, phase: 'idle', opacity: 0 };
+
 afterEach(() => {
     cleanup();
 });
 
 describe('TransitionOverlay', () => {
-    it('renders nothing without a scene transition', () => {
-        renderOverlay(makeSnapshot({ sceneTransition: null }));
+    it('renders nothing with no transition and the curtain fully down', () => {
+        renderOverlay(makeSnapshot({ sceneTransition: null }), undefined, transparentFade);
 
         expect(screen.queryByTestId('transition-overlay')).toBeNull();
+    });
+
+    it('stays for as long as the curtain is up, transition or not', () => {
+        // This provider has no other painter, so unmounting the instant the
+        // transition ends left the curtain with nothing drawing it: the
+        // fade-in that follows had no pixels to animate and the scene
+        // arrived by a hard cut. The reveal is deferred PAST the commit
+        // while a loading cover serves its minimum (§4.36), so the span
+        // this layer has to cover is the curtain’s, not the transition’s.
+        renderOverlay(makeSnapshot({ sceneTransition: null }));
+
+        const layer = screen.getByTestId('transition-overlay');
+        expect(layer.style.opacity).toBe('0.5');
+        expect(layer.style.backgroundColor).toBe('var(--ch-color-scrim)');
+    });
+
+    it('reports the fade’s own phase once no transition describes it', () => {
+        renderOverlay(makeSnapshot({ sceneTransition: null }));
+
+        expect(screen.getByTestId('transition-overlay').dataset['fadePhase']).toBe('fade-out');
+    });
+
+    it('paints the same black the app-level curtain does', () => {
+        // A translucent grey let the outgoing scene show through the hold, so a
+        // loading cover standing above it was never the only thing on screen.
+        // The whole point of the sequence is that a scene swap passes through
+        // black, and this is the layer that has to be black for that to hold.
+        renderOverlay(makeTransitioningSnapshot());
+
+        expect(screen.getByTestId('transition-overlay').style.backgroundColor).toBe(
+            'var(--ch-color-scrim)',
+        );
     });
 
     it('carries the displayed fade phase and stays out of the accessibility tree', () => {
@@ -93,9 +128,10 @@ function readPreloadProgress(): string | null {
 function overlayTree(
     snapshot: PlayerSnapshot,
     preloadProgress?: number | null,
+    fade: FadeControl = fadeControl,
 ): React.ReactElement {
     return (
-        <FadeContext.Provider value={fadeControl}>
+        <FadeContext.Provider value={fade}>
             <TransitionOverlay
                 snapshot={snapshot}
                 {...(preloadProgress === undefined ? {} : { preloadProgress })}
@@ -107,8 +143,9 @@ function overlayTree(
 function renderOverlay(
     snapshot: PlayerSnapshot,
     preloadProgress?: number | null,
+    fade?: FadeControl,
 ): ReturnType<typeof render> {
-    return render(overlayTree(snapshot, preloadProgress));
+    return render(overlayTree(snapshot, preloadProgress, fade));
 }
 
 function makeSceneId(raw: string): NonNullable<PlayerSnapshot['sceneId']> {

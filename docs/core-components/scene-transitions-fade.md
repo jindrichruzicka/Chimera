@@ -150,7 +150,13 @@ export function SceneRouter(): JSX.Element;
 
 The ack fires on **all four** preload outcomes — `loaded`, `failed`, `timeout`, `skipped`. Withholding it on a bad disk would freeze the match rather than degrade it: the host waits for every player, evaluates `timeoutTicks` only when an action is applied, and a turn-based game has no ticker to apply one.
 
-The minimum-visible cover hold (§4.36) changes none of this: `useFadeTransition` owns the ack and is untouched by it, so the fade-out, the preload run, the progress protocol and the `engine:scene_ready` dispatch are byte-identical with or without a declared minimum. The hold is a held COPY at the render site — when the commit drops the transition cover before its minimum has elapsed, `SceneRouter` re-renders the same cascade resolution with its last measured fraction as a sibling layer for the remainder — so nothing host-visible moves, by construction.
+The loading beat (§4.36) reaches exactly one thing here, and it is not the ack: **the reveal**. The fade-out, the preload run, the progress protocol and the `engine:scene_ready` dispatch are byte-identical with or without a declared minimum — the hook takes `coverUp` and reads it at one site, the fade-in that used to fire the moment the transition ended. That fade is now OWED at that moment and spent when that cover leaves, so the incoming scene is revealed out of black instead of appearing underneath a loading screen that is still serving its minimum. Nothing host-visible moves: the ack is upstream of the debt and never awaits it, and a beat that never ends delays one client’s curtain, never another seat’s turn.
+
+The debt waits on the held COPY at the render site, and on nothing else — when the commit drops the transition cover before its minimum has elapsed, `SceneRouter` re-renders the same cascade resolution with its last measured fraction as a sibling layer for the remainder, and that layer sits at `--ch-z-loading-hud` (150), above the curtain's `--ch-z-scene-fade` (130).
+
+A mounted Suspense fallback is deliberately NOT a term, for two reasons that point the same way. It renders in the screen slot rather than as a route-level layer — the preset is `position: absolute` with no z-index — so it paints BENEATH the curtain: holding the curtain up for it would show the player black for the whole wait instead of the loading screen the wait exists to explain. And it waits on a `React.lazy` chunk, the one wait Invariant #133 leaves deliberately unbounded ("a module chunk is not one"), so deferring on it could park a full-opacity black screen with no release path. Only covers that paint above the curtain, and whose wait has a bounded settle, can hold the reveal.
+
+Both those layers and `TransitionOverlay` paint `--ch-color-scrim`, the same black the app-level curtain uses, so the sequence a scene swap passes through is black, then the loading screen alone on black, then black again, then the scene. `TransitionOverlay` is what draws that black, and it is mounted for as long as the curtain is up rather than for as long as a transition is in flight: it is the only painter inside `GameShell`'s own `FadeProvider`, so unmounting it at the commit — while the reveal is still owed — left the fade with nothing to animate and the scene arrived by a cut.
 
 A run is abandoned by **cancellation, never disposal** (Invariant #21 — the manager is borrowed). Cancelling is not the transition effect's cleanup: that effect depends on the parsed `sceneTransition` object and re-runs on every state frame, so a remote player's ack alone would kill the local run. The two cancel sites are an unmount-only effect and an explicit transition-identity check.
 
@@ -231,11 +237,12 @@ export function useFade(): FadeControl {
 
 Default fade duration: **300 ms**.
 
-### SceneRouter Integration
+### Transition Integration
 
 ```typescript
-// Inside SceneRouter.tsx (simplified)
+// Inside useFadeTransition.ts (simplified)
 const fade = useFade();
+const [revealOwed, setRevealOwed] = useState(false);
 
 // Phase 1: fade to black, then signal readiness
 useEffect(() => {
@@ -251,12 +258,21 @@ useEffect(() => {
     }
 }, [phase]);
 
-// Phase 2: new scene mounted, fade in
+// Phase 2: the transition ended — the reveal is EARNED here, not spent.
 useEffect(() => {
     if (!phase) {
-        fade.fadeIn(300);
+        setRevealOwed(true);
     }
 }, [sceneId, phase]);
+
+// Phase 3: pay it once no loading cover stands in front of the scene, so
+// the last cover leaves against black rather than onto the live scene.
+// `coverUp` is a prop; SceneRouter derives it from its cover layers (§4.36).
+useEffect(() => {
+    if (coverUp || !revealOwed) return;
+    setRevealOwed(false);
+    fade.fadeIn(300);
+}, [coverUp, revealOwed]);
 ```
 
 `SceneReadyAction` is dispatched **after** fade-out completes — the fade is a cosmetic delay only. The host's readiness barrier is the authoritative gate.

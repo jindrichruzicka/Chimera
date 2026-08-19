@@ -397,6 +397,179 @@ describe('useFadeTransition', () => {
     });
 });
 
+describe('useFadeTransition — the reveal waits behind a cover', () => {
+    // A scene swap used to fade back in the moment the transition ended, which
+    // put the incoming scene on screen while the loading cover was still
+    // standing in front of it — the "model appears beside the spinner" the
+    // whole beat exists to remove. The reveal is now OWED at that moment and
+    // spent when the cover falls, so the cover leaves against a curtain still
+    // at full opacity and the scene arrives out of black.
+    //
+    // Only the reveal moved. Every case in the suites above pins the fade-out
+    // leg, the preload run, the ack and the retry cadence against a hook that
+    // is handed no cover at all, and they read exactly as they did before.
+
+    /** Drives one whole transition, then reports what the fade was told. */
+    function renderSwap(options: { readonly passCoverUp?: boolean } = {}): {
+        readonly fadeControl: FadeControl;
+        readonly sendAction: ReturnType<typeof vi.fn>;
+        readonly setCoverUp: (next: boolean) => void;
+        readonly endTransition: () => void;
+    } {
+        const fadeControl = makeFadeControl();
+        const sendAction = vi.fn();
+
+        // `passCoverUp: false` omits the option ENTIRELY rather than passing
+        // `false`. The hook’s own default is the only thing standing between
+        // a caller that never raises a cover and a reveal that is never paid
+        // — a permanently black screen — so one case has to reach it.
+        const passCoverUp = options.passCoverUp ?? true;
+
+        function Harness({
+            snap,
+            coverUp,
+        }: {
+            readonly snap: PlayerSnapshot;
+            readonly coverUp: boolean;
+        }): React.ReactElement {
+            useFadeTransition({
+                snapshot: snap,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                ...(passCoverUp ? { coverUp } : {}),
+                fadeOutMs: 10,
+                fadeInMs: 10,
+            });
+            return <div />;
+        }
+
+        const inFlight = makeSnapshot({
+            tick: 3,
+            sceneTransition: {
+                toSceneId: makeSceneId('engine:post-game'),
+                phase: 'preparing',
+                startedAtTick: 2,
+                params: {},
+                playersReady: [],
+            },
+        });
+        const ended = makeSnapshot({ tick: 4, sceneTransition: null });
+
+        let snap = inFlight;
+        let coverUp = true;
+        const { rerender } = render(
+            <FadeContext.Provider value={fadeControl}>
+                <Harness snap={snap} coverUp={coverUp} />
+            </FadeContext.Provider>,
+        );
+
+        const paint = (): void => {
+            rerender(
+                <FadeContext.Provider value={fadeControl}>
+                    <Harness snap={snap} coverUp={coverUp} />
+                </FadeContext.Provider>,
+            );
+        };
+
+        return {
+            fadeControl,
+            sendAction,
+            setCoverUp: (next: boolean) => {
+                coverUp = next;
+                paint();
+            },
+            endTransition: () => {
+                snap = ended;
+                paint();
+            },
+        };
+    }
+
+    it('withholds the reveal while the cover is still up', () => {
+        // The kill-shot for the shape this replaces: fading in here is exactly
+        // what showed the scene around the loading screen.
+        const swap = renderSwap();
+
+        swap.endTransition();
+
+        expect(swap.fadeControl.fadeIn).not.toHaveBeenCalled();
+    });
+
+    it('pays the owed reveal the moment the cover falls', () => {
+        const swap = renderSwap();
+        swap.endTransition();
+
+        swap.setCoverUp(false);
+
+        expect(swap.fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+        expect(swap.fadeControl.fadeIn).toHaveBeenCalledWith(10);
+    });
+
+    it('reveals a swap that raised no cover at all, on the commit after it ends', () => {
+        // Withholding is conditional on a cover EXISTING. A debt recorded in a
+        // ref would sit here forever: nothing raises a cover, so nothing
+        // changes to reach the payment. Holding it in state is what schedules
+        // the render that pays it.
+        const swap = renderSwap();
+        swap.setCoverUp(false);
+
+        swap.endTransition();
+
+        expect(swap.fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('spends the reveal once, so a later cover does not re-fire it', () => {
+        // The debt is cleared when paid. Left standing, every subsequent cover
+        // fall would fade in again over an already-revealed scene.
+        const swap = renderSwap();
+        swap.endTransition();
+        swap.setCoverUp(false);
+
+        swap.setCoverUp(true);
+        swap.setCoverUp(false);
+
+        expect(swap.fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('never reveals on a cover fall it earned no transition for', () => {
+        // A cover can rise and fall with no scene swap behind it — the route
+        // beat runs one on entry. Fading in there would open a curtain whose
+        // owner never asked for it.
+        const swap = renderSwap();
+
+        swap.setCoverUp(false);
+
+        expect(swap.fadeControl.fadeIn).not.toHaveBeenCalled();
+    });
+
+    it('acks the barrier at the fade-out, with a cover still standing', async () => {
+        // The reveal is the ONLY thing that waits. If the cover reached the
+        // fade-out or the barrier, a cosmetic hold on ONE client would stall
+        // every seat in the match (Invariant #133) — the host waits for all
+        // of them and evaluates its tick budget only when an action lands.
+        vi.useFakeTimers();
+        const swap = renderSwap();
+
+        await vi.advanceTimersByTimeAsync(10);
+
+        expect(swap.fadeControl.fadeOut).toHaveBeenCalledTimes(1);
+        expect(swap.sendAction).toHaveBeenCalledWith(
+            expect.objectContaining({ type: 'engine:scene_ready' }),
+        );
+        expect(swap.fadeControl.fadeIn).not.toHaveBeenCalled();
+    });
+
+    it('reveals a caller that never mentions a cover at all', () => {
+        // The hook’s default. A caller omitting the option gets the old,
+        // undeferred behaviour rather than a curtain that never opens.
+        const swap = renderSwap({ passCoverUp: false });
+
+        swap.endTransition();
+
+        expect(swap.fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('useFadeTransition — scene_ready retry cadence', () => {
     // The ack can be LOST: the host's own ack advances the tick while a
     // client's — stamped one tick earlier — is in flight, and the pipeline

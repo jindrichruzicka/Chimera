@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useContext, useEffect, useRef } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { PlayerId, PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import type { AssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
@@ -38,6 +38,19 @@ export interface UseFadeTransitionOptions {
     readonly fadeOutMs?: number;
     readonly fadeInMs?: number;
     /**
+     * Whether a cover the caller wants the reveal held for is still up.
+     *
+     * The reveal is OWED while this is true and spent the moment it falls,
+     * which is what puts black between the cover and the scene: the cover
+     * leaves against a curtain still at full opacity, and only then does the
+     * curtain ease off. Fading in beside a cover instead reveals the scene
+     * around it, which is the sequence this replaces.
+     *
+     * Only the REVEAL waits. The fade-out, the preload run, the ack and the
+     * retry cadence never read this (Invariant #133).
+     */
+    readonly coverUp?: boolean;
+    /**
      * The active game's manifest, for the entering scene's asset preload. Blank
      * for a game that declares none — the preload step is then a synchronous
      * no-op and reports no fraction.
@@ -69,6 +82,7 @@ export function useFadeTransition({
     sendAction,
     fadeOutMs = 300,
     fadeInMs = 300,
+    coverUp = false,
     assetManifest,
     preloadTimeoutMs = SCENE_PRELOAD_BUDGET_MS,
     onPreloadProgress,
@@ -80,6 +94,14 @@ export function useFadeTransition({
     fadeRef.current = fade;
     const lastReadyAttempt = useRef<{ readonly key: string; readonly tick: number } | null>(null);
     const fadeStartedKey = useRef<string | null>(null);
+    // A reveal the transition has earned but a cover is still standing in
+    // front of. STATE rather than a ref: the effect that pays it has to be
+    // reached, and a ref write schedules no render — the debt would sit
+    // until some unrelated render happened to come along, and for a caller
+    // that never raises a cover none ever would.
+    const [revealOwed, setRevealOwed] = useState(false);
+    const fadeInMsRef = useRef(fadeInMs);
+    fadeInMsRef.current = fadeInMs;
     const fadeCompletedKey = useRef<string | null>(null);
     const mountedRef = useRef(true);
 
@@ -89,6 +111,20 @@ export function useFadeTransition({
         transition === undefined || transition === null
             ? null
             : `${transition.toSceneId}:${transition.startedAtTick}`;
+    // Pays a reveal the transition earned while a cover was still standing
+    // in front of it. Its own effect, because the transition effect below
+    // cannot fire it: the cover outlives the transition by its own minimum,
+    // and that effect will not re-run when the cover finally leaves.
+    //
+    // Only the REVEAL waits here. The fade-out leg, the preload run, the ack
+    // and the retry cadence never read `coverUp` (Invariant #133).
+    useEffect(() => {
+        if (coverUp || !revealOwed) {
+            return;
+        }
+        setRevealOwed(false);
+        void fadeRef.current.fadeIn(fadeInMsRef.current);
+    }, [coverUp, revealOwed]);
     const previousTransitionKey = useRef<string | null>(transitionKey);
     const activeTransitionKeyRef = useRef<string | null>(transitionKey);
     activeTransitionKeyRef.current = transitionKey;
@@ -184,7 +220,7 @@ export function useFadeTransition({
         }
 
         if (transitionKey === null) {
-            // Transition ended — fade back in and reset the ready guard.
+            // Transition ended — owe the reveal and reset the ready guard.
             lastReadyAttempt.current = null;
             fadeStartedKey.current = null;
             fadeCompletedKey.current = null;
@@ -193,7 +229,10 @@ export function useFadeTransition({
             // blanked the instant the last ref lands.
             onPreloadProgressRef.current?.(null);
             if (previousKey !== null) {
-                void fadeRef.current.fadeIn(fadeInMs);
+                // Owed, not spent: the reveal effect above pays it once no
+                // cover stands in front of the scene, so the scene is revealed
+                // out of black rather than appearing around a loading screen.
+                setRevealOwed(true);
             }
             return;
         }
@@ -285,7 +324,10 @@ export function useFadeTransition({
             fadeCompletedKey.current = startedTransitionKey;
             dispatchReadyIfNeeded(readyKey);
         });
-    }, [dispatchReadyIfNeeded, fadeInMs, fadeOutMs, localPlayerId, transition, transitionKey]);
+        // `fadeInMs` is deliberately absent: this effect no longer spends the
+        // reveal, so re-running the whole transition for a duration change it
+        // does not read would be waste. The payment site reads it off a ref.
+    }, [dispatchReadyIfNeeded, fadeOutMs, localPlayerId, transition, transitionKey]);
 
     useEffect(() => {
         if (transitionKey === null || transition === undefined || transition === null) {

@@ -24,7 +24,7 @@ import {
 } from '../../assets/__test-support__/StubAssetManager.js';
 import { I18nProvider } from '../../i18n/I18nProvider.js';
 import { useUiStore } from '../../state/uiStore.js';
-import { FadeProvider } from '../shell/FadeContext.js';
+import { FadeContext, FadeProvider, type FadeControl } from '../shell/FadeContext.js';
 import { SceneRouter } from './SceneRouter.js';
 
 const LOCAL_PLAYER = playerId('local-player');
@@ -541,12 +541,14 @@ describe('SceneRouter — entering scene asset cover', () => {
 
     // Every placement axis is its own mutant: the layer is only a layer if it
     // fills its container, sits ABOVE the opaque scene fade (`--ch-z-scene-fade`
-    // is 130, this is 150) and — being a cover the contract gives no way to
-    // dispatch from — never eats a click meant for whatever is underneath.
+    // is 130, this is 150), paints its OWN backdrop rather than borrowing
+    // whatever happens to stand behind it, and — being a cover the contract
+    // gives no way to dispatch from — never eats a click meant for underneath.
     it.each([
         ['position', 'absolute'],
         ['inset', '0px'],
         ['zIndex', 'var(--ch-z-loading-hud)'],
+        ['backgroundColor', 'var(--ch-color-scrim)'],
         ['pointerEvents', 'none'],
     ])('sets %s on the cover layer', async (property, value) => {
         const ref = textureRef('arena');
@@ -633,6 +635,14 @@ function makeTransitioningSnapshot(
 
 interface RouterOptions {
     readonly fadeDurationMs?: number;
+    /**
+     * A fade to watch instead of the provider's own.
+     *
+     * The reveal is the one thing a standing cover defers, and it is a
+     * CALL — a fade that did not happen leaves no rendered trace, so a
+     * case about withholding it has to read the control itself.
+     */
+    readonly fadeControl?: FadeControl;
     readonly assetManager?: AssetManager;
     readonly assetManifest?: ReturnType<typeof stubManifest>;
     readonly sceneCoverOccluded?: boolean;
@@ -652,11 +662,12 @@ function wrapRouter(
     options: RouterOptions = {},
 ): React.ReactElement {
     const fadeDurationMs = options.fadeDurationMs ?? 1;
+    const fade = options.fadeControl;
 
     return (
         <I18nProvider>
             <AssetManagerContext.Provider value={options.assetManager ?? null}>
-                <FadeProvider>
+                <FadeShim control={fade}>
                     <SceneRouter
                         registry={registry}
                         snapshot={snapshot}
@@ -671,10 +682,43 @@ function wrapRouter(
                             ? {}
                             : { sceneCoverOccluded: options.sceneCoverOccluded })}
                     />
-                </FadeProvider>
+                </FadeShim>
             </AssetManagerContext.Provider>
         </I18nProvider>
     );
+}
+
+/** The real provider unless a case hands one in to watch. */
+function FadeShim({
+    control,
+    children,
+}: {
+    readonly control: FadeControl | undefined;
+    readonly children: React.ReactNode;
+}): React.ReactElement {
+    if (control === undefined) {
+        return <FadeProvider>{children}</FadeProvider>;
+    }
+    return <FadeContext.Provider value={control}>{children}</FadeContext.Provider>;
+}
+
+/** A fade that records what it was asked to do and does none of it. */
+function watchableFade(): FadeControl {
+    const control: FadeControl = {
+        phase: 'idle',
+        // Already black: the router is entered mid-transition in these
+        // cases, which is the state a scene swap actually reaches.
+        opacity: 1,
+        setPhase: vi.fn(),
+        fadeOut: vi.fn().mockResolvedValue(undefined),
+        fadeIn: vi.fn().mockResolvedValue(undefined),
+        claim: () => ({
+            isActive: true,
+            fadeOut: (durationMs?: number) => control.fadeOut(durationMs),
+            fadeIn: (durationMs?: number) => control.fadeIn(durationMs),
+        }),
+    };
+    return control;
 }
 
 function makeScreen(
@@ -855,12 +899,15 @@ describe('SceneRouter — minimum-visible held layer', () => {
         expect(heldCover.dataset['reason']).toBe('assets');
         expect(heldCover.dataset['screenKey']).toBe('summary');
 
-        // The transition lifecycle beneath is NOT deferred: the engine overlay
-        // unmounted with the commit, the whole time the held layer stands. (The
-        // fade/ack half of that claim is structural — useFadeTransition.ts is
-        // unmodified on this branch.)
+        // The transition lifecycle beneath is NOT deferred — the ack fired at
+        // the fade-out and the snapshot carries no transition any more. What
+        // the overlay still paints is the CURTAIN, at full opacity, for the
+        // whole time the held layer stands: it is the only painter in this
+        // provider, so the black the cover sits on is this element, and the
+        // reveal that follows has something to animate. The two cases at the
+        // end of this suite measure the reveal itself.
         await tickMs(299); // T=399... release lands at T=416 (rise 16 + 400)
-        expect(screen.queryByTestId('transition-overlay')).toBeNull();
+        expect(screen.getByTestId('transition-overlay').style.opacity).toBe('1');
         expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
 
         await tickMs(16); // T=415
@@ -989,6 +1036,165 @@ describe('SceneRouter — minimum-visible held layer', () => {
         // whole lifetime: nobody saw it, so nothing is held.
         expect(screen.getByTestId('resolved-screen')).toBeTruthy();
         expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('withholds the reveal while the held cover is still serving its minimum', async () => {
+        // The defect this replaces: the fade came back the instant the
+        // transition ended, so the incoming scene appeared UNDERNEATH a cover
+        // that was still serving its minimum — the model beside the spinner.
+        const ref = textureRef('arena');
+        const fadeControl = watchableFade();
+        const registry = heldRegistry();
+        const options = {
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+            fadeControl,
+        };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        expect(fadeControl.fadeIn).not.toHaveBeenCalled();
+    });
+
+    it('reveals in the commit the held cover leaves, and only once', async () => {
+        const ref = textureRef('arena');
+        const fadeControl = watchableFade();
+        const registry = heldRegistry();
+        const options = {
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+            fadeControl,
+        };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16); // cover rises at T=16; release lands at T=16+MIN_VISIBLE_MS
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        await tickMs(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+
+        // The debt is spent, not standing: nothing re-fires it later.
+        await tickMs(MIN_VISIBLE_MS);
+        expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not hold the curtain for a Suspense cover, which paints beneath it', async () => {
+        // The layering, because it is what decides the behaviour. A mounted
+        // fallback resolves through the same cascade as the transition cover
+        // (Invariant #88) but renders in the SCREEN SLOT — the preset is
+        // `position: absolute` with no z-index, "a sibling inside the scene,
+        // not a route-level layer" — while the curtain is `fixed` at
+        // `--ch-z-scene-fade`. Holding the curtain up for it would paint the
+        // player black for the whole chunk wait instead of the loading screen,
+        // and a `React.lazy` chunk is the one wait Invariant #133 leaves
+        // unbounded, so the black would have no release path.
+        const { Screen, resolve } = makeControlledScreen('summary-screen');
+        const ref = textureRef('arena');
+        const fadeControl = watchableFade();
+        const registry = heldRegistry({
+            playfield: Screen,
+            sceneDefaultScreens: { 'engine:post-game': 'playfield' },
+        });
+        const options = {
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+            fadeControl,
+        };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16);
+
+        // The transition cover, while it stands, IS above the curtain.
+        expect(screen.getByTestId('scene-preload-cover').style.zIndex).toBe(
+            'var(--ch-z-loading-hud)',
+        );
+
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeSnapshot({
+                        tick: 5,
+                        sceneId: makeSceneId('engine:post-game'),
+                        sceneTransition: null,
+                    }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        // The fallback took over and carries no stacking of its own, so it is
+        // under the curtain. The reveal is therefore spent here rather than
+        // deferred onto a wait nothing bounds.
+        expect(screen.queryByTestId('summary-screen')).toBeNull();
+        const fallbackCover = screen.getByTestId('reporting-cover');
+        expect(fallbackCover.closest('[data-testid="scene-held-cover"]')).toBeNull();
+        expect(fallbackCover.closest('[data-testid="scene-preload-cover"]')).toBeNull();
+        expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+
+        // And the chunk resolving later never pays a second time.
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(MIN_VISIBLE_MS);
+
+        expect(screen.getByTestId('summary-screen')).toBeTruthy();
+        expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the curtain painted at full opacity under the held cover, then lifts it', async () => {
+        // The paint, not the call: a fade nobody renders reveals nothing. This
+        // provider's only painter is `TransitionOverlay`, so the black the
+        // cover sits on and the ramp that follows are both this element — with
+        // the REAL fade, not a spy.
+        const ref = textureRef('arena');
+        const registry = heldRegistry();
+        const options = {
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+        };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16);
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+        await tickMs(0);
+
+        // Transition over, cover standing: fully black behind it.
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        expect(screen.getByTestId('transition-overlay').style.opacity).toBe('1');
+
+        await tickMs(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+
+        // The cover left against that same black; the curtain lifts after it.
+        await tickMs(64);
+        expect(screen.queryByTestId('transition-overlay')).toBeNull();
+        expect(screen.getByTestId('playfield-screen')).toBeTruthy();
     });
 
     it('a new transition supersedes the held layer, and its cover then stands alone', async () => {

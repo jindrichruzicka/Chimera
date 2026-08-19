@@ -24,11 +24,23 @@ export function TransitionOverlay({
 }: TransitionOverlayProps): React.ReactElement | null {
     const fade = useFade();
     const transition = snapshot.sceneTransition;
-    if (transition === undefined || transition === null) {
+    // Mounted for as long as the curtain is UP, not only while a transition is
+    // in flight. The two are not the same span: the transition ends at the
+    // host's commit, but the reveal is deferred past it while a loading cover
+    // serves its minimum (§4.36). Unmounting at the commit left this
+    // provider's opacity with no painter at all — the fade-in that follows had
+    // nothing to animate, so the scene arrived by a hard cut, and the black a
+    // player saw during the hold was whatever the cover itself painted.
+    if ((transition === undefined || transition === null) && fade.opacity <= 0) {
         return null;
     }
 
-    const displayedPhase = resolveDisplayedFadePhase(transition.phase, fade.phase);
+    // With no transition left to describe, the fade's own phase IS the phase:
+    // the curtain is holding or easing off under nobody's transition.
+    const displayedPhase =
+        transition === undefined || transition === null
+            ? fade.phase
+            : resolveDisplayedFadePhase(transition.phase, fade.phase);
 
     return (
         <div
@@ -64,6 +76,10 @@ const transitionOverlayStyle: React.CSSProperties = {
     position: 'fixed',
     inset: 0,
     pointerEvents: 'none',
-    backgroundColor: 'var(--ch-color-surface-overlay)',
+    // The same black the app-level curtain paints. A translucent grey let
+    // the outgoing scene show through the hold, so a loading cover above it
+    // was never the only thing on screen — which is what the beat exists to
+    // make true on this surface too.
+    backgroundColor: 'var(--ch-color-scrim)',
     zIndex: 'var(--ch-z-scene-fade)',
 };

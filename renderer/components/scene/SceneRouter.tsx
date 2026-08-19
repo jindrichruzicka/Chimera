@@ -80,15 +80,6 @@ export function SceneRouter({
     // routers would cross-talk) and NOT `FadeControl` (also mounted app-level,
     // where no scene preload exists; a load fraction is not a fade property).
     const [preloadProgress, setPreloadProgress] = React.useState<number | null>(null);
-    useFadeTransition({
-        snapshot,
-        sendAction,
-        onPreloadProgress: setPreloadProgress,
-        ...(localPlayerId === undefined ? {} : { localPlayerId }),
-        ...(assetManifest === undefined ? {} : { assetManifest }),
-        ...(fadeOutMs === undefined ? {} : { fadeOutMs }),
-        ...(fadeInMs === undefined ? {} : { fadeInMs }),
-    });
 
     useEffect(() => {
         useUiStore.getState().setActiveSceneId(sceneId, defaultScreenKey);
@@ -107,9 +98,10 @@ export function SceneRouter({
     // would drop, ONE held-layer slot re-renders the same resolved cover — the
     // held COPY below, snapshotted during covered renders, since the commit
     // render can no longer compute it — until the remainder elapses.
-    // `useFadeTransition` above is deliberately untouched: the ack, both fade
-    // channels and the progress protocol are what "nothing host-visible moves"
-    // means (Invariant #133).
+    // Nothing host-visible moves for any of it: the ack, the fade-OUT leg and
+    // the progress protocol are what that phrase covers, and they are carried
+    // by `useFadeTransition.test.tsx`'s ack suite (Invariant #133). The reveal
+    // is the one thing this file defers, at the `coverUp` term below.
     const holdMs = resolveLoadingCoverHoldMs(registry);
     // Whether the Suspense fallback is currently mounted, reported by the
     // wrapper around the fallback JSX (state, not a ref: the fallback's unmount
@@ -207,6 +199,49 @@ export function SceneRouter({
         !fallbackMounted &&
         !sceneCoverOccluded &&
         heldCover !== null;
+
+    // Whether a cover still stands between the player and the scene. The
+    // transition owes its reveal until this falls, so the cover leaves
+    // against a curtain still at full opacity and the scene is revealed out of
+    // black rather than appearing around a loading screen.
+    //
+    // Only covers that paint ABOVE the curtain count. The held layer is one:
+    // `preloadCoverLayerStyle` puts it at `--ch-z-loading-hud` (150), over the
+    // curtain's `--ch-z-scene-fade` (130). A mounted Suspense fallback is NOT —
+    // the preset is `position: absolute` with no z-index by design, "a sibling
+    // inside the scene, not a route-level layer" — so it renders beneath the
+    // curtain. Holding the curtain up for it would show the player black for
+    // the whole wait instead of the loading screen it exists to explain, which
+    // is the failure this feature removes rather than one to reproduce here.
+    //
+    // Excluding it also keeps this term bounded. The held layer waits on an
+    // ASSET preload, which settles on four independent paths; a fallback waits
+    // on a `React.lazy` chunk, which Invariant #133 deliberately leaves
+    // unbounded ("a module chunk is not one"). Deferring the curtain on a chunk
+    // would park a full-opacity black screen with no release path.
+    //
+    // The transition's own LIVE cover is deliberately absent too: `enteringScene`
+    // is non-null only while a transition is in flight, and a reveal is owed only
+    // once one has ended, so the two never overlap. When a new transition
+    // supersedes a standing hold, `showHeldLayer` drops on `transitionPending`
+    // in the same render that the new cover has not yet risen in, and the debt
+    // is spent there. A mutant dropping the term survives the whole suite,
+    // which is the measurement behind this paragraph rather than an assumption.
+    const coverUp = showHeldLayer;
+
+    // Declared HERE rather than beside the state above, because `coverUp` is
+    // what it needs and that is not known until the cover layers are
+    // resolved. Unconditional either way, so the hook order is stable.
+    useFadeTransition({
+        snapshot,
+        sendAction,
+        onPreloadProgress: setPreloadProgress,
+        coverUp,
+        ...(localPlayerId === undefined ? {} : { localPlayerId }),
+        ...(assetManifest === undefined ? {} : { assetManifest }),
+        ...(fadeOutMs === undefined ? {} : { fadeOutMs }),
+        ...(fadeInMs === undefined ? {} : { fadeInMs }),
+    });
 
     // WITHHELD, not passed as `null`: the contract reads an absent prop as "no
     // preload is running" and a `null` one as "running, but unmeasured", and the
@@ -345,6 +380,12 @@ const preloadCoverLayerStyle: React.CSSProperties = {
     position: 'absolute',
     inset: 0,
     zIndex: 'var(--ch-z-loading-hud)',
+    // Paints its OWN backdrop rather than borrowing the fade’s. A cover
+    // that declares no background is a glyph over whatever stands behind
+    // it, which makes "only the loading screen is visible" a property of
+    // the layer beneath rather than of the cover — the defect the loading
+    // beat exists to remove.
+    backgroundColor: 'var(--ch-color-scrim)',
     pointerEvents: 'none',
 };
 
