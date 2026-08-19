@@ -14,12 +14,45 @@ import { linear, type EasingFn } from '../../utils/curves.js';
 
 export type FadePhase = 'idle' | 'fade-out' | 'hold' | 'fade-in';
 
+/**
+ * One owner's handle on a {@link FadeControl}, taken through
+ * {@link FadeControl.claim}.
+ *
+ * Starting a fade cancels the one in flight and RESOLVES its promise early, so
+ * two owners writing the same provider can strand each other: a stale write
+ * lands after an exit fade and repaints the screen the exit blacked, or an
+ * exit's `await` returns mid-ramp and navigates over a half-faded screen. A
+ * session bounds that by ownership rather than by each caller remembering to
+ * check the others — the newest claim owns the provider, and every older
+ * session goes inert.
+ */
+export interface FadeSession {
+    /** Whether this session still owns the provider — `false` once superseded. */
+    readonly isActive: boolean;
+    /** Fade to black, or resolve without touching opacity once superseded. */
+    fadeOut(durationMs?: number): Promise<void>;
+    /** Fade to transparent, or resolve without touching opacity once superseded. */
+    fadeIn(durationMs?: number): Promise<void>;
+}
+
 export interface FadeControl {
     readonly phase: FadePhase;
     readonly opacity: number;
     setPhase(phase: FadePhase): void;
     fadeOut(durationMs?: number): Promise<void>;
     fadeIn(durationMs?: number): Promise<void>;
+    /**
+     * Take ownership of this provider, superseding whatever session held it.
+     *
+     * `owner` is a label for debugging only — claims are ordered, not keyed, so
+     * two claims under the same label still supersede one another.
+     *
+     * The bare {@link FadeControl.fadeOut} / {@link FadeControl.fadeIn} pair is
+     * deliberately left driving the provider directly and is never gated by a
+     * claim: most callers own the screen for one navigation and have nothing to
+     * coordinate.
+     */
+    claim(owner: string): FadeSession;
 }
 
 export const FadeContext = createContext<FadeControl | null>(null);
@@ -206,9 +239,46 @@ export function FadeProvider({
         [animateOpacity],
     );
 
+    // Monotonic claim counter. A session compares the token it captured against
+    // this ref at CALL time rather than at claim time, so a session claimed
+    // before its first fade still goes inert the moment a later owner claims.
+    const claimTokenRef = useRef(0);
+
+    const claim = useCallback(
+        (owner: string): FadeSession => {
+            claimTokenRef.current += 1;
+            const token = claimTokenRef.current;
+            const owns = (): boolean => claimTokenRef.current === token;
+
+            return {
+                get isActive(): boolean {
+                    return owns();
+                },
+                fadeOut: async (durationMs?: number): Promise<void> => {
+                    if (!owns()) {
+                        // Resolve rather than reject or hang: a superseded
+                        // owner is mid-`await` on its own sequence and has to
+                        // be able to unwind. `owner` names it in a debugger.
+                        void owner;
+                        return;
+                    }
+                    await fadeOut(durationMs);
+                },
+                fadeIn: async (durationMs?: number): Promise<void> => {
+                    if (!owns()) {
+                        void owner;
+                        return;
+                    }
+                    await fadeIn(durationMs);
+                },
+            };
+        },
+        [fadeIn, fadeOut],
+    );
+
     const value = useMemo<FadeControl>(
-        () => ({ phase, opacity, setPhase, fadeOut, fadeIn }),
-        [fadeIn, fadeOut, opacity, phase],
+        () => ({ phase, opacity, setPhase, fadeOut, fadeIn, claim }),
+        [claim, fadeIn, fadeOut, opacity, phase],
     );
 
     return React.createElement(FadeContext.Provider, { value }, children);

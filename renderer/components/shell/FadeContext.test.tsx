@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { easeOut } from '../../utils/curves.js';
-import { FADE_WATCHDOG_GRACE_MS, FadeProvider, useFade } from './FadeContext.js';
+import { FADE_WATCHDOG_GRACE_MS, FadeProvider, useFade, type FadeControl } from './FadeContext.js';
 
 afterEach(() => {
     cleanup();
@@ -382,6 +382,135 @@ describe('FadeContext', () => {
             await vi.advanceTimersByTimeAsync(64);
         });
         // The completion still snaps to the exact target — no easing rounding drift.
+        expect(screen.getByTestId('fade-opacity').textContent).toBe('1');
+    });
+});
+
+describe('FadeControl.claim', () => {
+    /**
+     * Renders one provider and hands the live `FadeControl` back through a ref,
+     * so a test can claim sessions in the order a real interleaving would
+     * rather than through a component tree built per case.
+     */
+    function renderControl(): { current: FadeControl | null } {
+        const ref: { current: FadeControl | null } = { current: null };
+
+        function Probe(): React.ReactElement {
+            const fade = useFade();
+            ref.current = fade;
+            return <output data-testid="fade-opacity">{fade.opacity}</output>;
+        }
+
+        render(
+            <FadeProvider>
+                <Probe />
+            </FadeProvider>,
+        );
+        return ref;
+    }
+
+    it('drives the provider from the active session', async () => {
+        // The positive control: without it, a claim() that returned inert
+        // no-ops from birth would satisfy every suppression case below.
+        vi.useFakeTimers();
+        const control = renderControl();
+
+        const session = control.current?.claim('beat');
+        await act(async () => {
+            await session?.fadeOut(0);
+        });
+
+        expect(screen.getByTestId('fade-opacity').textContent).toBe('1');
+    });
+
+    it('makes a superseded session inert without touching opacity', async () => {
+        // The stuck-screen hazard in one case: the beat still holds a session
+        // and issues its reveal fade-in AFTER a leave has claimed the
+        // provider. The reveal must not repaint the screen the leave blacked.
+        vi.useFakeTimers();
+        const control = renderControl();
+
+        const beat = control.current?.claim('beat');
+        const leave = control.current?.claim('leave');
+        await act(async () => {
+            await leave?.fadeOut(0);
+        });
+        expect(screen.getByTestId('fade-opacity').textContent).toBe('1');
+
+        await act(async () => {
+            await beat?.fadeIn(0);
+        });
+
+        expect(screen.getByTestId('fade-opacity').textContent).toBe('1');
+    });
+
+    it('resolves a superseded session’s fade instead of hanging its caller', async () => {
+        // A sequencer awaits its own legs. An inert call that never settled
+        // would park the beat mid-phase forever rather than let it unwind.
+        vi.useFakeTimers();
+        const control = renderControl();
+
+        const beat = control.current?.claim('beat');
+        control.current?.claim('leave');
+
+        let settled = false;
+        await act(async () => {
+            await beat?.fadeIn(0).then(() => {
+                settled = true;
+            });
+        });
+
+        expect(settled).toBe(true);
+    });
+
+    it('reports which session owns the provider', () => {
+        // The signal a sequencer reads to stop issuing commands at all,
+        // rather than issuing commands that are silently dropped.
+        const control = renderControl();
+
+        const beat = control.current?.claim('beat');
+        expect(beat?.isActive).toBe(true);
+
+        control.current?.claim('leave');
+        expect(beat?.isActive).toBe(false);
+    });
+
+    it('preempts an in-flight fade without stranding its promise', async () => {
+        // The cancel-resolves-early trap this API exists to contain: the
+        // superseded fade must settle (so its awaiter unwinds) while the new
+        // owner, not the old one, decides where the screen ends up.
+        vi.useFakeTimers();
+        const control = renderControl();
+
+        const beat = control.current?.claim('beat');
+        let beatFadeSettled = false;
+        act(() => {
+            void beat?.fadeOut(320).then(() => {
+                beatFadeSettled = true;
+            });
+        });
+
+        const leave = control.current?.claim('leave');
+        await act(async () => {
+            await leave?.fadeIn(0);
+        });
+
+        expect(beatFadeSettled).toBe(true);
+        expect(screen.getByTestId('fade-opacity').textContent).toBe('0');
+    });
+
+    it('leaves the unclaimed fadeOut/fadeIn pair driving the provider directly', async () => {
+        // Every existing caller fades without claiming anything. A claim that
+        // locked the provider against them would break the lobby hop, the
+        // menu reveal and the error boundary in one edit.
+        vi.useFakeTimers();
+        const control = renderControl();
+
+        control.current?.claim('beat');
+        await act(async () => {
+            await control.current?.fadeOut(0);
+        });
+
         expect(screen.getByTestId('fade-opacity').textContent).toBe('1');
     });
 });

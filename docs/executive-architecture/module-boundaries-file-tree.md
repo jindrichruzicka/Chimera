@@ -262,7 +262,8 @@ chimera/
 │   │   │   ├── EngineLoadingPreset.tsx   # The engine's own cover forms (spinner / progress / message / image); see §4.36
 │   │   │   ├── RouteEntryLoadingCover.tsx  # The route-entry cover site: a sibling layer over the mounted shell while the preload gate waits; see §4.36
 │   │   │   ├── resolveLoadingScreen.ts   # loadingScreens[key] ?? loadingScreen cascade; see §4.36
-│   │   │   ├── loadingCoverHold.ts  # Resolves loadingScreenMinVisibleMs into the hold consumers arm; e2e-collapsed at call time; see §4.36
+│   │   │   ├── loadingCoverHold.ts  # Resolves loadingScreenMinVisibleMs into the hold consumers arm and the beat's floor; e2e-collapsed at call time; see §4.36
+│   │   │   ├── useLoadingBeat.ts    # Sequences black → cover → black → reveal for one surface; see §4.36
 │   │   │   ├── useMinimumVisibleHold.ts  # Delayed-release latch: a shown cover stays up at least holdMs; see §4.36
 │   │   │   ├── useRouteCoverRevealGrace.ts  # Fixed timer after which a route entry still waiting on black reveals its cover; see §4.36
 │   │   │   ├── useCoverExitRamp.ts  # Keeps a cover the player saw mounted for its fade-out over the scene; see §4.36

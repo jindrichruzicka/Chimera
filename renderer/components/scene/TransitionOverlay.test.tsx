@@ -19,6 +19,11 @@ const fadeControl: FadeControl = {
     setPhase: () => undefined,
     fadeOut: () => Promise.resolve(),
     fadeIn: () => Promise.resolve(),
+    claim: () => ({
+        isActive: true,
+        fadeOut: () => Promise.resolve(),
+        fadeIn: () => Promise.resolve(),
+    }),
 };
 
 afterEach(() => {

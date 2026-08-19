@@ -357,6 +357,11 @@ describe('useFadeTransition', () => {
             setPhase: vi.fn(),
             fadeOut: vi.fn().mockResolvedValue(undefined),
             fadeIn: vi.fn().mockResolvedValue(undefined),
+            claim: () => ({
+                isActive: true,
+                fadeOut: (durationMs?: number) => fadeControl.fadeOut(durationMs),
+                fadeIn: (durationMs?: number) => fadeControl.fadeIn(durationMs),
+            }),
         };
 
         function Harness({ snap }: { snap: PlayerSnapshot }): React.ReactElement {
@@ -1213,14 +1218,24 @@ describe('useFadeTransition — entering scene asset preload', () => {
 // ── preload fixtures ─────────────────────────────────────────────────────────
 
 function makeFadeControl(overrides: Partial<FadeControl> = {}): FadeControl {
-    return {
+    const control: FadeControl = {
         phase: 'idle',
         opacity: 0,
         setPhase: vi.fn(),
         fadeOut: vi.fn().mockResolvedValue(undefined),
         fadeIn: vi.fn().mockResolvedValue(undefined),
+        // Delegates through `control`, so a session inherits whatever a case
+        // overrode. Several cases pin the ack against a fade that never
+        // resolves; a session with its own resolved stub would turn those into
+        // instant fades and leave them green while measuring nothing.
+        claim: () => ({
+            isActive: true,
+            fadeOut: (durationMs?: number) => control.fadeOut(durationMs),
+            fadeIn: (durationMs?: number) => control.fadeIn(durationMs),
+        }),
         ...overrides,
     };
+    return control;
 }
 
 function makePreloadingSnapshot(
@@ -1259,16 +1274,24 @@ interface PreloadHarnessOptions {
 /** A `FadeControl` whose fade-out the test decides the moment of. */
 function deferredFade(): { readonly control: FadeControl; readonly resolve: () => void } {
     const resolvers: (() => void)[] = [];
+    const deferredFadeOut = (): Promise<void> =>
+        new Promise<void>((resolve) => {
+            resolvers.push(resolve);
+        });
     return {
         control: {
             phase: 'idle',
             opacity: 0,
             setPhase: () => undefined,
-            fadeOut: () =>
-                new Promise<void>((resolve) => {
-                    resolvers.push(resolve);
-                }),
+            fadeOut: deferredFadeOut,
             fadeIn: () => Promise.resolve(),
+            // The same deferred fade, so a session defers too — the whole point
+            // of this double is a fade-out that has not finished.
+            claim: () => ({
+                isActive: true,
+                fadeOut: deferredFadeOut,
+                fadeIn: () => Promise.resolve(),
+            }),
         },
         resolve: () => {
             for (const resolveFade of resolvers.splice(0)) {
@@ -1320,6 +1343,11 @@ const sharedInstantFadeControl: FadeControl = {
     setPhase: () => undefined,
     fadeOut: () => Promise.resolve(),
     fadeIn: () => Promise.resolve(),
+    claim: () => ({
+        isActive: true,
+        fadeOut: () => Promise.resolve(),
+        fadeIn: () => Promise.resolve(),
+    }),
 };
 
 function renderPreloadHarness(options: PreloadHarnessOptions): ReturnType<typeof render> {

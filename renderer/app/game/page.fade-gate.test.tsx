@@ -183,6 +183,9 @@ function makeFade(opacity = 1): FadeControl {
         setPhase: vi.fn(),
         fadeOut,
         fadeIn,
+        // Sessions delegate to the same spies, so a caller that fades through a
+        // claim is recorded exactly like one that fades directly.
+        claim: () => ({ isActive: true, fadeOut, fadeIn }),
     };
 }
 
@@ -755,22 +758,26 @@ describe('GamePage minimum-visible hold', () => {
  */
 function StatefulFadeGame({ initialOpacity }: { initialOpacity: number }): React.ReactElement {
     const [opacity, setOpacity] = React.useState(initialOpacity);
-    const control = React.useMemo<FadeControl>(
-        () => ({
+    const control = React.useMemo<FadeControl>(() => {
+        const runFadeOut = async (durationMs?: number): Promise<void> => {
+            fadeOut(durationMs);
+            setOpacity(1);
+        };
+        const runFadeIn = async (durationMs?: number): Promise<void> => {
+            fadeIn(durationMs);
+            setOpacity(0);
+        };
+        return {
             phase: opacity >= 1 ? 'hold' : 'idle',
             opacity,
             setPhase: vi.fn(),
-            fadeOut: async (durationMs?: number): Promise<void> => {
-                fadeOut(durationMs);
-                setOpacity(1);
-            },
-            fadeIn: async (durationMs?: number): Promise<void> => {
-                fadeIn(durationMs);
-                setOpacity(0);
-            },
-        }),
-        [opacity],
-    );
+            fadeOut: runFadeOut,
+            fadeIn: runFadeIn,
+            // The stateful double's whole point is that a fade really moves the
+            // scrim, so a session has to move it too.
+            claim: () => ({ isActive: true, fadeOut: runFadeOut, fadeIn: runFadeIn }),
+        };
+    }, [opacity]);
 
     return (
         <I18nProvider>

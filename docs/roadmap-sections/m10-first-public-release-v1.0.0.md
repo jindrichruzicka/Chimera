@@ -1091,10 +1091,10 @@ cover form is what does that. A cover declared with no minimum resolves to an en
 floor rather than to nothing, since a beat bounded only by its own fades would flash under
 reduced motion, where the fades collapse to cuts; a declared `0` remains the explicit
 opt-down to gate-settle-only. The collapse asymmetry Invariant #133 states is unchanged:
-every deliberate delay in the beat arrives through `screenFadeMs()` or
-`resolveLoadingCoverHoldMs`, both of which return `0` under `NEXT_PUBLIC_CHIMERA_E2E`, and
-the sequencer takes both as inputs rather than reading the environment itself — while the
-release budgets keep their no-collapse rule. This takes up the "delay-before-show" pair F90
+every deliberate delay in the beat arrives through a duration resolver that returns `0`
+under `NEXT_PUBLIC_CHIMERA_E2E` — `screenFadeMs()` for the fades, `loadingCoverHold.ts` for
+the floor — and the sequencer takes them as inputs rather than reading the environment
+itself, while the release budgets keep their no-collapse rule. This takes up the "delay-before-show" pair F90
 deferred as a second feature with its own blank-screen trade-off, and answers that trade-off
 with the black legs: what stands in front of the wait meanwhile is the curtain already there.
 
