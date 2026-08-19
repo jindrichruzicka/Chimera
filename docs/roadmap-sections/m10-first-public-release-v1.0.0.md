@@ -1030,8 +1030,11 @@ stays internal — all candidates for a follow-up.
 
 ### F92 — Unconditional Loading Beat for Game-Load Presentation `§4.36, §4.10, §4.18–§4.19, §4.33`
 
-**Status: planned; the feature issue is
-[#1145](https://github.com/jindrichruzicka/Chimera/issues/1145).** Measured on 1.0.0-rc.7
+**Status: implemented across [#1146](https://github.com/jindrichruzicka/Chimera/issues/1146)–[#1150](https://github.com/jindrichruzicka/Chimera/issues/1150) and [#1152](https://github.com/jindrichruzicka/Chimera/issues/1152); the feature gate is [#1153](https://github.com/jindrichruzicka/Chimera/issues/1153).**
+[#1151](https://github.com/jindrichruzicka/Chimera/issues/1151) is open: the scene-transition
+surface shipped the sequence but not the sequencer, and
+[#1154](https://github.com/jindrichruzicka/Chimera/issues/1154) carries the rest. Invariant #133
+names the difference. Measured on 1.0.0-rc.7
 with a scaffolded game declaring `'spinner'` and a 5000 ms minimum over one critical 464 KB
 model, the pair could not deliver the thing it exists for. On a normal run the beat did not
 happen: the model settled in ~150 ms, the route cover mounted at ~180 ms and was dropped
@@ -1077,7 +1080,7 @@ while the curtain is still opaque.
 
 **Nothing host-visible moves, and the proof becomes a pin rather than a non-edit.** F90
 shipped without editing `useFadeTransition` at all; F92 edits it, because the
-scene-transition surface adopts the beat too and the reveal fade-in is what moves. What does
+scene-transition surface defers its reveal too and the reveal fade-in is what moves. What does
 not move is everything upstream of it: the fade-out, the preload run, the four-outcome ack,
 the retry cadence and the progress protocol. A minimum inserted before `engine:scene_ready`
 would serialise one client's cosmetic preference onto every seat in the match, so the
@@ -1102,7 +1105,7 @@ with the black legs: what stands in front of the wait meanwhile is the curtain a
 because the hold collapses under the flag. What survives that collapse is not duration but
 structure — which layers are mounted while the gate runs, and in what order the phases commit
 — so the beat is observable in the recorded reveal timeline with every delay at zero. The
-specs whose predicates the beat abolishes are rewritten; `scene-transition` and `hud-layout`
+one spec whose predicate the beat abolishes is rewritten; `scene-transition` and `hud-layout`
 stay as the surviving no-regression controls, the latter because tactics' playfield stays
 coverless on purpose and so keeps "a game gets no cover it did not ask for" falsifiable.
 

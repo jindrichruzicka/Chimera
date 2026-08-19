@@ -325,6 +325,110 @@ none of the three had landed then. Corrected here to state each one's actual sta
 
 ---
 
+### F92 feature-review gate (#1153)
+
+Run in full on the gate's own branch, base `main` @ `7a1e654e`, 2026-08-20. Every step below is
+the result at this tree.
+
+| Step              | Command                                                    | Result                             |
+| ----------------- | ---------------------------------------------------------- | ---------------------------------- |
+| Format            | `pnpm format:check`                                        | **exit 0**                         |
+| Lint              | `pnpm lint`                                                | **exit 0**                         |
+| Typecheck         | `pnpm typecheck`                                           | **exit 0**                         |
+| Unit tests        | `pnpm test`                                                | **exit 0 — 11 983 passed, 2 todo** |
+| Packaged bundle   | `pnpm verify:packaged-bundle`                              | **exit 0**                         |
+| Invariant checker | `.claude/skills/invariants/scripts/check-invariants.sh`    | **exit 0**                         |
+| Checker self-test | `.claude/skills/invariants/tests/check-invariants.test.sh` | **144 / 144 pass**                 |
+| Asset validation  | `pnpm validate:assets`                                     | **exit 0 — 17 refs checked**       |
+| Changeset policy  | `pnpm verify:changeset-policy`                             | **exit 0**                         |
+| Version alignment | `pnpm verify:version-alignment`                            | **exit 0**                         |
+| Scaffold          | `pnpm verify:scaffold`                                     | **exit 0**                         |
+| E2E               | `pnpm test:e2e`                                            | **exit 0 — 152 passed, 0 `flaky`** |
+
+The unit-test figure is the SUM of the seven per-package runs (simulation 2 298, ai 173,
+networking 300, renderer 4 233, electron 3 142, tactics 1 008, tools 829), not the tail line —
+`pnpm test` ends with the tools run, whose own total is what a casual read picks up.
+
+The e2e row is **not** evidence that the suite is stable, and it is written here with what
+contradicts it. Three runs at this tree returned exit 0 with 152 passed and no `flaky` line. A
+fourth, at the same tree and in the same checkout, returned **exit 1 — 150 passed, 1 failed, 1
+flaky**: `replay.spec.ts` › leaving a post-game replay returns the host to the lobby
+failed, and `scene-preload-cover.spec.ts` retried. Both died at the same place —
+`apps/tactics/e2e/helpers/lobby-match.ts` in `readyAndStart`'s ready poll, `Timeout 10000ms
+exceeded while waiting on the predicate` — which is UPSTREAM of every line F92 changed in that
+helper, and an isolated re-run of just those two specs passed. The suspected cause is launch
+contention behind a preceding heavy run rather than anything in this feature, which is a known
+shape in this repo. It is recorded rather than re-run away: a green exit code is what hides a
+retried spec, and three greens do not answer a red. Tracked as
+[#1155](https://github.com/jindrichruzicka/Chimera/issues/1155); this gate does not claim the flake
+is closed.
+
+Rows #21, #88 and #133 are what this gate ratifies. #133 is amended rather than renumbered, so
+the coverage summary above is unchanged and re-derives from the ledger.
+
+**Child acceptance criteria.** #1146, #1147, #1148, #1149, #1150 and #1152 are closed, and their
+carrying suites re-ran green on this base: `useLoadingBeat` / `loadingCoverHold` / `FadeContext`
+60, `GameShell` 75, the two route entries 126, the scene surface 235. Those four figures overlap
+and must not be summed — the scene-surface run contains two of the three files in the 60.
+
+**#1151 is OPEN, and this gate does not certify it.** It delivered the sequence on the
+scene-transition surface and not the sequencer; its own close-out comment lists what remains,
+and #1154 carries it. An inclusive range here would have asserted a green re-verification for a
+child whose record says otherwise.
+
+**The zero-commit sentinels, measured over `8b2ce0e5..7a1e654e`** — the fixed endpoints of the
+feature, written out rather than as `main`, because a moving endpoint turns a gate record into a
+claim later work silently falsifies (this file learned that from F90's own section, whose
+commit-count proof F92 went on to break):
+
+| Sentinel                                          | Commits | What it holds                                                  |
+| ------------------------------------------------- | ------- | -------------------------------------------------------------- |
+| `apps/tactics/e2e/tests/scene-transition.spec.ts` | 0       | the two-phase barrier and its 15 s polls                       |
+| `apps/tactics/e2e/tests/hud-layout.spec.ts`       | 0       | the HUD's geometry, now that its MOUNT moved                   |
+| `renderer/app/game/page.test.tsx`                 | 0       | `/game`'s mount gate (Invariant #21)                           |
+| `renderer/app/game/page.asset-manager.test.tsx`   | 0       | that the page hands `GameShell` a manager carrying a `dispose` |
+
+Paths are written in full: `page.test.tsx` alone matches twelve files in this repo, and one of
+them — `renderer/app/replays/player/page.test.tsx` — has two commits in this very range.
+
+`page.asset-manager.test.tsx`'s row is deliberately narrower than Invariant #21: that file
+asserts the prop is passed with a `dispose`, and UNIQUENESS is carried by Check 25's site-pin
+plus `GameShell.test.tsx`, as the #21 ledger row records.
+
+`scene-preload-cover.spec.ts` is **not** in that table, though it also has zero commits over the
+range. The four above were chosen in advance as no-regression controls; that one is unchanged
+because the work that would have rewritten it — carrying the beat on the scene surface — was
+deferred to #1154. Zero commits there is evidence of a deferral, and listing it beside the
+controls would present it as evidence for the feature. It passes unmodified, which is worth
+recording; it is not a control this feature earned.
+
+`asset-preload-gate.spec.ts` IS superseded — one commit, at #1149. Its old discriminator was the
+route cover's mounted window, which the beat abolished by holding the scrim opaque instead; the
+rewrite asserts the phase sequence (`covered` before `revealed`) and its docblock disclaims what
+it can no longer tell apart, a gate released from a gate that was never armed. Superseded rather
+than regressed, for the arrangement that docblock measures — tactics declares no cover, so what
+is left there is a duration difference and not a structural one.
+
+**The ack suite, measured rather than asserted.** The task called `useFadeTransition`'s ack suite
+an untouched sentinel; the FILE has two commits over the range, so the claim is made at the level
+it is true, and by a command rather than by a written tally that goes stale:
+
+```
+git diff 8b2ce0e5 7a1e654e -- renderer/components/scene/useFadeTransition.test.tsx
+```
+
+Every hunk in the three ack describes is one additive `claim` member — the one #1147 put on the
+`FadeControl` interface — inside an inline control literal or a shared fixture. Exactly one case
+body differs, by that member alone; its harness, its arrange steps and both its assertions are
+unchanged. The deletions on the file are the same cause in the two shared fixtures. No ack
+assertion moved, which is the property the sentinel exists for: `engine:scene_ready` fires when
+it always did.
+
+**What this gate does not ratify.** §4.36's scene-to-scene surface shipped the sequence and not
+the sequencer. Invariant #133 states the difference and #1154 carries the remainder; both are
+named here rather than restated, because every restatement is one more sentence #1154 has to find
+and delete. Its own issue carries the list.
+
 ## The roll-call — every invariant
 
 | #   | Invariant (short)                                                                                                  | Status        | Enforced-by / evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
