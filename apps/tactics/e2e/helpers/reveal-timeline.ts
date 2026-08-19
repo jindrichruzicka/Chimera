@@ -52,6 +52,17 @@ export interface RevealSample {
     readonly preloadCoverText: string | null;
     /** The scene router's committed scene id. */
     readonly activeSceneId: string | null;
+    /**
+     * Is the match HUD row mounted?
+     *
+     * The loading beat withholds it until the reveal, so this is what separates
+     * "the shell is up" from "the player is looking at the match" — and it is
+     * decided in RENDER, which is what keeps it readable once every beat
+     * duration collapses to zero under the e2e flag.
+     */
+    readonly hudMounted: boolean;
+    /** The beat's phase, as the shell publishes it, or null before it mounts. */
+    readonly revealPhase: string | null;
 }
 
 /** Every recorded state, plus the moment the timeline was read out. */
@@ -109,8 +120,11 @@ function recordRevealTimeline(): void {
         const overlay = browser.document.querySelector('[data-testid="transition-overlay"]');
         const cover = browser.document.querySelector('[data-testid="scene-preload-cover"]');
         const router = browser.document.querySelector('[data-testid="scene-router"]');
+        const shell = browser.document.querySelector('[data-testid="game-shell-root"]');
         return {
             at: browser.performance.now(),
+            hudMounted: browser.document.querySelector('[data-testid="game-hud-slot"]') !== null,
+            revealPhase: shell === null ? null : shell.getAttribute('data-reveal-phase'),
             canvasMounted: browser.document.querySelector('[data-testid="game-canvas"]') !== null,
             routeCoverMounted:
                 browser.document.querySelector('[data-testid="route-entry-loading-cover"]') !==
@@ -134,7 +148,12 @@ function recordRevealTimeline(): void {
         left.transitionOverlayMounted === right.transitionOverlayMounted &&
         left.preloadProgress === right.preloadProgress &&
         left.preloadCoverText === right.preloadCoverText &&
-        left.activeSceneId === right.activeSceneId;
+        left.activeSceneId === right.activeSceneId &&
+        // A field left out here does not merely go unrecorded — it silently
+        // merges two distinct states into one, so the transition it marks
+        // disappears from the timeline rather than showing up wrong.
+        left.hudMounted === right.hudMounted &&
+        left.revealPhase === right.revealPhase;
 
     const sample = (): void => {
         const next = read();
@@ -152,7 +171,12 @@ function recordRevealTimeline(): void {
         attributes: true,
         // The scrim's opacity rides `style`; the other two are read by name. A
         // cover's text arrives with the cover itself, so `childList` carries it.
-        attributeFilter: ['style', 'data-preload-progress', 'data-active-scene-id'],
+        attributeFilter: [
+            'style',
+            'data-preload-progress',
+            'data-active-scene-id',
+            'data-reveal-phase',
+        ],
     });
 }
 

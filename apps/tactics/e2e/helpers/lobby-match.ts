@@ -53,11 +53,33 @@ export async function readyAndStart(
     await hostGame.canvas.waitFor({ state: 'visible' });
     await clientGame.canvas.waitFor({ state: 'visible' });
     // The canvas mounts BEFORE the match is revealed: the route-entry asset gate
-    // holds the app-level fade opaque until the critical preload settles (§4.10).
-    // Every spec that starts a match this way would otherwise race that reveal,
-    // so the wait lives here rather than in each spec. Both windows run their own
-    // gate, so both are waited on. The gate itself is never disabled under e2e —
+    // holds the app-level fade opaque until the critical preload settles (§4.10),
+    // and the loading beat around it holds the HUD back for as long. Every spec
+    // that starts a match this way would otherwise race that reveal, so the wait
+    // lives here rather than in each spec. Both windows run their own gate, so
+    // both are waited on. The gate itself is never disabled under e2e —
     // determinism comes from this wait.
-    await expect(hostWindow.getByTestId('screen-fade-overlay')).toHaveCSS('opacity', '0');
-    await expect(clientWindow.getByTestId('screen-fade-overlay')).toHaveCSS('opacity', '0');
+    await waitForGameRevealed(hostWindow);
+    await waitForGameRevealed(clientWindow);
+}
+
+/**
+ * Wait until a `/game` route has actually revealed its match.
+ *
+ * A transparent scrim is no longer sufficient on its own. The loading beat
+ * holds an OPAQUE cover above that scrim, so a window can read
+ * `opacity: 0` while the player is still looking at a loading screen — a spec
+ * that waited on the scrim alone would pass and then assert against a covered
+ * screen. The three conditions together are what "revealed" means: the curtain
+ * is down, no cover is above it, and the match chrome the beat withholds is
+ * mounted.
+ *
+ * Tactics declares no route cover, so the middle condition is free here today —
+ * it exists so the wait keeps its meaning for a game that declares one, which
+ * is exactly the case that would otherwise regress unseen.
+ */
+export async function waitForGameRevealed(window: Page): Promise<void> {
+    await expect(window.getByTestId('screen-fade-overlay')).toHaveCSS('opacity', '0');
+    await expect(window.getByTestId('route-entry-loading-cover')).toHaveCount(0);
+    await expect(window.getByTestId('game-hud-slot')).toBeVisible();
 }

@@ -30,6 +30,7 @@ import {
 } from './electron.fixture';
 import { openE2eWindow } from './open-window';
 import { GamePage } from '../pages/GamePage';
+import { waitForGameRevealed } from '../helpers/lobby-match';
 
 export type E2eFirstPlayer = 'host' | 'client';
 
@@ -208,6 +209,15 @@ export const test = electronTest.extend<
                 // first snapshot while the hidden direct-game lobby auto-starts.
                 await expect(hostGame.canvas).toBeVisible({ timeout: 15_000 });
                 await expect(clientGame.canvas).toBeVisible({ timeout: 15_000 });
+
+                // `toBeVisible` ignores opacity and ignores anything painted
+                // over the element, so the waits above are satisfied while the
+                // route is still black or still covered. Specs built on this
+                // fixture sample canvas PIXELS, which would then read the
+                // curtain rather than the scene — a wrong number, not a
+                // timeout, which is the failure that goes unnoticed.
+                await waitForGameRevealed(hostWindow);
+                await waitForGameRevealed(clientWindow);
             }
 
             await use();

@@ -343,17 +343,16 @@ function ReplayPlayerView(): React.ReactElement {
     // unit falls back to the default colour, so the replay would render all-blue.
     const gameContent = useGameContent(info?.gameId ?? null);
 
-    // The minimum-visible hold (§4.36). This route has no entry fade, so unlike
-    // /game the cover is never occluded and `shown` stamps at cover mount —
+    // The minimum-visible hold (§4.36). This route has no entry fade, so the
+    // cover is never occluded and `shown` stamps at cover mount —
     // still only for a game-declared cover form; the engine placeholder and the
     // 'none' opt-out keep the latch structurally inert. Only the COVER waits
     // out the remainder: `isReady` below is never widened by the hold.
     //
-    // Deliberately WITHOUT /game's `scrimOpaque` conjunct and the reveal grace
-    // that makes it recoverable. Adding the conjunct alone would silently stop
-    // flooring a cover the moment some future path arrived here on black; adding
-    // the grace with it would put a `fadeIn` on a route that owns no fade, where
-    // it could cancel the fade-out `GameStoreBootstrap` runs when a replay's
+    // Deliberately WITHOUT an occlusion conjunct of its own. Adding one would
+    // silently stop flooring a cover the moment some future path arrived here
+    // on black; pairing it with a fade-in would put one on a route that owns no
+    // fade, where it could cancel the fade-out `GameStoreBootstrap` runs when a replay's
     // Leave broadcasts a lobby snapshot — and a cancelled fade resolves its
     // promise early, so the navigation would land mid-ramp. Both halves belong
     // to whoever gives this route an entry fade.
@@ -371,7 +370,7 @@ function ReplayPlayerView(): React.ReactElement {
     const coverHeld = useMinimumVisibleHold(coverShown, coverHoldMs);
     const routeCoverUp = !(criticalAssets.ready && !coverHeld);
     // A cover the player saw leaves on a fade over the replay already rendering
-    // beneath it, the same exit /game gives its own (§4.36). Collapses to a cut
+    // beneath it (§4.36). Collapses to a cut
     // under the e2e flag and under reduced motion, where `screenFadeMs()` is 0.
     //
     // Read at render because the ramp arms on the render that RELEASES the

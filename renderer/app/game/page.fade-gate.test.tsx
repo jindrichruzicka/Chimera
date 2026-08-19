@@ -29,10 +29,7 @@ import type { AssetManifest } from '@chimera-engine/simulation/content/AssetMani
 import type { AssetRef, TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import { buildAssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
 import type { AssetManager } from '../../assets/AssetManager';
-import {
-    CRITICAL_ASSET_PRELOAD_BUDGET_MS,
-    ROUTE_COVER_REVEAL_GRACE_MS,
-} from '../../assets/criticalAssetPreload.js';
+import { CRITICAL_ASSET_PRELOAD_BUDGET_MS } from '../../assets/criticalAssetPreload.js';
 import { FadeContext, type FadeControl } from '../../components/shell/FadeContext';
 import { SCREEN_FADE_FAST_MS } from '../../components/shell/screenFadeDuration';
 import { I18nProvider } from '../../i18n/I18nProvider';
@@ -115,14 +112,44 @@ vi.mock('../gameAssetSession.js', () => ({
     useRendererGameAssetManager: (loadedGame: unknown) => assetManagerFor(loadedGame),
 }));
 
+/**
+ * Set by a case that wants the mocked shell to report a suspending screen.
+ *
+ * The real `SceneRouter` reports this; the mock cannot, so without a way to
+ * drive it the `!scenePending` half of the route's settle term is never false
+ * in any case and can be deleted with the suite green.
+ */
+let mockScenePending: boolean | null = null;
+
 vi.mock('../../components/shell/GameShell', async () => {
     const react = await import('react');
     return {
-        GameShell: (props: { sceneCoverOccluded?: boolean }) =>
-            react.createElement('div', {
+        GameShell: (props: {
+            sceneCoverOccluded?: boolean;
+            hudMounted?: boolean;
+            revealPhase?: string;
+            onScenePending?: (pending: boolean) => void;
+        }) => {
+            const { onScenePending } = props;
+            // No dep array: the value it reports lives in a module variable a
+            // case reassigns, which React cannot see. Reporting on every render
+            // is what lets a case flip it; the route's own `setScenePending`
+            // makes a repeat of the same value a no-op.
+            react.useEffect(() => {
+                if (mockScenePending !== null) {
+                    onScenePending?.(mockScenePending);
+                }
+            });
+            return react.createElement('div', {
                 'data-testid': 'mock-game-shell',
                 'data-scene-cover-occluded': String(props.sceneCoverOccluded),
-            }),
+                // The seam the beat drives. Exposed here because a game that
+                // declares no cover mounts none, so the HUD's own state is the
+                // only thing that says whether the route has revealed.
+                'data-hud-mounted': String(props.hudMounted),
+                'data-reveal-phase': String(props.revealPhase),
+            });
+        },
     };
 });
 
@@ -132,23 +159,34 @@ interface PreloadHarness {
     readonly assetManager: AssetManager;
     readonly preloadCritical: ReturnType<typeof vi.fn>;
     readonly registerManifest: ReturnType<typeof vi.fn>;
+    /**
+     * Resolve the preload the moment it starts, instead of waiting for
+     * {@link PreloadHarness.settle}.
+     *
+     * The warm-hardware case, and the one the beat exists for: the load is done
+     * before anything could have been shown, so a beat that armed on the wait
+     * still being live would show nothing at all.
+     */
+    settleOnCall: boolean;
     settle(outcome: 'resolve' | 'reject'): void;
 }
 
 function createPreloadHarness(): PreloadHarness {
     let settlePreload: ((outcome: 'resolve' | 'reject') => void) | undefined;
-    const preloadCritical = vi.fn(
-        () =>
-            new Promise<void>((resolve, reject) => {
-                settlePreload = (outcome) => {
-                    if (outcome === 'resolve') {
-                        resolve();
-                    } else {
-                        reject(new Error('texture 404'));
-                    }
-                };
-            }),
-    );
+    const preloadCritical = vi.fn(() => {
+        if (state.settleOnCall) {
+            return Promise.resolve();
+        }
+        return new Promise<void>((resolve, reject) => {
+            settlePreload = (outcome) => {
+                if (outcome === 'resolve') {
+                    resolve();
+                } else {
+                    reject(new Error('texture 404'));
+                }
+            };
+        });
+    });
     const registerManifest = vi.fn();
     const assetManager = {
         registerManifest,
@@ -159,10 +197,11 @@ function createPreloadHarness(): PreloadHarness {
         dispose: vi.fn(),
     } as unknown as AssetManager;
 
-    return {
+    const state: PreloadHarness = {
         assetManager,
         preloadCritical,
         registerManifest,
+        settleOnCall: false,
         settle: (outcome) => {
             if (settlePreload === undefined) {
                 throw new Error('The preload has not started.');
@@ -170,6 +209,51 @@ function createPreloadHarness(): PreloadHarness {
             settlePreload(outcome);
         },
     };
+    return state;
+}
+
+/** One attribute off the mocked shell — the seam the beat drives. */
+function shellAttr(name: string): string | null {
+    return screen.getByTestId('mock-game-shell').getAttribute(name);
+}
+
+/**
+ * The route under a curtain whose fades really move it.
+ *
+ * `makeFade` returns a fixed opacity, which is right for a case that only reads
+ * what the entry started at. It is not enough for the darkening leg: the beat
+ * ends that leg on the curtain being OBSERVED opaque, so a double whose
+ * `fadeOut` resolves without moving anything parks the beat there forever —
+ * and a case built on it would measure a stall rather than a sequence.
+ */
+function StatefulFadeGame({ initialOpacity }: { initialOpacity: number }): React.ReactElement {
+    const [opacity, setOpacity] = React.useState(initialOpacity);
+    const control = React.useMemo<FadeControl>(() => {
+        const runFadeOut = async (durationMs?: number): Promise<void> => {
+            fadeOut(durationMs);
+            setOpacity(1);
+        };
+        const runFadeIn = async (durationMs?: number): Promise<void> => {
+            fadeIn(durationMs);
+            setOpacity(0);
+        };
+        return {
+            phase: opacity >= 1 ? 'hold' : 'idle',
+            opacity,
+            setPhase: vi.fn(),
+            fadeOut: runFadeOut,
+            fadeIn: runFadeIn,
+            claim: () => ({ isActive: true, fadeOut: runFadeOut, fadeIn: runFadeIn }),
+        };
+    }, [opacity]);
+
+    return (
+        <I18nProvider>
+            <FadeContext.Provider value={control}>
+                <GamePage />
+            </FadeContext.Provider>
+        </I18nProvider>
+    );
 }
 
 let harness: PreloadHarness;
@@ -297,6 +381,7 @@ beforeEach(() => {
     mockLeavingToMainMenu = false;
     mockRestoreAbortPending = false;
     mockRestore = null;
+    mockScenePending = null;
     mockReplace.mockClear();
     assetManagerFor.mockReset();
     assetManagerFor.mockImplementation((loadedGame: unknown) =>
@@ -319,38 +404,66 @@ afterEach(() => {
 
 // ── Cases ──────────────────────────────────────────────────────────────────────
 
+// Every case below stubs the e2e flag unless it says otherwise. That collapses
+// `screenFadeMs()` and the beat's floor to `0`, which is what makes the beat's
+// legs land in one commit chain instead of over real fade durations. The cases
+// that measure the beat's TIMING opt out and drive fake timers instead.
+beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+});
+
 describe('GamePage reveal gate', () => {
-    // Both entry shapes. With no declared minimum the hold is structurally
-    // inert, so a cold direct boot, whose scrim is already transparent
-    // (`FadeProvider` starts at 0), takes exactly the same path as a lobby→game
-    // hop that faded out: the fade-in is withheld either way, and on the cold
-    // boot it conceals nothing, leaving the route-entry cover as the only thing
-    // between the player and a half-loaded scene. The route reads `opacity`
-    // only to arm the minimum-visible hold (the describe below) — never to
-    // choose a reveal path.
+    // Both entry shapes. The route reads the curtain's opacity only to decide
+    // whether it still owes a fade to black — never to choose a reveal path —
+    // so a cold direct boot, whose curtain starts transparent, and a lobby→game
+    // hop that already faded out reach the same place.
     it.each([
         ['a hop that faded out to black', 1],
         ['a cold boot whose scrim is already transparent', 0],
     ])(
-        'mounts the shell but withholds the fade-in while the preload runs — %s',
+        'mounts the shell but withholds the reveal while the preload runs — %s',
         async (_entry, opacity) => {
             await renderMountedGame(makeFade(opacity));
 
-            // The whole feature in one assertion pair: the shell IS in the DOM (a
-            // mount gate would orphan the manager GameShell alone disposes,
+            // The whole feature in one assertion pair: the shell IS in the DOM
+            // (a mount gate would orphan the manager GameShell alone disposes,
             // Invariant #21) and the reveal is still withheld.
             expect(screen.getByTestId('mock-game-shell')).toBeInTheDocument();
             expect(fadeIn).not.toHaveBeenCalled();
-            expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-
-            await settlePreload();
-
-            expect(fadeIn).toHaveBeenCalledTimes(1);
-            expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+            expect(shellAttr('data-hud-mounted')).toBe('false');
         },
     );
 
-    it('fades in exactly once across later renders', async () => {
+    it('reveals a faded hop once the preload settles', async () => {
+        await renderMountedGame(makeFade(1));
+
+        await settlePreload();
+
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+    });
+
+    it('darkens a cold boot first, then reveals it once the preload settles', async () => {
+        // The entry that arrives lit. The beat owes it a fade to black before
+        // anything else, so the reveal is one leg further away than on a hop
+        // that already faded out — and only a curtain that really moves can
+        // show that, since the darkening leg ends on the curtain being opaque.
+        render(<StatefulFadeGame initialOpacity={0} />);
+        await screen.findByTestId('mock-game-shell');
+        await waitFor(() => {
+            expect(harness.preloadCritical).toHaveBeenCalled();
+        });
+
+        expect(fadeOut).toHaveBeenCalled();
+        expect(fadeIn).not.toHaveBeenCalled();
+
+        await settlePreload();
+
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+    });
+
+    it('reveals exactly once across later renders', async () => {
         const view = await renderMountedGame();
         await settlePreload();
 
@@ -362,7 +475,9 @@ describe('GamePage reveal gate', () => {
         expect(fadeIn).toHaveBeenCalledTimes(1);
     });
 
-    it('fades in when the budget elapses on a preload that never settles', async () => {
+    it('reveals when the budget elapses on a preload that never settles', async () => {
+        // The budget is a RELEASE, and it does not collapse under the flag —
+        // it is what guarantees the gate lets go at all (Invariant #133).
         vi.useFakeTimers();
         renderGame();
         await act(async () => {
@@ -376,26 +491,26 @@ describe('GamePage reveal gate', () => {
         });
 
         expect(fadeIn).toHaveBeenCalledTimes(1);
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(shellAttr('data-hud-mounted')).toBe('true');
     });
 
     it.each([['resolve'], ['reject']] as const)(
-        'drops the cover when the preload settles by %s',
+        'reveals when the preload settles by %s',
         async (outcome) => {
             await renderMountedGame();
-            expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+            expect(shellAttr('data-hud-mounted')).toBe('false');
 
             await settlePreload(outcome);
 
-            // A cover left standing on the failure path sits at
-            // `--ch-z-loading-hud` above every modal and toast for the rest of
-            // the match — the failure path is the one that most needs the UI.
-            expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+            // The beat reads readiness, never the outcome: a reveal withheld on
+            // the failure path would leave the player on a screen with no way
+            // forward, and that is the path that most needs the UI.
+            expect(shellAttr('data-hud-mounted')).toBe('true');
             expect(fadeIn).toHaveBeenCalledTimes(1);
         },
     );
 
-    it('suppresses the fade-in while a leave is in flight', async () => {
+    it('issues no reveal while a leave is in flight', async () => {
         mockLeavingToMainMenu = true;
         await renderMountedGame();
         await settlePreload();
@@ -406,7 +521,7 @@ describe('GamePage reveal gate', () => {
         expect(fadeIn).not.toHaveBeenCalled();
     });
 
-    it('suppresses the fade-in while the snapshot is still in the lobby phase', async () => {
+    it('issues no reveal while the snapshot is still in the lobby phase', async () => {
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
         await renderMountedGame();
         await settlePreload();
@@ -414,7 +529,7 @@ describe('GamePage reveal gate', () => {
         expect(fadeIn).not.toHaveBeenCalled();
     });
 
-    it('does not retry a suppressed fade-in once the phase clears', async () => {
+    it('does not retry a suppressed reveal once the phase clears', async () => {
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
         const view = await renderMountedGame();
         await settlePreload();
@@ -422,14 +537,14 @@ describe('GamePage reveal gate', () => {
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
         await rerenderGame(view);
 
-        // Documented, not accidental: the effect's deps are `[sceneReady]`
-        // alone, so a suppressed fade-in is never retried when the suppressing
-        // condition clears. Safe only because the phase:'lobby' window ends by
-        // navigating away, and /lobby fades itself in.
+        // Suppression is terminal for the activation. Safe only because each
+        // suppressor ends by leaving this route: a leave navigates away, and
+        // the phase:'lobby' window ends at /lobby, which fades itself in.
+        // Resuming here would fade back in over that navigation.
         expect(fadeIn).not.toHaveBeenCalled();
     });
 
-    it('re-arms the latch when the route drops out of shell-ready', async () => {
+    it('runs a fresh beat when the route drops out of shell-ready and returns', async () => {
         const view = await renderMountedGame();
         await settlePreload();
         expect(fadeIn).toHaveBeenCalledTimes(1);
@@ -444,19 +559,19 @@ describe('GamePage reveal gate', () => {
         expect(fadeIn).toHaveBeenCalledTimes(2);
     });
 
-    it('releases the reveal while the restore slice is waiting', async () => {
+    it('reveals immediately while the restore slice is waiting', async () => {
         mockRestore = { state: 'waiting' };
         await renderMountedGame();
 
-        // RestoreWaitingOverlay is a Modal at --ch-z-modal, under both the scrim
-        // at --ch-z-screen-fade and the cover at --ch-z-loading-hud: holding the
-        // reveal here hides the only control that can abort the restore.
+        // RestoreWaitingOverlay is a Modal at --ch-z-modal, under both the
+        // curtain at --ch-z-screen-fade and the cover at --ch-z-loading-hud:
+        // holding the reveal here hides the only control that can abort it.
         expect(fadeIn).toHaveBeenCalledTimes(1);
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(shellAttr('data-hud-mounted')).toBe('true');
         expect(harness.preloadCritical).toHaveBeenCalledTimes(1);
     });
 
-    it('covers the scene again when the restore wait ends with the preload still running', async () => {
+    it('does not replay the beat when the restore wait ends with the preload still running', async () => {
         mockRestore = { state: 'waiting' };
         const view = await renderMountedGame();
         expect(fadeIn).toHaveBeenCalledTimes(1);
@@ -464,19 +579,14 @@ describe('GamePage reveal gate', () => {
         mockRestore = { state: 'ready' };
         await rerenderGame(view);
 
-        // The exit edge of the release above, and intended: the reveal was
-        // handed out early so the abort control stayed reachable, not because
-        // the scene was ready. With the assets still cold it goes back behind
-        // the cover, and the second fade-in ramps from the current opacity, so
-        // there is no flash to black.
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        await settlePreload();
-
+        // The player has been looking at the scene since the release above.
+        // Dropping them back behind a loading screen — after they have already
+        // seen the board — reads as a regression, not as a beat.
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(fadeIn).toHaveBeenCalledTimes(2);
+        expect(shellAttr('data-hud-mounted')).toBe('true');
     });
 
-    it('fades in BEFORE routing to /saves when a restore is aborted mid-preload', async () => {
+    it('reveals BEFORE routing to /saves when a restore is aborted mid-preload', async () => {
         mockRestoreAbortPending = true;
         renderGame();
         await waitFor(() => {
@@ -485,33 +595,51 @@ describe('GamePage reveal gate', () => {
 
         expect(fadeIn).toHaveBeenCalledTimes(1);
         expect(mockReplace).toHaveBeenCalledWith('/saves');
-        // /saves has no mount fade-in of its own, so a hop that leaves the scrim
-        // opaque strands the player on a black screen.
+        // /saves has no mount fade-in of its own, so a hop that leaves the
+        // curtain opaque strands the player on a black screen.
         expect(fadeIn.mock.invocationCallOrder[0]).toBeLessThan(
             mockReplace.mock.invocationCallOrder[0]!,
         );
     });
 
-    it('resolves the cover against the ENTERING scene, not the previous match’s screen', async () => {
-        loadRendererGameMock.mockResolvedValue({
-            registry: makeRegistry({
-                sceneDefaultScreens: { 'engine:game': 'playfield' },
-                loadingScreens: {
-                    playfield: { message: 'COVER-PLAYFIELD' },
-                    summary: { message: 'COVER-SUMMARY' },
-                },
-            }),
-            assetManifest: manifestWithCritical(),
+    it('leaves the curtain alone on an abort that already reached a transparent screen', async () => {
+        // The abort asks the curtain where it is rather than tracking whether a
+        // fade happened, so a screen already transparent is not re-faded.
+        mockRestoreAbortPending = true;
+        renderGame(makeFade(0));
+        await waitFor(() => {
+            expect(mockReplace).toHaveBeenCalled();
         });
-        // What a second match in one process looks like: `uiStore` is a module
-        // singleton /game never resets, so `useActiveScreen()` still reads the
-        // previous match's post-game screen here.
-        useUiStore.getState().navigateToScreen('summary');
 
+        expect(fadeIn).not.toHaveBeenCalled();
+    });
+
+    it('withholds the reveal while the entering screen’s chunk is still in flight', async () => {
+        // The asset gate can settle while the screen's own code-split chunk is
+        // not here yet. Revealing on the gate alone lands the player on the
+        // Suspense fallback rather than on the screen, so the chunk's wait is
+        // part of the beat's settle term too.
+        mockScenePending = true;
         await renderMountedGame();
 
-        expect(await screen.findByText('COVER-PLAYFIELD')).toBeInTheDocument();
-        expect(screen.queryByText('COVER-SUMMARY')).not.toBeInTheDocument();
+        await settlePreload();
+
+        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(fadeIn).not.toHaveBeenCalled();
+    });
+
+    it('reveals once the chunk lands, with the gate already settled', async () => {
+        // The release edge of the case above — without it, "withheld" could be
+        // a beat that never reveals at all.
+        mockScenePending = true;
+        const view = await renderMountedGame();
+        await settlePreload();
+
+        mockScenePending = false;
+        await rerenderGame(view);
+
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(fadeIn).toHaveBeenCalledTimes(1);
     });
 
     it('gates on the committed scene’s declared refs', async () => {
@@ -530,494 +658,168 @@ describe('GamePage reveal gate', () => {
     });
 });
 
-// ── Minimum-visible hold (loadingScreenMinVisibleMs) ───────────────────────────
+// ── The beat itself ────────────────────────────────────────────────────────────
 
-const HOLD_MS = 400;
+const FLOOR_MS = 400;
 
 /**
- * The hold cases run under fake timers (with `performance` faked so the
- * latch's monotonic stamp advances with them), where `waitFor` cannot poll —
- * so the mount flush is an explicit zero-advance, the pattern of the budget
- * case above.
+ * Mounts the route under fake timers with a game that declares a cover.
+ *
+ * The e2e stub is dropped for this describe: these cases measure the beat's
+ * LEGS, and the flag exists to collapse exactly those. `performance` is faked
+ * with the timers because the floor's remainder is a monotonic stamp, and
+ * `requestAnimationFrame` because the cover's rise rides a frame.
  */
-async function mountUnderFakeTimers(fade: FadeControl): Promise<ReturnType<typeof render>> {
-    const view = renderGame(fade);
-    await act(async () => {
-        await vi.advanceTimersByTimeAsync(0);
-    });
-    expect(screen.getByTestId('mock-game-shell')).toBeInTheDocument();
-    expect(harness.preloadCritical).toHaveBeenCalled();
-    return view;
-}
-
-function installHoldRegistry(overrides: Partial<GameScreenRegistry> = {}): void {
+function installBeatRegistry(overrides: Partial<GameScreenRegistry> = {}): void {
     loadRendererGameMock.mockResolvedValue({
         registry: makeRegistry({
             sceneDefaultScreens: { 'engine:game': 'playfield' },
             loadingScreen: 'spinner',
-            loadingScreenMinVisibleMs: HOLD_MS,
+            loadingScreenMinVisibleMs: FLOOR_MS,
             ...overrides,
         }),
         assetManifest: manifestWithCritical(),
     });
 }
 
-describe('GamePage minimum-visible hold', () => {
-    beforeEach(() => {
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
-        installHoldRegistry();
-    });
-
-    it('holds the cover and the fade-in until the minimum when the preload settles early', async () => {
-        const view = await mountUnderFakeTimers(makeFade(0));
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
-        });
-        await settlePreload();
-
-        // Settled inside the minimum: the reveal is DEFERRED, both halves.
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        expect(fadeIn).not.toHaveBeenCalled();
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(HOLD_MS - 100 - 1);
-        });
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        expect(fadeIn).not.toHaveBeenCalled();
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(1);
-        });
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-        // Released — and this cover was visible for its whole life (the scrim
-        // this case pins at 0), so it leaves on its exit ramp rather than a cut.
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
-        });
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-
-        // The latch is preserved across the held release: later renders never
-        // fire a second fade-in.
-        mockSnapshot = makeSnapshot({ tick: 6 });
-        await rerenderGame(view, makeFade(0));
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-    });
-
-    it('reveals immediately when the preload outlives the minimum', async () => {
-        await mountUnderFakeTimers(makeFade(0));
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(HOLD_MS + 100);
-        });
-        await settlePreload();
-
-        // Nothing is DEFERRED: the fade-in is released with the settle, and the
-        // cover only outlives it for its exit ramp.
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
-        });
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-    });
-
-    it('arms no hold on a faded entry younger than the reveal grace', async () => {
-        // The lobby→game hop: the app scrim is opaque OVER the route subtree,
-        // so the cover, though mounted, is not something the player has seen. A
-        // mount-stamped hold here extends a black screen. Scoped to the window
-        // before the grace deliberately — past it the route clears its own
-        // scrim and the cover IS floored, which the grace describe below owns.
-        await mountUnderFakeTimers(makeFade(1));
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(ROUTE_COVER_REVEAL_GRACE_MS - 1);
-        });
-        await settlePreload();
-
-        // Reveal AT settle, exactly as with no minimum declared.
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-    });
-
-    it.each([
-        ['the engine placeholder (no declared cover)', { loadingScreen: undefined }],
-        ["the per-key 'none' opt-out", { loadingScreens: { playfield: 'none' } } as const],
-    ])('arms no hold when the cascade resolves %s', async (_name, overrides) => {
-        installHoldRegistry(overrides as Partial<GameScreenRegistry>);
-        await mountUnderFakeTimers(makeFade(0));
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
-        });
-        await settlePreload();
-
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-    });
-
-    it('collapses the minimum under NEXT_PUBLIC_CHIMERA_E2E', async () => {
-        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
-        await mountUnderFakeTimers(makeFade(0));
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
-        });
-        await settlePreload();
-
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-    });
-
-    it("reports its cover and scrim to GameShell's sceneCoverOccluded, released with the reveal", async () => {
-        // The inner code hold (SceneRouter) must not arm under the route cover
-        // or the opaque scrim; the page owns both signals, so it threads them.
-        await mountUnderFakeTimers(makeFade(0));
-        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
-        });
-        await settlePreload();
-        // Settled, but the hold still keeps the route cover up: still occluded.
-        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(HOLD_MS);
-        });
-        // The cover is on its exit ramp, still painting: the inner router must
-        // not surface a held layer under it yet.
-        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
-        });
-        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('false');
-    });
-
-    it('does not report occlusion for an undeclared route cover under a transparent scrim', async () => {
-        // The engine-placeholder route cover is an empty transparent layer —
-        // nothing sits visually above the router, so a declared Suspense cover
-        // beneath must keep its own hold.
-        loadRendererGameMock.mockResolvedValue({
-            registry: makeRegistry({
-                sceneDefaultScreens: { 'engine:game': 'playfield' },
-                loadingScreenMinVisibleMs: HOLD_MS,
-            }),
-            assetManifest: manifestWithCritical(),
-        });
-        await mountUnderFakeTimers(makeFade(0));
-
-        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('false');
-    });
-
-    it('keeps sceneCoverOccluded true on the faded entry even after its reveal', async () => {
-        await mountUnderFakeTimers(makeFade(1));
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
-        });
-        await settlePreload();
-
-        // The route cover dropped with the settle, but the scrim this harness
-        // pins at opacity 1 still paints over the subtree.
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
-    });
-
-    it('releases the reveal for a waiting restore even with a hold pending', async () => {
-        const view = await mountUnderFakeTimers(makeFade(0));
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
-        });
-        await settlePreload();
-        expect(fadeIn).not.toHaveBeenCalled(); // hold pending until t=400
-
-        mockRestore = { state: 'waiting' };
-        await rerenderGame(view, makeFade(0));
-
-        // RestoreWaitingOverlay sits under the cover; a hold that outwaited it
-        // would hide the only control that can abort the restore.
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-    });
-});
-
-// ── Reveal grace (ROUTE_COVER_REVEAL_GRACE_MS) ─────────────────────────────────
-
-/**
- * A fade double whose `fadeIn` actually clears the scrim, so `scrimOpaque` can
- * fall the way it does in the app. `makeFade` above is a fixed reading and
- * cannot: the route's own fade-in is what falsifies its arming condition.
- *
- * The clear is instant rather than ramped. Nothing the route reads distinguishes
- * the two — the floor stamps when the scrim stops being fully opaque, which is
- * the ramp's first frame either way — and an instant clear keeps these cases off
- * the animation-frame clock.
- */
-function StatefulFadeGame({ initialOpacity }: { initialOpacity: number }): React.ReactElement {
-    const [opacity, setOpacity] = React.useState(initialOpacity);
-    const control = React.useMemo<FadeControl>(() => {
-        const runFadeOut = async (durationMs?: number): Promise<void> => {
-            fadeOut(durationMs);
-            setOpacity(1);
-        };
-        const runFadeIn = async (durationMs?: number): Promise<void> => {
-            fadeIn(durationMs);
-            setOpacity(0);
-        };
-        return {
-            phase: opacity >= 1 ? 'hold' : 'idle',
-            opacity,
-            setPhase: vi.fn(),
-            fadeOut: runFadeOut,
-            fadeIn: runFadeIn,
-            // The stateful double's whole point is that a fade really moves the
-            // scrim, so a session has to move it too.
-            claim: () => ({ isActive: true, fadeOut: runFadeOut, fadeIn: runFadeIn }),
-        };
-    }, [opacity]);
-
-    return (
-        <I18nProvider>
-            <FadeContext.Provider value={control}>
-                <GamePage />
-            </FadeContext.Provider>
-        </I18nProvider>
-    );
-}
-
-async function mountFadedEntry(initialOpacity = 1): Promise<ReturnType<typeof render>> {
-    const view = render(<StatefulFadeGame initialOpacity={initialOpacity} />);
+async function mountBeat(fade: FadeControl = makeFade()): Promise<ReturnType<typeof render>> {
+    const view = renderGame(fade);
     await act(async () => {
-        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(20);
     });
-    expect(screen.getByTestId('mock-game-shell')).toBeInTheDocument();
-    expect(harness.preloadCritical).toHaveBeenCalled();
     return view;
 }
 
-async function advance(ms: number): Promise<void> {
-    await act(async () => {
-        await vi.advanceTimersByTimeAsync(ms);
-    });
+/** Advance in steps, so each leg's timer is armed by the render before it. */
+async function step(ms: number): Promise<void> {
+    for (let elapsed = 0; elapsed < ms; elapsed += 20) {
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(Math.min(20, ms - elapsed));
+        });
+    }
 }
 
-describe('GamePage route-cover reveal grace', () => {
+describe('GamePage loading beat', () => {
     beforeEach(() => {
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
-        installHoldRegistry();
-    });
-
-    it('holds the entry scrim over the mounted cover until the grace elapses', async () => {
-        await mountFadedEntry();
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS - 1);
-
-        expect(fadeIn).not.toHaveBeenCalled();
-        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
-    });
-
-    it('clears the scrim at the grace and floors the cover from that moment', async () => {
-        await mountFadedEntry();
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS - 1);
-        expect(fadeIn).not.toHaveBeenCalled();
-
-        await advance(1);
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-
-        // The gate settles the instant the cover becomes visible: the floor is
-        // stamped from the scrim clear, so the whole minimum is still owed.
-        await settlePreload();
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-
-        await advance(HOLD_MS - 1);
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-
-        await advance(1);
-        // Released — and now on its exit ramp rather than cut.
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        await advance(SCREEN_FADE_FAST_MS);
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-    });
-
-    it('fires exactly one fade-in for the entry — the grace one, none at the reveal', async () => {
-        await mountFadedEntry();
-
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS);
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-
-        await settlePreload();
-        await advance(HOLD_MS);
-        await advance(SCREEN_FADE_FAST_MS);
-
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(fadeIn).toHaveBeenCalledTimes(1);
-    });
-
-    it('fires one fade-in when the settle and the grace land in the same commit', async () => {
-        // The two effects are declared reveal-first, so a commit that rises
-        // both must find the latch already taken by the time the grace effect
-        // runs. Nothing else in this file drives both into one flush.
-        await mountFadedEntry();
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS - 1);
-        expect(fadeIn).not.toHaveBeenCalled();
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(1);
-            harness.settle('resolve');
-            await Promise.resolve();
+        vi.unstubAllEnvs();
+        vi.useFakeTimers({
+            toFake: ['setTimeout', 'clearTimeout', 'performance', 'requestAnimationFrame'],
         });
-
-        expect(fadeIn).toHaveBeenCalledTimes(1);
+        installBeatRegistry();
     });
 
-    it('reveals the cover on a wait that never settles at all', async () => {
-        // The grace timer reads nothing but the clock, so a critical ref that
-        // never resolves cannot leave the entry on black until the 8 s budget.
-        await mountFadedEntry();
+    it('shows the cover even when the preload settles before the first frame', async () => {
+        // The defect the feature exists for. Measured on 1.0.0-rc.7, a local
+        // model settled inside the old reveal grace, so the cover was dropped
+        // unseen and the floor never armed — on the hardware that reads a tip
+        // fastest, the tip never appeared.
+        harness.settleOnCall = true;
+        await mountBeat();
 
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS);
-
-        expect(fadeIn).toHaveBeenCalledTimes(1);
         expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        expect(harness.preloadCritical).toHaveBeenCalledTimes(1);
+        expect(shellAttr('data-hud-mounted')).toBe('false');
     });
 
-    it('arms no grace on an entry whose scrim was never opaque', async () => {
-        // A direct /game boot starts transparent, so its cover is visible from
-        // mount and the floor already stamps there. The grace times a wait spent
-        // on BLACK: arming it here would fade in over an entry that never faded
-        // out, and burn the entry's one fade-in on a no-op.
-        await mountFadedEntry(0);
+    it('holds the cover for the declared floor, then reveals', async () => {
+        harness.settleOnCall = true;
+        await mountBeat();
         expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
 
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
-
+        await step(SCREEN_FADE_FAST_MS + FLOOR_MS - 40);
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
         expect(fadeIn).not.toHaveBeenCalled();
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+
+        await step(SCREEN_FADE_FAST_MS * 2 + 120);
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+        expect(shellAttr('data-hud-mounted')).toBe('true');
     });
 
-    it('arms no grace for a declared cover with no declared minimum', async () => {
-        // The knob that floors a shown cover is what opts the entry into
-        // showing one: without it, revealing could flash a cover with nothing
-        // holding it up.
+    it('ramps its cover down before dropping it, rather than cutting it out', async () => {
+        // The page has to hand the cover the beat's LIVE visibility. Handing a
+        // constant leaves the cover opaque until it unmounts, which is the cut
+        // this sequence exists to replace — the player would go straight from
+        // the loading screen to the reveal with no black between them.
+        harness.settleOnCall = true;
+        await mountBeat();
+        const cover = (): HTMLElement => screen.getByTestId('route-entry-loading-cover');
+
+        await step(SCREEN_FADE_FAST_MS + 60);
+        expect(cover().style.opacity).toBe('1');
+
+        // Past the floor: the beat is on its closing leg, cover still mounted.
+        await step(FLOOR_MS + 40);
+        expect(cover().style.opacity).toBe('0');
+    });
+
+    it('mounts no cover for a game that declares none', async () => {
+        // A game that asked for nothing gets nothing: black until the settle,
+        // then one reveal. The negative control for the case above.
+        //
+        // Built rather than overridden: the slots are optional under
+        // `exactOptionalPropertyTypes`, so "declares none" means ABSENT keys,
+        // which is also what a real registry looks like.
         loadRendererGameMock.mockResolvedValue({
-            registry: makeRegistry({
-                sceneDefaultScreens: { 'engine:game': 'playfield' },
-                loadingScreen: 'spinner',
-            }),
+            registry: makeRegistry({ sceneDefaultScreens: { 'engine:game': 'playfield' } }),
             assetManifest: manifestWithCritical(),
         });
-        await mountFadedEntry();
+        harness.settleOnCall = true;
+        await mountBeat();
 
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
-
-        expect(fadeIn).not.toHaveBeenCalled();
-    });
-
-    it.each([
-        ['the engine placeholder (no declared cover)', { loadingScreen: undefined }],
-        ["the per-key 'none' opt-out", { loadingScreens: { playfield: 'none' } } as const],
-    ])('arms no grace when the cascade resolves %s', async (_name, overrides) => {
-        installHoldRegistry(overrides as Partial<GameScreenRegistry>);
-        await mountFadedEntry();
-
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
-
-        expect(fadeIn).not.toHaveBeenCalled();
-    });
-
-    it('leaves the scrim alone for a leave that started before the grace elapsed', async () => {
-        mockLeavingToMainMenu = true;
-        await mountFadedEntry();
-
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
-
-        // The leave owns the black it is fading through; a reveal here would
-        // undo the fade-out the leave just performed.
-        expect(fadeIn).not.toHaveBeenCalled();
-    });
-
-    it("leaves the scrim alone while a phase:'lobby' snapshot is returning the route", async () => {
-        mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
-        await mountFadedEntry();
-
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
-
-        expect(fadeIn).not.toHaveBeenCalled();
-    });
-
-    it('a waiting restore releases the reveal before the grace can run', async () => {
-        mockRestore = { state: 'waiting' };
-        await mountFadedEntry();
-
-        // The abortable overlay sits UNDER the cover: the reveal is released at
-        // once, and the cover is cut rather than ramped so nothing fades over it.
-        expect(fadeIn).toHaveBeenCalledTimes(1);
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
+        await step(200);
         expect(fadeIn).toHaveBeenCalledTimes(1);
     });
 
-    it('drops a cover the scrim hid for its whole life without a ramp', async () => {
-        // The warm entry, unchanged: settled well inside the grace, so the
-        // cover was never seen and there is nothing to fade out of.
-        await mountFadedEntry();
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS - 100);
-        await settlePreload();
+    it('mounts no cover for the per-key none opt-out', async () => {
+        installBeatRegistry({ loadingScreens: { playfield: 'none' } });
+        harness.settleOnCall = true;
+        await mountBeat();
 
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(fadeIn).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps sceneCoverOccluded true across the whole exit ramp', async () => {
-        // The inner router must not surface a held layer under a cover that is
-        // still painting, however faintly.
-        await mountFadedEntry();
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS);
-        await settlePreload();
-        // Before the release the cover is opaque, and already carries the
-        // transition it will need: the ramp is one property change against a
-        // declaration the rendered style already has.
-        const shownCover = screen.getByTestId('route-entry-loading-cover');
-        expect(shownCover.style.opacity).toBe('');
-        expect(shownCover.style.transition).toBe(
-            `opacity ${SCREEN_FADE_FAST_MS}ms var(--ch-easing-standard)`,
-        );
+    it('darkens before it covers, so the cover never rises over a lit scene', async () => {
+        // The cold-boot entry, whose curtain starts transparent. Without the
+        // darkening leg the cover would fade up over whatever the route was
+        // already showing.
+        harness.settleOnCall = true;
+        await mountBeat(makeFade(0));
 
-        await advance(HOLD_MS);
-
-        // Released: still mounted, now driven to transparent over the scene.
-        expect(screen.getByTestId('route-entry-loading-cover').style.opacity).toBe('0');
-        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('true');
-
-        await advance(SCREEN_FADE_FAST_MS);
-
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(screen.getByTestId('mock-game-shell').dataset['sceneCoverOccluded']).toBe('false');
+        expect(fadeOut).toHaveBeenCalled();
     });
 
-    it('the e2e flag disarms the grace through the floor it arms on', async () => {
-        // The join, not either half: the flag collapses the minimum to 0, which
-        // fails `coverWaitUnseen`'s floor conjunct, so no grace fires. Measured
-        // on a wait deliberately left PENDING past the grace — asserting only
-        // after a settle cannot tell an armed grace from a disarmed one, since
-        // both end with one fade-in and no cover.
+    it('reports occlusion to the shell until the reveal', async () => {
+        harness.settleOnCall = true;
+        await mountBeat();
+        expect(shellAttr('data-scene-cover-occluded')).toBe('true');
+
+        await step(SCREEN_FADE_FAST_MS * 3 + FLOOR_MS + 120);
+
+        expect(shellAttr('data-scene-cover-occluded')).toBe('false');
+    });
+
+    it('publishes its phase for the recorded timeline', async () => {
+        harness.settleOnCall = true;
+        await mountBeat();
+
+        expect(shellAttr('data-reveal-phase')).not.toBe('revealed');
+
+        await step(SCREEN_FADE_FAST_MS * 3 + FLOOR_MS + 120);
+
+        expect(shellAttr('data-reveal-phase')).toBe('revealed');
+    });
+
+    it('collapses every leg under NEXT_PUBLIC_CHIMERA_E2E', async () => {
+        // Both durations the beat schedules on come from resolvers that read
+        // the flag, so the whole sequence lands without a timer to wait out —
+        // and the cover still MOUNTS, which is the structure the recorded
+        // timeline reads once the durations are gone.
         vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
-        await mountFadedEntry();
+        harness.settleOnCall = true;
+        await mountBeat();
 
-        await advance(ROUTE_COVER_REVEAL_GRACE_MS + 100);
-        expect(fadeIn).not.toHaveBeenCalled();
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-
-        await settlePreload();
-
-        // And the cut, not the ramp: `screenFadeMs()` is 0 under the same flag.
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
         expect(fadeIn).toHaveBeenCalledTimes(1);
+        expect(shellAttr('data-hud-mounted')).toBe('true');
     });
 });

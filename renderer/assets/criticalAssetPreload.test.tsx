@@ -19,7 +19,6 @@ import { DefaultAssetManager, type AssetManager, type ResolvedAsset } from './As
 import type { AssetResolver } from './AssetResolver';
 import {
     CRITICAL_ASSET_PRELOAD_BUDGET_MS,
-    ROUTE_COVER_REVEAL_GRACE_MS,
     startCriticalAssetPreload,
     useCriticalAssetPreload,
     useCriticalAssetPreloadGate,
@@ -1250,33 +1249,5 @@ describe('useCriticalAssetPreloadGate', () => {
         expect(loadedRefs).toEqual([CRITICAL_REF, DEFERRED_REF]);
         expect(assetManager.get(CRITICAL_REF)).not.toBeNull();
         expect(assetManager.get(DEFERRED_REF)).not.toBeNull();
-    });
-});
-
-describe('ROUTE_COVER_REVEAL_GRACE_MS', () => {
-    it('is a finite positive threshold strictly below the budget it sits inside', () => {
-        // The grace decides when a still-pending wait is worth revealing its
-        // cover for; the budget decides when the wait is abandoned. A grace at
-        // or past the budget would reveal a cover the settle has already
-        // dropped.
-        expect(Number.isFinite(ROUTE_COVER_REVEAL_GRACE_MS)).toBe(true);
-        expect(ROUTE_COVER_REVEAL_GRACE_MS).toBeGreaterThan(0);
-        expect(ROUTE_COVER_REVEAL_GRACE_MS).toBeLessThan(CRITICAL_ASSET_PRELOAD_BUDGET_MS);
-    });
-
-    it('is a plain constant, with no env read of its own', async () => {
-        // Not a claim that collapsing it would be dangerous — it would not be,
-        // because a route arms the grace only on a positive
-        // resolveLoadingCoverHoldMs and that resolver already returns 0 under
-        // the flag. What this pins is that the flag has ONE reader on this
-        // path. Re-imported under the stub rather than merely stubbed: a
-        // module-level constant reads its env at import, so a stub-after-import
-        // could never observe the collapse it is hunting.
-        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
-        vi.resetModules();
-
-        const reloaded = await import('./criticalAssetPreload.js');
-
-        expect(reloaded.ROUTE_COVER_REVEAL_GRACE_MS).toBe(ROUTE_COVER_REVEAL_GRACE_MS);
     });
 });

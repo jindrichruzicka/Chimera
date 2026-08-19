@@ -182,6 +182,42 @@ describe('installRevealTimeline', () => {
         expect(timeline.samples.map((entry) => entry.routeCoverMounted)).toEqual([false, true]);
     });
 
+    it('records the HUD row the loading beat withholds', async () => {
+        // What separates "the shell is up" from "the player is looking at the
+        // match", and the one that survives every beat duration collapsing to
+        // zero under the flag — the row's presence is decided in render.
+        const page = makePage();
+        await installRevealTimeline(page);
+
+        mountTestId('game-hud-slot');
+        await settleObserver();
+
+        const timeline = await readRevealTimeline(page);
+        expect(timeline.samples.map((entry) => entry.hudMounted)).toEqual([false, true]);
+    });
+
+    it('records each reveal phase the shell publishes as its own state', async () => {
+        // A field left out of the dedupe does not go unrecorded — it MERGES the
+        // states it distinguishes, so the transition disappears from the
+        // timeline rather than showing up wrong. Two phases in a row is what
+        // catches that.
+        const page = makePage();
+        await installRevealTimeline(page);
+
+        const shell = mountTestId('game-shell-root');
+        shell.setAttribute('data-reveal-phase', 'loading');
+        await settleObserver();
+        shell.setAttribute('data-reveal-phase', 'revealed');
+        await settleObserver();
+
+        const timeline = await readRevealTimeline(page);
+        expect(timeline.samples.map((entry) => entry.revealPhase)).toEqual([
+            null,
+            'loading',
+            'revealed',
+        ]);
+    });
+
     it('records the transition overlay, its preload fraction and the entering cover', async () => {
         const page = makePage();
         await installRevealTimeline(page);
@@ -260,6 +296,8 @@ function sample(at: number, overrides: Partial<RevealSample> = {}): RevealSample
         preloadProgress: null,
         preloadCoverText: null,
         activeSceneId: null,
+        hudMounted: false,
+        revealPhase: null,
         ...overrides,
     };
 }

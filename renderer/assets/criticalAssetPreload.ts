@@ -193,30 +193,6 @@ export function useCriticalAssetPreload(
 export const CRITICAL_ASSET_PRELOAD_BUDGET_MS = 8_000;
 
 /**
- * How long a route entry stays under the opaque screen-fade scrim it arrived
- * on before the loading cover it has already mounted is revealed to the player
- * (§4.36).
- *
- * A THRESHOLD on the wait, not a delay added to one. A wait that settles first
- * pays nothing and keeps its single fade-in, so a warm entry is unchanged; a
- * wait that outlives this gets an explanation instead of more black. The timer
- * behind it reads nothing but the clock, so it fires whatever the preload does.
- *
- * 350 ms, below the point where a still frame of black reads as a hang once the
- * 200 ms fade-out before it is counted, and an order of magnitude above what a
- * warm entry actually costs: `asset-preload-gate.spec.ts` records the packaged
- * build holding its scrim over the mounted shell for 34.1 / 37.0 / 37.3 ms
- * across three runs.
- *
- * A plain constant with no env read of its own. It needs none: a route arms the
- * grace only where `resolveLoadingCoverHoldMs` returned a positive floor, and
- * that resolver already returns `0` under `NEXT_PUBLIC_CHIMERA_E2E`, so the flag
- * reaches this threshold through the floor it depends on and disarms it there.
- * One reader of the flag rather than two saying the same thing.
- */
-export const ROUTE_COVER_REVEAL_GRACE_MS = 350;
-
-/**
  * How a gated run ended.
  *
  * `'pending'` — still waiting; the ONLY outcome with `ready: false`.
