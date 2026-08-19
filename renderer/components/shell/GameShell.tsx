@@ -46,6 +46,26 @@ import { TimeScaleBridge } from './TimeScaleBridge.js';
 interface GameShellBaseProps {
     readonly children?: ReactNode;
     readonly tick: number;
+    /**
+     * Whether the match chrome may be shown yet (§4.33). `false` withholds the
+     * HUD row and the spectator HUD while a loading beat still owns the screen,
+     * so a player never watches them assemble beside a loading screen.
+     *
+     * Withholds a MOUNT rather than hiding a mounted row: an invisible HUD
+     * still runs its effects and still takes its grid row. What is NOT deferred
+     * is the scene beneath it — the canvas warms up under the curtain, and
+     * `GameShell` stays the unique disposer of a page-injected `AssetManager`
+     * (Invariant #21) — nor the diagnostics overlays, which self-gate already.
+     *
+     * Defaults to `true`, so a caller that knows nothing of the beat is
+     * unchanged.
+     */
+    readonly hudMounted?: boolean;
+    /**
+     * The loading beat's phase, published as `data-reveal-phase` for the e2e
+     * reveal timeline. Presentation-inert: nothing renders differently for it.
+     */
+    readonly revealPhase?: string;
     readonly canUndo: boolean;
     readonly canRedo: boolean;
     readonly canEndTurn?: boolean;
@@ -133,6 +153,19 @@ interface GameShellRegistryProps {
      * mounted below shadows the app-level fade context.
      */
     readonly sceneCoverOccluded?: boolean;
+    /** See {@link GameShellBaseProps.hudMounted}; forwarded to the frame. */
+    readonly hudMounted?: boolean;
+    /** See {@link GameShellBaseProps.revealPhase}; forwarded to the frame. */
+    readonly revealPhase?: string;
+    /**
+     * Called when a code-split screen starts or stops suspending below, so a
+     * loading beat can fold that wait into its own settle term — a reveal that
+     * ignored it would land on the fallback rather than on the screen.
+     *
+     * Only transitions are reported, so a consumer starts from "not pending"
+     * itself. Forwarded to `SceneRouter`, where the reporting is done.
+     */
+    readonly onScenePending?: (pending: boolean) => void;
     readonly onUndo?: () => void | Promise<void>;
     readonly onRedo?: () => void | Promise<void>;
     readonly onEndTurn?: () => void | Promise<void>;
@@ -172,6 +205,9 @@ function RegistryGameShell({
     fadeOutMs,
     fadeInMs,
     sceneCoverOccluded,
+    hudMounted,
+    revealPhase,
+    onScenePending,
     onUndo,
     onRedo,
     onEndTurn,
@@ -215,6 +251,8 @@ function RegistryGameShell({
                         {...(localPlayerId === undefined ? {} : { localPlayerId })}
                         {...(isHost === undefined ? {} : { isHost })}
                         {...(isSpectator === undefined ? {} : { isSpectator })}
+                        {...(hudMounted === undefined ? {} : { hudMounted })}
+                        {...(revealPhase === undefined ? {} : { revealPhase })}
                         {...(onUndo === undefined ? {} : { onUndo })}
                         {...(onRedo === undefined ? {} : { onRedo })}
                         {...(onEndTurn === undefined ? {} : { onEndTurn })}
@@ -232,16 +270,24 @@ function RegistryGameShell({
                             {...(fadeInMs === undefined ? {} : { fadeInMs })}
                             {...(assetManifest === undefined ? {} : { assetManifest })}
                             {...(sceneCoverOccluded === undefined ? {} : { sceneCoverOccluded })}
+                            {...(onScenePending === undefined ? {} : { onScenePending })}
                         />
                     </GameShellFrame>
-                    <InGameMenuHost
-                        {...(registry.inGameMenu === undefined
-                            ? {}
-                            : { inGameMenu: registry.inGameMenu })}
-                        {...(isHost === undefined ? {} : { isHost })}
-                        {...(localPlayerId === undefined ? {} : { localPlayerId })}
-                        {...(leaveGame === undefined ? {} : { leaveGame })}
-                    />
+                    {/*
+                     * Withheld with the HUD row. An Escape-stack layer mounted
+                     * under an opaque loading screen would swallow the key
+                     * without showing a menu.
+                     */}
+                    {hudMounted !== false && (
+                        <InGameMenuHost
+                            {...(registry.inGameMenu === undefined
+                                ? {}
+                                : { inGameMenu: registry.inGameMenu })}
+                            {...(isHost === undefined ? {} : { isHost })}
+                            {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                            {...(leaveGame === undefined ? {} : { leaveGame })}
+                        />
+                    )}
                 </FadeProvider>
             </ContentDatabaseProvider>
         </AssetManagerContext.Provider>
@@ -438,6 +484,8 @@ function GameShellFrame(
         localPlayerId,
         isHost,
         isSpectator = false,
+        hudMounted = true,
+        revealPhase,
         onUndo,
         onRedo,
         onEndTurn,
@@ -514,7 +562,12 @@ function GameShellFrame(
         );
 
     return (
-        <main aria-label={t(GAME_SHELL_KEYS.mainAriaLabel)} style={gameShellRootStyle}>
+        <main
+            data-testid="game-shell-root"
+            aria-label={t(GAME_SHELL_KEYS.mainAriaLabel)}
+            style={gameShellRootStyle}
+            {...(revealPhase === undefined ? {} : { 'data-reveal-phase': revealPhase })}
+        >
             <section
                 data-testid="game-canvas"
                 aria-label={t(GAME_SHELL_KEYS.canvasAriaLabel)}
@@ -535,9 +588,17 @@ function GameShellFrame(
                     />
                 )}
             </section>
-            {hud}
+            {/* A wrapper so the row has one thing to mount, unmount and locate. */}
+            {hudMounted && <div data-testid="game-hud-slot">{hud}</div>}
             <PerfHud />
-            <SpectatorHud />
+            {/*
+             * Match chrome, so it is withheld with the row above — but left in
+             * its own place in the tree rather than moved inside the wrapper.
+             * It and `PerfHud` are both fixed at the same z-index, where paint
+             * order is tree order, so moving it would put one on top of the
+             * other where they overlap.
+             */}
+            {hudMounted && <SpectatorHud />}
             <DebugInspectorToggle />
         </main>
     );

@@ -44,6 +44,16 @@ export interface SceneRouterProps {
      * never arms — nobody saw the cover it would be flooring (§4.36).
      */
     readonly sceneCoverOccluded?: boolean;
+    /**
+     * Called when a code-split screen starts or stops suspending below. A
+     * loading beat folds this into its settle term: the asset gate can be ready
+     * while the screen's own chunk is still in flight, and revealing then lands
+     * the player on the fallback rather than on the screen.
+     *
+     * Only transitions are reported — a router whose screen never suspends
+     * calls this never, so a consumer starts from "not pending" itself.
+     */
+    readonly onScenePending?: (pending: boolean) => void;
 }
 
 export function SceneRouter({
@@ -58,6 +68,7 @@ export function SceneRouter({
     fadeInMs,
     assetManifest,
     sceneCoverOccluded = false,
+    onScenePending,
 }: SceneRouterProps): React.ReactElement {
     const activeScreenKey = useActiveScreen();
     const sceneId = snapshot.sceneId ?? 'engine:game';
@@ -105,6 +116,27 @@ export function SceneRouter({
     // is exactly the drop the held layer must re-render across, so it has to
     // schedule a render).
     const [fallbackMounted, setFallbackMounted] = React.useState(false);
+
+    // Held in a ref, refreshed each render, so a callback whose identity changes
+    // per render does not re-fire this effect; what the consumer is watching is
+    // the chunk's state, not the reporter's identity.
+    const scenePendingRef = React.useRef(onScenePending);
+    scenePendingRef.current = onScenePending;
+    // Only CHANGES are reported, and the starting value counts as already
+    // reported. `FallbackLifetimeReporter` sits deeper in the tree, so on the
+    // commit that mounts the fallback its effect — the one that sets
+    // `fallbackMounted` — runs before this one, and this one would otherwise
+    // announce "not pending" with the fallback already on screen. A consumer
+    // folding that into a settle term could reveal on it.
+    const lastPendingRef = React.useRef(false);
+    React.useEffect(() => {
+        if (lastPendingRef.current === fallbackMounted) {
+            return;
+        }
+        lastPendingRef.current = fallbackMounted;
+        scenePendingRef.current?.(fallbackMounted);
+    }, [fallbackMounted]);
+
     const transitionPending =
         snapshot.sceneTransition !== undefined && snapshot.sceneTransition !== null;
     const liveCoverShown =

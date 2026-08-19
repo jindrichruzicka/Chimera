@@ -1879,3 +1879,245 @@ describe('GameShell minimum-visible hold occlusion threading', () => {
         expect(screen.queryByTestId('scene-held-cover')).toBeNull();
     });
 });
+
+describe('GameShell reveal seam', () => {
+    function revealRegistry(): GameScreenRegistry {
+        return { playfield: () => <div data-testid="seam-playfield" /> };
+    }
+
+    // Named rather than `Record<string, unknown>`: a wide spread satisfies JSX
+    // where a literal would be excess-property checked, so a misspelt seam prop
+    // would compile and every case below would pass while measuring nothing.
+    // Spread per property for the same reason `GameShell` does it — under
+    // `exactOptionalPropertyTypes` an optional cannot be handed an explicit
+    // `undefined`.
+    interface SeamOverrides {
+        readonly hudMounted?: boolean;
+        readonly revealPhase?: string;
+    }
+
+    function renderSeam(overrides: SeamOverrides = {}): ReturnType<typeof render> {
+        return renderWithAudio(
+            <GameShell
+                registry={revealRegistry()}
+                snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                fadeOutMs={0}
+                fadeInMs={0}
+                {...(overrides.hudMounted === undefined
+                    ? {}
+                    : { hudMounted: overrides.hudMounted })}
+                {...(overrides.revealPhase === undefined
+                    ? {}
+                    : { revealPhase: overrides.revealPhase })}
+            />,
+        );
+    }
+
+    it('mounts the HUD row by default, so every existing caller is unchanged', () => {
+        // The control for the whole describe: without it, a seam that mounted
+        // nothing would satisfy every absence assertion below.
+        renderSeam();
+
+        expect(screen.getByTestId('game-hud-slot')).toBeTruthy();
+    });
+
+    it('leaves the HUD row out of the DOM entirely while unrevealed', () => {
+        // Absent, not hidden. A seam that merely made the row invisible would
+        // still run its effects — timers, sounds, focus — behind the loading
+        // screen, and would still take its grid row.
+        renderSeam({ hudMounted: false });
+
+        expect(screen.queryByTestId('game-hud-slot')).toBeNull();
+    });
+
+    it('keeps the scene mounted while the HUD is withheld', () => {
+        // The seam defers presentation, never the mount: the canvas subtree
+        // warms up under the curtain, and GameShell stays the unique disposer
+        // of a page-injected AssetManager (Invariant #21).
+        renderSeam({ hudMounted: false });
+
+        expect(screen.getByTestId('seam-playfield')).toBeTruthy();
+        expect(screen.getByTestId('game-canvas')).toBeTruthy();
+    });
+
+    it('keeps the diagnostics HUD mounted while the game HUD is withheld', () => {
+        // PerfHud self-gates on its own setting and is what the perf specs
+        // sample; deferring it with the game's HUD would make a diagnostic
+        // depend on the presentation it exists to measure. The debug toggle
+        // rides along for the same reason.
+        renderSeam({ hudMounted: false });
+
+        expect(screen.getByTestId('perf-hud-mock')).toBeTruthy();
+        expect(screen.getByTestId('debug-inspector-toggle-mock')).toBeTruthy();
+    });
+
+    it('withholds the spectator HUD with the game HUD', () => {
+        // It is part of the same row of match chrome a player would otherwise
+        // watch assemble itself beside a loading screen.
+        renderSeam({ hudMounted: false });
+
+        expect(screen.queryByTestId('spectator-hud-mock')).toBeNull();
+    });
+
+    it('withholds the in-game menu host while unrevealed', () => {
+        // An invisible modal under a black curtain that still captures the
+        // Escape stack is worse than no menu at all. Asserted on the spy
+        // rather than the DOM: the host renders null once mounted, so its
+        // absence from the tree proves nothing on its own.
+        inGameMenuHostSpy.mockClear();
+
+        renderSeam({ hudMounted: false });
+
+        expect(inGameMenuHostSpy).not.toHaveBeenCalled();
+    });
+
+    it('mounts the in-game menu host once revealed (the control for the case above)', () => {
+        inGameMenuHostSpy.mockClear();
+
+        renderSeam();
+
+        expect(inGameMenuHostSpy).toHaveBeenCalled();
+    });
+
+    it('publishes the reveal phase for the recorded e2e timeline', () => {
+        renderSeam({ revealPhase: 'loading' });
+
+        expect(screen.getByTestId('game-shell-root').getAttribute('data-reveal-phase')).toBe(
+            'loading',
+        );
+    });
+
+    it('writes no reveal-phase attribute when the caller publishes none', () => {
+        renderSeam();
+
+        expect(screen.getByTestId('game-shell-root').hasAttribute('data-reveal-phase')).toBe(false);
+    });
+
+    it('republishes the reveal phase as the beat advances', () => {
+        // The timeline recorder reads this attribute on mutation, so a value
+        // that only ever landed on the first render would record one phase and
+        // miss the sequence it exists to show.
+        const { rerender } = renderSeam({ revealPhase: 'loading' });
+
+        rerender(
+            wrapWithAudio(
+                <GameShell
+                    registry={revealRegistry()}
+                    snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                    sendAction={vi.fn()}
+                    localPlayerId={playerId('p1')}
+                    fadeOutMs={0}
+                    fadeInMs={0}
+                    revealPhase="revealed"
+                />,
+            ),
+        );
+
+        expect(screen.getByTestId('game-shell-root').getAttribute('data-reveal-phase')).toBe(
+            'revealed',
+        );
+    });
+
+    function makeSuspendingScreen(): {
+        readonly Screen: React.LazyExoticComponent<React.ComponentType<GameScreenProps>>;
+        resolve(): void;
+    } {
+        let resolveModule: (() => void) | undefined;
+        const Screen = React.lazy(
+            () =>
+                new Promise<{ default: React.ComponentType<GameScreenProps> }>((res) => {
+                    resolveModule = () => {
+                        res({ default: () => <div data-testid="pending-playfield" /> });
+                    };
+                }),
+        );
+        return { Screen, resolve: () => resolveModule?.() };
+    }
+
+    async function settleChunk(resolve: () => void): Promise<void> {
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            await new Promise((r) => {
+                setTimeout(r, 0);
+            });
+        });
+    }
+
+    it('reports a suspending screen chunk, and its resolution, in that order', async () => {
+        // The asset gate can be ready while the screen's own chunk is still in
+        // flight. A beat that revealed on the gate alone would land the player
+        // on the fallback rather than on the screen, so it needs this wait too.
+        //
+        // The SEQUENCE is the assertion, not membership. The reporter sits
+        // above the wrapper that owns the fallback's mount, so its effect runs
+        // after that wrapper's — a reporter that announced every render would
+        // lead with "not pending" while the fallback was already on screen,
+        // and `toHaveBeenCalledWith(true)` would still be satisfied.
+        const { Screen, resolve } = makeSuspendingScreen();
+        const reported: boolean[] = [];
+
+        renderWithAudio(
+            <GameShell
+                registry={{ playfield: Screen }}
+                snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                fadeOutMs={0}
+                fadeInMs={0}
+                onScenePending={(pending) => reported.push(pending)}
+            />,
+        );
+
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(reported).toEqual([true]);
+
+        await settleChunk(resolve);
+
+        expect(reported).toEqual([true, false]);
+        expect(screen.getByTestId('pending-playfield')).toBeTruthy();
+    });
+
+    it('reports to the caller’s current callback, not the one it first mounted with', async () => {
+        // The reporter is held in a ref refreshed each render precisely so a
+        // callback whose identity changes per render — which is what an inline
+        // arrow gives — does not re-fire the effect. Refreshing is what makes
+        // that safe: without it the ref keeps its first value and the report
+        // goes to a callback the caller has already replaced.
+        const { Screen, resolve } = makeSuspendingScreen();
+        const first: boolean[] = [];
+        const second: boolean[] = [];
+
+        function Harness({ sink }: { sink: boolean[] }): React.ReactElement {
+            return (
+                <GameShell
+                    registry={{ playfield: Screen }}
+                    snapshot={makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })}
+                    sendAction={vi.fn()}
+                    localPlayerId={playerId('p1')}
+                    fadeOutMs={0}
+                    fadeInMs={0}
+                    onScenePending={(pending) => sink.push(pending)}
+                />
+            );
+        }
+
+        const { rerender } = renderWithAudio(<Harness sink={first} />);
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        rerender(wrapWithAudio(<Harness sink={second} />));
+        await settleChunk(resolve);
+
+        // The suspend reached the first callback; the resolve reached the second.
+        expect(first).toEqual([true]);
+        expect(second).toEqual([false]);
+    });
+});
