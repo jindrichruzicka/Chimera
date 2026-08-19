@@ -32,8 +32,7 @@ beat not having revealed.
 Removed with the mechanism they served: `ROUTE_COVER_REVEAL_GRACE_MS`,
 `useRouteCoverRevealGrace`, and the two fade-in effects that shared a latch on this route. The
 restore-abort exit now asks the curtain where it is rather than tracking whether a fade
-happened, which is also the correct question for an abort that lands mid-beat. `/replays/player`
-is unchanged in this release and keeps the visibility-armed hold and its exit ramp.
+happened, which is also the correct question for an abort that lands mid-beat.
 
 Invariant #133 is amended, never renumbered: the floor-on-a-shown-cover clauses and the grace
 derivation are replaced by the beat, which defers the local reveal and the HUD's mount and

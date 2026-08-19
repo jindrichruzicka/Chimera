@@ -39,24 +39,39 @@ vi.mock('../../../components/shell/GameShell', () => ({
         leaveGame,
         assetManager,
         sceneCoverOccluded,
+        hudMounted,
+        revealPhase,
+        onScenePending,
     }: {
         snapshot?: PlayerSnapshot;
         content?: GameContent;
         leaveGame?: () => void;
         assetManager?: { dispose(): void };
         sceneCoverOccluded?: boolean;
+        hudMounted?: boolean;
+        revealPhase?: string;
+        onScenePending?: (pending: boolean) => void;
     }) => {
         // Mirrors Invariant #21 in the double: GameShell is the unique disposer
         // of the manager its host route injects, and the route disposes nothing.
         // Without this the unmount case could not tell "disposed once" from
         // "never disposed at all".
         React.useEffect(() => () => assetManager?.dispose(), [assetManager]);
+        // Drives the route's chunk-pending term. No dep array: the value lives
+        // in a module variable a case reassigns, which React cannot see.
+        React.useEffect(() => {
+            if (mockScenePending !== null) {
+                onScenePending?.(mockScenePending);
+            }
+        });
         return (
             <div
                 data-testid="game-shell"
                 data-tick={snapshot?.tick ?? 'none'}
                 data-content={content === undefined ? 'none' : JSON.stringify(content)}
                 data-scene-cover-occluded={String(sceneCoverOccluded)}
+                data-hud-mounted={String(hudMounted)}
+                data-reveal-phase={String(revealPhase)}
             >
                 {/* Surfaces the in-game-menu leave so the player's `handleLeaveReplay`
                     navigation can be exercised without the real shell UI. */}
@@ -80,6 +95,7 @@ vi.mock('next/navigation', () => ({
 import { I18nProvider } from '../../../i18n/I18nProvider';
 import { EscapeStackProvider } from '../../../components/shell/EscapeStack';
 import { SCREEN_FADE_FAST_MS } from '../../../components/shell/screenFadeDuration';
+import { useGameStore } from '../../../state/gameStore';
 import { useUiStore } from '../../../state/uiStore';
 import { resetGameContentCache } from '../../../state/useGameContent';
 import ReplayPlayerPage from './page';
@@ -137,36 +153,56 @@ function makeBridge(overrides: Partial<ReplayAPI> = {}): Partial<ReplayAPI> {
  * The route hands one of these to `GameShell` and never disposes it, so the
  * double records `dispose` for the shell double to call.
  */
-function createManagerDouble(): {
+interface ManagerDouble {
     readonly assetManager: { dispose(): void };
     readonly dispose: ReturnType<typeof vi.fn>;
+    /**
+     * Resolve the preload the moment it starts.
+     *
+     * The warm-hardware case the beat exists for: the load is done before
+     * anything could have been shown, so a beat armed on the wait still being
+     * live would show nothing at all.
+     */
+    settleOnCall: boolean;
     settle(): void;
-} {
+}
+
+function createManagerDouble(): ManagerDouble {
     let resolvePreload: (() => void) | undefined;
     const dispose = vi.fn();
-    return {
+    const double: ManagerDouble = {
         assetManager: {
             registerManifest: vi.fn(),
-            preloadCritical: vi.fn(
-                () =>
-                    new Promise<void>((resolve) => {
-                        resolvePreload = resolve;
-                    }),
-            ),
+            preloadCritical: vi.fn(() => {
+                if (double.settleOnCall) {
+                    return Promise.resolve();
+                }
+                return new Promise<void>((resolve) => {
+                    resolvePreload = resolve;
+                });
+            }),
             get: () => null,
             load: () => Promise.reject(new Error('not used')),
             getManifestMetadata: () => undefined,
             dispose,
         } as unknown as { dispose(): void },
         dispose,
+        settleOnCall: false,
         settle: () => resolvePreload?.(),
     };
+    return double;
 }
 
 const CRITICAL_MANIFEST = {
     gameId: 'tactics',
     entries: [{ ref: 'tactics/textures/board.webp', kind: 'texture', priority: 'critical' }],
 };
+
+/**
+ * Set by a case that wants the mocked shell to report a suspending screen.
+ * The real SceneRouter reports this; the mock cannot without a way to drive it.
+ */
+let mockScenePending: boolean | null = null;
 
 /** One double per test: the gate keys on manager IDENTITY, so it must be stable. */
 let managerDouble: ReturnType<typeof createManagerDouble>;
@@ -177,6 +213,7 @@ beforeEach(() => {
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({ registry: { screens: {} } });
     managerDouble = createManagerDouble();
+    mockScenePending = null;
     assetManagerFor.mockReset();
     assetManagerFor.mockImplementation((loadedGame: unknown) =>
         loadedGame === null ? null : managerDouble.assetManager,
@@ -185,6 +222,9 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    // The game store is a module singleton, so a lobby snapshot set by one
+    // case would suppress the beat in every case after it.
+    useGameStore.getState().reset();
     Reflect.deleteProperty(window, '__chimera');
     resetGameContentCache();
     vi.restoreAllMocks();
@@ -656,7 +696,7 @@ describe('ReplayPlayerPage', () => {
 describe('ReplayPlayerPage asset reveal gate', () => {
     it('shows the loading cover OVER the mounted shell, not instead of it', async () => {
         loadRendererGameMock.mockResolvedValue({
-            registry: { screens: {} },
+            registry: { screens: {}, loadingScreen: 'spinner' },
             assetManifest: CRITICAL_MANIFEST,
         });
         installReplayBridge(makeBridge());
@@ -667,15 +707,11 @@ describe('ReplayPlayerPage asset reveal gate', () => {
         // Both, at once. Withholding <GameShell> here would orphan the manager
         // `useRendererGameAssetManager` allocated and never disposes — exactly
         // the leak Invariant #21 exists to prevent.
-        expect(screen.getByTestId('game-shell')).toBeInTheDocument();
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-
-        await act(async () => {
-            managerDouble.settle();
-            await Promise.resolve();
-        });
-
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        //
+        // Awaited rather than read: the shell lands on the commit that makes
+        // the route ready, while the beat reaches its cover a few commits
+        // later, having walked its own phases first.
+        expect(await screen.findByTestId('route-entry-loading-cover')).toBeInTheDocument();
         expect(screen.getByTestId('game-shell')).toBeInTheDocument();
     });
 
@@ -715,10 +751,10 @@ describe('ReplayPlayerPage asset reveal gate', () => {
     });
 });
 
-describe('ReplayPlayerPage minimum-visible hold', () => {
-    const REPLAY_HOLD_MS = 400;
+describe('ReplayPlayerPage loading beat', () => {
+    const REPLAY_FLOOR_MS = 400;
 
-    function installHoldGame(registry: Record<string, unknown>): void {
+    function installBeatGame(registry: Record<string, unknown>): void {
         loadRendererGameMock.mockResolvedValue({
             registry,
             assetManifest: CRITICAL_MANIFEST,
@@ -726,190 +762,320 @@ describe('ReplayPlayerPage minimum-visible hold', () => {
     }
 
     /**
-     * The hold cases run under fake timers (`performance` faked so the latch's
-     * monotonic stamp advances with them), where `waitFor` cannot poll — the
-     * mount flush is an explicit zero-advance.
+     * The beat cases run under fake timers — `performance` faked so the floor's
+     * monotonic stamp advances with them, and `requestAnimationFrame` because
+     * the cover's rise rides a frame — where `waitFor` cannot poll, so the
+     * mount flush is an explicit advance.
      */
     async function mountUnderFakeTimers(): Promise<void> {
         render(<ReplayPlayerPage />);
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(0);
+            await vi.advanceTimersByTimeAsync(20);
         });
         expect(screen.getByTestId('game-shell')).toBeInTheDocument();
     }
 
+    /** Advance in steps, so each leg's timer is armed by the render before it. */
+    async function step(ms: number): Promise<void> {
+        for (let elapsed = 0; elapsed < ms; elapsed += 20) {
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(Math.min(20, ms - elapsed));
+            });
+        }
+    }
+
+    const shellAttr = (name: string): string | null =>
+        screen.getByTestId('game-shell').getAttribute(name);
+
     beforeEach(() => {
-        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+        vi.useFakeTimers({
+            toFake: ['setTimeout', 'clearTimeout', 'performance', 'requestAnimationFrame'],
+        });
         installReplayBridge(makeBridge());
     });
 
-    it('holds a declared cover to the minimum boundary after the preload settles', async () => {
-        installHoldGame({
+    it('shows the cover even when the preload settles before the first frame', async () => {
+        // The case a visibility-armed hold could not serve. This route has no
+        // entry fade of its own, so the old shape stamped at cover mount and
+        // did reach it — but only because nothing was ever painted over the
+        // cover here. The beat reaches it for the same reason on both routes.
+        installBeatGame({
             screens: {},
             loadingScreen: 'spinner',
-            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
         });
+        managerDouble.settleOnCall = true;
         await mountUnderFakeTimers();
-        // No entry fade on this route, so the hold arms at cover mount (t=0).
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
-        });
-        await act(async () => {
-            managerDouble.settle();
-            await Promise.resolve();
-        });
 
         expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+        expect(shellAttr('data-hud-mounted')).toBe('false');
+    });
 
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(REPLAY_HOLD_MS - 100 - 1);
+    it('holds the cover for the declared floor, then reveals', async () => {
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
         });
+        managerDouble.settleOnCall = true;
+        await mountUnderFakeTimers();
+
+        await step(SCREEN_FADE_FAST_MS + REPLAY_FLOOR_MS - 40);
         expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
 
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(1);
-        });
-        // Released, and now on its exit ramp rather than cut — this route's
-        // cover is visible for its whole life.
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
-        });
+        await step(SCREEN_FADE_FAST_MS * 2 + 120);
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        // The transport controls stayed the route's the whole time: `isReady`
-        // is not widened by the hold.
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+        // The transport controls are part of the reveal, and they are back:
+        // `isReady` is never widened by the beat.
         expect(screen.getByRole('button', { name: /step forward/i })).toBeInTheDocument();
     });
 
-    it('collapses the minimum under NEXT_PUBLIC_CHIMERA_E2E', async () => {
-        // The collapse must be pinned at THIS use site: the resolver's own unit
-        // tests cannot fail for a route that stops calling it.
+    it('collapses every leg under NEXT_PUBLIC_CHIMERA_E2E', async () => {
+        // Pinned at THIS use site: the resolvers' own unit tests cannot fail
+        // for a route that stops calling them.
         vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
-        installHoldGame({
+        installBeatGame({
             screens: {},
             loadingScreen: 'spinner',
-            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
         });
+        managerDouble.settleOnCall = true;
         await mountUnderFakeTimers();
-        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
 
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
-        });
-        await act(async () => {
-            managerDouble.settle();
-            await Promise.resolve();
-        });
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+    });
+
+    it('mounts no cover for a game that declares none', async () => {
+        installBeatGame({ screens: {} });
+        managerDouble.settleOnCall = true;
+        await mountUnderFakeTimers();
 
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
     });
 
-    it("reports its mounted cover to GameShell's sceneCoverOccluded, released with the drop", async () => {
-        installHoldGame({
+    it('mounts no cover for the per-key none opt-out', async () => {
+        installBeatGame({ screens: {}, loadingScreens: { playfield: 'none' } });
+        managerDouble.settleOnCall = true;
+        await mountUnderFakeTimers();
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+    });
+
+    it('reports occlusion to the shell until the reveal', async () => {
+        installBeatGame({
             screens: {},
             loadingScreen: 'spinner',
-            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        managerDouble.settleOnCall = true;
+        await mountUnderFakeTimers();
+        expect(shellAttr('data-scene-cover-occluded')).toBe('true');
+
+        await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
+
+        expect(shellAttr('data-scene-cover-occluded')).toBe('false');
+    });
+
+    it('covers a game whose gate settles in render, with no wait to condition on', async () => {
+        // A manifest-less game: the gate short-circuits in RENDER, so the wait
+        // is over before the beat's first commit. A beat that armed on the wait
+        // still being live would show nothing here — this is the warm case with
+        // the race taken out of it.
+        loadRendererGameMock.mockResolvedValue({
+            registry: {
+                screens: {},
+                loadingScreen: 'spinner',
+                loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+            },
         });
         await mountUnderFakeTimers();
-        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('true');
+
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+        expect(shellAttr('data-hud-mounted')).toBe('false');
+    });
+
+    it('ramps its cover down before dropping it, rather than cutting it out', async () => {
+        // The page has to hand the cover the beat's LIVE visibility. A constant
+        // leaves it opaque until unmount, which is the cut this sequence
+        // replaces — the replay would appear with no black between.
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        managerDouble.settleOnCall = true;
+        await mountUnderFakeTimers();
+        const cover = (): HTMLElement => screen.getByTestId('route-entry-loading-cover');
+
+        await step(SCREEN_FADE_FAST_MS + 60);
+        expect(cover().style.opacity).toBe('1');
+
+        await step(REPLAY_FLOOR_MS + 40);
+        expect(cover().style.opacity).toBe('0');
+    });
+
+    it('withholds the reveal while the entering screen chunk is still in flight', async () => {
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        managerDouble.settleOnCall = true;
+        mockScenePending = true;
+        await mountUnderFakeTimers();
+
+        await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
+
+        expect(shellAttr('data-hud-mounted')).toBe('false');
+    });
+
+    it('stops the beat when a leave takes the screen', async () => {
+        // The hazard this route's old comment described: a fade issued here can
+        // cancel the fade-out GameStoreBootstrap runs on a replay's Leave, and a
+        // cancelled fade resolves early, landing the navigation mid-ramp. The
+        // beat stops issuing anything once the leave latches.
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        await mountUnderFakeTimers();
 
         await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
+            screen.getByTestId('shell-leave-btn').click();
+            await Promise.resolve();
         });
+        managerDouble.settleOnCall = true;
         await act(async () => {
             managerDouble.settle();
             await Promise.resolve();
         });
-        // Settled inside the minimum: the held route cover still occludes.
-        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('true');
+        await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
 
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(REPLAY_HOLD_MS);
-        });
-        // Still painting, however faintly: the inner router must not surface a
-        // held layer under a cover that is mid-ramp.
-        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('true');
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
-        });
-        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('false');
+        expect(shellAttr('data-hud-mounted')).toBe('false');
     });
 
-    it('does not report occlusion for an undeclared route cover', async () => {
-        // The engine placeholder is an empty transparent layer: nothing sits
-        // visually above the shell, so its inner covers keep their own hold.
-        installHoldGame({ screens: {}, loadingScreenMinVisibleMs: REPLAY_HOLD_MS });
-        await mountUnderFakeTimers();
-
-        expect(screen.getByTestId('game-shell').dataset['sceneCoverOccluded']).toBe('false');
-    });
-
-    it('fades a seen cover out over the replay instead of cutting it', async () => {
-        installHoldGame({
-            screens: {},
-            loadingScreen: 'spinner',
-            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
-        });
-        await mountUnderFakeTimers();
-        // The transition is carried for the cover's whole life, so the ramp is
-        // one property change against a declaration already in the style.
-        const cover = screen.getByTestId('route-entry-loading-cover');
-        expect(cover.style.transition).toBe(
-            `opacity ${SCREEN_FADE_FAST_MS}ms var(--ch-easing-standard)`,
+    it('stops the beat on the post-game leave, the branch that owns a live session', async () => {
+        // The `?saveable=1` branch is the ONLY one whose leave makes
+        // GameStoreBootstrap run a fade-out at all — the other is a bare
+        // router.push. Latching after that branch returns would leave the beat
+        // running against exactly the exit the latch exists for.
+        window.history.replaceState(
+            {},
+            '',
+            `/replays/player?path=${encodeURIComponent(PATH)}&saveable=1`,
         );
-        expect(cover.style.opacity).toBe('');
-
-        await act(async () => {
-            managerDouble.settle();
-            await Promise.resolve();
+        // This branch routes through the real `useLeaveGame`, which throws
+        // without a lobby bridge — the leave has to actually run for the latch's
+        // position relative to it to mean anything.
+        Object.defineProperty(window, '__chimera', {
+            configurable: true,
+            value: {
+                replay: makeBridge(),
+                lobby: {
+                    leave: vi.fn(async () => undefined),
+                    returnToLobby: vi.fn(async () => undefined),
+                },
+            },
         });
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(REPLAY_HOLD_MS);
-        });
-
-        expect(screen.getByTestId('route-entry-loading-cover').style.opacity).toBe('0');
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(SCREEN_FADE_FAST_MS);
-        });
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-    });
-
-    it('cuts rather than fades under NEXT_PUBLIC_CHIMERA_E2E', async () => {
-        // The ramp is a deliberate delay: it collapses at the flag exactly like
-        // the minimum above it, so no spec waits a cover out.
-        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
-        installHoldGame({
+        installBeatGame({
             screens: {},
             loadingScreen: 'spinner',
-            loadingScreenMinVisibleMs: REPLAY_HOLD_MS,
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
         });
         await mountUnderFakeTimers();
-        expect(screen.getByTestId('route-entry-loading-cover').style.transition).toBe('');
 
+        await act(async () => {
+            screen.getByTestId('shell-leave-btn').click();
+            await Promise.resolve();
+        });
+        managerDouble.settleOnCall = true;
         await act(async () => {
             managerDouble.settle();
             await Promise.resolve();
         });
+        await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
 
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(shellAttr('data-hud-mounted')).toBe('false');
     });
 
-    it('arms no hold for the engine placeholder cover', async () => {
-        installHoldGame({ screens: {}, loadingScreenMinVisibleMs: REPLAY_HOLD_MS });
+    it('stops the beat when a lobby snapshot arrives without anything here being clicked', async () => {
+        // A host's Leave from a post-game replay broadcasts phase:'lobby', and
+        // GameStoreBootstrap answers it on THIS route with a fade-out whose
+        // promise its navigation is chained to. Nothing on this page is
+        // clicked, so the leave latch cannot see it — a beat that faded in
+        // here would cancel that fade-out, and a cancelled fade resolves
+        // early, landing the navigation mid-ramp.
+        useGameStore.getState().applySnapshot({
+            tick: 0,
+            phase: 'lobby',
+            viewerId: 'p1',
+            players: {},
+            undoMeta: { canUndo: false, canRedo: false },
+        } as unknown as PlayerSnapshot);
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        managerDouble.settleOnCall = true;
         await mountUnderFakeTimers();
+
+        await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
+
+        expect(shellAttr('data-hud-mounted')).toBe('false');
+    });
+
+    it('carries the default floor for a cover declared without a minimum', async () => {
+        // The axis that separates this route's resolver from the hold it
+        // replaced: an ABSENT declaration is a default-length beat here, not no
+        // beat at all. Every other fixture in this describe declares a minimum,
+        // so without this the two resolvers are indistinguishable at this site.
+        installBeatGame({ screens: {}, loadingScreen: 'spinner' });
+        managerDouble.settleOnCall = true;
+        await mountUnderFakeTimers();
+
+        // Read the cover's OPACITY, not its presence: it stays mounted through
+        // the closing leg, so a zero floor is still on screen at this instant
+        // and a presence check cannot tell the two resolvers apart. Held at
+        // full opacity is what only a floor still running produces.
+        await step(SCREEN_FADE_FAST_MS + 60);
+        expect(screen.getByTestId('route-entry-loading-cover').style.opacity).toBe('1');
+    });
+
+    it('gives its cover a real ramp, not a cut', async () => {
+        // The duration reaches the cover from this call site. With it zeroed
+        // the cover mounts already opaque and carries no transition — which is
+        // what the e2e build and reduced motion get deliberately, and what a
+        // normal entry must not.
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        managerDouble.settleOnCall = true;
+        await mountUnderFakeTimers();
+
+        expect(screen.getByTestId('route-entry-loading-cover').style.transition).toContain(
+            `opacity ${SCREEN_FADE_FAST_MS}ms`,
+        );
+    });
+
+    it('withholds the reveal while the preload is still running', async () => {
+        // The beat defers; it does not manufacture a reveal. Without the gate
+        // settling, no timer of the beat's releases it.
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        await mountUnderFakeTimers();
+
+        await step(REPLAY_FLOOR_MS * 4);
+
         expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(100);
-        });
-        await act(async () => {
-            managerDouble.settle();
-            await Promise.resolve();
-        });
-
-        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(shellAttr('data-hud-mounted')).toBe('false');
     });
 });

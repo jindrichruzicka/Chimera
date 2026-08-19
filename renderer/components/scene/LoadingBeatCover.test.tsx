@@ -162,6 +162,30 @@ describe('LoadingBeatCover', () => {
         expect(screen.getByRole('status')).toBeTruthy();
     });
 
+    it('states the wait as an asset wait with no measured progress', async () => {
+        // A route cover stands in for assets that have not arrived, and this
+        // route measures no fraction — so `progress` is null rather than 0.
+        // `0` is a MEASUREMENT that happens to be zero, and a progress preset
+        // handed one draws an empty bar instead of degrading to a spinner.
+        const seen: { reason?: string | undefined; progress?: number | null | undefined } = {};
+        const ReportingCover = (props: { reason?: string; progress?: number | null }): null => {
+            seen.reason = props.reason;
+            seen.progress = props.progress;
+            return null;
+        };
+
+        renderCover({
+            registry: {
+                playfield: () => null,
+                loadingScreen: ReportingCover as never,
+            },
+        });
+        await settle();
+
+        expect(seen.reason).toBe('assets');
+        expect(seen.progress).toBeNull();
+    });
+
     it('keeps the scene surface in the tree, under its own testid', async () => {
         // The scene-transition site sits inside the shell, below the app
         // curtain, and the recorded e2e timeline reads it by this name.

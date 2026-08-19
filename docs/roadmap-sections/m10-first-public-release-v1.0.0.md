@@ -1041,8 +1041,8 @@ it was written to do is the wrong thing: a loading screen carries the tips a pla
 while waiting, and on the hardware that reads them fastest it did not appear.
 
 **The floor's arming condition and the cover's opacity are one defect wearing two faces.**
-The cover layer paints no background — neither `RouteEntryLoadingCover`'s layer nor the
-engine presets declare one — so what the engine renders is a glyph over whatever stands
+The cover layer painted no background — neither the route cover's layer nor the
+engine presets declared one — so what the engine renders is a glyph over whatever stands
 behind it. The black a player sees during a load is the app-level scrim, a sibling above the
 whole route subtree. F90 then made visibility the floor's arming condition, correctly, since
 flooring a cover nobody can see only extends a black screen; and the route-cover reveal grace

@@ -30,7 +30,7 @@ import { screenFadeMs } from '../../components/shell/screenFadeDuration';
 import { GameShell } from '../../components/shell/GameShell';
 import { resolveLoadingBeatFloorMs } from '../../components/scene/loadingCoverHold.js';
 import { LoadingBeatCover } from '../../components/scene/LoadingBeatCover.js';
-import { isRouteCoverGameDeclared } from '../../components/scene/RouteEntryLoadingCover';
+import { isRouteCoverGameDeclared } from '../../components/scene/resolveLoadingScreen.js';
 import { useLoadingBeat } from '../../components/scene/useLoadingBeat.js';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';

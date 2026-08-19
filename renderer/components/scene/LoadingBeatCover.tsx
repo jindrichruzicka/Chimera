@@ -24,7 +24,7 @@ import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { GameScreenRegistry } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
-import { resolveRouteCoverTarget } from './RouteEntryLoadingCover.js';
+import { resolveRouteCoverTarget } from './resolveLoadingScreen.js';
 import { SceneLoadingFallback } from './SceneLoadingFallback.js';
 
 /**

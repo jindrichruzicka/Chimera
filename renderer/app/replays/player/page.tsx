@@ -32,13 +32,11 @@ import type {
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useCriticalAssetPreloadGate } from '../../../assets/criticalAssetPreload.js';
 import { useLeaveGame } from '../../../bridge/useLeaveGame';
-import { resolveLoadingCoverHoldMs } from '../../../components/scene/loadingCoverHold.js';
-import {
-    isRouteCoverGameDeclared,
-    RouteEntryLoadingCover,
-} from '../../../components/scene/RouteEntryLoadingCover';
-import { useCoverExitRamp } from '../../../components/scene/useCoverExitRamp.js';
-import { useMinimumVisibleHold } from '../../../components/scene/useMinimumVisibleHold.js';
+import { resolveLoadingBeatFloorMs } from '../../../components/scene/loadingCoverHold.js';
+import { LoadingBeatCover } from '../../../components/scene/LoadingBeatCover.js';
+import { isRouteCoverGameDeclared } from '../../../components/scene/resolveLoadingScreen.js';
+import { useLoadingBeat } from '../../../components/scene/useLoadingBeat.js';
+import { useOptionalFade } from '../../../components/shell/FadeContext';
 import { GameShell } from '../../../components/shell/GameShell';
 import { screenFadeMs } from '../../../components/shell/screenFadeDuration';
 import { ReplayControls } from '../../../components/replay/ReplayControls';
@@ -49,6 +47,7 @@ import { REPLAYS_KEYS } from '../../../i18n/engine-keys';
 import { useTranslate } from '../../../i18n/useTranslate';
 import { useReplayApi } from '../../../hooks/useReplayApi';
 import { resolveShellGameId, withShellGameId } from '../../../shell/resolveMainMenuGameId';
+import { useGameStore } from '../../../state/gameStore';
 import { useGameContent } from '../../../state/useGameContent';
 import { useUiStore } from '../../../state/uiStore';
 
@@ -130,6 +129,17 @@ function ReplayPlayerView(): React.ReactElement {
     // The role-aware live-match leave (host → returnToLobby), used only for a
     // post-game replay where the session is still alive — see `handleLeaveReplay`.
     const liveLeave = useLeaveGame();
+    // Latched by the leave below so the beat stops issuing curtain commands the
+    // moment another owner takes the screen. A ref, not state: it is set inside
+    // a callback and read when a command would fire, never rendered.
+    const leavingRef = React.useRef(false);
+    const fade = useOptionalFade();
+    // The LIVE match's phase, not the replay's. A host's Leave from a post-game
+    // replay broadcasts a phase:'lobby' snapshot, and `GameStoreBootstrap`
+    // answers it — on this route too — with its own fade-out and a navigation
+    // chained to that fade's promise. It arrives unannounced, without anything
+    // on this page being clicked, so the leave latch below cannot see it.
+    const livePhase = useGameStore((state) => state.snapshot?.phase);
     // `useSearchParams` reflects the live router state, so the `?path=`/`?kind=`
     // query is read reactively: a client (soft) navigation can mount the player
     // before the URL is committed, and this re-renders once it settles rather
@@ -343,54 +353,35 @@ function ReplayPlayerView(): React.ReactElement {
     // unit falls back to the default colour, so the replay would render all-blue.
     const gameContent = useGameContent(info?.gameId ?? null);
 
-    // The minimum-visible hold (§4.36). This route has no entry fade, so the
-    // cover is never occluded and `shown` stamps at cover mount —
-    // still only for a game-declared cover form; the engine placeholder and the
-    // 'none' opt-out keep the latch structurally inert. Only the COVER waits
-    // out the remainder: `isReady` below is never widened by the hold.
+    // The loading beat (§4.36), the same sequence `/game` runs: black, an
+    // opaque cover for at least its floor, black, then the replay and its
+    // transport controls together.
     //
-    // Deliberately WITHOUT an occlusion conjunct of its own. Adding one would
-    // silently stop flooring a cover the moment some future path arrived here
-    // on black; pairing it with a fade-in would put one on a route that owns no
-    // fade, where it could cancel the fade-out `GameStoreBootstrap` runs when a replay's
-    // Leave broadcasts a lobby snapshot — and a cancelled fade resolves its
-    // promise early, so the navigation would land mid-ramp. Both halves belong
-    // to whoever gives this route an entry fade.
+    // This route owns no fade of its own, which used to be the reason it kept
+    // a visibility-armed hold instead: a fade-in here can cancel the fade-out
+    // `GameStoreBootstrap` runs when a replay's Leave broadcasts a lobby
+    // snapshot, and a cancelled fade resolves its promise early, landing the
+    // navigation mid-ramp. Both suppressors below exist for that — the latch
+    // for a leave this page started, the phase for one that arrives from the
+    // session without anything here being clicked.
     const registry = loadedGame?.registry;
-    const coverHoldMs = registry === undefined ? 0 : resolveLoadingCoverHoldMs(registry);
     const routeCoverDeclared =
         registry !== undefined && snapshot !== null && isRouteCoverGameDeclared(registry, snapshot);
-    const coverShown =
-        info !== null &&
-        snapshot !== null &&
-        loadedGame !== null &&
-        assetManager !== null &&
-        !criticalAssets.ready &&
-        routeCoverDeclared;
-    const coverHeld = useMinimumVisibleHold(coverShown, coverHoldMs);
-    const routeCoverUp = !(criticalAssets.ready && !coverHeld);
-    // A cover the player saw leaves on a fade over the replay already rendering
-    // beneath it (§4.36). Collapses to a cut
-    // under the e2e flag and under reduced motion, where `screenFadeMs()` is 0.
-    //
-    // Read at render because the ramp arms on the render that RELEASES the
-    // cover, where no "is a cover up" term is true any more. `screenFadeMs()`
-    // allocates a MediaQueryList per call, so the term short-circuits wherever
-    // no cover can be involved. Kept as the simpler of the two, the alternative
-    // being a duration the hook pulls through a callback at the one render that
-    // needs it.
-    const coverExitMs = routeCoverDeclared ? screenFadeMs() : 0;
-    const { mounted: coverMounted, exiting: coverExiting } = useCoverExitRamp(
-        routeCoverUp,
-        coverShown,
-        coverExitMs,
-    );
-    // This route cover's mounted window, threaded to SceneRouter (which cannot
-    // see this page-local state) as occlusion — the exit ramp included, since a
-    // cover still painting is still something above the shell's own covers —
-    // but only when the cover renders a game-declared form; the engine
-    // placeholder is an empty transparent layer that occludes nothing.
-    const sceneCoverOccluded = coverMounted && routeCoverDeclared;
+    const beatFloorMs = registry === undefined ? 0 : resolveLoadingBeatFloorMs(registry);
+    const [scenePending, setScenePending] = React.useState(false);
+    const beat = useLoadingBeat({
+        curtain: fade,
+        active: info !== null && snapshot !== null && loadedGame !== null && assetManager !== null,
+        declared: routeCoverDeclared,
+        settled: criticalAssets.ready && !scenePending,
+        holdMs: beatFloorMs,
+        fadeMs: screenFadeMs(),
+        isSuppressed: () => leavingRef.current || livePhase === 'lobby',
+    });
+    // What SceneRouter cannot derive: something opaque sits above the shell's
+    // own covers — this route's cover, or the curtain it rises out of — until
+    // the beat reveals.
+    const sceneCoverOccluded = !beat.revealed;
 
     const handlePlay = React.useCallback(() => {
         setIsPlaying(true);
@@ -424,6 +415,7 @@ function ReplayPlayerView(): React.ReactElement {
     // once the broadcast phase:'lobby' snapshot lands. A library-opened replay has
     // no session to return to, so it goes back to the replay library it came from.
     const handleLeaveReplay = React.useCallback(async (): Promise<void> => {
+        leavingRef.current = true;
         if (saveable) {
             await liveLeave();
             return;
@@ -528,18 +520,22 @@ function ReplayPlayerView(): React.ReactElement {
                     leaveGame={handleLeaveReplay}
                     localPlayerId={info.viewerId as PlayerSnapshot['viewerId']}
                     sceneCoverOccluded={sceneCoverOccluded}
+                    hudMounted={beat.revealed}
+                    revealPhase={beat.phase}
+                    onScenePending={setScenePending}
                 />
                 {/*
-                 * Inside the already-`position: relative` playfield wrapper, so
-                 * the cover spans the recorded frame and leaves the transport
-                 * controls above it reachable.
+                 * Full-viewport and portaled above the curtain, so the transport
+                 * controls are part of the reveal rather than something to look
+                 * at while the replay behind them is still loading.
                  */}
-                {coverMounted ? (
-                    <RouteEntryLoadingCover
+                {beat.coverMounted ? (
+                    <LoadingBeatCover
                         registry={loadedGame.registry}
                         snapshot={snapshot}
-                        {...(coverExitMs > 0 ? { exitMs: coverExitMs } : {})}
-                        {...(coverExiting ? { exiting: true } : {})}
+                        surface="route"
+                        visible={beat.coverVisible}
+                        fadeMs={screenFadeMs()}
                     />
                 ) : null}
             </div>

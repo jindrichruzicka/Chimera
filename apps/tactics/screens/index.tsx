@@ -58,7 +58,7 @@ export const TacticsGameScreenRegistry: GameScreenRegistry = {
     // half is the descriptor's `defaultScreen` (simulation/scenes.ts), and
     // `index.test.tsx` pins the two together for the contributed scene. Both
     // cover cascades prefer a value carried from the descriptor, so this map is
-    // their fallback — see `RouteEntryLoadingCover` for the other reader.
+    // their fallback — the route entry reads the same slots for its own cover.
     sceneDefaultScreens: {
         'engine:game': 'playfield',
         'engine:post-game': 'summary',
