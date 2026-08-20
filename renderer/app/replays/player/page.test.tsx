@@ -29,9 +29,18 @@ vi.mock('../../gameAssetSession.js', () => ({
     useRendererGameAssetManager: (loadedGame: unknown) => assetManagerFor(loadedGame),
 }));
 
+/**
+ * One sample per COMMIT of the shell double, so a case can read what the two
+ * reveal projections said in the SAME commit. An end-state read cannot: the
+ * seam this records is one commit wide. A case slices from its OWN mount rather
+ * than reading index 0: this array outlives any single case.
+ */
+const shellCommits: { readonly hudMounted: string; readonly revealPhase: string }[] = [];
+
 // Stub GameShell — we assert which snapshot AND content it receives, not how it
 // draws. The game-specific playfield derives its colour palette from `content`, so a
 // replay that omits it renders every unit in the default colour.
+
 vi.mock('../../../components/shell/GameShell', () => ({
     GameShell: ({
         snapshot,
@@ -63,6 +72,13 @@ vi.mock('../../../components/shell/GameShell', () => ({
             if (mockScenePending !== null) {
                 onScenePending?.(mockScenePending);
             }
+        });
+        // No dep array: one sample per commit, not per changed value.
+        React.useEffect(() => {
+            shellCommits.push({
+                hudMounted: String(hudMounted),
+                revealPhase: String(revealPhase),
+            });
         });
         return (
             <div
@@ -792,6 +808,7 @@ describe('ReplayPlayerPage loading beat', () => {
             toFake: ['setTimeout', 'clearTimeout', 'performance', 'requestAnimationFrame'],
         });
         installReplayBridge(makeBridge());
+        shellCommits.length = 0;
     });
 
     it('shows the cover even when the preload settles before the first frame', async () => {
@@ -829,6 +846,53 @@ describe('ReplayPlayerPage loading beat', () => {
         // The transport controls are part of the reveal, and they are back:
         // `isReady` is never widened by the beat.
         expect(screen.getByRole('button', { name: /step forward/i })).toBeInTheDocument();
+    });
+
+    it('publishes the phase the e2e reveal wait reads', async () => {
+        // The tactics e2e page object's reveal wait orders its Escape presses
+        // off this attribute, and dropping it from the GameShell call reds
+        // nothing else here.
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        managerDouble.settleOnCall = true;
+        await mountUnderFakeTimers();
+
+        expect(shellAttr('data-reveal-phase')).not.toBe('revealed');
+
+        await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 200);
+        expect(shellAttr('data-reveal-phase')).toBe('revealed');
+    });
+
+    it('publishes revealed only AFTER the commit that mounts the menu host', async () => {
+        // The ordering the e2e reveal wait rests on, and the half an end-state
+        // read cannot see. `hudMounted` is true from `revealing`, one commit
+        // before the phase string reads `revealed`; a projection that published
+        // `revealed` in the SAME commit would hand the wait a screen whose
+        // listener has not flushed its effect yet — the race being fixed.
+        //
+        // What `hudMounted` GATES is measured where the real shell mounts:
+        // `GameShell.test.tsx` › `mounts the in-game menu host once revealed (the
+        // control for the case above)`. Here it is a prop on a double.
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        managerDouble.settleOnCall = true;
+        // Sliced from this case's own mount, so what is read here cannot be
+        // another case's samples if the shared reset ever stops running.
+        const from = shellCommits.length;
+        await mountUnderFakeTimers();
+        await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 200);
+
+        const commits = shellCommits.slice(from);
+        const firstHudCommit = commits.findIndex((c) => c.hudMounted === 'true');
+        expect(firstHudCommit).toBeGreaterThanOrEqual(0);
+        expect(commits[firstHudCommit]?.revealPhase).not.toBe('revealed');
+        expect(commits.at(-1)?.revealPhase).toBe('revealed');
     });
 
     it('collapses every leg under NEXT_PUBLIC_CHIMERA_E2E', async () => {

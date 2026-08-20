@@ -103,6 +103,9 @@ async function openReplayAndAssertPlaysToEnd(hostWindow: Page, hostGame: GamePag
 
     const player = new ReplayPlayerPage(hostWindow);
     await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+    // Ordered here rather than at the caller's Escape: this helper returns
+    // before that keypress, so every route through it is ordered once.
+    await player.waitForRevealed();
     // Confirm the deterministic surface opened (the navigate push carried
     // kind=deterministic), so the pipeline-reconstruction path is the one exercised.
     // Exact match: the perspective group's label is a superstring of this one.

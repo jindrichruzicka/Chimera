@@ -112,6 +112,9 @@ test.describe('leave post-game replay → lobby → leave lobby returns to the t
         await expect(player.playButton).toBeVisible({ timeout: 30_000 });
 
         // 5. Esc → Leave: the saveable replay routes host → returnToLobby.
+        // Painted is not listening: the reveal orders the keypress after the
+        // leave listener exists.
+        await player.waitForRevealed();
         await hostWindow.keyboard.press('Escape');
         const leaveConfirm = hostWindow.getByTestId('tactics-leave-confirm');
         await expect(leaveConfirm).toBeVisible();

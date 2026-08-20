@@ -19,6 +19,7 @@ export class ReplayPlayerPage {
     readonly saveNameInput: Locator;
     readonly saveNameConfirm: Locator;
     readonly saveNameCancel: Locator;
+    readonly shellRoot: Locator;
 
     public constructor(private readonly page: Page) {
         this.playButton = page.getByTestId('replay-play-btn');
@@ -35,6 +36,9 @@ export class ReplayPlayerPage {
         this.saveNameInput = page.getByTestId('replay-save-name-input');
         this.saveNameConfirm = page.getByTestId('replay-save-name-confirm');
         this.saveNameCancel = page.getByTestId('replay-save-name-cancel');
+        // The shell frame that publishes the loading beat's phase; see
+        // waitForRevealed.
+        this.shellRoot = page.getByTestId('game-shell-root');
         // Native <select> labelled "Playback speed" — the engine Select primitive
         // associates its label via `htmlFor`, so locate it by accessible name.
         this.speedSelect = page.getByLabel('Playback speed');
@@ -43,6 +47,26 @@ export class ReplayPlayerPage {
         // which is wall-clock-unbounded since ticks advance in real time.
         this.seekToEndButton = page.getByRole('button', { name: 'Seek to end' });
         this.stepBackButton = page.getByRole('button', { name: 'Step back' });
+    }
+
+    /**
+     * Wait until the shell publishes `data-reveal-phase="revealed"`.
+     *
+     * The transport being visible is a RENDER fact, while the Escape/leave key
+     * listener attaches in an EFFECT; under launch contention the paint-to-effect
+     * gap stretches far enough that a one-shot keypress fired between them is
+     * silently lost (the shape behind this suite's replay-leave flakes).
+     *
+     * What orders this attribute after that listener is pinned in two halves:
+     * `renderer/app/replays/player/page.test.tsx` › `publishes revealed only
+     * AFTER the commit that mounts the menu host`, and `GameShell.test.tsx` ›
+     * `mounts the in-game menu host once revealed (the control for the case
+     * above)`.
+     */
+    public async waitForRevealed(timeout = 30_000): Promise<void> {
+        await expect(this.shellRoot).toHaveAttribute('data-reveal-phase', 'revealed', {
+            timeout,
+        });
     }
 
     /**

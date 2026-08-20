@@ -77,6 +77,9 @@ export async function readyAndStart(
  * Tactics declares no route cover, so the middle condition is free here today —
  * it exists so the wait keeps its meaning for a game that declares one, which
  * is exactly the case that would otherwise regress unseen.
+ *
+ * The replay route has a second wait of its own — `ReplayPlayerPage.waitForRevealed`,
+ * keyed on the shell's published beat phase.
  */
 export async function waitForGameRevealed(window: Page): Promise<void> {
     await expect(window.getByTestId('screen-fade-overlay')).toHaveCSS('opacity', '0');

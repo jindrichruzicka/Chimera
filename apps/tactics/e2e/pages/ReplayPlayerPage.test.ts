@@ -57,6 +57,7 @@ describe('ReplayPlayerPage', () => {
         expect(player.saveNameInput).toBeDefined();
         expect(player.saveNameConfirm).toBeDefined();
         expect(player.saveNameCancel).toBeDefined();
+        expect(player.shellRoot).toBeDefined();
         expect(requestedTestIds).toEqual([
             'replay-play-btn',
             'replay-pause-btn',
@@ -67,6 +68,7 @@ describe('ReplayPlayerPage', () => {
             'replay-save-name-input',
             'replay-save-name-confirm',
             'replay-save-name-cancel',
+            'game-shell-root',
         ]);
         expect(requestedLabels).toEqual(['Playback speed']);
         expect(requestedRoles).toEqual(['button[Seek to end]', 'button[Step back]']);

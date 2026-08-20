@@ -393,6 +393,9 @@ test.describe('Tactics replay lifecycle', () => {
 
         // Esc opens the in-game leave dialog; confirming Leave must take the host
         // back to the lobby (the reported bug: it did nothing from the replay route).
+        // Painted is not listening: wait out the reveal so the keypress has a
+        // listener to land on (see ReplayPlayerPage.waitForRevealed).
+        await player.waitForRevealed();
         await hostWindow.keyboard.press('Escape');
         const leaveConfirm = hostWindow.getByTestId('tactics-leave-confirm');
         await expect(leaveConfirm).toBeVisible();
@@ -425,6 +428,9 @@ test.describe('Tactics replay lifecycle', () => {
         await expect(player.playButton).toBeVisible({ timeout: 30_000 });
 
         // Esc → Leave must return to the replay library (not strand the player).
+        // Painted is not listening: the reveal orders the keypress after the
+        // leave listener exists.
+        await player.waitForRevealed();
         await hostWindow.keyboard.press('Escape');
         const leaveConfirm = hostWindow.getByTestId('tactics-leave-confirm');
         await expect(leaveConfirm).toBeVisible();
