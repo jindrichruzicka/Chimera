@@ -570,6 +570,189 @@ describe('useFadeTransition — the reveal waits behind a cover', () => {
     });
 });
 
+describe('useFadeTransition — the ack is invariant under the beat', () => {
+    // Invariant #133: the beat sits strictly downstream of `dispatchReadyIfNeeded`,
+    // so nothing host-visible moves when the cover's floor changes. Decisive
+    // because the ack is the barrier every OTHER seat waits on — a cosmetic
+    // floor that reached it would serialise one client's preference onto the
+    // whole match, and the host's tick budget cannot cover for it, since a tick
+    // advances only when an action is applied.
+    //
+    // Two host-visible arms, one case each: the ack itself, and the retry
+    // cadence that re-sends it. Both read as a VALUE compared ACROSS cover
+    // regimes, which is the form the guarantee is stated in and the form no
+    // single-regime case can take.
+
+    /** What the ack carried, and when it fired on the fake clock. */
+    interface AckRecord {
+        readonly action: unknown;
+        /** Milliseconds since this regime's first render. */
+        readonly atMs: number;
+    }
+
+    /** A harness whose acks are recorded, plus the levers a regime drives. */
+    function renderRecorded(coverUpInitially: boolean): {
+        readonly acks: readonly AckRecord[];
+        readonly setCoverUp: (next: boolean) => void;
+        readonly endTransition: () => void;
+    } {
+        vi.setSystemTime(0);
+        const acks: AckRecord[] = [];
+        const sendAction = vi.fn((action: unknown): void => {
+            acks.push({ action, atMs: Date.now() });
+        });
+
+        function Harness({
+            snap,
+            coverUp,
+        }: {
+            readonly snap: PlayerSnapshot;
+            readonly coverUp: boolean;
+        }): React.ReactElement {
+            useFadeTransition({
+                snapshot: snap,
+                localPlayerId: LOCAL_PLAYER,
+                sendAction,
+                coverUp,
+                fadeOutMs: 32,
+                fadeInMs: 32,
+            });
+            return <div />;
+        }
+
+        let snap = inFlight;
+        let coverUp = coverUpInitially;
+        const { rerender } = render(
+            <FadeProvider>
+                <Harness snap={snap} coverUp={coverUp} />
+            </FadeProvider>,
+        );
+        const paint = (): void => {
+            rerender(
+                <FadeProvider>
+                    <Harness snap={snap} coverUp={coverUp} />
+                </FadeProvider>,
+            );
+        };
+
+        return {
+            acks,
+            setCoverUp: (next: boolean): void => {
+                coverUp = next;
+                paint();
+            },
+            endTransition: (): void => {
+                snap = ended;
+                paint();
+            },
+        };
+    }
+
+    /**
+     * Drives one whole transition and reports every ack it dispatched.
+     *
+     * `coverFallsAfterEndMs` is a delay measured from the transition's END,
+     * which is the moment that owes a reveal: `0` never raises a cover at all,
+     * a positive value floors one, and `null` is the reveal that never fires.
+     */
+    async function acksUnder(coverFallsAfterEndMs: number | null): Promise<readonly AckRecord[]> {
+        const run = renderRecorded(coverFallsAfterEndMs !== 0);
+
+        await vi.advanceTimersByTimeAsync(TRANSITION_ENDS_AT_MS);
+        run.endTransition();
+
+        if (coverFallsAfterEndMs !== null && coverFallsAfterEndMs !== 0) {
+            await vi.advanceTimersByTimeAsync(coverFallsAfterEndMs);
+            run.setCoverUp(false);
+        }
+        await vi.advanceTimersByTimeAsync(RUN_OUT_MS);
+
+        cleanup();
+        return run.acks;
+    }
+
+    /**
+     * Holds a transition in `'preparing'` for two whole retry intervals without
+     * ever ending it, and reports every ack. The cadence is torn down when a
+     * transition ends, so a harness that ends one can never reach this arm.
+     */
+    async function cadenceUnder(coverUp: boolean): Promise<readonly AckRecord[]> {
+        const run = renderRecorded(coverUp);
+        await vi.advanceTimersByTimeAsync(SCENE_READY_RETRY_MS * 2 + 1);
+        cleanup();
+        return run.acks;
+    }
+
+    /** When the harness ends the transition — past the fade-out that gates the ack. */
+    const TRANSITION_ENDS_AT_MS = 200;
+    /** Run-out after the last event of a regime. */
+    const RUN_OUT_MS = 600;
+    /**
+     * How long after the transition's end the floored regime's cover stands.
+     * Named because the bound below re-derives that moment from it — written
+     * twice, a changed call site would silently stop meaning "before the cover
+     * falls" with nothing going red.
+     */
+    const LARGE_FLOOR_MS = 600;
+
+    const inFlight = makeSnapshot({
+        sceneTransition: {
+            toSceneId: makeSceneId('engine:post-game'),
+            phase: 'preparing',
+            startedAtTick: 2,
+            params: {},
+            playersReady: [],
+        },
+    });
+    const ended = makeSnapshot({ tick: 4, sceneTransition: null });
+
+    it('dispatches the same ack at the same moment under every floor', async () => {
+        vi.useFakeTimers();
+
+        const zeroFloor = await acksUnder(0);
+        // Comfortably past the fade-out that gates the ack, so a floor that
+        // reached the dispatch would move it rather than merely reorder it.
+        const largeFloor = await acksUnder(LARGE_FLOOR_MS);
+        const neverRevealed = await acksUnder(null);
+
+        // Named rather than asserted as "some ack happened": a regime that
+        // dispatched NOTHING would satisfy an equality between two empty lists.
+        expect(zeroFloor).toEqual([
+            {
+                action: {
+                    type: 'engine:scene_ready',
+                    playerId: LOCAL_PLAYER,
+                    tick: inFlight.tick,
+                    payload: { playerId: LOCAL_PLAYER },
+                },
+                atMs: expect.any(Number),
+            },
+        ]);
+        // The ack lands BEFORE the large-floor cover falls. Without this the
+        // equality below could be satisfied by three runs that all acked after
+        // every cover had already gone — true of a hook that waits for the
+        // cover, which is the shape being excluded.
+        expect(zeroFloor[0]?.atMs).toBeLessThan(TRANSITION_ENDS_AT_MS + LARGE_FLOOR_MS);
+        expect(largeFloor).toEqual(zeroFloor);
+        expect(neverRevealed).toEqual(zeroFloor);
+    });
+
+    it('re-sends on the retry cadence at the same rate with a cover standing', async () => {
+        // The second host-visible arm. A cover cannot slow the re-send either:
+        // the cadence exists because an ack can be LOST, and the host barrier
+        // has no other way to learn this seat is ready.
+        vi.useFakeTimers();
+
+        const uncovered = await cadenceUnder(false);
+        const covered = await cadenceUnder(true);
+
+        // The fade-out's ack, then one per elapsed interval. Pinned as a COUNT
+        // so a cadence that stopped after the first re-send still reds.
+        expect(uncovered).toHaveLength(3);
+        expect(covered).toEqual(uncovered);
+    });
+});
+
 describe('useFadeTransition — scene_ready retry cadence', () => {
     // The ack can be LOST: the host's own ack advances the tick while a
     // client's — stamped one tick earlier — is in flight, and the pipeline
