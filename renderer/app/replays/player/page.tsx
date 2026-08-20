@@ -520,7 +520,8 @@ function ReplayPlayerView(): React.ReactElement {
                     leaveGame={handleLeaveReplay}
                     localPlayerId={info.viewerId as PlayerSnapshot['viewerId']}
                     sceneCoverOccluded={sceneCoverOccluded}
-                    hudMounted={beat.revealed}
+                    hudMounted={beat.chromeMounted}
+                    menuMounted={beat.revealed}
                     revealPhase={beat.phase}
                     onScenePending={setScenePending}
                 />

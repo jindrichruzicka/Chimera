@@ -1893,6 +1893,7 @@ describe('GameShell reveal seam', () => {
     // `undefined`.
     interface SeamOverrides {
         readonly hudMounted?: boolean;
+        readonly menuMounted?: boolean;
         readonly revealPhase?: string;
     }
 
@@ -1908,6 +1909,9 @@ describe('GameShell reveal seam', () => {
                 {...(overrides.hudMounted === undefined
                     ? {}
                     : { hudMounted: overrides.hudMounted })}
+                {...(overrides.menuMounted === undefined
+                    ? {}
+                    : { menuMounted: overrides.menuMounted })}
                 {...(overrides.revealPhase === undefined
                     ? {}
                     : { revealPhase: overrides.revealPhase })}
@@ -1978,6 +1982,48 @@ describe('GameShell reveal seam', () => {
 
         renderSeam();
 
+        expect(inGameMenuHostSpy).toHaveBeenCalled();
+    });
+
+    it('keeps the menu host withheld after the HUD row has already mounted', () => {
+        // The two gates part company here, and this is the case that says why
+        // they must. The row mounts while the screen is still opaque, so its
+        // grid change re-fits the canvas under black — but the menu's concern
+        // is a KEY, not a paint, and Escape pressed against a screen the player
+        // cannot see is swallowed whether the row beside it is up or not.
+        inGameMenuHostSpy.mockClear();
+
+        renderSeam({ hudMounted: true, menuMounted: false });
+
+        expect(screen.getByTestId('game-hud-slot')).toBeTruthy();
+        expect(inGameMenuHostSpy).not.toHaveBeenCalled();
+    });
+
+    it('mounts the menu host on its own gate, with the HUD row still withheld', () => {
+        // The other half of the split, which is what stops `menuMounted` being
+        // read as "and the HUD too": an explicit true mounts the host even
+        // where the row's own gate says no.
+        inGameMenuHostSpy.mockClear();
+
+        renderSeam({ hudMounted: false, menuMounted: true });
+
+        expect(screen.queryByTestId('game-hud-slot')).toBeNull();
+        expect(inGameMenuHostSpy).toHaveBeenCalled();
+    });
+
+    it('falls back to the HUD row gate when no menu gate is given', () => {
+        // The compatibility term. A caller that knows only `hudMounted` — every
+        // caller before the split — must keep the behaviour it had, which is
+        // the two moving together.
+        inGameMenuHostSpy.mockClear();
+
+        renderSeam({ hudMounted: false });
+        expect(inGameMenuHostSpy).not.toHaveBeenCalled();
+
+        cleanup();
+        inGameMenuHostSpy.mockClear();
+
+        renderSeam({ hudMounted: true });
         expect(inGameMenuHostSpy).toHaveBeenCalled();
     });
 

@@ -47,15 +47,21 @@ interface GameShellBaseProps {
     readonly children?: ReactNode;
     readonly tick: number;
     /**
-     * Whether the match chrome may be shown yet (§4.33). `false` withholds the
-     * HUD row and the spectator HUD while a loading beat still owns the screen,
-     * so a player never watches them assemble beside a loading screen.
+     * Whether the match chrome may be mounted yet (§4.33). `false` withholds
+     * the HUD row and the spectator HUD while a loading beat still owns the
+     * screen, so a player never watches them assemble beside a loading screen.
      *
      * Withholds a MOUNT rather than hiding a mounted row: an invisible HUD
      * still runs its effects and still takes its grid row. What is NOT deferred
      * is the scene beneath it — the canvas warms up under the curtain, and
      * `GameShell` stays the unique disposer of a page-injected `AssetManager`
      * (Invariant #21) — nor the diagnostics overlays, which self-gate already.
+     *
+     * Expected to flip while the screen is still OPAQUE, not as it opens: the
+     * row is a grid row of the layout below, so mounting it re-fits the canvas
+     * beneath — and that re-fit lands two observer round-trips later, which on
+     * a reveal is well inside the fade the player is watching. The loading
+     * beat's `chromeMounted` is the term that satisfies this; `revealed` is not.
      *
      * Defaults to `true`, so a caller that knows nothing of the beat is
      * unchanged.
@@ -155,6 +161,19 @@ interface GameShellRegistryProps {
     readonly sceneCoverOccluded?: boolean;
     /** See {@link GameShellBaseProps.hudMounted}; forwarded to the frame. */
     readonly hudMounted?: boolean;
+    /**
+     * Whether the in-game menu host may mount — the Escape-bearing chrome,
+     * gated apart from the HUD row above because its concern is a KEY rather
+     * than a paint. The row wants to mount early, while the screen is opaque,
+     * so its layout change happens out of view; the menu must not, because an
+     * Escape-stack layer under a screen the player cannot see swallows the key
+     * without showing a menu. The loading beat's `revealed` is the term that
+     * satisfies this.
+     *
+     * Defaults to {@link GameShellRegistryProps.hudMounted}, so a caller that
+     * knows only the one gate keeps the behaviour it had.
+     */
+    readonly menuMounted?: boolean;
     /** See {@link GameShellBaseProps.revealPhase}; forwarded to the frame. */
     readonly revealPhase?: string;
     /**
@@ -206,6 +225,7 @@ function RegistryGameShell({
     fadeInMs,
     sceneCoverOccluded,
     hudMounted,
+    menuMounted,
     revealPhase,
     onScenePending,
     onUndo,
@@ -274,11 +294,15 @@ function RegistryGameShell({
                         />
                     </GameShellFrame>
                     {/*
-                     * Withheld with the HUD row. An Escape-stack layer mounted
-                     * under an opaque loading screen would swallow the key
-                     * without showing a menu.
+                     * Withheld PAST the HUD row, on its own gate. An Escape-
+                     * stack layer mounted under an opaque loading screen would
+                     * swallow the key without showing a menu, and the row above
+                     * mounts while the screen is still exactly that — opaque —
+                     * so that its grid change re-fits the canvas out of view.
+                     * `?? hudMounted` keeps the pair moving together for a
+                     * caller that supplies only the row's gate.
                      */}
-                    {hudMounted !== false && (
+                    {(menuMounted ?? hudMounted) !== false && (
                         <InGameMenuHost
                             {...(registry.inGameMenu === undefined
                                 ? {}

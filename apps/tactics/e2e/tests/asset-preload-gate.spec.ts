@@ -12,9 +12,9 @@
  * mounted in RENDER off the same term the gate answers, so a build without the
  * gate rendered it never. Tactics declares no cover, and the loading beat only
  * mounts one where a game declared it, so that artefact is gone from this path.
- * What is left — the shell mounted with its HUD withheld — walks the same
- * phases on a gateless build, one commit apart instead of one preload apart, so
- * it is a duration difference and not a structural one. The gate's own
+ * What is left — the shell mounted under a scrim still held opaque — walks the
+ * same phases on a gateless build, one commit apart instead of one preload
+ * apart, so it is a duration difference and not a structural one. The gate's own
  * non-vacuity is carried by its unit suite (four settle paths and a budget that
  * does not collapse under the flag); what this spec still proves is that the
  * packaged build sequences the entry at all, and that tactics gets no cover it
@@ -57,26 +57,49 @@ test('holds the app-level scrim opaque over the mounted shell, then reveals it',
     const timeline = await readRevealTimeline(hostWindow);
     const context = `reveal timeline: ${JSON.stringify(timeline)}`;
 
-    const heldMs = durationWhere(timeline, (sample) => sample.canvasMounted && !sample.hudMounted);
+    const heldMs = durationWhere(
+        timeline,
+        (sample) => sample.canvasMounted && sample.screenFadeOpacity === '1',
+    );
     // Half one, as the criterion words it: the shell was mounted and NOT shown.
     // A preload gates a reveal, never a mount — withholding the shell would
     // orphan the AssetManager whose unique disposer it is (Invariant #21).
+    //
+    // Read off the SCRIM rather than the HUD row: the row now mounts at
+    // `covered`, at the head of this same window rather than at its end, so it
+    // no longer separates "mounted" from "shown" — and the two commits between
+    // the shell appearing and the row arriving can share one observer batch,
+    // which would collapse the measurement to zero. The scrim's held opacity is
+    // what the spec's own title claims anyway.
     expect(heldMs, context).toBeGreaterThan(0);
 
     // The entry was sequenced rather than jumped: the beat passed through its
     // pre-reveal phases in order before anything was shown. Falsified by a
     // route that revealed straight from mount, which is what a build with the
     // seam unwired would do.
-    //
-    // Not asserted against the curtain: the HUD deliberately mounts while the
-    // curtain is still opaque, one commit before the closing fade, so the grid
-    // row it adds resizes the canvas under black rather than in front of the
-    // player. A sample with the HUD up and the scrim at 1 is that commit.
     const phases = timeline.samples
         .map((sample) => sample.revealPhase)
         .filter((phase): phase is string => phase !== null);
     expect(phases, context).toContain('covered');
     expect(phases.indexOf('covered')).toBeLessThan(phases.indexOf('revealed'));
+
+    // And the HUD row was already up by then. The row is a grid row, so its
+    // mount re-fits the canvas beneath it — the letterbox observer, then r3f's
+    // own gl.setSize — and that re-fit lands tens of milliseconds later. Mounted
+    // on the reveal, as `hudMounted={beat.revealed}` did, those milliseconds are
+    // spent inside the fade and the scene visibly rescales; mounted at
+    // `covered`, they are spent under a scrim still at opacity 1.
+    //
+    // The ORDERING is what is asserted, not the geometry: this build collapses
+    // both fade legs and the floor to zero, so there is no fade here for a jump
+    // to be visible in. Every `covered` sample carrying the row is the whole of
+    // what a zeroed build can still show.
+    const coveredSamples = timeline.samples.filter((sample) => sample.revealPhase === 'covered');
+    expect(coveredSamples.length, context).toBeGreaterThan(0);
+    expect(
+        coveredSamples.every((sample) => sample.hudMounted),
+        context,
+    ).toBe(true);
 
     // Tactics declares no route cover, so it takes the beat's coverless path:
     // black until the settle, then one reveal. Asserted rather than assumed,

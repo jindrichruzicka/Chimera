@@ -35,7 +35,7 @@ vi.mock('../../gameAssetSession.js', () => ({
  * seam this records is one commit wide. A case slices from its OWN mount rather
  * than reading index 0: this array outlives any single case.
  */
-const shellCommits: { readonly hudMounted: string; readonly revealPhase: string }[] = [];
+const shellCommits: { readonly menuMounted: string; readonly revealPhase: string }[] = [];
 
 // Stub GameShell — we assert which snapshot AND content it receives, not how it
 // draws. The game-specific playfield derives its colour palette from `content`, so a
@@ -49,6 +49,7 @@ vi.mock('../../../components/shell/GameShell', () => ({
         assetManager,
         sceneCoverOccluded,
         hudMounted,
+        menuMounted,
         revealPhase,
         onScenePending,
     }: {
@@ -58,6 +59,7 @@ vi.mock('../../../components/shell/GameShell', () => ({
         assetManager?: { dispose(): void };
         sceneCoverOccluded?: boolean;
         hudMounted?: boolean;
+        menuMounted?: boolean;
         revealPhase?: string;
         onScenePending?: (pending: boolean) => void;
     }) => {
@@ -76,7 +78,7 @@ vi.mock('../../../components/shell/GameShell', () => ({
         // No dep array: one sample per commit, not per changed value.
         React.useEffect(() => {
             shellCommits.push({
-                hudMounted: String(hudMounted),
+                menuMounted: String(menuMounted),
                 revealPhase: String(revealPhase),
             });
         });
@@ -87,6 +89,7 @@ vi.mock('../../../components/shell/GameShell', () => ({
                 data-content={content === undefined ? 'none' : JSON.stringify(content)}
                 data-scene-cover-occluded={String(sceneCoverOccluded)}
                 data-hud-mounted={String(hudMounted)}
+                data-menu-mounted={String(menuMounted)}
                 data-reveal-phase={String(revealPhase)}
             >
                 {/* Surfaces the in-game-menu leave so the player's `handleLeaveReplay`
@@ -825,7 +828,31 @@ describe('ReplayPlayerPage loading beat', () => {
         await mountUnderFakeTimers();
 
         expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
+    });
+
+    it('has the HUD row up for the whole cover, and does not take it down to reveal', async () => {
+        // The same split the live route makes, pinned here too because this
+        // route wires the shell itself: the layout-bearing row mounts while the
+        // cover is up, so the canvas re-fit it causes has the rest of the cover
+        // leg to land in instead of the fade. Kept mounted across the reveal —
+        // a row that came and went would re-fit twice.
+        installBeatGame({
+            screens: {},
+            loadingScreen: 'spinner',
+            loadingScreenMinVisibleMs: REPLAY_FLOOR_MS,
+        });
+        managerDouble.settleOnCall = true;
+        await mountUnderFakeTimers();
+
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
+
+        await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 200);
+
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 
     it('holds the cover for the declared floor, then reveals', async () => {
@@ -842,7 +869,7 @@ describe('ReplayPlayerPage loading beat', () => {
 
         await step(SCREEN_FADE_FAST_MS * 2 + 120);
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
         // The transport controls are part of the reveal, and they are back:
         // `isReady` is never widened by the beat.
         expect(screen.getByRole('button', { name: /step forward/i })).toBeInTheDocument();
@@ -868,12 +895,12 @@ describe('ReplayPlayerPage loading beat', () => {
 
     it('publishes revealed only AFTER the commit that mounts the menu host', async () => {
         // The ordering the e2e reveal wait rests on, and the half an end-state
-        // read cannot see. `hudMounted` is true from `revealing`, one commit
+        // read cannot see. `menuMounted` is true from `revealing`, one commit
         // before the phase string reads `revealed`; a projection that published
         // `revealed` in the SAME commit would hand the wait a screen whose
         // listener has not flushed its effect yet — the race being fixed.
         //
-        // What `hudMounted` GATES is measured where the real shell mounts:
+        // What `menuMounted` GATES is measured where the real shell mounts:
         // `GameShell.test.tsx` › `mounts the in-game menu host once revealed (the
         // control for the case above)`. Here it is a prop on a double.
         installBeatGame({
@@ -889,9 +916,9 @@ describe('ReplayPlayerPage loading beat', () => {
         await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 200);
 
         const commits = shellCommits.slice(from);
-        const firstHudCommit = commits.findIndex((c) => c.hudMounted === 'true');
-        expect(firstHudCommit).toBeGreaterThanOrEqual(0);
-        expect(commits[firstHudCommit]?.revealPhase).not.toBe('revealed');
+        const firstMenuCommit = commits.findIndex((c) => c.menuMounted === 'true');
+        expect(firstMenuCommit).toBeGreaterThanOrEqual(0);
+        expect(commits[firstMenuCommit]?.revealPhase).not.toBe('revealed');
         expect(commits.at(-1)?.revealPhase).toBe('revealed');
     });
 
@@ -908,7 +935,7 @@ describe('ReplayPlayerPage loading beat', () => {
         await mountUnderFakeTimers();
 
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 
     it('mounts no cover for a game that declares none', async () => {
@@ -957,7 +984,7 @@ describe('ReplayPlayerPage loading beat', () => {
         await mountUnderFakeTimers();
 
         expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
     });
 
     it('ramps its cover down before dropping it, rather than cutting it out', async () => {
@@ -992,7 +1019,7 @@ describe('ReplayPlayerPage loading beat', () => {
 
         await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
 
-        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
     });
 
     it('stops the beat when a leave takes the screen', async () => {
@@ -1018,7 +1045,7 @@ describe('ReplayPlayerPage loading beat', () => {
         });
         await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
 
-        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
     });
 
     it('stops the beat on the post-game leave, the branch that owns a live session', async () => {
@@ -1062,7 +1089,7 @@ describe('ReplayPlayerPage loading beat', () => {
         });
         await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
 
-        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
     });
 
     it('stops the beat when a lobby snapshot arrives without anything here being clicked', async () => {
@@ -1089,7 +1116,7 @@ describe('ReplayPlayerPage loading beat', () => {
 
         await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
 
-        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
     });
 
     it('carries the default floor for a cover declared without a minimum', async () => {
@@ -1140,6 +1167,6 @@ describe('ReplayPlayerPage loading beat', () => {
         await step(REPLAY_FLOOR_MS * 4);
 
         expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
     });
 });

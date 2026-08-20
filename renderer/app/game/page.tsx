@@ -384,7 +384,8 @@ export default function GamePage(): React.ReactElement | null {
                     ? { fadeOutMs: 0, fadeInMs: 0 }
                     : {})}
                 sceneCoverOccluded={sceneCoverOccluded}
-                hudMounted={beat.revealed}
+                hudMounted={beat.chromeMounted}
+                menuMounted={beat.revealed}
                 revealPhase={beat.phase}
                 onScenePending={setScenePending}
                 onUndo={() =>

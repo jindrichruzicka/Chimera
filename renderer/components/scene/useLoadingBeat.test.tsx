@@ -122,16 +122,21 @@ async function flush(): Promise<void> {
 function renderBeatRecording(
     initial: LoadingBeatOptions,
     seen: string[],
+    project: (beat: LoadingBeat) => string = (beat) => `${beat.phase}:${String(beat.revealed)}`,
 ): ReturnType<typeof renderHook<LoadingBeat, LoadingBeatOptions>> {
     return renderHook(
         (props: LoadingBeatOptions) => {
             const beat = useLoadingBeat(props);
-            seen.push(`${beat.phase}:${String(beat.revealed)}`);
+            seen.push(project(beat));
             return beat;
         },
         { initialProps: initial },
     );
 }
+
+/** The projection the chrome-mount cases record: phase against `chromeMounted`. */
+const chromeProjection = (beat: LoadingBeat): string =>
+    `${beat.phase}:${String(beat.chromeMounted)}`;
 
 beforeEach(() => {
     // The hold's remainder is computed from a monotonic performance.now()
@@ -771,12 +776,106 @@ describe('useLoadingBeat', () => {
         expect(result.current.coverMounted).toBe(false);
     });
 
+    it('reports the chrome mountable from the render that enters `covered`', async () => {
+        // What the HUD-row seam hangs off. The row is a grid row, so mounting
+        // it resizes the canvas beneath it — and a canvas resize is not a
+        // paint, it is two observer round-trips (the letterbox fit, then r3f's
+        // own `gl.setSize`) that take tens of milliseconds to land. Reported
+        // one commit before the fade, those milliseconds are spent IN the fade
+        // and the player watches the scene rescale. Reported at `covered`, they
+        // are spent under a curtain that is opaque for a whole cover leg after.
+        //
+        // Recorded from inside the render rather than sampled: a single commit
+        // reporting the chrome withheld is paintable, and it is exactly the
+        // commit that would put the resize back in view.
+        const curtain = makeCurtain(1);
+        const seen: string[] = [];
+        const { result } = renderBeatRecording(
+            baseOptions({ curtain, settled: true }),
+            seen,
+            chromeProjection,
+        );
+
+        await flush();
+        expect(result.current.chromeMounted).toBe(true);
+
+        await advance(FADE_MS + HOLD_MS + FADE_MS * 2 + 100);
+        expect(result.current.phase).toBe('revealed');
+
+        // No commit from `covered` onward withheld it. Listed phase by phase,
+        // because an assertion on the terminal alone passes for a beat that
+        // dropped the chrome in the middle and put it back.
+        expect(seen).not.toContain('covered:false');
+        expect(seen).not.toContain('loading-in:false');
+        expect(seen).not.toContain('loading:false');
+        expect(seen).not.toContain('loading-out:false');
+        expect(seen).not.toContain('revealing:false');
+        expect(seen).not.toContain('revealed:false');
+        // Non-vacuity: those phases were actually walked. Without this the
+        // absences above would hold for a beat that never left `idle`.
+        expect(seen).toContain('covered:true');
+        expect(seen).toContain('loading:true');
+        expect(seen).toContain('revealed:true');
+    });
+
+    it('withholds the chrome while the curtain is still coming down', async () => {
+        // The other end of the same hazard, and the reason this is not simply
+        // "always mounted": on a cold entry the surface is still LIT while the
+        // beat darkens it. A row mounted there resizes the canvas in front of
+        // the player just as surely — the jump moved, not removed.
+        const curtain = makeCurtain(0);
+        const seen: string[] = [];
+        const options = (): LoadingBeatOptions =>
+            baseOptions({ curtain, declared: false, settled: true, fadeMs: FADE_MS, holdMs: 0 });
+        const { result, rerender } = renderBeatRecording(options(), seen, chromeProjection);
+
+        // Mid-fade: the curtain has been commanded but has not landed, so the
+        // shell is still partly on screen.
+        await advance(FADE_MS / 2);
+        expect(curtain.calls).toContain('fadeOut');
+        expect(result.current.phase).toBe('darkening');
+        expect(result.current.chromeMounted).toBe(false);
+        expect(seen).not.toContain('idle:true');
+        expect(seen).not.toContain('darkening:true');
+
+        // The control: the same beat once the curtain is observed opaque.
+        await advance(FADE_MS);
+        rerender(options());
+        await flush();
+
+        expect(curtain.opacity).toBe(1);
+        expect(result.current.chromeMounted).toBe(true);
+    });
+
+    it('withholds the chrome once another owner takes the screen', async () => {
+        // A suppressed beat has handed the surface over — a leave in flight, a
+        // returning lobby snapshot. It reports nothing mountable from there,
+        // exactly as it reports nothing revealed: the chrome belongs to a beat
+        // that still owns its screen.
+        const curtain = makeCurtain(1);
+        let suppressed = false;
+        const options = (): LoadingBeatOptions =>
+            baseOptions({ curtain, settled: false, isSuppressed: () => suppressed });
+
+        const { result, rerender } = renderBeat(options());
+        await advance(FADE_MS);
+        expect(result.current.phase).toBe('loading');
+        expect(result.current.chromeMounted).toBe(true);
+
+        suppressed = true;
+        rerender(options());
+        await flush();
+
+        expect(result.current.phase).toBe('suppressed');
+        expect(result.current.chromeMounted).toBe(false);
+    });
+
     it('reveals from the render that enters the reveal, one commit before the fade starts', async () => {
-        // What the HUD-mount seam hangs off: the HUD has to mount under full
-        // black, so `revealed` must be true for the render that commits BEFORE
-        // the closing fade-in — not only once that fade has finished. A
-        // projection keyed on the terminal phase alone would mount the HUD
-        // mid-ramp, in front of the player.
+        // What the in-game menu's mount hangs off, and the scene surface's
+        // occlusion term with it: both have to be true for the render that
+        // commits BEFORE the closing fade-in, not only once that fade has
+        // finished. A projection keyed on the terminal phase alone would mount
+        // the menu mid-ramp, over a scene the player is only just seeing.
         const curtain = makeCurtain(1);
         const { result } = renderBeat(
             baseOptions({ curtain, declared: false, settled: true, fadeMs: FADE_MS }),

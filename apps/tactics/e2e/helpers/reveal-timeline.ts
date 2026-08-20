@@ -55,9 +55,12 @@ export interface RevealSample {
     /**
      * Is the match HUD row mounted?
      *
-     * The loading beat withholds it until the reveal, so this is what separates
-     * "the shell is up" from "the player is looking at the match" — and it is
-     * decided in RENDER, which is what keeps it readable once every beat
+     * NOT a reveal marker — the beat mounts the row a whole cover leg early, at
+     * `covered`, so that the canvas re-fit its grid row causes lands under an
+     * opaque screen instead of inside the closing fade. Read it against
+     * {@link RevealSample.revealPhase} to assert that ordering; read the scrim's
+     * opacity, or the phase itself, for whether the player is looking at the
+     * match. Decided in RENDER, which is what keeps it readable once every beat
      * duration collapses to zero under the e2e flag.
      */
     readonly hudMounted: boolean;

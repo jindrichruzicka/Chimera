@@ -108,8 +108,37 @@ export interface LoadingBeatOptions {
 
 export interface LoadingBeat {
     readonly phase: LoadingBeatPhase;
-    /** Whether the scene and its HUD may be shown. */
+    /** Whether the scene may be shown, and the input-bearing chrome mounted. */
     readonly revealed: boolean;
+    /**
+     * Whether the shell's LAYOUT-bearing chrome — the HUD row — may mount.
+     *
+     * True from the render that enters `covered`, one whole cover leg ahead of
+     * {@link LoadingBeat.revealed}, and it is the gap that matters. The HUD row
+     * is a grid row, so mounting it re-fits the canvas beneath it, and a canvas
+     * re-fit is not a paint: it is two observer round-trips — the letterbox fit,
+     * then r3f's own `gl.setSize` — that land tens of milliseconds later. Mount
+     * the row on the reveal and those milliseconds are spent IN the fade, where
+     * the player watches the whole scene rescale. Mount it as the surface goes
+     * opaque and they are spent under black.
+     *
+     * Not simply "always": on a cold entry the surface is still lit while the
+     * beat darkens it, and a row mounted there re-fits the canvas in front of
+     * the player just as surely. `covered` is the first moment nothing is in
+     * view — and a suppressed beat, which has handed its screen to another
+     * owner, reports nothing mountable at all.
+     *
+     * WHAT THIS BUYS, AND WHAT IT DOES NOT. The gap is a real window, not a
+     * tuned constant: a declared cover gives the whole cover leg (two fades and
+     * the floor, ≥ 400 ms by default), and an undeclared one gives whatever is
+     * left of the preload wait. It is NOT a guarantee. A beat with no cover
+     * whose gate is already settled when `covered` is entered advances in the
+     * same commit chain, so a re-fit begun there still lands inside the fade —
+     * an ordering rule cannot fix that, because the bound is wall-clock. Closing
+     * it would mean the reveal waiting on a stable box, which is a term this
+     * sequencer does not have.
+     */
+    readonly chromeMounted: boolean;
     /** Whether the cover element should be in the tree. */
     readonly coverMounted: boolean;
     /** Whether the mounted cover should be driven toward full opacity. */
@@ -396,10 +425,15 @@ export function useLoadingBeat(options: LoadingBeatOptions): LoadingBeat {
     }, []);
 
     const covering = phase === 'loading-in' || phase === 'loading' || phase === 'loading-out';
+    const revealed = phase === 'revealing' || phase === 'revealed';
 
     return {
         phase,
-        revealed: phase === 'revealing' || phase === 'revealed',
+        revealed,
+        // Enumerated rather than expressed as "not idle, darkening or
+        // suppressed": a phase added later joins this machine's sequence
+        // somewhere, and a negative form would silently adopt it as covered.
+        chromeMounted: phase === 'covered' || covering || revealed,
         coverMounted: covering,
         coverVisible: phase === 'loading-in' || phase === 'loading',
     };

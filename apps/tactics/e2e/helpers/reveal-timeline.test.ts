@@ -183,9 +183,9 @@ describe('installRevealTimeline', () => {
     });
 
     it('records the HUD row the loading beat withholds', async () => {
-        // What separates "the shell is up" from "the player is looking at the
-        // match", and the one that survives every beat duration collapsing to
-        // zero under the flag — the row's presence is decided in render.
+        // What a spec reads to place the row's mount against the beat's phase,
+        // and the one that survives every beat duration collapsing to zero
+        // under the flag — the row's presence is decided in render.
         const page = makePage();
         await installRevealTimeline(page);
 

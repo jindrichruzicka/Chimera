@@ -127,6 +127,7 @@ vi.mock('../../components/shell/GameShell', async () => {
         GameShell: (props: {
             sceneCoverOccluded?: boolean;
             hudMounted?: boolean;
+            menuMounted?: boolean;
             revealPhase?: string;
             onScenePending?: (pending: boolean) => void;
         }) => {
@@ -143,9 +144,14 @@ vi.mock('../../components/shell/GameShell', async () => {
             return react.createElement('div', {
                 'data-testid': 'mock-game-shell',
                 'data-scene-cover-occluded': String(props.sceneCoverOccluded),
-                // The seam the beat drives. Exposed here because a game that
-                // declares no cover mounts none, so the HUD's own state is the
-                // only thing that says whether the route has revealed.
+                // The two seams the beat drives, and they part company on
+                // purpose. `menuMounted` is the route's REVEAL — exposed here
+                // because a game that declares no cover mounts none, so it is
+                // the only thing that says whether the route has revealed.
+                // `hudMounted` is earlier: the layout-bearing row, mounted
+                // while the screen is still opaque so the canvas re-fit it
+                // causes lands under black rather than inside the fade.
+                'data-menu-mounted': String(props.menuMounted),
                 'data-hud-mounted': String(props.hudMounted),
                 'data-reveal-phase': String(props.revealPhase),
             });
@@ -430,9 +436,38 @@ describe('GamePage reveal gate', () => {
             // Invariant #21) and the reveal is still withheld.
             expect(screen.getByTestId('mock-game-shell')).toBeInTheDocument();
             expect(fadeIn).not.toHaveBeenCalled();
-            expect(shellAttr('data-hud-mounted')).toBe('false');
+            expect(shellAttr('data-menu-mounted')).toBe('false');
         },
     );
+
+    it('mounts the HUD row while the preload still runs, ahead of the reveal', async () => {
+        // Measured on 1.0.0-rc.7 against a single-model scene: the row mounted
+        // on the same commit that commanded the fade-in, so the grid it
+        // re-shaped re-fit the canvas — the letterbox observer, then r3f's own
+        // `gl.setSize` — some 60 ms INTO a fade the player was watching, and
+        // the scene visibly rescaled and shifted. The row has to be up before
+        // the fade is asked for, not with it.
+        await renderMountedGame(makeFade(1));
+
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+        // Against the reveal, not merely against a clock: a row mounted early
+        // is only a fix while the screen it lands on is still opaque.
+        expect(fadeIn).not.toHaveBeenCalled();
+        expect(shellAttr('data-menu-mounted')).toBe('false');
+    });
+
+    it('leaves the HUD row out while the curtain is still coming down', async () => {
+        // The control for the case above, and the reason the row is not simply
+        // mounted with the shell: a cold boot arrives LIT, and a row mounted
+        // there re-fits the canvas in front of the player just the same. The
+        // fade-out this entry owes has not landed yet, because the curtain
+        // double reports the opacity it was constructed with.
+        await renderMountedGame(makeFade(0));
+
+        expect(fadeOut).toHaveBeenCalled();
+        expect(shellAttr('data-reveal-phase')).toBe('darkening');
+        expect(shellAttr('data-hud-mounted')).toBe('false');
+    });
 
     it('reveals a faded hop once the preload settles', async () => {
         await renderMountedGame(makeFade(1));
@@ -440,7 +475,7 @@ describe('GamePage reveal gate', () => {
         await settlePreload();
 
         expect(fadeIn).toHaveBeenCalledTimes(1);
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 
     it('darkens a cold boot first, then reveals it once the preload settles', async () => {
@@ -460,7 +495,7 @@ describe('GamePage reveal gate', () => {
         await settlePreload();
 
         expect(fadeIn).toHaveBeenCalledTimes(1);
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 
     it('reveals exactly once across later renders', async () => {
@@ -491,21 +526,21 @@ describe('GamePage reveal gate', () => {
         });
 
         expect(fadeIn).toHaveBeenCalledTimes(1);
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 
     it.each([['resolve'], ['reject']] as const)(
         'reveals when the preload settles by %s',
         async (outcome) => {
             await renderMountedGame();
-            expect(shellAttr('data-hud-mounted')).toBe('false');
+            expect(shellAttr('data-menu-mounted')).toBe('false');
 
             await settlePreload(outcome);
 
             // The beat reads readiness, never the outcome: a reveal withheld on
             // the failure path would leave the player on a screen with no way
             // forward, and that is the path that most needs the UI.
-            expect(shellAttr('data-hud-mounted')).toBe('true');
+            expect(shellAttr('data-menu-mounted')).toBe('true');
             expect(fadeIn).toHaveBeenCalledTimes(1);
         },
     );
@@ -567,7 +602,7 @@ describe('GamePage reveal gate', () => {
         // curtain at --ch-z-screen-fade and the cover at --ch-z-loading-hud:
         // holding the reveal here hides the only control that can abort it.
         expect(fadeIn).toHaveBeenCalledTimes(1);
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
         expect(harness.preloadCritical).toHaveBeenCalledTimes(1);
     });
 
@@ -583,7 +618,7 @@ describe('GamePage reveal gate', () => {
         // Dropping them back behind a loading screen — after they have already
         // seen the board — reads as a regression, not as a beat.
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 
     it('reveals BEFORE routing to /saves when a restore is aborted mid-preload', async () => {
@@ -624,7 +659,7 @@ describe('GamePage reveal gate', () => {
 
         await settlePreload();
 
-        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
         expect(fadeIn).not.toHaveBeenCalled();
     });
 
@@ -638,7 +673,7 @@ describe('GamePage reveal gate', () => {
         mockScenePending = false;
         await rerenderGame(view);
 
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
         expect(fadeIn).toHaveBeenCalledTimes(1);
     });
 
@@ -717,7 +752,26 @@ describe('GamePage loading beat', () => {
         await mountBeat();
 
         expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
-        expect(shellAttr('data-hud-mounted')).toBe('false');
+        expect(shellAttr('data-menu-mounted')).toBe('false');
+    });
+
+    it('has the HUD row up for the whole cover, and does not take it down to reveal', async () => {
+        // The gap the fix is: with the real floor running, the row is already
+        // mounted while the cover is up, so the canvas re-fit it causes has the
+        // rest of the cover leg to land in — and it is still mounted at the
+        // reveal, because a row that came and went would re-fit twice and put
+        // the second one right back inside the fade.
+        harness.settleOnCall = true;
+        await mountBeat();
+
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(fadeIn).not.toHaveBeenCalled();
+
+        await step(SCREEN_FADE_FAST_MS * 3 + FLOOR_MS + 120);
+
+        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 
     it('holds the cover for the declared floor, then reveals', async () => {
@@ -732,7 +786,7 @@ describe('GamePage loading beat', () => {
         await step(SCREEN_FADE_FAST_MS * 2 + 120);
         expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
         expect(fadeIn).toHaveBeenCalledTimes(1);
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 
     it('ramps its cover down before dropping it, rather than cutting it out', async () => {
@@ -820,6 +874,6 @@ describe('GamePage loading beat', () => {
         await mountBeat();
 
         expect(fadeIn).toHaveBeenCalledTimes(1);
-        expect(shellAttr('data-hud-mounted')).toBe('true');
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 });

@@ -1067,16 +1067,24 @@ green over a screen the beat is still covering. A cover that fades around a curt
 have inverted that predicate silently, and tactics declares no route cover, so the regression
 would have shipped invisible until the first adopter game.
 
-**The HUD mounts at the reveal.** The deferral covers the HUD row and the in-game menu host —
-what a player would otherwise watch assemble itself beside a spinner.
+**The HUD mounts under the cover; only the menu waits for the reveal.** The deferral covers
+the HUD row and the in-game menu host — what a player would otherwise watch assemble itself
+beside a spinner — but the two gates part company, on `chromeMounted` and `revealed`.
 `PerfHud`, the debug toggle, input-action registration, the time-scale bridge and
 the audio delegate keep their current mount timing: deferring the delegate re-opens the
 silent-music-bed defect its own comment records, and the shell itself mounts on the commit it
 mounts on today, because it is the unique disposer of a page-injected `AssetManager`
 (Invariant #21). The canvas subtree mounts under the curtain on purpose, so shader compile
-and the first GPU upload are paid while the screen is black rather than at the reveal. The
-HUD row mounts one commit BEFORE the closing fade-in, so the grid re-layout it causes settles
-while the curtain is still opaque.
+and the first GPU upload are paid while the screen is black rather than at the reveal.
+
+The HUD row mounts at `covered`, a whole cover leg before the closing fade-in. Mounting it
+one commit before that fade — which is what shipped, and what 1.0.0-rc.7 reproduced — is not
+early enough: the row is a grid row, so its arrival re-fits the canvas beneath it, and a
+canvas re-fit is not a paint but two observer round-trips (the letterbox fit, then r3f's own
+`gl.setSize`) landing some 60 ms later. Those 60 ms fall inside the fade the player is
+watching, and the scene rescales in front of them. The in-game menu host keeps the reveal as
+its gate, because its concern is a KEY rather than a paint: an Escape-stack layer under a
+screen the player cannot see swallows the key without showing a menu.
 
 **Nothing host-visible moves, and the proof becomes a pin rather than a non-edit.** F90
 shipped without editing `useFadeTransition` at all; F92 edits it, because the
