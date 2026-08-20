@@ -1,9 +1,10 @@
-import { chmod, mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 
 import type { AudioClipMetadata } from '@chimera-engine/simulation/foundation/audio-cue-sheet.js';
 import { describe, expect, it, vi } from 'vitest';
+
+import { createTempDir } from '../__test-support__/tempDir.js';
 
 import {
     createNodeWorkspaceFileHost,
@@ -3107,7 +3108,7 @@ describe('scene source file collection edge cases', () => {
 
 describe('createNodeWorkspaceFileHost', () => {
     it('fileExists returns true for an existing file', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         const filePath = join(dir, 'asset.webp');
         await writeFile(filePath, '');
 
@@ -3123,7 +3124,7 @@ describe('createNodeWorkspaceFileHost', () => {
     });
 
     it('readFile returns the file contents as a string', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         const filePath = join(dir, 'data.json');
         await writeFile(filePath, '{"ok":true}');
 
@@ -3133,7 +3134,7 @@ describe('createNodeWorkspaceFileHost', () => {
     });
 
     it('findDataJsonFiles returns JSON files under apps/*/data/ recursively', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         const dataDir = join(dir, 'apps', 'tactics', 'data', 'units');
         await mkdir(dataDir, { recursive: true });
         await writeFile(join(dataDir, 'soldier.json'), '{}');
@@ -3147,7 +3148,7 @@ describe('createNodeWorkspaceFileHost', () => {
     });
 
     it('findDataJsonFiles returns an empty array when the apps/ directory does not exist', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
 
         const host = createNodeWorkspaceFileHost();
         const files = await host.findDataJsonFiles(dir);
@@ -3156,7 +3157,7 @@ describe('createNodeWorkspaceFileHost', () => {
     });
 
     it('findSceneSourceFiles returns .ts files and excludes .d.ts and test files', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         const scenesDir = join(dir, 'apps', 'tactics', 'scenes');
         await mkdir(scenesDir, { recursive: true });
         await writeFile(join(scenesDir, 'scenes.ts'), '');
@@ -3172,7 +3173,7 @@ describe('createNodeWorkspaceFileHost', () => {
     });
 
     it('findSceneSourceFiles returns an empty array when neither search root exists', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
 
         const host = createNodeWorkspaceFileHost();
         const files = await host.findSceneSourceFiles(dir);
@@ -3185,7 +3186,7 @@ describe('createNodeWorkspaceFileHost', () => {
 
 describe('runValidateAssetsCli', () => {
     it('returns exit code 0 for a workspace whose apps/ holds no games', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         await mkdir(join(dir, 'apps'), { recursive: true });
         vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
@@ -3204,7 +3205,7 @@ describe('runValidateAssetsCli', () => {
     // reachable by hand: run bare from a game package and the root defaults to
     // that package.
     it('refuses a root with no apps/ directory instead of passing vacuously', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
         const exitCode = await runValidateAssetsCli([dir]);
@@ -3232,7 +3233,7 @@ describe('runValidateAssetsCli', () => {
         // package as if it were the workspace, discover no games, and report
         // success. Only `apps/` distinguishes a workspace root from a package
         // inside one.
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         await mkdir(join(dir, 'simulation', 'scene'), { recursive: true });
         await mkdir(join(dir, 'renderer', 'assets'), { recursive: true });
         await mkdir(join(dir, 'renderer', 'public', 'assets'), { recursive: true });
@@ -3248,7 +3249,7 @@ describe('runValidateAssetsCli', () => {
         // this as passing coverage it did not have.
         skip(process.platform === 'win32' || process.getuid?.() === 0, 'needs POSIX mode bits');
 
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         await mkdir(join(dir, 'apps'), { recursive: true });
         await chmod(dir, 0o000);
         const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
@@ -3274,7 +3275,7 @@ describe('runValidateAssetsCli', () => {
     // nothing, while a finder that dropped one of those roots would swallow
     // real findings. These two plant a finding each and assert it is reported.
     it('still reports a forbidden renderer-public game asset', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         await mkdir(join(dir, 'apps'), { recursive: true });
         await mkdir(join(dir, 'renderer', 'public', 'assets', 'tactics'), { recursive: true });
         await writeFile(join(dir, 'renderer', 'public', 'assets', 'tactics', 'foo.png'), '');
@@ -3287,7 +3288,7 @@ describe('runValidateAssetsCli', () => {
     });
 
     it('still reports a missing ref declared by an engine-side scene descriptor', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         await mkdir(join(dir, 'apps'), { recursive: true });
         await mkdir(join(dir, 'simulation', 'scene'), { recursive: true });
         await writeFile(
@@ -3303,7 +3304,7 @@ describe('runValidateAssetsCli', () => {
     });
 
     it('refuses a workspace root whose apps/ is a file rather than a directory', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         await writeFile(join(dir, 'apps'), '');
         vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
@@ -3317,7 +3318,7 @@ describe('runValidateAssetsCli', () => {
         // behaviour that has to hold. The dangling half is not a second
         // discriminator — both calls reject it — it pins that following a
         // symlink does not become following it blindly.
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         const realApps = join(dir, 'elsewhere');
         await mkdir(realApps, { recursive: true });
         await symlink(realApps, join(dir, 'apps'), 'dir');
@@ -3326,14 +3327,14 @@ describe('runValidateAssetsCli', () => {
 
         expect(await runValidateAssetsCli([dir])).toBe(0);
 
-        const dangling = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dangling = await createTempDir('chimera-assets-test');
         await symlink(join(dangling, 'nowhere'), join(dangling, 'apps'), 'dir');
 
         expect(await runValidateAssetsCli([dangling])).toBe(1);
     });
 
     it('returns exit code 1 for a workspace with a missing asset reference', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         const dataDir = join(dir, 'apps', 'tactics', 'data');
         await mkdir(dataDir, { recursive: true });
         await writeFile(
@@ -3498,7 +3499,7 @@ describe('on-demand load detection — useModelInstance and the Invariant #96 su
     });
 
     it('findOnDemandLoadSourceFiles opens exactly the Invariant #96 surfaces plus the engine scene root', async () => {
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         const plant = async (relPath: string): Promise<void> => {
             const absPath = join(dir, ...relPath.split('/'));
             await mkdir(dirname(absPath), { recursive: true });
@@ -3549,7 +3550,7 @@ describe('on-demand load detection — useModelInstance and the Invariant #96 su
         // Mirrors the per-game-scope ancestor test: a checkout like
         // /srv/apps/Chimera must not anchor the surface check on the ancestor
         // 'apps' segment of the absolute path.
-        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dir = await createTempDir('chimera-assets-test');
         const workspace = join(dir, 'srv', 'apps', 'Chimera');
         const plant = async (relPath: string): Promise<void> => {
             const absPath = join(workspace, ...relPath.split('/'));

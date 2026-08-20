@@ -6,11 +6,11 @@
  * interface parity with InMemorySettingsRepository.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { InMemorySettingsRepository } from '@chimera-engine/simulation/settings/index.js';
 import type { SettingsRepository } from '@chimera-engine/simulation/settings/index.js';
 import { FileSettingsRepository, InvalidGameIdError } from './FileSettingsRepository.js';
@@ -116,9 +116,19 @@ describe('FileSettingsRepository (filesystem behaviour)', () => {
         repo = new FileSettingsRepository(tmpDir);
     });
 
-    afterAll(() => {
-        // tmpDir cleaned up via contractDirs pattern is not needed here — just remove per-test
+    afterEach(() => {
+        // Per CASE, because the `beforeEach` above allocates per case. An
+        // `afterAll` here would remove only the last one and leave every other
+        // directory this suite made behind on every run.
+        rmSync(tmpDir, { recursive: true, force: true });
+        removedDirs.push(tmpDir);
     });
+
+    // Written by the teardown, read by the case below it — the removal happens
+    // after the test that owned the directory has ended, so no case can observe
+    // its own. Without this the teardown could run per SUITE instead of per
+    // case and every assertion here would still pass.
+    const removedDirs: string[] = [];
 
     it('writes a JSON file at <baseDir>/<gameId>.json with version envelope (WARN-6)', async () => {
         await repo.save('tactics', { audio: { masterVolume: 0.3 } });
@@ -175,6 +185,18 @@ describe('FileSettingsRepository (filesystem behaviour)', () => {
         );
         const result = await repo.load('old-version');
         expect(result).toEqual({});
+    });
+
+    it('removes each case directory as that case ends, not once at the end', () => {
+        // LAST in the describe on purpose: the teardown runs after the case that
+        // owned the directory, so what it can read is what earlier cases left
+        // behind. An `afterAll` here would remove nothing until this case had
+        // already finished, leaving `removedDirs` empty.
+        expect(removedDirs.length, 'no earlier case has finished yet').toBeGreaterThan(0);
+        for (const dir of removedDirs) {
+            expect(existsSync(dir), `${dir} outlived the case that made it`).toBe(false);
+        }
+        expect(existsSync(tmpDir), 'this case still owns its own directory').toBe(true);
     });
 });
 

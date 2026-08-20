@@ -18,11 +18,11 @@
 // defined and a last-bit difference between two Node builds would turn the
 // byte-equality gate above into a machine-dependent failure.
 
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import { readGlbDocument } from '../electron/dev-tools/test-support/glbDocument.js';
 import type {
@@ -50,6 +50,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const committedPath = path.join(repoRoot, SHOWCASE_ANIMATED_GLB_REL_PATH);
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'chimera-showcase-glb-'));
+
+// Module scope: the directory outlives every case here and `onTestFinished`
+// has no test to attach to, so one removal after the last case is what stops
+// this file leaving a directory behind on every run.
+afterAll(() => {
+    rmSync(scratch, { recursive: true, force: true });
+});
 
 /**
  * Parse the given bytes through the same reader a game's own test uses.

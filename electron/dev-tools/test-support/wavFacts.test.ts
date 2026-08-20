@@ -1,16 +1,22 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import { MalformedAssetFileError } from './MalformedAssetFileError.js';
 import { readWavFacts } from './wavFacts.js';
 
 // Fixtures are BUILT here rather than committed: the interesting cases are
 // malformed containers, and a repo of deliberately-corrupt binaries is both
-// unreviewable and indistinguishable from rot. Written under the OS tmpdir,
-// which reclaims them — and leaves the bytes in place for a failed run.
+// unreviewable and indistinguishable from rot.
 const scratch = mkdtempSync(path.join(tmpdir(), 'chimera-wav-facts-'));
+
+// Module scope: the directory outlives every case here and `onTestFinished`
+// has no test to attach to, so one removal after the last case is what stops
+// this file leaving a directory behind on every run.
+afterAll(() => {
+    rmSync(scratch, { recursive: true, force: true });
+});
 
 /** `'RIFF'` + size + `'WAVE'`, then per-chunk `id` + size. Mirrors the reader. */
 const RIFF_HEADER_BYTES = 12;

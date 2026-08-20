@@ -91,8 +91,15 @@ previous run left behind. In bounds, for example:
   hand-roll a container parser.
 - **Creating fixtures the test itself owns, under the OS temp directory.** A `mkdtemp`
   root is private to the run, so nothing leaks between tests — the established pattern in
-  `electron/main/saves/FileSaveRepository.test.ts` and
-  `electron/dev-tools/validate-assets/index.test.ts`, among others.
+  `electron/main/saves/FileSaveRepository.test.ts`, among others. Privacy between tests is
+  not the whole obligation: a root nothing removes accumulates one directory per case per
+  run, and nothing local says so — the test passes and the suite is green. Remove
+  what you allocate, at the cadence you allocated it: a root taken per case needs an
+  `afterEach`, one taken at module scope an `afterAll`.
+  `tools/temp-dir-cleanup-census.test.ts` fails a test file that allocates one and removes
+  nothing. Tests inside `electron/` can register the removal at the call site with
+  `createTempDir` (`electron/dev-tools/__test-support__/tempDir.ts`), which is an internal
+  helper and not part of any published subpath.
 
 Out of bounds either way: real network, real Electron IPC, and writing anywhere under the
 repository itself.

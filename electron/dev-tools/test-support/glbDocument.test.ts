@@ -1,12 +1,19 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import { MalformedAssetFileError } from './MalformedAssetFileError.js';
 import { readGlbDocument } from './glbDocument.js';
 
 const scratch = mkdtempSync(path.join(tmpdir(), 'chimera-glb-document-'));
+
+// Module scope: the directory outlives every case here and `onTestFinished`
+// has no test to attach to, so one removal after the last case is what stops
+// this file leaving a directory behind on every run.
+afterAll(() => {
+    rmSync(scratch, { recursive: true, force: true });
+});
 
 const GLB_MAGIC = 0x46546c67; // 'glTF'
 const JSON_CHUNK_TYPE = 0x4e4f534a; // 'JSON'
