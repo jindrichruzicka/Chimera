@@ -13,9 +13,9 @@ readable loading screen on the way into the game and a flash on every scene hop 
 answers, and the difference invisible from the registry.
 
 `resolveLoadingCoverHoldMs` is deleted and every cover site arms
-`resolveLoadingBeatFloorMs`. A declared minimum was already honoured identically by both, so the
-only behaviour that moves is the DEFAULT: a raised cover with no declared minimum is now held
-long enough to read, wherever it is raised. A declared `0` still opts down to gate-settle-only —
+`resolveLoadingBeatFloorMs`. A declared, usable minimum was already honoured identically by
+both; what moves is the fallback: a raised cover with no usable declaration is now held long
+enough to read, wherever it is raised. A declared `0` still opts down to gate-settle-only —
 it is the one value that must not reach the fallback — and the floor still collapses under
 `NEXT_PUBLIC_CHIMERA_E2E`, still does not collapse under `prefers-reduced-motion`, and is still
 a floor rather than a delay added to a slow load.
@@ -30,6 +30,4 @@ behaviour: an invalid declaration was said to be "treated as 0" when it now fall
 engine default — a warn that misreports the outcome sends the author looking for a cover that is
 on screen the whole time. The over-budget warn now says what the over-budget case actually costs
 rather than implying it is a fault. Invariant #133's floor-divergence clause is corrected in the
-same pass: the floors have converged, so what remains between the two sites is the SEQUENCER —
-the scene site latches with `useMinimumVisibleHold` where the routes sequence with
-`useLoadingBeat`, which makes its closing black a single frame rather than a leg.
+same pass: the floors have converged.

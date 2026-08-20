@@ -424,10 +424,10 @@ unchanged. The deletions on the file are the same cause in the two shared fixtur
 assertion moved, which is the property the sentinel exists for: `engine:scene_ready` fires when
 it always did.
 
-**What this gate does not ratify.** §4.36's scene-to-scene surface shipped the sequence and not
-the sequencer. Invariant #133 states the difference and #1154 carries the remainder; both are
-named here rather than restated, because every restatement is one more sentence #1154 has to find
-and delete. Its own issue carries the list.
+**What this gate did not ratify.** At this gate's range, §4.36's scene-to-scene surface had
+shipped the sequence and not the sequencer; the convergence landed after it, and Invariant #133
+now states the universal. The gate record is the closed range above, not a claim about the
+present tree.
 
 ## The roll-call — every invariant
 

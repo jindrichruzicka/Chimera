@@ -38,7 +38,7 @@ stacking of its own, so it paints BENEATH the curtain: holding the curtain up fo
 black for the whole wait rather than the loading screen that wait exists to explain. And it
 waits on a `React.lazy` chunk, the one wait Invariant #133 leaves unbounded ("a module chunk is
 not one"), so deferring on it could park a black screen with no release path. Only a cover that
-paints above the curtain, over a wait with a bounded settle, can hold the reveal.
+paints above the curtain can hold the reveal.
 
 Only the reveal waits. The fade-out leg, the preload run, the four-outcome ack and the retry
 cadence never read `coverUp`, so `engine:scene_ready` fires exactly when it did before and a
@@ -52,10 +52,3 @@ fade channels and the progress protocol" — ships byte-identical. The ack, the 
 and the progress protocol still do, and those are what the claim was protecting. The fade-IN
 channel is now deferred by design, which is the point of the change; that entry is left as
 written, being consumed but retained by pre-release mode.
-
-Invariant #133's beat sequence is narrowed to the route entries in the same pass, because this
-site is not yet the same machine. It passes through the same black and defers on the same terms,
-but it keeps its own sequencer (`useMinimumVisibleHold` plus the epoch, rather than
-`useLoadingBeat`) and raises no cover at all for a transition whose preload measures nothing.
-Stating one universal over both sites would assert a SEQUENCE one of them does not run, so the
-invariant names the divergence instead. Converging the sequencers is a follow-up.

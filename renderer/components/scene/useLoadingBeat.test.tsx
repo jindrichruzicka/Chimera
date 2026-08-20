@@ -890,3 +890,86 @@ describe('useLoadingBeat', () => {
         vi.unstubAllEnvs();
     });
 });
+
+describe('useLoadingBeat — a beat that does not own its reveal', () => {
+    // The scene hop. `useFadeTransition` owes the reveal there, because it is
+    // the hook the transition earned it from, and paying it here as well would
+    // put two owners on one curtain. What the beat still does is SEQUENCE it:
+    // the cover's legs run, `revealing` is entered on the same terms, and
+    // `revealed` is the bit the owner watches to know the cover has gone.
+
+    it('sequences the reveal without commanding the fade', async () => {
+        const curtain = makeCurtain(1);
+        const { result } = renderBeat(
+            baseOptions({
+                curtain,
+                settled: true,
+                ownsReveal: false,
+                declared: true,
+                holdMs: 0,
+                fadeMs: 0,
+            }),
+        );
+
+        await advance(50);
+
+        // Arrives, rather than parking on `revealing`: the owner reads
+        // `revealed`, so a phase that stopped one short would leave a curtain
+        // nobody lifts — the same black screen by another route.
+        expect(result.current.phase).toBe('revealed');
+        expect(result.current.revealed).toBe(true);
+        // The whole point. `fadeOut` is absent too because the curtain starts
+        // opaque here, which is the state a hop reaches it in.
+        expect(curtain.calls).not.toContain('fadeIn');
+    });
+
+    it('still raises and drops the cover it is sequencing', async () => {
+        // Without this, "does not command the fade" would be satisfied by a
+        // beat that skipped the cover entirely and revealed on the spot.
+        const curtain = makeCurtain(1);
+        const { result, rerender } = renderBeat(
+            baseOptions({
+                curtain,
+                settled: false,
+                ownsReveal: false,
+                declared: true,
+                holdMs: HOLD_MS,
+                fadeMs: FADE_MS,
+            }),
+        );
+
+        await advance(FADE_MS);
+        expect(result.current.coverMounted).toBe(true);
+        expect(result.current.revealed).toBe(false);
+
+        rerender(
+            baseOptions({
+                curtain,
+                settled: true,
+                ownsReveal: false,
+                declared: true,
+                holdMs: HOLD_MS,
+                fadeMs: FADE_MS,
+            }),
+        );
+        await advance(HOLD_MS + FADE_MS * 2);
+
+        expect(result.current.coverMounted).toBe(false);
+        expect(result.current.revealed).toBe(true);
+        expect(curtain.calls).not.toContain('fadeIn');
+    });
+
+    it('commands the reveal when it does own it', async () => {
+        // The default, and the control that keeps the case above from passing
+        // for a beat that never calls `fadeIn` under any option.
+        const curtain = makeCurtain(1);
+        const { result } = renderBeat(
+            baseOptions({ curtain, settled: true, declared: true, holdMs: 0, fadeMs: 0 }),
+        );
+
+        await advance(50);
+
+        expect(result.current.revealed).toBe(true);
+        expect(curtain.calls).toContain('fadeIn');
+    });
+});

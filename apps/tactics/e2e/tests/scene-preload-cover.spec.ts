@@ -7,10 +7,11 @@
  * Tactics' `tactics:asset-demo` declares a non-empty `requiredAssets` list
  * (`apps/tactics/simulation/scenes.test.ts`), which is what gives the arm
  * something to do here: the engine's own scenes declare `[]`, and a preload with
- * nothing to wait for could ship green having never executed a load. The three
- * things asserted here are the three a real build alone can show — the refs
- * travel main → renderer on the snapshot, the cover is resolved through the
- * game's registry, and the fraction is produced by loads over `chimera://`.
+ * nothing to wait for could ship green having never executed a load. What is
+ * asserted here is what a real build alone can show — the refs travel main →
+ * renderer on the snapshot, the cover is resolved through the game's registry,
+ * the fraction is produced by loads over `chimera://`, and the cover leaves
+ * against a curtain still painted.
  *
  * Neither budget is disabled under `NEXT_PUBLIC_CHIMERA_E2E`; determinism comes
  * from the recorded timeline, not from a collapsed gate.
@@ -76,20 +77,21 @@ test('covers the entering scene with the declared cover, reports a fraction, the
     //    is an empty div with no text at all.
     expect(covered.length, context).toBeGreaterThan(0);
 
-    // 2. It stood over the scene being LEFT, for its whole life: the transition
-    //    overlay was mounted (the snapshot carried a `sceneTransition`) and the
-    //    router had not committed the entering scene. Asserted for EVERY covered
-    //    sample, so a cover that outlived the commit reds here.
+    // 2. It never stood without black behind it. The transition overlay is the
+    //    only painter inside `GameShell`'s own fade provider, so its presence is
+    //    the curtain being painted; asserted for EVERY covered sample, a cover
+    //    that outlived the curtain reds here. That is the whole point of the
+    //    sequence — a cover leaving against a lifted curtain is a scene arriving
+    //    around a loading screen.
     //
-    //    That window is the transition, not specifically its `'preparing'`
-    //    phase: `useFadeTransition` holds the fraction until the transition
-    //    ENDS. The phase itself is not separately pinned — measured end to end
-    //    at ~16 ms, it is far under what an out-of-process poll of the host
-    //    snapshot could catch without flaking.
+    //    Deliberately NOT also pinned to the scene being LEFT. The beat holds
+    //    one cover across the host's commit, so a covered sample carrying the
+    //    ENTERING scene id is the design rather than a leak; requiring
+    //    `IN_MATCH_SCENE_ID` here would assert the pre-convergence shape.
     expect(
-        covered.map((sample) => [sample.transitionOverlayMounted, sample.activeSceneId]),
+        covered.map((sample) => sample.transitionOverlayMounted),
         context,
-    ).toEqual(covered.map(() => [true, IN_MATCH_SCENE_ID]));
+    ).toEqual(covered.map(() => true));
 
     // 3. The overlay carried a measured fraction while the cover was up. Every
     //    value present has to be a fraction in [0, 1]: the prop is handed the
@@ -103,4 +105,15 @@ test('covers the entering scene with the declared cover, reports a fraction, the
         expect(Number(fraction), context).toBeGreaterThanOrEqual(0);
         expect(Number(fraction), context).toBeLessThanOrEqual(1);
     }
+
+    // 4. The wait ENDED, with the entering scene committed underneath. A cover
+    //    that never came down satisfies every assertion above — each one reads a
+    //    state while the cover is up — so the terminal state is what separates a
+    //    beat that completed from one that parked. Read as the last recorded
+    //    state rather than as a duration: the floor collapses to 0 under
+    //    `NEXT_PUBLIC_CHIMERA_E2E`, so a "how long" would read the same here
+    //    whether the sequence ran or not, while what it ended in does not.
+    const terminal = timeline.samples[timeline.samples.length - 1];
+    expect(terminal?.preloadCoverText, context).toBeNull();
+    expect(terminal?.activeSceneId, context).toBe(ASSET_DEMO_SCENE_ID);
 });

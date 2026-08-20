@@ -12,9 +12,8 @@
 //
 // Timer discipline follows `useMinimumVisibleHold`: `window.setTimeout` held in
 // a ref, cancelled in cleanup, remainders computed from a monotonic
-// `performance.now()` stamp. Durations arrive as inputs, resolved by the
-// callers that read the e2e flag — `screenFadeMs()` and `loadingCoverHold.ts`.
-// This module reads no environment of its own.
+// `performance.now()` stamp. Durations arrive as inputs, resolved by callers
+// that read the e2e flag. This module reads no environment of its own.
 
 import { useEffect, useRef, useState } from 'react';
 import type { FadeControl } from '../shell/FadeContext.js';
@@ -84,6 +83,17 @@ export interface LoadingBeatOptions {
      */
     readonly ownsDarkening?: boolean;
     /**
+     * Whether this beat commands the reveal itself. `false` on the scene
+     * surface, where `useFadeTransition` performs that fade because it is the
+     * same hook that owes it — the transition earned the reveal, and paying it
+     * anywhere else would put two owners on one curtain.
+     *
+     * The beat still SEQUENCES the reveal either way: `revealing` is entered on
+     * the same terms, and `revealed` is what the owner reads to know the cover
+     * has finished leaving. Only the `fadeIn` call moves. Defaults `true`.
+     */
+    readonly ownsReveal?: boolean;
+    /**
      * Whether something opaque already covers this surface. An occluded beat
      * skips its cover rather than flooring one nobody can see, which would only
      * extend a black screen.
@@ -117,6 +127,7 @@ export function useLoadingBeat(options: LoadingBeatOptions): LoadingBeat {
         shortCircuit = false,
         isSuppressed,
         ownsDarkening = true,
+        ownsReveal = true,
         occluded = false,
     } = options;
 
@@ -139,6 +150,8 @@ export function useLoadingBeat(options: LoadingBeatOptions): LoadingBeat {
     fadeMsRef.current = fadeMs;
     const ownsDarkeningRef = useRef(ownsDarkening);
     ownsDarkeningRef.current = ownsDarkening;
+    const ownsRevealRef = useRef(ownsReveal);
+    ownsRevealRef.current = ownsReveal;
 
     // A number, not the control: `FadeControl` re-memoises on every animation
     // frame, so depending on the object would re-run the effects below through
@@ -209,7 +222,11 @@ export function useLoadingBeat(options: LoadingBeatOptions): LoadingBeat {
 
         if (phase === 'revealing') {
             const control = curtainRef.current;
-            if (control === null) {
+            // Sequenced here, commanded elsewhere. The owner learns the cover
+            // has finished leaving from `revealed`, so the phase still has to
+            // ARRIVE — parking on `revealing` would leave a curtain nobody
+            // lifts, which is the same black screen by another route.
+            if (control === null || !ownsRevealRef.current) {
                 setPhase('revealed');
                 return;
             }

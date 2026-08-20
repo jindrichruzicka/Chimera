@@ -12,10 +12,11 @@
 // visible" a property of this layer rather than of whatever happens to be
 // beneath it.
 //
-// The screen key is the one the ROUTE owns — `snapshot.sceneDefaultScreen ??
+// The screen key defaults to the one the ROUTE owns — `snapshot.sceneDefaultScreen ??
 // registry.sceneDefaultScreens[sceneId] ?? 'playfield'` — and never
 // `useActiveScreen()`: `uiStore` is a module singleton the routes never reset,
-// so a second match would resolve the previous match's key.
+// so a second match would resolve the previous match's key. A scene hop hands
+// in its own `target` instead, since its entering scene is not derivable here.
 //
 // Architecture reference: §4.36 — scene loading covers.
 
@@ -52,10 +53,27 @@ export interface LoadingBeatCoverProps {
     /** Whether the beat wants this cover at full opacity. */
     readonly visible: boolean;
     /**
-     * How long the opacity ramp runs, in milliseconds — `screenFadeMs()` at the
-     * call sites, so it is `0` under the e2e flag and under reduced motion.
+     * How long the opacity ramp runs, in milliseconds. The route pages pass
+     * `screenFadeMs()`; the scene site passes `SceneRouter`'s fade duration,
+     * which defaults through `screenFadeMs()` too when no page pins it.
      */
     readonly fadeMs: number;
+    /**
+     * The scene this cover stands in for, when the caller already knows it.
+     *
+     * A route entry does not: it derives the target from the snapshot it
+     * mounted with. A scene HOP does, and cannot derive it — `snapshot.sceneId`
+     * stays the scene being LEFT for the whole `'preparing'` phase, so
+     * resolving from the snapshot there would name the outgoing scene.
+     */
+    readonly target?: { readonly sceneId: string; readonly screenKey: string };
+    /**
+     * Fraction of the entering scene's declared refs that have settled, or
+     * `null` for a wait nobody counted. A route entry passes nothing — its gate
+     * exposes no per-ref channel — while a hop carries the fraction its preload
+     * run reports.
+     */
+    readonly progress?: number | null;
 }
 
 /** The testid each surface keeps, because the recorded e2e timeline reads them. */
@@ -90,6 +108,8 @@ export function LoadingBeatCover({
     surface,
     visible,
     fadeMs,
+    target,
+    progress = null,
 }: LoadingBeatCoverProps): React.ReactElement {
     const ramps = fadeMs > 0;
     // Starts down when there is a ramp to run, so the browser has a value to
@@ -114,7 +134,7 @@ export function LoadingBeatCover({
         };
     }, [ramps]);
 
-    const { sceneId, screenKey } = resolveRouteCoverTarget(registry, snapshot);
+    const { sceneId, screenKey } = target ?? resolveRouteCoverTarget(registry, snapshot);
 
     const layerStyle: CSSProperties = {
         ...coverLayerStyle,
@@ -131,7 +151,7 @@ export function LoadingBeatCover({
                 screenKey={screenKey}
                 sceneId={sceneId}
                 reason="assets"
-                progress={null}
+                progress={progress}
             />
         </div>
     );

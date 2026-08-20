@@ -867,10 +867,10 @@ player — a minimum inserted before the ack would serialize one client's cosmet
 preference onto every seat in the match and falsify the retry cadence's meaning ("fade-out
 done, preload settled"). F90 never edits that path at all: `useFadeTransition`, the ack,
 both fade channels and the progress protocol (`0` at a measured start, `null` at the end)
-ship unchanged, pinned by their existing suites passing unmodified. The deferral cannot
-live there anyway — the transition cover's unmount is driven by `sceneTransition` leaving
-the snapshot (`readEnteringScene` answers `null` before it ever reads the progress
-fraction), a host-side event this feature does not delay. So the hold is a **held copy at
+ship unchanged, pinned by their existing suites passing unmodified. The deferral could not
+live there anyway — at the time, the transition cover's unmount was driven by
+`sceneTransition` leaving the snapshot, a host-side event this feature did not delay.
+(The hop has since moved onto `useLoadingBeat`, whose one cover spans that commit.) So the hold is a **held copy at
 the render site**: when the commit would drop a cover whose minimum has not elapsed,
 `SceneRouter` keeps rendering the same resolved cover with its last measured fraction as
 its own state, at `--ch-z-loading-hud`, over the scene fade-in already running beneath it,
@@ -884,8 +884,8 @@ reveal — the gate hook itself does not learn to lie about `ready`.
 most.** A code-split screen chunk on a warm disk resolves in tens of milliseconds, and a
 plain `<Suspense fallback>` unmounts the instant it does — nothing outside the fallback
 knows the cover was ever up. So a mount-report wrapper around the fallback stamps the
-cover's lifetime, and when the chunk resolves early, the same one held-layer slot
-`SceneRouter` uses for the transition arm keeps the resolved cover up for the remainder,
+cover's lifetime, and when the chunk resolves early, the held-layer slot (which at the
+time also served the transition arm) keeps the resolved cover up for the remainder,
 `reason="code"`, over a screen that mounts and runs underneath. At most one cover layer
 renders at a time: an entering-scene cover supersedes a lingering code hold, and a code
 hold never arms while another cover or the opaque scrim sits above the fallback (the
@@ -1031,10 +1031,10 @@ stays internal — all candidates for a follow-up.
 ### F92 — Unconditional Loading Beat for Game-Load Presentation `§4.36, §4.10, §4.18–§4.19, §4.33`
 
 **Status: implemented across [#1146](https://github.com/jindrichruzicka/Chimera/issues/1146)–[#1150](https://github.com/jindrichruzicka/Chimera/issues/1150) and [#1152](https://github.com/jindrichruzicka/Chimera/issues/1152); the feature gate is [#1153](https://github.com/jindrichruzicka/Chimera/issues/1153).**
-[#1151](https://github.com/jindrichruzicka/Chimera/issues/1151) is open: the scene-transition
-surface shipped the sequence but not the sequencer, and
-[#1154](https://github.com/jindrichruzicka/Chimera/issues/1154) carries the rest. Invariant #133
-names the difference. Measured on 1.0.0-rc.7
+The scene-transition surface has since converged onto the same sequencer
+([#1154](https://github.com/jindrichruzicka/Chimera/issues/1154), closing out
+[#1151](https://github.com/jindrichruzicka/Chimera/issues/1151)); Invariant #133 states the
+universal. Measured on 1.0.0-rc.7
 with a scaffolded game declaring `'spinner'` and a 5000 ms minimum over one critical 464 KB
 model, the pair could not deliver the thing it exists for. On a normal run the beat did not
 happen: the model settled in ~150 ms, the route cover mounted at ~180 ms and was dropped

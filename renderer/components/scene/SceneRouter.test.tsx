@@ -546,21 +546,51 @@ describe('SceneRouter — entering scene asset cover', () => {
     // whatever happens to stand behind it, and — being a cover the contract
     // gives no way to dispatch from — never eats a click meant for underneath.
     it.each([
-        ['position', 'absolute'],
+        // `fixed`, not `absolute`: the cover stands in for the whole screen, and
+        // an absolute layer fills only its positioned ancestor.
+        ['position', 'fixed'],
         ['inset', '0px'],
         ['zIndex', 'var(--ch-z-loading-hud)'],
         ['backgroundColor', 'var(--ch-color-scrim)'],
-        ['pointerEvents', 'none'],
     ])('sets %s on the cover layer', async (property, value) => {
         const ref = textureRef('arena');
+        // A DECLARED cover: the beat arms on the cascade resolving one, so a
+        // registry declaring none raises no layer to measure. That is the same
+        // rule the route entries follow — an empty placeholder held on screen
+        // is a wait with no explanation.
+        const registry: GameScreenRegistry = {
+            ...plainRegistry(),
+            loadingScreen: makeCover('layer-cover'),
+        };
 
-        renderRouter(makeTransitioningSnapshot([ref]), plainRegistry(), {
+        renderRouter(makeTransitioningSnapshot([ref]), registry, {
             assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
             assetManifest: stubManifest([ref]),
         });
 
         const layer = await screen.findByTestId('scene-preload-cover');
         expect(layer.style[property as unknown as number]).toBe(value);
+    });
+
+    it('swallows clicks rather than letting them reach what it hides', async () => {
+        // The opposite of the rule the layer this replaces carried. That one was
+        // a glyph over a live scene, so a click aimed at what showed through it
+        // had a real target. This one is opaque and now stands over a mounted,
+        // committed scene for the whole closing leg — a click during the beat is
+        // aimed at something the player cannot see.
+        const ref = textureRef('arena');
+        const registry: GameScreenRegistry = {
+            ...plainRegistry(),
+            loadingScreen: makeCover('layer-cover'),
+        };
+
+        renderRouter(makeTransitioningSnapshot([ref]), registry, {
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+        });
+
+        const layer = await screen.findByTestId('scene-preload-cover');
+        expect(layer.style.pointerEvents).toBe('');
     });
 });
 
@@ -616,6 +646,7 @@ function makeTransitioningSnapshot(
         readonly playersReady?: readonly ReturnType<typeof playerId>[];
         readonly toSceneId?: string;
         readonly defaultScreen?: string;
+        readonly startedAtTick?: number;
     } = {},
 ): PlayerSnapshot {
     return makeSnapshot({
@@ -623,7 +654,7 @@ function makeTransitioningSnapshot(
         sceneTransition: {
             toSceneId: makeSceneId(overrides.toSceneId ?? 'engine:post-game'),
             phase: overrides.phase ?? 'preparing',
-            startedAtTick: 2,
+            startedAtTick: overrides.startedAtTick ?? 2,
             params: {},
             playersReady: overrides.playersReady ?? [],
             requiredAssets,
@@ -786,6 +817,26 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
 
 const MIN_VISIBLE_MS = 400;
 
+/**
+ * Advance past a beat leg AND drain the effect-driven transitions chained
+ * after its timer.
+ *
+ * The last leg's timer only reaches `revealing`; `revealed`, the activation
+ * teardown and the return to `idle` are each an effect reacting to the phase
+ * before it. One `advanceTimersByTimeAsync` batches those into a single flush,
+ * so a case that advanced once would read the beat parked one hop short — an
+ * artifact of the fake clock, not of the machine.
+ */
+async function settleBeat(ms: number): Promise<void> {
+    await tickMs(ms);
+    // A frame per remaining leg. Each leg arms its OWN timer from the effect
+    // the previous leg's phase change ran, so one advance arms it rather than
+    // firing it — and a zero advance cannot fire it at all.
+    await tickMs(16);
+    await tickMs(16);
+    await tickMs(16);
+}
+
 /** Advance fake time inside act, flushing the microtask chain along the way. */
 async function tickMs(ms: number): Promise<void> {
     await act(async () => {
@@ -890,34 +941,38 @@ describe('SceneRouter — minimum-visible held layer', () => {
             await Promise.resolve();
         });
 
-        // The live cover dropped WITH the commit; the held copy stands in its
-        // place, same resolution, last measured fraction — snapshotted from the
-        // covered renders, since the commit render can no longer compute it.
-        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
-        const held = screen.getByTestId('scene-held-cover');
-        const heldCover = within(held).getByTestId('reporting-cover');
-        expect(heldCover.dataset['progress']).toBe('0.5');
-        expect(heldCover.dataset['reason']).toBe('assets');
-        expect(heldCover.dataset['screenKey']).toBe('summary');
+        // ONE cover spans the whole wait now. It does not drop and get replaced
+        // by a held copy at the commit — it simply stays, still resolved
+        // against the ENTERING scene, still carrying its last measured
+        // fraction. The copy existed because the commit render could no longer
+        // compute the resolution; the beat holds the hop it resolved once, so
+        // there is nothing left to copy.
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        const live = screen.getByTestId('scene-preload-cover');
+        const liveCover = within(live).getByTestId('reporting-cover');
+        expect(liveCover.dataset['progress']).toBe('0.5');
+        expect(liveCover.dataset['reason']).toBe('assets');
+        expect(liveCover.dataset['screenKey']).toBe('summary');
 
         // The transition lifecycle beneath is NOT deferred — the ack fired at
         // the fade-out and the snapshot carries no transition any more. What
         // the overlay still paints is the CURTAIN, at full opacity, for the
-        // whole time the held layer stands: it is the only painter in this
-        // provider, so the black the cover sits on is this element, and the
-        // reveal that follows has something to animate. The two cases at the
-        // end of this suite measure the reveal itself.
-        await tickMs(299); // T=399... release lands at T=416 (rise 16 + 400)
+        // whole time the cover stands: it is the only painter in this provider,
+        // so the black the cover sits on is this element, and the reveal that
+        // follows has something to animate.
+        await tickMs(299); // T=399, inside the floor measured from full visibility
         expect(screen.getByTestId('transition-overlay').style.opacity).toBe('1');
-        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
 
-        await tickMs(16); // T=415
-        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
-        await tickMs(1); // T=416
+        // Past the floor AND its closing leg. The cover now ramps out against
+        // the curtain rather than cutting in the commit's own flush, which is
+        // the rhythm that made this site differ from a route entry.
+        await settleBeat(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
         expect(screen.queryByTestId('scene-held-cover')).toBeNull();
     });
 
-    it('drops the transition cover with the commit when the minimum has already elapsed', async () => {
+    it('drops the transition cover after the commit when the minimum has already elapsed', async () => {
         const ref = textureRef('arena');
         const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
         const assetManifest = stubManifest([ref]);
@@ -928,7 +983,7 @@ describe('SceneRouter — minimum-visible held layer', () => {
         await tickMs(16);
         expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
 
-        await tickMs(MIN_VISIBLE_MS + 100); // T=516 > 416
+        await tickMs(MIN_VISIBLE_MS + 100);
         await act(async () => {
             rerender(
                 wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
@@ -936,6 +991,11 @@ describe('SceneRouter — minimum-visible held layer', () => {
             await Promise.resolve();
         });
 
+        // AFTER, not WITH. A spent floor no longer means the cover vanishes in
+        // the commit's own flush — it ramps out over `fadeMs` against the
+        // curtain, the same closing leg a route entry runs. That single-frame
+        // cut was the last rhythm difference between the two sites.
+        await settleBeat(0);
         expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
         expect(screen.queryByTestId('scene-held-cover')).toBeNull();
     });
@@ -958,8 +1018,8 @@ describe('SceneRouter — minimum-visible held layer', () => {
             await Promise.resolve();
         });
 
-        const held = screen.getByTestId('scene-held-cover');
-        expect(within(held).getByRole('status')).toBeTruthy();
+        const cover = screen.getByTestId('scene-preload-cover');
+        expect(within(cover).getByRole('status')).toBeTruthy();
     });
 
     it('holds a resolved Suspense cover as the held layer with the screen running underneath', async () => {
@@ -1153,7 +1213,7 @@ describe('SceneRouter — minimum-visible held layer', () => {
         });
         await tickMs(0);
 
-        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
         expect(fadeControl.fadeIn).not.toHaveBeenCalled();
     });
 
@@ -1176,8 +1236,8 @@ describe('SceneRouter — minimum-visible held layer', () => {
             await Promise.resolve();
         });
 
-        await tickMs(MIN_VISIBLE_MS);
-        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        await settleBeat(MIN_VISIBLE_MS * 2);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
         expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
 
         // The debt is spent, not standing: nothing re-fires it later.
@@ -1185,16 +1245,22 @@ describe('SceneRouter — minimum-visible held layer', () => {
         expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
     });
 
-    it('does not hold the curtain for a Suspense cover, which paints beneath it', async () => {
+    it('holds the curtain through a chunk wait behind its OWN cover, never behind the fallback', async () => {
         // The layering, because it is what decides the behaviour. A mounted
-        // fallback resolves through the same cascade as the transition cover
+        // fallback resolves through the same cascade as the hop's cover
         // (Invariant #88) but renders in the SCREEN SLOT — the preset is
         // `position: absolute` with no z-index, "a sibling inside the scene,
         // not a route-level layer" — while the curtain is `fixed` at
-        // `--ch-z-scene-fade`. Holding the curtain up for it would paint the
-        // player black for the whole chunk wait instead of the loading screen,
-        // and a `React.lazy` chunk is the one wait Invariant #133 leaves
-        // unbounded, so the black would have no release path.
+        // `--ch-z-scene-fade`. Deferring the reveal on a fallback ALONE would
+        // paint the player black for the whole chunk wait.
+        //
+        // The hop does defer through that wait, because the chunk folds into
+        // the beat's `settled` term exactly as it already does at `/game` and
+        // `/replays/player`. What makes that safe is the layer, not the bound:
+        // the beat's OWN cover stays mounted at `--ch-z-loading-hud`, above the
+        // curtain, so a `React.lazy` chunk that never resolves — the one wait
+        // Invariant #133 leaves unbounded — parks the player on the game's
+        // declared loading screen rather than on black.
         const { Screen, resolve } = makeControlledScreen('summary-screen');
         const ref = textureRef('arena');
         const fadeControl = watchableFade();
@@ -1232,21 +1298,38 @@ describe('SceneRouter — minimum-visible held layer', () => {
         });
         await tickMs(0);
 
-        // The fallback took over and carries no stacking of its own, so it is
-        // under the curtain. The reveal is therefore spent here rather than
-        // deferred onto a wait nothing bounds.
+        // The chunk is cold, so the screen is not there — and the ONE cover the
+        // player is looking at is the hop's, above the curtain. Read as the
+        // element's ancestry rather than its presence: the fallback would
+        // render the same `reporting-cover` testid in the screen slot, and
+        // "a cover is on screen" is true of both.
         expect(screen.queryByTestId('summary-screen')).toBeNull();
-        const fallbackCover = screen.getByTestId('reporting-cover');
-        expect(fallbackCover.closest('[data-testid="scene-held-cover"]')).toBeNull();
-        expect(fallbackCover.closest('[data-testid="scene-preload-cover"]')).toBeNull();
-        expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+        const standingCover = screen.getByTestId('reporting-cover');
+        const layer = standingCover.closest('[data-testid="scene-preload-cover"]');
+        expect(layer).not.toBeNull();
+        expect((layer as HTMLElement).style.zIndex).toBe('var(--ch-z-loading-hud)');
+        // Deferred, not spent: the wait is not over while the chunk is in
+        // flight, and revealing here would land the player on the fallback
+        // instead of on the screen.
+        expect(fadeControl.fadeIn).not.toHaveBeenCalled();
 
-        // And the chunk resolving later never pays a second time.
+        // PAST THE FLOOR, chunk still cold. This is the assertion that reads
+        // the chunk as part of the wait rather than beside it: before the floor
+        // elapses the reveal is withheld either way, so a beat whose `settled`
+        // ignored the chunk would satisfy the check above and only diverge
+        // here. The floor answers how long a cover is held, never whether the
+        // wait is over.
+        await settleBeat(MIN_VISIBLE_MS * 2);
+        expect(fadeControl.fadeIn).not.toHaveBeenCalled();
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        // The chunk resolves: the wait is finally over, and the reveal is paid
+        // exactly once on the far side of the cover's closing leg.
         await act(async () => {
             resolve();
             await Promise.resolve();
         });
-        await tickMs(MIN_VISIBLE_MS);
+        await settleBeat(MIN_VISIBLE_MS);
 
         expect(screen.getByTestId('summary-screen')).toBeTruthy();
         expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
@@ -1274,12 +1357,14 @@ describe('SceneRouter — minimum-visible held layer', () => {
         });
         await tickMs(0);
 
-        // Transition over, cover standing: fully black behind it.
-        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        // Transition over, cover standing: fully black behind it. The SAME
+        // cover that rose for the hop — it spans the wait rather than handing
+        // over to a copy at the commit.
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
         expect(screen.getByTestId('transition-overlay').style.opacity).toBe('1');
 
-        await tickMs(MIN_VISIBLE_MS);
-        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        await settleBeat(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
 
         // The cover left against that same black; the curtain lifts after it.
         await tickMs(64);
@@ -1382,7 +1467,7 @@ describe('SceneRouter — minimum-visible held layer', () => {
         await tickMs(0); // resolved at T=550
 
         // Wait 2's release lands at ITS rise + minimum (500 + 400 = 900) — a
-        // stale epoch from wait 1 would shrink it to nothing.
+        // latch that kept wait 1's rise stamp would shrink it to nothing.
         expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
         await tickMs(349); // T=899
         expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
@@ -1426,13 +1511,19 @@ describe('SceneRouter — minimum-visible held layer', () => {
             await Promise.resolve();
         });
 
-        // Release lands at the NEW rise + minimum (166 + 400 = 566), from both
-        // sides — never at the old wait's remainder.
-        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
-        await tickMs(365); // T=565
-        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
-        await tickMs(1); // T=566
-        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        // The hop's own cover carries on past the commit — the supersession
+        // handed the wait from the held layer to the beat, and the beat holds
+        // one cover for the whole of it.
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        // Still standing at T=565, which is the measurement: the old wait rose
+        // at T=0 and would have released at T=400, so a cover that billed the
+        // NEW wait for the old one's elapsed time would already be gone here.
+        await tickMs(365);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await settleBeat(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
     });
 
     it('the commit-time chunk suspend chains onto the transition cover’s clock', async () => {
@@ -1467,35 +1558,43 @@ describe('SceneRouter — minimum-visible held layer', () => {
         });
         await tickMs(0);
 
-        // The entering screen's chunk is cold: the Suspense fallback covers,
-        // alone — the held layer must NOT double it.
-        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        // The entering screen's chunk is cold, and the hop's own cover simply
+        // carries on: the chunk folds into the beat's `settled` term rather
+        // than becoming a second wait with a second cover. No hand-off happens
+        // at all now, which is what "one wait" means here.
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
         expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        // Exactly one, because the Suspense fallback is suppressed under a
+        // standing hop cover. Two would be invisible — the hop layer paints
+        // scrim above it — and still announce the same wait twice.
         expect(screen.getAllByTestId('reporting-cover')).toHaveLength(1);
 
-        await tickMs(100); // T=200
+        await tickMs(100);
         await act(async () => {
             resolve();
             await Promise.resolve();
         });
         await tickMs(0);
 
-        // One wait, one clock: the release lands at T=416 (the transition
-        // cover's rise + minimum), NOT 200 + minimum.
+        // One wait, one clock: the chunk resolving does not restart anything,
+        // and the cover is still the one that rose for the hop.
         expect(screen.getByTestId('entering-screen')).toBeTruthy();
-        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
         expect(screen.getAllByTestId('reporting-cover')).toHaveLength(1);
 
-        await tickMs(215); // T=415
-        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
-        await tickMs(1); // T=416
-        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        // Still standing at T=415 — the floor is measured from the hop's rise,
+        // not from the chunk's resolution at T=200.
+        await tickMs(215);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await settleBeat(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
     });
 
     it.each([
         ['the engine placeholder', {}],
         ["the per-key 'none' opt-out", { loadingScreens: { summary: 'none' } }],
-    ])('holds nothing when the cascade resolves %s', async (_name, overrides) => {
+    ])('raises nothing when the cascade resolves %s', async (_name, overrides) => {
         const ref = textureRef('arena');
         const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
         const assetManifest = stubManifest([ref]);
@@ -1509,7 +1608,13 @@ describe('SceneRouter — minimum-visible held layer', () => {
 
         const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
         await tickMs(16);
-        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+        // NOTHING, where this site used to raise the layer with the engine's
+        // empty placeholder inside and merely decline to HOLD it. The beat arms
+        // on a cover the game chose to show, so the two sites now agree on
+        // which waits are explained at all rather than only on how long for.
+        // A declared minimum does not conjure one — the floor answers how long,
+        // never whether.
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
 
         await tickMs(84);
         await act(async () => {
@@ -1519,11 +1624,18 @@ describe('SceneRouter — minimum-visible held layer', () => {
             await Promise.resolve();
         });
 
+        await settleBeat(MIN_VISIBLE_MS);
         expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
         expect(screen.queryByTestId('scene-held-cover')).toBeNull();
     });
 
-    it('renders byte-identically to today under the e2e env collapse', async () => {
+    it('collapses the floor but not the sequence under the e2e env', async () => {
+        // The flag zeroes `resolveLoadingBeatFloorMs`, and nothing else. The
+        // beat still ARMS, still raises the declared cover and still leaves it
+        // against the curtain — what goes is the deliberate delay, which is the
+        // whole of what that flag is for (Invariant #133). A collapse that
+        // skipped the sequence would make every e2e assertion about the cover
+        // pass vacuously.
         vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
         const ref = textureRef('arena');
         const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
@@ -1543,7 +1655,512 @@ describe('SceneRouter — minimum-visible held layer', () => {
             await Promise.resolve();
         });
 
+        // No floor left to serve, so the cover goes as soon as its legs run —
+        // asserted after the legs rather than in the commit's own flush, which
+        // is where the collapse differs from a skip.
+        await settleBeat(0);
         expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
         expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+});
+
+// ── The scene hop runs the loading beat (§4.36, Invariant #133) ───────────────
+//
+// The convergence: this site and the two route entries become
+// ONE machine rather than two that happen to produce a compatible order. What
+// separates them is not the order — it is which waits raise a cover at all.
+
+describe('SceneRouter — the scene hop runs the loading beat', () => {
+    /** A registry declaring a cover and a floor — what makes a beat happen at all. */
+    function beatRegistry(overrides: Partial<GameScreenRegistry> = {}): GameScreenRegistry {
+        return {
+            ...plainRegistry(),
+            loadingScreen: makeFullReportingCover(),
+            loadingScreenMinVisibleMs: MIN_VISIBLE_MS,
+            ...overrides,
+        };
+    }
+
+    beforeEach(() => {
+        vi.useFakeTimers({
+            toFake: [
+                'setTimeout',
+                'clearTimeout',
+                'performance',
+                'requestAnimationFrame',
+                'cancelAnimationFrame',
+            ],
+        });
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    it('raises the declared cover for a hop that measures nothing', async () => {
+        // The divergence, stated as a case. `readEnteringScene` answered `null`
+        // while `preloadProgress` was `null`, so a scene declaring no
+        // `requiredAssets` — or a game shipping no manifest — hopped with no
+        // cover at all, while the SAME registry entering through `/game` got
+        // the full beat. The beat arms on a DECLARED cover, never on a measured
+        // one: a wait that settles before anything could be counted is exactly
+        // the wait a floor exists for.
+        const registry: GameScreenRegistry = {
+            ...plainRegistry(),
+            loadingScreen: makeCover('declared-cover'),
+            loadingScreenMinVisibleMs: MIN_VISIBLE_MS,
+        };
+
+        renderRouter(makeTransitioningSnapshot([]), registry, {
+            assetManager: createStubAssetManager(),
+        });
+
+        await tickMs(16);
+
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+        expect(screen.getByTestId('declared-cover')).toBeTruthy();
+    });
+
+    it('never reveals between two hops when one supersedes another mid-beat', async () => {
+        // The reveal is owed per TRANSITION, and a supersession means the first
+        // one's scene is never the one the player should be shown. Revealing
+        // between the two would flash the superseded scene for a frame and then
+        // black it out again to run the second hop.
+        const first = textureRef('arena');
+        const fadeControl = watchableFade();
+        const registry = beatRegistry();
+        const options = {
+            assetManager: createStubAssetManager({ [String(first)]: 'hang' }),
+            assetManifest: stubManifest([first]),
+            fadeControl,
+        };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([first]), registry, options);
+        await tickMs(16);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        // A SECOND hop arrives before the first has settled — a different
+        // `startedAtTick`, which is what makes it a different wait rather than
+        // a re-render of the same one.
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeTransitioningSnapshot([first], { tick: 6, toSceneId: 'engine:menu' }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+        await settleBeat(MIN_VISIBLE_MS);
+
+        // Nothing was revealed across the hand-off. Asserted as a COUNT of
+        // zero rather than "the second cover is up": a reveal that fired and
+        // was immediately re-covered leaves the same DOM behind.
+        expect(fadeControl.fadeIn).not.toHaveBeenCalled();
+    });
+
+    it('reveals a hop that raises no cover even while a chunk is still cold', async () => {
+        // The chunk may only EXTEND a wait the player can see something during.
+        // A registry declaring no cover form raises no layer here, so folding a
+        // cold `React.lazy` chunk into the wait would hold the curtain at full
+        // opacity over nothing — released only by the module import, the one
+        // wait Invariant #133 leaves unbounded. The layer is what makes the
+        // deferral safe, so where there is no layer there is no deferral.
+        const { Screen } = makeControlledScreen('cold-screen');
+        const fadeControl = watchableFade();
+        // No `loadingScreen`: the cascade resolves the engine placeholder, so
+        // the beat arms nothing.
+        const registry: GameScreenRegistry = {
+            ...plainRegistry(),
+            playfield: Screen,
+            loadingScreenMinVisibleMs: MIN_VISIBLE_MS,
+        };
+        const options = {
+            assetManager: createStubAssetManager(),
+            fadeControl,
+        };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([]), registry, options);
+        await tickMs(16);
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+        await settleBeat(MIN_VISIBLE_MS);
+
+        // The chunk is STILL cold — `resolve()` is never called — and the
+        // reveal has been paid anyway.
+        expect(screen.queryByTestId('cold-screen')).toBeNull();
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the cover up past the floor while the host has not yet committed', async () => {
+        // The commit is half of the wait, and the half no other case reads:
+        // every "past the floor" assertion elsewhere is taken AFTER the
+        // rerender that ends the transition. A beat whose `settled` dropped the
+        // pending-transition term would drop the cover once the floor elapsed
+        // and leave the player on bare black for the rest of the preload.
+        const ref = textureRef('arena');
+        const registry = beatRegistry();
+        const options = {
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+        };
+
+        renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        await tickMs(16);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        // No commit rerender at all — the snapshot still carries the
+        // transition, and the preload never settles.
+        await settleBeat(MIN_VISIBLE_MS * 2);
+
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+    });
+
+    it('raises no held copy while a hop owns the screen', async () => {
+        // The held layer serves the screen switch; a hop has its own cover and
+        // its own clock. What keeps a copy from rising here is the residue
+        // clear on the hop's arrival plus the fallbackMounted wall — see
+        // `drops pre-hop held residue for good` for the post-commit window.
+        const { Screen, resolve } = makeControlledScreen('switch-screen');
+        const ref = textureRef('arena');
+        const registry = beatRegistry({ playfield: Screen });
+        const options = {
+            assetManager: createStubAssetManager({ [String(ref)]: 'hang' }),
+            assetManifest: stubManifest([ref]),
+        };
+
+        // A code wait first, so a held copy exists to be re-raised.
+        const { rerender } = renderRouter(makeSnapshot(), registry, options);
+        await tickMs(0);
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(50);
+
+        // Now a hop arrives and owns the screen through its whole beat.
+        await act(async () => {
+            rerender(wrapRouter(makeTransitioningSnapshot([ref]), registry, options));
+            await Promise.resolve();
+        });
+        await tickMs(16);
+
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('ramps the cover out against the curtain instead of cutting it', async () => {
+        // The rhythm difference this convergence removes. The hand-rolled layer
+        // this replaces declared no `opacity` and no `transition`, so its
+        // `loading-out` leg was byte-identical to `loading` and the cover cut at
+        // unmount — a delayed cut, not a leg. Read as the DECLARATION plus the
+        // commanded value, because a ramp nobody declared animates nothing.
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
+        const registry = beatRegistry();
+        const options = { assetManager, assetManifest: stubManifest([ref]), fadeDurationMs: 40 };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([ref]), registry, options);
+        // Past the fade-out and the cover's mount, plus the extra frames: the
+        // cover starts DOWN so the browser has a value to animate from, and
+        // raises on a frame armed during the advance — which a single advance
+        // arms rather than fires, the same artifact `settleBeat` absorbs.
+        await tickMs(160);
+        await tickMs(16);
+        await tickMs(16);
+
+        const covering = screen.getByTestId('scene-preload-cover');
+        expect(covering.style.transition).toContain('opacity');
+        expect(covering.style.opacity).toBe('1');
+
+        // Settle the wait so the beat leaves `loading` for its closing leg.
+        await act(async () => {
+            assetManager.settleDeferred(ref);
+            await Promise.resolve();
+        });
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+        await tickMs(MIN_VISIBLE_MS + 16);
+
+        // Still MOUNTED, and driven to 0 — the leg the old shape did not run.
+        const leaving = screen.getByTestId('scene-preload-cover');
+        expect(leaving.style.opacity).toBe('0');
+        expect(leaving.style.transition).toContain('opacity');
+    });
+
+    it('treats a re-entry to the SAME scene as a new wait with no inherited fraction', async () => {
+        // `toSceneId` alone cannot separate these two waits — it is the same
+        // string for both. `startedAtTick` is what makes the second hop its
+        // own, and the fraction channel has to agree: the first hop ended at 1,
+        // and a second hop with NOTHING to measure reports no number of its
+        // own, so whatever its cover shows is inherited. It must show none.
+        const first = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(first)]: 'deferred' });
+        const registry = beatRegistry({
+            sceneDefaultScreens: { 'engine:post-game': 'summary' },
+        });
+        const options = { assetManager, assetManifest: stubManifest([first]) };
+
+        const { rerender } = renderRouter(
+            makeTransitioningSnapshot([first], { startedAtTick: 2 }),
+            registry,
+            options,
+        );
+        await tickMs(16);
+        await act(async () => {
+            assetManager.settleDeferred(first);
+            await Promise.resolve();
+        });
+        await tickMs(0);
+        expect(screen.getByTestId('reporting-cover').dataset['progress']).toBe('1');
+
+        // The SAME scene again, one tick later, with nothing to preload.
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeTransitioningSnapshot([], { tick: 6, startedAtTick: 5 }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+        await tickMs(16);
+
+        expect(screen.getByTestId('reporting-cover').dataset['progress']).toBe('null');
+    });
+
+    it('never re-raises a held cover after the reveal for a chunk nobody saw', async () => {
+        // The suppressed fallback must not arm the minimum-VISIBLE hold: while
+        // the hop's cover stands, nobody saw the fallback, so there is nothing
+        // whose visibility a floor could protect. Armed anyway, the latch
+        // outlives the hop — its minimum runs from the chunk's MOUNT — and the
+        // held copy rises OVER the revealed scene for the remainder: a loading
+        // screen flashing up after the player is already looking at the board.
+        //
+        // The commit is deliberately LATE relative to the cover's rise, which
+        // widens the window between the beat's reveal and the latch's release;
+        // asserted INSIDE that window, because the flash is transient and an
+        // end-state read steps straight over it.
+        const { Screen: EnteringScreen, resolve } = makeControlledScreen('entering-screen');
+        const ref = textureRef('arena');
+        const assetManager = createStubAssetManager({ [String(ref)]: 'deferred' });
+        const registry = beatRegistry({ screens: { summary: EnteringScreen } });
+        const options = { assetManager, assetManifest: stubManifest([ref]) };
+
+        const { rerender } = renderRouter(
+            makeTransitioningSnapshot([ref], { defaultScreen: 'summary' }),
+            registry,
+            options,
+        );
+        await tickMs(16);
+        await act(async () => {
+            assetManager.settleDeferred(ref);
+            await Promise.resolve();
+        });
+
+        // Hold the transition open until T≈300: the floor has been running
+        // since the cover rose at T≈17, so the beat ends well before a latch
+        // armed at the commit would release.
+        await tickMs(268);
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeSnapshot({
+                        tick: 5,
+                        sceneId: makeSceneId('engine:post-game'),
+                        sceneTransition: null,
+                        ...({ sceneDefaultScreen: 'summary' } as Partial<PlayerSnapshot>),
+                    }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+        await tickMs(16);
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+
+        // Into the window: the beat has revealed and released the hop, and a
+        // latch armed at the chunk's mount would still be serving its
+        // remainder for another ~250 ms.
+        await settleBeat(120);
+        expect(screen.getByTestId('entering-screen')).toBeTruthy();
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+
+        await settleBeat(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('drops pre-hop held residue for good — the old cover never re-raises after the hop', async () => {
+        // A hop is a NEW wait: whatever a pre-hop code wait left standing — the
+        // latch still serving its minimum, the held copy's content — is not the
+        // hop's to resurrect. Without clearing it, the latch outlives the hop
+        // and the OLD screen's cover rises over the NEWLY revealed scene for
+        // the old wait's remainder. The hop here resolves an undeclared cover
+        // ('none' for the entering key), so it reveals at the commit and the
+        // window between its release and the stale latch's is wide open.
+        const { Screen, resolve } = makeControlledScreen('old-screen');
+        const registry = beatRegistry({
+            playfield: Screen,
+            loadingScreens: { summary: 'none' },
+            sceneDefaultScreens: { 'engine:post-game': 'summary' },
+        });
+        const options = { assetManager: createStubAssetManager() };
+
+        // The pre-hop code wait: cover up, then the chunk resolves inside the
+        // minimum, leaving the copy standing on a latch with ~350ms to serve.
+        const { rerender } = renderRouter(makeSnapshot(), registry, options);
+        await tickMs(0);
+        await act(async () => {
+            resolve();
+            await Promise.resolve();
+        });
+        await tickMs(50);
+        expect(screen.getByTestId('scene-held-cover')).toBeTruthy();
+
+        // The hop arrives and commits while that latch is still running.
+        await act(async () => {
+            rerender(wrapRouter(makeTransitioningSnapshot([]), registry, options));
+            await Promise.resolve();
+        });
+        await tickMs(16);
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeSnapshot({
+                        tick: 5,
+                        sceneId: makeSceneId('engine:post-game'),
+                        sceneTransition: null,
+                        ...({ sceneDefaultScreen: 'summary' } as Partial<PlayerSnapshot>),
+                    }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+
+        // Inside the stale latch's remainder, after the hop has revealed and
+        // released: the old cover must not be back.
+        await settleBeat(64);
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+        await settleBeat(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-held-cover')).toBeNull();
+    });
+
+    it('defaults every leg through screenFadeMs, so an unpinned page collapses under the e2e flag', async () => {
+        // The replay player passes no fade props at all, so THIS default is the
+        // only thing standing between its hops and 200ms legs inside an e2e
+        // build. Rendered without fade props on purpose; the beat completing on
+        // effect flushes alone — no leg-sized timer ever advanced — is what
+        // separates a collapsed default from a hardcoded one.
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+        const registry = beatRegistry();
+
+        const { rerender } = render(
+            <I18nProvider>
+                <AssetManagerContext.Provider value={createStubAssetManager()}>
+                    <FadeProvider>
+                        <SceneRouter
+                            registry={registry}
+                            snapshot={makeTransitioningSnapshot([])}
+                            localPlayerId={LOCAL_PLAYER}
+                            sendAction={vi.fn()}
+                        />
+                    </FadeProvider>
+                </AssetManagerContext.Provider>
+            </I18nProvider>,
+        );
+        // The fade-out is the hook's own 300ms default here — the e2e flag
+        // collapses the BEAT's durations, not the ack's fade — so the curtain
+        // needs its frames before the cover can rise.
+        await settleBeat(320);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+
+        await act(async () => {
+            rerender(
+                <I18nProvider>
+                    <AssetManagerContext.Provider value={createStubAssetManager()}>
+                        <FadeProvider>
+                            <SceneRouter
+                                registry={registry}
+                                snapshot={makeSnapshot({ tick: 5, sceneTransition: null })}
+                                localPlayerId={LOCAL_PLAYER}
+                                sendAction={vi.fn()}
+                            />
+                        </FadeProvider>
+                    </AssetManagerContext.Provider>
+                </I18nProvider>,
+            );
+            await Promise.resolve();
+        });
+
+        // Floor 0 and legs 0: nothing but flushes between the commit and the
+        // cover's exit. tickMs(0) fires no leg-sized timer, so a 200ms (or any
+        // hardcoded) default parks the cover here and reds.
+        await tickMs(0);
+        await tickMs(0);
+        await tickMs(0);
+        await tickMs(0);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+    });
+
+    it('holds the ack where it was, whatever the floor', async () => {
+        // Invariant #133 at the seam the beat and the floor actually meet.
+        // `useFadeTransition.test.tsx` pins the ack against cover regimes it is
+        // handed; here the floor is the real resolver's, so a mutant that let
+        // it reach the dispatch has somewhere to bite.
+        const ackTicks = async (minVisibleMs: number): Promise<unknown[]> => {
+            const sent: unknown[] = [];
+            // Nothing to preload, so the ack turns on the fade-out alone —
+            // the leg whose timing the floor must not touch.
+            const registry = beatRegistry({ loadingScreenMinVisibleMs: minVisibleMs });
+            render(
+                <I18nProvider>
+                    <AssetManagerContext.Provider value={createStubAssetManager()}>
+                        <FadeProvider>
+                            <SceneRouter
+                                registry={registry}
+                                snapshot={makeTransitioningSnapshot([])}
+                                localPlayerId={LOCAL_PLAYER}
+                                sendAction={(action) => sent.push(action)}
+                                fadeOutMs={1}
+                                fadeInMs={1}
+                            />
+                        </FadeProvider>
+                    </AssetManagerContext.Provider>
+                </I18nProvider>,
+            );
+            await tickMs(64);
+            cleanup();
+            return sent;
+        };
+
+        const noFloor = await ackTicks(0);
+        const longFloor = await ackTicks(10_000);
+
+        expect(noFloor).toEqual([
+            {
+                type: 'engine:scene_ready',
+                playerId: LOCAL_PLAYER,
+                tick: 3,
+                payload: { playerId: LOCAL_PLAYER },
+            },
+        ]);
+        expect(longFloor).toEqual(noFloor);
     });
 });
