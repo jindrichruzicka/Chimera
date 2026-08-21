@@ -56,7 +56,12 @@ export interface LoadingBeatOptions {
      * settle paths, failures included, reveal alike (Invariant #133).
      */
     readonly settled: boolean;
-    /** How long the cover holds once fully visible — `resolveLoadingBeatFloorMs`. */
+    /**
+     * How long the cover holds once fully visible — `resolveLoadingBeatFloorMs`.
+     *
+     * A floor on the RAISE, stamped when the cover reaches full opacity — see
+     * the `'loading'` case.
+     */
     readonly holdMs: number;
     /** How long each fade leg runs — `screenFadeMs()`. */
     readonly fadeMs: number;
@@ -331,6 +336,13 @@ export function useLoadingBeat(options: LoadingBeatOptions): LoadingBeat {
                 if (!settled) {
                     return;
                 }
+                // Measured from the stamp `loading-in` took, and from no other
+                // clock: the floor belongs to the RAISE, so a superseding scene
+                // hop that resolves a different cover form under a standing
+                // cover spends the same minimum rather than re-arming one. A
+                // stamp re-armed there would grow the covered window with the
+                // host's churn, which is the delay-added-to-a-slow-load this
+                // knob is not (§4.36).
                 const stamp = stampRef.current ?? performance.now();
                 const remainder = holdMs - (performance.now() - stamp);
                 if (remainder <= 0) {

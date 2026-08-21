@@ -674,6 +674,40 @@ describe('useLoadingBeat', () => {
         expect(result.current.phase).not.toBe('loading-in');
     });
 
+    it('ends the hold on the stamp it took, even when the cover form changes under it', async () => {
+        // The hook-visible shadow of a scene-hop supersession (§4.36): the
+        // cascade resolves a different form mid-hold, so `declared` flips
+        // beneath a beat already serving its floor. The floor was stamped when
+        // the cover reached full visibility, and a form change is not a new
+        // raise — a stamp re-armed here would hand every superseding hop a
+        // fresh minimum and grow the covered window with the host's churn.
+        const curtain = makeCurtain(1);
+        const { result, rerender } = renderBeat(
+            baseOptions({ curtain, settled: false, holdMs: HOLD_MS, fadeMs: 0 }),
+        );
+
+        await flush();
+        expect(result.current.phase).toBe('loading');
+
+        // All but the last 200 ms of the floor spent, and then the form
+        // changes on the same render that settles the gate.
+        await advance(HOLD_MS - 200);
+        rerender(
+            baseOptions({ curtain, settled: true, declared: false, holdMs: HOLD_MS, fadeMs: 0 }),
+        );
+
+        // Read from INSIDE the remainder, so both ends of it are measured: a
+        // form change that forfeited the rest of the floor reveals here, and a
+        // stamp re-armed by one would still be holding at the line below.
+        await advance(150);
+        expect(result.current.phase).toBe('loading');
+
+        // The remainder was the 200 ms left of the original stamp, not another
+        // whole floor.
+        await advance(100);
+        expect(result.current.phase).toBe('revealed');
+    });
+
     it('releases nothing further once suppressed, even if the suppressor clears', async () => {
         // Terminal for the activation: the screen belongs to whoever took it,
         // and a beat that resumed would fade back in over their navigation.

@@ -1740,7 +1740,7 @@ describe('SceneRouter — the scene hop runs the loading beat', () => {
         expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
 
         // A SECOND hop arrives before the first has settled — a different
-        // `startedAtTick`, which is what makes it a different wait rather than
+        // transition key, which is what makes it a different wait rather than
         // a re-render of the same one.
         await act(async () => {
             rerender(
@@ -1756,8 +1756,249 @@ describe('SceneRouter — the scene hop runs the loading beat', () => {
 
         // Nothing was revealed across the hand-off. Asserted as a COUNT of
         // zero rather than "the second cover is up": a reveal that fired and
-        // was immediately re-covered leaves the same DOM behind.
+        // was immediately re-covered leaves the same DOM behind. WHOSE floor
+        // the second hop then stands on, and what the layer shows while it
+        // waits, are the cases below.
         expect(fadeControl.fadeIn).not.toHaveBeenCalled();
+    });
+
+    // ── Supersession: whose floor does the second hop stand on? (§4.36) ───────
+    //
+    // The decision these cases pin: the floor is on the RAISE, not on the hop.
+
+    it('stands a superseding hop on the floor the first hop already spent', async () => {
+        // Re-arming per hop would make the covered window grow with host
+        // churn: each supersession would push the reveal another whole floor
+        // out, which is the "delay added to a slow load" the knob is
+        // documented never to be.
+        const fadeControl = watchableFade();
+        const registry = beatRegistry();
+        const options = { assetManager: createStubAssetManager(), fadeControl };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([]), registry, options);
+        // Past the cover's fade-in leg, so the floor is stamped...
+        await tickMs(16);
+        // ...and then spent in full, while the first hop stays unsettled on
+        // its still-pending transition.
+        await tickMs(MIN_VISIBLE_MS);
+        expect(fadeControl.fadeIn).not.toHaveBeenCalled();
+
+        // A second hop — a different `toSceneId`, so a different wait — and
+        // then its commit, which is what ends the wait.
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeTransitioningSnapshot([], { tick: 6, toSceneId: 'engine:menu' }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 7, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        // Only the closing leg is left to run. `settleBeat(0)` advances 48 ms
+        // against a floor of MIN_VISIBLE_MS, so a beat that re-stamped on the
+        // second hop is still holding its cover at this line.
+        await settleBeat(0);
+        expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+    });
+
+    it('still owes the rest of that floor when the supersession lands early in it', async () => {
+        // The other direction of the same rule, and the one an "a new target
+        // clears the stamp" edit would break the other way: inheriting the
+        // first hop's clock means inheriting what is LEFT of it, not skipping
+        // it. Without this case, a beat that dropped the floor outright on a
+        // target change would pass the case above.
+        const fadeControl = watchableFade();
+        const registry = beatRegistry();
+        const options = { assetManager: createStubAssetManager(), fadeControl };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([]), registry, options);
+        await tickMs(16);
+        // A quarter of the floor spent, no more.
+        await tickMs(100);
+
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeTransitioningSnapshot([], { tick: 6, toSceneId: 'engine:menu' }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 7, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        // Settled, and still covered: the first hop's remainder is what the
+        // second one is waiting out.
+        await settleBeat(0);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+        expect(fadeControl.fadeIn).not.toHaveBeenCalled();
+
+        await settleBeat(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('swaps the standing cover to the superseding hop’s declared form in place', async () => {
+        // What the layer RENDERS across the hand-off. The cover resolves the
+        // entering scene's key, so a supersession changes what it shows — and
+        // it has to change it without the layer going anywhere, since the
+        // curtain behind it is what the player would see instead.
+        const fadeControl = watchableFade();
+        const registry = beatRegistry({
+            loadingScreens: {
+                alpha: makeCover('cover-alpha'),
+                beta: makeCover('cover-beta'),
+            },
+        });
+        const options = { assetManager: createStubAssetManager(), fadeControl };
+
+        const { rerender } = renderRouter(
+            makeTransitioningSnapshot([], { defaultScreen: 'alpha' }),
+            registry,
+            options,
+        );
+        await tickMs(16);
+        const raised = screen.getByTestId('scene-preload-cover');
+        expect(within(raised).getByTestId('cover-alpha')).toBeTruthy();
+        expect(raised.style.opacity).toBe('1');
+
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeTransitioningSnapshot([], {
+                        tick: 6,
+                        toSceneId: 'engine:menu',
+                        defaultScreen: 'beta',
+                    }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+
+        // Read on the commit the supersession itself produced, not after a
+        // frame: a layer torn down and re-raised is either absent here or back
+        // at opacity 0 waiting for its ramp, and correct again one frame later.
+        const swapped = screen.getByTestId('scene-preload-cover');
+        expect(swapped).toBe(raised);
+        expect(swapped.style.opacity).toBe('1');
+        expect(within(swapped).getByTestId('cover-beta')).toBeTruthy();
+        expect(screen.queryByTestId('cover-alpha')).toBeNull();
+    });
+
+    it('keeps the layer standing for a superseding hop whose cascade declares none', async () => {
+        // The awkward form, decided rather than left unmeasured: the second
+        // hop's key resolves the `'none'` opt-out, so the layer renders the
+        // engine's empty placeholder for the rest of the floor. It is NOT
+        // dropped — the curtain it would uncover is opaque for that whole
+        // window anyway, so dropping it buys nothing and costs the one thing
+        // the beat exists to remove, a layer changing mid-wait.
+        const fadeControl = watchableFade();
+        const registry = beatRegistry({ loadingScreens: { bare: 'none' } });
+        const options = { assetManager: createStubAssetManager(), fadeControl };
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([]), registry, options);
+        await tickMs(16);
+        expect(
+            within(screen.getByTestId('scene-preload-cover')).getByTestId('reporting-cover'),
+        ).toBeTruthy();
+
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeTransitioningSnapshot([], {
+                        tick: 6,
+                        toSceneId: 'engine:menu',
+                        defaultScreen: 'bare',
+                    }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+
+        const standing = screen.getByTestId('scene-preload-cover');
+        expect(standing.style.opacity).toBe('1');
+        expect(standing.style.backgroundColor).toBe('var(--ch-color-scrim)');
+        // The engine placeholder, and it is empty — the scrim is the whole of
+        // what shows.
+        expect(within(standing).getByTestId('scene-screen-loading').childElementCount).toBe(0);
+        expect(screen.queryByTestId('reporting-cover')).toBeNull();
+
+        // And it leaves on the first hop's clock like any other supersession.
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 7, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+        await settleBeat(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+    });
+
+    it('gives a declared hop its own whole floor when the hop it supersedes raised nothing', async () => {
+        // The rule stated as "the floor is on the RAISE" only holds if an
+        // undeclared hop raises nothing to inherit. It parks the beat at
+        // `covered` with the curtain black and no cover, so the first — and
+        // only — raise of the sequence is the second hop's, and it earns the
+        // whole minimum rather than a remainder of a floor nobody served.
+        const fadeControl = watchableFade();
+        const registry = beatRegistry({ loadingScreens: { bare: 'none' } });
+        const options = { assetManager: createStubAssetManager(), fadeControl };
+
+        const { rerender } = renderRouter(
+            makeTransitioningSnapshot([], { defaultScreen: 'bare' }),
+            registry,
+            options,
+        );
+        await tickMs(16);
+        await tickMs(MIN_VISIBLE_MS);
+        // Nothing was raised, so nothing was floored.
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+
+        await act(async () => {
+            rerender(
+                wrapRouter(
+                    makeTransitioningSnapshot([], { tick: 6, toSceneId: 'engine:menu' }),
+                    registry,
+                    options,
+                ),
+            );
+            await Promise.resolve();
+        });
+        await act(async () => {
+            rerender(
+                wrapRouter(makeSnapshot({ tick: 7, sceneTransition: null }), registry, options),
+            );
+            await Promise.resolve();
+        });
+
+        // Settled now, and still covered 48 ms later: this hop's cover is
+        // serving a whole floor of its own, not a spent remainder.
+        await settleBeat(0);
+        expect(screen.getByTestId('scene-preload-cover')).toBeTruthy();
+        expect(fadeControl.fadeIn).not.toHaveBeenCalled();
+
+        await settleBeat(MIN_VISIBLE_MS);
+        expect(screen.queryByTestId('scene-preload-cover')).toBeNull();
+        expect(fadeControl.fadeIn).toHaveBeenCalledTimes(1);
     });
 
     it('reveals a hop that raises no cover even while a chunk is still cold', async () => {

@@ -178,6 +178,14 @@ export function SceneRouter({
         // and left in place, the OLD screen's copy would rise over the newly
         // revealed scene for that stale remainder.
         heldCoverRef.current = null;
+        // What is NOT cleared, and deliberately: the beat. `hop` never goes
+        // null across a supersession, so the machine stays armed on the phase
+        // it was in and the floor it already stamped — the second hop stands on
+        // what is LEFT of the first one's minimum. The floor is on the RAISE
+        // and this is not one: the cover the player is looking at never left,
+        // only the form it resolves changed. Re-arming per hop would push the
+        // reveal another whole floor out for every superseding transition the
+        // host emits (§4.36).
         // The KEY alone. `registry` and `snapshot` are read for the hop's
         // identity, and a snapshot arrives every frame — depending on it would
         // re-resolve the hop mid-wait. Keying the effect is the whole guard: a
