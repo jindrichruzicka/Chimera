@@ -1019,7 +1019,25 @@ describe('ReplayPlayerPage loading beat', () => {
 
         await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
 
+        // The cover the fold stands on: without it the deferral below would be
+        // a black screen rather than a loading screen.
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
         expect(shellAttr('data-menu-mounted')).toBe('false');
+    });
+
+    it('reveals an entry that declares no cover on the gate alone, chunk still pending', async () => {
+        // The undeclared arm of the case above. `covered` mounts no cover, so a
+        // fold here would park the player on the held black curtain
+        // (Invariant #133). Where there is no layer there is no deferral.
+        installBeatGame({ screens: {} });
+        managerDouble.settleOnCall = true;
+        mockScenePending = true;
+        await mountUnderFakeTimers();
+
+        await step(SCREEN_FADE_FAST_MS * 3 + REPLAY_FLOOR_MS + 120);
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
+        expect(shellAttr('data-menu-mounted')).toBe('true');
     });
 
     it('stops the beat when a leave takes the screen', async () => {

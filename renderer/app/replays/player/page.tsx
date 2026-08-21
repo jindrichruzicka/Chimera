@@ -373,7 +373,11 @@ function ReplayPlayerView(): React.ReactElement {
         curtain: fade,
         active: info !== null && snapshot !== null && loadedGame !== null && assetManager !== null,
         declared: routeCoverDeclared,
-        settled: criticalAssets.ready && !scenePending,
+        // A chunk folds into the wait only where a cover stands over it
+        // (Invariant #133). Undeclared, the beat parks on `covered` — a phase
+        // that mounts no cover — so the deferral would be the held black
+        // curtain.
+        settled: criticalAssets.ready && (!routeCoverDeclared || !scenePending),
         holdMs: beatFloorMs,
         fadeMs: screenFadeMs(),
         isSuppressed: () => leavingRef.current || livePhase === 'lobby',

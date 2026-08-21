@@ -51,9 +51,10 @@ export interface LoadingBeatOptions {
      */
     readonly declared: boolean;
     /**
-     * Whether the wait is over: the preload gate is ready AND no code-split
-     * chunk is still pending. Read as one bit on purpose; the gate's four
-     * settle paths, failures included, reveal alike (Invariant #133).
+     * Whether the wait is over. Composed by the caller — what counts as the
+     * wait differs per surface — and read here as one bit on purpose: the
+     * gate's four settle paths, failures included, reveal alike
+     * (Invariant #133).
      */
     readonly settled: boolean;
     /**

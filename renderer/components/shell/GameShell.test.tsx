@@ -2095,10 +2095,6 @@ describe('GameShell reveal seam', () => {
     }
 
     it('reports a suspending screen chunk, and its resolution, in that order', async () => {
-        // The asset gate can be ready while the screen's own chunk is still in
-        // flight. A beat that revealed on the gate alone would land the player
-        // on the fallback rather than on the screen, so it needs this wait too.
-        //
         // The SEQUENCE is the assertion, not membership. The reporter sits
         // above the wrapper that owns the fallback's mount, so its effect runs
         // after that wrapper's — a reporter that announced every render would

@@ -177,9 +177,8 @@ interface GameShellRegistryProps {
     /** See {@link GameShellBaseProps.revealPhase}; forwarded to the frame. */
     readonly revealPhase?: string;
     /**
-     * Called when a code-split screen starts or stops suspending below, so a
-     * loading beat can fold that wait into its own settle term — a reveal that
-     * ignored it would land on the fallback rather than on the screen.
+     * Called when a code-split screen starts or stops suspending below. What a
+     * consumer makes of that wait is the consumer's (Invariant #133).
      *
      * Only transitions are reported, so a consumer starts from "not pending"
      * itself. Forwarded to `SceneRouter`, where the reporting is done.

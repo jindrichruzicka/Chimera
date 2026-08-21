@@ -49,10 +49,8 @@ export interface SceneRouterProps {
      */
     readonly sceneCoverOccluded?: boolean;
     /**
-     * Called when a code-split screen starts or stops suspending below. A
-     * loading beat folds this into its settle term: the asset gate can be ready
-     * while the screen's own chunk is still in flight, and revealing then lands
-     * the player on the fallback rather than on the screen.
+     * Called when a code-split screen starts or stops suspending below. What a
+     * consumer makes of that wait is the consumer's (Invariant #133).
      *
      * Only transitions are reported — a router whose screen never suspends
      * calls this never, so a consumer starts from "not pending" itself.

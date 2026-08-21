@@ -300,14 +300,22 @@ export default function GamePage(): React.ReactElement | null {
     const routeCoverDeclared =
         registry !== undefined && snapshot !== null && isRouteCoverGameDeclared(registry, snapshot);
     const beatFloorMs = registry === undefined ? 0 : resolveLoadingBeatFloorMs(registry);
-    // A screen whose chunk is still in flight is part of the wait: revealing on
-    // the asset gate alone would land the player on the Suspense fallback.
+    // Reported by `SceneRouter` while the entering screen's chunk is in flight.
     const [scenePending, setScenePending] = React.useState(false);
     const beat = useLoadingBeat({
         curtain: fade,
         active: shellReady,
         declared: routeCoverDeclared,
-        settled: sceneReady && !scenePending,
+        // Conditioned on the cover: the LAYER is what makes deferring across a
+        // chunk safe (Invariant #133). An entry the cascade resolves no cover
+        // for raises none — the beat parks on `covered`, a phase that mounts no
+        // cover at all — so the deferral would hold the black curtain over
+        // nothing, and `sceneCoverOccluded` suppresses `SceneRouter`'s held
+        // layer for the same window. Where there is no layer there is no
+        // deferral: an undeclared entry reveals on the asset gate and lands on
+        // the Suspense fallback. `SceneRouter` conditions its own hop term over
+        // the entering scene's key rather than the one this route owns.
+        settled: sceneReady && (!routeCoverDeclared || !scenePending),
         holdMs: beatFloorMs,
         fadeMs: screenFadeMs(),
         // A waiting restore must surface its abortable overlay, which sits at

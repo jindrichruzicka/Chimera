@@ -293,6 +293,26 @@ function makeRegistry(overrides: Partial<GameScreenRegistry> = {}): GameScreenRe
     return { playfield: () => null, ...overrides };
 }
 
+/**
+ * What `loadRendererGame` resolves to, with whatever registry slots a case adds.
+ *
+ * The default here IS the `beforeEach` default, so a case that only declares a
+ * cover keeps every other slot the suite runs on — one place to change rather
+ * than one per call site silently drifting out of the default.
+ */
+function makeLoadedGame(registryOverrides: Partial<GameScreenRegistry> = {}): {
+    readonly registry: GameScreenRegistry;
+    readonly assetManifest: AssetManifest;
+} {
+    return {
+        registry: makeRegistry({
+            sceneDefaultScreens: { 'engine:game': 'playfield' },
+            ...registryOverrides,
+        }),
+        assetManifest: manifestWithCritical(),
+    };
+}
+
 function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
     const id = playerId('p1');
     return {
@@ -394,10 +414,7 @@ beforeEach(() => {
         loadedGame === null ? null : harness.assetManager,
     );
     loadRendererGameMock.mockReset();
-    loadRendererGameMock.mockResolvedValue({
-        registry: makeRegistry({ sceneDefaultScreens: { 'engine:game': 'playfield' } }),
-        assetManifest: manifestWithCritical(),
-    });
+    loadRendererGameMock.mockResolvedValue(makeLoadedGame());
     useUiStore.getState().resetScreenNavigation();
 });
 
@@ -649,16 +666,29 @@ describe('GamePage reveal gate', () => {
         expect(fadeIn).not.toHaveBeenCalled();
     });
 
-    it('withholds the reveal while the entering screen’s chunk is still in flight', async () => {
+    /**
+     * Re-point the loaded game at a registry that DECLARES a cover.
+     *
+     * The `beforeEach` default declares none, and the chunk fold is conditioned
+     * on a declared cover — so a case that means to measure the fold has to say
+     * so, or it silently measures the undeclared arm instead.
+     */
+    function declareCover(): void {
+        loadRendererGameMock.mockResolvedValue(makeLoadedGame({ loadingScreen: 'spinner' }));
+    }
+
+    it('withholds the reveal while a covered entry’s chunk is still in flight', async () => {
         // The asset gate can settle while the screen's own code-split chunk is
-        // not here yet. Revealing on the gate alone lands the player on the
-        // Suspense fallback rather than on the screen, so the chunk's wait is
-        // part of the beat's settle term too.
+        // not here yet. An entry whose cascade declares a cover folds that wait
+        // into the beat's settle term too, because the cover is what the player
+        // looks at meanwhile.
+        declareCover();
         mockScenePending = true;
         await renderMountedGame();
 
         await settlePreload();
 
+        expect(screen.getByTestId('route-entry-loading-cover')).toBeInTheDocument();
         expect(shellAttr('data-menu-mounted')).toBe('false');
         expect(fadeIn).not.toHaveBeenCalled();
     });
@@ -666,6 +696,7 @@ describe('GamePage reveal gate', () => {
     it('reveals once the chunk lands, with the gate already settled', async () => {
         // The release edge of the case above — without it, "withheld" could be
         // a beat that never reveals at all.
+        declareCover();
         mockScenePending = true;
         const view = await renderMountedGame();
         await settlePreload();
@@ -673,6 +704,22 @@ describe('GamePage reveal gate', () => {
         mockScenePending = false;
         await rerenderGame(view);
 
+        expect(shellAttr('data-menu-mounted')).toBe('true');
+        expect(fadeIn).toHaveBeenCalledTimes(1);
+    });
+
+    it('reveals an entry that declares no cover on the gate alone, chunk still pending', async () => {
+        // Where there is no layer there is no deferral. An undeclared entry
+        // PARKS on `covered`, and `covered` mounts no cover (`coverMounted` is
+        // the covering legs only), so folding the chunk in there would hold the
+        // black curtain over nothing (Invariant #133). It reveals on the asset
+        // gate instead.
+        mockScenePending = true;
+        await renderMountedGame();
+
+        await settlePreload();
+
+        expect(screen.queryByTestId('route-entry-loading-cover')).not.toBeInTheDocument();
         expect(shellAttr('data-menu-mounted')).toBe('true');
         expect(fadeIn).toHaveBeenCalledTimes(1);
     });
