@@ -1,5 +1,21 @@
 # @chimera-engine/electron
 
+## 1.0.0-rc.8
+
+### Patch Changes
+
+- Updated dependencies [60e960a]
+- Updated dependencies [7a1e654]
+- Updated dependencies [8c10f64]
+- Updated dependencies [8b2ce0e]
+- Updated dependencies [7aa61d4]
+- Updated dependencies [0467678]
+- Updated dependencies [62f29bc]
+    - @chimera-engine/renderer@1.0.0-rc.8
+    - @chimera-engine/simulation@1.0.0-rc.8
+    - @chimera-engine/ai@1.0.0-rc.8
+    - @chimera-engine/networking@1.0.0-rc.8
+
 ## 1.0.0-rc.7
 
 ### Patch Changes

@@ -1,5 +1,312 @@
 # @chimera-engine/renderer
 
+## 1.0.0-rc.8
+
+### Minor Changes
+
+- 60e960a: Run the loading beat on the `/game` entry (F92, §4.36): black, an opaque loading cover held for
+  at least its floor, black, then the scene and its HUD together. A game that declares a cover
+  form now gets that sequence on every entry, including one whose critical preload settles before
+  anything could have been shown.
+
+    The mechanism this replaces could not deliver that, and the reason was structural rather than a
+    tuning problem. The route cover painted no background, so it was a glyph over whatever stood
+    behind it; the only lever that could make it visible was easing the entry scrim off, and the
+    scrim is what hides the scene. A wait that settled inside `ROUTE_COVER_REVEAL_GRACE_MS` was
+    therefore dropped unseen, and one that outlived it showed a spinner over a live board with the
+    HUD already up. Measured on 1.0.0-rc.7 with a scaffolded game declaring `'spinner'` and a
+    5000 ms minimum over one critical model: the model settled in ~150 ms, the cover mounted at
+    ~180 ms and was dropped at ~340 ms, and the floor never armed.
+
+    `LoadingBeatCover` is the new surface: opaque `--ch-color-scrim`, filling the VIEWPORT rather
+    than its positioned ancestor, and portaled to the document body on a route so it escapes the
+    stacking context `AppShell` wraps routes in — inside it a cover's `--ch-z-loading-hud` is local
+    while the app scrim is a sibling above, which is why the scrim used to paint over the cover. It
+    rises on an animation frame rather than in its mounting flush, because a transition whose start
+    and end land in one paint is not animated. Unlike the cover it replaces it swallows clicks: it
+    is opaque, so a click during the beat is aimed at something the player cannot see.
+
+    `GameShell` receives the beat's state through the seam added alongside it — the HUD row and the
+    in-game menu host mount at the reveal, under the closing black, so the grid row they add
+    resizes the canvas before the player is looking at it. `sceneCoverOccluded` is now simply the
+    beat not having revealed.
+
+    Removed with the mechanism they served: `ROUTE_COVER_REVEAL_GRACE_MS`,
+    `useRouteCoverRevealGrace`, and the two fade-in effects that shared a latch on this route. The
+    restore-abort exit now asks the curtain where it is rather than tracking whether a fade
+    happened, which is also the correct question for an abort that lands mid-beat.
+
+    Invariant #133 is amended, never renumbered: the floor-on-a-shown-cover clauses and the grace
+    derivation are replaced by the beat, which defers the local reveal and the HUD's mount and
+    nothing else — no mount of `GameShell`, no ack, no host barrier — and adds no release path of
+    its own, since its cover leg waits on the gate's own four settle paths.
+
+- 7a1e654: Make `loadingScreenMinVisibleMs` mean one thing everywhere (F92, §4.36), and sweep the prose
+  that described the old two-resolver split.
+
+    There were two resolvers, and they disagreed on the case a game is most likely to hit. A route
+    entry read `resolveLoadingBeatFloorMs`, where an absent declaration means the engine default of
+    400 ms. An in-game scene hop read `resolveLoadingCoverHoldMs`, where an absent declaration means
+    no floor at all. So a game that declared `loadingScreen` and left the minimum alone got a
+    readable loading screen on the way into the game and a flash on every scene hop — one knob, two
+    answers, and the difference invisible from the registry.
+
+    `resolveLoadingCoverHoldMs` is deleted and every cover site arms
+    `resolveLoadingBeatFloorMs`. A declared, usable minimum was already honoured identically by
+    both; what moves is the fallback: a raised cover with no usable declaration is now held long
+    enough to read, wherever it is raised. A declared `0` still opts down to gate-settle-only —
+    it is the one value that must not reach the fallback — and the floor still collapses under
+    `NEXT_PUBLIC_CHIMERA_E2E`, still does not collapse under `prefers-reduced-motion`, and is still
+    a floor rather than a delay added to a slow load.
+
+    This reaches the within-scene screen switch too (`navigateToScreen`, playfield → tech-tree),
+    which previously had no floor. That wait keeps the held layer and no fade: it is local UI
+    navigation with no curtain owner, so there is nothing to sequence a beat against, and darkening
+    a running game to open a panel would be worse than the flash. It arms the same floor.
+
+    The registration warns were reworded, because one of them was reporting the retired resolver's
+    behaviour: an invalid declaration was said to be "treated as 0" when it now falls back to the
+    engine default — a warn that misreports the outcome sends the author looking for a cover that is
+    on screen the whole time. The over-budget warn now says what the over-budget case actually costs
+    rather than implying it is a fault. Invariant #133's floor-divergence clause is corrected in the
+    same pass: the floors have converged.
+
+- 8c10f64: Run the loading beat on the `/replays/player` entry (F92, §4.36), the same sequence `/game`
+  already runs: black, an opaque cover held at least its floor, black, then the replay and its
+  transport controls together. The cover is full-viewport and painted above the app curtain
+  rather than nested in the playfield wrapper, so the controls arrive with the replay instead of
+  sitting over a frame that has not loaded.
+
+    This route owns no fade of its own, which is why it previously kept a visibility-armed hold
+    instead: a fade-in here can cancel the fade-out `GameStoreBootstrap` runs when a replay's Leave
+    broadcasts a lobby snapshot, and a cancelled fade resolves its promise early, so the navigation
+    chained to it lands mid-ramp. The beat therefore carries TWO suppressors, because the hazard
+    arrives two ways. A Leave clicked on this page latches a ref. A host's Leave from a post-game
+    replay instead arrives as a broadcast `phase: 'lobby'` snapshot with nothing here clicked — and
+    the in-game menu that would have latched the ref is itself withheld until the reveal, so the
+    latch could never fire in time. The route reads the live match's phase for that case, the same
+    term `/game` carries.
+
+    `useCoverExitRamp` is removed with its last consumer: the beat's closing leg returns through
+    black rather than fading a cover out over the scene beneath it. `RouteEntryLoadingCover` is
+    removed with it, having no production caller left; `resolveRouteCoverTarget` and
+    `isRouteCoverGameDeclared` move to `renderer/components/scene/resolveLoadingScreen.ts`, beside
+    the cascade they read, and keep their behaviour and their tests.
+
+    This supersedes clauses of `route-entry-cover-reveal-grace`, whose text otherwise publishes in
+    the same release as this change: the exit ramp it adds
+    is gone from both routes, so a seen cover no longer leaves on a fade over the scene beneath it
+    but through the beat's own black; and the two hooks it names, along with the `exiting` /
+    `exitMs` props it gives `RouteEntryLoadingCover`, no longer exist.
+    The minimum-visible hold survives for `SceneRouter`'s own cover sites, which have not adopted
+    the beat.
+
+- 8b2ce0e: Reveal a route-entry loading cover when the wait turns out to be long, instead of leaving it
+  under the entry scrim for its whole life. `GameScreenRegistry.loadingScreen` and
+  `loadingScreenMinVisibleMs` (§4.36) were structurally inert on lobby→game — the only path a
+  player takes into a match. `GameStoreBootstrap` runs its fade-out to completion before pushing
+  `/game`, so the route mounted under an opaque scrim; the cover resolved and mounted correctly,
+  but the fade-in that clears that scrim was itself gated on the reveal, so the scrim never
+  lifted while the wait ran, the minimum-visible floor never armed, and the player saw black.
+  Measured on 1.0.0-rc.7 with a scaffolded game declaring `'spinner'` and a 2000 ms minimum: the
+  cover mounted, dropped 476 ms later at the settle, and the scrim read opacity 1 at every sample.
+
+    The guard the arming condition encodes is kept — a hold stamped at a cover's mount really would
+    extend a black screen. What changes is when visibility is decided. `ROUTE_COVER_REVEAL_GRACE_MS`
+    (350 ms, exported from `renderer/assets/criticalAssetPreload.ts` beside the preload budget) times
+    a wait spent under an opaque scrim on a fixed timer that reads no gate, no progress and no asset
+    state; if the wait is still running when it fires, the route eases its own scrim off — the
+    entry's one fade-in, brought forward, under the same leave and lobby-phase suppressors — and the
+    floor stamps from that clear. A wait that settles first is unchanged: the scrim stays black, the
+    cover is dropped unseen, one fade-in at the reveal. The declared minimum is what opts an entry
+    in, so a cover declared without one keeps the previous path.
+
+    A cover the player saw now leaves on a fade over the scene already rendering beneath it rather
+    than a cut, on both `/game` and `/replays/player` — one fade instead of returning through black
+    for two — and `sceneCoverOccluded` follows the cover through that ramp so `SceneRouter` surfaces
+    no held layer under a cover that is still painting. A waiting restore keeps its immediate
+    release and takes the cut, since the overlay that aborts it sits below the cover.
+
+    Two hooks are added under `renderer/components/scene/`: `useRouteCoverRevealGrace` (the timer)
+    and `useCoverExitRamp` (the fade-out window). `RouteEntryLoadingCover` gains optional `exiting`
+    and `exitMs` props; with neither supplied its rendered style is unchanged. The exit ramp takes its duration from `screenFadeMs()`,
+    so it collapses to a cut under `NEXT_PUBLIC_CHIMERA_E2E` and under `prefers-reduced-motion`;
+    the minimum itself collapses only under the flag, and deliberately not under reduced motion. `ROUTE_COVER_REVEAL_GRACE_MS` carries no env read of its own and needs none: an
+    entry arms the grace only where the floor resolved positive, and that resolver already returns
+    `0` under the flag, so the flag disarms the grace at its arming condition, and the unit suites
+    are what carry it. No mount, ack, host barrier or
+    release budget is affected (Invariant #133).
+
+    This supersedes clauses of the F90 entry above it. That entry says the faded lobby→game
+    entry is left unchanged, which was true of F90 and is what this change corrects; and it says an
+    absent or `0` minimum keeps every path byte-identical, which now holds of the minimum-visible
+    hold alone — the exit ramp arms on whether a cover was seen, not on the floor, so a game that
+    declares a cover without a minimum gets it. The F90 changeset is
+    left as written — it is consumed but retained by pre-release mode, and its text has already been
+    published in the 1.0.0-rc.6 changelog.
+
+- 0467678: Pass a scene-to-scene swap through black (F92, §4.36), so a player sees the loading screen alone
+  on black and the scene revealed out of black, in the order the route entries already run it:
+  black, the cover, black, the reveal.
+
+    The ORDER matches the routes; the rhythm does not. A route beat ramps its cover out over
+    `fadeMs` against the held curtain, so its closing black is a leg you can see. This site cuts the
+    cover and starts the reveal in the same flush, so its closing black is a single frame.
+
+    Three things stood in the way, and the third is the one that made the other two visible.
+
+    **Nothing painted the black.** `TransitionOverlay` used `--ch-color-surface-overlay` — a
+    translucent dark grey — so the outgoing scene showed through the hold, and `SceneRouter`'s cover
+    layer declared no background at all, which made it a glyph over whatever happened to stand
+    behind it. Both now paint `--ch-color-scrim`, the same black the app-level curtain uses. A cover
+    that declares no backdrop cannot be the only thing on screen without something else being black
+    for it, which is the defect the beat exists to remove rather than to depend on.
+
+    **The curtain left the screen before the reveal.** `TransitionOverlay` returned `null` the
+    moment `sceneTransition` went null, and it is the only painter inside `GameShell`'s own
+    `FadeProvider` — so at the host's commit the black stopped being drawn while the fade opacity
+    was still 1, and the fade-in that followed animated an element that no longer existed. The
+    scene arrived by a hard cut. The overlay now stays mounted for as long as the curtain is up,
+    which is a longer span than the transition's: the reveal is deferred past the commit while a
+    cover serves its minimum.
+
+    **The reveal was spent too early.** `useFadeTransition` faded back in the moment the transition
+    ended, putting the incoming scene on screen underneath a cover still serving its minimum — the
+    model beside the spinner. It now takes `coverUp` and OWES that fade instead, paying it once no
+    cover stands in front of the scene. `SceneRouter` derives the flag from its held layer, which
+    paints at `--ch-z-loading-hud` (150) — above the curtain's `--ch-z-scene-fade` (130).
+
+    A mounted Suspense fallback is deliberately not a term. It renders in the screen slot with no
+    stacking of its own, so it paints BENEATH the curtain: holding the curtain up for it would show
+    black for the whole wait rather than the loading screen that wait exists to explain. And it
+    waits on a `React.lazy` chunk, the one wait Invariant #133 leaves unbounded ("a module chunk is
+    not one"), so deferring on it could park a black screen with no release path. Only a cover that
+    paints above the curtain can hold the reveal.
+
+    Only the reveal waits. The fade-out leg, the preload run, the four-outcome ack and the retry
+    cadence never read `coverUp`, so `engine:scene_ready` fires exactly when it did before and a
+    cosmetic hold on one client can never delay another seat (Invariant #133). The debt is held as
+    state rather than a ref: a ref write schedules no render, so for a swap that raises no cover
+    the payment effect would never be reached and the curtain would stay down.
+
+    This narrows one clause of `minimum-visible-loading-cover-hold`, whose text otherwise publishes
+    in the same release. That entry says `useFadeTransition` — "the `engine:scene_ready` ack, both
+    fade channels and the progress protocol" — ships byte-identical. The ack, the fade-OUT channel
+    and the progress protocol still do, and those are what the claim was protecting. The fade-IN
+    channel is now deferred by design, which is the point of the change; that entry is left as
+    written, being consumed but retained by pre-release mode.
+
+- 62f29bc: Add the primitives behind the unconditional loading beat (F92, §4.36): the presentation
+  sequencer that will run black → the loading cover → black → the reveal on a surface whose
+  cascade resolves a game-declared cover form, the fade-ownership sessions that keep two owners
+  of one curtain from stranding each other, and the floor that keeps an undeclared beat readable.
+
+    `useLoadingBeat` (`renderer/components/scene/useLoadingBeat.ts`) sequences one surface against
+    one curtain. Its loading leg is unconditional on a resolved cover: a gate that settles before
+    the first frame still gets the beat, which is what the knob was always for and what visibility
+    as an arming condition could not deliver on fast hardware. The floor is measured from the
+    moment the cover is fully visible rather than from its mount, so a fade is not spent out of the
+    time a player has to read. The beat reads `gate.ready` and never the settle outcome, so the
+    four settle paths reveal alike; it adds no release path of its own, and an unsettled gate is
+    never revealed by a timer of the beat's. `darkening` ends on the curtain being OBSERVED opaque,
+    which is what lets the same machine serve a route that commands its own fade-out and a scene
+    transition where `useFadeTransition` owns that fade because the ack awaits it. Durations arrive
+    as inputs and the module reads no environment of its own, so the e2e collapse keeps the
+    call-time readers it already had (Invariant #133). Nothing consumes the hook yet.
+
+    `FadeControl` gains `claim(owner)`, returning a `FadeSession` whose `fadeOut`/`fadeIn` go inert
+    once a later claim supersedes it, resolving rather than hanging so a superseded owner can
+    unwind. Starting a fade cancels the one in flight and resolves its promise early, which lets
+    two owners of one provider strand each other — a stale write repainting a screen an exit
+    blacked, or an exit's `await` returning mid-ramp and navigating over a half-faded screen. The
+    bare `fadeOut`/`fadeIn` pair is deliberately left driving the provider directly and is not
+    gated by a claim, so every existing caller is unchanged.
+
+    `resolveLoadingBeatFloorMs` lands in `renderer/components/scene/loadingCoverHold.ts` beside the
+    resolver it later replaces, so no live path changes behaviour in this change. It differs in one
+    respect: an absent or unusable declaration
+    resolves to `DEFAULT_LOADING_BEAT_FLOOR_MS` instead of to nothing, because a beat bounded only
+    by its own two fades is sub-perceptual under `prefers-reduced-motion`, where those fades are
+    cuts. A declared `0` still resolves to `0` — the explicit opt-down to gate-settle-only. It
+    collapses to `0` under `NEXT_PUBLIC_CHIMERA_E2E` on every branch, default included, reading the
+    env at call time; like the hold, it does not collapse under reduced motion.
+
+    This supersedes clauses of the two entries above it, both of which are left as written — pre-release
+    mode retains their published text. From the reveal-grace entry: the mechanism it describes is
+    the one F92 replaces, so its statements that the declared minimum is what opts an entry in,
+    that a wait which settles first is unchanged, and that a seen cover leaves on one fade instead
+    of returning through black for two, all hold only until the surfaces adopt the beat. From the
+    F90 entry: visibility as the arming condition at every consumer, which becomes a resolved cover
+    form instead. No mount, ack, host barrier or release budget is affected by anything here.
+
+### Patch Changes
+
+- 7aa61d4: Run the scene-to-scene hop on `useLoadingBeat`, the same sequencer the route entries use.
+
+    `SceneRouter` served the hop with its own machinery — `useMinimumVisibleHold` plus an epoch that
+    chained one wait's covers onto a single clock — which produced a compatible order without being
+    the same machine. Three things followed from that, and all three are gone.
+
+    The cover was conditional. `readEnteringScene` answered `null` while no fraction had been
+    measured, so a scene declaring no `requiredAssets`, or a game shipping no manifest, hopped with
+    no cover at all while the same registry entering through `/game` got the full beat. The beat
+    arms on the cascade resolving a game-DECLARED cover, which is what the route entries already do:
+    a wait that settles before anything could be counted is exactly the wait a floor exists for. The
+    other side of the same rule is that a registry declaring no cover form now raises no layer at
+    all here, where the old shape raised one with the engine's empty placeholder inside it.
+
+    The rhythm differed. The old site cut its cover and started the reveal in one flush, so its
+    closing black was a single frame; the beat ramps the cover out over `fadeMs` against the curtain
+    first, which is the `loading-out` leg every other cover site runs.
+
+    Two covers spanned one wait. The transition cover dropped at the host's commit and a held COPY
+    stood in for the remainder, swapping `scene-preload-cover` for `scene-held-cover` mid-wait. One
+    cover now spans the whole hop — `LoadingBeatCover`, the same component the route entries mount,
+    with `surface: 'scene'` — so there is nothing to copy. That layer is `position: fixed`, paints
+    its own scrim, swallows clicks (it is opaque and can stand over a committed scene, so a click
+    during the beat is aimed at something the player cannot see), and carries the last measured
+    fraction across the commit, because `useFadeTransition` releases the progress channel there and
+    a cover that outlives the commit would otherwise blank while still standing. A superseding hop
+    starts unmeasured: the channel is released again on the transition KEY changing, so a re-entry
+    to the same scene never opens showing the previous wait's number.
+
+    `useLoadingBeat` gains `ownsReveal`, symmetric with the `ownsDarkening` it already had. The hop
+    passes `false` for both: `useFadeTransition` owns the fade-out because the `engine:scene_ready`
+    ack awaits it, and owns the reveal because it is the hook the transition earned that reveal
+    from. The beat still sequences the reveal — `revealing` is entered on the same terms and
+    `revealed` is what the owner reads — so only the `fadeIn` call moves.
+
+    A code-split chunk is part of a DECLARED hop's wait, folded into `settled` exactly as `/game`
+    and `/replays/player` already fold it. The reveal is therefore deferred across a `React.lazy`
+    chunk, the one wait Invariant #133 leaves unbounded. What makes that safe is the LAYER, not a
+    bound: the beat's own cover stays mounted at `--ch-z-loading-hud`, above the curtain, so a chunk
+    that never resolves parks the player on the game's declared loading screen rather than on black.
+    A hop whose cascade resolves NO cover folds nothing in — it has no layer to stand on that
+    deferral, so its reveal waits on the commit alone and its chunk wait falls back to the Suspense
+    fallback exactly as before. Where there is no layer there is no deferral. The Suspense
+    fallback's own cover is suppressed while the hop's layer stands, so one wait is announced once
+    rather than twice in the accessibility tree.
+
+    The held layer is NOT deleted. A within-scene screen switch — `navigateToScreen`, playfield to
+    tech-tree — has no curtain owner at all: nothing fades, and a beat there would have to black out
+    a running game to open a tech tree. That wait keeps `useMinimumVisibleHold`, which is the only
+    way to floor a Suspense cover whose fallback unmounts the instant its chunk resolves. What went
+    with the convergence is the epoch apparatus, which existed to chain the hop's cover onto the
+    fallback's clock; the beat's `settled` term does that now.
+
+    Nothing host-visible moves: the ack, the fade-out leg, the preload run and the retry cadence are
+    untouched, and the ack fires at the same tick whatever floor the registry declares.
+
+    Three earlier entries in this same pre-release describe the pre-convergence shape and are
+    consumed by this one. `scene-transition-loading-beat`'s rhythm paragraph ("its
+    closing black is a single frame"), its held-layer derivation of `coverUp`, and its "a mounted
+    Suspense fallback is deliberately not a term" paragraph each describe the machine this entry
+    replaces. `minimum-visible-loading-cover-hold`'s held-slot clause names the transition commit
+    among the drops the hold serves; the hold now serves a visible fallback's early unmount alone.
+    `replay-player-loading-beat` says `SceneRouter`'s cover sites "have not adopted the beat"; the
+    hop now has.
+    - @chimera-engine/simulation@1.0.0-rc.8
+
 ## 1.0.0-rc.7
 
 ### Minor Changes
