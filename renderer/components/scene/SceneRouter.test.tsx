@@ -482,6 +482,91 @@ describe('SceneRouter — entering scene asset cover', () => {
         await waitFor(() => expect(readGameOverlayProgress()).toBe('absent'));
     });
 
+    // ── What a game overlay can actually OBSERVE ─────────────────────────────
+    //
+    // The contract admits a set of states; these two cases measure the set the
+    // render site can actually produce. Recorded from INSIDE the overlay's own
+    // render rather than sampled off the DOM, because a state handed over for a
+    // single commit is gone before any poll runs.
+    //
+    // `labelPreloadState` is the compile-time half: it is typed by the CONTRACT
+    // and names exactly the two labels asserted below, so a contract admitting a
+    // third state leaves its value unnarrowed and the `never` binding stops
+    // compiling.
+    it('hands a game overlay a fraction and nothing else across a measured run', async () => {
+        const first = textureRef('arena');
+        const second = textureRef('floor');
+        const assetManager = createStubAssetManager({
+            [String(first)]: 'deferred',
+            [String(second)]: 'deferred',
+        });
+        const assetManifest = stubManifest([first, second]);
+        const observed: PreloadStateLabel[] = [];
+        const registry = {
+            ...plainRegistry(),
+            transitionOverlay: makeGameOverlay(observed),
+        } satisfies GameScreenRegistry;
+
+        const { rerender } = renderRouter(makeTransitioningSnapshot([first, second]), registry, {
+            assetManager,
+            assetManifest,
+        });
+
+        await waitFor(() => expect(assetManager.registered).toHaveLength(1));
+        assetManager.settleDeferred(first);
+        await waitFor(() => expect(readGameOverlayProgress()).toBe('0.5'));
+        assetManager.settleDeferred(second);
+        await waitFor(() => expect(readGameOverlayProgress()).toBe('1'));
+
+        rerender(
+            wrapRouter(makeSnapshot({ tick: 5, sceneTransition: null }), registry, {
+                assetManager,
+                assetManifest,
+            }),
+        );
+        await waitFor(() => expect(readGameOverlayProgress()).toBe('absent'));
+
+        // The wait above pins the state the run ENDS in; this pins the whole
+        // run — two states across every render of it and no third one, so the
+        // `null` the hook publishes to release its channel reaches the overlay
+        // as a withheld prop rather than as a value.
+        expect([...new Set(observed)].sort()).toEqual(['absent', 'fraction']);
+    });
+
+    it('hands a game overlay nothing at all across an unmeasured run', async () => {
+        const observed: PreloadStateLabel[] = [];
+        const registry = {
+            ...plainRegistry(),
+            transitionOverlay: makeGameOverlay(observed),
+        } satisfies GameScreenRegistry;
+        // A fade to WATCH, because a registry supplying an overlay mounts no
+        // engine one — so `data-fade-phase`, the anchor the engine-side cases
+        // wait on, is not on screen here. The run starts on the far side of this
+        // call, so observing it is what keeps the assertion from passing
+        // vacuously over a run that never began.
+        const fade = watchableFade();
+
+        // No manifest: the run measures nothing, so there is no fraction to
+        // report at any point in it — and no separate way to say so either. The
+        // no-op path still reports `1` internally; the hook's gate is what stops
+        // it, and this is the seam that catches the gate going.
+        renderRouter(makeTransitioningSnapshot([textureRef('arena')]), registry, {
+            assetManager: createStubAssetManager(),
+            fadeControl: fade,
+        });
+
+        await waitFor(() => expect(fade.fadeOut).toHaveBeenCalled());
+        // One macrotask drains the preload step's whole microtask chain, which
+        // runs in the same `.then()` as that call resolving.
+        await act(async () => {
+            await new Promise((resolve) => {
+                setTimeout(resolve, 0);
+            });
+        });
+
+        expect([...new Set(observed)]).toEqual(['absent']);
+    });
+
     // The byte-identity claim measured at the WIRED seam, not on
     // `TransitionOverlay` in isolation: the run's own no-op path reports `1`,
     // and a router that passed that on would author "100% preloaded" over a
@@ -617,18 +702,47 @@ function PlainPlayfield(_props: GameScreenProps): React.ReactElement {
 
 /**
  * A game overlay that reports the fraction it was handed, distinguishing an
- * ABSENT prop from a present one — the contract gives those two states different
- * meanings ("no preload running" vs "running, unmeasured").
+ * ABSENT prop from a present one — a fraction and "no measured preload is
+ * running" are the two states the contract gives an overlay.
+ *
+ * `observed` collects every state it is handed, in render order. The DOM
+ * attribute alone cannot carry that: a value the router publishes for a single
+ * commit — the hook's release at the transition's end is exactly that — is gone
+ * before any poll of the rendered tree runs.
  */
-function makeGameOverlay(): (props: TransitionOverlayProps) => React.ReactElement {
-    return (props: TransitionOverlayProps): React.ReactElement => (
-        <div
-            data-testid="game-transition-overlay"
-            data-preload-progress={
-                'preloadProgress' in props ? String(props.preloadProgress) : 'absent'
-            }
-        />
-    );
+function makeGameOverlay(
+    observed: PreloadStateLabel[] = [],
+): (props: TransitionOverlayProps) => React.ReactElement {
+    return (props: TransitionOverlayProps): React.ReactElement => {
+        observed.push(labelPreloadState(props.preloadProgress));
+        return (
+            <div
+                data-testid="game-transition-overlay"
+                data-preload-progress={
+                    'preloadProgress' in props ? String(props.preloadProgress) : 'absent'
+                }
+            />
+        );
+    };
+}
+
+type PreloadStateLabel = 'fraction' | 'absent';
+
+/**
+ * Names the state an overlay was handed. Typed by the CONTRACT rather than by
+ * what the router happens to pass, so the two labels are a claim about the type
+ * as much as about the run: an arm this cannot name leaves `value` unnarrowed
+ * at the `never` binding and fails to compile.
+ */
+function labelPreloadState(value: TransitionOverlayProps['preloadProgress']): PreloadStateLabel {
+    if (typeof value === 'number') {
+        return 'fraction';
+    }
+    if (value === undefined) {
+        return 'absent';
+    }
+    const unreachable: never = value;
+    return unreachable;
 }
 
 /** A game cover that reports the fraction it was handed. */

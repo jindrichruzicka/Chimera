@@ -9,7 +9,7 @@ import {
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { FadeContext, type FadeControl } from '../shell/FadeContext.js';
-import { TransitionOverlay } from './TransitionOverlay.js';
+import { TransitionOverlay, type TransitionOverlayProps } from './TransitionOverlay.js';
 
 const LOCAL_PLAYER = playerId('local-player');
 
@@ -97,14 +97,24 @@ describe('TransitionOverlay', () => {
         ]);
     });
 
-    it('renders a null fraction exactly as it renders an absent one', () => {
-        const { container: absent } = renderOverlay(makeTransitioningSnapshot());
-        const absentHtml = absent.innerHTML;
-        cleanup();
+    // This prop mirrors the game-facing `TransitionOverlayProps` contract's,
+    // and `SceneRouter` feeds both slots from one withheld-or-passed value — so
+    // it admits the same two states and no third. Widened back to `| null`, this
+    // overlay would document a state its only render site strips.
+    it('admits a fraction or an absent prop, and rejects null, at compile time', () => {
+        const snapshot = makeTransitioningSnapshot();
+        const measured: TransitionOverlayProps = { snapshot, preloadProgress: 0.25 };
+        const absent: TransitionOverlayProps = { snapshot };
+        const rejected: TransitionOverlayProps = {
+            snapshot,
+            // @ts-expect-error: an unmeasured wait is an ABSENT prop, not a
+            // `null` one — see the contract field this mirrors.
+            preloadProgress: null,
+        };
 
-        const { container: explicitNull } = renderOverlay(makeTransitioningSnapshot(), null);
-
-        expect(explicitNull.innerHTML).toBe(absentHtml);
+        expect(measured.preloadProgress).toBe(0.25);
+        expect(absent.preloadProgress).toBeUndefined();
+        expect(rejected.preloadProgress).toBeNull();
     });
 
     it('surfaces a measured fraction and follows it across a two-ref scene', () => {
@@ -127,7 +137,7 @@ function readPreloadProgress(): string | null {
 
 function overlayTree(
     snapshot: PlayerSnapshot,
-    preloadProgress?: number | null,
+    preloadProgress?: number,
     fade: FadeControl = fadeControl,
 ): React.ReactElement {
     return (
@@ -142,7 +152,7 @@ function overlayTree(
 
 function renderOverlay(
     snapshot: PlayerSnapshot,
-    preloadProgress?: number | null,
+    preloadProgress?: number,
     fade?: FadeControl,
 ): ReturnType<typeof render> {
     return render(overlayTree(snapshot, preloadProgress, fade));

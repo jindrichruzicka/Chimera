@@ -80,13 +80,15 @@ export interface GameScreenProps {
 export interface TransitionOverlayProps extends GameScreenProps {
     /**
      * Fraction in `[0, 1]` of the entering scene's declared required assets that
-     * have settled, or `null` when the wait is not measured. Absent when no
-     * preload is running.
+     * have settled. Absent whenever no measured fraction exists — a run that
+     * measures nothing (a scene declaring no refs, a game shipping no manifest)
+     * is reported exactly as no run at all, so there is no third state to branch
+     * on.
      *
      * Never `0` as a stand-in for "unmeasured": a bar reading 0% for something
      * nobody counted is a claim the engine will not author on a game's behalf.
      */
-    readonly preloadProgress?: number | null;
+    readonly preloadProgress?: number;
 }
 
 /**

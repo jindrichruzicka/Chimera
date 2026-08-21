@@ -315,9 +315,11 @@ export function SceneRouter({
         fadeInMs: revealFadeMs,
     });
 
-    // WITHHELD, not passed as `null`: the contract reads an absent prop as "no
-    // preload is running" and a `null` one as "running, but unmeasured", and the
-    // hook only ever reports a number for a run that measures something.
+    // WITHHELD, not passed on. `null` is this router's OWN vocabulary for the
+    // overlay channel — the hook reports a number only for a run that measures
+    // something, and releases the channel to `null` at the commit. The contract
+    // has one way to say "no measured fraction", an absent prop, so an overlay
+    // handed a `null` instead would be branching on a state nothing documents.
     const preloadProgressProps = preloadProgress === null ? {} : { preloadProgress };
     const screenProps = {
         snapshot,

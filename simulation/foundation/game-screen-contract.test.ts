@@ -421,17 +421,29 @@ describe('GameScreenRegistry.transitionOverlay', () => {
         expect(registry.transitionOverlay).toBe(Overlay);
     });
 
-    it('leaves preloadProgress optional — a fraction, an explicit null, or absent', () => {
+    // Type legality only — what is legal to WRITE. What a mounted overlay is
+    // actually HANDED is measured at the render seam, in
+    // `SceneRouter.test.tsx`: "hands a game overlay a fraction and nothing else
+    // across a measured run" and its unmeasured twin.
+    it('admits a fraction or an absent prop, and rejects null, at compile time', () => {
         // The ABSENT binding is the killer for making `preloadProgress` required;
         // the assignability case above does not move, because a widened prop
         // interface stays assignable to its own base whichever way it is declared.
         const measured: TransitionOverlayProps = { snapshot, sendAction, preloadProgress: 0.25 };
-        const unmeasured: TransitionOverlayProps = { snapshot, sendAction, preloadProgress: null };
         const absent: TransitionOverlayProps = { snapshot, sendAction };
+        const rejected: TransitionOverlayProps = {
+            snapshot,
+            sendAction,
+            // @ts-expect-error: two states, not three. An unmeasured run is
+            // reported as an absent prop, so a `null` arm here would be a state
+            // no overlay can be handed — and the branch a game wrote for it
+            // would never run.
+            preloadProgress: null,
+        };
 
         expect(measured.preloadProgress).toBe(0.25);
-        expect(unmeasured.preloadProgress).toBeNull();
         expect(absent.preloadProgress).toBeUndefined();
+        expect(rejected.preloadProgress).toBeNull();
     });
 
     it('hands the component it holds a preloadProgress channel', () => {

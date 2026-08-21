@@ -8,14 +8,15 @@ export interface TransitionOverlayProps {
     readonly snapshot: PlayerSnapshot;
     /**
      * Fraction in `[0, 1]` of the entering scene's declared required assets that
-     * have settled. Absent — and `null` is treated identically — when no
-     * measured preload is running.
+     * have settled. Absent when no measured preload is running — the same two
+     * states, spelled the same way, as the game-facing contract this mirrors:
+     * `SceneRouter` feeds both slots from one withheld-or-passed value.
      *
      * Never `0` as a stand-in for "unmeasured": `0` here means 0 of N refs
      * settled. See the identically-named field on the game-facing
      * `TransitionOverlayProps` contract.
      */
-    readonly preloadProgress?: number | null;
+    readonly preloadProgress?: number;
 }
 
 export function TransitionOverlay({
@@ -48,10 +49,10 @@ export function TransitionOverlay({
             data-fade-phase={displayedPhase}
             aria-hidden="true"
             // Handed the raw value, never stringified and never defaulted:
-            // React omits an attribute whose value is `null`/`undefined`, so an
+            // React omits an attribute whose value is `undefined`, so an
             // unmeasured wait leaves the element byte-identical to what it was
             // before this prop existed. `String(...)` would print the word
-            // "null", and `?? 0` would draw an empty bar as a claim nobody
+            // "undefined", and `?? 0` would draw an empty bar as a claim nobody
             // measured.
             data-preload-progress={preloadProgress}
             style={{ ...transitionOverlayStyle, opacity: fade.opacity }}

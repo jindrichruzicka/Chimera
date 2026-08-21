@@ -142,7 +142,7 @@ Game reducers never dispatch from inside themselves. They set a domain event in 
 export function SceneRouter(): JSX.Element;
 ```
 
-`TransitionOverlay.tsx` (engine-provided): a full-screen fade. Games can override it via the `GameScreenRegistry.transitionOverlay` slot. It draws no progress bar and no "Waiting for N player(s)…" status. It does receive the measured fraction and expose it as `data-preload-progress`, handed through raw so an UNMEASURED wait omits the attribute entirely rather than printing `null` or drawing an empty bar as a claim nobody measured; see the component for what it does render.
+`TransitionOverlay.tsx` (engine-provided): a full-screen fade. Games can override it via the `GameScreenRegistry.transitionOverlay` slot. It draws no progress bar and no "Waiting for N player(s)…" status. It does receive the measured fraction and expose it as `data-preload-progress`, handed through raw so an UNMEASURED wait — which the prop states by being ABSENT, its only way to say so — omits the attribute entirely rather than printing the word `undefined` or drawing an empty bar as a claim nobody measured; see the component for what it does render.
 
 #### The barrier's ack waits for the entering scene's assets
 
