@@ -11,7 +11,8 @@
  *
  * What it exports is the calling surface and nothing else: the hooks a game uses
  * (`useSound` to start a voice, `useMusicTrack` for the live-handle verbs,
- * `useSpatialAudio` for the listener pose and moving sources, `useAudioManager` for
+ * `useAudioCues` to observe a voice's playhead, `useSpatialAudio` for the listener
+ * pose and moving sources, `useAudioManager` for
  * the manager itself — Invariant #84 makes the context hook the only sanctioned way
  * to reach it), the provider those hooks read from, the two exported
  * constants a caller names (`MUSIC_PRIORITY`, `DEFAULT_FADE_CURVE`), and the option
@@ -36,6 +37,7 @@
 
 export { useSound } from './useSound';
 export { useMusicTrack, type AudioTrackControls } from './useMusicTrack';
+export { useAudioCues } from './useAudioCues.js';
 export { useSpatialAudio, type SpatialAudioControls } from './useSpatialAudio';
 export { useAudioManager } from './AudioManagerContext.js';
 export { AudioManagerProvider, type AudioManagerProviderProps } from './AudioManagerProvider.js';
@@ -52,12 +54,27 @@ export {
 export type {
     Cue,
     CrossfadeOptions,
+    CueAlignedCrossfadeOptions,
+    CueAlignedFadeOutSpec,
     FadeCurve,
     FadeInSpec,
     FadeOutSpec,
     FadeToSpec,
     LoopRegion,
 } from './Cue';
+
+// The cue OBSERVATION surface: what a handler is handed, and the record it goes in.
+// The three event shapes are exported alongside their union because the union alone
+// cannot annotate one handler — a game extracting `onCue` into a named function would
+// otherwise have to reach for `Extract<CueEvent, { kind: 'cue' }>`, which is not an API.
+// The scheduler behind them stays internal: a game observes cues, it does not step them.
+export type {
+    CueCrossedEvent,
+    CueEndEvent,
+    CueEvent,
+    CueHandlers,
+    CueLoopEvent,
+} from './cueMarkerScheduler.js';
 
 // The spatial OPTION surface only. The resolution internals (`resolveSpatialSpec`,
 // the resolved-spec shapes, the defaults and the hard-cutoff epsilon) stay behind

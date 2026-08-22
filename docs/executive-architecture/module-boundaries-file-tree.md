@@ -315,7 +315,8 @@ chimera/
 │   │   ├── AudioManagerProvider.tsx # Publishes the app-level manager; mounted once by app/providers.tsx
 │   │   ├── EventAudioBinding.ts
 │   │   ├── useSound.ts
-│   │   └── useMusicTrack.ts         # Live-handle verbs (fadeOut/fadeTo/crossfade) bound to the manager
+│   │   ├── useMusicTrack.ts         # The live-handle verbs, bound to the manager
+│   │   └── useAudioCues.ts          # Subscribes a component to a voice's cue/loop/end emissions
 │   ├── input/                       # Keyboard / gamepad input layer (§4.26); public barrel: @chimera-engine/renderer/input
 │   │   ├── InputAction.ts           # InputAction ID namespaces (engine:*, game:*); registry contract
 │   │   ├── InputBindingSchema.ts    # EngineBindings base; GameBindingSchema<T> generic; default bindings

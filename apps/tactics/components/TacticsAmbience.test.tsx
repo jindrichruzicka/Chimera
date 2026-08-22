@@ -11,6 +11,7 @@ import {
     type AudioHandle,
     type AudioManager,
     type CrossfadeOptions,
+    type CueAlignedCrossfadeOptions,
     type PlayOptions,
 } from '@chimera-engine/renderer/audio';
 
@@ -60,10 +61,12 @@ function createManagerDouble(): {
             (_outgoing: AudioHandle, incoming: AssetRef<AudioClipAsset>, _opts: CrossfadeOptions) =>
                 mint(incoming),
         ),
-        // The cue-aligned options type is not on the barrel yet, so the opts parameter is
-        // left to contextual typing rather than annotated the way `crossfade`'s is.
-        crossfadeAtCue: vi.fn((_outgoing: AudioHandle, incoming: AssetRef<AudioClipAsset>) =>
-            mint(incoming),
+        crossfadeAtCue: vi.fn(
+            (
+                _outgoing: AudioHandle,
+                incoming: AssetRef<AudioClipAsset>,
+                _opts: CueAlignedCrossfadeOptions,
+            ) => mint(incoming),
         ),
         fadeOutAtCue: vi.fn(),
         secondsUntilCue: vi.fn(() => null),

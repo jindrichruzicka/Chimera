@@ -8,7 +8,13 @@ import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/conten
 
 import type { AudioHandle, AudioManager } from './AudioManager';
 import { AudioManagerContext } from './AudioManagerContext.js';
-import type { CrossfadeOptions, FadeOutSpec, FadeToSpec } from './Cue';
+import type {
+    CrossfadeOptions,
+    CueAlignedCrossfadeOptions,
+    CueAlignedFadeOutSpec,
+    FadeOutSpec,
+    FadeToSpec,
+} from './Cue';
 import { createAudioManagerSpy } from './__test-support__/AudioManagerStubs.js';
 import { useMusicTrack, type AudioTrackControls } from './useMusicTrack.js';
 
@@ -30,7 +36,9 @@ const TRACK: AudioHandle = {
  */
 const TRACK_VERBS = [
     'crossfade',
+    'crossfadeAtCue',
     'fadeOut',
+    'fadeOutAtCue',
     'fadeTo',
 ] as const satisfies readonly (keyof AudioTrackControls)[];
 
@@ -84,12 +92,48 @@ describe('useMusicTrack', () => {
         expect(incoming).toBe(vi.mocked(audioManager.crossfade).mock.results[0]?.value);
     });
 
-    it('exposes the three live-handle verbs and nothing else the manager carries', () => {
+    it('arms a cue-aligned crossfade through the context manager and returns the incoming handle', () => {
+        // The same mutant as the instant verb's case, and it needs its own fixture: an
+        // arming call that handed back `outgoing` type-checks, and leaves every later
+        // verb aimed at the voice that is about to fade out.
+        const audioManager = createAudioManagerSpy();
+        const { result } = renderHook(() => useMusicTrack(), {
+            wrapper: createWrapper(audioManager),
+        });
+        const opts: CueAlignedCrossfadeOptions = {
+            durationMs: 2000,
+            bus: 'music',
+            loop: true,
+            atCue: { name: 'loopEnd' },
+        };
+
+        const incoming = result.current.crossfadeAtCue(TRACK, NEXT_MUSIC_REF, opts);
+
+        expect(audioManager.crossfadeAtCue).toHaveBeenCalledOnce();
+        expect(audioManager.crossfadeAtCue).toHaveBeenCalledWith(TRACK, NEXT_MUSIC_REF, opts);
+        expect(incoming).toBe(vi.mocked(audioManager.crossfadeAtCue).mock.results[0]?.value);
+    });
+
+    it('arms a cue-aligned fade-out through the context manager', () => {
+        const audioManager = createAudioManagerSpy();
+        const { result } = renderHook(() => useMusicTrack(), {
+            wrapper: createWrapper(audioManager),
+        });
+        const spec: CueAlignedFadeOutSpec = { atCue: { name: 'loopEnd' }, fade: { overMs: 800 } };
+
+        result.current.fadeOutAtCue(TRACK, spec);
+
+        expect(audioManager.fadeOutAtCue).toHaveBeenCalledOnce();
+        expect(audioManager.fadeOutAtCue).toHaveBeenCalledWith(TRACK, spec);
+    });
+
+    it('exposes the five live-handle verbs and nothing else the manager carries', () => {
         // `AudioManager` is structurally assignable to `AudioTrackControls`, so a body of
         // `return audioManager;` typechecks AND delegates correctly — every other case in
         // this file passes on it. What it also hands the component is `play`, `stop`,
-        // `stopAll`, `duck`, `setListener`, `setVoicePosition` and `dispose`, so the
-        // narrowing is a runtime property that only this assertion holds.
+        // `stopAll`, `duck`, `setListener`, `setVoicePosition`, `secondsUntilCue`,
+        // `observeCues` and `dispose`, so the narrowing is a runtime property that only
+        // this assertion holds.
         const audioManager = createAudioManagerSpy();
         const { result } = renderHook(() => useMusicTrack(), {
             wrapper: createWrapper(audioManager),
@@ -112,12 +156,16 @@ describe('useMusicTrack', () => {
         result.current.fadeOut(TRACK, { toEnd: true });
         result.current.fadeTo(TRACK, { to: 0.5, durationMs: 100 });
         result.current.crossfade(TRACK, NEXT_MUSIC_REF, { durationMs: 100 });
+        result.current.crossfadeAtCue(TRACK, NEXT_MUSIC_REF, { durationMs: 100, atCue: 'end' });
+        result.current.fadeOutAtCue(TRACK, { atCue: 'end', fade: { overMs: 100 } });
 
         // `toBe`, not `toEqual`: the claim is that the receiver IS the manager, and two
         // distinct spies are deep-equal.
         expect(vi.mocked(audioManager.fadeOut).mock.contexts[0]).toBe(audioManager);
         expect(vi.mocked(audioManager.fadeTo).mock.contexts[0]).toBe(audioManager);
         expect(vi.mocked(audioManager.crossfade).mock.contexts[0]).toBe(audioManager);
+        expect(vi.mocked(audioManager.crossfadeAtCue).mock.contexts[0]).toBe(audioManager);
+        expect(vi.mocked(audioManager.fadeOutAtCue).mock.contexts[0]).toBe(audioManager);
     });
 
     it('throws outside the provider, having no other source for a manager', () => {

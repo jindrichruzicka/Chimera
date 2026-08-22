@@ -171,10 +171,10 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `import { translationKey } from '@chimera-engine/renderer/i18n/index.js';`,
         },
         {
-            // The public audio barrel (useSound / useMusicTrack /
-            // useAudioManager + the cue and fade option types) is allowed from a
-            // game surface — the subpath that makes the cue/fade/crossfade verbs
-            // reachable by an adopter at all.
+            // The public audio barrel is allowed from a game surface — the subpath
+            // that makes the cue/fade/crossfade verbs reachable by an adopter at
+            // all. What it exports is `renderer/audio/index.ts`'s own header; the
+            // rule is on the specifier, so this case stands whatever that grows.
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
             code: `import { useMusicTrack, MUSIC_PRIORITY } from '@chimera-engine/renderer/audio';`,
         },

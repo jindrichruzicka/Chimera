@@ -95,11 +95,11 @@ describe('@chimera-engine/renderer package surface', () => {
             default: './dist/i18n/index.js',
         });
 
-        // The audio barrel ships the hooks a game needs to start a voice
-        // and to act on one already playing (`useSound`, `useMusicTrack`,
-        // `useAudioManager`) plus the cue/fade option types those calls take. It is
-        // the reachability half of the cue/fade/crossfade design (§4.25) — the verbs
-        // landed on `AudioManager` with no subpath a game could name.
+        // The audio barrel is the reachability half of the cue/fade/crossfade design
+        // (§4.25) — the verbs landed on `AudioManager` with no subpath a game could
+        // name. What it ships is `renderer/audio/index.ts`'s own header, pinned as a
+        // closed set by `audio-barrel-side-effects.test.ts`; this case pins the map
+        // entry, which is what makes that surface reachable at all.
         expect(exportsMap['./audio']).toEqual({
             types: './dist/audio/index.d.ts',
             default: './dist/audio/index.js',

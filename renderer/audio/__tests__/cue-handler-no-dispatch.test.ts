@@ -21,8 +21,9 @@
  *    event. That half is a source read, and `OWNING_MODULES` is the list of what
  *    owns the surface, so it is one place rather than a count repeated in prose.
  *    The pure scheduler declares both the events and the handler record; the frame
- *    sampler calls the handlers and the manager verb takes them from a game. A
- *    module joining that surface joins this list.
+ *    sampler calls the handlers, the manager verb takes them from a game, and the
+ *    React hook is what a game hands them to. A module joining that surface joins
+ *    this list.
  *
  * Neither is a lint rule, deliberately: the rule's own claim is that the shape is
  * the enforcement, and a lint rule is something someone can disable.
@@ -114,7 +115,12 @@ describe('a cue event carries no dispatcher', () => {
 
 describe('the cue surface DECLARES no dispatcher', () => {
     /** Every module that owns part of the cue observation surface. */
-    const OWNING_MODULES = ['cueMarkerScheduler.ts', 'cueSampler.ts', 'AudioManager.ts'] as const;
+    const OWNING_MODULES = [
+        'cueMarkerScheduler.ts',
+        'cueSampler.ts',
+        'AudioManager.ts',
+        'useAudioCues.ts',
+    ] as const;
 
     /** The one that DECLARES the handler record; the others take it as a parameter. */
     const DECLARING_MODULE = 'cueMarkerScheduler.ts';

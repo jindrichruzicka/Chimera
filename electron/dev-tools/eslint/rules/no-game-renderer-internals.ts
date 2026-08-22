@@ -184,9 +184,9 @@ function isPublicI18nBarrelImport(source: string): boolean {
     );
 }
 
-// The engine audio barrel (§4.25): `useSound`, `useMusicTrack`,
-// `useAudioManager`, and the cue/fade option types a game needs to start a voice
-// and to act on one already playing.
+// The engine audio barrel (§4.25). What it exports is `renderer/audio/index.ts`'s
+// own header, pinned by `audio-barrel-side-effects.test.ts`; this rule is about the
+// specifier, so it stays true whatever that surface grows.
 function isPublicAudioBarrelImport(source: string): boolean {
     return (
         source === '@chimera-engine/renderer/audio' ||

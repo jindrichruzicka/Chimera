@@ -44,6 +44,13 @@ import type {
     AudioTrackControls,
     CrossfadeOptions,
     Cue,
+    CueAlignedCrossfadeOptions,
+    CueAlignedFadeOutSpec,
+    CueCrossedEvent,
+    CueEndEvent,
+    CueEvent,
+    CueHandlers,
+    CueLoopEvent,
     DistanceFalloff,
     FadeCurve,
     FadeInSpec,
@@ -76,6 +83,13 @@ interface BarrelTypeSurface {
     readonly trackControls: AudioTrackControls;
     readonly crossfade: CrossfadeOptions;
     readonly cue: Cue;
+    readonly cueAlignedCrossfade: CueAlignedCrossfadeOptions;
+    readonly cueAlignedFadeOut: CueAlignedFadeOutSpec;
+    readonly cueCrossed: CueCrossedEvent;
+    readonly cueEnd: CueEndEvent;
+    readonly cueEvent: CueEvent;
+    readonly cueHandlers: CueHandlers;
+    readonly cueLoop: CueLoopEvent;
     readonly curve: FadeCurve;
     readonly distanceFalloff: DistanceFalloff;
     readonly fadeIn: FadeInSpec;
@@ -109,6 +123,7 @@ describe('@chimera-engine/renderer/audio barrel', () => {
             'AudioManagerProvider',
             'DEFAULT_FADE_CURVE',
             'MUSIC_PRIORITY',
+            'useAudioCues',
             'useAudioManager',
             'useMusicTrack',
             'useSound',
@@ -116,7 +131,7 @@ describe('@chimera-engine/renderer/audio barrel', () => {
         ]);
     });
 
-    it('pulls in exactly fourteen modules, one of them a store', async () => {
+    it('pulls in a closed set of modules, one of them a store', async () => {
         const { inputs, externals } = await analyze({ entryPoint: resolve(AUDIO_DIR, 'index.ts') });
 
         // EXHAUSTIVE, not a denylist. A denylist only rejects the subsystems whoever
@@ -142,6 +157,7 @@ describe('@chimera-engine/renderer/audio barrel', () => {
             'renderer/audio/cueMarkerScheduler.ts',
             'renderer/audio/cueSampler.ts',
             'renderer/audio/index.ts',
+            'renderer/audio/useAudioCues.ts',
             'renderer/audio/useMusicTrack.ts',
             'renderer/audio/useSound.ts',
             'renderer/audio/useSpatialAudio.ts',

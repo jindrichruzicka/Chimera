@@ -9,9 +9,9 @@ that call them were renderer internals with no entry in the `exports` map, and I
 allows a game surface only a public barrel — so the feature had no possible caller outside its
 own tests.
 
-The barrel ships the three hooks (`useSound`, `useMusicTrack`, `useAudioManager`), an
-`AudioManagerProvider`, the `MUSIC_PRIORITY` and `DEFAULT_FADE_CURVE` constants, and the
-full option/handle/manager type surface those calls take; its own header is the index.
+The barrel ships the audio hooks, an `AudioManagerProvider`, the `MUSIC_PRIORITY` and
+`DEFAULT_FADE_CURVE` constants, and the option/handle/manager type surface those calls
+take; its own header is the index.
 `renderer/app/providers.tsx` now mounts the provider instead of the raw context, with no
 behaviour change.
 
