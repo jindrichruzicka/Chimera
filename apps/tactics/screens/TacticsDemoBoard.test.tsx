@@ -58,6 +58,7 @@ function makeAudioManagerDouble(): AudioManager {
         fadeOut: vi.fn(),
         fadeTo: vi.fn(),
         crossfade: vi.fn(),
+        secondsUntilCue: vi.fn(() => null),
         stopAll: vi.fn(),
         duck: vi.fn(),
         setListener: vi.fn(),

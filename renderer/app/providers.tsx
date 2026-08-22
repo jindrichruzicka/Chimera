@@ -172,6 +172,10 @@ function createNoopAudioManager(): AudioManager {
                 valid: false,
             };
         },
+        secondsUntilCue(): number | null {
+            // Nothing plays, so no cue is ever reached — answered, never thrown.
+            return null;
+        },
         stopAll(): void {
             return;
         },

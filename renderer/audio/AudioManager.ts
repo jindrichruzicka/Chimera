@@ -26,6 +26,12 @@ import {
     type SpatialOptions,
 } from './Spatial';
 
+import {
+    nextCueContextTime,
+    voicePlayheadSeconds,
+    type LoopWindowSeconds,
+} from './voicePlayhead.js';
+
 export type { AudioBusId } from './AudioBus';
 
 export interface PlayOptions {
@@ -103,6 +109,26 @@ export interface AudioManager {
         incoming: AssetRef<AudioClipAsset>,
         opts: CrossfadeOptions,
     ): AudioHandle;
+    /**
+     * How many seconds until this voice's playhead next reaches `cue`, or `null` when
+     * nothing in the voice's schedule brings it there.
+     *
+     * The read direction of the cue timeline. It resolves the cue exactly as
+     * `fadeOut({ toCue })` does and names the same arrival, so a countdown agrees with
+     * the transition it is counting down to. The two part company in one place: a voice
+     * whose scheduled end comes first. The fade has to fade something, so it clamps its
+     * ramp to that end; a query is asked whether the cue is coming, and answers that it
+     * is not. RELATIVE by design: a game holds no `AudioContext.currentTime` semantics,
+     * and "how long from now" is what a HUD countdown or an "arm the transition yet?"
+     * check reads.
+     *
+     * `null`, never `0` and never negative: an invalid handle, a voice still loading or
+     * scheduled to start later, one whose playhead has run off the end, a cue outside
+     * the loop window or already passed, and one the voice's own scheduled end arrives
+     * before. Silent throughout, unlike the fade — a query changes nothing audible, and
+     * one that logged would spam a per-frame caller.
+     */
+    secondsUntilCue(handle: AudioHandle, cue: Cue): number | null;
     stopAll(bus?: AudioBusId): void;
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
     /**
@@ -327,12 +353,6 @@ interface CeilingHold {
     readonly bound: number;
     /** Absolute context time the ramp lands, after which {@link VoiceRecord.volume} governs. */
     readonly until: number;
-}
-
-/** A resolved `[loopStart, loopEnd]` region in buffer-local seconds. */
-interface LoopWindowSeconds {
-    readonly startSeconds: number;
-    readonly endSeconds: number;
 }
 
 /** A voice's resolved playback schedule, against a decoded buffer's real duration. */
@@ -758,6 +778,64 @@ export class DefaultAudioManager implements AudioManager {
         };
 
         return handle;
+    }
+
+    /**
+     * Invariant #122's read direction, layered on the same two functions the fade verbs
+     * use: {@link voicePlayheadSeconds} decides whether this voice HAS a playhead at all,
+     * and {@link nextCueContextTime} says when that playhead next reaches the cue.
+     *
+     * The playhead gate is not redundant with the arrival maths. A voice whose scheduled
+     * start is still ahead would otherwise be handed an arrival measured from a start
+     * that has not happened — a positive, plausible countdown on a voice making no sound.
+     *
+     * The cue resolves under END-POINT rules, exactly as `fadeOut({ toCue })` resolves
+     * its own, so a name absent from the sheet clamps to the decoded end rather than
+     * abandoning. Sharing the resolution is what makes this the fade's dual rather than a
+     * second opinion about the same cue.
+     */
+    public secondsUntilCue(handle: AudioHandle, cue: Cue): number | null {
+        const record = this.voices.get(handle.id);
+        if (record === undefined) {
+            return null;
+        }
+
+        const started = startedVoice(record);
+        if (started === null) {
+            return null;
+        }
+
+        const now = this.audioContext.currentTime;
+        if (voicePlayheadSeconds(record, started, now) === null) {
+            return null;
+        }
+
+        const resolution = resolveCue(cue, {
+            sheet: record.sheet,
+            duration: started.bufferDurationSeconds,
+            role: 'endpoint',
+        });
+        // An endpoint never abandons; the fallback keeps the union exhaustive for TS.
+        const cueSeconds =
+            resolution.kind === 'resolved' ? resolution.seconds : started.bufferDurationSeconds;
+
+        const cueContextTime = nextCueContextTime(record, started, cueSeconds, now);
+        if (cueContextTime === null) {
+            return null;
+        }
+
+        // The voice's own end bounds the arrival, and the buffer timeline cannot see it:
+        // a `to`-bounded voice stops before its buffer runs out, and a voice already
+        // fading out has had its end rewritten to the ramp end. Closed at the stop, as
+        // the loop window is closed at `loopEnd`. `fadeOut({ toCue })` meets this same
+        // fact one line later and CLAMPS to it instead — it still has to fade something,
+        // while a query has to say the cue is not coming.
+        const scheduledStopAt = record.scheduledStopAt;
+        if (scheduledStopAt !== null && cueContextTime > scheduledStopAt) {
+            return null;
+        }
+
+        return cueContextTime - now;
     }
 
     public stopAll(bus?: AudioBusId): void {
@@ -2081,70 +2159,6 @@ function describeVoiceTimeline(record: VoiceRecord): string {
     return window === null
         ? `${entry}, not looping`
         : `${entry}, loop window [${window.startSeconds}s, ${window.endSeconds}s]`;
-}
-
-/**
- * The context time the playhead NEXT reaches `cueSeconds`, or `null` when it never will
- * — Invariant #122. Derived from `startedAtContextTime`, `startOffsetSeconds` and the
- * effective loop window at a fixed `playbackRate` of 1, so it needs no timer and no
- * sampling of where the playhead currently is.
- *
- * A looping voice runs its ENTRY pass from `startOffsetSeconds` out to the window end,
- * then repeats `[loopStart, loopEnd]` forever, so a cue is reached in the entry pass,
- * on some later pass, or never. "Never" covers a cue that has gone by on a non-looping
- * voice, one before `loopStart` that only the intro played, and one past `loopEnd` — all
- * the same thing from the caller's side, and all answered with `null`.
- *
- * The window is treated as CLOSED at `loopEnd`: that is where the playhead wraps, so a
- * cue there is reached once per pass rather than never — which is what makes
- * `{ toCue: 'end' }` on a whole-buffer loop a fade over the current pass instead of an
- * instant cut.
- */
-function nextCueContextTime(
-    record: VoiceRecord,
-    started: StartedVoice,
-    cueSeconds: number,
-    now: number,
-): number | null {
-    const startedAt = started.startedAtContextTime;
-    const entrySeconds = record.startOffsetSeconds;
-    const window = record.loopWindowSeconds;
-
-    if (window === null) {
-        // No loop: every position is passed exactly once. A cue BEHIND the entry point
-        // needs no test of its own — it lands before `startedAtContextTime`, which is
-        // necessarily behind `now`, so the one comparison covers both ways of missing.
-        const reachedAt = startedAt + (cueSeconds - entrySeconds);
-        return reachedAt > now ? reachedAt : null;
-    }
-
-    const { startSeconds: loopStart, endSeconds: loopEnd } = window;
-    const period = loopEnd - loopStart;
-
-    if (cueSeconds > loopEnd) {
-        // Past the window: the entry pass runs out to `loopEnd` and every pass after it
-        // wraps there, so the playhead never gets this far.
-        return null;
-    }
-
-    // A cue BEHIND the entry point is not in the entry pass at all, and needs no branch
-    // of its own: this lands it before `startedAtContextTime` — necessarily behind
-    // `now` — so it falls through to the period advance below, which puts it exactly one
-    // period on, at `(loopEnd − entry) + (cue − loopStart)`. The two are the same
-    // instant, and naming the wrap separately would only compute it twice.
-    const reachedAt = startedAt + (cueSeconds - entrySeconds);
-    if (reachedAt > now) {
-        return reachedAt;
-    }
-
-    // At or behind the playhead: the NEXT pass over it, if the loop returns there at
-    // all. A cue before `loopStart` was in the intro and is never replayed; a degenerate
-    // zero-length window replays nothing. `floor(…) + 1` rather than `ceil`, so a cue
-    // the playhead is sitting exactly on waits a whole period — a looping voice always
-    // has a next arrival, and fading over it beats the cut that a cue which never comes
-    // back has to take.
-    const repeats = cueSeconds >= loopStart && period > 0;
-    return repeats ? reachedAt + period * (Math.floor((now - reachedAt) / period) + 1) : null;
 }
 
 /**

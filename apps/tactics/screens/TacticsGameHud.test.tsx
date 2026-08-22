@@ -81,6 +81,7 @@ function createSilentAudioManager(): AudioManager {
         fadeOut: vi.fn(),
         fadeTo: vi.fn(),
         crossfade: () => handle,
+        secondsUntilCue: vi.fn(() => null),
         stopAll: vi.fn(),
         duck: vi.fn(),
         setListener: vi.fn(),

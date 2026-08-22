@@ -24,14 +24,15 @@
  *
  * Mechanism mirrors `renderer/components/ui/__tests__/ui-barrel-side-effects.test.ts`:
  * esbuild bundles the barrel with tree-shaking, and the test asserts over the
- * resolved inputs and external specifiers.
+ * resolved inputs and external specifiers. The bundling itself lives in
+ * `audioGraph.js`, shared with this directory's other graph guard so the two cannot
+ * drift into measuring different graphs.
  */
 
 import { describe, it, expect } from 'vitest';
-import { build, type Plugin } from 'esbuild';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
+import { analyze, AUDIO_DIR } from './audioGraph.js';
 import * as audioBarrel from '../index';
 import type {
     AudioBusId,
@@ -88,48 +89,9 @@ interface BarrelTypeSurface {
     readonly spatial: SpatialOptions;
 }
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-/** Marks every bare specifier external so the bundle holds only in-repo source. */
-const externalizeBareImports: Plugin = {
-    name: 'externalize-bare-imports',
-    setup(b) {
-        // esbuild filters are Go RE2 regexes — the JS `u` flag is rejected.
-        b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, external: true }));
-        b.onResolve({ filter: /\.css$/ }, (args) => ({ path: args.path, external: true }));
-    },
-};
-
-async function analyzeBarrel(
-    entryAbsPath: string,
-): Promise<{ readonly inputs: readonly string[]; readonly externals: ReadonlySet<string> }> {
-    const result = await build({
-        entryPoints: [entryAbsPath],
-        bundle: true,
-        treeShaking: true,
-        write: false,
-        metafile: true,
-        format: 'esm',
-        platform: 'browser',
-        jsx: 'automatic',
-        logLevel: 'silent',
-        plugins: [externalizeBareImports],
-    });
-    const metafile = result.metafile;
-    const externals = new Set<string>();
-    for (const input of Object.values(metafile.inputs)) {
-        for (const imported of input.imports) {
-            if (imported.external) {
-                externals.add(imported.path);
-            }
-        }
-    }
-    return { inputs: Object.keys(metafile.inputs), externals };
-}
-
 /** A forbidden external is the named runtime or any of its subpaths. */
-function importsRuntime(externals: ReadonlySet<string>, name: string): boolean {
-    return [...externals].some((spec) => spec === name || spec.startsWith(`${name}/`));
+function importsRuntime(externals: readonly string[], name: string): boolean {
+    return externals.some((spec) => spec === name || spec.startsWith(`${name}/`));
 }
 
 describe('@chimera-engine/renderer/audio barrel', () => {
@@ -154,8 +116,8 @@ describe('@chimera-engine/renderer/audio barrel', () => {
         ]);
     });
 
-    it('pulls in exactly eleven modules, one of them a store', async () => {
-        const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
+    it('pulls in exactly twelve modules, one of them a store', async () => {
+        const { inputs, externals } = await analyze({ entryPoint: resolve(AUDIO_DIR, 'index.ts') });
 
         // EXHAUSTIVE, not a denylist. A denylist only rejects the subsystems whoever
         // wrote it thought of — `assets/`, `hooks/`, `game/` and `logging/` would all
@@ -166,26 +128,23 @@ describe('@chimera-engine/renderer/audio barrel', () => {
         // this barrel is not import-inert — that singleton is eager, so importing the
         // barrel constructs it.
         //
-        // Compared on the last TWO path segments. esbuild reports inputs relative to
-        // the CWD vitest ran from — repo root for a single-file run, the renderer
-        // package dir under `pnpm -r test` — and those two differ only by a leading
-        // `renderer/`, so a two-segment suffix is as CWD-independent as a bare
-        // basename while still naming which directory each module came from. A
-        // basename alone would let `state/settingsStore.ts` be replaced by any other
-        // `settingsStore.ts` without the set changing.
-        const dirAndFile = inputs.map((input) => input.split('/').slice(-2).join('/')).sort();
-        expect(dirAndFile).toEqual([
-            'audio/AudioBus.ts',
-            'audio/AudioManager.ts',
-            'audio/AudioManagerContext.ts',
-            'audio/AudioManagerProvider.tsx',
-            'audio/Spatial.ts',
-            'audio/audioCueSheet.ts',
-            'audio/index.ts',
-            'audio/useMusicTrack.ts',
-            'audio/useSound.ts',
-            'audio/useSpatialAudio.ts',
-            'state/settingsStore.ts',
+        // Full repo-relative paths: the analyzer pins what they are relative TO, so a
+        // single-file run and `pnpm -r test` report the same spelling. Whole paths
+        // rather than basenames, so `state/settingsStore.ts` cannot be replaced by any
+        // other `settingsStore.ts` without the set changing.
+        expect([...inputs].sort()).toEqual([
+            'renderer/audio/AudioBus.ts',
+            'renderer/audio/AudioManager.ts',
+            'renderer/audio/AudioManagerContext.ts',
+            'renderer/audio/AudioManagerProvider.tsx',
+            'renderer/audio/Spatial.ts',
+            'renderer/audio/audioCueSheet.ts',
+            'renderer/audio/index.ts',
+            'renderer/audio/useMusicTrack.ts',
+            'renderer/audio/useSound.ts',
+            'renderer/audio/useSpatialAudio.ts',
+            'renderer/audio/voicePlayhead.ts',
+            'renderer/state/settingsStore.ts',
         ]);
 
         // Heavy runtimes are externalized rather than bundled, so they never appear as

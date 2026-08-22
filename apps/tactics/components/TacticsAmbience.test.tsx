@@ -60,6 +60,7 @@ function createManagerDouble(): {
             (_outgoing: AudioHandle, incoming: AssetRef<AudioClipAsset>, _opts: CrossfadeOptions) =>
                 mint(incoming),
         ),
+        secondsUntilCue: vi.fn(() => null),
         stopAll: vi.fn(),
         duck: vi.fn(),
         setListener: vi.fn(),

@@ -76,6 +76,8 @@ export interface AudioManager {
         incoming: AssetRef<AudioClipAsset>,
         opts: CrossfadeOptions,
     ): AudioHandle;
+    /** Seconds until the playhead next reaches `cue`, or null when nothing in the voice's schedule brings it there — the read direction of the cue timeline, resolving the cue exactly as fadeOut({ toCue }) does. Relative, silent, and null (never 0) on an invalid, loading, not-yet-started or ended voice, on a cue out of the loop window, and on one the voice's scheduled end arrives before — where the fade clamps to that end instead. */
+    secondsUntilCue(handle: AudioHandle, cue: Cue): number | null;
     stopAll(bus?: AudioBusId): void;
     /** Duck a bus to duckedVolume for durationMs, then restore. */
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;

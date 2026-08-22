@@ -90,6 +90,12 @@
  * param holds at `t0` rather than what it reports there. Those last three run on
  * {@link FakeQuantizedAudioParam} with `equalPower`, because the write-through double and
  * a `linear` ramp each hide the whole defect class on their own.
+ *
+ * `secondsUntilCue` was written against a body that resolves the handle and then answers
+ * `null` unconditionally, so its five `null` cases are green against that baseline and
+ * fence the verb in rather than drive it. The load-bearing reds are the arrival itself —
+ * relative, re-read from the clock, and landing on the instant `fadeOut({ toCue })` ramps
+ * to, which is the one assertion that makes the two directions one answer rather than two.
  */
 
 import {
@@ -3710,6 +3716,228 @@ describe('DefaultAudioManager — fadeOut', () => {
         expect(handle.valid).toBe(false);
         expect(vi.getTimerCount()).toBe(0);
         expect(context.close).toHaveBeenCalledOnce();
+    });
+});
+
+// ─── secondsUntilCue (#118, #122, #126) ─────────────────────────────────────────
+
+describe('DefaultAudioManager — secondsUntilCue', () => {
+    it('answers how long until the playhead next reaches the cue, relatively (#122)', async () => {
+        // Relative rather than absolute: a game holds no `AudioContext.currentTime`
+        // semantics, and "3 s from now" is what a HUD countdown or an "arm the
+        // transition yet?" check reads. Sampled twice so the answer is shown to track
+        // the clock rather than to be a constant resolved once.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        expect(manager.secondsUntilCue(handle, { name: 'chorus' })).toBe(4);
+
+        context.currentTime = 13;
+
+        expect(manager.secondsUntilCue(handle, { name: 'chorus' })).toBe(1);
+    });
+
+    it('lands on the same instant fadeOut({ toCue }) would ramp to (#122)', async () => {
+        // The query is the fade's dual, so the two must agree — a countdown that
+        // disagreed with the transition it is counting down to would be worse than none.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { from: 1 });
+        await flushAudioLoad();
+        context.currentTime = 11;
+
+        const remaining = manager.secondsUntilCue(handle, { name: 'chorus' });
+        manager.fadeOut(handle, { toCue: { name: 'chorus' } });
+
+        expect(remaining).toBe(2);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(11 + 2);
+    });
+
+    it('waits a whole period for a cue the playhead is sitting exactly on (#122)', async () => {
+        // Never `0` and never negative: a looping voice always has a NEXT arrival, and
+        // the one it is on has gone.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+        context.currentTime = 14;
+
+        expect(manager.secondsUntilCue(handle, 4)).toBe(10);
+    });
+
+    it('reaches a cue that sits exactly on loopEnd (#122)', async () => {
+        // The window is CLOSED at `loopEnd`, since that is where the playhead wraps —
+        // treating it as exclusive would make this cue one the voice never reaches.
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { loop: true, loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+
+        expect(manager.secondsUntilCue(handle, { name: 'loopEnd' })).toBe(6);
+    });
+
+    it('answers null for a cue past the loop window, with no warning (#118)', async () => {
+        // The outro at 9 s is past a [2, 6] loop, so the playhead never gets there. The
+        // fade verb warns here because it CUTS the voice off; a query changes nothing
+        // audible, and one that logged would spam a per-frame caller.
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { loop: true, loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        expect(manager.secondsUntilCue(handle, { name: 'outro' })).toBeNull();
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('answers null for a cue before loopStart on a voice that entered after it (#122)', async () => {
+        // Entered at 4 with a [2, 6] loop: the intro was never played, so the cue at 1 s
+        // is not in the entry pass, and the loop never returns below `loopStart`.
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, {
+            loop: true,
+            loopRegion: { start: 2, end: 6 },
+            from: 4,
+        });
+        await flushAudioLoad();
+
+        expect(manager.secondsUntilCue(handle, 1)).toBeNull();
+    });
+
+    it('answers null for a cue a non-looping voice has already passed (#122)', async () => {
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        context.currentTime = 15;
+
+        expect(manager.secondsUntilCue(handle, { name: 'chorus' })).toBeNull();
+    });
+
+    it('lets an unresolvable cue name degrade to the buffer end, in silence (#118)', async () => {
+        // End-point rules, the same ones `fadeOut({ toCue })` resolves under: a cue that
+        // is not in the sheet clamps to the decoded end rather than abandoning. Sharing
+        // the resolution is what keeps the query and the fade answering one question.
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        expect(manager.secondsUntilCue(handle, { name: 'chrous' })).toBe(10);
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('resolves against the decoded duration, not the authoring sheet (#122)', async () => {
+        // The sheet claims 10 s but the clip decodes to 4, so the outro at 9 s clamps to
+        // the real end. Trusting `durationSeconds` would count down to a cue past it.
+        const { manager, ref } = createCuedManager({
+            bufferSeconds: 4,
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        expect(manager.secondsUntilCue(handle, { name: 'outro' })).toBe(4);
+    });
+
+    it('answers null on a voice still loading, not 0 (#122)', async () => {
+        // `play()` has returned but `startVoice` has not run, so there is no playhead to
+        // read. Zero would name the cue as due right now.
+        const { manager, handle, start } = createLoadingVoice({ metadata: THEME_CUE_SHEET });
+
+        expect(manager.secondsUntilCue(handle, { name: 'chorus' })).toBeNull();
+
+        await start();
+
+        expect(manager.secondsUntilCue(handle, { name: 'chorus' })).toBe(4);
+    });
+
+    it('answers null on a voice whose scheduled start is still ahead (#122)', async () => {
+        // A voice started at a FUTURE context time has not begun, so it has no playhead
+        // and no cue timing either. Written onto the record because no verb schedules a
+        // future start yet; the state is the one such a start produces, and the maths
+        // reads it the same way whoever wrote it.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        readVoiceRecord(manager, handle).startedAtContextTime = context.currentTime + 2;
+
+        expect(manager.secondsUntilCue(handle, { name: 'chorus' })).toBeNull();
+    });
+
+    it('is a silent no-op on an invalid handle, like the other handle verbs (#126)', async () => {
+        // Ids are minted monotonically, so a released handle can never name a live
+        // record. Matching `stop`/`fadeOut`/`fadeTo`, that is answered rather than
+        // diagnosed.
+        const { manager, ref } = createCuedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.stop(handle);
+
+        expect(handle.valid).toBe(false);
+        expect(manager.secondsUntilCue(handle, 'end')).toBeNull();
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('answers null for a cue the voice’s scheduled end arrives before (#122)', async () => {
+        // `to: 5` starts the source with a duration, so the playhead stops at buffer
+        // position 5 and never reaches the outro at 9 — the loop window is not the only
+        // thing that can put a cue out of reach.
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { to: 5 });
+        await flushAudioLoad();
+
+        expect(manager.secondsUntilCue(handle, { name: 'outro' })).toBeNull();
+    });
+
+    it('still reaches a cue that lands exactly on the scheduled end (#122)', async () => {
+        // The fence for the test above: the bound is closed at the stop, the same way
+        // the loop window is closed at `loopEnd`. Without it a `to`-bounded voice would
+        // answer null for every cue rather than for the ones past its end.
+        const { manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { to: 5 });
+        await flushAudioLoad();
+
+        expect(manager.secondsUntilCue(handle, 5)).toBe(5);
+    });
+
+    it('answers null once a fade has moved the voice’s end before the cue (#122)', async () => {
+        // A fade-out rewrites `scheduledStopAt` to its ramp end, so this voice is silent
+        // and released a second from now. A HUD counting down four seconds to the chorus
+        // would be counting on a voice that is already leaving.
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { overMs: 1000 });
+
+        expect(manager.secondsUntilCue(handle, { name: 'chorus' })).toBeNull();
+    });
+
+    it('keeps answering while a longer fade still outlasts the cue (#122)', async () => {
+        // The fence for the test above: what matters is where the end lands relative to
+        // the arrival, not that the voice is fading. This one reaches its chorus with a
+        // second to spare.
+        const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+
+        manager.fadeOut(handle, { overMs: 5000 });
+
+        expect(manager.secondsUntilCue(handle, { name: 'chorus' })).toBe(4);
+    });
+
+    it('answers null where fadeOut({ toCue }) truncates to the scheduled end instead (#118)', async () => {
+        // The one place the query and the fade part company, and neither is wrong: the
+        // fade has to fade SOMETHING, so it clamps its ramp to the voice's end; the query
+        // is asked whether the cue is coming, and it is not.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { to: 5 });
+        await flushAudioLoad();
+
+        const remaining = manager.secondsUntilCue(handle, { name: 'outro' });
+        manager.fadeOut(handle, { toCue: { name: 'outro' } });
+
+        expect(remaining).toBeNull();
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(15);
     });
 });
 
