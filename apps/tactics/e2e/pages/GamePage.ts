@@ -168,8 +168,12 @@ export class GamePage {
         this.staminaReadout = page.getByTestId('hud-stamina');
         this.turnStatus = page.getByTestId('tactics-turn-status');
         // The ambience bed (§4.25). Hidden by design — it has no user-facing
-        // control — so `data-track` is the only thing a spec can read; assert
-        // attributes on it, never visibility.
+        // control — so its attributes are all a spec can read; assert on those,
+        // never on visibility. There are two, because there are two facts:
+        // `data-track` is the bed the turn calls for and moves with the turn, and
+        // `data-playing-track` is the bed the handover was armed to reach, which lags
+        // it while an armed swap waits for its cue. Neither says what is audible at
+        // that instant — `TacticsAmbience.tsx`'s header has the two reasons.
         this.ambience = page.getByTestId('tactics-ambience');
         this.commitStatus = page.getByTestId('tactics-commit-status');
         this.revealOverlay = page.getByTestId('tactics-reveal');

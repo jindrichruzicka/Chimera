@@ -3,7 +3,7 @@
  * §4.25 Audio System → Cue, Fade & Crossfade Extensions
  *
  * The feature-review gate's end-to-end proof that Tactics' adoption of cue
- * sheets and `crossfade` works in the real runtime, not just against doubles.
+ * sheets and the bed swap works in the real runtime, not just against doubles.
  *
  * No spec can hear sound, so this one asserts the three things that are actually
  * observable and that together make silence the only remaining failure:
@@ -18,9 +18,12 @@
  *      against the decoded buffer — a disagreement mis-times every cue silently.
  *      `music/` is also a directory no Tactics asset used before, so this doubles
  *      as the protocol-serves-it check.
- *   2. **The crossfade path runs.** The bed follows the turn, so ending a turn puts
- *      the two windows through `AudioManager.crossfade` in opposite directions.
- *      `data-track` is the marker `<TacticsAmbience>` renders for exactly this.
+ *   2. **The turn signal reaches both beds.** The bed follows the turn, so ending a
+ *      turn puts the two windows through the swap in opposite directions.
+ *      `data-track` is the marker `<TacticsAmbience>` renders for exactly this — the
+ *      bed the turn calls for. That the swap is then DEFERRED to the bed's own cue
+ *      rather than cutting across the phrase is a different claim, on a different
+ *      marker, and it belongs to `ambience-cue-aligned.spec.ts`.
  *   3. **Nothing degraded on the way.** Cue resolution is fail-soft by design
  *      (Invariant #118): an unresolvable `{ name }`, or a `from` past the buffer,
  *      abandons the play with ONE warning and playback simply continues silent.
@@ -179,7 +182,7 @@ function audioComplaints(entries: readonly LoggedEntry[]): LoggedEntry[] {
     });
 }
 
-test.describe('Audio smoke — cue sheet + crossfade', () => {
+test.describe('Audio smoke — cue sheet + bed swap', () => {
     test('both ambience beds decode to the duration their cue sheets author', async ({
         hostWindow,
     }) => {
@@ -197,7 +200,7 @@ test.describe('Audio smoke — cue sheet + crossfade', () => {
         }
     });
 
-    test('the bed crossfades in both windows when the turn passes', async ({
+    test('the turn signal reaches the bed in both windows when the turn passes', async ({
         hostWindow,
         clientWindow,
     }) => {
@@ -212,13 +215,14 @@ test.describe('Audio smoke — cue sheet + crossfade', () => {
 
         await hostGame.endTurnButton.click();
 
-        // Each window crossfades in the opposite direction — the swap is driven by the
-        // projected snapshot, not by who clicked.
+        // Each window's bed is called in the opposite direction — driven by the projected
+        // snapshot, not by who clicked. WHEN the handover then happens is
+        // `ambience-cue-aligned.spec.ts`'s claim, not this one's.
         await expect(hostGame.ambience).toHaveAttribute('data-track', 'tense');
         await expect(clientGame.ambience).toHaveAttribute('data-track', 'calm');
     });
 
-    test('no cue resolved fail-soft while the beds started and swapped', async ({
+    test('no cue resolved fail-soft while the beds started and the turn passed', async ({
         hostWindow,
         clientWindow,
     }) => {

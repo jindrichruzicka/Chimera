@@ -63,8 +63,9 @@ function HudProviders({ children }: { readonly children: React.ReactNode }): Rea
  *
  * The HUD mounts `<TacticsAmbience>`, whose `useAudioManager()` THROWS outside a
  * provider (Invariant #83) — so every HUD render needs one, and none of these tests
- * are about audio. `play`/`crossfade` must still return a well-formed handle rather
- * than throw: the ambience effect stores what they return and the next swap fades it.
+ * are about audio. The verbs that hand back a handle must still return a well-formed
+ * one rather than throw: the ambience effect keeps what they return, and the next
+ * swap is armed against it.
  * `TacticsAmbience.test.tsx` owns the assertions on what actually gets called.
  */
 function createSilentAudioManager(): AudioManager {

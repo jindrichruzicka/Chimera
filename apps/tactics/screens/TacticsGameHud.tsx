@@ -117,9 +117,9 @@ export function TacticsGameHud({
     return (
         <>
             {/* The ambience bed (§4.25 — the reference adoption of cue sheets and
-                crossfade). It lives on the HUD because the HUD is mounted for exactly
-                the span the bed should play — the whole of an in-progress match — and
-                already holds the turn signal the bed swaps on. It renders nothing
+                cue-aligned transitions). It lives on the HUD because the HUD is mounted
+                for exactly the span the bed should play — the whole of an in-progress
+                match — and already holds the turn signal the bed follows. It renders nothing
                 visible and so sits outside the footer's layout entirely. */}
             <TacticsAmbience isMyTurn={snapshot.isMyTurn} />
             <footer aria-label={t(HUD_KEYS.hudAriaLabel)} className={styles['hud']}>
