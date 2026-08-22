@@ -303,13 +303,21 @@ describe('Rule MARK-ONCE-PER-STEP — one enormous delta costs one emission per 
     });
 });
 
-// ─── the end of a non-looping voice ─────────────────────────────────────────────
+// ─── the end of a voice ─────────────────────────────────────────────────────────
 
-describe('end — a non-looping voice finished', () => {
+describe('end — a voice finished', () => {
     const cues = cuesOf({ outro: 2 });
 
     it('emits the cues the step crossed, then end last', () => {
         expect(oneStep(cues, null, at(1), at(3, true))).toEqual(['cue:outro', 'end']);
+    });
+
+    it('emits end for a LOOPING voice whose sample says it finished', () => {
+        // What ends a voice belongs to the caller, and a looping one is ended by whatever
+        // bounded it rather than by running out of buffer — so an ended sample arrives
+        // with a loop window still in force, and the wrap rules apply to it as to any
+        // other. Here the step crosses the outro on its way to the bound.
+        expect(oneStep(cues, window(1, 3), at(1.5), at(2.5, true))).toEqual(['cue:outro', 'end']);
     });
 
     it('emits nothing at all on any step after the end', () => {

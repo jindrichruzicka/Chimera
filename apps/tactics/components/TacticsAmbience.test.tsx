@@ -61,6 +61,7 @@ function createManagerDouble(): {
                 mint(incoming),
         ),
         secondsUntilCue: vi.fn(() => null),
+        observeCues: vi.fn(() => () => undefined),
         stopAll: vi.fn(),
         duck: vi.fn(),
         setListener: vi.fn(),

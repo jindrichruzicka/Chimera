@@ -20,9 +20,9 @@
  *    see a parameter added to `CueHandlers` or a second argument added beside the
  *    event. That half is a source read, and `OWNING_MODULES` is the list of what
  *    owns the surface, so it is one place rather than a count repeated in prose.
- *    The list is ONE module today: the pure scheduler declares both the events and
- *    the handler record, and the manager verb and the React hook that will consume
- *    them are not in this tree yet. A module joining that surface joins this list.
+ *    The pure scheduler declares both the events and the handler record; the frame
+ *    sampler calls the handlers and the manager verb takes them from a game. A
+ *    module joining that surface joins this list.
  *
  * Neither is a lint rule, deliberately: the rule's own claim is that the shape is
  * the enforcement, and a lint rule is something someone can disable.
@@ -114,24 +114,37 @@ describe('a cue event carries no dispatcher', () => {
 
 describe('the cue surface DECLARES no dispatcher', () => {
     /** Every module that owns part of the cue observation surface. */
-    const OWNING_MODULES = ['cueMarkerScheduler.ts'] as const;
+    const OWNING_MODULES = ['cueMarkerScheduler.ts', 'cueSampler.ts', 'AudioManager.ts'] as const;
 
-    it.each(OWNING_MODULES)('names no dispatch API in %s', (moduleName) => {
+    /** The one that DECLARES the handler record; the others take it as a parameter. */
+    const DECLARING_MODULE = 'cueMarkerScheduler.ts';
+
+    it.each(OWNING_MODULES)('names no dispatch API anywhere in %s', (moduleName) => {
         const source = codeOf(readFileSync(path.join(here, '..', moduleName), 'utf8'));
 
         // Three floors against a scan that could pass for the wrong reason: the
-        // module must still carry declarations after stripping; the handler record
-        // itself must be among what was read, or the scan would stay green the day
-        // it moved somewhere unlisted; and the phrase the module header uses to SAY
-        // it holds this rule must not survive into what is scanned, or a header
+        // module must still carry declarations after stripping; it must still NAME
+        // the handler record, or the scan would stay green the day its part of the
+        // surface moved somewhere unlisted; and the phrase a module header uses to
+        // SAY it holds this rule must not survive into what is scanned, or a header
         // would satisfy its own scan.
         expect(source).toMatch(/export (interface|type|class|function)/u);
-        expect(source).toMatch(/export interface CueHandlers/u);
+        expect(source).toContain('CueHandlers');
         expect(source).not.toContain('held by parameters');
 
         for (const forbidden of ['SendAction', 'EngineAction', 'dispatch', 'PlayerId', 'tick']) {
             expect(source.toLowerCase(), forbidden).not.toContain(forbidden.toLowerCase());
         }
+    });
+
+    it('reads the module the handler record is declared in', () => {
+        // The scan above accepts a module that merely NAMES `CueHandlers`, which every
+        // consumer does. Without this, the list could lose its declaration site and go
+        // on passing on three consumers of a record nothing here reads.
+        const source = codeOf(readFileSync(path.join(here, '..', DECLARING_MODULE), 'utf8'));
+
+        expect(OWNING_MODULES).toContain(DECLARING_MODULE);
+        expect(source).toMatch(/export interface CueHandlers/u);
     });
 });
 
@@ -141,8 +154,8 @@ describe('the cue surface DECLARES no dispatcher', () => {
  *
  * Crude in a known direction: it has no notion of string or regex literals, so a
  * `//` inside one is eaten and a `/*` inside one eats forward to the next close.
- * The module holds neither, and the floors above catch a strip that removed real
- * declarations.
+ * The floors above are what catch a strip that removed real declarations, in
+ * whichever module of the list it happened.
  */
 function codeOf(source: string): string {
     return source.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/(^|[^:])\/\/.*$/gmu, '$1');

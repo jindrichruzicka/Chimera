@@ -26,6 +26,13 @@ import {
     type SpatialOptions,
 } from './Spatial';
 
+import { compileCueSheet, type CueHandlers } from './cueMarkerScheduler.js';
+import {
+    browserFrameSource,
+    CueSampler,
+    type FrameSource,
+    type VoiceCueReading,
+} from './cueSampler.js';
 import {
     nextCueContextTime,
     voicePlayheadSeconds,
@@ -129,6 +136,27 @@ export interface AudioManager {
      * one that logged would spam a per-frame caller.
      */
     secondsUntilCue(handle: AudioHandle, cue: Cue): number | null;
+    /**
+     * Observe this voice's `cue` / `loop` / `end` emissions until the returned
+     * unsubscribe is called; a no-op unsubscribe on an invalid or released handle.
+     *
+     * Frame-sampled, so an emission carries at most one frame of jitter — observation
+     * is for reacting to a musical moment (a HUD beat, a flourish, a decision), not for
+     * landing one. Anything that must be sample-accurate is scheduled instead, because
+     * a callback that fires a frame late and then starts a crossfade puts the
+     * transition a frame off the beat.
+     *
+     * The unsubscribe is the return value rather than a paired `stopObserving(handle)`
+     * verb: it makes a React binding a one-line effect, and it leaves no way to name a
+     * subscription that has already gone.
+     *
+     * A voice still LOADING may be observed — that is the order a binding made beside
+     * `play()` sees it in — and its scheduler is seated when it starts, at the position
+     * it enters the buffer at. Whatever ends the voice ends the observation with one
+     * final `end`: a natural finish, `stop`, `stopAll`, preemption, or a load that never
+     * produced a source. `dispose()` is the exception and cancels rather than ends.
+     */
+    observeCues(handle: AudioHandle, handlers: CueHandlers): () => void;
     stopAll(bus?: AudioBusId): void;
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
     /**
@@ -174,6 +202,12 @@ export interface AudioManagerOptions {
     readonly audioContext?: AudioContext;
     readonly busOptions?: AudioBusOptions;
     readonly poolSize?: number;
+    /**
+     * The clock the cue sampler's frame chain runs on. Defaults to
+     * `requestAnimationFrame`; injected the same way and for the same reason as
+     * {@link audioContext}, so a test drives frames instead of waiting for them.
+     */
+    readonly frameSource?: FrameSource;
 }
 
 /**
@@ -380,6 +414,11 @@ interface StartedVoice {
     readonly bufferDurationSeconds: number;
 }
 
+/** The unsubscribe {@link DefaultAudioManager.observeCues} hands back when it refuses. */
+const NO_CUE_OBSERVATION = (): void => {
+    return;
+};
+
 const DEFAULT_POOL_SIZE = 32;
 const DEFAULT_BUS_ID: AudioBusId = 'sfx';
 const DEFAULT_PRIORITY = 0;
@@ -434,6 +473,7 @@ export class DefaultAudioManager implements AudioManager {
     private readonly buses = new Map<AudioBusId, AudioBus>();
     private readonly voices = new Map<string, VoiceRecord>();
     private readonly poolSize: number;
+    private readonly cueSampler: CueSampler;
     private disposed = false;
     private nextHandleId = 0;
     private nextSequence = 0;
@@ -444,6 +484,10 @@ export class DefaultAudioManager implements AudioManager {
     ) {
         this.audioContext = options.audioContext ?? createAudioContext();
         this.poolSize = normalizePoolSize(options.poolSize);
+        this.cueSampler = new CueSampler({
+            frameSource: options.frameSource ?? browserFrameSource,
+            readVoice: (voiceId) => this.readCuePlayhead(voiceId),
+        });
         this.createBuses(options.busOptions);
     }
 
@@ -838,6 +882,80 @@ export class DefaultAudioManager implements AudioManager {
         return cueContextTime - now;
     }
 
+    /**
+     * The observation half of the cue timeline, sampled once per frame by
+     * {@link CueSampler} — which owns the chain, and exists only while an observation
+     * does. Nothing is scheduled here: a cue firing changes no audio.
+     *
+     * Refused for a handle that names no live voice, exactly as `stop`, `fadeOut` and
+     * `setVoicePosition` refuse one, and silently for the same reason — a stale handle is
+     * an ordinary thing for a caller to hold, not a defect worth a warning.
+     */
+    public observeCues(handle: AudioHandle, handlers: CueHandlers): () => void {
+        const record = this.voices.get(handle.id);
+        if (record === undefined) {
+            return NO_CUE_OBSERVATION;
+        }
+
+        // Compiled lazily: the sheet is a property of the CLIP, so the second observer of
+        // a voice joins the list the first one's compile produced.
+        return this.cueSampler.observe(handle.id, () => compileCueSheet(record.sheet), handlers);
+    }
+
+    /**
+     * Where one observed voice's playhead is, for the frame being sampled — or `null`
+     * when there is nothing to sample.
+     *
+     * The scheduler steps on the UNWRAPPED position: the entry point plus elapsed context
+     * time, which {@link voicePlayheadSeconds} computes and then FOLDS into the loop
+     * window. The fold is the one thing a cue step must not be handed, so the timeline
+     * facts are read here directly, and the two bounds that decide whether there is a
+     * playhead at all are applied as the manager's own:
+     *
+     * - A start still AHEAD of the clock has none. Subtracting anyway would report a
+     *   position behind the entry point, and the first real step would then sweep a
+     *   stretch of buffer the voice was never in.
+     * - The voice's SCHEDULED end is where it stops sounding, so it is where observation
+     *   ends. {@link voicePlayheadSeconds} deliberately leaves that bound to whoever owns
+     *   it, and this is that owner: it is an absolute context time the manager writes and
+     *   rewrites — a `to` bound at the start, a fade-out's ramp end later — rather than a
+     *   fact about the buffer. `secondsUntilCue` applies the same one, so a countdown and
+     *   the emission it counts down to agree about when the voice is over. It also covers
+     *   the decoded buffer's own end, which every non-looping voice is given a scheduled
+     *   stop at — so a cue an authoring sheet places past the decode is never swept.
+     */
+    private readCuePlayhead(voiceId: string): VoiceCueReading | null {
+        const record = this.voices.get(voiceId);
+        if (record === undefined) {
+            return null;
+        }
+
+        const started = startedVoice(record);
+        if (started === null) {
+            return null; // Still loading: nothing to seat a scheduler from yet.
+        }
+
+        const startedAt = started.startedAtContextTime;
+        const now = this.audioContext.currentTime;
+        if (now < startedAt) {
+            return null;
+        }
+
+        const stopAt = record.scheduledStopAt;
+        // Closed at the stop, as the loop window is closed at `loopEnd`: the playhead
+        // reaches that position, so a cue sitting exactly on it sounds on the step that
+        // ends the voice.
+        const reachedStop = stopAt !== null && now >= stopAt;
+        const at = reachedStop ? stopAt : now;
+        return {
+            sample: {
+                unwrappedSeconds: record.startOffsetSeconds + (at - startedAt),
+                ended: reachedStop,
+            },
+            loopWindow: record.loopWindowSeconds,
+        };
+    }
+
     public stopAll(bus?: AudioBusId): void {
         const records = Array.from(this.voices.values()).filter(
             (record) => bus === undefined || record.handle.bus === bus,
@@ -951,6 +1069,11 @@ export class DefaultAudioManager implements AudioManager {
         }
 
         this.disposed = true;
+        // Before the releases below, which is what makes disposal cancel the sampler
+        // rather than end every observation through it: the voices did not finish, and
+        // an observer being torn down alongside the manager has nothing to do with an
+        // `end`. `stopAll()`, the session-end call an observer outlives, still emits one.
+        this.cueSampler.dispose();
         this.stopAll();
         for (const busId of BUS_IDS) {
             this.getBus(busId).dispose();
@@ -1293,6 +1416,13 @@ export class DefaultAudioManager implements AudioManager {
             disconnectNode(pannerNode);
             record.pannerNode = null;
         }
+
+        // Last, and here rather than in each verb: this is the one release path every
+        // way of ending a voice funnels through (Invariant #119), so it is the one place
+        // an observation can be ended exactly once — and the graph is fully torn down
+        // before a game handler runs, so an `onEnd` that plays another voice cannot find
+        // this one half-disconnected.
+        this.cueSampler.endVoice(record.handle.id);
     }
 
     private connectVoice(

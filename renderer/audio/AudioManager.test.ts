@@ -119,6 +119,8 @@ import {
 import type { AssetManager, ResolvedAsset } from '../assets/AssetManager';
 import type { AudioListenerPose } from './Spatial';
 import { useSettingsStore } from '../state/settingsStore';
+import { FrameSourceDouble, recordCueEvents } from './__test-support__/CueObservationDoubles';
+import type { FrameSource } from './cueSampler';
 import {
     createAudioManager,
     DefaultAudioManager,
@@ -3941,6 +3943,363 @@ describe('DefaultAudioManager — secondsUntilCue', () => {
     });
 });
 
+// ─── observeCues (#64, #119, #122) ──────────────────────────────────────────────
+
+describe('DefaultAudioManager — observeCues', () => {
+    it('schedules no frame until the first observation, and none after the last', async () => {
+        // The whole point of the on-demand chain: a game that never observes a cue pays
+        // no frame cost, and one that stops observing stops paying again.
+        const { frames, manager, ref } = createObservedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        expect(frames.requestCount).toBe(0);
+
+        const unsubscribe = manager.observeCues(handle, {});
+
+        expect(frames.requestCount).toBe(1);
+
+        unsubscribe();
+
+        expect(frames.pendingCount).toBe(0);
+    });
+
+    it('returns a callable no-op for a released handle, and observes nothing', async () => {
+        // Matches the other handle verbs: voice ids are minted monotonically, so a stale
+        // handle can never name a live record, and the caller still gets an unsubscribe
+        // it can call unconditionally.
+        const { frames, manager, ref } = createObservedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        manager.stop(handle);
+        const observer = recordCueEvents();
+
+        const unsubscribe = manager.observeCues(handle, observer.handlers);
+        unsubscribe();
+
+        expect(handle.valid).toBe(false);
+        expect(frames.requestCount).toBe(0);
+        expect(observer.events).toEqual([]);
+    });
+
+    it('emits what the context clock carried the playhead across, in order (#122)', async () => {
+        // A [2, 6] loop entered from the top of the buffer: the intro pass reaches
+        // `loopStart` and the chorus, then the step from 5 to 7 crosses `loopEnd`, wraps,
+        // and lands back on `loopStart` — one batch carrying both halves of the wrap.
+        const { context, frames, manager, ref } = createObservedManager({
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref, { loop: true, loopRegion: { start: 2, end: 6 } });
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        frames.fire();
+        context.currentTime = 13;
+        frames.fire();
+        context.currentTime = 15;
+        frames.fire();
+        context.currentTime = 17;
+        frames.fire();
+
+        expect(observer.events).toEqual([
+            { kind: 'cue', name: 'loopStart' },
+            { kind: 'cue', name: 'chorus' },
+            { kind: 'cue', name: 'loopEnd' },
+            { kind: 'loop' },
+            { kind: 'cue', name: 'loopStart' },
+        ]);
+    });
+
+    it('samples the audio clock rather than the wall clock or a timer (#122)', async () => {
+        // Five seconds of wall clock with the context clock held still must move the
+        // playhead nowhere: a sampler on `Date.now()` or a `setInterval` would emit here,
+        // and a suspended `AudioContext` is exactly that state in the wild.
+        const { context, frames, manager, ref } = createObservedManager({
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        const dateNow = vi.spyOn(Date, 'now');
+        manager.observeCues(handle, observer.handlers);
+
+        frames.fire();
+        vi.advanceTimersByTime(5000);
+        frames.fire();
+
+        expect(observer.events).toEqual([]);
+        expect(vi.getTimerCount()).toBe(0);
+
+        context.currentTime = 15;
+        frames.fire();
+
+        expect(observer.events).toEqual([
+            { kind: 'cue', name: 'loopStart' },
+            { kind: 'cue', name: 'chorus' },
+        ]);
+        expect(dateNow).not.toHaveBeenCalled();
+        dateNow.mockRestore();
+    });
+
+    it('gives two observers of one voice every emission, and one leaving leaves the other', async () => {
+        const { context, frames, manager, ref } = createObservedManager({
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const leaving = recordCueEvents();
+        const staying = recordCueEvents();
+        const unsubscribe = manager.observeCues(handle, leaving.handlers);
+        manager.observeCues(handle, staying.handlers);
+
+        frames.fire();
+        context.currentTime = 13;
+        frames.fire();
+        unsubscribe();
+        context.currentTime = 15;
+        frames.fire();
+
+        expect(leaving.events).toEqual([{ kind: 'cue', name: 'loopStart' }]);
+        expect(staying.events).toEqual([
+            { kind: 'cue', name: 'loopStart' },
+            { kind: 'cue', name: 'chorus' },
+        ]);
+    });
+
+    it('observes a voice still loading, and seats it where it starts from', async () => {
+        // The order a React binding takes: `play()` returns a handle for a voice that has
+        // not decoded yet, and the observation is made in the same turn. Entering at 4 s,
+        // the voice never plays the cues behind it, so a scheduler seated at 0 on the
+        // frames it spent loading would fire three of them the moment it started.
+        const { context, frames, manager, ref } = createObservedManager({
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref, { from: 4 });
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        frames.fire();
+        await flushAudioLoad();
+        frames.fire();
+        context.currentTime = 12;
+        frames.fire();
+
+        expect(observer.events).toEqual([{ kind: 'cue', name: 'loopEnd' }]);
+    });
+
+    it('takes no sample from a voice whose start is still ahead of the clock (#122)', async () => {
+        // A start that has not happened has no playhead. Subtracting anyway would put the
+        // sample BEHIND the entry point and make the first real step sweep the whole
+        // stretch the voice was never in.
+        const { context, frames, manager, ref } = createObservedManager({
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        writeVoiceIntents(manager, handle, { startedAtContextTime: 14 });
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        frames.fire();
+        context.currentTime = 16;
+        frames.fire();
+        context.currentTime = 19;
+        frames.fire();
+
+        expect(observer.events).toEqual([{ kind: 'cue', name: 'chorus' }]);
+    });
+
+    it('ends a voice its playhead ran past, after the cues inside the DECODED buffer', async () => {
+        // The authoring sheet claims 10 s and the decode is 8, so the outro at 9 s is a
+        // cue this clip never sounds — the final step sweeps to the buffer's end rather
+        // than to the unwrapped position, which would carry the playhead over it.
+        const { context, frames, manager, ref } = createObservedManager({
+            bufferSeconds: 8,
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        frames.fire();
+        context.currentTime = 25;
+        frames.fire();
+
+        expect(observer.events).toEqual([
+            { kind: 'cue', name: 'loopStart' },
+            { kind: 'cue', name: 'chorus' },
+            { kind: 'cue', name: 'loopEnd' },
+            { kind: 'end' },
+        ]);
+        expect(frames.pendingCount).toBe(0);
+    });
+
+    it('ends a voice at its scheduled stop rather than sweeping past it (#122)', async () => {
+        // `to: 5` stops the voice at buffer position 5, which the BUFFER timeline cannot
+        // see: the chorus at 4 sounds, and `loopEnd` at 6 and the outro at 9 never do.
+        // The same bound `secondsUntilCue` answers null against, applied to the emission
+        // rather than to the countdown.
+        const { context, frames, manager, ref } = createObservedManager({
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref, { to: 5 });
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        frames.fire();
+        context.currentTime = 20;
+        frames.fire();
+
+        expect(observer.events).toEqual([
+            { kind: 'cue', name: 'loopStart' },
+            { kind: 'cue', name: 'chorus' },
+            { kind: 'end' },
+        ]);
+        expect(frames.pendingCount).toBe(0);
+    });
+
+    it('ends a voice on the frame that lands exactly on its scheduled stop (#122)', async () => {
+        // The stop instant belongs to the voice, as `loopEnd` belongs to the pass that
+        // reaches it: the playhead is AT 5 s there and the voice is over. Treating the
+        // instant as still playing would put the end a frame late.
+        const { context, frames, manager, ref } = createObservedManager({
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref, { to: 5 });
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        frames.fire();
+        context.currentTime = 15;
+        frames.fire();
+
+        expect(observer.events).toEqual([
+            { kind: 'cue', name: 'loopStart' },
+            { kind: 'cue', name: 'chorus' },
+            { kind: 'end' },
+        ]);
+    });
+
+    it('ends a LOOPING voice where its to-cue bound falls (#122)', async () => {
+        // `to` on a looping voice bounds ELAPSED PLAY DURATION rather than a buffer
+        // window, so what ends this one is the bound — it never runs out of buffer at all.
+        // An `end` is not a non-looping voice's alone.
+        const { context, frames, manager, ref } = createObservedManager({
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref, { loop: true, loopRegion: { start: 2, end: 6 }, to: 5 });
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        frames.fire();
+        context.currentTime = 16;
+        frames.fire();
+
+        expect(observer.events).toEqual([
+            { kind: 'cue', name: 'loopStart' },
+            { kind: 'cue', name: 'chorus' },
+            { kind: 'end' },
+        ]);
+        expect(frames.pendingCount).toBe(0);
+    });
+
+    it('emits end exactly once when the voice finishes naturally (#119)', async () => {
+        // The native `onended` release and the frame that sees the playhead run off are
+        // separate turns, so both reach an observation that has to end exactly once.
+        const { context, frames, manager, ref } = createObservedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+        frames.fire();
+
+        expectSource(context, 0).finish();
+
+        expect(observer.events).toEqual([{ kind: 'end' }]);
+        expect(frames.pendingCount).toBe(0);
+
+        frames.fire();
+
+        expect(observer.events).toEqual([{ kind: 'end' }]);
+    });
+
+    it('emits end when the voice is stopped (#119)', async () => {
+        const { frames, manager, ref } = createObservedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        manager.stop(handle);
+
+        expect(observer.events).toEqual([{ kind: 'end' }]);
+        expect(frames.pendingCount).toBe(0);
+    });
+
+    it('emits end when the voice is preempted (#123)', async () => {
+        const created = createObservedManager({ poolSize: 1 });
+        const handle = created.manager.play(created.ref);
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        created.manager.observeCues(handle, observer.handlers);
+
+        playPooledVoice(created, 'blip');
+
+        expect(observer.events).toEqual([{ kind: 'end' }]);
+        expect(created.frames.pendingCount).toBe(0);
+    });
+
+    it('emits end when the voice never starts at all', async () => {
+        // A load that rejects releases a voice that has no source and no playhead. The
+        // observation still has to be closed, or an observer waits on a track that will
+        // never play a note.
+        const { frames, manager } = createObservedManager();
+        const handle = manager.play(audioRef('audio/sfx/missing.ogg'));
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        await flushAudioLoad();
+
+        expect(observer.events).toEqual([{ kind: 'end' }]);
+        expect(frames.pendingCount).toBe(0);
+    });
+
+    it('ends every observed voice on stopAll (#64)', async () => {
+        const { frames, manager, ref } = createObservedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        manager.stopAll();
+
+        expect(observer.events).toEqual([{ kind: 'end' }]);
+        expect(frames.pendingCount).toBe(0);
+    });
+
+    it('cancels the chain on dispose, without ending the voices under it (#64)', async () => {
+        // The session-end call ends voices an observer outlives; disposal does not. The
+        // graph is going away under the observer rather than a track finishing, and a
+        // React observer being unmounted alongside the manager can do nothing with it.
+        const { frames, manager, ref } = createObservedManager();
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        manager.dispose();
+
+        expect(frames.cancelled).toEqual([1]);
+        expect(frames.pendingCount).toBe(0);
+        expect(observer.events).toEqual([]);
+    });
+});
+
 // ─── fadeTo (#116, #120, #121) ──────────────────────────────────────────────────
 
 describe('DefaultAudioManager — fadeTo', () => {
@@ -5747,17 +6106,22 @@ describe('scheduleGainRamp', () => {
     });
 });
 
-function createManager(options: { readonly poolSize?: number } = {}): {
+function createManager(
+    options: { readonly poolSize?: number; readonly frameSource?: FrameSource } = {},
+): {
     readonly assetManager: AssetManagerDouble;
     readonly context: FakeAudioContext;
     readonly manager: DefaultAudioManager;
 } {
     const assetManager = new AssetManagerDouble();
     const context = new FakeAudioContext();
-    const managerOptions: AudioManagerOptions =
-        options.poolSize === undefined
-            ? { audioContext: asAudioContext(context) }
-            : { audioContext: asAudioContext(context), poolSize: options.poolSize };
+    // Spread-omitted rather than passed as `undefined`: `exactOptionalPropertyTypes`
+    // makes an explicitly-undefined option a different thing from an absent one.
+    const managerOptions: AudioManagerOptions = {
+        audioContext: asAudioContext(context),
+        ...(options.poolSize === undefined ? null : { poolSize: options.poolSize }),
+        ...(options.frameSource === undefined ? null : { frameSource: options.frameSource }),
+    };
     const manager = new DefaultAudioManager(assetManager, managerOptions);
     managers.push(manager);
     return { assetManager, context, manager };
@@ -5817,6 +6181,7 @@ function createAudioBuffer(name: string, durationSeconds = 1): AudioBuffer {
 function createCuedManager(
     options: {
         readonly bufferSeconds?: number;
+        readonly frameSource?: FrameSource;
         readonly metadata?: unknown;
         readonly poolSize?: number;
         /** Give the voice a gain whose `value` cannot see same-turn automation. */
@@ -5828,10 +6193,10 @@ function createCuedManager(
     readonly manager: DefaultAudioManager;
     readonly ref: AssetRef<AudioClipAsset>;
 } {
-    const created =
-        options.poolSize === undefined
-            ? createManager()
-            : createManager({ poolSize: options.poolSize });
+    const created = createManager({
+        ...(options.poolSize === undefined ? null : { poolSize: options.poolSize }),
+        ...(options.frameSource === undefined ? null : { frameSource: options.frameSource }),
+    });
     // Set after the constructor, so the voice's own stage-1 gain is created quantized
     // while the four bus gains stay on the ordinary double.
     created.context.quantizedGainParams = options.quantizedGainParams ?? false;
@@ -5842,6 +6207,29 @@ function createCuedManager(
     }
     created.assetManager.resolve(ref, createAudioBuffer('theme', options.bufferSeconds ?? 10));
     return { ...created, ref };
+}
+
+/**
+ * A cued manager whose cue sampler runs on a frame source the test drives, so every
+ * assertion about the chain is about frames the test asked for. Nothing here installs a
+ * `requestAnimationFrame`: the manager takes the source as an option for exactly the
+ * reason it takes the `AudioContext` as one.
+ */
+function createObservedManager(
+    options: {
+        readonly bufferSeconds?: number;
+        readonly metadata?: unknown;
+        readonly poolSize?: number;
+    } = {},
+): {
+    readonly assetManager: AssetManagerDouble;
+    readonly context: FakeAudioContext;
+    readonly frames: FrameSourceDouble;
+    readonly manager: DefaultAudioManager;
+    readonly ref: AssetRef<AudioClipAsset>;
+} {
+    const frames = new FrameSourceDouble();
+    return { ...createCuedManager({ ...options, frameSource: frames }), frames };
 }
 
 /**

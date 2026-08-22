@@ -87,7 +87,11 @@ export interface CuePoint {
 export interface CuePlayheadSample {
     /** `startOffsetSeconds + (now − startedAtContextTime)`, before any loop fold. */
     readonly unwrappedSeconds: number;
-    /** Whether the voice has finished — a non-looping voice carried past its buffer. */
+    /**
+     * Whether this sample is the voice's LAST. What ends a voice belongs to the caller,
+     * which is why this is a fact ON the sample rather than something derived here: a
+     * looping voice ends too, when whatever bounded it arrives.
+     */
     readonly ended: boolean;
 }
 
@@ -103,7 +107,7 @@ export interface CueLoopEvent {
     readonly kind: 'loop';
 }
 
-/** A non-looping voice finished. Always the last event of its batch. */
+/** The voice finished. Always the last event of its batch. */
 export interface CueEndEvent {
     readonly kind: 'end';
 }
@@ -122,7 +126,7 @@ export interface CueHandlers {
     readonly onCue?: (event: CueCrossedEvent) => void;
     /** The playhead wrapped back to the loop window's start. */
     readonly onLoop?: (event: CueLoopEvent) => void;
-    /** A non-looping voice finished. */
+    /** The voice finished. */
     readonly onEnd?: (event: CueEndEvent) => void;
 }
 

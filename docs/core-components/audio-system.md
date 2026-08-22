@@ -78,6 +78,8 @@ export interface AudioManager {
     ): AudioHandle;
     /** Seconds until the playhead next reaches `cue`, or null when nothing in the voice's schedule brings it there — the read direction of the cue timeline, resolving the cue exactly as fadeOut({ toCue }) does. Relative, silent, and null (never 0) on an invalid, loading, not-yet-started or ended voice, on a cue out of the loop window, and on one the voice's scheduled end arrives before — where the fade clamps to that end instead. */
     secondsUntilCue(handle: AudioHandle, cue: Cue): number | null;
+    /** Observe a voice's cue / loop / end emissions; returns the unsubscribe. Frame-sampled by one requestAnimationFrame chain the manager owns, started on the FIRST observation and cancelled on the last — a game that observes no cue pays no frame cost. A voice still loading may be observed and is seated where it starts from; whatever ends the voice ends the observation with one final `end`, while `dispose()` cancels the chain instead. Invalid handle: a callable no-op. */
+    observeCues(handle: AudioHandle, handlers: CueHandlers): () => void;
     stopAll(bus?: AudioBusId): void;
     /** Duck a bus to duckedVolume for durationMs, then restore. */
     duck(bus: AudioBusId, duckedVolume: number, durationMs: number): void;
@@ -91,6 +93,15 @@ export interface AudioManager {
     ): void;
     /** Dispose all active sources and clear the pool. Called by `Providers` at app shutdown (Invariant #64). */
     dispose(): void;
+}
+
+// renderer/audio/cueMarkerScheduler.ts — what a cue observer is handed. Every member
+// takes its event and returns nothing: no dispatcher, no PlayerId, no tick, so a handler
+// has nothing to reach a game's authoritative state with.
+export interface CueHandlers {
+    onCue?: (event: CueCrossedEvent) => void; // a named cue was crossed
+    onLoop?: (event: CueLoopEvent) => void; // the playhead wrapped back to loopStart
+    onEnd?: (event: CueEndEvent) => void; // the voice finished
 }
 ```
 

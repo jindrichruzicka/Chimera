@@ -176,6 +176,11 @@ function createNoopAudioManager(): AudioManager {
             // Nothing plays, so no cue is ever reached — answered, never thrown.
             return null;
         },
+        observeCues(): () => void {
+            // No voice, so no frame chain and nothing to emit; the unsubscribe a caller
+            // holds in an effect cleanup still has to be callable.
+            return () => undefined;
+        },
         stopAll(): void {
             return;
         },

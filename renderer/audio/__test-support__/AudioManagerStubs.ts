@@ -13,6 +13,7 @@ export function createAudioManagerSpy(): AudioManager {
             makeAudioHandle(incoming),
         ),
         secondsUntilCue: vi.fn(() => null),
+        observeCues: vi.fn(() => () => undefined),
         stopAll: vi.fn(),
         duck: vi.fn(),
         setListener: vi.fn(),
@@ -37,6 +38,9 @@ export function createAudioManagerStub(): AudioManager {
         },
         secondsUntilCue(): number | null {
             return null;
+        },
+        observeCues(): () => void {
+            return () => undefined;
         },
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         stopAll(): void {},
