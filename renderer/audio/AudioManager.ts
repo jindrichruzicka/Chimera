@@ -222,6 +222,8 @@ export interface AudioManagerOptions {
  * from the other two, having no effective loop window to read there yet. So all three
  * phases are distinguished, and the same voice can rank as looping while it loads and as
  * a one-shot once it starts — a bare `loopRegion` that collapses is exactly that voice.
+ * A voice given a FUTURE start is `'playing'` from `startVoice` onward, audible or not;
+ * see {@link DefaultAudioManager.startVoice} for why no fourth phase marks that.
  *
  * @internal Exported only so tests reading the private `VoiceRecord` bind to this union
  * rather than hand-copying it — a copy would drift silently when a phase is added.
@@ -293,7 +295,8 @@ interface VoiceRecord {
     /**
      * A playhead anchor. With {@link startOffsetSeconds} it lets the fade verbs derive
      * a cue's wall-clock position from `AudioContext.currentTime` alone, with no timer.
-     * `AudioContext.currentTime` at the moment `source.start()` was called.
+     * The context time `source.start(when)` was scheduled for — `currentTime` at the
+     * call for an ordinary play, a cue-aligned instant AHEAD of it for a scheduled one.
      */
     startedAtContextTime: number | null;
     /** `start()`'s offset argument — the POST-fold entry point into the buffer. */
@@ -403,9 +406,11 @@ interface VoiceSchedule {
 
 /**
  * The nodes and playback timeline a STARTED voice ramps against. Obtained through
- * {@link startedVoice}, which returns `null` for the one state where a fade verb has
- * nothing to write to: a voice still `'loading'`, whose `play()` has returned but whose
- * `startVoice` has not run.
+ * {@link startedVoice}, which returns `null` for the state where a fade verb has nothing
+ * to write to at all: a voice still `'loading'`, whose `play()` has returned but whose
+ * `startVoice` has not run. A voice scheduled AHEAD of the clock has every one of these
+ * and is not that state; what a verb owes it is the verb's own call — see
+ * {@link DefaultAudioManager.applyFadeOut}.
  */
 interface StartedVoice {
     readonly source: AudioBufferSourceNode;
@@ -605,15 +610,16 @@ export class DefaultAudioManager implements AudioManager {
     /**
      * Ramp a live voice's stage-1 gain to `0` per `spec`, then stop it — Invariant #119.
      *
-     * The release is realised ONLY by `source.stop(rampEnd)`, so the native
-     * `source.onended` handler installed at `startVoice` stays the sole `releaseVoice`
-     * path and no wall-clock timer ever schedules one. The voice therefore stays in the
-     * pool with `handle.valid === true` for the whole ramp (phase `'fading-out'`), and
-     * `valid` flips false exactly once, under `releaseVoice`'s `voices.delete` guard.
+     * A voice that is ramping is released by `source.stop(rampEnd)` through the native
+     * `source.onended` handler installed at `startVoice`, and no wall-clock timer ever
+     * schedules one. So the voice stays in the pool with `handle.valid === true` for the
+     * whole ramp (phase `'fading-out'`), and `valid` flips false exactly once, under
+     * `releaseVoice`'s `voices.delete` guard.
      *
-     * A no-op on an invalid or already-released handle. A fade arriving before the
-     * voice has started parks {@link VoiceRecord.releaseOnStart} instead, so the source
-     * is never created at all (Invariant #121).
+     * A no-op on an invalid or already-released handle. What a fade does to a voice that
+     * is not sounding yet — still `'loading'`, or scheduled ahead of the clock — is
+     * decided in {@link DefaultAudioManager.applyFadeOut}, and neither of those two ends
+     * in a ramp.
      */
     public fadeOut(handle: AudioHandle, spec: FadeOutSpec): void {
         const record = this.voices.get(handle.id);
@@ -634,13 +640,15 @@ export class DefaultAudioManager implements AudioManager {
      * start is shared by this: the end is resolved below against THIS voice's own scheduled
      * stop, and the incoming half's against its own.
      *
-     * Those two are the same instant whenever a linkage fires — `startVoice` reads `t0` from
-     * `currentTime` and is synchronous and non-reentrant, so the clock cannot advance before
-     * the intents are applied, which is also what keeps {@link scheduleGainRamp}'s
-     * not-in-the-future precondition satisfied. Re-reading the clock here would therefore
-     * produce the same number today. Taking it as an argument is what stops "one shared
-     * window" from resting on that: it becomes a fact of the code rather than of the call
-     * stack, and it survives a caller that reaches this from anywhere else.
+     * Those two are the same instant whenever an ordinary play's linkage fires — `startVoice`
+     * resolves `t0` from `currentTime` and is synchronous and non-reentrant, so the clock
+     * cannot advance before the intents are applied, and re-reading the clock here would
+     * produce the same number. Taking it as an argument is what stops "one shared window"
+     * from resting on that: it becomes a fact of the code rather than of the call stack, and
+     * it survives a caller that reaches this from anywhere else. A `t0` that is a cue AHEAD
+     * of the clock is a further step this does NOT take on its own — the window would be
+     * authored correctly and the ramp would still depart from {@link rampDeparture}'s read
+     * at `currentTime`, which is the precondition {@link scheduleGainRamp} states.
      */
     private applyFadeOut(record: VoiceRecord, spec: FadeOutSpec, now: number): void {
         const started = startedVoice(record);
@@ -648,6 +656,19 @@ export class DefaultAudioManager implements AudioManager {
             // Still loading: there is no gain to ramp and no source to stop, so the
             // release is parked rather than applied — step 1 of Invariant #121.
             record.releaseOnStart = true;
+            return;
+        }
+
+        if (now < started.startedAtContextTime) {
+            // Scheduled but not yet begun: nothing is audible to ramp, and a fade over
+            // `[now, rampEnd]` would run to completion before the voice's first sample —
+            // the mirror of a fade-in anchored at the call. So the voice is CUT, reaching
+            // the outcome the `'loading'` park above reaches: it never becomes audible.
+            // Released here rather than through `source.stop(rampEnd)` and the native
+            // `onended` the ordinary path hands off to, because that route rests on a
+            // source which never plays still reporting an end — and a voice whose end is
+            // never reported would hold its pool slot for good.
+            this.releaseVoice(record, { stopSource: true });
             return;
         }
 
@@ -709,9 +730,17 @@ export class DefaultAudioManager implements AudioManager {
      * `to` becomes the voice's new ceiling, which is what keeps a later fade's departure
      * bound honest (see {@link rampDeparture} and {@link CeilingHold}).
      *
-     * A no-op on an invalid or already-released handle. A fade arriving before the voice
-     * has started is parked on {@link VoiceRecord.pendingFadeTo} instead — step 3 of
+     * A no-op on an invalid or already-released handle. A fade arriving while the voice is
+     * still `'loading'` is parked on {@link VoiceRecord.pendingFadeTo} instead — step 3 of
      * Invariant #121 — and applied at the real `t0`.
+     *
+     * A voice SCHEDULED ahead of the clock is not that state: it has a gain to write to,
+     * so the ramp is laid from `now`, and the `cancelAndHoldAtTime` that anchors it
+     * retires both the floor written at the scheduled start and any fade-in laid over it —
+     * so such a voice begins at `to` rather than fading to it. Deliberately left there:
+     * `fadeOut` is the verb the same state needed handling for, because its ramp ends in a
+     * release, and nothing can create the state yet — `startVoice`'s only production
+     * caller names no start.
      */
     public fadeTo(handle: AudioHandle, spec: FadeToSpec): void {
         const record = this.voices.get(handle.id);
@@ -829,9 +858,10 @@ export class DefaultAudioManager implements AudioManager {
      * use: {@link voicePlayheadSeconds} decides whether this voice HAS a playhead at all,
      * and {@link nextCueContextTime} says when that playhead next reaches the cue.
      *
-     * The playhead gate is not redundant with the arrival maths. A voice whose scheduled
-     * start is still ahead would otherwise be handed an arrival measured from a start
-     * that has not happened — a positive, plausible countdown on a voice making no sound.
+     * The playhead gate is not redundant with the arrival maths: a voice whose scheduled
+     * start is still ahead has no playhead, and answering a countdown for one is a policy
+     * this verb settles rather than an error it corrects — see `answers no cue countdown
+     * while the scheduled start is still ahead`.
      *
      * The cue resolves under END-POINT rules, exactly as `fadeOut({ toCue })` resolves
      * its own, so a name absent from the sheet clamps to the decoded end rather than
@@ -1218,7 +1248,20 @@ export class DefaultAudioManager implements AudioManager {
         return { loop, entryOffsetSeconds, playDurationSeconds, loopWindow };
     }
 
-    private startVoice(record: VoiceRecord, buffer: AudioBuffer): void {
+    /**
+     * Create a voice's nodes and start it — at `when`, or as soon as possible when no
+     * start is named. A scheduled start is what makes a cue-aligned transition native
+     * rather than timed: `source.start(when)` lands on the sample, where a callback firing
+     * a frame late would put the same transition a frame off the beat.
+     *
+     * A voice awaiting a future start is `'playing'` with a `startedAtContextTime` still
+     * ahead of the clock, and no fourth {@link VoicePhase} marks it: a fourth phase would
+     * move {@link voiceLoops} and Invariant #123's four-key ranking, and nothing here
+     * bounds how long the state lasts, so it is recorded rather than engineered away —
+     * such a voice ranks as playing for preemption while still inaudible, so a saturated
+     * pool reclaims a live voice already fading out ahead of it.
+     */
+    private startVoice(record: VoiceRecord, buffer: AudioBuffer, when?: number): void {
         if (this.disposed || !record.handle.valid || !this.voices.has(record.handle.id)) {
             return;
         }
@@ -1253,10 +1296,22 @@ export class DefaultAudioManager implements AudioManager {
         source.onended = () => {
             this.releaseVoice(record, { stopSource: false });
         };
-        // One `t0`, read once and used for the gain floor, the start, the stop maths and
-        // every pending ramp — "applied atomically at t0" is only true if there is a
-        // single t0 to apply them at.
-        const startedAt = this.audioContext.currentTime;
+        // One `t0`, resolved once and used for the gain floor, the start, the stop maths
+        // and every pending ramp — "applied atomically at t0" is only true if there is a
+        // single t0 to apply them at, and that stays true when the t0 is a cue rather than
+        // now. A `when` already behind the clock is floored: `source.start()` treats a past
+        // time as "now" anyway, but the record must not advertise a start that never
+        // happened, since every cue answer this voice gives is derived from it. The finite
+        // test is what makes that a floor for EVERY non-finite input rather than for two of
+        // the three: `NaN` and `-Infinity` fail the comparison on their own, while
+        // `+Infinity` passes it and would put a non-finite time into the `setValueAtTime`
+        // below — a `RangeError` from outside the try that guards `source.start`, on a path
+        // that is otherwise fail-soft throughout. `when` is optional rather than defaulted
+        // at the signature, so the clock is read exactly ONCE: a default expression plus
+        // the floor here would read it twice, and two reads are two instants on a clock
+        // that advances between them.
+        const now = this.audioContext.currentTime;
+        const startedAt = when !== undefined && Number.isFinite(when) && when > now ? when : now;
         // A fade-in departs from its curve's floor rather than from `volume`, and this
         // write is also what anchors the ramp: `scheduleGainRamp` re-anchors at the value
         // the param holds.
@@ -1278,9 +1333,9 @@ export class DefaultAudioManager implements AudioManager {
 
         try {
             if (!schedule.loop && schedule.playDurationSeconds !== null) {
-                source.start(0, schedule.entryOffsetSeconds, schedule.playDurationSeconds);
+                source.start(startedAt, schedule.entryOffsetSeconds, schedule.playDurationSeconds);
             } else {
-                source.start(0, schedule.entryOffsetSeconds);
+                source.start(startedAt, schedule.entryOffsetSeconds);
             }
         } catch {
             this.releaseVoice(record, { stopSource: false });
@@ -1769,9 +1824,14 @@ function clampUnit(value: number): number {
  * cue metadata.
  *
  * Precondition: `startTime` must not be in the future relative to
- * `AudioContext.currentTime`. The re-anchor reads `param.value`, which is the value
- * at `currentTime`, so a future `startTime` would anchor the curve at a stale
- * departure. Callers pass `audioContext.currentTime`, as {@link AudioBus.duck} does.
+ * `AudioContext.currentTime` unless the caller KNOWS the departure independently. The
+ * re-anchor reads `param.value`, which is the value at `currentTime`, so a future
+ * `startTime` otherwise anchors the curve at a stale departure. A caller ramping from now
+ * satisfies it by passing `audioContext.currentTime`, as {@link AudioBus.duck} does; the
+ * ramps laid at a voice's own `t0` satisfy it by passing the gain they wrote there, which
+ * holds however far ahead that `t0` is ({@link DefaultAudioManager.applyPendingIntents}).
+ * A departure merely READ at `currentTime` and handed on — {@link rampDeparture} — does
+ * not satisfy it: it is the same stale value arriving by another route.
  *
  * Pass `departure` whenever the caller knows the gain better than the getter can report
  * it. `param.value` reports `[[current value]]` — the parameter's value at the start of

@@ -130,6 +130,101 @@ describe('voicePlayheadSeconds', () => {
     });
 });
 
+/**
+ * The other half of a scheduled start: a voice given a future `startedAtContextTime` has
+ * not entered its buffer, so an arrival before that instant is not one — while the instant
+ * it begins IS.
+ *
+ * Two of these eight are red against the body this branch replaced, which compared only
+ * against `now`: a cue behind the entry point of a non-looping voice, answered with an
+ * instant in the gap before the first sample, and the same cue on a loop, answered a whole
+ * period early. Two fence the collapse — a cue ahead of the entry still arrives when it
+ * arrives, and a voice already playing still searches from `now`, which is every voice
+ * there was before a start could be scheduled.
+ *
+ * The last four sit ON a bound, where the two comparators pull apart, and the baseline
+ * cannot drive them: the replaced body compares against `now` alone and happens to answer
+ * all four correctly. The first fix this branch wrote did not — comparing against the
+ * later of `now` and the start discarded the arrival at the start itself, `null` on the
+ * non-looping arm and a whole period late on the looping one. So the mutants are what pin
+ * them: `cueSeconds > entrySeconds` for the `>=` reds the two on the entry point, and
+ * `reachedAt >= now` for the `>` reds one on each arm — the comparator is written twice,
+ * so a fixture on one arm leaves the other unmeasured.
+ */
+describe('nextCueContextTime on a voice scheduled ahead of the clock', () => {
+    /** Four seconds ahead of `now`, which every fixture below leaves at `T0`. */
+    const SCHEDULED = T0 + 4;
+
+    it('answers null for a cue behind the entry point of a voice that has not started', () => {
+        // Entered at 5 with no loop, so position 3 is never played. Searching from `now`
+        // would name 12 — an instant two seconds BEFORE the first sample, and one the
+        // playhead is never at.
+        expect(nextCueContextTime(timeline(5), started(SCHEDULED), 3, T0)).toBeNull();
+    });
+
+    it('answers the real arrival for a cue ahead of the entry point of a scheduled voice', () => {
+        // The other side of the same comparison: position 7 is two seconds of play past
+        // the entry, so it arrives two seconds after the scheduled start.
+        expect(nextCueContextTime(timeline(5), started(SCHEDULED), 7, T0)).toBe(SCHEDULED + 2);
+    });
+
+    it('sends a cue behind the entry point of a scheduled LOOP one period on', () => {
+        // Window [3, 8], entered at 5: the entry pass runs 5 → 8, wraps to 3, and only
+        // then reaches 4 — one period after the naive 13 that searching from `now` would
+        // let through, and three seconds after the voice becomes audible at all.
+        const record = timeline(5, { startSeconds: 3, endSeconds: 8 });
+        expect(nextCueContextTime(record, started(SCHEDULED), 4, T0)).toBe(SCHEDULED + 4);
+    });
+
+    it('leaves a started voice searching from now, not from its own start', () => {
+        // The collapse that keeps every pre-scheduling answer intact: with the start
+        // behind the clock the later of the two IS `now`, so a cue the playhead has
+        // already gone past on this pass waits for the next one rather than being
+        // reported behind it.
+        const record = timeline(0, { startSeconds: 2, endSeconds: 6 });
+        expect(nextCueContextTime(record, started(T0), 3, T0 + 4)).toBe(T0 + 7);
+    });
+
+    it('names the scheduled start itself for a cue sitting ON the entry point', () => {
+        // The boundary the two directions have to agree about, and the one place `now` and
+        // the voice's own start pull opposite ways: `now` is where the playhead already IS,
+        // so a cue sitting on it waits a whole pass, while a scheduled start is where the
+        // playhead first WILL be — an arrival there is still ahead, and discarding it would
+        // answer "never" for the cue a cue-aligned transition is most likely to name.
+        expect(voicePlayheadSeconds(timeline(5), started(SCHEDULED), SCHEDULED)).toBe(5);
+        expect(nextCueContextTime(timeline(5), started(SCHEDULED), 5, T0)).toBe(SCHEDULED);
+    });
+
+    it('names the scheduled start itself for a cue on the entry point of a LOOP', () => {
+        // The same instant on the looping arm, where the cost of discarding it is a whole
+        // period rather than a `null`: the entry pass would be skipped and the answer would
+        // land on the next wrap.
+        const record = timeline(5, { startSeconds: 3, endSeconds: 8 });
+        expect(voicePlayheadSeconds(record, started(SCHEDULED), SCHEDULED)).toBe(5);
+        expect(nextCueContextTime(record, started(SCHEDULED), 5, T0)).toBe(SCHEDULED);
+    });
+
+    it('answers null for a cue a non-looping playhead is sitting exactly on', () => {
+        // The other half of the asymmetry, and the reason the two comparators cannot be
+        // one: `now` is where the playhead already IS, so a cue there has arrived rather
+        // than being about to, and a non-looping voice has no next pass to offer instead.
+        // The looping arm answers the same instant one period on; only the entry bound
+        // admits a cue it lands exactly on.
+        expect(voicePlayheadSeconds(timeline(0), started(T0), T0 + 4)).toBe(4);
+        expect(nextCueContextTime(timeline(0), started(T0), 4, T0 + 4)).toBeNull();
+    });
+
+    it('sends a cue a LOOPING playhead is sitting exactly on a whole period on', () => {
+        // The looping half of the same bound, and the reason it needs its own fixture: the
+        // clock comparator is written twice, once per arm, and this arm answers with the
+        // next pass where the other answers `null`. Window [2, 6] entered at 0, so the
+        // playhead is at 4 four seconds in and back there one period later.
+        const record = timeline(0, { startSeconds: 2, endSeconds: 6 });
+        expect(voicePlayheadSeconds(record, started(T0), T0 + 4)).toBe(4);
+        expect(nextCueContextTime(record, started(T0), 4, T0 + 4)).toBe(T0 + 8);
+    });
+});
+
 describe('the playhead reader and nextCueContextTime agree at every boundary', () => {
     /**
      * One legal voice-and-question shape, on a quarter-second grid over a 10 s buffer.

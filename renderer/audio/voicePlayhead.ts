@@ -40,7 +40,7 @@ export interface VoiceTimeline {
 
 /** The start facts only a STARTED voice has; a `'loading'` one has neither. */
 export interface StartedTimeline {
-    /** `AudioContext.currentTime` at the moment `source.start()` was called. */
+    /** The context time `source.start(when)` was scheduled for, which may be ahead of the clock. */
     readonly startedAtContextTime: number;
     /** The DECODED buffer's duration — the timeline the voice was scheduled against. */
     readonly bufferDurationSeconds: number;
@@ -112,7 +112,10 @@ export function voicePlayheadSeconds(
  * The context time the playhead NEXT reaches `cueSeconds`, or `null` when it never will
  * — Invariant #122. Derived from `startedAtContextTime`, `startOffsetSeconds` and the
  * effective loop window at a fixed `playbackRate` of 1, so it needs no timer and no
- * sampling of where the playhead currently is.
+ * sampling of where the playhead currently is. A voice whose start is still AHEAD of
+ * `now` is bounded by that start as well, so no arrival is named in the gap before its
+ * first sample — while the instant it begins IS one, unlike an instant `now` sits on,
+ * which the playhead has already reached.
  *
  * A looping voice runs its ENTRY pass from `startOffsetSeconds` out to the window end,
  * then repeats `[loopStart, loopEnd]` forever, so a cue is reached in the entry pass,
@@ -136,11 +139,13 @@ export function nextCueContextTime(
     const window = record.loopWindowSeconds;
 
     if (window === null) {
-        // No loop: every position is passed exactly once. A cue BEHIND the entry point
-        // needs no test of its own — it lands before `startedAtContextTime`, which is
-        // necessarily behind `now`, so the one comparison covers both ways of missing.
+        // No loop: every position is passed exactly once, and only FORWARD from the entry
+        // point, so an arrival is real when the cue is at or after that point and the
+        // instant is still ahead of the clock. Two comparators rather than one, because a
+        // cue behind the entry can land after `now` on a voice scheduled AHEAD of the
+        // clock, and that instant is a position the playhead is never at.
         const reachedAt = startedAt + (cueSeconds - entrySeconds);
-        return reachedAt > now ? reachedAt : null;
+        return cueSeconds >= entrySeconds && reachedAt > now ? reachedAt : null;
     }
 
     const { startSeconds: loopStart, endSeconds: loopEnd } = window;
@@ -152,22 +157,29 @@ export function nextCueContextTime(
         return null;
     }
 
-    // A cue BEHIND the entry point is not in the entry pass at all, and needs no branch
-    // of its own: this lands it before `startedAtContextTime` — necessarily behind
-    // `now` — so it falls through to the period advance below, which puts it exactly one
-    // period on, at `(loopEnd − entry) + (cue − loopStart)`. The two are the same
-    // instant, and naming the wrap separately would only compute it twice.
+    // A cue at or after the entry point is reached in the ENTRY pass, unless the clock is
+    // already past it. Behind that point it is not in the entry pass at all and needs no
+    // branch of its own: it falls through to the period advance below, which puts it
+    // exactly one period on, at `(loopEnd − entry) + (cue − loopStart)`. The two are the
+    // same instant, and naming the wrap separately would only compute it twice.
+    //
+    // The comparators differ on purpose. `>=` against the entry admits a cue sitting ON
+    // it, which is a real arrival at the voice's own start; `>` against the clock does
+    // not admit one sitting on `now`, which is where the playhead already IS. One
+    // comparison could not say both, and a scheduled start is where they come apart.
     const reachedAt = startedAt + (cueSeconds - entrySeconds);
-    if (reachedAt > now) {
+    if (cueSeconds >= entrySeconds && reachedAt > now) {
         return reachedAt;
     }
 
-    // At or behind the playhead: the NEXT pass over it, if the loop returns there at
-    // all. A cue before `loopStart` was in the intro and is never replayed; a degenerate
-    // zero-length window replays nothing. `floor(…) + 1` rather than `ceil`, so a cue
-    // the playhead is sitting exactly on waits a whole period — a looping voice always
-    // has a next arrival, and fading over it beats the cut that a cue which never comes
-    // back has to take.
+    // The NEXT pass over it, if the loop returns there at all, counted from where the
+    // search really begins: `now` for a voice already playing, its own start for one
+    // still scheduled, which has played nothing to be past yet. A cue before `loopStart`
+    // was in the intro and is never replayed; a degenerate zero-length window replays
+    // nothing. `floor(…) + 1` rather than `ceil`, so a cue the playhead is sitting
+    // exactly on waits a whole period — a looping voice always has a next arrival, and
+    // fading over it beats the cut that a cue which never comes back has to take.
+    const from = startedAt > now ? startedAt : now;
     const repeats = cueSeconds >= loopStart && period > 0;
-    return repeats ? reachedAt + period * (Math.floor((now - reachedAt) / period) + 1) : null;
+    return repeats ? reachedAt + period * (Math.floor((from - reachedAt) / period) + 1) : null;
 }

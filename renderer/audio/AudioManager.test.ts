@@ -2173,7 +2173,7 @@ describe('DefaultAudioManager — dynamic cue validation', () => {
         manager.play(ref, { from: 2, to: 50 });
         await flushAudioLoad();
 
-        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 2, 8);
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 2, 8);
     });
 
     it('clamps a negative from up to the buffer start without warning (#118)', async () => {
@@ -2183,7 +2183,7 @@ describe('DefaultAudioManager — dynamic cue validation', () => {
         manager.play(ref, { from: -3, to: 4 });
         await flushAudioLoad();
 
-        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 0, 4);
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 0, 4);
         expect(warn).not.toHaveBeenCalled();
     });
 
@@ -2201,7 +2201,7 @@ describe('DefaultAudioManager — dynamic cue validation', () => {
 
         const source = expectSource(context, 0);
         expect(handle.valid).toBe(true);
-        expect(source.start).toHaveBeenCalledWith(0, 3);
+        expect(source.start).toHaveBeenCalledWith(10, 3);
         expect(expectStartArgs(source)[2]).toBeUndefined();
         expect(source.stop).not.toHaveBeenCalled();
         expect(warn).toHaveBeenCalledTimes(1);
@@ -2273,7 +2273,11 @@ describe('DefaultAudioManager — cue scheduling', () => {
         await flushAudioLoad();
 
         const source = expectSource(context, 0);
-        expect(source.start).toHaveBeenCalledWith(0, 0);
+        // The first argument is the voice's own `t0`, which for a play that names no start
+        // is `currentTime` at the moment `startVoice` ran — `10` under the fake clock, and
+        // `12` in the decode-latency cases below. Never the literal `0` that would mean the
+        // same thing to the node while disagreeing with `startedAtContextTime`.
+        expect(source.start).toHaveBeenCalledWith(10, 0);
         expect(expectStartArgs(source)[2]).toBeUndefined();
     });
 
@@ -2283,7 +2287,7 @@ describe('DefaultAudioManager — cue scheduling', () => {
         manager.play(ref, { from: 2.5 });
         await flushAudioLoad();
 
-        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 2.5);
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 2.5);
     });
 
     it('passes a non-loop window length as the third start argument (#117)', async () => {
@@ -2294,7 +2298,7 @@ describe('DefaultAudioManager — cue scheduling', () => {
 
         const source = expectSource(context, 0);
         // The native duration argument bounds the voice; no scheduled stop is needed.
-        expect(source.start).toHaveBeenCalledWith(0, 2, 4);
+        expect(source.start).toHaveBeenCalledWith(10, 2, 4);
         expect(source.stop).not.toHaveBeenCalled();
     });
 
@@ -2304,7 +2308,7 @@ describe('DefaultAudioManager — cue scheduling', () => {
         manager.play(ref, { from: { name: 'chorus' }, to: { name: 'outro' } });
         await flushAudioLoad();
 
-        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 4, 5);
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 4, 5);
     });
 });
 
@@ -2445,7 +2449,7 @@ describe('DefaultAudioManager — loop regions', () => {
         await flushAudioLoad();
 
         const source = expectSource(context, 0);
-        expect(source.start).toHaveBeenCalledWith(0, 5);
+        expect(source.start).toHaveBeenCalledWith(10, 5);
         expect(source.loopStart).toBe(2);
         expect(source.loopEnd).toBe(6);
     });
@@ -2462,7 +2466,7 @@ describe('DefaultAudioManager — loop regions', () => {
         await flushAudioLoad();
 
         const source = expectSource(context, 0);
-        expect(source.start).toHaveBeenCalledWith(0, 0);
+        expect(source.start).toHaveBeenCalledWith(10, 0);
         expect(source.loopStart).toBe(3);
         expect(source.loopEnd).toBe(5);
     });
@@ -2494,7 +2498,7 @@ describe('DefaultAudioManager — loop regions', () => {
         await flushAudioLoad();
 
         const source = expectSource(context, 0);
-        expect(source.start).toHaveBeenCalledWith(0, 5);
+        expect(source.start).toHaveBeenCalledWith(12, 5);
         expect(source.stop).toHaveBeenCalledWith(13);
     });
 
@@ -4956,6 +4960,281 @@ describe('DefaultAudioManager — fadeTo', () => {
     });
 });
 
+// ─── future-start scheduling (#121, #123) ───────────────────────────────────────
+
+/**
+ * `startVoice` takes its start time as a parameter, so a voice can be scheduled AHEAD of
+ * the clock — the capability a cue-aligned transition is built on. Every `t0`-derived fact
+ * anchors to that scheduled start rather than to the call, and getting it wrong is silent:
+ * a fade-in anchored at the call runs to completion BEFORE the first sample sounds, so the
+ * bed simply appears at full volume.
+ *
+ * Written against today's body — one that ignores the third argument and reads
+ * `currentTime` — so every red is behavioural: 15 of the 18 fail there. The three that
+ * pass fence the capability rather than drive it: the boundary fixture where the
+ * scheduled start IS `now`; the pre-start `stop`, which releases the record by a route
+ * that reads no start time at all; and the preemption consequence, which is the documented
+ * outcome of keeping three phases rather than a behaviour this adds.
+ */
+describe('DefaultAudioManager — future-start scheduling', () => {
+    /** Four seconds ahead of the fake context's clock, which starts at 10. */
+    const FUTURE_START = 14;
+
+    it('starts the source AT the scheduled time rather than as soon as possible (#121)', () => {
+        const { context, manager, handle } = createLoadingVoice();
+
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        // The scheduled time reaches the native call, and the record advertises the same
+        // instant — `start(0)` would play the voice now and record a start it never made.
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(FUTURE_START, 0);
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'playing',
+            startedAtContextTime: FUTURE_START,
+        });
+    });
+
+    it('writes the stage-1 gain floor at the scheduled start, not at the call (#121)', () => {
+        const { context, manager, handle } = createLoadingVoice({
+            playOptions: { volume: 0.5 },
+        });
+
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 0.5, time: FUTURE_START },
+        ]);
+    });
+
+    it('runs a pending fadeIn over the window that OPENS at the scheduled start (#121)', () => {
+        const { context, manager, handle } = createLoadingVoice({
+            playOptions: { fadeIn: { durationMs: 500 } },
+        });
+
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        // Anchored at the call, this ramp would be over four seconds before the voice was
+        // audible, and the bed would appear at full volume with no fade at all.
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 0, time: FUTURE_START },
+            { method: 'cancelAndHoldAtTime', time: FUTURE_START },
+            { method: 'linearRampToValueAtTime', value: 1, time: FUTURE_START + 0.5 },
+        ]);
+    });
+
+    it('measures the natural end of an unbounded non-loop voice from the scheduled start (#117)', () => {
+        const { manager, handle } = createLoadingVoice();
+
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        // 10 s of buffer entered at 0, so the voice ends four seconds later than a call-time
+        // anchor would have it end.
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(FUTURE_START + 10);
+    });
+
+    it('measures the scheduled stop of a bounded non-loop voice from the scheduled start (#117)', () => {
+        const { context, manager, handle } = createLoadingVoice({
+            playOptions: { from: 2, to: 6 },
+        });
+
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        const source = expectSource(context, 0);
+        // The native duration argument bounds the voice, so no stop is scheduled — but the
+        // record still has to name the instant that duration lands on.
+        expect(source.start).toHaveBeenCalledWith(FUTURE_START, 2, 4);
+        expect(source.stop).not.toHaveBeenCalled();
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(FUTURE_START + 4);
+    });
+
+    it('measures the native stop of a bounded loop from the scheduled start (#117)', () => {
+        const { context, manager, handle } = createLoadingVoice({
+            playOptions: { loop: true, from: 2, to: 6 },
+        });
+
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        const source = expectSource(context, 0);
+        expect(source.stop).toHaveBeenCalledWith(FUTURE_START + 4);
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(FUTURE_START + 4);
+    });
+
+    it('applies a pending fadeTo at the scheduled start (#121)', () => {
+        const { context, manager, handle } = createLoadingVoice();
+        manager.fadeTo(handle, { to: 0.25, durationMs: 200 });
+
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: FUTURE_START },
+            { method: 'cancelAndHoldAtTime', time: FUTURE_START },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: FUTURE_START + 0.2 },
+        ]);
+        expect(readVoiceRecord(manager, handle).pendingFadeTo).toBeNull();
+    });
+
+    it('lays a LIVE fadeTo on a scheduled voice from now, retiring the schedule at its start (#120)', () => {
+        const { context, manager, handle } = createLoadingVoice({
+            playOptions: { fadeIn: { durationMs: 500 } },
+        });
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        manager.fadeTo(handle, { to: 0.25, durationMs: 200 });
+
+        // The documented consequence of leaving `fadeTo` on the ordinary path: its
+        // cancel-and-hold at `now` retires both the floor at the scheduled start and the
+        // fade-in laid over `[14, 14.5]`, so the voice BEGINS at `to` rather than fading
+        // to it. `fadeOut` is the verb the same state needed handling for, because its
+        // ramp ends in a release. Pinned so that changing either half has to change this.
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 0, time: FUTURE_START },
+            { method: 'cancelAndHoldAtTime', time: FUTURE_START },
+            { method: 'linearRampToValueAtTime', value: 1, time: FUTURE_START + 0.5 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0.25, time: 10.2 },
+        ]);
+        expect(handle.valid).toBe(true);
+    });
+
+    it('fires a linked fade-out at the scheduled start, not at the call (#121)', () => {
+        const { manager, handle } = createLoadingVoice();
+        const anchors: number[] = [];
+        writeVoiceIntents(manager, handle, {
+            linkedFadeOut: (startedAt: number): void => {
+                anchors.push(startedAt);
+            },
+        });
+
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        // The whole point of the linkage taking its anchor as an argument: a crossfade armed
+        // at a cue has both halves author the same window, and that window opens at the cue.
+        expect(anchors).toEqual([FUTURE_START]);
+        expect(readVoiceRecord(manager, handle).linkedFadeOut).toBeNull();
+    });
+
+    it('answers no cue countdown while the scheduled start is still ahead (#122)', () => {
+        const { manager, handle } = createLoadingVoice();
+
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        // The reader half of the same anchor: a voice that has not begun has no playhead,
+        // so the countdown is absent rather than measured from a position the playhead is
+        // not in. Anchored at the call, this cue would be reported 5 s out — from a voice
+        // that will not make a sound for another four.
+        expect(manager.secondsUntilCue(handle, 5)).toBeNull();
+    });
+
+    it('floors a start already behind the clock at currentTime and records it there (#121)', () => {
+        const { context, manager, handle } = createLoadingVoice();
+
+        startVoiceAt(manager, handle, 5);
+
+        // `source.start()` treats a past time as "now" anyway; what the floor protects is the
+        // RECORD, which must not advertise a start that never happened — every cue answer is
+        // derived from it.
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 0);
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            startedAtContextTime: 10,
+            scheduledStopAt: 20,
+        });
+    });
+
+    it.each([
+        ['NaN', Number.NaN],
+        ['+Infinity', Number.POSITIVE_INFINITY],
+        ['-Infinity', Number.NEGATIVE_INFINITY],
+    ])(
+        'floors a %s start at currentTime rather than writing it through the schedule (#121)',
+        (_name, when) => {
+            const { context, manager, handle } = createLoadingVoice();
+
+            startVoiceAt(manager, handle, when);
+
+            // Each of the three separately, because the comparison absorbs them by different
+            // routes: `NaN` and `-Infinity` fail `when > now`, while `+Infinity` passes it and
+            // needs the finite test. Getting any of them through puts a non-finite time into
+            // `setValueAtTime` — a `RangeError` from OUTSIDE the try that guards
+            // `source.start`, out of a path that is fail-soft throughout.
+            expect(expectGain(context, 4).gain.calls).toEqual([
+                { method: 'setValueAtTime', value: 1, time: 10 },
+            ]);
+            expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 0);
+            expect(readVoiceRecord(manager, handle)).toMatchObject({
+                startedAtContextTime: 10,
+                scheduledStopAt: 20,
+            });
+        },
+    );
+
+    it('cuts a voice whose start is still ahead instead of ramping a source that has not begun (#121)', () => {
+        const { context, manager, handle } = createLoadingVoice();
+        startVoiceAt(manager, handle, FUTURE_START);
+        const gain = expectGain(context, 4).gain;
+        const callsAtStart = gain.calls.length;
+
+        manager.fadeOut(handle, { overMs: 500 });
+
+        const source = expectSource(context, 0);
+        // Cancelled outright, with no argument — a `stop(rampEnd)` before the voice's own
+        // start would leave the release resting on a source that never plays still
+        // reporting an end, and a voice whose end is never reported holds its slot.
+        expect(source.stop).toHaveBeenCalledWith();
+        expect(gain.calls).toHaveLength(callsAtStart);
+        expect(handle.valid).toBe(false);
+    });
+
+    it('still fades out a voice whose scheduled start is exactly now (#119)', () => {
+        const { context, manager, handle } = createLoadingVoice();
+        startVoiceAt(manager, handle, 10);
+
+        manager.fadeOut(handle, { overMs: 500 });
+
+        // ON the boundary: the voice is audible from this instant, so the ordinary ramp runs
+        // and the handle stays valid for its whole length.
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10.5);
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 10.5 },
+        ]);
+        expect(handle.valid).toBe(true);
+        expect(readVoiceRecord(manager, handle).phase).toBe('fading-out');
+    });
+
+    it('releases a voice stopped before its scheduled start and cancels its source (#119)', () => {
+        const { context, manager, handle } = createLoadingVoice();
+        startVoiceAt(manager, handle, FUTURE_START);
+
+        manager.stop(handle);
+
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith();
+        expect(handle.valid).toBe(false);
+    });
+
+    it('leaves a voice awaiting a future start outranked by a fading-out one (#123)', async () => {
+        // The documented consequence of keeping three phases: an inaudible voice ranks as
+        // playing, so it survives a reclamation that takes a live voice already dying. A
+        // fourth `VoicePhase` would move `voiceLoops` and the four-key ranking to say so,
+        // which is the trade this records rather than makes.
+        const created = createManager({ poolSize: 2 });
+        const { assetManager, manager } = created;
+        const scheduledRef = audioRef('audio/music/battle.ogg');
+        assetManager.defer(scheduledRef);
+        const scheduled = manager.play(scheduledRef);
+        startVoiceAt(manager, scheduled, FUTURE_START);
+
+        const dying = playPooledVoice(created, 'hit');
+        await flushAudioLoad();
+        manager.fadeOut(dying, { overMs: 500 });
+
+        playPooledVoice(created, 'clang');
+
+        expect(dying.valid).toBe(false);
+        expect(scheduled.valid).toBe(true);
+    });
+});
+
 // ─── crossfade (#121, #116, #120) ───────────────────────────────────────────────
 
 describe('DefaultAudioManager — crossfade', () => {
@@ -5512,7 +5791,7 @@ describe('DefaultAudioManager — cue sheet provenance', () => {
         manager.play(ref, { from: 1, to: 3 });
         await flushAudioLoad();
 
-        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 1, 2);
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 1, 2);
     });
 
     it('still honours raw-second cues when the manifest metadata is malformed (#118)', async () => {
@@ -5522,7 +5801,7 @@ describe('DefaultAudioManager — cue sheet provenance', () => {
         manager.play(ref, { from: 1, to: 3 });
         await flushAudioLoad();
 
-        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 1, 2);
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 1, 2);
         expect(warn).not.toHaveBeenCalled();
 
         // A named cue has no sheet to resolve against, so it abandons rather than guessing.
@@ -5563,7 +5842,7 @@ describe('DefaultAudioManager — cue sheet provenance', () => {
         await flushAudioLoad();
 
         expect(handle.valid).toBe(true);
-        expect(expectSource(context, 0).start).toHaveBeenCalledWith(0, 1, 2);
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 1, 2);
     });
 });
 
@@ -6285,6 +6564,21 @@ interface ObservableVoiceRecord {
 }
 
 /**
+ * The manager internals the tests reach, behind ONE cast site. `startVoice` is here for
+ * the same reason the voice map is: no public verb takes a start time, so a scheduled
+ * start would otherwise be unmeasurable until the first cue-aligned transition ships.
+ */
+interface AudioManagerInternals {
+    readonly voices: Map<string, ObservableVoiceRecord>;
+    startVoice(record: ObservableVoiceRecord, buffer: AudioBuffer, when?: number): void;
+}
+
+// @chimera-review: reaches the manager's private voice map and starter because the handle exposes none of this schedule state by design; asserting it here is what stops it becoming unverifiable write-only state.
+function managerInternals(manager: DefaultAudioManager): AudioManagerInternals {
+    return manager as unknown as AudioManagerInternals;
+}
+
+/**
  * Read a live voice's internal schedule and pending-intent state. No public surface
  * exposes any of it — `AudioHandle` deliberately gains no fields (Invariant #126) — and
  * without a reader the difference between "stop scheduled" and "stop refused", between
@@ -6292,13 +6586,31 @@ interface ObservableVoiceRecord {
  * released, is unobservable.
  */
 function readVoiceRecord(manager: DefaultAudioManager, handle: AudioHandle): ObservableVoiceRecord {
-    // @chimera-review: reaches the manager's private voice map because the handle exposes none of this schedule state by design; asserting it here is what stops it becoming unverifiable write-only state.
-    const { voices } = manager as unknown as { voices: Map<string, ObservableVoiceRecord> };
-    const record = voices.get(handle.id);
+    const record = managerInternals(manager).voices.get(handle.id);
     if (record === undefined) {
         throw new Error(`Expected a live voice for handle ${handle.id}.`);
     }
     return record;
+}
+
+/**
+ * Start a loading voice at an EXPLICIT context time, the way a cue-aligned transition
+ * will: `play()` names no start, so the load continuation always takes the default and
+ * nothing in production reaches a future `t0` yet.
+ *
+ * This bypasses the pending load rather than resolving it, so the buffer is supplied here
+ * — the ten seconds {@link createLoadingVoice} decodes by default, which is why a voice
+ * built with a different `bufferSeconds` must not be started through this. That load stays
+ * pending for the rest of the test; resolving it afterwards would run `startVoice` a
+ * second time on an already-started record, so no caller here does.
+ */
+function startVoiceAt(manager: DefaultAudioManager, handle: AudioHandle, when: number): void {
+    const internals = managerInternals(manager);
+    const record = internals.voices.get(handle.id);
+    if (record === undefined) {
+        throw new Error(`Expected a loading voice for handle ${handle.id}.`);
+    }
+    internals.startVoice(record, createAudioBuffer('theme', 10), when);
 }
 
 /**
