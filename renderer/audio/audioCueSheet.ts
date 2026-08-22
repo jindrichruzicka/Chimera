@@ -7,9 +7,9 @@ import type { Cue } from './Cue.js';
 
 /**
  * The pure, fail-soft cue-sheet parser + cue resolver (§4.25 — Audio System →
- * Cue, Fade & Crossfade Extensions). This is the ONLY renderer-side reader of the
- * opaque `AudioClipMetadata` a game authors onto an audio clip (Invariant #124);
- * `simulation/`/`ai/` never import back from here.
+ * Cue, Fade & Crossfade Extensions). It parses the opaque `AudioClipMetadata` a
+ * game authors onto an audio clip, which Invariant #124 keeps inside
+ * `renderer/audio`; `simulation/`/`ai/` never import back from here.
  *
  * Resolution is FAIL-SOFT and NEVER throws into a caller (Invariant #118). These
  * functions also never call a logger — they RETURN the warning string in the

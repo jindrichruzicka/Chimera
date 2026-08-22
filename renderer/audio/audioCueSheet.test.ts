@@ -2,9 +2,9 @@
  * renderer/audio/audioCueSheet.test.ts
  *
  * Unit tests for the pure, fail-soft cue-sheet parser + cue resolver:
- * `parseAudioCueSheet`, `resolveCue`, and `resolveCueWindow`. These are the sole
- * renderer-side reader/resolver of the opaque `AudioClipMetadata` a game authors
- * onto an audio clip (Invariant #124); `simulation/`/`ai/` never import back.
+ * `parseAudioCueSheet`, `resolveCue`, and `resolveCueWindow`. These parse the opaque
+ * `AudioClipMetadata` a game authors onto an audio clip, which Invariant #124 keeps
+ * inside `renderer/audio`; `simulation/`/`ai/` never import back.
  *
  * Architecture reference: §4.25 — Audio System → Cue, Fade & Crossfade Extensions.
  *
@@ -13,7 +13,7 @@
  *     a load-bearing (anchor) unresolvable cue abandons with exactly one warning;
  *     end-point cues clamp; a post-clamp-collapsed window drops and playback
  *     continues; `parseAudioCueSheet` returns `null` for absent/malformed metadata.
- *   #124 — the resolver is the only reader of the sheet; the sheet rides the
+ *   #124 — the sheet is read inside `renderer/audio` and nowhere else; it rides the
  *     opaque `AssetManifestEntry.metadata` slot (typed `unknown`).
  *
  * The resolver is PURE: it never calls a logger — it RETURNS the warning string

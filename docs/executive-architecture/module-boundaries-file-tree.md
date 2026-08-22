@@ -310,7 +310,7 @@ chimera/
 │   │   ├── AudioManager.ts          # play/stop/fadeOut/fadeTo/crossfade, 32-voice pool, MUSIC_PRIORITY
 │   │   ├── AudioBus.ts
 │   │   ├── Cue.ts                   # Cue, LoopRegion, Fade{In,Out,To}Spec, CrossfadeOptions
-│   │   ├── audioCueSheet.ts         # parseAudioCueSheet + resolvers — the SOLE reader of a sheet (#124)
+│   │   ├── audioCueSheet.ts         # parseAudioCueSheet + resolvers — parses the opaque metadata slot (#124)
 │   │   ├── AudioManagerContext.ts   # Context + useAudioManager() (throws outside the provider, #83)
 │   │   ├── AudioManagerProvider.tsx # Publishes the app-level manager; mounted once by app/providers.tsx
 │   │   ├── EventAudioBinding.ts

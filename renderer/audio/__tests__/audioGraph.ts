@@ -1,10 +1,10 @@
 /**
  * renderer/audio/__tests__/audioGraph.ts
  *
- * The esbuild analyzer both guards over `renderer/audio/` share: the barrel's
- * side-effect claim (`audio-barrel-side-effects.test.ts`) and the playhead
- * module's purity claim (`voicePlayhead-purity.test.ts`). Not a test itself —
- * one copy, so the two cannot drift into measuring different graphs.
+ * The esbuild analyzer the guards over `renderer/audio/` share: the barrel's
+ * side-effect claim and the per-module purity claims. Not a test itself —
+ * one copy, so the guards in this directory cannot drift into measuring different
+ * graphs.
  *
  * **Two channels, because an import can reach a module without resolving into
  * it.** A binding the module USES pulls its target in as a resolved INPUT. A
@@ -23,11 +23,10 @@
  * module pulls into a BUNDLE, which is what a purity or side-effect verdict is
  * about in the first place.
  *
- * Mechanism mirrors `renderer/animation/__tests__/animationGraph.ts`, and the two are a
- * deliberate COPY rather than one shared module: the single-sourcing above is a claim
- * about this directory's guards, not about the repo's. Hoisting them would put a
- * test-only analyzer above both package subtrees for the sake of three differing
- * constants; if a third directory wants one, that is the moment to do it.
+ * Mechanism mirrors `renderer/animation/__tests__/animationGraph.ts`, and
+ * `renderer/assets/__tests__/assetsGraph.ts` answers a narrower question the same way.
+ * They are separate modules rather than one shared one: the single-sourcing above is a
+ * claim about this directory's guards, not about the repo's.
  */
 
 import { build, type Plugin } from 'esbuild';

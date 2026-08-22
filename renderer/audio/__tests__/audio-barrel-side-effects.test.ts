@@ -25,8 +25,8 @@
  * Mechanism mirrors `renderer/components/ui/__tests__/ui-barrel-side-effects.test.ts`:
  * esbuild bundles the barrel with tree-shaking, and the test asserts over the
  * resolved inputs and external specifiers. The bundling itself lives in
- * `audioGraph.js`, shared with this directory's other graph guard so the two cannot
- * drift into measuring different graphs.
+ * `audioGraph.js`, shared with the other graph guards in this directory so they
+ * cannot drift into measuring different graphs.
  */
 
 import { describe, it, expect } from 'vitest';
