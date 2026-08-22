@@ -172,6 +172,19 @@ function createNoopAudioManager(): AudioManager {
                 valid: false,
             };
         },
+        crossfadeAtCue(_outgoing, incoming, opts): AudioHandle {
+            // An arm is a decision about a start time, and nothing here ever starts.
+            return {
+                id: 'noop-audio-handle',
+                ref: incoming,
+                bus: opts.bus ?? 'sfx',
+                priority: opts.priority ?? 0,
+                valid: false,
+            };
+        },
+        fadeOutAtCue(): void {
+            return;
+        },
         secondsUntilCue(): number | null {
             // Nothing plays, so no cue is ever reached — answered, never thrown.
             return null;

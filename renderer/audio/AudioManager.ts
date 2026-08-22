@@ -7,6 +7,8 @@ import { parseAudioCueSheet, resolveCue, resolveCueWindow } from './audioCueShee
 import type {
     CrossfadeOptions,
     Cue,
+    CueAlignedCrossfadeOptions,
+    CueAlignedFadeOutSpec,
     FadeCurve,
     FadeInSpec,
     FadeOutSpec,
@@ -116,6 +118,27 @@ export interface AudioManager {
         incoming: AssetRef<AudioClipAsset>,
         opts: CrossfadeOptions,
     ): AudioHandle;
+    /**
+     * Arm a crossfade now and execute it at the outgoing voice's next arrival at
+     * `opts.atCue`, sample-accurately: the incoming clip loads immediately and its
+     * `source.start` is scheduled for the cue, with both ramps anchored there.
+     *
+     * Returns the incoming handle, which names a voice that is loading AND scheduled —
+     * `valid` is the whole report, and `play` owns the diagnosis of why it declined. See
+     * {@link DefaultAudioManager.crossfadeAtCue} for what each fail-soft branch leaves
+     * audible.
+     */
+    crossfadeAtCue(
+        outgoing: AudioHandle,
+        incoming: AssetRef<AudioClipAsset>,
+        opts: CueAlignedCrossfadeOptions,
+    ): AudioHandle;
+    /**
+     * Hold a fade-out until this voice's next arrival at `spec.atCue`, then run the
+     * authored {@link FadeOutSpec} from there — a fade that STARTS at a cue, where
+     * `fadeOut({ toCue })` is one that ENDS at one.
+     */
+    fadeOutAtCue(handle: AudioHandle, spec: CueAlignedFadeOutSpec): void;
     /**
      * How many seconds until this voice's playhead next reaches `cue`, or `null` when
      * nothing in the voice's schedule brings it there.
@@ -355,10 +378,14 @@ interface VoiceRecord {
      * Step 4: a crossfade's linked fade-out of the OUTGOING voice, fired with this
      * voice's real `t0` so both curves are anchored there and authored over the same
      * window — each still clamps its own end against its own voice's scheduled stop, per
-     * {@link DefaultAudioManager.crossfade} (§4.25). A thunk
-     * rather than a descriptor: this record owns only WHEN the linkage fires, while
-     * {@link DefaultAudioManager.crossfade}, which writes it, owns what it does — down
-     * to which voice is faded, resolved by handle id at fire time rather than captured.
+     * {@link DefaultAudioManager.crossfade} (§4.25). A thunk rather than a descriptor:
+     * this record owns only WHEN the linkage fires, while `linkCrossfade`, which writes
+     * it, owns what it does — down to which voice is faded, resolved by handle id at fire
+     * time rather than captured.
+     *
+     * That `t0` is where a cue-aligned crossfade needs no linkage of its own: it is the
+     * incoming voice's scheduled start, so it IS the cue, and both curves follow it there
+     * with nothing here to change.
      */
     linkedFadeOut: ((startedAt: number) => void) | null;
     source: AudioBufferSourceNode | null;
@@ -497,6 +524,26 @@ export class DefaultAudioManager implements AudioManager {
     }
 
     public play(ref: AssetRef<AudioClipAsset>, opts: PlayOptions = {}): AudioHandle {
+        return this.playVoice(ref, opts);
+    }
+
+    /**
+     * The one path every play takes, the ordinary verb and both crossfades alike.
+     *
+     * `resolveStart` names the context time the voice is to start at, and is handed on
+     * unevaluated — omitted, or `undefined` from it, means "as soon as possible", which is
+     * what every play but a cue-aligned crossfade asks for. A resolver rather than a number
+     * because the instant it names is a fact about ANOTHER voice's playhead, and that
+     * playhead moves while this one loads: resolved at the call it could only ever name an
+     * arrival the decode might already have missed, and `startVoice` would floor it at the
+     * clock and fire at once. `startVoice` owns WHEN it runs, which is late, for reasons
+     * stated there.
+     */
+    private playVoice(
+        ref: AssetRef<AudioClipAsset>,
+        opts: PlayOptions,
+        resolveStart?: (now: number) => number | undefined,
+    ): AudioHandle {
         const bus = opts.bus ?? DEFAULT_BUS_ID;
         const priority = normalizePriority(opts.priority);
         const handle = new ManagedAudioHandle(this.createHandleId(), ref, bus, priority);
@@ -589,7 +636,7 @@ export class DefaultAudioManager implements AudioManager {
                     this.releaseVoice(record, { stopSource: false });
                     return;
                 }
-                this.startVoice(record, buffer);
+                this.startVoice(record, buffer, resolveStart);
             })
             .catch(() => {
                 this.releaseVoice(record, { stopSource: false });
@@ -618,8 +665,7 @@ export class DefaultAudioManager implements AudioManager {
      *
      * A no-op on an invalid or already-released handle. What a fade does to a voice that
      * is not sounding yet — still `'loading'`, or scheduled ahead of the clock — is
-     * decided in {@link DefaultAudioManager.applyFadeOut}, and neither of those two ends
-     * in a ramp.
+     * decided in {@link DefaultAudioManager.applyFadeOut}, against the anchor it is handed.
      */
     public fadeOut(handle: AudioHandle, spec: FadeOutSpec): void {
         const record = this.voices.get(handle.id);
@@ -646,9 +692,10 @@ export class DefaultAudioManager implements AudioManager {
      * produce the same number. Taking it as an argument is what stops "one shared window"
      * from resting on that: it becomes a fact of the code rather than of the call stack, and
      * it survives a caller that reaches this from anywhere else. A `t0` that is a cue AHEAD
-     * of the clock is a further step this does NOT take on its own — the window would be
-     * authored correctly and the ramp would still depart from {@link rampDeparture}'s read
-     * at `currentTime`, which is the precondition {@link scheduleGainRamp} states.
+     * of the clock — what {@link DefaultAudioManager.fadeOutAtCue} and a cue-aligned
+     * crossfade's linkage both hand over — needs one thing more than a correctly authored
+     * window: the gain the ramp DEPARTS from is a fact about that anchor rather than about
+     * `currentTime`, and {@link fadeOutDeparture} is where the two are told apart.
      */
     private applyFadeOut(record: VoiceRecord, spec: FadeOutSpec, now: number): void {
         const started = startedVoice(record);
@@ -709,7 +756,7 @@ export class DefaultAudioManager implements AudioManager {
             now,
             rampEnd,
             spec.curve ?? DEFAULT_FADE_CURVE,
-            rampDeparture(record, started.gainNode.gain, now),
+            fadeOutDeparture(record, started.gainNode.gain, now, this.audioContext.currentTime),
         );
     }
 
@@ -737,10 +784,12 @@ export class DefaultAudioManager implements AudioManager {
      * A voice SCHEDULED ahead of the clock is not that state: it has a gain to write to,
      * so the ramp is laid from `now`, and the `cancelAndHoldAtTime` that anchors it
      * retires both the floor written at the scheduled start and any fade-in laid over it —
-     * so such a voice begins at `to` rather than fading to it. Deliberately left there:
-     * `fadeOut` is the verb the same state needed handling for, because its ramp ends in a
-     * release, and nothing can create the state yet — `startVoice`'s only production
-     * caller names no start.
+     * so such a voice begins at `to` rather than fading to it. That is the deliberate
+     * answer rather than an oversight, and {@link DefaultAudioManager.crossfadeAtCue} is
+     * what makes it a state a game can reach: a live `fadeTo` on the handle it returns
+     * lands here. `fadeOut` is the verb the same state needed handling for, because its
+     * ramp ends in a release and a ramp that finishes before the first sample would leave
+     * a voice silent and unreleased; a dip that arrives early is only a dip.
      */
     public fadeTo(handle: AudioHandle, spec: FadeToSpec): void {
         const record = this.voices.get(handle.id);
@@ -767,7 +816,7 @@ export class DefaultAudioManager implements AudioManager {
      * anchored to the incoming voice's REAL start `t0` and both authored over
      * `[t0, t0 + durationMs]` (§4.25). Returns the incoming handle.
      *
-     * Stateless sugar over `play` and the fade-out path, holding no crossfade state of its
+     * Stateless sugar over the play and fade-out paths, holding no crossfade state of its
      * own: the linkage lives on the incoming {@link VoiceRecord} as step 4 of Invariant
      * #121's precedence order, and fires once, at `t0`. The shared ANCHOR is unconditional
      * and is the whole point — until the incoming voice actually starts, the outgoing one
@@ -821,12 +870,80 @@ export class DefaultAudioManager implements AudioManager {
         incoming: AssetRef<AudioClipAsset>,
         opts: CrossfadeOptions,
     ): AudioHandle {
+        return this.linkCrossfade(outgoing, incoming, opts, null);
+    }
+
+    /**
+     * Arm a crossfade now and execute it at the outgoing voice's next arrival at
+     * `opts.atCue`: the incoming voice is `source.start`ed at that instant and BOTH ramps
+     * are anchored there, so the pair lands on the sample rather than on whichever frame a
+     * callback happened to fire in (§4.25). Everything else — the shared window, the two
+     * preconditions behind constant power, the per-voice clamp — is
+     * {@link DefaultAudioManager.crossfade}'s, unchanged.
+     *
+     * The load starts at once and the arrival is read when the buffer is in hand, not at
+     * the call. That ordering is what makes the fail-soft branches below reachable at all,
+     * since every one of them is a fact about the outgoing voice that can change while the
+     * incoming clip decodes.
+     *
+     * Fail-soft throughout, and every branch keeps SOMETHING audible:
+     *
+     * - **The decode lands after the cue.** The arrival is re-read there, so a looping bed
+     *   simply hands over on its NEXT pass. Only a voice with no next arrival falls to the
+     *   branch below.
+     * - **The cue is one the voice never reaches again** — past `loopEnd`, already gone on
+     *   a non-looping voice, or beyond the voice's own scheduled end. One warning, and the
+     *   swap happens immediately: the same answer `fadeOut({ toCue })` gives an
+     *   unreachable cue, and for the same reason — the transition was asked for, only its
+     *   alignment is impossible.
+     * - **The outgoing voice is gone, or still loading, when the decode lands.** There is
+     *   no timeline to align to, so the swap is immediate and silent. A voice already gone
+     *   also takes no linkage at all, exactly as `crossfade` leaves one.
+     * - **The incoming decode fails.** The arm dies with the record that held it, so the
+     *   outgoing voice keeps playing UNFADED and its own natural life — and no second
+     *   diagnosis is added beside whatever `play` already emitted (Invariant #118).
+     *
+     * The returned handle names a voice that is loading AND scheduled. `valid` is the
+     * whole report: a play that `play` rejected returns an invalid one having warned there,
+     * so a message here would put two warnings on one defect.
+     */
+    public crossfadeAtCue(
+        outgoing: AudioHandle,
+        incoming: AssetRef<AudioClipAsset>,
+        opts: CueAlignedCrossfadeOptions,
+    ): AudioHandle {
+        const { atCue, ...crossfadeOptions } = opts;
+        return this.linkCrossfade(outgoing, incoming, crossfadeOptions, atCue);
+    }
+
+    /**
+     * The one path both crossfade verbs take, so an obligation added to either cannot be
+     * forgotten by the other — {@link DefaultAudioManager.crossfade} owns what the pair
+     * does, {@link DefaultAudioManager.crossfadeAtCue} what the cue adds.
+     *
+     * `atCue` is the whole difference: `null` starts the incoming voice as soon as it
+     * decodes, a cue schedules it for the outgoing voice's next arrival there. The linkage
+     * needs no branch of its own either way, because it already takes the incoming voice's
+     * real `t0` as its argument and that `t0` IS the cue.
+     */
+    private linkCrossfade(
+        outgoing: AudioHandle,
+        incoming: AssetRef<AudioClipAsset>,
+        opts: CrossfadeOptions,
+        atCue: Cue | null,
+    ): AudioHandle {
         // Rest rather than a field-by-field forward, so a `PlayOptions` field added later
         // reaches `play` without a second edit here — which is what
         // `CrossfadeOptions extends Omit<PlayOptions, 'fadeIn'>` already promises. Excess
         // properties are still rejected where `opts` is authored.
         const { durationMs, curve = DEFAULT_CROSSFADE_CURVE, ...playOptions } = opts;
-        const handle = this.play(incoming, { ...playOptions, fadeIn: { durationMs, curve } });
+        const handle = this.playVoice(
+            incoming,
+            { ...playOptions, fadeIn: { durationMs, curve } },
+            atCue === null
+                ? undefined
+                : (now): number | undefined => this.cueAlignedStart(outgoing, atCue, now),
+        );
 
         const incomingRecord = this.voices.get(handle.id);
         // The outgoing voice is checked AFTER the play, not before: a saturated pool
@@ -851,6 +968,124 @@ export class DefaultAudioManager implements AudioManager {
         };
 
         return handle;
+    }
+
+    /**
+     * The context time a cue-aligned crossfade's incoming voice starts at, resolved when
+     * its buffer is in hand and that voice is going to play — or `undefined` for "as soon
+     * as possible", which every fail-soft branch of
+     * {@link DefaultAudioManager.crossfadeAtCue} lands on.
+     *
+     * Resolved by handle id here, never captured as a record, for the reason the linkage
+     * is: the outgoing voice may have been stopped, preempted or reached its own end while
+     * the incoming clip decoded, and a captured record would answer for a voice that has
+     * left the pool.
+     *
+     * `now` is the incoming voice's own `t0` clock read, handed down rather than re-read,
+     * so the arrival is measured against the same instant the start is floored at.
+     */
+    private cueAlignedStart(outgoing: AudioHandle, cue: Cue, now: number): number | undefined {
+        const record = this.voices.get(outgoing.id);
+        if (record === undefined) {
+            return undefined;
+        }
+
+        return this.nextCueArrival(record, cue, 'crossfadeAtCue', now) ?? undefined;
+    }
+
+    /**
+     * Hold `spec.fade` until this voice's next arrival at `spec.atCue`, then run it from
+     * there — the simple half of the cue-aligned pair, and deliberately not reducible to
+     * `fadeOut({ toCue })`, which ramps TO a cue over the window ending at one (§4.25).
+     *
+     * Nothing is deferred by a timer: the ramp is written now, over a window that OPENS at
+     * the cue, and the release rides the `source.stop(rampEnd)` every fade-out schedules
+     * (Invariant #119). So the voice is `'fading-out'` and condemned from this call even
+     * though it plays on at full volume until the cue — the phase names the schedule, not
+     * the audible descent, and preemption ranks it accordingly (Invariant #123).
+     *
+     * The whole {@link FadeOutSpec} vocabulary resolves against the cue rather than the
+     * call, so `{ overMs }` is a window opening there, `{ toCue }` names the NEXT arrival
+     * after it, and `{ toEnd: true }` ramps from it to the voice's scheduled end.
+     *
+     * Fail-soft, like every other cue op:
+     *
+     * - **A cue the voice never reaches again** gets one warning, and the fade then falls
+     *   back to `now` — so it is whatever a bare `fadeOut` would have done from here. The
+     *   fade was asked for; only its alignment is impossible.
+     * - **A voice still loading** has no timeline to align to and no gain to ramp, so the
+     *   release is parked and it never becomes audible: exactly what a bare `fadeOut`
+     *   leaves, and the fade is lost rather than deferred (Invariant #121).
+     * - **An invalid or already-released handle** is a silent no-op, as `stop`, `fadeOut`
+     *   and `fadeTo` are.
+     *
+     * A voice whose own start is still AHEAD of the clock is where this CAN part company
+     * with `fadeOut`, which cuts one outright because a ramp from `now` would finish before
+     * its first sample. An arrival at a cue is at or after the start it is measured from,
+     * so a reachable cue gives such a voice something to fade and the ordinary ramp runs.
+     * An unreachable one falls back to `now` under the first bullet and cuts it just the
+     * same; both are measured.
+     */
+    public fadeOutAtCue(handle: AudioHandle, spec: CueAlignedFadeOutSpec): void {
+        const record = this.voices.get(handle.id);
+        if (record === undefined) {
+            return;
+        }
+
+        const now = this.audioContext.currentTime;
+        const arrival = this.nextCueArrival(record, spec.atCue, 'fadeOutAtCue', now);
+        this.applyFadeOut(record, spec.fade, arrival ?? now);
+    }
+
+    /**
+     * The context time this voice's playhead next reaches `cue` — the instant a cue-aligned
+     * op is armed for — or `null` when nothing in its schedule brings it there.
+     *
+     * Derived from the recorded schedule facts through {@link nextCueContextTime}, so no
+     * playhead is sampled and no timer is consulted (Invariant #122), and the cue resolves
+     * under the same END-POINT rules `fadeOut({ toCue })` and `secondsUntilCue` use.
+     *
+     * `now` is supplied rather than read, so an arm and the start it is resolved for are
+     * measured against one instant.
+     *
+     * `verb` names the caller in the one warning this emits, which is the only diagnosis
+     * either cue-aligned verb adds (Invariant #118). It is a closed union rather than a
+     * `string`, so the message can only ever name a verb that exists. A voice still
+     * `'loading'` is NOT that diagnosis: it has no timeline to align to yet, which is a
+     * fact about how early the call came rather than a defect in it, so it returns `null`
+     * silently.
+     */
+    private nextCueArrival(
+        record: VoiceRecord,
+        cue: Cue,
+        verb: 'crossfadeAtCue' | 'fadeOutAtCue',
+        now: number,
+    ): number | null {
+        const started = startedVoice(record);
+        if (started === null) {
+            return null;
+        }
+
+        const cueSeconds = resolveEndpointCueSeconds(record, started, cue);
+        const arrival = nextCueContextTime(record, started, cueSeconds, now);
+        // The voice's own scheduled end bounds the arrival, exactly as it bounds
+        // `secondsUntilCue` — and closed at the stop, as the loop window is closed at
+        // `loopEnd`. `fadeOut({ toCue })` meets the same fact and CLAMPS to it instead,
+        // because it still has to fade something; an arm has to say the cue is not coming,
+        // for two reasons at once. Nothing would be there to hear it: the incoming half
+        // would start after the outgoing voice had gone silent. And the fade-out's ramp
+        // end is floored at its own anchor, so an anchor past the stop would push
+        // `source.stop` LATER than the one already booked — the one thing a re-target must
+        // never do (§4.25).
+        const stopAt = record.scheduledStopAt;
+        if (arrival === null || (stopAt !== null && arrival > stopAt)) {
+            console.warn(
+                `Audio ${verb} cue ${describeCue(cue)} resolved to ${cueSeconds}s, which nothing in this voice's schedule brings it to (${describeVoiceTimeline(record)}); beginning the transition immediately.`,
+            );
+            return null;
+        }
+
+        return arrival;
     }
 
     /**
@@ -884,15 +1119,7 @@ export class DefaultAudioManager implements AudioManager {
             return null;
         }
 
-        const resolution = resolveCue(cue, {
-            sheet: record.sheet,
-            duration: started.bufferDurationSeconds,
-            role: 'endpoint',
-        });
-        // An endpoint never abandons; the fallback keeps the union exhaustive for TS.
-        const cueSeconds =
-            resolution.kind === 'resolved' ? resolution.seconds : started.bufferDurationSeconds;
-
+        const cueSeconds = resolveEndpointCueSeconds(record, started, cue);
         const cueContextTime = nextCueContextTime(record, started, cueSeconds, now);
         if (cueContextTime === null) {
             return null;
@@ -1249,10 +1476,18 @@ export class DefaultAudioManager implements AudioManager {
     }
 
     /**
-     * Create a voice's nodes and start it — at `when`, or as soon as possible when no
-     * start is named. A scheduled start is what makes a cue-aligned transition native
-     * rather than timed: `source.start(when)` lands on the sample, where a callback firing
-     * a frame late would put the same transition a frame off the beat.
+     * Create a voice's nodes and start it — at the time `resolveStart` names, or as soon as
+     * possible when it names none. A scheduled start is what makes a cue-aligned transition
+     * native rather than timed: `source.start(when)` lands on the sample, where a callback
+     * firing a frame late would put the same transition a frame off the beat.
+     *
+     * The start arrives as a RESOLVER rather than a number, and is called late — after the
+     * release check and the schedule resolution below, and against the one `now` this reads.
+     * Both matter. Naming a cue-aligned arrival emits its own fail-soft warning, and a voice
+     * about to be torn down or abandoned would make that warning a lie, which is the rule
+     * the release check already states for the schedule's own messages. And a resolver that
+     * read the clock itself would be reading a second instant, when everything below is
+     * derived from one.
      *
      * A voice awaiting a future start is `'playing'` with a `startedAtContextTime` still
      * ahead of the clock, and no fourth {@link VoicePhase} marks it: a fourth phase would
@@ -1261,7 +1496,11 @@ export class DefaultAudioManager implements AudioManager {
      * such a voice ranks as playing for preemption while still inaudible, so a saturated
      * pool reclaims a live voice already fading out ahead of it.
      */
-    private startVoice(record: VoiceRecord, buffer: AudioBuffer, when?: number): void {
+    private startVoice(
+        record: VoiceRecord,
+        buffer: AudioBuffer,
+        resolveStart?: (now: number) => number | undefined,
+    ): void {
         if (this.disposed || !record.handle.valid || !this.voices.has(record.handle.id)) {
             return;
         }
@@ -1306,11 +1545,12 @@ export class DefaultAudioManager implements AudioManager {
         // the three: `NaN` and `-Infinity` fail the comparison on their own, while
         // `+Infinity` passes it and would put a non-finite time into the `setValueAtTime`
         // below — a `RangeError` from outside the try that guards `source.start`, on a path
-        // that is otherwise fail-soft throughout. `when` is optional rather than defaulted
-        // at the signature, so the clock is read exactly ONCE: a default expression plus
-        // the floor here would read it twice, and two reads are two instants on a clock
-        // that advances between them.
+        // that is otherwise fail-soft throughout. The resolver takes `now` and is optional
+        // rather than defaulted at the signature, so the clock is read exactly ONCE: a
+        // resolver reading it, or a default expression plus the floor here, would read it
+        // twice, and two reads are two instants on a clock that advances between them.
         const now = this.audioContext.currentTime;
+        const when = resolveStart?.(now);
         const startedAt = when !== undefined && Number.isFinite(when) && when > now ? when : now;
         // A fade-in departs from its curve's floor rather than from `volume`, and this
         // write is also what anchors the ramp: `scheduleGainRamp` re-anchors at the value
@@ -1842,10 +2082,12 @@ function clampUnit(value: number): number {
  * the departure and the fallback path writes it as an explicit anchor — so a fade-in
  * from silence would invert into a ramp down from full gain.
  *
- * Two callers know better, for different reasons: one just WROTE the value (the fade-in
- * at `t0` passes the floor it laid down), and one can BOUND it ({@link rampDeparture}
- * caps the read at the voice's ceiling, since a stale read reports a gain the voice
- * cannot be at). Omit it only when neither holds and the departure is genuinely unknown.
+ * A caller may know better for either of two reasons: it just WROTE the value (the fade-in
+ * at `t0` passes the floor it laid down), or it can BOUND it ({@link rampDeparture} caps
+ * the read at the voice's ceiling, since a stale read reports a gain the voice cannot be
+ * at; {@link fadeOutDeparture} drops the read entirely for a ramp starting at a cue, where
+ * it answers about the wrong instant rather than a stale quantum). Omit it only when
+ * neither holds and the departure is genuinely unknown.
  */
 export function scheduleGainRamp(
     param: AudioParam,
@@ -2025,10 +2267,42 @@ function fadeInFloor(curve: FadeCurve): number {
 }
 
 /**
+ * The gain a fade-out departs from, for a ramp starting at `startTime` against a clock
+ * reading `now`. The two coincide for every fade-out taken at the call; a cue-aligned one
+ * puts `startTime` AHEAD of the clock, and that is the whole reason this exists.
+ *
+ * At a future anchor `AudioParam.value` answers about the wrong INSTANT, not merely about a
+ * stale quantum: it reports where the gain is now, while the ramp departs from where the
+ * gain will be at the cue. Mixing it in is the under-estimate {@link rampDeparture}'s cap
+ * exists to prevent, arriving by the other route — a voice one second into a five-second
+ * fade-in would have its cue-aligned fade-out depart from near the floor and step DOWN to
+ * it, from a gain that will by then have climbed to `volume`.
+ *
+ * So the param is dropped there and the bound that applies AT the anchor is taken instead:
+ * a {@link CeilingHold} still travelling then, otherwise the settled ceiling. Exact for an
+ * ordinary voice and for any ramp that has landed by the cue, and a bounded OVER-estimate
+ * for one still in flight — the only safe direction, and the same trade
+ * {@link rampDeparture} makes for its own read. {@link VoiceRecord.settledGain} needs no
+ * arm of its own here: every instant application that writes it leaves it at or below the
+ * ceiling this returns.
+ */
+function fadeOutDeparture(
+    record: VoiceRecord,
+    gain: AudioParam,
+    startTime: number,
+    now: number,
+): number {
+    return startTime > now
+        ? voiceCeiling(record, startTime)
+        : rampDeparture(record, gain, startTime);
+}
+
+/**
  * The gain a fade verb on a LIVE voice departs from: what the param reports, capped at the
  * voice's own ceiling — or {@link VoiceRecord.settledGain} outright, on the one path where
- * the gain is known rather than estimated. Shared by {@link DefaultAudioManager.fadeOut}
- * and {@link DefaultAudioManager.fadeTo}; the ramps laid down at `t0` need none of it,
+ * the gain is known rather than estimated. Reached by {@link DefaultAudioManager.fadeTo}
+ * directly and by every fade-out through {@link fadeOutDeparture}, which answers for a
+ * ramp starting at a cue itself; the ramps laid down at `t0` need none of it,
  * because they know the gain written there exactly — {@link initialVoiceGain} as
  * `startVoice` set it, or an instant fade-in's own target where one landed over it.
  *
@@ -2221,8 +2495,8 @@ interface FadeOutRamp {
     /**
      * Held for {@link DefaultAudioManager.fadeOut} to print once `source.stop(rampEnd)` is
      * accepted, because it narrates a fade the refusal path cancels. A diagnosis that
-     * survives that path is printed where it is found instead: the unreachable-cue warning
-     * names an immediate stop, which is what the refusal does too.
+     * survives that path is printed where it is found instead — see
+     * {@link resolveAuthoredFadeOutEnd} for the one that does.
      */
     readonly deferredWarning: string | null;
 }
@@ -2300,15 +2574,7 @@ function resolveAuthoredFadeOutEnd(
 
     // `{ toCue }` — an end-point by nature, so it clamps to `[0, duration]` and never
     // abandons, exactly as `play()` resolves its `to`.
-    const resolution = resolveCue(spec.toCue, {
-        sheet: record.sheet,
-        duration: started.bufferDurationSeconds,
-        role: 'endpoint',
-    });
-    // An endpoint never abandons; the fallback keeps the union exhaustive for TS.
-    const cueSeconds =
-        resolution.kind === 'resolved' ? resolution.seconds : started.bufferDurationSeconds;
-
+    const cueSeconds = resolveEndpointCueSeconds(record, started, spec.toCue);
     const cueContextTime = nextCueContextTime(record, started, cueSeconds, now);
     if (cueContextTime !== null) {
         return { rampEnd: cueContextTime, deferredWarning: null };
@@ -2322,11 +2588,30 @@ function resolveAuthoredFadeOutEnd(
     // degraded end lands past `loopEnd`. There a message naming only the seconds would
     // leave the operator no way back to the call that caused it.
     console.warn(
-        `Audio fadeOut cue ${describeCue(spec.toCue)} resolved to ${cueSeconds}s, which this voice never reaches again (${describeVoiceTimeline(record)}); silencing and stopping the voice immediately.`,
+        `Audio fadeOut cue ${describeCue(spec.toCue)} resolved to ${cueSeconds}s, which this voice never reaches again (${describeVoiceTimeline(record)}); silencing and stopping the voice without a fade.`,
     );
-    // Printed here, not deferred: it names an immediate stop, which is exactly what the
-    // refusal path performs as well, so it stays true whichever way the stop goes.
+    // Printed here, not deferred: it names no instant, so it stays true whichever way the
+    // stop goes — the refusal path stops the voice at once, and a cue-aligned fade begins
+    // the whole empty window ahead of the clock.
     return { rampEnd: now, deferredWarning: null };
+}
+
+/**
+ * A cue resolved on THIS voice's decoded timeline under END-POINT rules: it clamps to
+ * `[0, duration]` and never abandons, so an absent `{ name }` degrades to the decoded end
+ * rather than taking the op down with it (Invariant #118).
+ *
+ * Shared, so that a cue named to two verbs resolves to one number rather than to opinions
+ * that happen to agree today.
+ */
+function resolveEndpointCueSeconds(record: VoiceRecord, started: StartedVoice, cue: Cue): number {
+    const resolution = resolveCue(cue, {
+        sheet: record.sheet,
+        duration: started.bufferDurationSeconds,
+        role: 'endpoint',
+    });
+    // An endpoint never abandons; the fallback keeps the union exhaustive for TS.
+    return resolution.kind === 'resolved' ? resolution.seconds : started.bufferDurationSeconds;
 }
 
 /**

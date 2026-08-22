@@ -3315,7 +3315,7 @@ describe('DefaultAudioManager — fadeOut', () => {
         // The timeline segment is the half that tells an operator WHY the cue is out of
         // reach; without it the message names seconds and no schedule to place them in.
         expect(String(warn.mock.calls[0]?.[0])).toContain('entered at 2s, not looping');
-        expect(String(warn.mock.calls[0]?.[0])).toContain('stopping the voice immediately');
+        expect(String(warn.mock.calls[0]?.[0])).toContain('stopping the voice without a fade');
     });
 
     it('silences and stops immediately when a toCue lies outside the loop window (#122)', async () => {
@@ -3856,9 +3856,9 @@ describe('DefaultAudioManager — secondsUntilCue', () => {
 
     it('answers null on a voice whose scheduled start is still ahead (#122)', async () => {
         // A voice started at a FUTURE context time has not begun, so it has no playhead
-        // and no cue timing either. Written onto the record because no verb schedules a
-        // future start yet; the state is the one such a start produces, and the maths
-        // reads it the same way whoever wrote it.
+        // and no cue timing either. Written onto the record here rather than produced by
+        // `crossfadeAtCue`: the state is the same one, and the maths reads it the same way
+        // whoever wrote it.
         const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
         const handle = manager.play(ref);
         await flushAudioLoad();
@@ -5768,6 +5768,655 @@ describe('DefaultAudioManager — crossfade', () => {
     });
 });
 
+// ─── cue-aligned transitions (#118, #119, #121, #122) ───────────────────────────
+
+/**
+ * `crossfadeAtCue` and `fadeOutAtCue` — armed now, executed at the cue, native throughout.
+ * The crossfade rides the future-start capability: its incoming voice is
+ * `source.start(when)`ed at the cue and the linked fade-out is anchored there with it. The
+ * fade-out needs no start at all — it writes a ramp whose window OPENS at the cue, and the
+ * `source.stop` that releases the voice along with it. Neither waits on a callback, so
+ * neither can land a frame off the beat.
+ *
+ * Written against a body that DELEGATES — `crossfadeAtCue` calling `crossfade`, and
+ * `fadeOutAtCue` calling `fadeOut(spec.fade)`, both dropping `atCue` — which is exactly the
+ * reducible verb these must not be. Against it 18 of 27 are red. The nine that pass are the
+ * cases where no arrival is resolved at all, which a body that never resolves one satisfies
+ * for free: an outgoing voice still loading, gone before the decode, or already invalid; an
+ * incoming decode that fails, a play its own schedule abandons, and one cancelled at its
+ * start; the arm itself before the decode lands; a fade on a loading voice; and the
+ * released-handle no-op. They fence the verbs rather than drive them — and the two that
+ * assert SILENCE about a transition that never happens are green here for the reason they
+ * exist: they are red against an implementation that resolves the arrival before
+ * `startVoice`'s own release and abandon gates, which is where that warning becomes a lie.
+ *
+ * The fixture is the shared theme sheet on a 10 s buffer under the fake clock's `10`: a
+ * `loop: true` voice takes the sheet's own `[2, 6]` default region, enters at `0` and
+ * wraps every 4 s, so `loopEnd` first arrives at `16` and again at `20`. Every instant
+ * below is that arithmetic, and nothing samples a playhead to find it (Invariant #122).
+ */
+describe('DefaultAudioManager — cue-aligned transitions', () => {
+    it('starts the incoming voice AT the cue, with both halves anchored there (#121, #122)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            });
+
+        manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'loopEnd' },
+        });
+        await startIncoming();
+
+        // The decode landed at 10 and the playhead reaches `loopEnd` at 16, so an
+        // immediate crossfade would put the whole transition six seconds early.
+        expect(expectSource(context, 1).start).toHaveBeenCalledWith(16, 0);
+        expect(expectGain(context, 5).gain.calls.slice(0, 2)).toEqual([
+            { method: 'setValueAtTime', value: 0, time: 16 },
+            { method: 'cancelAndHoldAtTime', time: 16 },
+        ]);
+        // The outgoing voice's own start is untouched at 10; only the fade moves to 16.
+        expect(expectGain(context, 4).gain.calls.slice(0, 2)).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 16 },
+        ]);
+
+        const rising = expectGain(context, 5).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        const falling = expectGain(context, 4).gain.calls.filter(
+            (call) => call.method === 'linearRampToValueAtTime',
+        );
+        expect(rising).toHaveLength(64);
+        expect(falling).toHaveLength(64);
+        // Identical waypoint times over `[16, 18]` is what "both halves anchored there"
+        // means: one window, opened by the cue rather than by the call.
+        expect(rising.map((call) => call.time)).toEqual(falling.map((call) => call.time));
+        expect(rising.at(-1)).toEqual({ method: 'linearRampToValueAtTime', value: 1, time: 18 });
+        expect(falling.at(-1)).toEqual({ method: 'linearRampToValueAtTime', value: 0, time: 18 });
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(18);
+        // Native scheduling throughout — a `setTimeout` holding the arm would show here,
+        // since fake timers are installed for the whole file.
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('takes the NEXT arrival when the decode lands after the cue (#122)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            });
+
+        manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'loopEnd' },
+        });
+        // The load outran the cue: 16 has gone by the time the buffer is here. Reading the
+        // arrival at the DECODE rather than at the call is what makes the next pass
+        // reachable at all — an instant captured at the call is floored at the clock by
+        // `startVoice` and fires at once, off the beat entirely.
+        context.currentTime = 17;
+        await startIncoming();
+
+        expect(expectSource(context, 1).start).toHaveBeenCalledWith(20, 0);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(22);
+        expect(expectGain(context, 5).gain.calls[0]).toEqual({
+            method: 'setValueAtTime',
+            value: 0,
+            time: 20,
+        });
+    });
+
+    it('measures the arrival against the t0 it is handed, not a re-read clock (#122)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            });
+        // The outgoing voice is already started, so this only affects the incoming `t0`
+        // and anything that reads the clock after it.
+        driftAudioClock(context);
+        const warn = spyOnWarn();
+
+        // A cue in the INTRO, before `loopStart`: the entry pass reaches 0.25 s at 10.25
+        // and no later pass ever returns there. So it is reachable from `t0` and gone a
+        // clock-read later, which is the whole window in which "handed the start" and
+        // "read the clock again" differ — under the frozen double they never do.
+        manager.crossfadeAtCue(outgoing, incomingRef, { durationMs: 2000, atCue: 0.25 });
+        await startIncoming();
+
+        expect(warn).not.toHaveBeenCalled();
+        expect(expectSource(context, 1).start).toHaveBeenCalledWith(10.25, 0);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12.25);
+    });
+
+    it.each([
+        [
+            'a looping voice whose cue lies past the loop window',
+            { loop: true },
+            { name: 'outro' },
+            'Audio crossfadeAtCue cue { name: "outro" } resolved to 9s, which nothing in this voice\'s schedule brings it to (entered at 0s, loop window [2s, 6s]); beginning the transition immediately.',
+        ],
+        [
+            'a non-looping voice the playhead has already carried past it',
+            { from: 5 },
+            2,
+            "Audio crossfadeAtCue cue 2s resolved to 2s, which nothing in this voice's schedule brings it to (entered at 5s, not looping); beginning the transition immediately.",
+        ],
+    ])(
+        'crossfades immediately with exactly one warning for %s (#118)',
+        async (_name, outgoingPlayOptions, atCue, expectedWarning) => {
+            const { context, manager, outgoing, incomingRef, startIncoming } =
+                await createCrossfadePair({
+                    outgoingMetadata: THEME_CUE_SHEET,
+                    outgoingPlayOptions,
+                });
+            const warn = spyOnWarn();
+
+            manager.crossfadeAtCue(outgoing, incomingRef, { durationMs: 2000, atCue });
+            await startIncoming();
+
+            expect(warn).toHaveBeenCalledExactlyOnceWith(expectedWarning);
+            // Fail-soft keeps the swap audible: it is the ALIGNMENT that is lost, not the
+            // transition — the same answer `fadeOut({ toCue })` gives an unreachable cue.
+            expect(expectSource(context, 1).start).toHaveBeenCalledWith(10, 0);
+            expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12);
+        },
+    );
+
+    it('treats an arrival past the outgoing voice own scheduled end as unreachable (#122)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { to: 4 },
+            });
+        const warn = spyOnWarn();
+
+        // The buffer runs to 10 s so the playhead would reach 8 s at t=18, but the `to`
+        // bound stops this voice at 14 — the same end `secondsUntilCue` answers `null`
+        // for, applied here so the arm cannot schedule the swap into a voice's grave.
+        manager.crossfadeAtCue(outgoing, incomingRef, { durationMs: 2000, atCue: 8 });
+        await startIncoming();
+
+        expect(warn).toHaveBeenCalledOnce();
+        expect(expectSource(context, 1).start).toHaveBeenCalledWith(10, 0);
+        // And the stop is SHORTENED to the immediate fade's end rather than pushed out to
+        // an arrival past it: a re-target can only ever take life away.
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12);
+        expect(readVoiceRecord(manager, outgoing).scheduledStopAt).toBe(12);
+    });
+
+    it('hands over ON the outgoing voice scheduled end, which it still reaches (#122)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { to: 4 },
+            });
+        const warn = spyOnWarn();
+
+        // Exactly ON the bound the test above sits past: the `to` bound ends this voice at
+        // 14 and the cue at 4 s arrives at 14 too. Closed at the stop, as the loop window
+        // is closed at `loopEnd` — the playhead does reach that position, so the handover
+        // lands there rather than being abandoned four seconds early.
+        manager.crossfadeAtCue(outgoing, incomingRef, { durationMs: 2000, atCue: 4 });
+        await startIncoming();
+
+        expect(warn).not.toHaveBeenCalled();
+        expect(expectSource(context, 1).start).toHaveBeenCalledWith(14, 0);
+        // Nothing of the outgoing voice's own life is left to fade over, so its half is the
+        // instant silence an empty window always is — and lands on the sample its source
+        // was already going to end at.
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 14 },
+            { method: 'setValueAtTime', value: 0, time: 14 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(14);
+    });
+
+    it('clamps a cue-aligned fade-out to the stop already scheduled, never extending it', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { to: 8 },
+            });
+
+        // Reachable — the cue at 4 s arrives at 14, inside the life the `to` bound fixed
+        // at 18 — but the authored six-second window would run two seconds past it.
+        manager.crossfadeAtCue(outgoing, incomingRef, { durationMs: 6000, atCue: 4 });
+        await startIncoming();
+
+        expect(expectSource(context, 1).start).toHaveBeenCalledWith(14, 0);
+        expect(expectGain(context, 4).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0,
+            time: 18,
+        });
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(18);
+        expect(readVoiceRecord(manager, outgoing).scheduledStopAt).toBe(18);
+        // The incoming half clamps against its OWN voice, which nothing bounds here, so
+        // the two windows diverge exactly as an immediate crossfade's can.
+        expect(expectGain(context, 5).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 1,
+            time: 20,
+        });
+    });
+
+    it('starts the incoming voice now when the outgoing one is still loading (#121)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming, startOutgoing } =
+            await createCrossfadePair({
+                deferOutgoing: true,
+                outgoingMetadata: THEME_CUE_SHEET,
+            });
+        const warn = spyOnWarn();
+
+        manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'loopEnd' },
+        });
+        await startIncoming();
+
+        // A voice that has not started has no timeline to align to and no defect to
+        // diagnose — it is simply too early for a cue, so the swap takes the ordinary
+        // immediate path. The incoming voice started first, so it is source index 0.
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 0);
+        expect(warn).not.toHaveBeenCalled();
+        expect(readVoiceRecord(manager, outgoing).releaseOnStart).toBe(true);
+
+        await startOutgoing();
+
+        expect(outgoing.valid).toBe(false);
+    });
+
+    it('starts the incoming voice now when the outgoing one is released before the decode', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            });
+        const warn = spyOnWarn();
+
+        manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'loopEnd' },
+        });
+        manager.stop(outgoing);
+        await startIncoming();
+
+        // The arrival is read from the outgoing voice when the decode lands, so a voice
+        // gone by then names no instant — and waiting for a cue nothing will reach would
+        // hold the incoming bed out of a silence it could be filling.
+        expect(expectSource(context, 1).start).toHaveBeenCalledWith(10, 0);
+        expect(warn).not.toHaveBeenCalled();
+        expect(countGainRamps(expectGain(context, 5).gain.calls)).toBe(64);
+    });
+
+    it('still fades the incoming voice in when the outgoing handle is already invalid', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            });
+        manager.stop(outgoing);
+
+        const incoming = manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'loopEnd' },
+        });
+
+        expect(readVoiceRecord(manager, incoming).linkedFadeOut).toBeNull();
+
+        await startIncoming();
+
+        expect(expectSource(context, 1).start).toHaveBeenCalledWith(10, 0);
+        expect(countGainRamps(expectGain(context, 5).gain.calls)).toBe(64);
+    });
+
+    it('leaves the outgoing voice playing unfaded when the incoming one never decodes', async () => {
+        const { context, manager, outgoing, incomingRef, incomingLoad } = await createCrossfadePair(
+            {
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            },
+        );
+        const warn = spyOnWarn();
+
+        const incoming = manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'loopEnd' },
+        });
+        incomingLoad.reject(new Error('decode failed'));
+        await flushAudioLoad();
+
+        expect(incoming.valid).toBe(false);
+        // The arm lives entirely on the incoming record, so it dies with it — and `play`
+        // owns whatever diagnosis a failed load gets (Invariant #118).
+        expect(warn).not.toHaveBeenCalled();
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+        ]);
+        expect(expectSource(context, 0).stop).not.toHaveBeenCalled();
+        expect(readVoiceRecord(manager, outgoing).phase).toBe('playing');
+    });
+
+    it('says nothing about a transition an incoming voice cancelled at its start never makes (#118)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            });
+        const warn = spyOnWarn();
+
+        const incoming = manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'outro' },
+        });
+        // Parks `releaseOnStart` on the still-loading incoming voice, so its own
+        // `startVoice` tears it down before it can sound.
+        manager.fadeOut(incoming, { overMs: 500 });
+        await startIncoming();
+
+        // The unreachable cue would ordinarily warn. Resolving the arrival before the
+        // release gate would print it here too, narrating a transition that never happens
+        // — the same lie `startVoice` already keeps its schedule warnings clear of.
+        expect(warn).not.toHaveBeenCalled();
+        expect(incoming.valid).toBe(false);
+        expect(context.createdSources).toHaveLength(1);
+        expect(readVoiceRecord(manager, outgoing).phase).toBe('playing');
+    });
+
+    it('says nothing about a transition an abandoned incoming play never makes (#118)', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            });
+        const warn = spyOnWarn();
+
+        // Two defects at once: an unreachable cue on the outgoing voice, and an incoming
+        // `from` that the dynamic tier abandons the play over. Only the second happens.
+        manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'outro' },
+            from: { name: 'missing' },
+        });
+        await startIncoming();
+
+        expect(warn).toHaveBeenCalledOnce();
+        expect(String(warn.mock.calls[0]?.[0])).toContain('abandoning playback');
+        expect(context.createdSources).toHaveLength(1);
+        expect(readVoiceRecord(manager, outgoing).phase).toBe('playing');
+    });
+
+    it('leaves the outgoing voice at full volume for the whole arm', async () => {
+        const { context, manager, outgoing, incomingRef } = await createCrossfadePair({
+            outgoingMetadata: THEME_CUE_SHEET,
+            outgoingPlayOptions: { loop: true },
+        });
+
+        const incoming = manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'loopEnd' },
+        });
+
+        // Nothing at all happens at the call: no second source, no ramp, no rescheduled
+        // stop. The arm is a decision about a start time, and it is taken at the decode.
+        expect(context.createdSources).toHaveLength(1);
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+        ]);
+        expect(readVoiceRecord(manager, outgoing)).toMatchObject({
+            phase: 'playing',
+            scheduledStopAt: null,
+        });
+        expect(readVoiceRecord(manager, incoming).linkedFadeOut).toBeInstanceOf(Function);
+    });
+
+    it('returns the incoming handle and forwards every play option to it', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            });
+
+        const incoming = manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'loopEnd' },
+            bus: 'music',
+            loop: true,
+            priority: 7,
+            volume: 0.5,
+        });
+
+        expect(incoming.ref).toBe(incomingRef);
+        expect(incoming.bus).toBe('music');
+        expect(incoming.priority).toBe(7);
+        expect(incoming.id).not.toBe(outgoing.id);
+
+        await startIncoming();
+
+        // `atCue` is destructured off rather than forwarded, so it reaches `play` as
+        // nothing at all; the rest arrives exactly as an immediate crossfade forwards it.
+        expect(expectSource(context, 1).loop).toBe(true);
+        expect(expectGain(context, 5).gain.calls.at(-1)).toEqual({
+            method: 'linearRampToValueAtTime',
+            value: 0.5,
+            time: 18,
+        });
+    });
+
+    it('holds a fadeOutAtCue ramp until the cue and runs the authored fade from there (#122)', async () => {
+        const { context, manager, handle } = await createCuedVoice({ loop: true });
+
+        manager.fadeOutAtCue(handle, {
+            atCue: { name: 'loopEnd' },
+            fade: { overMs: 2000, curve: 'linear' },
+        });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 16 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 18 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(18);
+        // The stop is booked at the arm, so the voice is condemned from here even though
+        // it stays at full volume for six more seconds — `'fading-out'` names the
+        // schedule, not the audible descent, and preemption reads it as such.
+        expect(readVoiceRecord(manager, handle)).toMatchObject({
+            phase: 'fading-out',
+            scheduledStopAt: 18,
+        });
+        expect(handle.valid).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('starts at the cue where fadeOut({ toCue }) ends there, on the same cue (#122)', async () => {
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const held = manager.play(ref, { loop: true });
+        const ramped = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+
+        manager.fadeOutAtCue(held, {
+            atCue: { name: 'loopEnd' },
+            fade: { toCue: { name: 'loopEnd' }, curve: 'linear' },
+        });
+        manager.fadeOut(ramped, { toCue: { name: 'loopEnd' }, curve: 'linear' });
+
+        // One cue, two verbs, no overlap: `fadeOut({ toCue })` ramps INTO the wrap over
+        // the pass the voice is in, while this one holds through that wrap and ramps over
+        // the pass AFTER it. Reducing either to the other would move a whole loop period.
+        expect(expectGain(context, 4).gain.calls.slice(1)).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 16 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 20 },
+        ]);
+        expect(expectGain(context, 5).gain.calls.slice(1)).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 16 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(20);
+        expect(expectSource(context, 1).stop).toHaveBeenCalledWith(16);
+    });
+
+    it('ramps a fadeOutAtCue { toEnd } from the cue to the voice own scheduled end (#122)', async () => {
+        const { context, manager, handle } = await createCuedVoice();
+
+        manager.fadeOutAtCue(handle, {
+            atCue: { name: 'chorus' },
+            fade: { toEnd: true, curve: 'linear' },
+        });
+
+        // Only the ramp's START moves: a non-looping voice ends where its buffer runs
+        // out, at 20, and `{ toEnd }` still lands exactly there.
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 14 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 20 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(20);
+    });
+
+    it('fades a scheduled voice from its cue rather than cutting it (#119, #121)', () => {
+        const { context, manager, handle } = createLoadingVoice();
+        startVoiceAt(manager, handle, 14);
+
+        manager.fadeOutAtCue(handle, { atCue: 4, fade: { overMs: 2000, curve: 'linear' } });
+
+        // A bare `fadeOut` CUTS a voice whose start is still ahead, because its ramp would
+        // run out before the first sample. A cue-aligned one need not: the cue at 4 s
+        // arrives at 18, four seconds after the voice begins, so there is something to
+        // fade and the ordinary ramp runs.
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 14 },
+            { method: 'cancelAndHoldAtTime', time: 18 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 20 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(20);
+        expect(handle.valid).toBe(true);
+    });
+
+    it('cuts a scheduled voice whose cue is unreachable, exactly as a bare fadeOut does (#119)', () => {
+        const { context, manager, handle } = createLoadingVoice({ playOptions: { from: 5 } });
+        startVoiceAt(manager, handle, 14);
+        const warn = spyOnWarn();
+
+        manager.fadeOutAtCue(handle, { atCue: 2, fade: { overMs: 2000, curve: 'linear' } });
+
+        // The other half of the boundary above: an unreachable cue falls back to `now`,
+        // which is BEHIND this voice's own start, so there is nothing to ramp after all
+        // and the voice is cut — the same answer `fadeOut` gives that state, reached
+        // through the same guard. Warned once for the cue, and not again for the cut.
+        expect(warn).toHaveBeenCalledOnce();
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 14 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith();
+        expect(handle.valid).toBe(false);
+    });
+
+    it('stops without a fade when the FADE own cue is unreachable from the arm (#118)', async () => {
+        const { context, manager, handle } = await createCuedVoice();
+        const warn = spyOnWarn();
+
+        // A reachable arm and an unreachable fade: `chorus` arrives at 14, and from there
+        // this non-looping playhead never comes back to `intro` at 0.
+        manager.fadeOutAtCue(handle, {
+            atCue: { name: 'chorus' },
+            fade: { toCue: { name: 'intro' } },
+        });
+
+        // The empty window lands where the ramp would have BEGUN, which is the cue — not
+        // the clock. That is why the message names no instant: the same sentence has to
+        // hold for this anchor and for the immediate stop a refused schedule performs.
+        expect(warn).toHaveBeenCalledOnce();
+        expect(String(warn.mock.calls[0]?.[0])).toContain(
+            'silencing and stopping the voice without a fade',
+        );
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 14 },
+            { method: 'setValueAtTime', value: 0, time: 14 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(14);
+    });
+
+    it('fades immediately with exactly one warning when the cue is unreachable (#118)', async () => {
+        const { context, manager, handle } = await createCuedVoice({ from: 5 });
+        const warn = spyOnWarn();
+
+        manager.fadeOutAtCue(handle, { atCue: 2, fade: { overMs: 2000, curve: 'linear' } });
+
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            "Audio fadeOutAtCue cue 2s resolved to 2s, which nothing in this voice's schedule brings it to (entered at 5s, not looping); beginning the transition immediately.",
+        );
+        expect(expectGain(context, 4).gain.calls.slice(1)).toEqual([
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 12 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12);
+    });
+
+    it.each([
+        ['has landed by then', 2000, 0.5],
+        ['is still travelling then', 20000, 1],
+    ])(
+        'departs a cue-aligned fade from the ceiling that applies AT the cue, with a fadeTo that %s (#120)',
+        async (_name, durationMs, expectedDeparture) => {
+            const { context, manager, handle } = await createCuedVoice({ loop: true });
+            manager.fadeTo(handle, { to: 0.5, durationMs });
+            // What the param reports part-way down that ramp. It is a fact about NOW, and
+            // the ramp being armed here departs six seconds later — so mixing it in
+            // reports a gain the voice will have left, and steps the fade down to it.
+            expectGain(context, 4).gain.value = 0.3;
+
+            manager.fadeOutAtCue(handle, {
+                atCue: { name: 'loopEnd' },
+                fade: { overMs: 640, curve: 'equalPower' },
+            });
+
+            const waypoints = expectGain(context, 4)
+                .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+                .slice(-64);
+            // A 2000 ms `fadeTo` has settled by 16, so the ceiling there is the voice's
+            // own `volume`; a 20000 ms one is still in flight, so the hold it booked is
+            // the operative bound and is deliberately the LOOSER of the two.
+            expect(waypoints[0]?.value).toBeCloseTo(
+                expectedDeparture * Math.cos(Math.PI / 128),
+                12,
+            );
+            expect(waypoints.at(-1)).toEqual({
+                method: 'linearRampToValueAtTime',
+                value: 0,
+                time: 16.64,
+            });
+        },
+    );
+
+    it('parks a release on a voice still loading, exactly as a bare fadeOut does (#121)', () => {
+        const { context, manager, handle } = createLoadingVoice();
+
+        manager.fadeOutAtCue(handle, { atCue: 4, fade: { overMs: 2000 } });
+
+        // There is no timeline to align to and no gain to ramp, so the release is parked
+        // and the voice never becomes audible — the fade is lost, not deferred.
+        expect(readVoiceRecord(manager, handle).releaseOnStart).toBe(true);
+        expect(context.createdSources).toHaveLength(0);
+    });
+
+    it('is a silent no-op on a handle whose voice has already been released', async () => {
+        const { context, manager, handle } = await createCuedVoice({ loop: true });
+        manager.stop(handle);
+        const warn = spyOnWarn();
+        const gainCallsBefore = context.createdGainNodes.map((gain) => [...gain.gain.calls]);
+
+        manager.fadeOutAtCue(handle, { atCue: { name: 'loopEnd' }, fade: { overMs: 2000 } });
+
+        expect(warn).not.toHaveBeenCalled();
+        expect(context.createdGainNodes.map((gain) => gain.gain.calls)).toEqual(gainCallsBefore);
+    });
+});
+
 // ─── cue-sheet provenance (#124) ────────────────────────────────────────────────
 
 describe('DefaultAudioManager — cue sheet provenance', () => {
@@ -6565,12 +7214,16 @@ interface ObservableVoiceRecord {
 
 /**
  * The manager internals the tests reach, behind ONE cast site. `startVoice` is here for
- * the same reason the voice map is: no public verb takes a start time, so a scheduled
- * start would otherwise be unmeasurable until the first cue-aligned transition ships.
+ * the same reason the voice map is: no public verb NAMES a start time, so the only ones a
+ * test could otherwise reach are the arrivals a cue-aligned crossfade happens to resolve.
  */
 interface AudioManagerInternals {
     readonly voices: Map<string, ObservableVoiceRecord>;
-    startVoice(record: ObservableVoiceRecord, buffer: AudioBuffer, when?: number): void;
+    startVoice(
+        record: ObservableVoiceRecord,
+        buffer: AudioBuffer,
+        resolveStart?: (now: number) => number | undefined,
+    ): void;
 }
 
 // @chimera-review: reaches the manager's private voice map and starter because the handle exposes none of this schedule state by design; asserting it here is what stops it becoming unverifiable write-only state.
@@ -6594,9 +7247,10 @@ function readVoiceRecord(manager: DefaultAudioManager, handle: AudioHandle): Obs
 }
 
 /**
- * Start a loading voice at an EXPLICIT context time, the way a cue-aligned transition
- * will: `play()` names no start, so the load continuation always takes the default and
- * nothing in production reaches a future `t0` yet.
+ * Start a loading voice at an EXPLICIT context time, the way a cue-aligned crossfade does:
+ * `play()` names no start, so its load continuation takes the default, and the starts a
+ * cue can resolve are all finite arrivals ahead of the clock. This reaches the rest — a
+ * start already behind it, and the three non-finite ones.
  *
  * This bypasses the pending load rather than resolving it, so the buffer is supplied here
  * — the ten seconds {@link createLoadingVoice} decodes by default, which is why a voice
@@ -6610,7 +7264,10 @@ function startVoiceAt(manager: DefaultAudioManager, handle: AudioHandle, when: n
     if (record === undefined) {
         throw new Error(`Expected a loading voice for handle ${handle.id}.`);
     }
-    internals.startVoice(record, createAudioBuffer('theme', 10), when);
+    // Wrapped, because the production parameter is a RESOLVER `startVoice` calls after its
+    // own release gates. A constant one names the same instant however late it is called,
+    // which is what lets these tests drive a start time the cue path could never resolve.
+    internals.startVoice(record, createAudioBuffer('theme', 10), () => when);
 }
 
 /**
@@ -6689,6 +7346,8 @@ async function createCrossfadePair(
     options: {
         readonly deferOutgoing?: boolean;
         readonly incomingBufferSeconds?: number;
+        /** A cue sheet on the OUTGOING ref, which is the timeline a cue-aligned arm reads. */
+        readonly outgoingMetadata?: unknown;
         readonly outgoingPlayOptions?: PlayOptions;
         readonly poolSize?: number;
     } = {},
@@ -6710,6 +7369,10 @@ async function createCrossfadePair(
             : createManager({ poolSize: options.poolSize });
     const outgoingRef = audioRef('audio/music/theme.ogg');
     const incomingRef = audioRef('audio/music/battle.ogg');
+    // `in` rather than `!== undefined`, so a test can register a literal `undefined`.
+    if ('outgoingMetadata' in options) {
+        assetManager.registerMetadata(outgoingRef, options.outgoingMetadata);
+    }
     const outgoingLoad = assetManager.defer(outgoingRef);
     const incomingLoad = assetManager.defer(incomingRef);
     const startOutgoing = async (): Promise<void> => {
@@ -6735,6 +7398,23 @@ async function createCrossfadePair(
         },
         startOutgoing,
     };
+}
+
+/**
+ * One STARTED voice carrying the shared theme sheet, on the 10 s buffer
+ * {@link createCuedManager} decodes by default. The cue-aligned verbs read a live
+ * voice's own timeline, so every one of their tests needs a voice that has a schedule
+ * rather than a handle that has a load.
+ */
+async function createCuedVoice(playOptions: PlayOptions = {}): Promise<{
+    readonly context: FakeAudioContext;
+    readonly manager: DefaultAudioManager;
+    readonly handle: AudioHandle;
+}> {
+    const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+    const handle = manager.play(ref, playOptions);
+    await flushAudioLoad();
+    return { context, manager, handle };
 }
 
 /** How many gain ramps a call log holds — the write a fade is made of. */

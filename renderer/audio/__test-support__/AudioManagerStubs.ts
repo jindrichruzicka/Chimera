@@ -12,6 +12,10 @@ export function createAudioManagerSpy(): AudioManager {
         crossfade: vi.fn((_outgoing: AudioHandle, incoming: AssetRef<AudioClipAsset>) =>
             makeAudioHandle(incoming),
         ),
+        crossfadeAtCue: vi.fn((_outgoing: AudioHandle, incoming: AssetRef<AudioClipAsset>) =>
+            makeAudioHandle(incoming),
+        ),
+        fadeOutAtCue: vi.fn(),
         secondsUntilCue: vi.fn(() => null),
         observeCues: vi.fn(() => () => undefined),
         stopAll: vi.fn(),
@@ -36,6 +40,11 @@ export function createAudioManagerStub(): AudioManager {
         crossfade(): never {
             throw new Error('unused audio manager stub');
         },
+        crossfadeAtCue(): never {
+            throw new Error('unused audio manager stub');
+        },
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        fadeOutAtCue(): void {},
         secondsUntilCue(): number | null {
             return null;
         },

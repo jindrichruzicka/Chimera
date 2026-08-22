@@ -225,10 +225,10 @@ describe('Providers', () => {
             </Providers>,
         );
 
-        expect(screen.getByTestId('noop-audio-probe')).toHaveAttribute(
-            'data-audio-handle-valid',
-            'false',
-        );
+        const probe = screen.getByTestId('noop-audio-probe');
+        expect(probe).toHaveAttribute('data-audio-handle-valid', 'false');
+        expect(probe).toHaveAttribute('data-crossfade-handle-valid', 'false');
+        expect(probe).toHaveAttribute('data-armed-handle-valid', 'false');
         expect(warn).toHaveBeenCalledWith(
             '[Providers] AudioManager initialization failed; using noop audio manager.',
             setupError,
@@ -278,14 +278,19 @@ function DelegateSetterProbe({ manager }: { readonly manager: AssetManager }): R
 
 function NoopAudioProbe(): React.ReactElement {
     const audioManager = useAudioManager();
-    const handle = audioManager.play(
-        'tactics/audio/sfx/test.ogg' as Parameters<AudioManager['play']>[0],
-    );
+    const ref = 'tactics/audio/sfx/test.ogg' as Parameters<AudioManager['play']>[0];
+    const handle = audioManager.play(ref);
+    // Every verb that MINTS a handle, not just `play`: each builds its own, and a `valid`
+    // that read `true` would tell a game a silent voice is sounding.
+    const crossfaded = audioManager.crossfade(handle, ref, { durationMs: 0 });
+    const armed = audioManager.crossfadeAtCue(handle, ref, { durationMs: 0, atCue: 'start' });
 
     return (
         <div
             data-testid="noop-audio-probe"
             data-audio-handle-valid={handle.valid ? 'true' : 'false'}
+            data-crossfade-handle-valid={crossfaded.valid ? 'true' : 'false'}
+            data-armed-handle-valid={armed.valid ? 'true' : 'false'}
         />
     );
 }

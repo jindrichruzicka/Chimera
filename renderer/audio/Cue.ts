@@ -113,3 +113,48 @@ export interface CrossfadeOptions extends Omit<PlayOptions, 'fadeIn'> {
      */
     readonly curve?: FadeCurve;
 }
+
+/**
+ * Cue-aligned crossfade options — {@link CrossfadeOptions} plus the cue the swap is armed
+ * at. The pair itself is unchanged: what moves is WHEN both halves are anchored, from the
+ * call to the outgoing voice's next arrival at {@link atCue}.
+ */
+export interface CueAlignedCrossfadeOptions extends CrossfadeOptions {
+    /**
+     * A position on the OUTGOING voice's own timeline, resolved under end-point rules
+     * against that clip's cue sheet — so an absent `{ name }` degrades to its decoded end
+     * rather than abandoning, exactly as `fadeOut({ toCue })` resolves one.
+     *
+     * The arrival is read from the outgoing voice's schedule when the incoming clip
+     * DECODES, not at the call: a decode that lands after the cue then takes the next
+     * arrival rather than an instant already gone. See `AudioManager.crossfadeAtCue` for
+     * what each branch leaves audible.
+     */
+    readonly atCue: Cue;
+}
+
+/**
+ * A fade-out held until a cue and then run from there — the arming half and the fade
+ * itself, kept as two fields because they name two different instants.
+ *
+ * Deliberately not reducible to `fadeOut({ toCue })`, which ramps TO a cue over the window
+ * ending there. This one STARTS at the cue: the voice plays on unchanged until the
+ * playhead reaches it, and only then does {@link fade} begin. `{ atCue: X, fade: { toCue: Y } }`
+ * composes the two. See `AudioManager.fadeOutAtCue` for what each of them leaves when the
+ * playhead does not reach the cue it names.
+ */
+export interface CueAlignedFadeOutSpec {
+    /**
+     * Where the ramp BEGINS, on this voice's own timeline. Resolved under the same
+     * end-point rules as {@link CueAlignedCrossfadeOptions.atCue}, and read once, at the
+     * call — there is no decode to wait for here.
+     */
+    readonly atCue: Cue;
+    /**
+     * The fade to run from there, in full: every {@link FadeOutSpec} variant, resolved
+     * against the cue instant rather than against the call. So `{ overMs }` is a window
+     * that opens at the cue, `{ toCue }` names the NEXT arrival after it, and
+     * `{ toEnd: true }` ramps from the cue to the voice's scheduled end.
+     */
+    readonly fade: FadeOutSpec;
+}
