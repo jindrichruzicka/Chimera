@@ -15,7 +15,7 @@ tags: [audio, sound, renderer, event-driven, bus]
 
 Renderer-only audio playback for music, sound effects, and voice cues. Zero coupling to the simulation — game reducers emit `GameEvent`s; the renderer's `EventAudioBinding` maps event types to `AssetRef<AudioClipAsset>` and plays them through `AudioManager`.
 
-Beyond fire-and-forget event SFX, the [Cue, Fade & Crossfade Extensions](#cue-fade--crossfade-extensions) below add cue-bounded playback, native loop points, per-voice fades, and seamless two-track crossfades — the primitives games need for music transitions.
+Beyond fire-and-forget event SFX, the [Cue, Fade & Crossfade Extensions](#cue-fade--crossfade-extensions) below add cue-bounded playback, native loop points, per-voice fades, and seamless two-track crossfades — the primitives games need for music transitions. [Cue Observation & Cue-Aligned Transitions](#cue-observation--cue-aligned-transitions) then adds the two mechanisms built on those: watching a playhead pass its cues, and booking a transition to land on one.
 
 ---
 
@@ -542,11 +542,76 @@ not amended; the spatial rules are Invariant #134).
 
 ---
 
+## Cue Observation & Cue-Aligned Transitions
+
+Two mechanisms, and the split between them is the whole design: **observe to decide,
+schedule to execute.**
+
+| Question                                 | Mechanism                        | Clock                                                                  |
+| ---------------------------------------- | -------------------------------- | ---------------------------------------------------------------------- |
+| _Where is this voice now?_               | `observeCues` / `useAudioCues`   | Sampled from `AudioContext.currentTime`, once per frame while observed |
+| _How long until it reaches that cue?_    | `secondsUntilCue`                | One read of `AudioContext.currentTime` per call — nothing is scheduled |
+| _Make this transition land on that cue._ | `crossfadeAtCue`, `fadeOutAtCue` | Booked against `AudioContext.currentTime`, natively                    |
+
+**Why one is not built out of the other.** A cue emission is a report that the playhead
+has **already** crossed the cue: the sampler runs on `requestAnimationFrame`, so the
+report is at best a frame late and at worst as late as the frame budget slipped. Starting
+a crossfade from an `onCue` handler therefore lands the swap a frame or more past the beat
+— exactly the jitter `crossfadeAtCue` exists to remove, and it reappears silently, because
+nothing about the code looks wrong. The arming verbs never sample: they resolve the
+arrival arithmetically from the voice's own timeline and hand it to `source.start(when)` /
+`source.stop(when)`, which are honoured on the sample. Invariant #135 holds the observation
+side, #136 the scheduling side.
+
+**So a game uses the callback to DECIDE, never to act on the audio clock.** Moving a
+marker, advancing a UI beat counter, choosing which clip to arm next — all fine. What must
+not happen is `onCue: () => audio.crossfade(...)`, which is the shape this section exists
+to warn about.
+
+**Observation costs nothing when unused.** The sampler is one `requestAnimationFrame`
+chain owned by `AudioManager`, started by the first observation and cancelled by the last,
+so a game that never observes a cue pays no per-frame cost at all. It is deliberately not
+`useFrame`: the audio barrel is not r3f-bound, and cue observation has to work on a menu
+screen with no `<Canvas>` mounted. The frame callback declares **no parameter**, so the
+`performance.now()` timestamp `requestAnimationFrame` supplies is not even reachable from
+it — the only clock a cue can be derived from is the audio one (Invariant #122).
+
+**The handler surface carries no dispatcher.** `CueHandlers` and each event it delivers
+name no `SendAction`, `PlayerId`, `EngineAction` or tick, so a handler has nothing to reach
+authoritative state with. That is enforcement by absent parameter rather than by review,
+the same discipline the clip marks of [§4.40](animation-system.md) use, and it is the reading direction Invariant #63
+does not cover — #63 bars the simulation from reaching audio, never the reverse.
+
+### Edge cases
+
+| Input                                                        | Outcome                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crossfadeAtCue`, incoming clip decodes AFTER the cue        | The arrival is read when the buffer is in hand, so the swap takes the NEXT pass rather than an instant already gone. Whether there IS a next pass is the row below's question                                                                                           |
+| `crossfadeAtCue`, cue the outgoing voice never reaches again | One warning, then an immediate swap — past `loopEnd`, already gone on a non-looping voice, or beyond that voice's own scheduled end, which is treated as unreachable because nothing would be there to hear it                                                          |
+| `crossfadeAtCue`, outgoing handle invalid or still loading   | Immediate swap, silently — a stale handle is an ordinary thing for a caller to hold, and a voice with no timeline yet has no arrival to resolve                                                                                                                         |
+| `fadeOutAtCue`, unreachable `atCue`                          | One warning, then the fade runs from `now` — what a bare `fadeOut` would have done. The voice is `'fading-out'` from the call either way                                                                                                                                |
+| `fadeOutAtCue`, unreachable cue inside `spec.fade`           | The ramp is skipped and the voice stops, as the same unreachable cue does through `fadeOut({ toCue })`                                                                                                                                                                  |
+| `fadeOutAtCue` on a loading voice / invalid handle           | Loading: a release is parked and applied at `t0` (#121). Invalid: silent no-op, matching `stop` and `fadeTo`                                                                                                                                                            |
+| Armed, then the caller unmounts before the cue               | Nothing in the engine cancels it: the incoming voice is already scheduled and will start at the cue. The **caller** owns this — a swap hands back only the incoming handle, so a component must keep it and `stop()` it on teardown                                     |
+| `observeCues` on a voice still loading                       | Accepted; the scheduler is seated where the voice starts from rather than at zero, so cues behind its entry point are not replayed                                                                                                                                      |
+| `observeCues` on an invalid handle                           | A callable no-op unsubscribe; nothing is observed and nothing warns                                                                                                                                                                                                     |
+| Whatever ends the voice                                      | One final `end` to every observer, once, however it ended — natural finish, `stop`, preemption, or a sample reaching its scheduled stop. `dispose()` instead cancels the chain and emits none: the graph is going away under the observers, which is not the same event |
+| A handler throws                                             | Contained, the event dropped, the voice still observed — the chain re-arms inside its own callback, so an escaping throw would end cue observation for every voice permanently. Reported once per subscription, not once per frame                                      |
+
+**A marker driven from a cue is not a claim about what is audible.** Two reasons, both
+worth stating because an adopter will hit them: through a crossfade's window BOTH voices
+sound, and because the arrival is resolved at decode, an arm placed close to a wrap can be
+booked for the next arrival while the observer settles on the imminent one. `apps/tactics`'
+ambience component records both limits at its own use site.
+
+---
+
 ## Invariants
 
 The engine-wide rules this section is governed by — **#63** (the simulation never
 produces audio) and **#64** (`AudioManager` lifecycle ownership) — the
-cue/fade/crossfade rules **#116–#126**, and the spatial rule **#134** live in
+cue/fade/crossfade rules **#116–#126**, the spatial rule **#134**, and the cue-observation
+and cue-scheduling rules **#135** and **#136** live in
 [`architecture-invariants.md`](../executive-architecture/architecture-invariants.md).
 
 ---

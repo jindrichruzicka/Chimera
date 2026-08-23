@@ -179,8 +179,8 @@ caller outside its own tests. F74 closes that with a sixth public barrel,
 `AudioManagerProvider` a game's tests can mount, and the cue/fade option types — which moves
 Invariant #96, mechanical check 17, the `no-game-renderer-internals` rule, and the package
 exports contract in step. Tactics then adopts the surface for real —
-two loop-cued ambience beds authored through `audioClipEntry`, crossfaded as the turn
-passes — which also gives Invariant #125's build gate its first production input (before
+two loop-cued ambience beds authored through `audioClipEntry` — which also gives
+Invariant #125's build gate its first production input (before
 this, no in-repo manifest carried `metadata`, so `pnpm validate:assets` exercised it
 vacuously).
 
@@ -213,11 +213,13 @@ deferred past it**, and are recorded here so the deferral and the milestone do n
 tell two different stories. **3D / spatial panning** **landed** as **F84** — with
 **HRTF** specifically still deferred, since `panningModel` is pinned to
 `'equalpower'`, and with source cones, occlusion and reverb zones still out with the
-rest of the DSP list. The **cue-reactive half of `MusicDirector`** is **F85**, still
-_designed, not implemented_ per its section below: it adds the primitive that layer
-would have been built on — a music transition that waits for an authored cue — while
-the layer itself (named slots, stem stacks, in-flight retarget, a global cue
-registry) stays deferred either way. And **variable playback rate** is **F86**, also
+rest of the DSP list. The **cue-reactive half of `MusicDirector`** **landed** as **F85**: it adds the
+primitive that layer would have been built on — a music transition that waits for an
+authored cue, plus the observation stream that lets a game decide which one to wait
+for — while the layer itself (named slots, stem stacks, in-flight retarget, a global
+cue registry) stays deferred either way. What F85 settles is that the layer, if it is
+ever built, is built ON this primitive rather than out of the observation callback:
+the two mechanisms are separate on purpose (Invariants #135 and #136). And **variable playback rate** is **F86**, also
 _designed, not implemented_, as resampling, so rate and pitch move together;
 pitch-**preserving** time-stretch and live mid-voice rate changes stay deferred, and
 the option is named `rate` rather than `pitch` so the type does not promise the one
@@ -560,9 +562,10 @@ candidates for a follow-up.
 
 ### F85 — Music Cue Observation & Cue-Aligned Transitions `§4.25`
 
-**Status: designed, not implemented.** F74 gave music transitions everything except a sense of
-_when_. A game can crossfade two beds, but only **now**, so a swap driven by gameplay — the
-last enemy dies, the turn passes — cuts across whatever the music was in the middle of. F85
+**Status: implemented across [#1038](https://github.com/jindrichruzicka/Chimera/issues/1038)–[#1045](https://github.com/jindrichruzicka/Chimera/issues/1045); the feature gate is
+[#1161](https://github.com/jindrichruzicka/Chimera/issues/1161).** F74 gave music transitions everything except a sense of
+_when_. A game could crossfade two beds, but only **now**, so a swap driven by gameplay — the
+last enemy dies, the turn passes — cut across whatever the music was in the middle of. F85
 adds the ability to say "do this at the next musical boundary", and it does so in two halves
 whose separation **is** the feature: **observe to decide**, a frame-sampled cue stream
 (`cue` / `loop` / `end`) with one frame of jitter by construction, for HUD, VFX and
@@ -572,21 +575,25 @@ callback that fires a frame late and _then_ starts a crossfade would put the tra
 frame off the beat, which is precisely the artifact the feature exists to remove — so neither
 mechanism is built out of the other.
 
-**Most of the arithmetic already exists.** `nextCueContextTime()` answers "when does this
-voice's playhead next reach cue X", loop-period-aware, with the entry-pass asymmetry worked
-out and the window treated as closed at `loopEnd` because that is where the playhead wraps; it
-is what `fadeOut({ toCue })` already runs on, and cue-aligned scheduling is largely a second
-consumer of it. What does not exist is its **dual** — where the playhead is _now_ — which is
-what a sampler needs, and the two directions are tested against each other rather than each
-against a hand-computed table. The enabling change on the scheduling side is likewise small,
-because `startVoice` is already shaped for it: it reads `audioContext.currentTime` **once** and
-threads that single `t0` through the gain floor, `source.start`, the stop maths and every
-pending ramp, with a comment saying that "applied atomically at t0" is only true if there is a
-single `t0` to apply them at. That local becomes a parameter, and the existing `linkedFadeOut`
-slot already takes `startedAt` as its argument, so crossfade linkage anchors at the cue with no
-change at all. Getting the anchoring wrong is silent rather than loud: a fade-in anchored at
-the call rather than at the scheduled start runs to completion **before the voice is audible**,
-so the bed simply appears at full volume.
+**The arithmetic was already half there, and the missing half was its dual.**
+`nextCueContextTime()` answered "when does this voice's playhead next reach cue X",
+loop-period-aware, with the entry-pass asymmetry worked out and the window closed at
+`loopEnd` because that is where the playhead wraps. What did not exist is where the playhead
+is _now_, which is what a sampler needs; `voicePlayheadSeconds` is that dual, and the two
+directions are tested against each other rather than each against a hand-computed table.
+
+**The scheduling side cost one parameter, and getting its shape right took the arc's longest
+argument.** `startVoice` already read `audioContext.currentTime` exactly once and threaded
+that single `t0` through the gain floor, `source.start`, the stop maths and every pending
+ramp. The plan was to promote that local to a parameter. It could not be one: a start passed
+as an argument is evaluated before the callee's own gates, so it narrated a transition for a
+voice `releaseOnStart` was about to tear down — the exact lie `startVoice`'s own comment
+forbids. It became a **resolver**, `(now: number) => number | undefined`, called after the
+release check and after `resolveVoiceSchedule`, at the one clock read everything downstream
+derives from. A related surprise: a ramp anchored ahead of the clock needs a different
+departure than one anchored at it, because reading `AudioParam.value` at a future anchor
+answers about the wrong instant rather than a stale render quantum. Both are recorded in
+Invariant #136, which is the arming direction of #122.
 
 **Observation is inert by a missing parameter.** The cue-handler record carries no dispatcher,
 no `SendAction`, no `PlayerId`, no `EngineAction` and no tick — the discipline F82 used for
@@ -599,11 +606,19 @@ buffer, where a clip timeline is normalized **phase** in `[0, 1]` with cycles. T
 one `requestAnimationFrame` chain owned by `AudioManager`, started on the first subscription
 and cancelled on the last, so a game that never observes a cue pays no frame cost; it is not
 `useFrame`, because the audio barrel is not r3f-bound and cue observation has to work on a menu
-screen with no `<Canvas>` mounted. **Tactics** is the reference adopter and needs no new
-content: both ambience beds already declare `loopStart`/`loopEnd`, so the turn-driven swap
-becomes a `crossfadeAtCue` at the same `loopEnd` the loop already uses, and the e2e's claim
-becomes a **timing** one — the mirrored bed marker must not change at the turn boundary and
-must change afterwards.
+screen with no `<Canvas>` mounted. That rule is Invariant #135.
+
+**Tactics is the reference adopter and needed no new content**: both ambience beds already
+declared `loopStart`/`loopEnd`, so the turn-driven swap became a `crossfadeAtCue` at the same
+`loopEnd` the loop already used. The e2e's claim is a **timing** one, and finding out what it
+had to be is the delivery's other lesson. The component renders two markers — the bed the turn
+calls for, and the bed the handover was armed to reach — and a `MutationObserver` reading both
+at the instant the first moves looked like proof of deferral. It is not: a component that
+swapped instantly and moved the second marker one React commit later passes it, measured.
+So the load-bearing assertion is made against Web Audio itself —
+`AudioBufferSourceNode.prototype.start` is patched to record each bed's scheduled `when`
+against `AudioContext.currentTime`, and both handovers must be booked ahead of the clock and
+land on a `loopEnd` arrival of the bed they replace.
 
 | Task                                                                                                       | Issue                                                           |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -615,6 +630,7 @@ must change afterwards.
 | Add useAudioCues and export the cue surface from the audio barrel                                          | [#1043](https://github.com/jindrichruzicka/Chimera/issues/1043) |
 | Adopt the cue-aligned ambience swap in tactics with an e2e                                                 | [#1044](https://github.com/jindrichruzicka/Chimera/issues/1044) |
 | Author the cue-observation invariants, sweep the docs and roadmap F85, cut the changeset and open the gate | [#1045](https://github.com/jindrichruzicka/Chimera/issues/1045) |
+| Run the F85 feature review and merge gate                                                                  | [#1161](https://github.com/jindrichruzicka/Chimera/issues/1161) |
 
 Feature issue: [#1028](https://github.com/jindrichruzicka/Chimera/issues/1028).
 

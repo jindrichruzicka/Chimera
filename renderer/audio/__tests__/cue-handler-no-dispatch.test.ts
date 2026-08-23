@@ -2,10 +2,10 @@
  * renderer/audio/__tests__/cue-handler-no-dispatch.test.ts
  *
  * The cue-observation rule: a cue is renderer-only feedback, so nothing on the
- * observation surface can reach the simulation with it. That direction has no
- * invariant number yet — Invariant #63 runs the other way, barring the simulation
- * from reaching audio — and the row for it is authored with the audio-system docs
- * rather than here, so this guard names no number and holds whatever one it is given.
+ * observation surface can reach the simulation with it. That is the direction
+ * Invariant #63 does not cover — #63 runs the other way, barring the simulation from
+ * reaching audio. This guard deliberately names no number: the roll-call row is what
+ * points AT it, so the citation lives in one place rather than two.
  *
  * The rule's own claim is that it is held by ABSENT PARAMETERS rather than by
  * review — so what has to be pinned is the parameter list, and pinning it needs two

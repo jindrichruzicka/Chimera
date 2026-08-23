@@ -3,7 +3,7 @@
  *
  * Anti-rot guard for every shape in which the repo cites a numbered invariant.
  *
- * A citation names a row of a 134-entry ledger. The number is hand-maintained
+ * A citation names a row of the invariant ledger. The number is hand-maintained
  * and, until this guard existed, nothing measured it, so it drifted:
  * `GameSnapshot never leaves the main process` was filed under #1 in two docs
  * and under its own #3 in two others, so one property carried two numbers, and
