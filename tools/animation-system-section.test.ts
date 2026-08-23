@@ -25,6 +25,25 @@
  * against the `›` separators in the cell, so a pointer cannot escape resolution
  * by ceasing to be a link.
  *
+ * **The marker invariant's citation.** The tree-wide scan is per FILE, so it is
+ * blind to a citation that names the WRONG number: the file simply drops out of
+ * the scan's input and it has nothing to say. A wrong number sends its reader to
+ * a real document that describes something else, which is the one defect shape a
+ * resolving-path check cannot see, so the ledger's animation-marker row is pinned
+ * here by name.
+ *
+ * The general census that would catch a wrong number anywhere — resolve every
+ * `§n.n` in a doc against the overview index and require the citing text to share
+ * a term with the cited section — is deliberately NOT built. It was prototyped
+ * against this ledger rather than argued about, and every calibration tried either
+ * flagged correct citations alongside the defect or missed the defect: an index
+ * summary cell is a shorter, differently-worded restatement of its section, so
+ * whether a correct citation shares a term with it turns on which identifier each
+ * side happened to use. The prototype is not in the tree, so its counts are not
+ * re-runnable and are not recorded here. A guard that reds on correct citations
+ * trains its readers to reword the index until it stops, which is worse than the
+ * blind spot it would close.
+ *
  * `readFileSync` throws if a doc moves, so this guard fails loud rather than
  * passing vacuously on a renamed path.
  */
@@ -45,6 +64,31 @@ const SELF = 'tools/animation-system-section.test.ts';
 const SECTION_DOC = 'docs/core-components/animation-system.md';
 const OVERVIEW_DOC = 'docs/architecture-overview.md';
 const ROADMAP_DOC = 'docs/roadmap-sections/m10-first-public-release-v1.0.0.md';
+const LEDGER_DOC = 'docs/executive-architecture/architecture-invariants.md';
+
+/**
+ * The handler type the marker invariant rules, and the anchor its citation check
+ * is keyed on — one identifier the ledger names in exactly one row.
+ */
+const MARKER_HANDLER_TYPE = 'ClipMarkerHandlers';
+
+/** A `**N.**` row of the invariant ledger, as number and text. */
+const LEDGER_ROW = /^\*\*(\d+)\.\*\*\s+(.*)$/;
+
+/**
+ * Read the ledger's rows as `[number, text]` pairs, in file order.
+ *
+ * Takes its text through a reader for the reason {@link citesTheSection} does: the
+ * anchor in {@link LEDGER_ROW} is a conjunct, and a real ledger has nothing that
+ * would tell an anchored parse from an unanchored one.
+ */
+function ledgerRows(readText: (rel: string) => string = read): [number, string][] {
+    return readText(LEDGER_DOC)
+        .split('\n')
+        .map((line) => LEDGER_ROW.exec(line))
+        .filter((match): match is RegExpExecArray => match !== null)
+        .map((match) => [Number(match[1]), match[2] ?? ''] as [number, string]);
+}
 
 /**
  * The section number, assembled at run time so this file's own source never
@@ -425,6 +469,43 @@ describe('every citation of the number resolves to the section', () => {
             unresolved,
             'files cite the section number without a path that resolves to the section',
         ).toEqual([]);
+    });
+
+    it('is the only section the invariant that rules the marker surface cites, by a path a reader can follow', () => {
+        // Why this case exists at all: see the header's blind-spot paragraph.
+        //
+        // Keyed on `ClipMarkerHandlers` rather than on a row number, which a renumber
+        // would strand. Deliberately narrow: a general census that resolved every
+        // `§n.n` against the overview index was measured on this ledger and could not
+        // be calibrated — again, the header.
+        const rows = ledgerRows().filter(([, text]) => text.includes(MARKER_HANDLER_TYPE));
+        // Anti-vacuity: a renamed type would empty the filter and pass silently.
+        expect(rows.map(([number]) => number)).toEqual([132]);
+
+        for (const [number, text] of rows) {
+            // EXACTLY this section, not merely among the sections it names. Presence
+            // alone leaves the defect re-addable: the correct link with the two wrong
+            // numbers restored beside it carries the token and a resolving path while
+            // still sending the reader to the Performance HUD. A row that genuinely
+            // earns a second section is a deliberate edit here, which is the ratchet.
+            expect(
+                [...text.matchAll(/§\d+(?:\.\d+)+/g)].map(([token]) => token),
+                `invariant #${String(number)} cites sections other than the one that describes it`,
+            ).toEqual([SECTION_TOKEN]);
+            expect(
+                pathsResolvingToTheSection(text, path.dirname(LEDGER_DOC)).length,
+                `invariant #${String(number)} cites the section with no path that resolves to it`,
+            ).toBeGreaterThan(0);
+        }
+    });
+
+    it('reads a ledger row only where the row marker opens the line', () => {
+        // `ledgerRows`' anchor has no killer on the real ledger — an anchored and an
+        // unanchored parse agree on every one of its rows — so it is pinned against a
+        // line that mentions a row inside prose, which is how a ledger discussing its
+        // own numbering would strand this guard on the wrong text.
+        const ledger = ['**132.** The rule.', 'See **132.** above for the rule.', ''].join('\n');
+        expect(ledgerRows(() => ledger)).toEqual([[132, 'The rule.']]);
     });
 
     it('carries neither of the two sentences that reserved the number', () => {
