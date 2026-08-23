@@ -1,5 +1,12 @@
 # @chimera-engine/ai
 
+## 1.0.0-rc.9
+
+### Patch Changes
+
+- Updated dependencies [3af9e43]
+    - @chimera-engine/simulation@1.0.0-rc.9
+
 ## 1.0.0-rc.8
 
 ### Patch Changes

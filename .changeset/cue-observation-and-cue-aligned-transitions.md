@@ -28,4 +28,10 @@ cue-aligned option types; `useMusicTrack`'s control object gains `crossfadeAtCue
 `apps/tactics` is the reference adopter: its ambience beds now hand over at the `loopEnd` they
 already loop on, so a turn passing mid-phrase no longer cuts the music.
 
+The fail-soft diagnostics on the shared fade-out path now name the verb the caller invoked
+rather than always saying `fadeOut`. A crossfade's linked fade-out, `fadeOutAtCue`, and a
+cue-aligned crossfade's linkage all reach that path without being a `fadeOut` call, so an
+operator reading one had no route back to the call that produced it. Message wording only —
+no behaviour moves.
+
 Additive throughout — nothing removed or renamed.

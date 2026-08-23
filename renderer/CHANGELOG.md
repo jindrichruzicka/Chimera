@@ -1,5 +1,84 @@
 # @chimera-engine/renderer
 
+## 1.0.0-rc.9
+
+### Minor Changes
+
+- 49a69db: Add music cue observation and cue-aligned transitions (§4.25), so a game can say "do this at
+  the next musical boundary" instead of only "do this now".
+
+    Two mechanisms, and the separation between them is the feature: **observe to decide, schedule
+    to execute.** `AudioManager.observeCues` and the `useAudioCues` hook deliver a voice's
+    `cue` / `loop` / `end` emissions from one on-demand `requestAnimationFrame` sampler — started
+    by the first observation, cancelled by the last, so a game that observes no cue pays no frame
+    cost. `crossfadeAtCue` and `fadeOutAtCue` arm a transition now and execute it at the voice's
+    next arrival at the named cue, through native `source.start(when)` / `source.stop(when)`
+    against `AudioContext.currentTime` rather than a wall-clock timer. `secondsUntilCue` answers
+    the read direction of the same timeline.
+
+    Starting a transition from an observation callback is the mistake the split exists to prevent:
+    an emission is at best a frame late, so the swap would land off the beat. The new Invariants
+    #135 and #136 state each half, and `docs/core-components/audio-system.md` documents which
+    mechanism answers which question.
+
+    The audio barrel gains `useAudioCues`, the cue-event and handler types, and the two
+    cue-aligned option types; `useMusicTrack`'s control object gains `crossfadeAtCue` and
+    `fadeOutAtCue`. No new subpath, and no cue-authoring change — `validate-assets` and Invariant
+    #125 are untouched, and existing sheets pass as they stand.
+
+    `apps/tactics` is the reference adopter: its ambience beds now hand over at the `loopEnd` they
+    already loop on, so a turn passing mid-phrase no longer cuts the music.
+
+    The fail-soft diagnostics on the shared fade-out path now name the verb the caller invoked
+    rather than always saying `fadeOut`. A crossfade's linked fade-out, `fadeOutAtCue`, and a
+    cue-aligned crossfade's linkage all reach that path without being a `fadeOut` call, so an
+    operator reading one had no route back to the call that produced it. Message wording only —
+    no behaviour moves.
+
+    Additive throughout — nothing removed or renamed.
+
+### Patch Changes
+
+- A route entry no longer holds the loading beat on a black curtain while the entering screen's
+  code-split chunk is in flight and no cover is declared for that entry.
+
+    Both route entries, `/game` and `/replays/player`, folded the chunk wait into the beat's settle
+    term unconditionally, while the scene hop in `SceneRouter` conditions the same fold on a
+    declared cover. An entry the cascade resolves no cover for raises no layer, so the beat parked
+    on `covered` — a phase that mounts no cover at all — and the deferral held the black curtain
+    over nothing for as long as the chunk took. It is the shipped path for any game whose registry
+    declares no route-wide loading screen.
+
+    Each entry now conditions the fold on its OWN resolved cover. An undeclared entry reveals on
+    the asset gate and lands on the Suspense fallback; a declared entry keeps the fold its cover
+    pays for. Invariant #133 is restated to match: the fold is conditioned on the surface's own
+    resolved cover, and where there is no layer there is no deferral.
+
+- 3af9e43: `TransitionOverlayProps.preloadProgress` narrows from `number | null | undefined` to
+  `number | undefined`. The `| null` arm documented a third state — "running, but the wait is not
+  measured" — that no game overlay could ever be handed: `useFadeTransition` reports a number only
+  for a run that measures something and publishes `null` purely to release its own channel at the
+  commit, and `SceneRouter` withholds the prop on that `null` rather than passing it on. An adopter
+  branching on `null`, which is exactly what the removed sentence invited, wrote a branch that never
+  ran and silently took the absent-prop path instead.
+
+    An unmeasured wait is now stated one way only, the way the engine's own overlay already relied on:
+    the prop is absent, so `data-preload-progress` is omitted rather than printing a word or drawing an
+    empty bar as a claim nobody measured. Two states, and a game reads them as "a fraction" or "no
+    measured fraction".
+
+    A game overlay that declared `preloadProgress?: number | null` still fits the slot — the slot reads
+    its props type contravariantly. What the narrowing rejects is an ASSIGNMENT of `null` to the field;
+    a `=== null` comparison still compiles, so an overlay that already wrote the dead branch is not told
+    about it. Nothing about what is rendered moves.
+
+    The sibling cover contract is deliberately untouched: `GameLoadingScreenProps.progress` stays
+    `number | null` and required, because `null` really does arrive there — a code-split `import()`
+    exposes no progress channel, and `SceneRouter` passes `progress={null}` for the `'code'` reason.
+
+- Updated dependencies [3af9e43]
+    - @chimera-engine/simulation@1.0.0-rc.9
+
 ## 1.0.0-rc.8
 
 ### Minor Changes
