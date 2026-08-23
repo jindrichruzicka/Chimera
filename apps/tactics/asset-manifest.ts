@@ -127,9 +127,11 @@ export const tacticsShowcaseLeanClip = {
      *
      * Long for a game — a third of a second is the usual scale — and deliberately
      * so: this clip's whole job is to be caught mid-blend from outside the
-     * renderer, by an e2e polling a DOM attribute, and the window that poll has
-     * to land in is the blend itself. On a CI runner painting a handful of frames
-     * a second, a blend measured in tenths would be over between two samples.
+     * renderer, and what catches it is a frame. The screen records the posed
+     * rotation (`TacticsAnimatedShowcase`) and `animation-blend.spec.ts` reads
+     * the series, so the blend has to outlast the gap between two REPAINTS — a
+     * gap that on a software-GL CI runner is a large fraction of a second, and
+     * that a blend measured in tenths would not outlast.
      */
     blendInSeconds: 1.2,
     /** The passage span, as normalized phases of the clip. */

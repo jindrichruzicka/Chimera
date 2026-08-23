@@ -79,6 +79,51 @@ export class ModelShowcasePage {
         return raw === null || raw === '' ? Number.NaN : Number(raw);
     }
 
+    /**
+     * Every played-bone rotation the screen RECORDED since the clip it is
+     * playing was asked for, in the order the frames took them.
+     *
+     * Not a series of reads from out here: the screen appends from inside its
+     * own render loop, so a rotation the bone passed through between two reads a
+     * caller could make is still in this list. That is the whole difference for
+     * a TRANSIENT — a blend lasts about a second and a caller sampling from
+     * outside sees only the instants it happened to ask on.
+     *
+     * Empty until the first frame contributes a rotation. What a frame
+     * contributes is `TacticsAnimatedShowcase`'s `recordSample`, which skips a
+     * repeat of the entry before it and stops at a cap — so this is the series
+     * of rotations VISITED, and its length is not a frame count.
+     */
+    public async playedBoneRecording(): Promise<readonly number[]> {
+        return (await this.recordedSamples('clip-played-bone-z-recording')).map(Number);
+    }
+
+    /**
+     * The same recording for the CONTROL instance, left as the strings the
+     * screen published.
+     *
+     * The at-rest claim its callers make is `'0.0000'`.
+     */
+    public async controlBoneRecording(): Promise<readonly string[]> {
+        return this.recordedSamples('clip-control-bone-z-recording');
+    }
+
+    /**
+     * The clip the two recordings above are scoped to.
+     *
+     * `null` before the first frame writes the attribute at all, and `''` once
+     * a frame has written it for a screen declaring no clip.
+     */
+    public async recordedClip(): Promise<string | null> {
+        return this.clipAttribute('clip-recording-clip');
+    }
+
+    /** One recording attribute, split into its samples. */
+    private async recordedSamples(name: string): Promise<readonly string[]> {
+        const raw = await this.clipAttribute(name);
+        return raw === null || raw === '' ? [] : raw.split(',');
+    }
+
     /** Ask the screen for the other clip. */
     public async toggleClip(): Promise<void> {
         await this.clipToggle.click();

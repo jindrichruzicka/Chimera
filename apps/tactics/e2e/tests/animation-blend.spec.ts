@@ -23,22 +23,26 @@
  * cannot fake. The band is `helpers/showcase-clip-poses.ts`, whose own test reads
  * both angles back off the committed container.
  *
- * **Why polling rather than a screenshot.** A blend is a transient, the two clips
- * differ by a rotation rather than by colour, and this route's magenta quads look
- * identical at every angle. The bone rotation is written to a DOM attribute once
- * per frame, so a poll over it samples the transient. A poll that misses times
- * out — it cannot pass falsely.
+ * **Why a RECORDING rather than a screenshot or a poll.** A blend is a
+ * transient, the two clips differ by a rotation rather than by colour, and this
+ * route's magenta quads look identical at every angle — so a screenshot says
+ * nothing. A poll over the live bone attribute reads it on the instants the poll
+ * chooses, and every rotation the bone passes through between two of them is one
+ * it cannot see at all — a rate it cannot fix either, because `intervals` is a
+ * floor and a round trip out to the window costs whatever the machine gives. So
+ * the screen records the rotation itself from inside the render loop
+ * (`TacticsAnimatedShowcase`, which owns what a frame contributes), and this
+ * spec reads the whole series ONCE the transition has settled. There is nothing
+ * between two frames for a rotation to hide in.
  *
- * **How much of the blend is samplable.** DERIVED from the ramp: the published
- * angle is `wave(t)·(1 − u) + 60°·u` for `u = t / blendInSeconds`, with `wave`
- * inside ±20°, so it is above the swing's peak for every `u > 0.5` whatever phase
- * the swing was on. Half the authored blend is therefore in the band for certain
- * — 0.6 s at the 1.2 s the manifest authors — and up to all of it when the click
- * lands near a peak. The blend is REAL TIME, so that window does not shrink on a
- * slow runner; what shrinks is how many frames repaint inside it. If this spec
- * ever reds on CI, the first thing to weigh is whether 0.6 s bought a sample,
- * and the knob for that is the authored blend length rather than the poll
- * interval.
+ * **How much of the blend lands in the band.** DERIVED from the ramp: the
+ * published angle is `wave(t)·(1 − u) + 60°·u` for `u = t / blendInSeconds`, with
+ * `wave` inside ±20°, so it is above the swing's peak for every `u > 0.5`
+ * whatever phase the swing was on. Half the authored blend is therefore in the
+ * band for certain — 0.6 s at the 1.2 s the manifest authors — and up to all of
+ * it when the click lands near a peak. The blend is REAL TIME, so that window
+ * does not shrink on a slow runner; what shrinks is how many frames repaint
+ * inside it, and the recording needs exactly ONE of them.
  *
  * The route needs NO match: it opens its own game asset session, so the plain
  * single-window Electron fixture is the whole harness (see
@@ -66,11 +70,12 @@ import {
 const SAMPLE_TIMEOUT_MS = 20_000;
 
 /**
- * How often to sample the bone rotation while a blend is running.
+ * How often to sample the bone rotation on a wait that may resolve quickly.
  *
  * Tight, and deliberately tighter than Playwright's default back-off (100 ms,
- * then 250, 500, 1000): the thing being caught lasts about a second, so a
- * back-off would spend most of it asleep.
+ * then 250, 500, 1000), because a back-off spends most of a short wait asleep.
+ * The transient in the middle of a transition is not polled at all; see the
+ * header.
  */
 const SAMPLE_INTERVALS_MS = [50];
 
@@ -112,56 +117,53 @@ test.describe('Tactics blended clip transition', () => {
             'data-showcase-clip',
             tacticsShowcaseWaveClip.name,
         );
-        // The control instance's bone, before anything is asked for. Read here as
-        // well as at the end, because one reading at the end is satisfied by a
-        // control that moved during the blend and came back.
-        expect(await showcase.clipAttribute('clip-control-bone-z')).toBe('0.0000');
+        // The control instance, frame by frame over the window before anything
+        // is asked for — a control that moved and came back inside it is what a
+        // point read could not see. Its recording restarts on the clip the
+        // toggle asks for, so the reading at the end is a SECOND window rather
+        // than a longer one.
+        expect(await showcase.controlBoneRecording()).toEqual(['0.0000']);
 
         await showcase.toggleClip();
 
         // The click landed and the screen declares the other clip. Read first, so
-        // a band that never fills is diagnosed as a blend that did not happen
-        // rather than as a click that did not.
+        // a recording with no band value in it is diagnosed as a blend that did
+        // not happen rather than as a click that did not.
         await expect(showcase.clipToggle).toHaveAttribute(
             'data-showcase-clip',
             tacticsShowcaseLeanClip.name,
         );
 
-        // The blend itself: a rotation between the swing's peak and the lean's
-        // hold, which neither clip can pose alone. Every sample is kept rather
-        // than only the last, because the band is a window in time — a sample
-        // taken after the blend arrived is legitimately outside it.
-        const blended: number[] = [];
-        await expect
-            .poll(
-                async () => {
-                    const rotation = await showcase.playedBoneRotation();
-                    if (isBlendedRotation(rotation)) {
-                        blended.push(rotation);
-                    }
-                    return blended.length;
-                },
-                { intervals: SAMPLE_INTERVALS_MS, timeout: SAMPLE_TIMEOUT_MS },
-            )
-            .toBeGreaterThan(0);
-
-        for (const rotation of blended) {
-            expect(rotation).toBeGreaterThan(SHOWCASE_BLEND_BAND.above);
-            expect(rotation).toBeLessThan(SHOWCASE_BLEND_BAND.below);
-        }
-
-        // …and the blend ARRIVES: the incoming clip ends up posing the bone on
-        // its own. A transition that stalled halfway would sit inside the band
-        // for ever and satisfy everything above it.
+        // The blend ARRIVES: the incoming clip ends up posing the bone on its
+        // own. Waited for FIRST, because it is what says the transition is over
+        // and the recording below is therefore complete — and because a
+        // transition that stalled halfway would sit inside the band for ever and
+        // satisfy the band assertion on its own. This is a state that persists
+        // once reached, so a poll cannot miss it.
         await expect
             .poll(async () => showcase.playedBoneRotation(), { timeout: SAMPLE_TIMEOUT_MS })
             .toBeCloseTo(SHOWCASE_LEAN_POSE_RADIANS, 3);
 
-        // The control instance carries a mixer with no action, and is at rest on
-        // both sides of the transition: a bone that moved there would mean a
-        // second driver on one root (Rule ONE-MIXER-PER-ROOT), which would make
-        // every reading above suspect.
-        expect(await showcase.clipAttribute('clip-control-bone-z')).toBe('0.0000');
+        // The recording below is scoped to the clip the toggle asked for, which
+        // is the window the band claim is about.
+        expect(await showcase.recordedClip()).toBe(tacticsShowcaseLeanClip.name);
+
+        // The blend itself: a rotation between the swing's peak and the lean's
+        // hold, which neither clip can pose alone. Read off the frame-by-frame
+        // recording rather than polled, so the answer does not depend on when
+        // this process happened to look.
+        const recorded = await showcase.playedBoneRecording();
+        const blended = recorded.filter(isBlendedRotation);
+        expect(
+            blended.length,
+            `no rotation between ${SHOWCASE_BLEND_BAND.above} and ${SHOWCASE_BLEND_BAND.below} ` +
+                `in the ${recorded.length} rotations recorded since the toggle: ${recorded.join(' ')}`,
+        ).toBeGreaterThan(0);
+
+        // The same control, over the transition itself. A bone that moved here
+        // would mean a second driver on one root (Rule ONE-MIXER-PER-ROOT),
+        // which would make every reading above suspect.
+        expect(await showcase.controlBoneRecording()).toEqual(['0.0000']);
     });
 
     test('comes back out of the clip it blended into', async ({ mainWindow }) => {

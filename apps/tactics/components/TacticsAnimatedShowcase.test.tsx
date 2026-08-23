@@ -69,6 +69,13 @@ const CLIP_NAME = 'wave';
 const DURATION_SECONDS = 1;
 
 /**
+ * A second clip on the same bone, so a case can change the DECLARED clip —
+ * which is the only thing the real screen's toggle changes, and what restarts
+ * the frame recording.
+ */
+const OTHER_CLIP_NAME = 'hold';
+
+/**
  * The sheet under test, authored to the same shape the manifest ships: one
  * notify at the half-second, and one phase passage spanning the middle half.
  */
@@ -82,6 +89,19 @@ const SHEET: ModelAnimationMetadata = {
                 swing: { from: 0.25, to: 0.75, beatWindow: [5, 15], window: 'showcase-swing' },
             },
         },
+        [OTHER_CLIP_NAME]: { durationSeconds: DURATION_SECONDS, loop: 'once' },
+    },
+};
+
+/**
+ * The same sheet with the played clip LOOPING, so the bone keeps moving for as
+ * many frames as a case cares to advance. `SHEET`'s `once` holds the final pose
+ * after a second, and a held pose is exactly what the recording collapses.
+ */
+const LOOPING_SHEET: ModelAnimationMetadata = {
+    clips: {
+        [CLIP_NAME]: { durationSeconds: DURATION_SECONDS, loop: 'loop' },
+        [OTHER_CLIP_NAME]: { durationSeconds: DURATION_SECONDS, loop: 'once' },
     },
 };
 
@@ -99,8 +119,18 @@ function makeInstance(): ModelInstance {
         [0, 0, 0, 1, 0, 0, 0.17364817766693033, 0.984807753012208],
     );
     const clip: AnimationClipType = new AnimationClip(CLIP_NAME, DURATION_SECONDS, [track]);
+    // A second clip holding the bone still, so declaring it is a real clip
+    // change the player can act on rather than a name nothing resolves.
+    const otherTrack = new QuaternionKeyframeTrack(
+        `${bone.name}.quaternion`,
+        [0, DURATION_SECONDS],
+        [0, 0, 0.5, 0.8660254037844387, 0, 0, 0.5, 0.8660254037844387],
+    );
+    const otherClip: AnimationClipType = new AnimationClip(OTHER_CLIP_NAME, DURATION_SECONDS, [
+        otherTrack,
+    ]);
 
-    return { root, clips: [clip] };
+    return { root, clips: [clip, otherClip] };
 }
 
 interface RecordedMarker {
@@ -122,6 +152,45 @@ interface RecordedMarker {
  */
 function codeOf(source: string): string {
     return source.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/(^|[^:])\/\/.*$/gmu, '$1');
+}
+
+/**
+ * Advance `frames` REAL frames on `renderer`, one at a time.
+ *
+ * MEASURED against `@react-three/test-renderer@9.1.0`: its `advanceFrames(n, δ)`
+ * loops SUBSCRIBERS on the outside and frames on the inside, so it runs the clip
+ * player n times, then the mixer n times, then this component's writer n times —
+ * the last of those against a scene that is already n frames old. Every sample
+ * such a call produces is the same one, which is invisible to a case reading
+ * only the final value and fatal to one reading a series. Only
+ * `advanceFrames(1, δ)` in a loop interleaves the three the way a frame loop
+ * does.
+ */
+async function stepFrames(
+    renderer: Awaited<ReturnType<typeof ReactThreeTestRenderer.create>>,
+    frames: number,
+    delta: number,
+): Promise<void> {
+    for (let frame = 0; frame < frames; frame += 1) {
+        await renderer.advanceFrames(1, delta);
+    }
+}
+
+/** The samples carried by one recording attribute, in the order they were taken. */
+function recorded(element: HTMLElement, key: string): string[] {
+    const raw = element.dataset[key] ?? '';
+    return raw === '' ? [] : raw.split(',');
+}
+
+/**
+ * `values` with consecutive repeats collapsed — what a recording keeps.
+ *
+ * A repeat visits no rotation the entry before it did not, so dropping one
+ * loses nothing a reader asking "was this value ever posed" can use, and it is
+ * what keeps a held pose from filling the recording's cap.
+ */
+function withoutRepeats(values: readonly string[]): string[] {
+    return values.filter((value, index) => value !== values[index - 1]);
 }
 
 function recorder(): { events: RecordedMarker[]; handlers: Record<string, unknown> } {
@@ -376,6 +445,200 @@ describe('TacticsAnimatedShowcase', () => {
             expect(element.dataset['clipPassageEnds']).toBe('1');
             expect(element.dataset['clipPassageEndReason']).toBe('reached-end');
             expect(element.dataset['clipControlBoneZ']).toBe('0.0000');
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('records the same rotation series a reader that missed no frame would see', async () => {
+        // The reason the recording exists: a value the bone passes THROUGH
+        // between two outside reads is a value an outside reader cannot see at
+        // all. What is pinned is that the recording holds what a reader who
+        // never missed a frame would have got, so nothing can fall between two
+        // of its entries.
+        const element = document.createElement('div');
+        const renderer = await ReactThreeTestRenderer.create(
+            <TacticsAnimatedShowcase
+                playedInstance={makeInstance()}
+                controlInstance={makeInstance()}
+                sheet={SHEET}
+                clip={CLIP_NAME}
+                statusRef={{ current: element }}
+            />,
+        );
+
+        try {
+            // One frame at a time, reading the LIVE attribute after each: this
+            // is the series an outside reader could only get by sampling on
+            // exactly these instants and never missing one.
+            const perFrame: string[] = [];
+            for (let frame = 0; frame < 8; frame += 1) {
+                await stepFrames(renderer, 1, 0.1);
+                perFrame.push(element.dataset['clipPlayedBoneZ'] ?? '');
+            }
+
+            // Two floors. The bone really moved across these frames, so the
+            // equality below is not one repeated value compared with itself —
+            // and no two of them repeat, which is what makes that equality
+            // EXACT rather than one the collapse could have paid for. The
+            // collapse has its own case below.
+            expect(new Set(perFrame).size).toBeGreaterThan(4);
+            expect(withoutRepeats(perFrame)).toEqual(perFrame);
+            expect(recorded(element, 'clipPlayedBoneZRecording')).toEqual(perFrame);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('records the control bone as a single at-rest sample for the whole run', async () => {
+        // Stronger than the two instants an e2e can read from outside, and in
+        // the way that matters: a control that moved during a transition and
+        // came back would land a second sample here, where two point reads on
+        // either side of the transition see nothing.
+        const element = document.createElement('div');
+        const renderer = await ReactThreeTestRenderer.create(
+            <TacticsAnimatedShowcase
+                playedInstance={makeInstance()}
+                controlInstance={makeInstance()}
+                sheet={SHEET}
+                clip={CLIP_NAME}
+                statusRef={{ current: element }}
+            />,
+        );
+
+        try {
+            await stepFrames(renderer, 8, 0.1);
+
+            expect(recorded(element, 'clipControlBoneZRecording')).toEqual(['0.0000']);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('restarts the recording, and names the new clip, when the declared clip changes', async () => {
+        // What scopes the recording to ONE ask. Without it the samples an e2e
+        // reads after a toggle would still carry everything the previous clip
+        // posed, and no reader could tell which transition produced what.
+        const played = makeInstance();
+        const control = makeInstance();
+        const element = document.createElement('div');
+        const statusRef = { current: element };
+        const renderer = await ReactThreeTestRenderer.create(
+            <TacticsAnimatedShowcase
+                playedInstance={played}
+                controlInstance={control}
+                sheet={SHEET}
+                clip={CLIP_NAME}
+                statusRef={statusRef}
+            />,
+        );
+
+        try {
+            await stepFrames(renderer, 6, 0.1);
+
+            // Floor: the window BEFORE the change is longer than the one after
+            // it, so a recording that never restarted could not satisfy the
+            // length assertion below.
+            expect(recorded(element, 'clipPlayedBoneZRecording').length).toBeGreaterThan(2);
+            expect(element.dataset['clipRecordingClip']).toBe(CLIP_NAME);
+
+            await renderer.update(
+                <TacticsAnimatedShowcase
+                    playedInstance={played}
+                    controlInstance={control}
+                    sheet={SHEET}
+                    clip={OTHER_CLIP_NAME}
+                    statusRef={statusRef}
+                />,
+            );
+            await stepFrames(renderer, 2, 0.1);
+
+            expect(element.dataset['clipRecordingClip']).toBe(OTHER_CLIP_NAME);
+            // ONE, not "at most two": `hold` authors no blend length, so the
+            // change cuts and both frames after it pose the same rotation. A
+            // bound with slack in it would be satisfied by a restart that left a
+            // stale entry behind.
+            expect(recorded(element, 'clipPlayedBoneZRecording')).toHaveLength(1);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('leaves a frame with no bone to read out of the series entirely', async () => {
+        // The route really produces those frames: the screen hands this
+        // component its status node from the first render, while both instances
+        // are still `null` — so `boneRotationZ` answers '' and the recorder is
+        // asked to take it. An '' TAKEN is a sample a reader parses as 0, and 0
+        // is a rotation the rig genuinely poses, so it cannot be told from a
+        // bone at rest.
+        const element = document.createElement('div');
+        const statusRef = { current: element };
+        const renderer = await ReactThreeTestRenderer.create(
+            <TacticsAnimatedShowcase
+                playedInstance={null}
+                controlInstance={null}
+                sheet={null}
+                clip={CLIP_NAME}
+                statusRef={statusRef}
+            />,
+        );
+
+        try {
+            await stepFrames(renderer, 3, 0.1);
+            expect(recorded(element, 'clipPlayedBoneZRecording')).toEqual([]);
+
+            await renderer.update(
+                <TacticsAnimatedShowcase
+                    playedInstance={makeInstance()}
+                    controlInstance={makeInstance()}
+                    sheet={SHEET}
+                    clip={CLIP_NAME}
+                    statusRef={statusRef}
+                />,
+            );
+            await stepFrames(renderer, 3, 0.1);
+
+            // The series OPENS on a real rotation. Read this way rather than as
+            // an index, because the empty samples are at the head: a recorder
+            // that took them would answer `['', '0.0035', …]` here.
+            const series = recorded(element, 'clipPlayedBoneZRecording');
+            expect(series.length).toBeGreaterThan(0);
+            expect(series).toEqual(series.filter((sample) => sample !== ''));
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('caps the recording by dropping the frames AFTER the cap, never the ones before', async () => {
+        // The route can be left open for as long as a spec runs, and a clip
+        // that keeps moving writes a new sample every frame — so the recording
+        // needs a bound. Which END it drops is the load-bearing half: a
+        // transition happens at the START of a recording, so a bound that
+        // dropped the oldest entries would throw away the only frames anything
+        // reads it for.
+        const element = document.createElement('div');
+        const renderer = await ReactThreeTestRenderer.create(
+            <TacticsAnimatedShowcase
+                playedInstance={makeInstance()}
+                controlInstance={makeInstance()}
+                sheet={LOOPING_SHEET}
+                clip={CLIP_NAME}
+                statusRef={{ current: element }}
+            />,
+        );
+
+        try {
+            await stepFrames(renderer, 20, 0.01);
+            const opening = recorded(element, 'clipPlayedBoneZRecording')[0];
+            expect(opening).toBeDefined();
+
+            // Well past the cap: the clip LOOPS, so every one of these frames
+            // moves the bone and nothing here is collapsed away.
+            await stepFrames(renderer, 1300, 0.01);
+
+            const full = recorded(element, 'clipPlayedBoneZRecording');
+            expect(full).toHaveLength(600);
+            expect(full[0]).toBe(opening);
         } finally {
             await renderer.unmount();
         }
