@@ -429,6 +429,112 @@ shipped the sequence and not the sequencer; the convergence landed after it, and
 now states the universal. The gate record is the closed range above, not a claim about the
 present tree.
 
+### F85 feature-review gate (#1161)
+
+Run in full on the gate's own branch, base `main` @ `9acd0606`, 2026-08-23. Every step below is
+the result at this tree.
+
+| Step              | Command                                                    | Result                             |
+| ----------------- | ---------------------------------------------------------- | ---------------------------------- |
+| Format            | `pnpm format:check`                                        | **exit 0**                         |
+| Lint              | `pnpm lint`                                                | **exit 0**                         |
+| Typecheck         | `pnpm typecheck`                                           | **exit 0**                         |
+| Unit tests        | `pnpm test`                                                | **exit 0 — 12 254 passed, 2 todo** |
+| Packaged bundle   | `pnpm verify:packaged-bundle`                              | **exit 0**                         |
+| Invariant checker | `.claude/skills/invariants/scripts/check-invariants.sh`    | **exit 0**                         |
+| Checker self-test | `.claude/skills/invariants/tests/check-invariants.test.sh` | **144 / 144 pass**                 |
+| Asset validation  | `pnpm validate:assets`                                     | **exit 0 — 17 refs checked**       |
+| Changeset policy  | `pnpm verify:changeset-policy`                             | **exit 0**                         |
+| Version alignment | `pnpm verify:version-alignment`                            | **exit 0**                         |
+| Scaffold          | `pnpm verify:scaffold`                                     | **exit 0**                         |
+| E2E               | `pnpm test:e2e`                                            | **exit 0 — 154 passed, 0 `flaky`** |
+
+The unit-test figure is the SUM of the seven per-package runs (simulation 2 298, ai 173,
+networking 300, renderer 4 476, electron 3 145, tactics 1 019, tools 843), not the tail line —
+`pnpm test` ends with the tools run, whose own total is what a casual read picks up.
+
+The e2e row is a green the gate had to earn. The first full run at this base was **exit 1**:
+`ambience-cue-aligned.spec.ts`'s handover-timing test bounded a handover's
+lead ABOVE at one loop pass, and handover 1 led by 1.19–1.28 s. Reproduced three times on
+`main` with the branch stashed, so it was pre-existing and not this gate's tree.
+
+The recorded leads are all under 1.3 s, so what produced them is the entry pass on its own: a
+bed enters its buffer at 0 and plays the intro `[0, loopStart)` once before the loop window
+repeats, so its FIRST `loopEnd` is 1.3 s after its start — already past a bound written at the
+loop PERIOD of 1.1 s. The deleted constant compared against the spacing of a bed's arrivals
+where the entry pass runs to `loopEnd`.
+
+A lead has no upper end this spec can derive, which is why the assertion is now bounded below
+only rather than re-tuned. `nextCueContextTime` resolves the arrival against the outgoing bed's
+OWN start and returns `startedAt + loopEnd` whenever that start is still ahead of the clock, so
+the lead also carries whatever the outgoing bed has left to wait before it begins — and that
+bed was itself booked for a cue. §4.25 records the race: an arm placed close to a wrap can be
+booked for the NEXT arrival while the observer settles on the imminent one. Probed against the
+shipped resolver, a 0.5 s gap before the outgoing bed starts yields a 1.8 s lead. Any constant
+here would bound that race rather than the feature.
+
+**What the deletion costs, stated rather than waved away.** The residue check below pins a
+PHASE, not an instant: a bed's `loopStart` arrivals and its `loopEnd` arrivals sit on the same
+1.1 s lattice, so swapping the arm's cue from one to the other leaves the residue at zero and
+this spec green — measured, by arming at `loopStart` and re-running it. That one is killed by
+`TacticsAmbience.test.tsx`, which asserts the cue by name. `passes` is bounded below at zero
+and not above, so a booking several passes out also survives here — and NOT in that suite,
+whose manager is a double. Which arrival the resolver picks is measured in
+`renderer/audio/voicePlayhead.test.ts` and `renderer/audio/AudioManager.test.ts`.
+What this spec adds over all three is that the booking reaches Web Audio at all, ahead of the
+clock, in the real runtime.
+
+**The spec still separates the verbs after the repair**: with `crossfadeAtCue` replaced by the
+instant `crossfade`, it reds with `handover 0 was not booked ahead of the clock`.
+
+**Both of the arc's measurement lessons were re-run rather than trusted.**
+
+The load-bearing claim really is the `AudioBufferSourceNode.prototype.start` probe. Under that
+same instant-verb mutant the marker-pair test — `leaves the sounding bed alone at the turn
+boundary and moves it afterwards` — **passes**: a component that swaps instantly and moves the
+second marker one React commit later satisfies it. The probe reds; the unit suite kills the
+same mutant nine times over, before e2e runs. Nothing here says how the other e2e specs
+respond to it — they were not run under the mutant.
+
+The probe's loop-boundary residue is taken through `Math.abs`. Signed, `Math.round` puts the
+residue on either side of the nearest arrival and a positive bound would accept everything from
+the arrival back to half a pass before it — 555 ms of tolerance dressed up as 5 ms.
+
+Rows **#135** and **#136** are what this gate ratifies, and both are new numbers rather than
+amendments, so the coverage summary above re-derives from the ledger: 136 rows, 49 / 79 / 8, no
+gaps in the numbering, and every ledger row present in the roll-call and vice versa — recomputed
+from the rows rather than edited by eye.
+
+Invariant **#122** is referenced and EXTENDED, not amended, and #135 and #136 cite it for the
+timing rule they build on. Recorded as a command rather than a digest, so it re-runs instead of
+going stale — an empty result is the proof:
+
+```
+git diff 16af0854~1 HEAD -- docs/executive-architecture/architecture-invariants.md | grep '^[-+]\*\*122\.\*\*'
+```
+
+`16af0854` is the arc's first commit (#1038), so that range spans the whole feature. #135's
+citations of **#63** and **#132** both resolve and both say what #135
+says they say — #63 bars the simulation from reaching audio and is silent on the reverse
+direction, and #132 is the animation-mark rule whose discipline #135 mirrors.
+
+**Child acceptance criteria**, re-verified on this tree rather than from the tasks' close-outs.
+#1038's two directions are checked against each other by a 500-run property with per-class
+anti-vacuity counters, not against a hand-computed table. #1039's four named rules
+(`MARK-CROSS`, `CLOSE-BEFORE-WRAP`, `MARK-ONCE-PER-STEP`, `MARK-ORDER`) are stated in
+`cueMarkerScheduler.ts`, which imports nothing from the clip scheduler — a sibling, not a reuse.
+#1040's chain is started by the first observation and cancelled by the last. #1041's `startVoice`
+takes `resolveStart?: (now: number) => number | undefined` — a resolver called after the release
+check, not a start value evaluated before the callee's gates. #1042's fail-soft
+diagnostics each name the verb the caller invoked, which #1159 completed after the arc closed.
+#1043's barrel exports `useAudioCues`, the cue-event and handler types and both cue-aligned
+option types. #1044 added no manifest entry and no audio asset — the swap reuses the `loopEnd`
+the beds already looped on. #1045's changeset is present and the version stays lock-step.
+
+**#1160 was open when this gate was written and is now closed** (`4f06ad62`), so the
+handle-to-manager pairing it followed up on is pinned on the observation path as well as the
+arm. What it landed is that commit.
+
 ## The roll-call — every invariant
 
 | #   | Invariant (short)                                                                                                                  | Status        | Enforced-by / evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -568,7 +674,7 @@ present tree.
 | 133 | A client preload gates no MOUNT and no host barrier; four fail-open settle paths                                                   | code-verified | `criticalAssetPreload.test.tsx` âº settles failed â and READY â when a critical entry rejects Â· warns exactly once on the budget, and never on a load that settles Â· starts the preload in a commit-phase effect, never during render; `scenePreload.test.ts` âº does not time out before the budget elapses Â· leaves no budget timer pending once it has settled; `useFadeTransition.test.tsx` âº dispatches scene_ready when a declared ref FAILS to load Â· withholds scene_ready while the fade-out is still running, preload settled or not; e2e `scene-preload-cover.spec.ts` âº covers the entering scene with the declared cover, reports a fraction, then commits; the F90 hold's floor-not-budget clause is carried by `loadingCoverHold.test.ts` âº collapses to 0 under the e2e flag, read at call time â stubbed after import, it still collapses, and by `useMinimumVisibleHold.test.tsx` âº holdMs 0 is structurally inert: returns shown and never calls setTimeout; the beat that replaced it on `/game` is carried by `useLoadingBeat.test.tsx` âº adds no release path of its own â an unsettled gate never reveals Â· behaves identically under the e2e flag, so it adds no collapse point, and at the use site by `page.fade-gate.test.tsx` âº GamePage loading beat âº shows the cover even when the preload settles before the first frame Â· holds the cover for the declared floor, then reveals, and on `/replays/player` by `page.test.tsx` âº ReplayPlayerPage loading beat âº covers a game whose gate settles in render, with no wait to condition on Â· holds the cover for the declared floor, then reveals; the clause conditioning a chunk fold on the surface's own resolved cover is carried by `page.fade-gate.test.tsx` âº GamePage reveal gate âº withholds the reveal while a covered entry’s chunk is still in flight Â· reveals an entry that declares no cover on the gate alone, chunk still pending, and by `page.test.tsx` âº ReplayPlayerPage loading beat âº withholds the reveal while the entering screen chunk is still in flight Â· reveals an entry that declares no cover on the gate alone, chunk still pending; the hop half of the same clause is carried by `SceneRouter.test.tsx` âº holds the curtain through a chunk wait behind its OWN cover, never behind the fallback Â· reveals a hop that raises no cover even while a chunk is still cold |
 | 134 | Spatial attenuation only via the voice's own `PannerNode` + the one shared listener; the pose never camera-derived                 | code-verified | `renderer/audio/AudioManager.test.ts` › writes exactly the gain automation a non-spatial play writes, and no gain stage from the spatial path (#116) · ducks the bus and fades the voice identically with a panner in the chain (#116) · writes no gain stage on any path (#116) · pins panningModel to equalpower even though nothing can author it · takes the pose as plain tuples — nothing camera-shaped fits the parameter; `renderer/audio/Spatial.test.ts` › exposes exactly the five authored fields — panningModel is not one of them; `renderer/audio/__tests__/audio-barrel-side-effects.test.ts` › pulls in a closed set of modules, one of them a store — whose externals asserts pin that the bundled audio graph names neither `three` nor `@react-three/fiber`; production evidence `apps/tactics/screens/TacticsDemoBoard.test.tsx` › anchors the listener at the board centre, which is not the camera position                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | 135 | Cue observation is renderer-only feedback: no dispatcher on the handler surface, one on-demand rAF chain, no audio scheduled       | code-verified | `renderer/audio/__tests__/cue-handler-no-dispatch.test.ts` › emits every event kind the surface declares, so the census below is not vacuous · carries NO key beside the declared ones, on any event · emits self-contained values, with no function riding on any of them · names no dispatch API anywhere in cueMarkerScheduler.ts · … in cueSampler.ts · … in AudioManager.ts · … in useAudioCues.ts (one case per module, from `it.each(OWNING_MODULES)`) · reads the module the handler record is declared in; `renderer/audio/cueSampler.test.ts` › schedules no frame while nothing is observing · starts the chain on the first observation and keeps exactly one frame in flight · runs one chain however many voices are observed · cancels the chain when the last observer unsubscribes · asks for nothing on a host with no frames to give; `renderer/audio/AudioManager.test.ts` › schedules no frame until the first observation, and none after the last · samples the audio clock rather than the wall clock or a timer (#122); production evidence `apps/tactics/components/TacticsAmbience.test.tsx` › leaves the sounding bed unchanged at the turn boundary, and moves it at the cue — a game that acts on a cue and dispatches nothing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| 136 | A cue-aligned transition is natively scheduled against the audio clock, and every `t0`-derived fact anchors to the scheduled start | code-verified | `renderer/audio/AudioManager.test.ts` › starts the incoming voice AT the cue, with both halves anchored there (#121, #122) · takes the NEXT arrival when the decode lands after the cue (#122) · measures the arrival against the t0 it is handed, not a re-read clock (#122) · treats an arrival past the outgoing voice own scheduled end as unreachable (#122) · hands over ON the outgoing voice scheduled end, which it still reaches (#122) · leaves the outgoing voice at full volume for the whole arm · holds a fadeOutAtCue ramp until the cue and runs the authored fade from there (#122) · ramps a fadeOutAtCue { toEnd } from the cue to the voice own scheduled end (#122); production evidence e2e `apps/tactics/e2e/tests/ambience-cue-aligned.spec.ts` › books each handover ahead of the clock, on a loop boundary of the bed it replaces — which reads `source.start`'s `when` against `AudioContext.currentTime` in the real runtime                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 136 | A cue-aligned transition is natively scheduled against the audio clock, and every `t0`-derived fact anchors to the scheduled start | code-verified | `renderer/audio/AudioManager.test.ts` › starts the incoming voice AT the cue, with both halves anchored there (#121, #122) · takes the NEXT arrival when the decode lands after the cue (#122) · measures the arrival against the t0 it is handed, not a re-read clock (#122) · treats an arrival past the outgoing voice own scheduled end as unreachable (#122) · hands over ON the outgoing voice scheduled end, which it still reaches (#122) · leaves the outgoing voice at full volume for the whole arm · holds a fadeOutAtCue ramp until the cue and runs the authored fade from there (#122) · ramps a fadeOutAtCue { toEnd } from the cue to the voice own scheduled end (#122); production evidence e2e `apps/tactics/e2e/tests/ambience-cue-aligned.spec.ts` › books every handover ahead of the clock, and the second on a loop boundary of the bed the first started — which reads `source.start`'s `when` against `AudioContext.currentTime` in the real runtime                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ---
 

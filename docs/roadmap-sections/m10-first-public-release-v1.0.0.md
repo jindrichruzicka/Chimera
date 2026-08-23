@@ -562,8 +562,8 @@ candidates for a follow-up.
 
 ### F85 — Music Cue Observation & Cue-Aligned Transitions `§4.25`
 
-**Status: implemented across [#1038](https://github.com/jindrichruzicka/Chimera/issues/1038)–[#1045](https://github.com/jindrichruzicka/Chimera/issues/1045); the feature gate is
-[#1161](https://github.com/jindrichruzicka/Chimera/issues/1161).** F74 gave music transitions everything except a sense of
+**Status: implemented across [#1038](https://github.com/jindrichruzicka/Chimera/issues/1038)–[#1045](https://github.com/jindrichruzicka/Chimera/issues/1045) and reviewed by the feature gate
+[#1161](https://github.com/jindrichruzicka/Chimera/issues/1161), whose run is recorded in the [invariant roll-call](../executive-architecture/invariant-roll-call.md).** F74 gave music transitions everything except a sense of
 _when_. A game could crossfade two beds, but only **now**, so a swap driven by gameplay — the
 last enemy dies, the turn passes — cut across whatever the music was in the middle of. F85
 adds the ability to say "do this at the next musical boundary", and it does so in two halves
@@ -617,8 +617,9 @@ at the instant the first moves looked like proof of deferral. It is not: a compo
 swapped instantly and moved the second marker one React commit later passes it, measured.
 So the load-bearing assertion is made against Web Audio itself —
 `AudioBufferSourceNode.prototype.start` is patched to record each bed's scheduled `when`
-against `AudioContext.currentTime`, and both handovers must be booked ahead of the clock and
-land on a `loopEnd` arrival of the bed they replace.
+against `AudioContext.currentTime`. Every handover must be booked ahead of the clock, and the
+second must land on a `loopEnd` arrival of the bed the first one started — a relationship an
+instant swap cannot produce. Which cue it is stays the unit suite's claim, asserted by name.
 
 | Task                                                                                                       | Issue                                                           |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |

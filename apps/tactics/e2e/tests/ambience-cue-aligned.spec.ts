@@ -26,8 +26,8 @@
  *      Audio itself. `AudioBufferSourceNode.prototype.start` is patched to record the
  *      `when` each looping bed was scheduled for alongside `AudioContext.currentTime`
  *      at that moment, and two things follow that an instant swap cannot produce:
- *      every handover is booked AHEAD of the clock, and the instant it is booked for
- *      is a `loopEnd` arrival of the bed it replaces — `when` lands on
+ *      every handover is booked AHEAD of the clock, and the second is booked for a
+ *      `loopEnd` arrival of the bed the first one started — `when` lands on
  *      `previousWhen + loopEnd + k × (loopEnd − loopStart)` for a whole number of
  *      passes. `crossfade` books `currentTime`, so it fails both.
  *
@@ -58,7 +58,7 @@ test.use({ port: '7795' });
 const AMBIENCE_DURATION_SECONDS = 1.5;
 const AMBIENCE_LOOP_START_SECONDS = 0.2;
 const AMBIENCE_LOOP_END_SECONDS = 1.3;
-/** One pass of the loop body — the longest a handover can be made to wait. */
+/** One pass of the loop body — how far apart a bed's `loopEnd` arrivals are. */
 const LOOP_PERIOD_SECONDS = AMBIENCE_LOOP_END_SECONDS - AMBIENCE_LOOP_START_SECONDS;
 
 /**
@@ -81,7 +81,7 @@ const DURATION_TOLERANCE_SECONDS = 0.05;
  */
 const CUE_TOLERANCE_SECONDS = 0.005;
 
-/** Time allowed for a handover: one loop pass, with a wide margin for a slow runner. */
+/** Time allowed for a handover — a wide margin for a slow runner, not a derived bound. */
 const HANDOVER_TIMEOUT_MS = 15_000;
 
 /** What the ambience markers said at one instant. */
@@ -280,7 +280,7 @@ test.describe('Ambience — the swap lands on the bed’s own cue', () => {
         await expect(game.ambience).toHaveAttribute('data-track', 'tense');
     });
 
-    test('books each handover ahead of the clock, on a loop boundary of the bed it replaces', async ({
+    test('books every handover ahead of the clock, and the second on a loop boundary of the bed the first started', async ({
         hostWindow,
         clientWindow,
     }) => {
@@ -319,16 +319,25 @@ test.describe('Ambience — the swap lands on the bed’s own cue', () => {
 
         // Native scheduling, not a timer that calls `play()` when it fires (Invariant
         // #122). `crossfade` books `currentTime` and would leave this at or below zero.
+        //
+        // Bounded BELOW and not above, deliberately. A lead has no upper end this spec
+        // can derive: the arrival is resolved against the outgoing bed's own start, and
+        // that bed may not have started yet — it was itself booked for a cue — so the
+        // lead carries however long it has left to wait, which is a race this spec does
+        // not control — §4.25's arm placed close to a wrap, booked for the next arrival
+        // while the observer settles on the imminent one. What that costs is real and is
+        // not covered by the residue check below, which pins a PHASE rather than an
+        // instant: `loopStart` arrivals sit on the same lattice as `loopEnd` ones, and
+        // `passes` has no upper bound either. The cue's NAME is pinned in
+        // `TacticsAmbience.test.tsx`, the arrival the resolver picks in
+        // `renderer/audio/voicePlayhead.test.ts` and `renderer/audio/AudioManager.test.ts`;
+        // what this spec adds is that the booking reaches Web Audio ahead of the clock
+        // for real.
         for (const [index, start] of [first, second].entries()) {
-            const lead = start.when - start.at;
             expect(
-                lead,
+                start.when - start.at,
                 `handover ${String(index)} was not booked ahead of the clock`,
             ).toBeGreaterThan(0);
-            expect(
-                lead,
-                `handover ${String(index)} was booked further out than one pass of the loop`,
-            ).toBeLessThanOrEqual(LOOP_PERIOD_SECONDS + CUE_TOLERANCE_SECONDS);
         }
 
         // The instant itself. The second bed entered its buffer at 0 when the first
