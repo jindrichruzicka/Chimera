@@ -3141,7 +3141,7 @@ describe('DefaultAudioManager — fadeOut', () => {
         expect(expectSource(context, 0).stop).toHaveBeenCalledWith(13);
     });
 
-    it('falls back to a 250 ms ramp when toEnd names no scheduled end (#119)', async () => {
+    it('falls back to a 250 ms ramp when toEnd names no scheduled end, naming fadeOut (#118, #119)', async () => {
         const { context, manager, ref } = createCuedManager();
         const handle = manager.play(ref, { loop: true });
         await flushAudioLoad();
@@ -3157,9 +3157,11 @@ describe('DefaultAudioManager — fadeOut', () => {
             time: 10.25,
         });
         expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10.25);
-        // An unbounded loop has no end to ramp to; the substitution must be visible.
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(String(warn.mock.calls[0]?.[0])).toContain('no scheduled end');
+        // An unbounded loop has no end to ramp to; the substitution must be visible, and
+        // visible under the verb that asked for it.
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            'Audio fadeOut { toEnd } found no scheduled end on this voice; fading out over 250ms instead.',
+        );
     });
 
     it('says nothing about a toEnd substitution whose own stop is then refused (#118)', async () => {
@@ -3451,7 +3453,7 @@ describe('DefaultAudioManager — fadeOut', () => {
         expect(String(warn.mock.calls[0]?.[0])).toContain('cue 1s resolved to 1s');
     });
 
-    it('stops now rather than dividing by a zero-length loop period (#122)', async () => {
+    it('stops now rather than dividing by a zero-length loop period, naming fadeOut (#118, #122)', async () => {
         // A degenerate empty clip loops a zero-length window, so no wait can ever end.
         // Without the guard the period advance divides by zero and hands `NaN` on.
         const { context, manager, ref } = createCuedManager({ bufferSeconds: 0 });
@@ -3462,10 +3464,12 @@ describe('DefaultAudioManager — fadeOut', () => {
         manager.fadeOut(handle, { toCue: 'end' });
 
         expect(expectSource(context, 0).stop).toHaveBeenCalledWith(10);
-        expect(warn).toHaveBeenCalledTimes(1);
-        // A symbolic cue renders quoted as authored, not as the seconds it stands for.
-        expect(String(warn.mock.calls[0]?.[0])).toContain("cue 'end' resolved to 0s");
-        expect(String(warn.mock.calls[0]?.[0])).toContain('never reaches again');
+        // A symbolic cue renders quoted as authored, not as the seconds it stands for. The
+        // whole message is pinned rather than two fragments of it, which is also what pins
+        // that it names no INSTANT: the stop above happens at 10 and no `10` appears here.
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            "Audio fadeOut cue 'end' resolved to 0s, which this voice never reaches again (entered at 0s, loop window [0s, 0s]); silencing and stopping the voice without a fade.",
+        );
     });
 
     it('shapes an equalPower fade-out as the falling quarter-wave (#120)', async () => {
@@ -3661,7 +3665,7 @@ describe('DefaultAudioManager — fadeOut', () => {
         expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(10.5);
     });
 
-    it('stops the voice immediately when the scheduled stop is refused (#119)', async () => {
+    it('stops the voice immediately when the scheduled stop is refused, naming fadeOut (#118, #119)', async () => {
         // Without the release the ramp hands off to, a faded voice would sit silent and
         // unreleased forever, holding a pool slot. Containment must not hide that.
         const { context, manager, ref } = createCuedManager();
@@ -3684,8 +3688,11 @@ describe('DefaultAudioManager — fadeOut', () => {
         expect(source.stop).toHaveBeenCalledTimes(2);
         expect(source.stop).toHaveBeenLastCalledWith();
         expect(() => readVoiceRecord(manager, handle)).toThrow();
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(String(warn.mock.calls[0]?.[0])).toContain('stopped immediately');
+        // Named for the verb the caller actually invoked, so an operator reading it has a
+        // route back to this call rather than to whichever verb happens to share the path.
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            'Audio fadeOut could not schedule its stop at 10.5s; the fade is dropped and the voice is stopped immediately.',
+        );
     });
 
     it('lets an explicit stop supersede a fade without double-releasing (#119)', async () => {
@@ -5766,6 +5773,26 @@ describe('DefaultAudioManager — crossfade', () => {
         expect(warn).not.toHaveBeenCalled();
         expect(context.createdGainNodes.map((gain) => gain.gain.calls)).toEqual(gainCallsBefore);
     });
+
+    it('names crossfade, not fadeOut, when the linked fade cannot schedule its stop (#118)', async () => {
+        // A linked fade-out is not a `fadeOut` call, and an operator who never called one
+        // has no route back from a message that says so. Only the OUTGOING source is armed
+        // to refuse — the incoming one is created after the flag is cleared, so the single
+        // warning below can only have come from the linkage.
+        const { context, manager, outgoing, incomingRef, startIncoming, startOutgoing } =
+            await createCrossfadePair({ deferOutgoing: true });
+        context.failNextStopSchedule = true;
+        await startOutgoing();
+        context.failNextStopSchedule = false;
+        const warn = spyOnWarn();
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000 });
+        await startIncoming();
+
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            'Audio crossfade could not schedule its stop at 12s; the fade is dropped and the voice is stopped immediately.',
+        );
+    });
 });
 
 // ─── cue-aligned transitions (#118, #119, #121, #122) ───────────────────────────
@@ -6315,7 +6342,7 @@ describe('DefaultAudioManager — cue-aligned transitions', () => {
         expect(handle.valid).toBe(false);
     });
 
-    it('stops without a fade when the FADE own cue is unreachable from the arm (#118)', async () => {
+    it('stops without a fade when the FADE own cue is unreachable from the arm, naming fadeOutAtCue (#118)', async () => {
         const { context, manager, handle } = await createCuedVoice();
         const warn = spyOnWarn();
 
@@ -6329,9 +6356,10 @@ describe('DefaultAudioManager — cue-aligned transitions', () => {
         // The empty window lands where the ramp would have BEGUN, which is the cue — not
         // the clock. That is why the message names no instant: the same sentence has to
         // hold for this anchor and for the immediate stop a refused schedule performs.
-        expect(warn).toHaveBeenCalledOnce();
-        expect(String(warn.mock.calls[0]?.[0])).toContain(
-            'silencing and stopping the voice without a fade',
+        // Pinned whole, so the absent instant is asserted rather than merely intended —
+        // the anchor is 14 and no `14` appears — and the verb is the one the caller used.
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            'Audio fadeOutAtCue cue { name: "intro" } resolved to 0s, which this voice never reaches again (entered at 0s, not looping); silencing and stopping the voice without a fade.',
         );
         expect(expectGain(context, 4).gain.calls).toEqual([
             { method: 'setValueAtTime', value: 1, time: 10 },
@@ -6414,6 +6442,64 @@ describe('DefaultAudioManager — cue-aligned transitions', () => {
 
         expect(warn).not.toHaveBeenCalled();
         expect(context.createdGainNodes.map((gain) => gain.gain.calls)).toEqual(gainCallsBefore);
+    });
+
+    it('names fadeOutAtCue when the armed fade cannot schedule its stop (#118)', async () => {
+        // The shared fade-out path's refusal message, reached from the cue-aligned verb:
+        // the arm resolves `loopEnd` to 16 and the 2 s window ends at 18, which this
+        // platform will not book.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        context.failNextStopSchedule = true;
+        const handle = manager.play(ref, { loop: true });
+        await flushAudioLoad();
+        const warn = spyOnWarn();
+
+        manager.fadeOutAtCue(handle, { atCue: { name: 'loopEnd' }, fade: { overMs: 2000 } });
+
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            'Audio fadeOutAtCue could not schedule its stop at 18s; the fade is dropped and the voice is stopped immediately.',
+        );
+        expect(handle.valid).toBe(false);
+    });
+
+    it('names crossfadeAtCue, not crossfade, when the linked fade cannot schedule its stop (#118)', async () => {
+        // The cue-aligned arm of the same message. The two crossfade verbs share the
+        // linkage, so only naming the one the caller invoked separates them.
+        const { context, manager, outgoing, incomingRef, startIncoming, startOutgoing } =
+            await createCrossfadePair({
+                deferOutgoing: true,
+                outgoingMetadata: THEME_CUE_SHEET,
+                outgoingPlayOptions: { loop: true },
+            });
+        context.failNextStopSchedule = true;
+        await startOutgoing();
+        context.failNextStopSchedule = false;
+        const warn = spyOnWarn();
+
+        manager.crossfadeAtCue(outgoing, incomingRef, {
+            durationMs: 2000,
+            atCue: { name: 'loopEnd' },
+        });
+        await startIncoming();
+
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            'Audio crossfadeAtCue could not schedule its stop at 18s; the fade is dropped and the voice is stopped immediately.',
+        );
+    });
+
+    it('names fadeOutAtCue when the armed { toEnd } finds no scheduled end (#118)', async () => {
+        // The substitution message, reached from the cue-aligned verb: an unbounded loop
+        // has no end for `{ toEnd }` to ramp to, so the 250 ms fallback runs from the cue.
+        const { context, manager, handle } = await createCuedVoice({ loop: true });
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBeNull();
+        const warn = spyOnWarn();
+
+        manager.fadeOutAtCue(handle, { atCue: { name: 'loopEnd' }, fade: { toEnd: true } });
+
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            'Audio fadeOutAtCue { toEnd } found no scheduled end on this voice; fading out over 250ms instead.',
+        );
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(16.25);
     });
 });
 

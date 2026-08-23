@@ -446,6 +446,26 @@ interface StartedVoice {
     readonly bufferDurationSeconds: number;
 }
 
+/**
+ * The two verbs that ARM a cue-aligned op, for the one warning
+ * {@link DefaultAudioManager.nextCueArrival} emits.
+ */
+type CueArmVerb = 'crossfadeAtCue' | 'fadeOutAtCue';
+
+/**
+ * The verbs that reach the shared fade-out path, for the diagnostics on it.
+ *
+ * Every message there is named for the verb the CALLER invoked rather than for the path
+ * they meet on, so an operator reading one has a route back to the call that produced it —
+ * and a crossfade's linked fade-out, which is no `fadeOut` call at all, names the crossfade
+ * verb its caller used. A closed union rather than a `string`, as {@link CueArmVerb} is:
+ * a message can only ever name a verb that exists, and an unknown one fails `tsc`.
+ *
+ * Built ON the arming pair rather than beside it, so a verb added there reaches this
+ * without a second edit.
+ */
+type FadeOutVerb = CueArmVerb | 'crossfade' | 'fadeOut';
+
 /** The unsubscribe {@link DefaultAudioManager.observeCues} hands back when it refuses. */
 const NO_CUE_OBSERVATION = (): void => {
     return;
@@ -673,7 +693,7 @@ export class DefaultAudioManager implements AudioManager {
             return;
         }
 
-        this.applyFadeOut(record, spec, this.audioContext.currentTime);
+        this.applyFadeOut(record, spec, 'fadeOut', this.audioContext.currentTime);
     }
 
     /**
@@ -696,8 +716,16 @@ export class DefaultAudioManager implements AudioManager {
      * crossfade's linkage both hand over — needs one thing more than a correctly authored
      * window: the gain the ramp DEPARTS from is a fact about that anchor rather than about
      * `currentTime`, and {@link fadeOutDeparture} is where the two are told apart.
+     *
+     * `verb` is passed for the same reason, and threaded on down to
+     * {@link resolveAuthoredFadeOutEnd} — see {@link FadeOutVerb}.
      */
-    private applyFadeOut(record: VoiceRecord, spec: FadeOutSpec, now: number): void {
+    private applyFadeOut(
+        record: VoiceRecord,
+        spec: FadeOutSpec,
+        verb: FadeOutVerb,
+        now: number,
+    ): void {
         const started = startedVoice(record);
         if (started === null) {
             // Still loading: there is no gain to ramp and no source to stop, so the
@@ -719,7 +747,13 @@ export class DefaultAudioManager implements AudioManager {
             return;
         }
 
-        const { rampEnd, deferredWarning } = resolveFadeOutRampEnd(record, started, spec, now);
+        const { rampEnd, deferredWarning } = resolveFadeOutRampEnd(
+            record,
+            started,
+            spec,
+            verb,
+            now,
+        );
 
         try {
             started.source.stop(rampEnd);
@@ -729,7 +763,7 @@ export class DefaultAudioManager implements AudioManager {
             // a pool slot, so it is stopped now — and the cut is said out loud rather
             // than left as an unexplained missing fade.
             console.warn(
-                `Audio fadeOut could not schedule its stop at ${rampEnd}s; the fade is dropped and the voice is stopped immediately.`,
+                `Audio ${verb} could not schedule its stop at ${rampEnd}s; the fade is dropped and the voice is stopped immediately.`,
             );
             this.releaseVoice(record, { stopSource: true });
             return;
@@ -954,6 +988,7 @@ export class DefaultAudioManager implements AudioManager {
             return handle;
         }
 
+        const verb: FadeOutVerb = atCue === null ? 'crossfade' : 'crossfadeAtCue';
         incomingRecord.linkedFadeOut = (startedAt): void => {
             // Resolved by handle id when the linkage FIRES, never captured as a record:
             // the voice may have been stopped, preempted or have reached its own end in
@@ -964,7 +999,7 @@ export class DefaultAudioManager implements AudioManager {
                 return;
             }
 
-            this.applyFadeOut(outgoingRecord, { overMs: durationMs, curve }, startedAt);
+            this.applyFadeOut(outgoingRecord, { overMs: durationMs, curve }, verb, startedAt);
         };
 
         return handle;
@@ -1034,7 +1069,7 @@ export class DefaultAudioManager implements AudioManager {
 
         const now = this.audioContext.currentTime;
         const arrival = this.nextCueArrival(record, spec.atCue, 'fadeOutAtCue', now);
-        this.applyFadeOut(record, spec.fade, arrival ?? now);
+        this.applyFadeOut(record, spec.fade, 'fadeOutAtCue', arrival ?? now);
     }
 
     /**
@@ -1048,9 +1083,9 @@ export class DefaultAudioManager implements AudioManager {
      * `now` is supplied rather than read, so an arm and the start it is resolved for are
      * measured against one instant.
      *
-     * `verb` names the caller in the one warning this emits, which is the only diagnosis
-     * either cue-aligned verb adds (Invariant #118). It is a closed union rather than a
-     * `string`, so the message can only ever name a verb that exists. A voice still
+     * `verb` names the caller in the one warning this emits (Invariant #118). It is a
+     * closed union rather than a `string`, so the message can only ever name a verb that
+     * exists — see {@link FadeOutVerb}, which is built on it. A voice still
      * `'loading'` is NOT that diagnosis: it has no timeline to align to yet, which is a
      * fact about how early the call came rather than a defect in it, so it returns `null`
      * silently.
@@ -1058,7 +1093,7 @@ export class DefaultAudioManager implements AudioManager {
     private nextCueArrival(
         record: VoiceRecord,
         cue: Cue,
-        verb: 'crossfadeAtCue' | 'fadeOutAtCue',
+        verb: CueArmVerb,
         now: number,
     ): number | null {
         const started = startedVoice(record);
@@ -2493,8 +2528,8 @@ interface FadeOutRamp {
     /** The absolute context time the ramp reaches `0`. */
     readonly rampEnd: number;
     /**
-     * Held for {@link DefaultAudioManager.fadeOut} to print once `source.stop(rampEnd)` is
-     * accepted, because it narrates a fade the refusal path cancels. A diagnosis that
+     * Held for {@link DefaultAudioManager.applyFadeOut} to print once `source.stop(rampEnd)`
+     * is accepted, because it narrates a fade the refusal path cancels. A diagnosis that
      * survives that path is printed where it is found instead — see
      * {@link resolveAuthoredFadeOutEnd} for the one that does.
      */
@@ -2517,12 +2552,14 @@ function resolveFadeOutRampEnd(
     record: VoiceRecord,
     started: StartedVoice,
     spec: FadeOutSpec,
+    verb: FadeOutVerb,
     now: number,
 ): FadeOutRamp {
     const { rampEnd: authoredEnd, deferredWarning } = resolveAuthoredFadeOutEnd(
         record,
         started,
         spec,
+        verb,
         now,
     );
     if (!Number.isFinite(authoredEnd)) {
@@ -2539,11 +2576,16 @@ function resolveFadeOutRampEnd(
     return { rampEnd: Math.max(now, clampRampEnd(record, authoredEnd)), deferredWarning };
 }
 
-/** The ramp end each variant ASKS for, before clamping. May be non-finite. */
+/**
+ * The ramp end each variant ASKS for, before clamping. May be non-finite.
+ *
+ * `verb` names the caller in the two diagnostics below — see {@link FadeOutVerb}.
+ */
 function resolveAuthoredFadeOutEnd(
     record: VoiceRecord,
     started: StartedVoice,
     spec: FadeOutSpec,
+    verb: FadeOutVerb,
     now: number,
 ): FadeOutRamp {
     if ('overMs' in spec) {
@@ -2568,7 +2610,7 @@ function resolveAuthoredFadeOutEnd(
         // substitution this message promises.
         return {
             rampEnd: now + DEFAULT_FADE_OUT_MS / 1000,
-            deferredWarning: `Audio fadeOut { toEnd } found no scheduled end on this voice; fading out over ${DEFAULT_FADE_OUT_MS}ms instead.`,
+            deferredWarning: `Audio ${verb} { toEnd } found no scheduled end on this voice; fading out over ${DEFAULT_FADE_OUT_MS}ms instead.`,
         };
     }
 
@@ -2588,7 +2630,7 @@ function resolveAuthoredFadeOutEnd(
     // degraded end lands past `loopEnd`. There a message naming only the seconds would
     // leave the operator no way back to the call that caused it.
     console.warn(
-        `Audio fadeOut cue ${describeCue(spec.toCue)} resolved to ${cueSeconds}s, which this voice never reaches again (${describeVoiceTimeline(record)}); silencing and stopping the voice without a fade.`,
+        `Audio ${verb} cue ${describeCue(spec.toCue)} resolved to ${cueSeconds}s, which this voice never reaches again (${describeVoiceTimeline(record)}); silencing and stopping the voice without a fade.`,
     );
     // Printed here, not deferred: it names no instant, so it stays true whichever way the
     // stop goes — the refusal path stops the voice at once, and a cue-aligned fade begins
