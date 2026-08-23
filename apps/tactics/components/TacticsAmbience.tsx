@@ -72,8 +72,12 @@ const AMBIENCE_SWAP_OPTIONS: Omit<CueAlignedCrossfadeOptions, 'durationMs'> = {
     atCue: AMBIENCE_SWAP_CUE,
 };
 
-/** A swap that is scheduled but has not sounded yet. */
+/**
+ * A swap that is scheduled but has not sounded yet, kept with the manager that armed
+ * it — which is therefore the manager that minted `incoming`.
+ */
 interface PendingSwap {
+    readonly manager: AudioManager;
     readonly track: TacticsAmbienceTrack;
     readonly incoming: AudioHandle;
 }
@@ -101,8 +105,8 @@ export interface TacticsAmbienceProps {
  * for starting audio.
  *
  * **Two markers, because there are two facts.** `data-track` is the bed the turn
- * calls for and changes the instant the turn does; `data-playing-track` names the bed
- * the handover was armed to reach, and moves at the first `loopEnd` after the arm.
+ * calls for and changes the instant the turn does; `data-playing-track` is the other —
+ * see the tests that measure what moves it.
  * Collapsing them would delete the turn-signal claim `TacticsGameHud.test.tsx`
  * measures, and the gap between them IS the deferral.
  *
@@ -155,6 +159,13 @@ export function TacticsAmbience({ isMyTurn }: TacticsAmbienceProps): React.React
     // an engine that has never heard of the handle, and the pending slot would then sit
     // there refusing every later arm. Recomputed rather than stored so it cannot go
     // stale, and it stays reference-stable, since it is `liveBed` or nothing.
+    //
+    // The arm and the observation both take this value, and the settle stamps the manager
+    // that ARMED the swap rather than whichever one the context happens to supply at the
+    // cue — so the pair is true by construction there. Not because a measurement says the
+    // alternative is wrong: a manager swap tears the mount effect down and re-stamps
+    // `liveBed` inside the same commit, so a settle reached in the window between is
+    // overwritten before any render can read it.
     const bed = liveBed !== null && liveBed.manager === audioManager ? liveBed : null;
 
     const pendingSwapRef = useRef<PendingSwap | null>(null);
@@ -165,6 +176,16 @@ export function TacticsAmbience({ isMyTurn }: TacticsAmbienceProps): React.React
     useEffect(() => {
         const started = startBed();
         setLiveBed({ manager: audioManager, handle: started });
+        // The restart plays `openingTrackRef` — the bed the match opened on — whatever
+        // the last settle left on the marker, so the marker is moved back onto it. A
+        // no-op on the first mount, where the two are the same value by construction.
+        // Unreconciled, a manager swap after a settle leaves the new manager sounding
+        // the calm bed while both markers read tense; and because the arm compares the
+        // TURN against that marker, it would then find nothing to do until the turn
+        // changed. The bed cannot be restarted on `playingTrack` instead: `useSound` keys
+        // its callback on the ref it is handed, so that would re-run this effect on
+        // every settle and restart the bed at each swap.
+        setPlayingTrack(openingTrackRef.current);
         const openVoices = (openVoicesRef.current ??= new Set<AudioHandle>());
         openVoices.add(started);
 
@@ -200,7 +221,7 @@ export function TacticsAmbience({ isMyTurn }: TacticsAmbienceProps): React.React
             ...AMBIENCE_SWAP_OPTIONS,
             durationMs: AMBIENCE_CROSSFADE_MS,
         });
-        pendingSwapRef.current = { track, incoming };
+        pendingSwapRef.current = { manager: bed.manager, track, incoming };
 
         const openVoices = (openVoicesRef.current ??= new Set<AudioHandle>());
         // Retiring invalidated entries keeps the set bounded by a swap rather than by
@@ -239,7 +260,7 @@ export function TacticsAmbience({ isMyTurn }: TacticsAmbienceProps): React.React
             return;
         }
         pendingSwapRef.current = null;
-        setLiveBed({ manager: audioManager, handle: pending.incoming });
+        setLiveBed({ manager: pending.manager, handle: pending.incoming });
         setPlayingTrack(pending.track);
     }
 

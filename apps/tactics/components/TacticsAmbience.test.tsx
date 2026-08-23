@@ -150,7 +150,7 @@ function renderAmbience(isMyTurn: boolean): ManagerDouble & {
     };
 }
 
-/** The bed the turn calls for, and the bed the handover was armed to reach. */
+/** Both ambience markers, read in one go. */
 function markers(): { readonly track: string | null; readonly playing: string | null } {
     const marker = screen.getByTestId('tactics-ambience');
     return {
@@ -475,6 +475,111 @@ describe('TacticsAmbience — the cue-sheet + cue-aligned swap reference adoptio
             CueAlignedCrossfadeOptions,
         ];
         expect(outgoing).toBe(vi.mocked(second.manager.play).mock.results[0]?.value);
+    });
+
+    it('observes no handle the manager the context now supplies did not mint', () => {
+        // `DefaultAudioManager.createHandleId` mints `audio-N` from a PER-MANAGER
+        // counter, so a handle from another manager is not the harmless miss a stale
+        // handle usually is: the id can name a live voice on this one. The observation
+        // is keyed on `bed`, which is `liveBed` only while the pair still agrees with
+        // the manager in context — handing it `liveBed.handle` instead would observe
+        // the old manager's voice on the new one for the commit before the mount effect
+        // re-seats the bed. Asserted over EVERY call rather than the live set, because
+        // that subscription lasts one commit and a poll after the fact cannot see it.
+        const first = createManagerDouble();
+        const second = createManagerDouble();
+        const view = render(
+            <AudioManagerProvider audioManager={first.manager}>
+                <TacticsAmbience isMyTurn />
+            </AudioManagerProvider>,
+        );
+        const startedOnFirst = vi.mocked(first.manager.play).mock.results[0]?.value as AudioHandle;
+
+        view.rerender(
+            <AudioManagerProvider audioManager={second.manager}>
+                <TacticsAmbience isMyTurn />
+            </AudioManagerProvider>,
+        );
+
+        const observedOnSecond = vi
+            .mocked(second.manager.observeCues)
+            .mock.calls.map(([handle]) => handle);
+        const startedOnSecond = vi.mocked(second.manager.play).mock.results[0]
+            ?.value as AudioHandle;
+        // `toBe`, not a structural match: the two doubles each mint a `voice-0` carrying
+        // the same ref, bus and priority, so only object identity separates them.
+        expect(observedOnSecond).toHaveLength(1);
+        expect(observedOnSecond[0]).toBe(startedOnSecond);
+        expect(observedOnSecond).not.toContain(startedOnFirst);
+    });
+
+    it('restarts on the opening bed after a manager swap, and says so on the marker', () => {
+        // The mount effect restarts from `openingTrackRef` — the bed the match OPENED
+        // on — while `playingTrack` still holds whatever the last settle left. Left
+        // unreconciled the new manager plays the calm bed while both markers read tense,
+        // and nothing moves it back.
+        const first = createManagerDouble();
+        const second = createManagerDouble();
+        const view = render(
+            <AudioManagerProvider audioManager={first.manager}>
+                <TacticsAmbience isMyTurn />
+            </AudioManagerProvider>,
+        );
+        view.rerender(
+            <AudioManagerProvider audioManager={first.manager}>
+                <TacticsAmbience isMyTurn={false} />
+            </AudioManagerProvider>,
+        );
+        first.reachCue('loopEnd');
+        expect(markers()).toEqual({ track: 'tense', playing: 'tense' });
+
+        view.rerender(
+            <AudioManagerProvider audioManager={second.manager}>
+                <TacticsAmbience isMyTurn={false} />
+            </AudioManagerProvider>,
+        );
+
+        const [restarted] = vi.mocked(second.manager.play).mock.calls[0] as [
+            AssetRef<AudioClipAsset>,
+        ];
+        expect(restarted).toBe(tacticsAudioRefs.ambienceCalm);
+        // The marker moved with the restart, so the two agree again.
+        expect(markers()).toEqual({ track: 'tense', playing: 'calm' });
+    });
+
+    it('arms the turn’s bed again on the manager that replaced the one it opened on', () => {
+        // The consequence of the reconciliation above, and the half a marker assertion
+        // alone would miss: with the marker still reading tense the arm comparison finds
+        // nothing to do, so the new manager plays the calm bed for the rest of the match
+        // and nothing arms again until the turn changes.
+        const first = createManagerDouble();
+        const second = createManagerDouble();
+        const view = render(
+            <AudioManagerProvider audioManager={first.manager}>
+                <TacticsAmbience isMyTurn />
+            </AudioManagerProvider>,
+        );
+        view.rerender(
+            <AudioManagerProvider audioManager={first.manager}>
+                <TacticsAmbience isMyTurn={false} />
+            </AudioManagerProvider>,
+        );
+        first.reachCue('loopEnd');
+
+        view.rerender(
+            <AudioManagerProvider audioManager={second.manager}>
+                <TacticsAmbience isMyTurn={false} />
+            </AudioManagerProvider>,
+        );
+
+        expect(second.manager.crossfadeAtCue).toHaveBeenCalledTimes(1);
+        const [outgoing, incoming] = vi.mocked(second.manager.crossfadeAtCue).mock.calls[0] as [
+            AudioHandle,
+            AssetRef<AudioClipAsset>,
+            CueAlignedCrossfadeOptions,
+        ];
+        expect(outgoing).toBe(vi.mocked(second.manager.play).mock.results[0]?.value);
+        expect(incoming).toBe(tacticsAudioRefs.ambienceTense);
     });
 
     it('leaves no cue observation standing once it unmounts', () => {
