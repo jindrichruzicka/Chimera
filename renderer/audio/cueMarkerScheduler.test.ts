@@ -354,7 +354,11 @@ describe('the fold agrees with voicePlayheadSeconds at every position', () => {
     // table of its own. Positions are binary fractions, so the arithmetic below
     // is exact and a cue can sit exactly on the folded position.
     const loop = window(1, 3);
-    const timeline = { startOffsetSeconds: 0, loopWindowSeconds: loop };
+    // Rate 1, so `now` and the unwrapped position are the same number and the table below
+    // can be read as positions. What is pinned here is the FOLD, which is buffer
+    // arithmetic and the same at every rate; the conversion into that arithmetic is
+    // measured in `voicePlayhead.test.ts`.
+    const timeline = { startOffsetSeconds: 0, loopWindowSeconds: loop, rate: 1 };
     const started = { startedAtContextTime: 0, bufferDurationSeconds: 1000 };
 
     it.each([0.5, 1, 2.5, 3, 3.5, 5, 5.25, 7])(

@@ -36,6 +36,8 @@ import {
     type VoiceCueReading,
 } from './cueSampler.js';
 import {
+    bufferSecondsToContextSeconds,
+    contextSecondsToBufferSeconds,
     nextCueContextTime,
     voicePlayheadSeconds,
     type LoopWindowSeconds,
@@ -69,9 +71,10 @@ export interface PlayOptions {
      * phase vocoder would be needed for. `rateFromSemitones` in `./rate.ts` spells a
      * musical interval as one of these.
      *
-     * Fixed for the life of the voice: read once by `startVoice` and never written
-     * again. A non-positive or non-finite value falls back to `1` with one warning —
-     * see {@link normalizeRate}.
+     * Fixed for the life of the voice — no verb rewrites it. That immutability is what
+     * keeps every buffer-seconds-to-wall-clock conversion on this voice a single division
+     * rather than an integral of rate over time (Invariant #122). A non-positive or
+     * non-finite value falls back to `1` with one warning — see {@link normalizeRate}.
      */
     readonly rate?: number;
     /** Play-from-cue; resolves to `start()`'s offset argument. Defaults to `'start'` (0). */
@@ -323,9 +326,12 @@ interface VoiceRecord {
      */
     settledGain: number | null;
     /**
-     * The NORMALISED resampling rate, resolved at `play()` and read exactly once, by
-     * `startVoice`. Fixed for the life of the voice — no verb rewrites it — which is
-     * what lets the timeline anchors below stand as constants. Lives here and never on
+     * The NORMALISED resampling rate, resolved at `play()` and never written again. Fixed
+     * for the life of the voice — no verb rewrites it — which is what lets the timeline
+     * anchors below stand as constants, and what makes the conversion between buffer
+     * seconds and context seconds one division rather than an integral. Read by
+     * `startVoice`, by the playhead maths in `./voicePlayhead.ts` (which the record
+     * satisfies structurally) and by the cue sampler's reading. Lives here and never on
      * {@link AudioHandle} (Invariant #126).
      */
     readonly rate: number;
@@ -516,7 +522,9 @@ const DEFAULT_VOLUME = 1;
 /**
  * The rate at which a clip plays back at its authored pitch and duration. Also the value
  * `AudioBufferSourceNode.playbackRate` already holds, which is why `startVoice` writes
- * nothing at all for a voice that names it.
+ * nothing at all for a voice that names it — and, for the same "leave the rate-1 path
+ * exactly as it was" reason, why a bounded non-looping play at this rate still rides
+ * `start()`'s duration argument instead of a scheduled stop.
  */
 const DEFAULT_RATE = 1;
 const BUS_IDS: readonly AudioBusId[] = ['master', 'music', 'sfx', 'voice'];
@@ -1232,8 +1240,9 @@ export class DefaultAudioManager implements AudioManager {
      * Where one observed voice's playhead is, for the frame being sampled — or `null`
      * when there is nothing to sample.
      *
-     * The scheduler steps on the UNWRAPPED position: the entry point plus elapsed context
-     * time, which {@link voicePlayheadSeconds} computes and then FOLDS into the loop
+     * The scheduler steps on the UNWRAPPED position: the entry point plus the buffer the
+     * elapsed context time carried the playhead across at this voice's rate, which
+     * {@link voicePlayheadSeconds} computes the same way and then FOLDS into the loop
      * window. The fold is the one thing a cue step must not be handed, so the timeline
      * facts are read here directly, and the two bounds that decide whether there is a
      * playhead at all are applied as the manager's own:
@@ -1275,7 +1284,14 @@ export class DefaultAudioManager implements AudioManager {
         const at = reachedStop ? stopAt : now;
         return {
             sample: {
-                unwrappedSeconds: record.startOffsetSeconds + (at - startedAt),
+                // The rate is what turns the elapsed context time into the buffer the
+                // playhead crossed (Invariant #122). The scheduler downstream steps in
+                // BUFFER seconds throughout — the marker positions it compares against
+                // are authored on the clip — so this is the one place the conversion can
+                // happen without leaking the rate into the cue sheet.
+                unwrappedSeconds:
+                    record.startOffsetSeconds +
+                    contextSecondsToBufferSeconds(at - startedAt, record.rate),
                 ended: reachedStop,
             },
             loopWindow: record.loopWindowSeconds,
@@ -1648,8 +1664,21 @@ export class DefaultAudioManager implements AudioManager {
             ? (schedule.loopWindow ?? { startSeconds: 0, endSeconds: buffer.duration })
             : null;
 
+        // `start()`'s third argument is the ONE quantity on this path whose axis the Web
+        // Audio spec leaves open: it is buffer-relative, and nothing settles whether a
+        // resampled voice's duration is counted before or after the resample. The looping
+        // branch already refuses to rely on the analogous meaning; a rate-shifted voice is
+        // the second case with no portable reading, so it is bounded by `source.stop()`
+        // below instead — an absolute context time, which means one thing everywhere.
+        // The rate-1 path keeps the native argument, so the call sequence every voice in
+        // the engine made before `PlayOptions.rate` existed is unchanged rather than
+        // merely equivalent. Stated of the VOICE rather than of a bound it may not have:
+        // an unbounded play reaches neither branch below, and phrasing this as "is bounded
+        // natively" would be a claim about every rate-1 one-shot in the engine.
+        const canBoundNatively = !schedule.loop && record.rate === DEFAULT_RATE;
+
         try {
-            if (!schedule.loop && schedule.playDurationSeconds !== null) {
+            if (schedule.playDurationSeconds !== null && canBoundNatively) {
                 source.start(startedAt, schedule.entryOffsetSeconds, schedule.playDurationSeconds);
             } else {
                 source.start(startedAt, schedule.entryOffsetSeconds);
@@ -1663,29 +1692,54 @@ export class DefaultAudioManager implements AudioManager {
         // Only now — a voice whose `start()` was refused never played.
         record.phase = 'playing';
 
+        // The end a NON-LOOPING voice reaches on its own: the buffer it has left, in wall
+        // clock. Both arms that read it are non-looping — a voice with no `to`, and one
+        // whose `to` this platform refused to schedule — and a loop never reaches it.
+        const naturalEndAt =
+            startedAt +
+            bufferSecondsToContextSeconds(
+                buffer.duration - schedule.entryOffsetSeconds,
+                record.rate,
+            );
+
         if (schedule.playDurationSeconds !== null) {
-            const stopAt = startedAt + schedule.playDurationSeconds;
-            if (schedule.loop) {
+            // `to` names a length of BUFFER, whichever branch realises it, so the rate is
+            // what turns it into an instant on the context clock (Invariant #122).
+            const stopAt =
+                startedAt +
+                bufferSecondsToContextSeconds(schedule.playDurationSeconds, record.rate);
+            if (canBoundNatively) {
+                record.scheduledStopAt = stopAt;
+            } else {
                 // On a looping voice `to` bounds ELAPSED PLAY DURATION, so the stop is
-                // anchored to the real start — never `start()`'s third argument, whose
-                // meaning under `loop` is not portable.
+                // anchored to the real start; on a rate-shifted one it is the only
+                // unambiguous bound there is. Either way the native `onended` still drives
+                // the single release path of Invariant #119.
                 try {
                     source.stop(stopAt);
                     record.scheduledStopAt = stopAt;
                 } catch {
-                    // Unschedulable on this platform. `scheduledStopAt` stays null so it
-                    // never advertises an end that was not scheduled — but the caller
-                    // asked for a bounded loop and is getting an unbounded one, so say
-                    // so rather than letting the containment hide it.
-                    console.warn(
-                        `Audio voice could not schedule its stop at ${stopAt}s; the requested play bound is dropped and the voice will loop with no scheduled end.`,
-                    );
+                    // Unschedulable on this platform, and what survives differs by branch,
+                    // so the message must too. A loop has no end to fall back to and gets
+                    // none — `scheduledStopAt` stays null rather than advertising an end
+                    // that was not scheduled. A non-looping voice does have one: it runs
+                    // out of buffer, so the bound is dropped onto the end it would have had
+                    // without a `to`, which is both what will happen and what every later
+                    // fade needs to clamp against.
+                    if (schedule.loop) {
+                        console.warn(
+                            `Audio voice could not schedule its stop at ${stopAt}s; the requested play bound is dropped and the voice will loop with no scheduled end.`,
+                        );
+                    } else {
+                        record.scheduledStopAt = naturalEndAt;
+                        console.warn(
+                            `Audio voice could not schedule its stop at ${stopAt}s; the requested play bound is dropped and the voice plays on to the natural end of its clip.`,
+                        );
+                    }
                 }
-            } else {
-                record.scheduledStopAt = stopAt;
             }
         } else if (!schedule.loop) {
-            record.scheduledStopAt = startedAt + (buffer.duration - schedule.entryOffsetSeconds);
+            record.scheduledStopAt = naturalEndAt;
         }
 
         // Last, because every ramp below clamps against `scheduledStopAt`.

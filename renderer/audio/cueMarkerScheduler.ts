@@ -25,14 +25,13 @@
  *
  * ### The sample is UNWRAPPED, and that is the whole design
  *
- * A sample carries the position the playhead would hold if the loop did not exist:
- * the entry offset plus elapsed context time, which is what
- * {@link voicePlayheadSeconds} computes before folding. One monotonic fact rather
- * than a position plus a pass counter that could disagree with it — and it is what
- * makes every rule below exact rather than approximate, because the number of passes
- * a step crossed is a subtraction on it instead of a guess from a position that went
- * backwards. The caller already holds it: it is `startOffsetSeconds + (now −
- * startedAtContextTime)`, taken from the schedule facts Invariant #122 names.
+ * A sample carries the position the playhead would hold if the loop did not exist,
+ * which is what {@link voicePlayheadSeconds} computes before folding. One monotonic
+ * fact rather than a position plus a pass counter that could disagree with it — and it
+ * is what makes every rule below exact rather than approximate, because the number of
+ * passes a step crossed is a subtraction on it instead of a guess from a position that
+ * went backwards. The caller already holds it, derived from the schedule facts
+ * Invariant #122 names — see {@link CuePlayheadSample}.
  *
  * ### The rules
  *
@@ -85,7 +84,7 @@ export interface CuePoint {
  * state a caller threads between two steps is the previous one of these.
  */
 export interface CuePlayheadSample {
-    /** `startOffsetSeconds + (now − startedAtContextTime)`, before any loop fold. */
+    /** `startOffsetSeconds + (now − startedAtContextTime) × rate`, before any loop fold. */
     readonly unwrappedSeconds: number;
     /**
      * Whether this sample is the voice's LAST. What ends a voice belongs to the caller,

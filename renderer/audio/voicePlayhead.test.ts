@@ -5,20 +5,26 @@
  *
  * Invariants upheld:
  *   #122 — a voice's cue-relative timing is derived from `startedAtContextTime`,
- *          `startOffsetSeconds`, the decoded buffer duration and the effective loop
- *          window, never from a wall-clock timer. This module holds no clock of its
- *          own at all: `now` arrives as a parameter, which is what makes both
- *          directions testable with no fake timers and no `AudioContext`.
+ *          `startOffsetSeconds`, the decoded buffer duration, the effective loop
+ *          window and the voice's fixed playback rate, never from a wall-clock timer.
+ *          This module holds no clock of its own at all: `now` arrives as a parameter,
+ *          which is what makes both directions testable with no fake timers and no
+ *          `AudioContext`.
  *
  * The two directions are pinned against EACH OTHER as well as against tables. A
  * hand-computed table alone cannot say they agree — each would keep its own idea of
  * where a pass ends — and the round-trip property is what turns a boundary
  * disagreement into a failure rather than into two individually plausible answers.
  *
- * The property's three classes are counted and asserted non-empty. Every generated
- * shape is legal but not every one is reachable: `nextCueContextTime` answers `null`
- * for a cue the playhead never gets to, and a round-trip over an empty class would be
- * green while proving nothing.
+ * The property's three classes are counted and asserted non-empty, and so is the rate
+ * axis — once as a whole, and once on the wrap arm, where the rate reaches two terms
+ * rather than one. Every generated shape is legal but not every one is reachable:
+ * `nextCueContextTime` answers `null` for a cue the playhead never gets to, and a
+ * round-trip over an empty class would be green while proving nothing. On the rate
+ * axis the property is a FENCE rather than a driver — two directions that BOTH ignored
+ * the rate would still agree with each other — so what it catches is one of them
+ * converting while the other does not, and the tables above it are what pin the
+ * conversion itself.
  *
  * Values are generated on a quarter-second grid so every sum, difference and
  * remainder below is exact in binary floating point. `toBeCloseTo` is still what the
@@ -30,6 +36,8 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
 import {
+    bufferSecondsToContextSeconds,
+    contextSecondsToBufferSeconds,
     nextCueContextTime,
     voicePlayheadSeconds,
     type LoopWindowSeconds,
@@ -46,8 +54,9 @@ const T0 = 10;
 function timeline(
     startOffsetSeconds: number,
     loopWindowSeconds: LoopWindowSeconds | null = null,
+    rate = 1,
 ): VoiceTimeline {
-    return { startOffsetSeconds, loopWindowSeconds };
+    return { startOffsetSeconds, loopWindowSeconds, rate };
 }
 
 function started(startedAtContextTime = T0, bufferDurationSeconds = DURATION): StartedTimeline {
@@ -225,6 +234,146 @@ describe('nextCueContextTime on a voice scheduled ahead of the clock', () => {
     });
 });
 
+/**
+ * The two directions of the ONE axis rate moves the timeline along, named so that a
+ * call site says which way it is converting instead of leaving a bare `* rate` or
+ * `/ rate` to be read twice. They are duals, and the whole hazard this pair exists for
+ * is applying the wrong one: at any rate but `1` a swap is a squared error, so a rate
+ * of `2` here would read `8` where it should read `2`.
+ */
+describe('the buffer-seconds ↔ context-seconds conversions', () => {
+    it('spends less wall clock on a stretch of buffer the faster the voice plays', () => {
+        // Four buffer seconds at double speed take two wall-clock ones.
+        expect(bufferSecondsToContextSeconds(4, 2)).toBe(2);
+        // And at half speed, eight — the direction the sign of the exponent cannot say.
+        expect(bufferSecondsToContextSeconds(4, 0.5)).toBe(8);
+    });
+
+    it('covers more buffer in a stretch of wall clock the faster the voice plays', () => {
+        expect(contextSecondsToBufferSeconds(4, 2)).toBe(8);
+        expect(contextSecondsToBufferSeconds(4, 0.5)).toBe(2);
+    });
+
+    it('leaves both directions identities at the default rate', () => {
+        // The fence under every rate-1 answer in this file: the arithmetic the module
+        // had before a rate existed has to be what a rate of `1` still computes.
+        expect(bufferSecondsToContextSeconds(4, 1)).toBe(4);
+        expect(contextSecondsToBufferSeconds(4, 1)).toBe(4);
+    });
+});
+
+/**
+ * Rate turns a buffer-seconds quantity into a wall-clock one, so a voice at rate `r`
+ * reaches every position in `1 / r` of the wall clock it would need at rate `1`
+ * (Invariant #122). The rate is FIXED for the life of the voice, which is what keeps
+ * this a single division rather than an integral of rate over time.
+ *
+ * Every fixture below is paired with its rate-`1` control on the same shape, because
+ * the claim is a RATIO: an answer that merely differs from the rate-1 one is not the
+ * claim, and a body that dropped the conversion on one of the two arms would still
+ * differ. Rates of `2` and `0.5` both appear, so multiplying where the code should
+ * divide is red rather than accidentally right — at rate `1` the two are the same
+ * function, which is exactly why the rate-1 cases cannot drive any of this.
+ */
+describe('the playhead timeline at a rate other than 1', () => {
+    it('advances the playhead by the rate’s worth of buffer per context second', () => {
+        // 3.5 s of wall clock, entered at 2: at rate 1 the playhead is at 5.5, and every
+        // rate scales the stretch it covered rather than where it came from.
+        expect(voicePlayheadSeconds(timeline(2, null, 1), started(), T0 + 3.5)).toBe(5.5);
+        expect(voicePlayheadSeconds(timeline(2, null, 2), started(), T0 + 3.5)).toBe(9);
+        expect(voicePlayheadSeconds(timeline(2, null, 0.5), started(), T0 + 3.5)).toBe(3.75);
+    });
+
+    it('runs a non-looping voice past its buffer end in 1 / r of the wall clock', () => {
+        // Entered at 2 with 8 s of buffer left: at rate 2 the last instant the voice has
+        // a playhead is four seconds in rather than eight, and a quarter second later it
+        // has none. The rate-1 pair sits at 8 and 8.25 (above), so a body that ignored the
+        // rate would report 6 at the first instant and 6.25 at the second — both of them
+        // comfortably inside a buffer this voice has already run out of.
+        expect(voicePlayheadSeconds(timeline(2, null, 2), started(), T0 + 4)).toBe(DURATION);
+        expect(voicePlayheadSeconds(timeline(2, null, 2), started(), T0 + 4.25)).toBeNull();
+    });
+
+    it('folds a rate-shifted looping voice into the same window positions', () => {
+        // The fold itself is BUFFER arithmetic and must not be scaled — [2, 6] is a
+        // window on the buffer whatever the rate is. Only the wall clock that carries
+        // the playhead into it moves: 3.5 s at rate 2 is the 7 s the rate-1 fixture
+        // above needs to land at 3.
+        expect(voicePlayheadSeconds(INTRO_THEN_LOOP, started(), T0 + 7)).toBe(3);
+        expect(
+            voicePlayheadSeconds(
+                timeline(0, { startSeconds: 2, endSeconds: 6 }, 2),
+                started(),
+                T0 + 3.5,
+            ),
+        ).toBe(3);
+    });
+
+    it('reaches an entry-pass cue in 1 / r of the wall-clock offset', () => {
+        // Entered at 5, cue at 7: two buffer seconds of material, which is two wall-clock
+        // seconds at rate 1, one at rate 2 and four at rate 0.5.
+        expect(nextCueContextTime(timeline(5, null, 1), started(), 7, T0)).toBe(T0 + 2);
+        expect(nextCueContextTime(timeline(5, null, 2), started(), 7, T0)).toBe(T0 + 1);
+        expect(nextCueContextTime(timeline(5, null, 0.5), started(), 7, T0)).toBe(T0 + 4);
+    });
+
+    it('reaches a post-wrap cue in 1 / r of the wall-clock offset', () => {
+        // Window [2, 6] entered at 0, asked once the playhead has gone past the cue at 3
+        // on this pass — the arm that advances by whole PERIODS, which are buffer seconds
+        // and convert exactly as the entry-pass offset does. Both questions are asked at
+        // the same PLAYHEAD position (unwrapped 12), which is 12 s of wall clock at rate
+        // 1 and 6 at rate 2, so the two answers are comparable as a ratio: 15 s against
+        // 7.5. THREE periods have gone by, which is what makes this fixture kill both
+        // halves — divide only the entry offset and the rate-2 answer lands at 9.5,
+        // because an unconverted period counts two passes where three have run.
+        const atRateOne = timeline(0, { startSeconds: 2, endSeconds: 6 }, 1);
+        const atRateTwo = timeline(0, { startSeconds: 2, endSeconds: 6 }, 2);
+        expect(nextCueContextTime(atRateOne, started(), 3, T0 + 12)).toBe(T0 + 15);
+        expect(nextCueContextTime(atRateTwo, started(), 3, T0 + 6)).toBe(T0 + 7.5);
+        // And the reader agrees the arrival really is that position.
+        expect(voicePlayheadSeconds(atRateTwo, started(), T0 + 7.5)).toBe(3);
+    });
+
+    it('scales the period a scheduled voice’s pre-entry cue waits by', () => {
+        // The other period site: a cue behind the entry point of a voice that has not
+        // started yet is sent one period on, counted from the voice's own START rather
+        // than from `now` — which is why the ratio here is against that start and not
+        // against `T0`. Window [3, 8] entered at 5: the entry pass runs 5 → 8 and the
+        // wrap then carries 3 → 4, four buffer seconds in all. At rate 2 that is two
+        // wall-clock seconds after the start against the four the rate-1 control takes,
+        // and it is the PERIOD arm that answers both — leave the period unconverted and
+        // the rate-2 answer lands 2.5 s late, at the whole rate-1 period past the wrap.
+        const scheduled = started(T0 + 4);
+        const atRateOne = timeline(5, { startSeconds: 3, endSeconds: 8 }, 1);
+        const atRateTwo = timeline(5, { startSeconds: 3, endSeconds: 8 }, 2);
+        expect(nextCueContextTime(atRateOne, scheduled, 4, T0)).toBe(T0 + 8);
+        expect(nextCueContextTime(atRateTwo, scheduled, 4, T0)).toBe(T0 + 6);
+    });
+
+    it('still answers null for a cue no rate brings the playhead to', () => {
+        // Reachability is a fact about the BUFFER — which positions the schedule passes
+        // over — and the rate only says when. A conversion applied to the comparisons
+        // rather than to the offsets would move these.
+        expect(nextCueContextTime(timeline(5, null, 2), started(), 3, T0)).toBeNull();
+        expect(
+            nextCueContextTime(
+                timeline(0, { startSeconds: 2, endSeconds: 6 }, 2),
+                started(),
+                7,
+                T0,
+            ),
+        ).toBeNull();
+        expect(
+            nextCueContextTime(
+                timeline(4, { startSeconds: 2, endSeconds: 6 }, 2),
+                started(),
+                1,
+                T0,
+            ),
+        ).toBeNull();
+    });
+});
+
 describe('the playhead reader and nextCueContextTime agree at every boundary', () => {
     /**
      * One legal voice-and-question shape, on a quarter-second grid over a 10 s buffer.
@@ -242,6 +391,9 @@ describe('the playhead reader and nextCueContextTime agree at every boundary', (
             entryQuarters: fc.integer({ min: 0, max: 40 }),
             cueQuarters: fc.integer({ min: 0, max: 40 }),
             elapsedQuarters: fc.integer({ min: 0, max: 400 }),
+            // Powers of two, so every division and multiplication by the rate stays
+            // exact on the quarter-second grid the rest of the generator keeps to.
+            rate: fc.constantFrom(0.25, 0.5, 1, 2, 4),
         })
         .map((raw) => {
             const loopEndQuarters = Math.min(40, raw.loopStartQuarters + raw.loopSpanQuarters);
@@ -252,14 +404,15 @@ describe('the playhead reader and nextCueContextTime agree at every boundary', (
                 ? raw.entryQuarters % loopEndQuarters
                 : raw.entryQuarters;
             return {
-                record: timeline(entryQuarters / 4, window),
+                record: timeline(entryQuarters / 4, window, raw.rate),
                 cueSeconds: raw.cueQuarters / 4,
                 now: T0 + raw.elapsedQuarters / 4,
             };
         });
 
     it('reads back exactly the cue the writer says the playhead next reaches', () => {
-        const seen = { nonLooping: 0, entryPass: 0, postWrap: 0 };
+        const seen = { nonLooping: 0, entryPass: 0, postWrap: 0, rateShifted: 0 };
+        const seenAtShiftedRate = { postWrap: 0 };
 
         fc.assert(
             fc.property(arbitraryVoice, ({ record, cueSeconds, now }) => {
@@ -269,21 +422,28 @@ describe('the playhead reader and nextCueContextTime agree at every boundary', (
                 }
 
                 const window = record.loopWindowSeconds;
-                // The entry pass reaches a cue at `t0 + (cue − entry)`; anything later is
-                // a wrap arrival. Restating that one line here is what lets the
+                // The entry pass reaches a cue at `t0 + (cue − entry) / rate`; anything later
+                // is a wrap arrival. Restating that one line here is what lets the
                 // expectation below be a single exact value instead of a disjunction.
-                const entryPassArrival = T0 + (cueSeconds - record.startOffsetSeconds);
+                const entryPassArrival =
+                    T0 + (cueSeconds - record.startOffsetSeconds) / record.rate;
                 const wrapsOntoLoopStart =
                     window !== null &&
                     cueSeconds === window.startSeconds &&
                     reachedAt > entryPassArrival;
 
-                if (window === null) {
-                    seen.nonLooping += 1;
-                } else if (reachedAt === entryPassArrival) {
-                    seen.entryPass += 1;
-                } else {
-                    seen.postWrap += 1;
+                const arm =
+                    window === null
+                        ? 'nonLooping'
+                        : reachedAt === entryPassArrival
+                          ? 'entryPass'
+                          : 'postWrap';
+                seen[arm] += 1;
+                if (record.rate !== 1) {
+                    seen.rateShifted += 1;
+                    if (arm === 'postWrap') {
+                        seenAtShiftedRate.postWrap += 1;
+                    }
                 }
 
                 // `loopStart` reached by a WRAP is the one arrival the two directions
@@ -307,6 +467,18 @@ describe('the playhead reader and nextCueContextTime agree at every boundary', (
         expect(seen.nonLooping).toBeGreaterThan(0);
         expect(seen.entryPass).toBeGreaterThan(0);
         expect(seen.postWrap).toBeGreaterThan(0);
+        // And that the rate really varied: four of the five drawn rates are not `1`, and
+        // at `1` the two conversions are the identity — a generator that stopped drawing
+        // them would leave the whole rate axis of this property vacuously green.
+        expect(seen.rateShifted).toBeGreaterThan(0);
+        // The two counters above are independent, so they can both be positive with the
+        // wrap arm exercised only at rate `1` — which is the arm where the rate reaches
+        // TWO terms rather than one, since the period converts alongside the entry
+        // offset. Fenced on its own, and only this one of the three crossings: measured
+        // over six unseeded runs the wrap arm drew 47–65 rate-shifted arrivals of 500,
+        // while the non-looping and entry-pass arms drew 9–27 and 7–18 — the same
+        // too-thin-to-fence judgement the wrap-onto-loopStart arm above already records.
+        expect(seenAtShiftedRate.postWrap).toBeGreaterThan(0);
     });
 
     it('names one instant by both its bounds where the writer reaches loopStart', () => {

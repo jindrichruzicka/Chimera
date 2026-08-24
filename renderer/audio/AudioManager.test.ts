@@ -23,9 +23,10 @@
  *          applied atomically at `t0` in the order `releaseOnStart` →
  *          `pendingFadeIn` → `pendingFadeTo` → `linkedFadeOut`; no ramp is ever
  *          scheduled against a null source.
- *   #122 — cue-relative fade timing is derived from `startedAtContextTime`,
- *          `startOffsetSeconds`, the decoded duration and the effective loop window,
- *          never from a wall-clock timer.
+ *   #122 — cue-relative fade timing is derived from the voice's recorded schedule
+ *          facts, never from a wall-clock timer. The facts themselves are enumerated
+ *          in one place, `renderer/audio/voicePlayhead.ts`, so a roll-call here cannot
+ *          go stale behind them.
  *   #123 — preemption reclaims a `'fading-out'` voice first, then the lowest
  *          priority, then — at equal priority — a looping voice before a one-shot,
  *          then the oldest; no voice class is hard-exempt.
@@ -2506,6 +2507,197 @@ describe('DefaultAudioManager — playback rate', () => {
     });
 });
 
+// ─── rate-aware voice timeline (§4.25, #117/#119/#122) ──────────────────────────
+
+/**
+ * Rate is what separates the two axes a voice's timeline lives on — buffer seconds and
+ * wall-clock ones. Which way each case crosses that axis, where it crosses it at all, is
+ * stated in its own body: getting a direction backwards is a squared error, so none of
+ * them is left to be inferred from an operator.
+ *
+ * Where the claim is a RATIO, a rate-1 control stands with it — inside the same body, or
+ * as the fixture immediately beside it — because an answer that merely differs from the
+ * rate-1 one is not the claim. Those controls are FENCES, not drivers: at rate `1` the
+ * conversion is the identity, so they say what must not move and drive nothing. The cases
+ * that are not ratios — the release path, the refused stop, the observation sweep and the
+ * fade windows — carry their own reasoning in their bodies instead.
+ *
+ * **The bounded non-looping play is a code-shape rule, not an arithmetic one.**
+ * `start(when, offset, duration)`'s third argument is BUFFER-relative, and the spec does
+ * not settle whether a resampled voice's duration is measured before or after the
+ * resample — the same ambiguity the looping branch already refuses to rely on. The
+ * double here cannot observe it at all: it records whatever number it is handed and
+ * plays nothing. So what is pinned is the ARITY of the call plus the stop that replaces
+ * it, never a duration the double would accept either way.
+ */
+describe('DefaultAudioManager — rate-aware voice timeline', () => {
+    it('bounds a rate-shifted non-looping play by a stop, not start()’s third argument', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref, { from: 2, to: 6, rate: 2 });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        // TWO arguments. Not "three carrying a converted number": whichever way this
+        // platform reads the third one, a value chosen for the other reading is wrong,
+        // and `source.stop` is the bound that means the same thing on both.
+        expect(expectStartArgs(source)).toHaveLength(2);
+        expect(source.start).toHaveBeenCalledWith(10, 2);
+        // Four buffer seconds of material at double speed: two wall-clock seconds.
+        expect(source.stop).toHaveBeenCalledWith(12);
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(12);
+    });
+
+    it('keeps the native duration argument and schedules no stop at rate 1 (#117)', async () => {
+        // The fence the rule above is carved out of: the rate-1 path stays the call
+        // sequence it was, so the change is scoped to voices that were impossible before
+        // `PlayOptions.rate` existed rather than applied to every bounded play there is.
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { from: 2, to: 6, rate: 1 });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(expectStartArgs(source)).toHaveLength(3);
+        expect(source.start).toHaveBeenCalledWith(10, 2, 4);
+        expect(source.stop).not.toHaveBeenCalled();
+    });
+
+    it('releases a stop-bounded rate-shifted voice through the native onended (#119)', async () => {
+        // The single release path is what makes the stop-based bound safe to substitute
+        // for the duration argument: a voice bounded either way still ends by its own
+        // `onended`, so nothing here needs a timer to reclaim the pool slot.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { to: 6, rate: 2 });
+        await flushAudioLoad();
+
+        expectSource(context, 0).finish();
+
+        expect(handle.valid).toBe(false);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('divides a bounded loop’s elapsed play duration by the rate (#117)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { loop: true, from: 2, to: 6, rate: 2 });
+        await flushAudioLoad();
+        manager.play(ref, { loop: true, from: 2, to: 6, rate: 0.5 });
+        await flushAudioLoad();
+        manager.play(ref, { loop: true, from: 2, to: 6 });
+        await flushAudioLoad();
+
+        // `to` bounds ELAPSED PLAY DURATION on a loop (#117), and what the rate changes
+        // is how much wall clock four buffer seconds of it take — never what is bounded.
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12);
+        expect(expectSource(context, 1).stop).toHaveBeenCalledWith(18);
+        expect(expectSource(context, 2).stop).toHaveBeenCalledWith(14);
+    });
+
+    it('divides a non-looping voice’s implicit end by the rate (#122)', async () => {
+        const { manager, ref } = createCuedManager();
+
+        const fast = manager.play(ref, { from: 2, rate: 2 });
+        await flushAudioLoad();
+        const slow = manager.play(ref, { from: 2, rate: 0.5 });
+        await flushAudioLoad();
+        const plain = manager.play(ref, { from: 2 });
+        await flushAudioLoad();
+
+        // Eight seconds of buffer left after entering at 2, played at three speeds.
+        expect(readVoiceRecord(manager, fast).scheduledStopAt).toBe(14);
+        expect(readVoiceRecord(manager, slow).scheduledStopAt).toBe(26);
+        expect(readVoiceRecord(manager, plain).scheduledStopAt).toBe(18);
+    });
+
+    it('falls back to the clip’s natural end when a rate-shifted stop is refused (#118)', async () => {
+        // The platform that accepts a bare `stop()` and refuses a scheduled one. The
+        // looping arm has nowhere to fall back to and says so; a NON-looping voice does —
+        // it runs out of buffer — so the bound is dropped onto the end it would have had
+        // with no `to` at all rather than left null, which would tell every later fade
+        // this voice has no end to clamp against.
+        const { context, manager, ref } = createCuedManager();
+        context.failNextStopSchedule = true;
+        const warn = spyOnWarn();
+
+        const handle = manager.play(ref, { from: 2, to: 6, rate: 2 });
+        await flushAudioLoad();
+
+        expect(readVoiceRecord(manager, handle).scheduledStopAt).toBe(14);
+        expect(warn).toHaveBeenCalledExactlyOnceWith(
+            'Audio voice could not schedule its stop at 12s; the requested play bound is dropped and the voice plays on to the natural end of its clip.',
+        );
+    });
+
+    it('reaches a cue in 1 / r of the wall clock, for a countdown and for a fade (#122)', async () => {
+        // Entered at 2 with the outro cue at 9: seven buffer seconds of material, which
+        // is 3.5 wall-clock seconds at double speed against the 7 the rate-1 fixture in
+        // the fadeOut block takes. Both verbs read the same arrival, so a conversion
+        // applied to one of them would put a countdown and the fade it counts down to on
+        // different clocks.
+        const { context, manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
+        const handle = manager.play(ref, { from: 2, rate: 2 });
+        await flushAudioLoad();
+
+        expect(manager.secondsUntilCue(handle, { name: 'outro' })).toBe(3.5);
+
+        manager.fadeOut(handle, { toCue: { name: 'outro' } });
+
+        expect(expectGain(context, 4).gain.calls).toEqual([
+            { method: 'setValueAtTime', value: 1, time: 10 },
+            { method: 'cancelAndHoldAtTime', time: 10 },
+            { method: 'linearRampToValueAtTime', value: 0, time: 13.5 },
+        ]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(13.5);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('sweeps the observed playhead across the rate’s worth of buffer per frame (#122)', async () => {
+        // The observation half of the same axis. 2.5 seconds of context clock carry a
+        // rate-2 voice to buffer position 5, past `loopStart` at 2 and `chorus` at 4 —
+        // the same two cues the rate-1 sampler needs five seconds to reach. A sampler
+        // that stepped on the wall clock alone would still be at 2.5 and would have
+        // emitted `loopStart` only.
+        const { context, frames, manager, ref } = createObservedManager({
+            metadata: THEME_CUE_SHEET,
+        });
+        const handle = manager.play(ref, { rate: 2 });
+        await flushAudioLoad();
+        const observer = recordCueEvents();
+        manager.observeCues(handle, observer.handlers);
+
+        frames.fire();
+        context.currentTime = 12.5;
+        frames.fire();
+
+        expect(observer.events).toEqual([
+            { kind: 'cue', name: 'loopStart' },
+            { kind: 'cue', name: 'chorus' },
+        ]);
+    });
+
+    it('leaves every fade window in wall-clock milliseconds whatever the rate is (§4.25)', async () => {
+        // The defect this change most plausibly introduces: `durationMs` is authored in
+        // WALL CLOCK, so none of the three ramp windows converts. Divide them by the rate
+        // and this voice's fade-in ends at 10.5, its fadeTo at 11.1 and its fade-out at
+        // 12.2 — every one of them a fade the caller never asked for.
+        const { context, manager, ref } = createCuedManager();
+        const handle = manager.play(ref, { rate: 2, fadeIn: { durationMs: 1000 } });
+        await flushAudioLoad();
+
+        context.currentTime = 11;
+        manager.fadeTo(handle, { to: 0.4, durationMs: 200 });
+        context.currentTime = 12;
+        manager.fadeOut(handle, { overMs: 400 });
+
+        const rampEnds = expectGain(context, 4)
+            .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+            .map((call) => call.time);
+        expect(rampEnds).toEqual([11, 11.2, 12.4]);
+        expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12.4);
+    });
+});
+
 // ─── loop regions (#117) ────────────────────────────────────────────────────────
 
 describe('DefaultAudioManager — loop regions', () => {
@@ -3359,13 +3551,15 @@ describe('DefaultAudioManager — fadeOut', () => {
     });
 
     it('says nothing about a toEnd substitution whose own stop is then refused (#118)', async () => {
-        // Both conditions come from ONE platform. A bounded LOOP is the shape that needs
-        // `source.stop(when)` to realise its end — a non-looping window rides `start()`'s
-        // duration argument instead — so the only way this voice reaches `fadeOut` with
-        // no scheduled end is the node having refused that stop at `play()`, and the same
-        // node refuses this fade's stop. Announcing the 250 ms substitution before the
-        // stop is accepted would promise a fade one statement ahead of the message saying
-        // the fade was dropped: the pair Invariant #118 allows one warning to rule out.
+        // Both conditions come from ONE platform. A bounded LOOP is the shape left with
+        // NO end to fall back to when a scheduled stop is refused — a non-looping voice
+        // runs out of buffer and drops its bound onto that end instead, whether it was
+        // bounded natively or by a stop of its own — so the only way this voice reaches
+        // `fadeOut` with no scheduled end is the node having refused that stop at
+        // `play()`, and the same node refuses this fade's stop. Announcing the 250 ms
+        // substitution before the stop is accepted would promise a fade one statement
+        // ahead of the message saying the fade was dropped: the pair Invariant #118
+        // allows one warning to rule out.
         const { context, manager, ref } = createCuedManager();
         context.failNextStopSchedule = true;
         const handle = manager.play(ref, { loop: true, to: 2 });

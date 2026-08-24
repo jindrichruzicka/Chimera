@@ -6,11 +6,11 @@
  * clock, no `react`, no `three`, and nothing else either.
  *
  * Invariants upheld:
- *   #122 — a voice's cue timing is derived from `startedAtContextTime`,
- *          `startOffsetSeconds`, the decoded duration and the effective loop window
- *          against a clock the CALLER supplies, never a wall-clock timer. A module
- *          that reaches no timer and no context cannot read one, which is what turns
- *          that rule into something measured rather than reviewed.
+ *   #122 — a voice's cue timing is derived from its recorded schedule facts — the ones
+ *          `voicePlayhead.ts` itself enumerates — against a clock the CALLER supplies,
+ *          never a wall-clock timer. A module that reaches no timer and no context
+ *          cannot read one, which is what turns that rule into something measured
+ *          rather than reviewed.
  *
  * Stated as CLOSED sets rather than as a denylist of the names the design happened
  * to call out. A denylist rejects only what whoever wrote it thought of; this module

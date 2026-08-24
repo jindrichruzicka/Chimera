@@ -22,7 +22,43 @@
  * Both functions take the schedule facts structurally rather than a `VoiceRecord`, so
  * nothing here can reach a node, a gain or a phase — the record satisfies them by
  * shape.
+ *
+ * A voice's playback `rate` is one of those facts, and it is what separates the two axes
+ * these functions work in: buffer seconds and wall-clock ones. Every crossing between
+ * them goes through {@link bufferSecondsToContextSeconds} or its dual, so which way a
+ * conversion runs is written down rather than inferred from an operator.
  */
+
+/**
+ * The wall-clock seconds a stretch of BUFFER seconds occupies at `rate` — the one axis
+ * a playback rate moves a voice's timeline along (Invariant #122). Every quantity read
+ * off the buffer converts through here before it can be compared with, or added to, an
+ * `AudioContext` time.
+ *
+ * Named rather than inlined because `/ rate` at a call site says nothing about which
+ * way it is converting, and the dual below is the same expression with the operator
+ * flipped. Applying the wrong one is a SQUARED error, which is the defect this pair
+ * exists to make visible: at rate `2` a four-second window is two wall-clock seconds,
+ * and the swap would read eight.
+ *
+ * Fade windows are authored in wall-clock milliseconds and never come through here.
+ *
+ * `rate` arrives already normalised to a positive finite number, exactly as the loop
+ * window arrives already resolved against the decoded buffer — this module validates
+ * neither, and `AudioManager.normalizeRate` is what makes that safe.
+ */
+export function bufferSecondsToContextSeconds(bufferSeconds: number, rate: number): number {
+    return bufferSeconds / rate;
+}
+
+/**
+ * The buffer seconds a stretch of WALL-CLOCK seconds carries the playhead across at
+ * `rate` — the dual of {@link bufferSecondsToContextSeconds}, and the direction the
+ * playhead reader converts in.
+ */
+export function contextSecondsToBufferSeconds(contextSeconds: number, rate: number): number {
+    return contextSeconds * rate;
+}
 
 /** A resolved `[loopStart, loopEnd]` region in buffer-local seconds. */
 export interface LoopWindowSeconds {
@@ -36,6 +72,12 @@ export interface VoiceTimeline {
     readonly startOffsetSeconds: number;
     /** The EFFECTIVE loop window as started, or `null` when the voice does not loop. */
     readonly loopWindowSeconds: LoopWindowSeconds | null;
+    /**
+     * The voice's FIXED resampling rate, normalised and recorded at `play()`. Nothing
+     * rewrites it, which is what keeps every conversion below a single division rather
+     * than an integral of rate over time (Invariant #122).
+     */
+    readonly rate: number;
 }
 
 /** The start facts only a STARTED voice has; a `'loading'` one has neither. */
@@ -49,8 +91,10 @@ export interface StartedTimeline {
 /**
  * The buffer-local position the playhead holds at `now`, or `null` when the voice has
  * none — Invariant #122, read direction. The dual of {@link nextCueContextTime}, and
- * derived from the same four facts at a fixed `playbackRate` of 1, so it needs no
- * sampling of the source and no clock of its own.
+ * derived from the same schedule facts and the voice's own fixed `rate`, so it needs no
+ * sampling of the source and no clock of its own. Wall-clock seconds convert into buffer
+ * ones through {@link contextSecondsToBufferSeconds}; every bound below is a position on
+ * the clip, which no rate moves.
  *
  * `null`, never `0`, for the two ways the BUFFER timeline puts a voice outside itself:
  * a start still AHEAD of `now` (a voice scheduled at a future context time has not
@@ -78,9 +122,12 @@ export function voicePlayheadSeconds(
         return null;
     }
 
-    // Where the playhead would be if nothing wrapped: the entry point plus elapsed
-    // context time. Every branch below is about what the schedule does to that.
-    const unwrapped = record.startOffsetSeconds + (now - startedAt);
+    // Where the playhead would be if nothing wrapped: the entry point plus the buffer
+    // the elapsed context time carried it across. Every branch below is about what the
+    // schedule does to that, and every one of them is BUFFER arithmetic — the fold, the
+    // window and the decoded duration are positions on the clip, which no rate moves.
+    const unwrapped =
+        record.startOffsetSeconds + contextSecondsToBufferSeconds(now - startedAt, record.rate);
     const window = record.loopWindowSeconds;
 
     if (window === null) {
@@ -111,11 +158,11 @@ export function voicePlayheadSeconds(
 /**
  * The context time the playhead NEXT reaches `cueSeconds`, or `null` when it never will
  * — Invariant #122. Derived from `startedAtContextTime`, `startOffsetSeconds` and the
- * effective loop window at a fixed `playbackRate` of 1, so it needs no timer and no
- * sampling of where the playhead currently is. A voice whose start is still AHEAD of
- * `now` is bounded by that start as well, so no arrival is named in the gap before its
- * first sample — while the instant it begins IS one, unlike an instant `now` sits on,
- * which the playhead has already reached.
+ * effective loop window, divided by the voice's own fixed `rate` wherever a buffer length
+ * becomes a wall-clock one, so it needs no timer and no sampling of where the playhead
+ * currently is. A voice whose start is still AHEAD of `now` is bounded by that start as
+ * well, so no arrival is named in the gap before its first sample — while the instant it
+ * begins IS one, unlike an instant `now` sits on, which the playhead has already reached.
  *
  * A looping voice runs its ENTRY pass from `startOffsetSeconds` out to the window end,
  * then repeats `[loopStart, loopEnd]` forever, so a cue is reached in the entry pass,
@@ -144,7 +191,8 @@ export function nextCueContextTime(
         // instant is still ahead of the clock. Two comparators rather than one, because a
         // cue behind the entry can land after `now` on a voice scheduled AHEAD of the
         // clock, and that instant is a position the playhead is never at.
-        const reachedAt = startedAt + (cueSeconds - entrySeconds);
+        const reachedAt =
+            startedAt + bufferSecondsToContextSeconds(cueSeconds - entrySeconds, record.rate);
         return cueSeconds >= entrySeconds && reachedAt > now ? reachedAt : null;
     }
 
@@ -167,7 +215,8 @@ export function nextCueContextTime(
     // it, which is a real arrival at the voice's own start; `>` against the clock does
     // not admit one sitting on `now`, which is where the playhead already IS. One
     // comparison could not say both, and a scheduled start is where they come apart.
-    const reachedAt = startedAt + (cueSeconds - entrySeconds);
+    const reachedAt =
+        startedAt + bufferSecondsToContextSeconds(cueSeconds - entrySeconds, record.rate);
     if (cueSeconds >= entrySeconds && reachedAt > now) {
         return reachedAt;
     }
@@ -181,5 +230,13 @@ export function nextCueContextTime(
     // fading over it beats the cut that a cue which never comes back has to take.
     const from = startedAt > now ? startedAt : now;
     const repeats = cueSeconds >= loopStart && period > 0;
-    return repeats ? reachedAt + period * (Math.floor((from - reachedAt) / period) + 1) : null;
+    // The period is a BUFFER length and the advance is added to a context time, so it
+    // converts exactly as the entry offset above does — and it has to, because the
+    // quotient below divides a wall-clock gap by it. Convert one and not the other and
+    // the count of passes is off by the rate.
+    const periodContextSeconds = bufferSecondsToContextSeconds(period, record.rate);
+    return repeats
+        ? reachedAt +
+              periodContextSeconds * (Math.floor((from - reachedAt) / periodContextSeconds) + 1)
+        : null;
 }
