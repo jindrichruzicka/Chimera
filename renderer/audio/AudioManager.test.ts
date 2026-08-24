@@ -445,6 +445,12 @@ class FakeAudioBufferSourceNode extends FakeAudioNode {
     // buffer" sentinel, so an untouched pair is itself an assertable state.
     public loopStart = 0;
     public loopEnd = 0;
+    /**
+     * The resampling rate. A real one defaults to `1`, so an EMPTY call log is what "the
+     * voice plays at the default rate" looks like — the state every play left behind
+     * before `PlayOptions.rate` existed, and the one a rate of `1` must still leave.
+     */
+    public readonly playbackRate = new FakeAudioParam();
     public onended: ((this: AudioBufferSourceNode, event: Event) => unknown) | null = null;
     /** Models a platform that accepts a bare `stop()` but refuses a scheduled one. */
     public rejectScheduledStop = false;
@@ -2309,6 +2315,194 @@ describe('DefaultAudioManager — cue scheduling', () => {
         await flushAudioLoad();
 
         expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 4, 5);
+    });
+});
+
+// ─── playback rate (§4.25, #126) ────────────────────────────────────────────────
+
+/**
+ * `PlayOptions.rate` resamples the source, so speed and pitch move together — which is
+ * why the option is not spelled `pitch`, and why nothing here promises a time-stretch.
+ *
+ * The rate is written ONCE, at the voice's real `t0`, and never again. A rate of `1`
+ * writes NOTHING — `playbackRate` already defaults to `1`, so the default path has to
+ * stay the byte-identical call sequence it was before the option existed rather than
+ * merely an equivalent one.
+ *
+ * Written test-first against a manager that ignored `rate` entirely. The cases that pass
+ * against that baseline are the fences — they say what must NOT move, so they are
+ * worthless as drivers and load-bearing as bounds: the explicit `rate: 1` sequence, and
+ * the two refused plays, which are silent about the rate either way. The omitted-rate
+ * case is half a fence too; only its recorded default reds.
+ */
+describe('DefaultAudioManager — playback rate', () => {
+    it('writes an authored rate to playbackRate at the voice start (§4.25)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref, { rate: 2 });
+        await flushAudioLoad();
+
+        const source = expectSource(context, 0);
+        expect(source.playbackRate.calls).toEqual([
+            { method: 'setValueAtTime', value: 2, time: 10 },
+        ]);
+        expect(source.playbackRate.value).toBe(2);
+        // Recorded on the internal record, never on the handle (Invariant #126).
+        expect(readVoiceRecord(manager, handle).rate).toBe(2);
+    });
+
+    it('writes the rate at the SCHEDULED start of a future voice, not at the call (§4.25)', () => {
+        const { context, manager, handle } = createLoadingVoice({ playOptions: { rate: 0.5 } });
+
+        startVoiceAt(manager, handle, 14);
+
+        // Anchored at the call, the write would land four seconds before the voice
+        // sounds — harmless for a constant rate today, and a silent lie about the `t0`
+        // every other schedule fact on this record is measured from.
+        expect(expectSource(context, 0).playbackRate.calls).toEqual([
+            { method: 'setValueAtTime', value: 0.5, time: 14 },
+        ]);
+    });
+
+    it('writes nothing and says nothing at all when no rate is authored (§4.25)', async () => {
+        const warn = spyOnWarn();
+        const { context, manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref);
+        await flushAudioLoad();
+
+        expect(expectSource(context, 0).playbackRate.calls).toEqual([]);
+        expect(readVoiceRecord(manager, handle).rate).toBe(1);
+        // An omitted rate is not a refused one. Normalising it through the same branch
+        // the bad values take would warn on every rateless play in the engine.
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('leaves an explicit rate of 1 with the call sequence of a play that names none', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        manager.play(ref, { from: 2, to: 6 });
+        await flushAudioLoad();
+        manager.play(ref, { from: 2, to: 6, rate: 1 });
+        await flushAudioLoad();
+
+        const defaulted = expectSource(context, 0);
+        const explicit = expectSource(context, 1);
+        // Every observable the two nodes carry, not the rate log alone: what a rate of
+        // `1` promises is that NOTHING moves, and comparing only `playbackRate` would
+        // still pass if the write had displaced the start, the stop or the gain floor.
+        expect(explicit.playbackRate.calls).toEqual([]);
+        expect(explicit.playbackRate.calls).toEqual(defaulted.playbackRate.calls);
+        expect(explicit.start.mock.calls).toEqual(defaulted.start.mock.calls);
+        expect(explicit.stop.mock.calls).toEqual(defaulted.stop.mock.calls);
+        expect([explicit.loop, explicit.loopStart, explicit.loopEnd]).toEqual([
+            defaulted.loop,
+            defaulted.loopStart,
+            defaulted.loopEnd,
+        ]);
+        // Voice gains follow the four bus gains built in the constructor.
+        expect(expectGain(context, 5).gain.calls).toEqual(expectGain(context, 4).gain.calls);
+    });
+
+    it.each([
+        ['zero', 0],
+        ['negative', -2],
+        ['NaN', Number.NaN],
+        ['positive infinite', Number.POSITIVE_INFINITY],
+        ['negative infinite', Number.NEGATIVE_INFINITY],
+    ])('normalises a %s rate to 1 with exactly one warning (§4.25)', async (_label, rate) => {
+        const warn = spyOnWarn();
+        const { context, manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref, { rate });
+        await flushAudioLoad();
+
+        // Fails BACK to the default rather than to an extreme, the shape `priority`
+        // already uses: a zero rate parks the playhead forever and a negative one asks
+        // for a reversing playhead, which nothing on this path models.
+        expect(readVoiceRecord(manager, handle).rate).toBe(1);
+        expect(expectSource(context, 0).playbackRate.calls).toEqual([]);
+        expect(warn).toHaveBeenCalledTimes(1);
+        // Names the value it refused, so the warning can be traced to a call site.
+        expect(warn.mock.calls[0]?.[0]).toContain(`rate ${String(rate)}`);
+        // Fail-soft: the play is normalised, never rejected — the voice still sounds.
+        expect(handle.valid).toBe(true);
+        expect(expectSource(context, 0).start).toHaveBeenCalledWith(10, 0);
+    });
+
+    it('reaches the INCOMING voice of a crossfade, which forwards options as a rest', async () => {
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair();
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 500, rate: 2 });
+        await startIncoming();
+
+        // `CrossfadeOptions extends Omit<PlayOptions, 'fadeIn'>` and the verb forwards a
+        // REST rather than naming each field, which is what makes a field added to
+        // `PlayOptions` reachable through the crossfade with no second edit. `rate` is
+        // the first field added since that was written, so it is the first measurement
+        // of it: sources 0 and 1 are the outgoing and incoming voices.
+        expect(expectSource(context, 1).playbackRate.calls).toEqual([
+            { method: 'setValueAtTime', value: 2, time: 10 },
+        ]);
+        expect(expectSource(context, 0).playbackRate.calls).toEqual([]);
+    });
+
+    it('says nothing about the rate of a play the static tier already rejected (§4.25)', () => {
+        const warn = spyOnWarn();
+        const { assetManager, manager, ref } = createCuedManager();
+
+        // Both faults at once. The rejection is the only line worth printing: the voice
+        // is never reserved, so a second warning would narrate the rate of a play that
+        // does not happen — and it would land BEFORE the reason the play was refused.
+        expect(manager.play(ref, { from: 5, to: 2, rate: 0 }).valid).toBe(false);
+
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0]?.[0]).not.toContain('rate 0');
+        expect(assetManager.loadCalls).toEqual([]);
+    });
+
+    it('says nothing about the rate of a play a saturated pool refused (§4.25)', async () => {
+        const created = createManager({ poolSize: 1, frameSource: new FrameSourceDouble() });
+        const { manager } = created;
+        const incumbent = playPooledVoice(created, 'incumbent');
+        await flushAudioLoad();
+        // Reaching the refusal arm takes re-entrancy: this play's own `reserveVoiceSlot`
+        // preempts the incumbent, whose release ends its observation, and an `onEnd` that
+        // plays refills the slot before the outer play can claim it. That is the only way
+        // in — preemption otherwise always yields a candidate (Invariant #123).
+        manager.observeCues(incumbent, {
+            onEnd: () => {
+                playPooledVoice(created, 'refill');
+            },
+        });
+        const warn = spyOnWarn();
+
+        const refused = playPooledVoice(created, 'refused', { rate: 0 });
+
+        expect(refused.valid).toBe(false);
+        // The pool refusal is silent — the invalid handle is its whole report — so a rate
+        // warning here would be the only line the caller got, and it would name the rate
+        // rather than the refusal.
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('never rewrites the rate across a fade-in, a re-target and a fade-out (§4.25)', async () => {
+        const { context, manager, ref } = createCuedManager();
+
+        const handle = manager.play(ref, { rate: 1.5, fadeIn: { durationMs: 500 } });
+        await flushAudioLoad();
+        const source = expectSource(context, 0);
+        const written = [{ method: 'setValueAtTime', value: 1.5, time: 10 }];
+        expect(source.playbackRate.calls).toEqual(written);
+
+        manager.fadeTo(handle, { to: 0.4, durationMs: 200 });
+        manager.fadeOut(handle, { overMs: 200 });
+
+        // Not a length check: a verb that rewrote the rate to its own value and then
+        // back would keep the count and still have moved the pitch mid-voice.
+        expect(source.playbackRate.calls).toEqual(written);
+        expect(source.playbackRate.value).toBe(1.5);
     });
 });
 
@@ -6620,12 +6814,13 @@ describe('AudioHandle — public shape', () => {
         expect(ownKeys).toHaveLength(PUBLIC_KEYS.length + 1);
     });
 
-    it('carries no schedule context even when every cue option is used (#126)', async () => {
+    it('carries no schedule context even when every cue and rate option is used (#126)', async () => {
         const { manager, ref } = createCuedManager({ metadata: THEME_CUE_SHEET });
         const handle = manager.play(ref, {
             from: { name: 'intro' },
             to: { name: 'outro' },
             loopRegion: { start: { name: 'loopStart' }, end: { name: 'loopEnd' } },
+            rate: 1.5,
         });
         await flushAudioLoad();
 
@@ -6655,6 +6850,7 @@ describe('AudioHandle — public shape', () => {
             'spatial',
             'sequence',
             'volume',
+            'rate',
         ]) {
             expect(handle).not.toHaveProperty(leaked);
         }
@@ -7285,6 +7481,8 @@ function spyOnWarn(): MockInstance<typeof console.warn> {
 interface ObservableVoiceRecord {
     /** The SETTLED voice ceiling, which `fadeTo` rewrites — not a copy of `PlayOptions`. */
     volume: number;
+    /** The NORMALISED playback rate, fixed for the life of the voice. */
+    readonly rate: number;
     scheduledStopAt: number | null;
     startedAtContextTime: number | null;
     startOffsetSeconds: number;

@@ -10,9 +10,8 @@ import { useGameStore } from '../../state/gameStore.js';
 /**
  * One entry's resolved per-occurrence overrides, every member present and
  * possibly `undefined` so the merge below can `??` uniformly. `rate` is
- * deliberately not read out: nothing in the play options consumes it yet, and
- * forwarding it as an excess property would ship an unvalidated field the day
- * they grow one.
+ * deliberately not read out — see `EventAudioPlayer.test.tsx` › does not forward
+ * the reserved rate override into play options.
  */
 interface ResolvedEventOverrides {
     readonly bus: 'master' | 'music' | 'sfx' | 'voice' | undefined;

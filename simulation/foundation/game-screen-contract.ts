@@ -193,8 +193,7 @@ export interface GameHudProps extends GameScreenProps {
  * sim-side and flows sim → renderer, never the reverse, so it names no renderer
  * type — not the play options, not a cue, not a spatial spec. `bus` is a
  * string-literal union that coincides with the renderer's bus ids without naming
- * them. `rate` is reserved for a playback-rate override: the engine's event-audio
- * player drops it rather than forwarding an unvalidated field.
+ * them.
  */
 export interface EventAudioOverrides {
     readonly bus?: 'master' | 'music' | 'sfx' | 'voice';

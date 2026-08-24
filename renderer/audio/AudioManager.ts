@@ -62,6 +62,18 @@ export interface PlayOptions {
      * and defaulted to `0`; music should name {@link MUSIC_PRIORITY}.
      */
     readonly priority?: number;
+    /**
+     * Resampling rate, defaulting to `1`. A RESAMPLE, not a time-stretch: speed and
+     * pitch move together — `2` is an octave up and half the duration — which is why
+     * the option is spelled `rate` rather than `pitch`, so the type promises nothing a
+     * phase vocoder would be needed for. `rateFromSemitones` in `./rate.ts` spells a
+     * musical interval as one of these.
+     *
+     * Fixed for the life of the voice: read once by `startVoice` and never written
+     * again. A non-positive or non-finite value falls back to `1` with one warning —
+     * see {@link normalizeRate}.
+     */
+    readonly rate?: number;
     /** Play-from-cue; resolves to `start()`'s offset argument. Defaults to `'start'` (0). */
     readonly from?: Cue;
     /**
@@ -310,6 +322,13 @@ interface VoiceRecord {
      * invalidate it — so it is exact for exactly as long as it is non-null.
      */
     settledGain: number | null;
+    /**
+     * The NORMALISED resampling rate, resolved at `play()` and read exactly once, by
+     * `startVoice`. Fixed for the life of the voice — no verb rewrites it — which is
+     * what lets the timeline anchors below stand as constants. Lives here and never on
+     * {@link AudioHandle} (Invariant #126).
+     */
+    readonly rate: number;
     /** The clip's cue sheet, parsed once synchronously at `play()`. */
     readonly sheet: AudioClipMetadata | null;
     readonly from: Cue | null;
@@ -494,6 +513,12 @@ const DEFAULT_PRIORITY = 0;
  */
 export const MUSIC_PRIORITY = 100;
 const DEFAULT_VOLUME = 1;
+/**
+ * The rate at which a clip plays back at its authored pitch and duration. Also the value
+ * `AudioBufferSourceNode.playbackRate` already holds, which is why `startVoice` writes
+ * nothing at all for a voice that names it.
+ */
+const DEFAULT_RATE = 1;
 const BUS_IDS: readonly AudioBusId[] = ['master', 'music', 'sfx', 'voice'];
 const GAIN_RAMP_EPSILON = 1e-4;
 const EQUAL_POWER_WAYPOINTS = 64;
@@ -504,8 +529,8 @@ const EQUAL_POWER_WAYPOINTS = 64;
  * must move together: were they to disagree, `{ durationMs }` and
  * `{ durationMs, curve: 'linear' }` would share one memo key while naming two different
  * fades, and whichever rendered first would keep playing. The same coupling holds for the
- * other four defaults that hook copies (`bus`, `loop`, `volume`, `priority`); they are
- * still copies, and single-homing them is its own change.
+ * other defaults that hook copies (`bus`, `loop`, `volume`, `priority`, `rate`); they
+ * are still copies, and single-homing them is its own change.
  */
 export const DEFAULT_FADE_CURVE: FadeCurve = 'linear';
 /**
@@ -604,6 +629,14 @@ export class DefaultAudioManager implements AudioManager {
             return handle;
         }
 
+        // Resolved here rather than beside `priority` above, because this normalisation
+        // WARNS and every branch above it declines the play. Some of those say why and
+        // some are silent — for a saturated pool the invalid handle is the whole report —
+        // so a line about a rate that was never going to be used would at best narrate a
+        // voice that does not exist, and at worst be the ONLY line the caller got, naming
+        // the rate instead of the refusal.
+        const rate = normalizeRate(opts.rate);
+
         const record: VoiceRecord = {
             handle,
             loop: opts.loopRegion !== undefined || (opts.loop ?? false),
@@ -614,6 +647,7 @@ export class DefaultAudioManager implements AudioManager {
             volume: clampUnit(opts.volume ?? DEFAULT_VOLUME),
             ceilingHold: null,
             settledGain: null,
+            rate,
             sheet,
             from: opts.from ?? null,
             to: opts.to ?? null,
@@ -1591,6 +1625,14 @@ export class DefaultAudioManager implements AudioManager {
         // write is also what anchors the ramp: `scheduleGainRamp` re-anchors at the value
         // the param holds.
         gainNode.gain.setValueAtTime(initialVoiceGain(record), startedAt);
+        // Anchored at the same `t0` as the gain floor, and written ONLY when it moves the
+        // voice: `playbackRate` already holds `1`, so writing the default would add a
+        // call to every voice in the engine while changing nothing audible — and the
+        // rate-1 path has to stay the call sequence it was, not merely an equivalent one.
+        // Nothing rewrites `record.rate` after `play()` resolved it.
+        if (record.rate !== DEFAULT_RATE) {
+            source.playbackRate.setValueAtTime(record.rate, startedAt);
+        }
         this.connectVoice(record, source, gainNode);
 
         // The playhead timeline half of what {@link startedVoice} narrows on; the two
@@ -2060,6 +2102,35 @@ function normalizePoolSize(value: number | undefined): number {
 function normalizePriority(value: number | undefined): number {
     if (value === undefined || !Number.isFinite(value)) {
         return DEFAULT_PRIORITY;
+    }
+
+    return value;
+}
+
+/**
+ * A voice's resampling rate, or {@link DEFAULT_RATE} for a value it cannot be played at.
+ *
+ * Falls back to the DEFAULT rather than to a nearest legal extreme — the shape
+ * {@link normalizePriority} already uses — because no extreme here is a sane reading of
+ * the intent: `0` parks the playhead forever, a negative rate asks for a reversing one
+ * that nothing on this path models, and `Infinity` is not a speed. The default is the
+ * only rate every other part of the manager is already correct for.
+ *
+ * Unlike priority, it warns. An out-of-range priority still plays the voice and only
+ * reorders preemption, while a rate is the difference between a clip the caller pitched
+ * and one that never advances — silently ignoring it would leave the game hunting a
+ * clip that sounds untouched.
+ */
+function normalizeRate(value: number | undefined): number {
+    if (value === undefined) {
+        return DEFAULT_RATE;
+    }
+
+    if (!Number.isFinite(value) || value <= 0) {
+        console.warn(
+            `Audio play rate ${value} is not a positive finite number; the voice plays at the default rate of ${DEFAULT_RATE}.`,
+        );
+        return DEFAULT_RATE;
     }
 
     return value;

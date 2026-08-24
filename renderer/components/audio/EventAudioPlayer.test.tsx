@@ -224,10 +224,7 @@ describe('EventAudioPlayer', () => {
     });
 
     it('does not forward the reserved rate override into play options', async () => {
-        // `rate` is carried by the overrides type for the coming playback-rate
-        // feature, but nothing in PlayOptions consumes it yet — forwarding it as an
-        // excess property would ship an unvalidated field the day PlayOptions grows
-        // one. The exact-argument assert is what proves the key is absent.
+        // The exact-argument assert is what proves the key is absent.
         const audioManager = createAudioManagerSpy();
         const binding: EventAudioBinding = {
             'combat:hit': {

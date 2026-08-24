@@ -87,6 +87,7 @@ const KEYED_FIELDS = {
         { loopRegion: { start: 1.1, end: 2.2 } },
     ],
     fadeIn: [{ fadeIn: { durationMs: 400.1 } }, { fadeIn: { durationMs: 400.2 } }],
+    rate: [{ rate: 1.1 }, { rate: 1.2 }],
 } satisfies Record<keyof PlayOptions, readonly [PlayOptions, PlayOptions]>;
 
 afterEach(() => {

@@ -18,6 +18,7 @@ const DEFAULT_BUS = 'sfx';
 const DEFAULT_LOOP = false;
 const DEFAULT_VOLUME = 1;
 const DEFAULT_PRIORITY = 0;
+const DEFAULT_RATE = 1;
 
 /**
  * Collapse a {@link Cue} to a scalar memo key. A `{ name }` cue is a fresh object on
@@ -48,6 +49,7 @@ export function useSound(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): () 
             opts?.loop ?? DEFAULT_LOOP,
             opts?.volume ?? DEFAULT_VOLUME,
             opts?.priority ?? DEFAULT_PRIORITY,
+            opts?.rate ?? DEFAULT_RATE,
             // An absent `spatial` cannot collide with an authored one: the three axis
             // keys are `undefined` only then. The distance keys default through the
             // SHARED constants — not copies — so an omitted field and its explicit
