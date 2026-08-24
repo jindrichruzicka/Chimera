@@ -15,12 +15,6 @@ name: Release
 # publish step sets `NPM_CONFIG_PROVENANCE=true`. Provenance is enabled here in CI only (not via
 # each package's `publishConfig`) on purpose — provenance generation needs the OIDC CI runtime,
 # so a global `publishConfig.provenance` would break the LOCAL `verify:publish` dry-run.
-#
-# CI Actions billing is blocked on this account, so this workflow does not actually execute
-# here — the LOCAL `verify:pack` + `verify:publish` gates remain authoritative before a real
-# publish. It is the future automation layer and the executable record of the release steps.
-# Before the first real publish, configure the `NPM_TOKEN` repository secret (an npm automation
-# token with publish rights to the `@chimera-engine` scope).
 
 on:
   push:

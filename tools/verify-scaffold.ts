@@ -46,8 +46,8 @@
  * the freshly-scaffolded app (in the temp dir only — never the template) and asserts the
  * smoke run then FAILS. If the broken scaffold still passes, the self-test exits non-zero.
  *
- * Mirrors `verify:pack`'s philosophy; the local gate is authoritative (CI Actions billing
- * is blocked). Kept out of `test`/`lint` (it spawns a full scaffold + Electron run) and
+ * Mirrors `verify:pack`'s philosophy; the local gate is authoritative. Kept out of
+ * `test`/`lint` (it spawns a full scaffold + Electron run) and
  * invoked explicitly via `pnpm verify:scaffold` / `pnpm verify:scaffold:selftest`.
  *
  * Invariants upheld:

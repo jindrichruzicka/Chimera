@@ -70,8 +70,8 @@ jobs:
     # and runs the generated app's unit + e2e boot-smoke. Heavier than the tactics e2e (a full
     # fresh install + next build + Electron run), so give it headroom.
     timeout-minutes: 40
-    # The local gate is authoritative (CI Actions billing is blocked); this job mirrors it for
-    # signal but the acceptance gate does not depend on it.
+    # The local gate is authoritative; this job mirrors it for signal but the
+    # acceptance gate does not depend on it.
     continue-on-error: true
 
     steps:

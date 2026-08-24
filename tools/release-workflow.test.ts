@@ -3,9 +3,8 @@ import path from 'node:path';
 import { describe, it, expect, beforeAll } from 'vitest';
 
 // Asserts the structure/contract of the F66 release workflow. Like
-// e2e-workflow.test.ts, it reads the YAML as text and checks shape + step ordering;
-// CI Actions billing is blocked on this account, so this is the executable record of
-// the release pipeline and the guard that the gating + provenance contract holds.
+// e2e-workflow.test.ts, it reads the YAML as text and checks shape + step ordering —
+// the guard that the release pipeline's gating + provenance contract holds.
 const workspaceRoot = path.resolve(import.meta.dirname, '..');
 const workflowPath = path.join(workspaceRoot, '.github', 'workflows', 'release.yml');
 
