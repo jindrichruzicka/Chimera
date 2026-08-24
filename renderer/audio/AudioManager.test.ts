@@ -2676,7 +2676,7 @@ describe('DefaultAudioManager — rate-aware voice timeline', () => {
         ]);
     });
 
-    it('leaves every fade window in wall-clock milliseconds whatever the rate is (§4.25)', async () => {
+    it('leaves the fade-in, fadeTo and fade-out windows in wall-clock milliseconds whatever the rate is (§4.25)', async () => {
         // The defect this change most plausibly introduces: `durationMs` is authored in
         // WALL CLOCK, so none of the three ramp windows converts. Divide them by the rate
         // and this voice's fade-in ends at 10.5, its fadeTo at 11.1 and its fade-out at

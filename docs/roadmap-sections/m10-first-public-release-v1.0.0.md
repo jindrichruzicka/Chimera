@@ -652,8 +652,8 @@ candidates for a follow-up.
 
 ### F86 — Variable Playback Rate `§4.25`
 
-**Status: implemented across [#1046](https://github.com/jindrichruzicka/Chimera/issues/1046)–[#1049](https://github.com/jindrichruzicka/Chimera/issues/1049); the feature gate is
-[#1164](https://github.com/jindrichruzicka/Chimera/issues/1164).** Every voice in the engine
+**Status: implemented across [#1046](https://github.com/jindrichruzicka/Chimera/issues/1046)–[#1049](https://github.com/jindrichruzicka/Chimera/issues/1049) and reviewed by the feature gate
+[#1164](https://github.com/jindrichruzicka/Chimera/issues/1164), whose run is recorded in the [invariant roll-call](../executive-architecture/invariant-roll-call.md).** Every voice in the engine
 used to play at exactly rate `1`, and Invariant #122 stated that constraint outright inside its
 own fade-timing rule. The practical cost was the machine-gun effect: `apps/tactics` plays `step`
 and `swordHit` from the projection delta, and at one fixed rate those are bit-identical every
