@@ -2696,6 +2696,36 @@ describe('DefaultAudioManager — rate-aware voice timeline', () => {
         expect(rampEnds).toEqual([11, 11.2, 12.4]);
         expect(expectSource(context, 0).stop).toHaveBeenCalledWith(12.4);
     });
+
+    it('leaves a crossfade’s window in wall-clock milliseconds at either half’s rate (§4.25)', async () => {
+        // The FOURTH window §4.25 enumerates, and the one the case above cannot reach:
+        // `linkCrossfade` authors one `durationMs` into the incoming voice's fade-in and
+        // the same number into the outgoing one's linked fade-out, and neither reads a
+        // `rate`. The two halves are given DIFFERENT rates so each pins its own — divide
+        // by the voice's own rate and the incoming ramp ends at 11 while the outgoing one
+        // ends at 14, and a linkage that reached for the INCOMING record's rate for both,
+        // which is the one in scope where that closure is written, ends BOTH at 11.
+        const { context, manager, outgoing, incomingRef, startIncoming } =
+            await createCrossfadePair({ outgoingPlayOptions: { rate: 0.5 } });
+
+        manager.crossfade(outgoing, incomingRef, { durationMs: 2000, rate: 2 });
+        await startIncoming();
+
+        const lastRamp = (gainIndex: number): ScheduledGainCall | undefined =>
+            expectGain(context, gainIndex)
+                .gain.calls.filter((call) => call.method === 'linearRampToValueAtTime')
+                .at(-1);
+        // Both halves land on `t0 + durationMs / 1000`, each having reached its own
+        // target — the same pair of ends the rate-1 crossfade of `lays both curves over
+        // one shared t0 window, complementary and dip-free` writes for the same 2 s.
+        expect(lastRamp(5)).toEqual({ method: 'linearRampToValueAtTime', value: 1, time: 12 });
+        expect(lastRamp(4)).toEqual({ method: 'linearRampToValueAtTime', value: 0, time: 12 });
+        // ONE stop, and it is the fade-out's own end. An unbounded voice schedules none
+        // at all — its rate-shifted natural end, 30 here, is a number on the record that
+        // later ramps clamp against and nothing more — so this list is the whole of what
+        // the crossfade wrote, and it is on the wall clock rather than near the buffer.
+        expect(expectSource(context, 0).stop.mock.calls).toEqual([[12]]);
+    });
 });
 
 // ─── loop regions (#117) ────────────────────────────────────────────────────────

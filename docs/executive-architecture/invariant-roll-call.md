@@ -613,13 +613,6 @@ production call sites cross it at this tree — four in `voicePlayhead.ts`, thre
 sampler being the difference. `renderer/audio/voicePlayhead.ts` defines the two directions
 they are named by.
 
-**One enumerated window has no rate-shifted assert.** §4.25 lists four wall-clock fade windows
-the rate must not divide — `fadeIn.durationMs`, `fadeOut{overMs}`, `fadeTo` and a crossfade's
-duration. `leaves the fade-in, fadeTo and fade-out windows in wall-clock milliseconds whatever
-the rate is (§4.25)` pins the three it names; `linkCrossfade` forwards `durationMs` without
-reading `record.rate`, so the fourth is true of the code and unmeasured. A coverage gap,
-not a defect, and tracked as [#1165](https://github.com/jindrichruzicka/Chimera/issues/1165).
-
 **Child acceptance criteria**, re-verified on this tree rather than from the tasks' close-outs.
 #1046's `AudioHandle` still carries `id`/`ref`/`bus`/`priority`/`valid` and nothing else
 (#126), an authored rate writes one `setValueAtTime` at the voice's own `t0` while an omitted
