@@ -1,5 +1,15 @@
 # @chimera-engine/electron
 
+## 1.0.0-rc.10
+
+### Patch Changes
+
+- Updated dependencies [8459288]
+    - @chimera-engine/renderer@1.0.0-rc.10
+    - @chimera-engine/simulation@1.0.0-rc.10
+    - @chimera-engine/ai@1.0.0-rc.10
+    - @chimera-engine/networking@1.0.0-rc.10
+
 ## 1.0.0-rc.9
 
 ### Patch Changes

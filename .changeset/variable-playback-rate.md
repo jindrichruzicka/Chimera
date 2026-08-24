@@ -42,4 +42,13 @@ player; it had been typed and reserved with no consumer.
 pitch-jittered from the game's own seeded per-turn stream, so a replay hears the turn it
 recorded. The randomness is the game's — the engine supplies none.
 
+The tactics animated showcase now **records** both bone rotations from inside its frame loop and
+publishes the series, replacing the e2e spec's `expect.poll` over a live attribute. A poll's
+`intervals` is a floor, so every rotation the bone passed through between two samples was
+invisible to it; the blend spec read zero in-band samples on a release run and, under
+`failOnFlakyTests`, the retry-pass still blocked the publish. The recorder takes one sample per
+frame per instance, skips an empty or repeated entry, restarts on a declared-clip change and
+refuses samples past a 600-entry cap rather than evicting old ones — a transition sits at the
+head of a recording, not past its eviction. Test-surface only; no engine package is involved.
+
 Additive throughout — nothing removed or renamed.

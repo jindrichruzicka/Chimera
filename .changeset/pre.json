@@ -104,6 +104,7 @@
     "unconditional-loading-beat",
     "validate-assets-animation-sheet-gate",
     "validate-assets-into-dev-tools",
+    "variable-playback-rate",
     "vscode-renderer-debug-scaffold-parity"
   ]
 }
