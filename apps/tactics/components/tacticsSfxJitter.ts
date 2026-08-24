@@ -3,10 +3,11 @@
  *
  * Tactics' own per-play pitch variation for the board's derived SFX.
  *
- * `step` plays on every move and `swordHit` on every attack the viewer can see.
- * Played at the authored rate they are bit-identical every time, and a burst of
- * identical samples reads as a defect rather than as a run of footsteps. A small
- * detune per play is what makes them read as separate events.
+ * `step` and `swordHit` are derived from the projection delta, whose own rules
+ * decide which changes are voiced (`tacticsSfxDelta.ts`). Played at the
+ * authored rate they are bit-identical every time, and a burst of identical
+ * samples reads as a defect rather than as a run of footsteps. A small detune
+ * per play is what makes them read as separate events.
  *
  * The variation is the GAME's, not the engine's: a game that wants it authors it
  * and hands the result in as `PlayOptions.rate`. Tactics authors it SEEDED rather than from

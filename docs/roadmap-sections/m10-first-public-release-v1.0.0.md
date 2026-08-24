@@ -219,11 +219,12 @@ authored cue, plus the observation stream that lets a game decide which one to w
 for — while the layer itself (named slots, stem stacks, in-flight retarget, a global
 cue registry) stays deferred either way. What F85 settles is that the layer, if it is
 ever built, is built ON this primitive rather than out of the observation callback:
-the two mechanisms are separate on purpose (Invariants #135 and #136). And **variable playback rate** is **F86**, also
-_designed, not implemented_, as resampling, so rate and pitch move together;
-pitch-**preserving** time-stretch and live mid-voice rate changes stay deferred, and
-the option is named `rate` rather than `pitch` so the type does not promise the one
-it does not do.
+the two mechanisms are separate on purpose (Invariants #135 and #136). And **variable playback
+rate** **landed** as **F86**, as resampling, so rate and pitch move together and the option is
+named `rate` rather than `pitch` so the type does not promise the one it does not do. What stays
+deferred there is pitch-**preserving** time-stretch and independent pitch shift — both want a
+phase vocoder — and live mid-voice rate changes, since a rate that could move would make cue
+timing an integral of rate over time rather than the single division Invariant #122 rests on.
 
 ### F75 — Standalone-Reachable Font Self-Hosting Tooling `§4.37`
 
@@ -651,39 +652,63 @@ candidates for a follow-up.
 
 ### F86 — Variable Playback Rate `§4.25`
 
-**Status: designed, not implemented.** Every voice in the engine plays at exactly rate `1`, and
-Invariant #122 states the constraint outright — cue-relative fade timing is derived "at a fixed
-`playbackRate` of 1". The practical cost is the machine-gun effect: `apps/tactics` plays `step`
-for every move and `swordHit` for every attack it can see, whichever seat acted, which is what
-makes repeated SFX read as a defect rather than as a footstep. F86 adds `PlayOptions.rate`,
-**immutable for the life of the voice**, plus a `rateFromSemitones` helper so the `2 ** (n/12)`
-constant appears in one place. This is resampling, so **rate and pitch move together**, and the
-option is named `rate` rather than `pitch` so the type does not promise a time-stretch it does
-not perform.
+**Status: implemented across [#1046](https://github.com/jindrichruzicka/Chimera/issues/1046)–[#1049](https://github.com/jindrichruzicka/Chimera/issues/1049); the feature gate is
+[#1164](https://github.com/jindrichruzicka/Chimera/issues/1164).** Every voice in the engine
+used to play at exactly rate `1`, and Invariant #122 stated that constraint outright inside its
+own fade-timing rule. The practical cost was the machine-gun effect: `apps/tactics` plays `step`
+and `swordHit` from the projection delta, and at one fixed rate those are bit-identical every
+time, which is what makes repeated SFX read as a defect rather than as a run of footsteps. F86
+adds `PlayOptions.rate`, **immutable for the life of the voice**, plus a `rateFromSemitones`
+helper, so a caller names a musical interval instead of spelling `2 ** (n / 12)` at the call
+site. This is resampling, so **rate and pitch move together**, and the option is named `rate`
+rather than `pitch` so the type does not promise a time-stretch it does not perform.
 
-**Rate turns a buffer-seconds quantity into a wall-clock one, so the whole feature is the four
-places that conversion happens** — `nextCueContextTime`'s entry-pass offset and loop-period
-advance, the looping `to` bound's `source.stop`, and the non-looping voice's implicit end — plus
-one portability rule for the fourth. The non-looping **bounded** play today passes its duration
-as `start(when, offset, duration)`'s third argument, which is buffer-relative; the code already
-calls the analogous meaning "not portable" for the looping branch, which is why that branch
-schedules `source.stop()` instead. So when the rate is not `1`, the play is bounded the same
-way — `source.stop(startedAt + seconds / rate)`, unambiguous, with `onended` still the single
-release path of Invariant #119. That rule matters more than it looks, because the unit suite
-runs against a Web Audio double that **cannot observe** the ambiguity at all: it is held by the
-code shape and by a test that a rate-shifted bounded play passes no third argument, never by an
-assertion about a duration the double would satisfy either way. Fade windows are authored in
-wall-clock milliseconds and are **not** divided — mixing the two axes is the defect this change
-most plausibly introduces.
+**Rate turns a buffer-seconds quantity into a wall-clock one, so the feature is every place that
+conversion happens.** The design named four — `nextCueContextTime`'s entry-pass offset and
+loop-period advance, the looping `to` bound's `source.stop`, and the non-looping voice's implicit
+end — and flagged that F85's playhead reader would cross the same axis. F85 landed first, with a
+cue sampler reading through it, so by delivery there were more than four and the tree answers by
+**naming the crossing rather than counting it**. `bufferSecondsToContextSeconds` and
+`contextSecondsToBufferSeconds` in `voicePlayhead.ts` name the two directions, each a one-line
+division or multiplication, so a call site crosses the axis by naming one of them instead of
+writing `/ rate` — which says nothing about which way it runs, and applying the wrong one is a
+**squared** error that reads like an ordinary arithmetic slip.
+
+**The portability rule the design flagged held, and it is the one thing the test double cannot
+see.** A non-looping **bounded** play used to pass its duration as `start(when, offset,
+duration)`'s third argument, which is buffer-relative; the code already called the analogous
+meaning "not portable" for the looping branch, which is why that branch schedules `source.stop()`
+instead. So at any rate other than `1` the play is bounded the same way —
+`source.stop(startedAtContextTime + durationSec / rate)`, unambiguous, with the native `onended`
+still the single release path of Invariant #119. One `canBoundNatively` predicate gates both the
+third argument and the stop arm, so the rate-`1` call sequence is byte-identical to what it was
+rather than merely equivalent. The unit suite runs against a Web Audio double that **cannot
+observe** the ambiguity at all, so the rule is held by the code shape and by a test that a
+rate-shifted bounded play passes no third argument, never by an assertion about a duration the
+double would satisfy either way. Fade windows are authored in wall-clock milliseconds and are
+**not** divided — mixing the two axes was the defect this change most plausibly introduced, and
+it has its own assertion.
 
 The rate's **immutability is what keeps the arithmetic a single division rather than an integral
-of rate over time**, which is why it lands as an amendment to Invariant #122 rather than as a new
-number: it is not a separate rule but the precondition that makes #122's own claim true. F85's
-playhead reader converts on the same axis, so whichever of the two lands second sweeps the
-other's arithmetic; neither blocks the other. **Tactics** adopts it at
-`apps/tactics/screens/TacticsDemoBoard.tsx`, with the jitter authored **by the game** — the engine supplies no randomness,
-so replays and tests stay under the game's control and nothing non-deterministic enters engine
-code.
+of rate over time**, which is why it landed as an amendment to Invariant #122 rather than as a new
+number: it is not a separate rule but the precondition that makes #122's own claim true. The
+roll-call total, its numbering line and its coverage percentage therefore did not move. The rate
+is also written **once**, at the voice's real `t0` and only when it differs from `1`, so a voice
+that names no rate reaches Web Audio through exactly the calls it always did.
+
+**The adoption site the tasks predicted did not exist by the time they ran.** #1048 was authored
+expecting `step` and `swordHit` in `TACTICS_EVENT_AUDIO_BINDING`, jittered through F84's
+per-event options resolver; F84's own tactics adoption had already removed both entries and #1134
+had made those two SFX delta-derived. The resolver could not have hosted a reproducible jitter in
+any case: `GameEvent` carries no payload, so a resolver has no per-occurrence key to draw from.
+The jitter therefore lives at the delta call site, which has the tick — **tactics** authors it in
+`apps/tactics/components/tacticsSfxJitter.ts` as a seeded per-turn stream drawn once per play in
+cue order, and `apps/tactics/screens/TacticsDemoBoard.tsx` converts each interval with
+`rateFromSemitones`. The helper returns **semitones, not a rate**, because Invariant #96's
+game-surface allowance is extension-scoped: a plain `.ts` helper in `components/` may not import
+the audio barrel, so the `.tsx` board does the conversion. What a turn reproduces is its
+**sequence** of intervals, not a given unit's pitch — which interval lands on which unit follows
+cue order, which walks the projection's unit order.
 
 | Task                                                                                               | Issue                                                           |
 | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -691,6 +716,7 @@ code.
 | Make the voice timeline arithmetic rate-aware and bound a rate-shifted play by stop()              | [#1047](https://github.com/jindrichruzicka/Chimera/issues/1047) |
 | Export the rate surface and adopt pitch-jittered footsteps in tactics                              | [#1048](https://github.com/jindrichruzicka/Chimera/issues/1048) |
 | Amend Invariant #122, sweep the rate-1 claims and roadmap F86, cut the changeset and open the gate | [#1049](https://github.com/jindrichruzicka/Chimera/issues/1049) |
+| Run the F86 feature review and merge gate                                                          | [#1164](https://github.com/jindrichruzicka/Chimera/issues/1164) |
 
 Feature issue: [#1029](https://github.com/jindrichruzicka/Chimera/issues/1029).
 
@@ -698,12 +724,12 @@ Feature issue: [#1029](https://github.com/jindrichruzicka/Chimera/issues/1029).
 both need a phase vocoder or a WASM library, and rate and pitch are one knob here; No live rate
 changes (`setVoiceRate`). Every cached timeline anchor on `VoiceRecord` assumes a constant rate,
 so a mid-flight change would make cue timing a piecewise integral of rate over time — a different
-feature with a different invariant; the rate is read once, at `startVoice`; No `detune` option, a
+feature with a different invariant; the rate is resolved once, inside `play()`, and never rewritten; No `detune` option, a
 second spelling of the same quantity that `rateFromSemitones` already covers musically; No rate on
 the bus or master — rate is per-voice and the three-stage graph is unchanged; No engine-supplied
-per-play jitter. A game authors its own through the event-options resolver or its own call site,
-so nothing non-deterministic enters engine code; No new invariant number — #122 is amended, and
-the roll-call total does not move — all candidates for a follow-up.
+per-play jitter. A game authors its own, and a jitter that has to be **reproducible** is authored
+at a call site that knows the occurrence — `EventAudioOverrides.rate` reaches the play options,
+but `GameEvent` carries no payload for a resolver to key on — all candidates for a follow-up.
 
 ### F89 — Blended Clip Transitions, Finished-Clip Pose Retention & Authored Blend Durations `§4.40`
 
