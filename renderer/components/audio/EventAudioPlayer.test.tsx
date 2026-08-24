@@ -223,8 +223,12 @@ describe('EventAudioPlayer', () => {
         expect(warn).toHaveBeenCalledTimes(1);
     });
 
-    it('does not forward the reserved rate override into play options', async () => {
-        // The exact-argument assert is what proves the key is absent.
+    it('forwards the rate override unchanged into play options', async () => {
+        // UNCHANGED is the load-bearing half: the exact-argument assert pins the
+        // value the resolver returned, so the player cannot be jittering, scaling
+        // or defaulting the rate on the way through. Per-play variation is the
+        // game's to author, and this is where the player's half of that is
+        // measured rather than asserted.
         const audioManager = createAudioManagerSpy();
         const binding: EventAudioBinding = {
             'combat:hit': {
@@ -239,7 +243,34 @@ describe('EventAudioPlayer', () => {
             .applySnapshot(makeSnapshot({ tick: 2, events: [{ type: 'combat:hit' }] }));
 
         await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(1));
+        expect(audioManager.play).toHaveBeenCalledWith(HIT_REF, { volume: 0.4, rate: 1.5 });
+    });
+
+    it('adds no rate of its own when the resolver omits one', async () => {
+        // The other fork of the same merge: `rate` has no static field to fall back
+        // to, so the player must neither invent one nor pass the key at all.
+        //
+        // The key set is asserted separately because `toHaveBeenCalledWith` compares
+        // with `toEqual` semantics, under which `{ volume }` and
+        // `{ volume, rate: undefined }` are the same object — so the argument assert
+        // alone catches a substituted rate and not a spread-always one. (`tsc` does
+        // catch that one, under `exactOptionalPropertyTypes`; this makes the claim
+        // the test's own.)
+        const audioManager = createAudioManagerSpy();
+        const binding: EventAudioBinding = {
+            'combat:hit': { ref: HIT_REF, options: () => ({ volume: 0.4 }) },
+        };
+
+        renderPlayer(binding, audioManager);
+        useGameStore
+            .getState()
+            .applySnapshot(makeSnapshot({ tick: 2, events: [{ type: 'combat:hit' }] }));
+
+        await waitFor(() => expect(audioManager.play).toHaveBeenCalledTimes(1));
         expect(audioManager.play).toHaveBeenCalledWith(HIT_REF, { volume: 0.4 });
+        expect(Object.keys(vi.mocked(audioManager.play).mock.calls[0]?.[1] ?? {})).toEqual([
+            'volume',
+        ]);
     });
 
     it('restarts playback indexing when the snapshot event list shrinks', async () => {

@@ -22,10 +22,15 @@ import {
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import type { CommitmentId } from '@chimera-engine/simulation/foundation/commitment-contract.js';
 import { I18nProvider } from '@chimera-engine/renderer/i18n';
-import { AudioManagerProvider, type AudioManager } from '@chimera-engine/renderer/audio';
+import {
+    AudioManagerProvider,
+    rateFromSemitones,
+    type AudioManager,
+} from '@chimera-engine/renderer/audio';
 import { tacticsBundleEn } from '../shell/translations/en.js';
 import { tacticsAudioRefs } from '../asset-manifest.js';
 import { gridToWorldPoint } from '../components/tacticsSceneModel.js';
+import { TACTICS_SFX_JITTER_SEMITONES } from '../components/tacticsSfxJitter.js';
 import { TACTICS_CAMERA_POSITION } from '../components/tacticsCamera.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
 import { useCommitmentBuffer } from '../components/useCommitmentBuffer';
@@ -71,6 +76,15 @@ function makeAudioManagerDouble(): AudioManager {
 }
 
 let audioManager = makeAudioManagerDouble();
+
+/**
+ * The rate every positioned SFX has been played at so far, in call order.
+ * Read off the double rather than off a DOM marker: pitch has no marker, and
+ * `data-ref` would report two steps at two pitches as the same play twice.
+ */
+function playedRates(): readonly (number | undefined)[] {
+    return vi.mocked(audioManager.play).mock.calls.map((call) => call[1]?.rate);
+}
 
 // Colour hexes now arrive via the generic `content` prop (loaded from the content
 // database). Mirrors apps/tactics/data/{player,board}-colors. Hexes are lifted to
@@ -668,6 +682,9 @@ describe('TacticsDemoBoard', () => {
         expect(audioManager.play).toHaveBeenCalledWith(tacticsAudioRefs.swordHit, {
             bus: 'sfx',
             volume: 0.65,
+            // Pitch is per PLAY, not per cue kind, so its value is asserted where
+            // variation is the subject; naming the key keeps this object exhaustive.
+            rate: expect.any(Number),
             spatial: {
                 position: [defenderWorld.x, defenderWorld.y, defenderWorld.z],
                 fullVolumeDistance: 1,
@@ -699,12 +716,134 @@ describe('TacticsDemoBoard', () => {
         expect(audioManager.play).toHaveBeenCalledWith(tacticsAudioRefs.step, {
             bus: 'sfx',
             volume: 0.45,
+            rate: expect.any(Number),
             spatial: {
                 position: [moverWorld.x, moverWorld.y, moverWorld.z],
                 fullVolumeDistance: 1,
                 falloffDistance: 6,
             },
         });
+    });
+
+    it('gives each step of one turn its own pitch, inside the authored band', () => {
+        // The machine-gun defect: two units move in one revealed turn and, at a
+        // fixed rate, play the same clip twice bit-identically. The band is read
+        // from the game's own constant — its WIDTH is pinned by literals in
+        // `tacticsSfxJitter.test.ts`, and what this asserts is that the board
+        // plays a draw FROM it rather than an unbounded number.
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({
+                    localUnitAt: { x: 0, y: 1 },
+                    enemyUnitAt: { x: 1, y: 1 },
+                    tick: 8,
+                })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        const rates = playedRates();
+        expect(rates).toHaveLength(2);
+        expect(new Set(rates).size).toBe(2);
+        for (const rate of rates) {
+            expect(rate).toBeGreaterThanOrEqual(rateFromSemitones(-TACTICS_SFX_JITTER_SEMITONES));
+            expect(rate).toBeLessThanOrEqual(rateFromSemitones(TACTICS_SFX_JITTER_SEMITONES));
+        }
+    });
+
+    it('re-pitches the next turn rather than repeating the last one', () => {
+        // Two turns rather than two cues, which is what kills a stream keyed on a
+        // constant instead of on the turn: it would hand every turn's first step
+        // one pitch while a single turn's cues still differed from each other.
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 0 }, tick: 9 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+
+        const rates = playedRates();
+        expect(rates).toHaveLength(2);
+        expect(rates[0]).not.toBe(rates[1]);
+    });
+
+    it('keys the pitch on the turn, not on the mount', () => {
+        // Reaching ONE turn from two different histories, which is what kills a
+        // per-mount stream — `useRef(createTacticsSfxJitter(tick))`. Such a stream
+        // still varies its draws per play and per turn, so a single history cannot
+        // see it; what it changes is WHICH draw a turn gets. Turn 9 is the second
+        // turn of the long history and the first of the short one, and a stream
+        // keyed on the turn hands both the same interval.
+        const long = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        long.rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        long.rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 0 }, tick: 9 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        const acrossTwoTurns = playedRates();
+        expect(acrossTwoTurns).toHaveLength(2);
+
+        // A fresh mount AND a fresh double: `playedRates` reads the calls the double
+        // has collected, and the second history has to start from an empty one.
+        cleanup();
+        audioManager = makeAudioManagerDouble();
+
+        const short = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 1 }, tick: 8 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        short.rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ localUnitAt: { x: 0, y: 0 }, tick: 9 })}
+                localPlayerId={playerId('p1')}
+                sendAction={vi.fn()}
+            />,
+        );
+        const fromOneTurn = playedRates();
+        expect(fromOneTurn).toHaveLength(1);
+
+        expect(fromOneTurn[0]).toBe(acrossTwoTurns[1]);
     });
 
     it('anchors the listener at the board centre, which is not the camera position', () => {

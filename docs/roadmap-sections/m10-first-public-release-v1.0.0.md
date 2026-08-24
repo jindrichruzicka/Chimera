@@ -508,8 +508,7 @@ attenuation in JS and multiplying it into stage 1, would break #116 and make eve
 the distance curve. One event-side seam lands here too: `EventAudioBinding` is a static
 `{ ref, bus?, volume? }` map, so it gains an optional per-event options resolver. It receives
 the `GameEvent` the contract actually has — `{ readonly type: string }` and nothing else — so
-it can vary volume, priority and bus (`rate` is typed and reserved, dropped by the player
-until F86 lands a consumer) but **cannot** produce a position; widening
+it can vary volume, priority, rate and bus but **cannot** produce a position; widening
 `GameEvent` with an opaque payload would push uninspected data through
 `StateProjector.project()`, which is a projection-contract change (Invariants #3/#8/#98) and
 not an audio one. Positioned event SFX therefore use explicit call sites, and **Tactics** is
@@ -655,8 +654,8 @@ candidates for a follow-up.
 **Status: designed, not implemented.** Every voice in the engine plays at exactly rate `1`, and
 Invariant #122 states the constraint outright — cue-relative fade timing is derived "at a fixed
 `playbackRate` of 1". The practical cost is the machine-gun effect: `apps/tactics` plays `step`
-for every move and `swordHit` for every attack it can see, whichever seat acted, and each replay
-is bit-identical, which is what makes repeated SFX read as a defect rather than as a footstep. F86 adds `PlayOptions.rate`,
+for every move and `swordHit` for every attack it can see, whichever seat acted, which is what
+makes repeated SFX read as a defect rather than as a footstep. F86 adds `PlayOptions.rate`,
 **immutable for the life of the voice**, plus a `rateFromSemitones` helper so the `2 ** (n/12)`
 constant appears in one place. This is resampling, so **rate and pitch move together**, and the
 option is named `rate` rather than `pitch` so the type does not promise a time-stretch it does
@@ -681,8 +680,8 @@ The rate's **immutability is what keeps the arithmetic a single division rather 
 of rate over time**, which is why it lands as an amendment to Invariant #122 rather than as a new
 number: it is not a separate rule but the precondition that makes #122's own claim true. F85's
 playhead reader converts on the same axis, so whichever of the two lands second sweeps the
-other's arithmetic; neither blocks the other. **Tactics** adopts it through F84's per-event
-options resolver, with the jitter authored **by the game** — the engine supplies no randomness,
+other's arithmetic; neither blocks the other. **Tactics** adopts it at
+`apps/tactics/screens/TacticsDemoBoard.tsx`, with the jitter authored **by the game** — the engine supplies no randomness,
 so replays and tests stay under the game's control and nothing non-deterministic enters engine
 code.
 

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { GameCanvas, type OrthographicCameraConfig } from '@chimera-engine/renderer/components/r3f';
 import {
+    rateFromSemitones,
     useAudioManager,
     useSpatialAudio,
     type AudioPosition,
@@ -28,6 +29,7 @@ import {
     type TacticsWorldPoint,
 } from '../components/tacticsSceneModel.js';
 import { resolveTacticsSfxCues, type TacticsSfxCue } from '../components/tacticsSfxDelta.js';
+import { createTacticsSfxJitter } from '../components/tacticsSfxJitter.js';
 import { tacticsAudioRefs } from '../asset-manifest.js';
 import { tacticsGridCoordinate } from '../simulation/actions.js';
 import { applyBuffer } from '../simulation/commitment/buffer.js';
@@ -189,12 +191,18 @@ function TacticsBoardSpatialAudio({
             return;
         }
 
+        // One stream per turn, drawn once per play in cue order: at a fixed rate
+        // two steps in one turn are the same sample twice, which reads as a
+        // stutter rather than as two units moving.
+        const nextJitter = createTacticsSfxJitter(tick);
+
         for (const cue of resolveTacticsSfxCues(previous.units, units)) {
             const { ref, volume } = TACTICS_SFX_FOR_CUE[cue.kind];
             const position: AudioPosition = [cue.world.x, cue.world.y, cue.world.z];
             audioManager.play(ref, {
                 bus: 'sfx',
                 volume,
+                rate: rateFromSemitones(nextJitter()),
                 spatial: {
                     position,
                     fullVolumeDistance: TACTICS_SFX_FULL_VOLUME_DISTANCE,

@@ -68,8 +68,8 @@ export interface PlayOptions {
      * Resampling rate, defaulting to `1`. A RESAMPLE, not a time-stretch: speed and
      * pitch move together — `2` is an octave up and half the duration — which is why
      * the option is spelled `rate` rather than `pitch`, so the type promises nothing a
-     * phase vocoder would be needed for. `rateFromSemitones` in `./rate.ts` spells a
-     * musical interval as one of these.
+     * phase vocoder would be needed for. `rateFromSemitones`, exported alongside this
+     * type from the audio barrel, spells a musical interval as one of these.
      *
      * Fixed for the life of the voice — no verb rewrites it. That immutability is what
      * keeps every buffer-seconds-to-wall-clock conversion on this voice a single division

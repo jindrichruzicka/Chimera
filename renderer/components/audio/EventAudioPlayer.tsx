@@ -9,20 +9,20 @@ import { useGameStore } from '../../state/gameStore.js';
 
 /**
  * One entry's resolved per-occurrence overrides, every member present and
- * possibly `undefined` so the merge below can `??` uniformly. `rate` is
- * deliberately not read out — see `EventAudioPlayer.test.tsx` › does not forward
- * the reserved rate override into play options.
+ * possibly `undefined` so the merge below can `??` uniformly.
  */
 interface ResolvedEventOverrides {
     readonly bus: 'master' | 'music' | 'sfx' | 'voice' | undefined;
     readonly volume: number | undefined;
     readonly priority: number | undefined;
+    readonly rate: number | undefined;
 }
 
 const NO_OVERRIDES: ResolvedEventOverrides = {
     bus: undefined,
     volume: undefined,
     priority: undefined,
+    rate: undefined,
 };
 
 /**
@@ -40,8 +40,8 @@ function resolveEventOverrides(
     }
 
     try {
-        const { bus, volume, priority } = resolver(event);
-        return { bus, volume, priority };
+        const { bus, volume, priority, rate } = resolver(event);
+        return { bus, volume, priority, rate };
     } catch {
         console.warn(
             `Audio event options resolver for '${event.type}' threw; playing the static binding entry instead.`,
@@ -88,10 +88,15 @@ export function EventAudioPlayer({ binding }: EventAudioPlayerProps): null {
             const bus = overrides.bus ?? entry.bus;
             const volume = overrides.volume ?? entry.volume;
             const priority = overrides.priority;
+            // `priority` and `rate` have no static field to fall back to: the
+            // resolver is the only author of either, and an omitted one stays
+            // ABSENT rather than becoming an explicit `undefined`.
+            const rate = overrides.rate;
             audioManager.play(entry.ref, {
                 ...(bus === undefined ? {} : { bus }),
                 ...(volume === undefined ? {} : { volume }),
                 ...(priority === undefined ? {} : { priority }),
+                ...(rate === undefined ? {} : { rate }),
             });
         }
     }, [audioManager, binding, events]);

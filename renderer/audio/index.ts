@@ -15,8 +15,9 @@
  * pose and moving sources, `useAudioManager` for
  * the manager itself — Invariant #84 makes the context hook the only sanctioned way
  * to reach it), the provider those hooks read from, the two exported
- * constants a caller names (`MUSIC_PRIORITY`, `DEFAULT_FADE_CURVE`), and the option
- * and handle types the calls take. `AudioManagerProvider` is here because a
+ * constants a caller names (`MUSIC_PRIORITY`, `DEFAULT_FADE_CURVE`), the pure helper
+ * that spells a musical interval as a `PlayOptions.rate` (`rateFromSemitones`), and
+ * the option and handle types the calls take. `AudioManagerProvider` is here because a
  * hook a game may call is only half of what the game needs: its component tests
  * have to mount something that satisfies the hook, and without a provider the game
  * would be forced back onto the internal context object. The app root mounts the
@@ -50,6 +51,11 @@ export {
     type AudioManager,
     type PlayOptions,
 } from './AudioManager';
+
+// Public because the per-play variation it serves is the GAME's to author: a game
+// whose repeated SFX read as one sample twice authors the interval itself and hands
+// it in as a rate.
+export { rateFromSemitones } from './rate.js';
 
 export type {
     Cue,
