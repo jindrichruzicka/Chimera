@@ -264,6 +264,17 @@ const LobbyAgentSlotSchema = z
         slotIndex: z.number().int().nonnegative(),
         kind: z.enum(['human', 'ai']),
         omniscient: z.boolean().optional(),
+        // Host-authored per-seat attributes for this slot (e.g. an AI's
+        // character). `chimera:lobby:host` is the sole write path for them, so
+        // this is where the host enforces the per-attribute wire bounds — the
+        // same caps `SetPlayerAttributePayloadSchema` applies to an
+        // owner-authored human seat.
+        attributes: z
+            .record(
+                NonEmptyStringSchema.max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
+                z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH),
+            )
+            .optional(),
     })
     .strict();
 
@@ -279,12 +290,16 @@ export const HostLobbyParamsSchema = z
         password: z.string().min(1).max(128).optional(),
     })
     .transform((value): HostLobbyParams => {
-        const agentSlots = value.agentSlots?.map((slot): LobbyAgentSlot => {
-            if (slot.omniscient === undefined) {
-                return { slotIndex: slot.slotIndex, kind: slot.kind };
-            }
-            return { slotIndex: slot.slotIndex, kind: slot.kind, omniscient: slot.omniscient };
-        });
+        // Each optional field is spread only when present, never set to
+        // `undefined` — the repo runs with `exactOptionalPropertyTypes`.
+        const agentSlots = value.agentSlots?.map(
+            (slot): LobbyAgentSlot => ({
+                slotIndex: slot.slotIndex,
+                kind: slot.kind,
+                ...(slot.omniscient !== undefined ? { omniscient: slot.omniscient } : {}),
+                ...(slot.attributes !== undefined ? { attributes: slot.attributes } : {}),
+            }),
+        );
 
         const base = {
             gameId: value.gameId,

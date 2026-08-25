@@ -21,6 +21,10 @@
 // elsewhere.
 
 import { z } from 'zod';
+import {
+    WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
+    WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
+} from '@chimera-engine/simulation/foundation/messages-schemas.js';
 import type { AssetRef, TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import { toCommitmentId } from '@chimera-engine/simulation/projection/index.js';
 import { MAX_SAVE_LABEL_LENGTH, toSlotId, playerId } from '../api-types.js';
@@ -117,6 +121,27 @@ export const LobbyInfoSchema = z.object({
     gameId: z.string(),
 }) satisfies z.ZodType<LobbyInfo>;
 
+// Every optional `LobbyState` field is declared below. `z.object` STRIPS an
+// undeclared key and `satisfies z.ZodType<LobbyState>` still passes (an absent
+// optional is assignable), so a field omitted here is silently dropped from
+// `chimera:lobby:get-current-state` — the initial-load / restore path the live
+// `lobby.onUpdate` push does not cover. `schemas.test.ts` pins the full round
+// trip against `Required<LobbyState>`, so adding an optional field to the wire
+// contract reds here until it is carried through.
+
+// Each map below mirrors its wire counterpart in
+// `simulation/foundation/messages-schemas.ts` EXACTLY — main forwards the wire
+// `LobbyState` verbatim, so validating tighter here would reject a payload the
+// host legitimately produced, and validating looser would let drift through.
+// `matchSettings` and a player's `attributes` are unbounded on the state frame
+// (their write frames carry the caps); an agent slot has no write frame of its
+// own, so its caps ride the state frame.
+const StringMapSchema = z.record(z.string(), z.string());
+const BoundedAttributesSchema = z.record(
+    z.string().min(1).max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
+    z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH),
+);
+
 const LobbyPlayerEntrySchema = z.object({
     playerId: z.string(),
     displayName: z.string(),
@@ -124,17 +149,29 @@ const LobbyPlayerEntrySchema = z.object({
     // Seat role (spectator vs player) mirrored from the wire so the IPC boundary
     // validates and preserves it instead of stripping it (Invariant #114).
     role: z.enum(['player', 'spectator']).optional(),
+    // Owner-authored per-player attributes (e.g. unit colour), mirrored from the
+    // wire so a window hydrated by invoke sees the same seat picks the live
+    // push carries (Invariant #99).
+    attributes: StringMapSchema.optional(),
 });
 
 const LobbyAgentSlotSchema = z.object({
     slotIndex: z.number().int().nonnegative(),
     kind: z.enum(['human', 'ai']),
     omniscient: z.boolean().optional(),
+    // Host-authored per-seat attributes for an AI slot — the agent-slot twin of
+    // the entry attributes above.
+    attributes: BoundedAttributesSchema.optional(),
 });
 
 export const LobbyStateSchema = z.object({
     info: LobbyInfoSchema,
     players: z.array(LobbyPlayerEntrySchema).readonly(),
+    // Host-authored match settings, mirrored from the wire. Load-bearing beyond
+    // game config: the engine's own reserved `engine.`-namespaced settings ride
+    // here, so a window hydrated by invoke rather than by the live push must
+    // see them.
+    matchSettings: StringMapSchema.optional(),
     // Synced AI agent slots so a renderer reading the snapshot (e.g. on initial
     // load / replay) sees the AI roster, not just the live `onUpdate` push.
     agentSlots: z.array(LobbyAgentSlotSchema).readonly().optional(),

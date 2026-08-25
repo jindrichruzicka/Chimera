@@ -23,6 +23,7 @@ import type {
     GameLobbySetup,
     GameSetupConfig,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import { createSyntheticAIPlayerId } from '../runtime/syntheticAgentId.js';
 
 /**
  * Build the `resolveLobbySetup` resolver injected into `LobbyManager`, closing
@@ -51,23 +52,51 @@ export function createResolveLobbySetup(
 
 /**
  * Build the synced `GameSetupConfig` carried into `engine:start_game` from the
- * host-authored values already present on `LobbyState`: the chosen match
- * settings and each player's host-assigned attributes.
+ * values already present on `LobbyState`: the host-authored match settings and
+ * every seat's attributes.
+ *
+ * "Every seat" spans both rosters. A human seat — the host, a joined remote, or
+ * a pass-and-play local seat — is a `players` entry and contributes its
+ * owner-authored `attributes`. An AI seat is NOT a `players` entry: it lives in
+ * `agentSlots` and is seated at match start under the synthetic
+ * `ai-<slotIndex>` id (`collectGameStartAiPlayerSlots`), so its host-authored
+ * attributes are keyed here by that same {@link createSyntheticAIPlayerId}
+ * value — a reducer asks "what is seat N playing?" once, against one map,
+ * whatever kind of seat N is. Only `kind: 'ai'` slots contribute: a human-kind
+ * slot is a placeholder for a joining human whose own `players` entry carries
+ * its attributes, and no `ai-<slotIndex>` seat is ever created for it. A
+ * `players` entry WINS over an agent slot claiming the same id — a real seat's
+ * owner-authored value is authoritative for its own id.
  *
  * Returns `undefined` when there is nothing to carry — no (non-empty) match
- * settings and no player with (non-empty) attributes — so the start payload
+ * settings and no seat with (non-empty) attributes — so the start payload
  * omits `setup` and stays backward-compatible with games that have no lobby
  * setup. When defined, both `GameSetupConfig` keys are always present (the
- * shape is never partial); `playerAttributes` is keyed by real `playerId` and
- * includes only players whose attributes are present and non-empty.
+ * shape is never partial); `playerAttributes` includes only seats whose
+ * attributes are present and non-empty.
+ *
+ * Every map in the returned config is a copy: the config is carried onto the
+ * snapshot and projected, so it shares no object with the live lobby state.
  */
 export function buildSetupFromLobbyState(state: LobbyState): GameSetupConfig | undefined {
-    const matchSettings = state.matchSettings ?? {};
+    const matchSettings = { ...state.matchSettings };
 
     const playerAttributes: Record<string, Record<string, string>> = {};
+    const carry = (seatId: string, attributes: Readonly<Record<string, string>> | undefined) => {
+        if (attributes === undefined || Object.keys(attributes).length === 0) {
+            return;
+        }
+        // `??=` keeps the FIRST writer — the `players` walk runs first, so a
+        // real seat wins over an agent slot claiming the same id.
+        playerAttributes[seatId] ??= { ...attributes };
+    };
+
     for (const player of state.players) {
-        if (player.attributes !== undefined && Object.keys(player.attributes).length > 0) {
-            playerAttributes[player.playerId] = player.attributes;
+        carry(player.playerId, player.attributes);
+    }
+    for (const slot of state.agentSlots ?? []) {
+        if (slot.kind === 'ai') {
+            carry(createSyntheticAIPlayerId(slot.slotIndex), slot.attributes);
         }
     }
 

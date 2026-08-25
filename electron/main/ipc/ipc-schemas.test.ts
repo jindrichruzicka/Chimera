@@ -169,6 +169,117 @@ describe('HostLobbyParamsSchema', () => {
     });
 });
 
+describe('HostLobbyParamsSchema — agent-slot attributes', () => {
+    const hostWithSlot = (slot: Record<string, unknown>) => ({
+        gameId: 'sample-game',
+        maxPlayers: 4,
+        agentSlots: [slot],
+    });
+
+    it('carries an AI slot attributes map through the transform unchanged', () => {
+        const result = HostLobbyParamsSchema.safeParse(
+            hostWithSlot({ slotIndex: 1, kind: 'ai', attributes: { character: 'rogue' } }),
+        );
+        expect(result.success).toBe(true);
+        // The transform rebuilds each slot field by field, so this asserts the
+        // VALUE reaches `HostLobbyParams`, not merely that the payload parses.
+        if (result.success) {
+            expect(result.data.agentSlots?.[0]?.attributes).toEqual({ character: 'rogue' });
+        }
+    });
+
+    it('omits attributes on a slot that declares none (backward compatible)', () => {
+        const result = HostLobbyParamsSchema.safeParse(hostWithSlot({ slotIndex: 1, kind: 'ai' }));
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.agentSlots?.[0]).toEqual({ slotIndex: 1, kind: 'ai' });
+            expect('attributes' in (result.data.agentSlots?.[0] ?? {})).toBe(false);
+        }
+    });
+
+    it('carries omniscient and attributes together on one slot', () => {
+        const result = HostLobbyParamsSchema.safeParse(
+            hostWithSlot({
+                slotIndex: 2,
+                kind: 'ai',
+                omniscient: true,
+                attributes: { character: 'mage' },
+            }),
+        );
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.agentSlots?.[0]).toEqual({
+                slotIndex: 2,
+                kind: 'ai',
+                omniscient: true,
+                attributes: { character: 'mage' },
+            });
+        }
+    });
+
+    it('stays strict — an unknown key on an agent slot is rejected', () => {
+        expect(
+            HostLobbyParamsSchema.safeParse(
+                hostWithSlot({ slotIndex: 1, kind: 'ai', bogus: 'nope' }),
+            ).success,
+        ).toBe(false);
+    });
+
+    it('rejects an attributes entry with a non-string value', () => {
+        expect(
+            HostLobbyParamsSchema.safeParse(
+                hostWithSlot({ slotIndex: 1, kind: 'ai', attributes: { character: 7 } }),
+            ).success,
+        ).toBe(false);
+    });
+
+    it('rejects an attribute key or value past the wire bounds the host enforces', () => {
+        expect(
+            HostLobbyParamsSchema.safeParse(
+                hostWithSlot({
+                    slotIndex: 1,
+                    kind: 'ai',
+                    attributes: { ['k'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH + 1)]: 'v' },
+                }),
+            ).success,
+        ).toBe(false);
+        expect(
+            HostLobbyParamsSchema.safeParse(
+                hostWithSlot({
+                    slotIndex: 1,
+                    kind: 'ai',
+                    attributes: {
+                        character: 'v'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH + 1),
+                    },
+                }),
+            ).success,
+        ).toBe(false);
+        // Boundary control: exactly ON the cap is accepted, so the rejections
+        // above pin the cap rather than any shorter length.
+        expect(
+            HostLobbyParamsSchema.safeParse(
+                hostWithSlot({
+                    slotIndex: 1,
+                    kind: 'ai',
+                    attributes: {
+                        ['k'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH)]: 'v'.repeat(
+                            WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
+                        ),
+                    },
+                }),
+            ).success,
+        ).toBe(true);
+    });
+
+    it('rejects an empty attribute key, like the set-player-attribute channel', () => {
+        expect(
+            HostLobbyParamsSchema.safeParse(
+                hostWithSlot({ slotIndex: 1, kind: 'ai', attributes: { '': 'v' } }),
+            ).success,
+        ).toBe(false);
+    });
+});
+
 describe('JoinLobbyParamsSchema', () => {
     it('accepts a well-formed JoinLobbyParams', () => {
         expect(JoinLobbyParamsSchema.safeParse({ address: 'ws://127.0.0.1:7777' }).success).toBe(

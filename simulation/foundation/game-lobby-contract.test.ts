@@ -31,6 +31,7 @@ import type {
     LobbyPendingAction,
     GameLobbyScreenProps,
 } from './game-lobby-contract.js';
+import type { QuickStartConfig } from './quick-start-contract.js';
 import {
     resolveMatchSettingsDefaults,
     resolvePlayerAttributeDefaults,
@@ -98,6 +99,32 @@ describe('GameLobbySetup.resolveDefaultPlayerAttributes', () => {
         const seat0 = setup.resolveDefaultPlayerAttributes(0);
         const seat1 = setup.resolveDefaultPlayerAttributes(1);
         expect(seat0).not.toEqual(seat1);
+    });
+});
+
+// ─── GameLobbySetup — quickStart defaults block ─────────────────────────────────
+
+describe('GameLobbySetup.quickStart', () => {
+    it('is absent on a setup that declares no quick-start defaults', () => {
+        expect(setup.quickStart).toBeUndefined();
+    });
+
+    it('carries a QuickStartConfig defaults block naming every seat kind', () => {
+        const quickStartSetup: GameLobbySetup = {
+            ...setup,
+            quickStart: {
+                matchSettings: { mapSize: 'small' },
+                hostAttributes: { team: 'red' },
+                localSeats: [{ attributes: { team: 'blue' } }],
+                aiSeats: [{ attributes: { team: 'blue' }, omniscient: true }],
+            },
+        };
+
+        const quickStart: QuickStartConfig | undefined = quickStartSetup.quickStart;
+        expect(quickStart?.matchSettings).toEqual({ mapSize: 'small' });
+        expect(quickStart?.hostAttributes).toEqual({ team: 'red' });
+        expect(quickStart?.localSeats?.[0]?.attributes).toEqual({ team: 'blue' });
+        expect(quickStart?.aiSeats?.[0]?.omniscient).toBe(true);
     });
 });
 

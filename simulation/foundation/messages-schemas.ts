@@ -215,6 +215,19 @@ const LobbyAgentSlot = z.object({
     slotIndex: z.number().int().nonnegative(),
     kind: z.enum(['human', 'ai']),
     omniscient: z.boolean().optional(),
+    // Host-authored per-seat attributes for this slot (e.g. an AI's character).
+    // The agent-slot twin of `LobbyPlayerEntry.attributes`: an AI seat is never
+    // a `players` entry, so this is the only carrier its picks have. Bounded by
+    // the same coarse wire caps the owner-authored `PLAYER_ATTRIBUTE_UPDATE`
+    // write frame uses. There is no attribute-setter frame for an agent slot to
+    // carry those caps, so they ride the state frame instead. Optional and
+    // backward-compatible.
+    attributes: z
+        .record(
+            z.string().min(1).max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
+            z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH),
+        )
+        .optional(),
 });
 
 const LobbyState = z.object({

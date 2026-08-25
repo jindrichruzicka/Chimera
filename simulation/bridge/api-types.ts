@@ -186,6 +186,13 @@ export interface LobbyAgentSlot {
     readonly slotIndex: number;
     readonly kind: LobbyAgentKind;
     readonly omniscient?: boolean;
+    /**
+     * Host-authored per-seat match attributes for this slot (e.g. an AI's
+     * character). An AI seat is not a `LobbyPlayerEntry`, so this is the only
+     * carrier its picks have into `snapshot.setup`. Optional and
+     * backward-compatible.
+     */
+    readonly attributes?: Readonly<Record<string, string>>;
 }
 
 /** Parameters for hosting a new lobby session. */

@@ -30,13 +30,14 @@ import type {
     GamePhase,
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
-import { gamePhase, playerId, sceneId } from '@chimera-engine/simulation/engine/types.js';
+import { gamePhase, sceneId } from '@chimera-engine/simulation/engine/types.js';
 import type {
     PlayerSnapshot,
     StateProjector,
 } from '@chimera-engine/simulation/projection/StateProjector.js';
 import type { LobbyAgentSlot } from '@chimera-engine/networking';
 import type { ReplayPlayerMetadata } from '@chimera-engine/simulation/replay/ReplayFile.js';
+import { createSyntheticAIPlayerId } from './syntheticAgentId.js';
 
 export interface HostedSessionAgentMetadata {
     readonly hostId: PlayerId;
@@ -95,9 +96,7 @@ export function resolveAgentSlot(
     return configured ?? { slotIndex, kind: 'human' };
 }
 
-export function createSyntheticAIPlayerId(slotIndex: number): PlayerId {
-    return playerId(`ai-${slotIndex}`);
-}
+export { createSyntheticAIPlayerId };
 
 export function collectInitialPlayerSlots(
     metadata: HostedSessionAgentMetadata,

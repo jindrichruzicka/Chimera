@@ -28,6 +28,7 @@
 
 import type { LobbyState, PlayerId } from './messages-schemas.js';
 import type { GameContent } from './game-content-contract.js';
+import type { QuickStartConfig } from './quick-start-contract.js';
 import { WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH } from './messages-schemas.js';
 
 // ─── Field options ──────────────────────────────────────────────────────────────
@@ -79,14 +80,25 @@ export interface GameLobbySetup {
      * `LobbyManager` via {@link resolveAttributeValueCap}.
      */
     readonly maxAttributeValueLength?: number;
+
+    /**
+     * Optional defaults for this game's QUICK START — the one-click path from a
+     * shell screen into a match, skipping the lobby. Declared here rather than
+     * on `GameManifest` because a quick-start seat's attributes are drawn from
+     * the same vocabulary as {@link playerAttributeOptions}, and the lobby
+     * setup is built from the game's `GameContent` (the manifest never sees
+     * it). Absent ⇒ the game declares no quick start.
+     */
+    readonly quickStart?: QuickStartConfig;
 }
 
 // ─── Synced setup config ──────────────────────────────────────────────────────
 
 /**
  * The resolved, synced match-setup shape: the match settings chosen for the
- * session plus each player's chosen attributes, keyed by `PlayerId`. Carried
- * alongside the snapshot so every peer agrees on the agreed-upon configuration.
+ * session plus every seat's attributes, keyed by `PlayerId` — a human seat's
+ * own picks and an AI seat's host-authored ones alike. Carried alongside the
+ * snapshot so every peer agrees on the agreed-upon configuration.
  */
 export interface GameSetupConfig {
     readonly matchSettings: Record<string, string>;

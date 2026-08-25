@@ -3187,9 +3187,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 playerIds,
             );
 
-            // Carry the host-authored lobby setup (chosen match settings +
-            // per-player attributes) into the match. Keyed by real
-            // playerId via `state.players`, so the firstPlayer turn-order reorder
+            // Carry the agreed lobby setup into the match — see
+            // `buildSetupFromLobbyState` for what it reads and how it keys each
+            // seat. Keyed by seat id, so the firstPlayer turn-order reorder
             // above does not affect it. Omitted (undefined) for games with no
             // lobby setup, keeping the payload backward-compatible.
             const setup = buildSetupFromLobbyState(state);

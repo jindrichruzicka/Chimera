@@ -11,6 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { playerId, type LobbyState } from '@chimera-engine/networking';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import type { QuickStartConfig } from '@chimera-engine/simulation/foundation/quick-start-contract.js';
+import { createSyntheticAIPlayerId } from '../runtime/syntheticAgentId.js';
 import { createResolveLobbySetup, buildSetupFromLobbyState } from './lobbySetupRegistry.js';
 
 const SAMPLE_CONTENT: GameContent = {
@@ -69,6 +71,26 @@ describe('createResolveLobbySetup', () => {
         });
         resolve('sample');
         expect(received).toBe(SAMPLE_CONTENT);
+    });
+});
+
+// The quick-start contract is a `simulation/foundation` leaf, so `electron/`
+// reaches it on the same contract path it already uses for `GameLobbySetup` —
+// no new module-boundary exception. The renderer half of this guard lives in
+// `renderer/__tests__/quick-start-contract-boundary.test.ts`.
+describe('QuickStartConfig from electron/', () => {
+    it('type-checks and carries every seat kind on a resolved GameLobbySetup', () => {
+        const quickStart: QuickStartConfig = {
+            matchSettings: { mapSize: 'small' },
+            hostAttributes: { team: 'red' },
+            localSeats: [{ attributes: { team: 'blue' } }],
+            aiSeats: [{ attributes: { team: 'green' }, omniscient: true }],
+        };
+        const resolve = createResolveLobbySetup(() => SAMPLE_CONTENT, {
+            sample: (): GameLobbySetup => ({ ...SAMPLE_SETUP, quickStart }),
+        });
+
+        expect(resolve('sample')?.quickStart).toBe(quickStart);
     });
 });
 
@@ -132,6 +154,162 @@ describe('buildSetupFromLobbyState', () => {
             makeState({ matchSettings: { turnMode: 'commitment' } }),
         );
         expect(result?.matchSettings['turnMode']).toBe('commitment');
+    });
+
+    it('keys an AI agent slot\'s attributes by its synthetic "ai-<slotIndex>" player id', () => {
+        const state = makeState({
+            agentSlots: [{ slotIndex: 1, kind: 'ai', attributes: { character: 'rogue' } }],
+        });
+        expect(buildSetupFromLobbyState(state)).toEqual({
+            matchSettings: {},
+            playerAttributes: { 'ai-1': { character: 'rogue' } },
+        });
+    });
+
+    it('uses the same synthetic id the host seats the AI under at game start', () => {
+        // The key above is only useful if it matches the id
+        // `collectGameStartAiPlayerSlots` registers — otherwise `snapshot.setup`
+        // would describe a seat that never exists.
+        expect(createSyntheticAIPlayerId(1)).toBe('ai-1');
+    });
+
+    it('builds a config when an AI slot carries the only attributes in the lobby', () => {
+        // Before this widening the roster walk saw `players` only, so an
+        // AI-only lobby returned `undefined` and the AI's picks never shipped.
+        const state = makeState({
+            agentSlots: [{ slotIndex: 2, kind: 'ai', attributes: { character: 'mage' } }],
+        });
+        expect(buildSetupFromLobbyState(state)).not.toBeUndefined();
+    });
+
+    it('omits AI slots with absent or empty attributes', () => {
+        const state = makeState({
+            agentSlots: [
+                { slotIndex: 1, kind: 'ai' },
+                { slotIndex: 2, kind: 'ai', attributes: {} },
+                { slotIndex: 3, kind: 'ai', attributes: { character: 'rogue' } },
+            ],
+        });
+        expect(buildSetupFromLobbyState(state)).toEqual({
+            matchSettings: {},
+            playerAttributes: { 'ai-3': { character: 'rogue' } },
+        });
+    });
+
+    it('returns undefined when the only agent slots carry no attributes', () => {
+        const state = makeState({ agentSlots: [{ slotIndex: 1, kind: 'ai' }] });
+        expect(buildSetupFromLobbyState(state)).toBeUndefined();
+    });
+
+    it('ignores a human-kind agent slot — no synthetic seat is ever created for one', () => {
+        // Only `kind: 'ai'` slots become `ai-<slotIndex>` seats; a human-kind
+        // slot is a placeholder for a joining human whose own `players` entry
+        // carries its attributes.
+        const state = makeState({
+            agentSlots: [{ slotIndex: 1, kind: 'human', attributes: { character: 'rogue' } }],
+        });
+        expect(buildSetupFromLobbyState(state)).toBeUndefined();
+    });
+
+    it('lets a real seat entry win over an agent slot claiming the same id', () => {
+        const state = makeState({
+            players: [
+                {
+                    playerId: playerId('ai-1'),
+                    displayName: 'ai-1',
+                    ready: false,
+                    attributes: { character: 'seat' },
+                },
+            ],
+            agentSlots: [{ slotIndex: 1, kind: 'ai', attributes: { character: 'slot' } }],
+        });
+        expect(buildSetupFromLobbyState(state)?.playerAttributes['ai-1']).toEqual({
+            character: 'seat',
+        });
+    });
+
+    it("carries a local (pass-and-play) seat's attributes beside the host's", () => {
+        // A local seat is a real `players` entry (LobbyManager.addLocalSeat
+        // seeds it from the descriptor), so it travels the same road as a
+        // remote human's seat.
+        const state = makeState({
+            players: [
+                {
+                    playerId: playerId('host'),
+                    displayName: 'host',
+                    ready: true,
+                    attributes: { team: 'red' },
+                },
+                {
+                    playerId: playerId('host-local-2'),
+                    displayName: 'Player 2',
+                    ready: true,
+                    attributes: { team: 'blue' },
+                },
+            ],
+        });
+        expect(buildSetupFromLobbyState(state)?.playerAttributes).toEqual({
+            host: { team: 'red' },
+            'host-local-2': { team: 'blue' },
+        });
+    });
+
+    it('carries host, local, AI seats and match settings into one config', () => {
+        const state = makeState({
+            matchSettings: { mapSize: 'large' },
+            players: [
+                {
+                    playerId: playerId('host'),
+                    displayName: 'host',
+                    ready: true,
+                    attributes: { team: 'red' },
+                },
+                {
+                    playerId: playerId('host-local-2'),
+                    displayName: 'Player 2',
+                    ready: true,
+                    attributes: { team: 'blue' },
+                },
+            ],
+            agentSlots: [{ slotIndex: 2, kind: 'ai', attributes: { team: 'green' } }],
+        });
+        expect(buildSetupFromLobbyState(state)).toEqual({
+            matchSettings: { mapSize: 'large' },
+            playerAttributes: {
+                host: { team: 'red' },
+                'host-local-2': { team: 'blue' },
+                'ai-2': { team: 'green' },
+            },
+        });
+    });
+
+    it('shares no object with the lobby state it was built from', () => {
+        // The config is carried onto the snapshot and projected, so a later
+        // lobby edit must not be able to reach into a started match's `setup`.
+        const hostAttributes = { team: 'red' };
+        const slotAttributes = { team: 'green' };
+        const matchSettings = { mapSize: 'large' };
+        const state = makeState({
+            matchSettings,
+            players: [
+                {
+                    playerId: playerId('host'),
+                    displayName: 'host',
+                    ready: true,
+                    attributes: hostAttributes,
+                },
+            ],
+            agentSlots: [{ slotIndex: 1, kind: 'ai', attributes: slotAttributes }],
+        });
+
+        const result = buildSetupFromLobbyState(state);
+
+        expect(result?.matchSettings).toEqual(matchSettings);
+        expect(result?.matchSettings).not.toBe(matchSettings);
+        expect(result?.playerAttributes['host']).toEqual(hostAttributes);
+        expect(result?.playerAttributes['host']).not.toBe(hostAttributes);
+        expect(result?.playerAttributes['ai-1']).toEqual(slotAttributes);
+        expect(result?.playerAttributes['ai-1']).not.toBe(slotAttributes);
     });
 
     it('combines matchSettings and per-player attributes into one config', () => {

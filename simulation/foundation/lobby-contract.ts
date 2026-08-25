@@ -29,6 +29,15 @@ export interface LobbyAgentSlot {
     readonly slotIndex: number;
     readonly kind: LobbyAgentKind;
     readonly omniscient?: boolean;
+    /**
+     * Host-authored per-seat match attributes for this slot (e.g. an AI's
+     * character), the agent-slot twin of {@link LobbyPlayerEntry.attributes}.
+     * An AI seat is not a `players` entry — it is seated at match start under
+     * the synthetic `ai-<slotIndex>` id — so without this carrier its picks
+     * have no road into `snapshot.setup`. Optional and backward-compatible:
+     * absent on games with no per-seat attributes and on older clients.
+     */
+    readonly attributes?: Readonly<Record<string, string>>;
 }
 
 /** Metadata returned when a lobby is successfully hosted or joined. */

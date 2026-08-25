@@ -98,9 +98,35 @@ export interface GameLobbyScreenProps {
 }
 ```
 
+The blocks above are abridged to the fields this contract explains; each cited module is the full surface.
+
 The synced state lives on the wire types in [`simulation/foundation/messages-schemas.ts`](../../simulation/foundation/messages-schemas.ts):
-`LobbyState.matchSettings?: Record<string, string>` and `LobbyPlayerEntry.attributes?: Record<string, string>`.
-Both are **optional and backward-compatible** — absent on older clients and on games with no lobby setup.
+`LobbyState.matchSettings?`, `LobbyPlayerEntry.attributes?`, and `LobbyAgentSlot.attributes?` — the last being an
+AI seat's host-authored picks, since an AI seat is never a `players` entry and so has no other carrier.
+All three are **optional and backward-compatible** — absent on older clients and on games with no lobby setup.
+There is no attribute-setter channel for an agent slot — `chimera:lobby:host` is the sole write path for its
+attributes — so its per-attribute caps ride the state frame; a player's attributes are bounded at
+`chimera:lobby:set-player-attribute` instead.
+
+### Quick-start defaults
+
+`GameLobbySetup.quickStart?: QuickStartConfig` ([`simulation/foundation/quick-start-contract.ts`](../../simulation/foundation/quick-start-contract.ts),
+a zero-import foundation leaf) declares what match a game opens when the player skips the lobby entirely:
+
+```ts
+export interface QuickStartConfig {
+    readonly matchSettings?: Readonly<Record<string, string>>;
+    readonly hostAttributes?: Readonly<Record<string, string>>;
+    readonly localSeats?: readonly QuickStartSeat[];
+    readonly aiSeats?: readonly QuickStartAiSeat[];
+}
+```
+
+Every seat kind carries its own `attributes` (an AI seat adds `omniscient?`), so a game whose seats differ by
+character, colour, or faction can say so — a bare seat count could not. It lives on the lobby setup rather than
+the manifest because a seat's attributes are drawn from the same vocabulary as `playerAttributeOptions`, and the
+lobby setup is built from the game's `GameContent` (the manifest never sees it). The verb that consumes this
+config lands separately; the type is the contract both ends compile against.
 
 ---
 
@@ -157,8 +183,13 @@ LobbyState ──buildSetupFromLobbyState()──▶ GameSetupConfig
                                           PlayerSnapshot.setup  (identical for every viewer)
 ```
 
-`buildSetupFromLobbyState()` returns `undefined` when there is nothing to carry (no match settings and no
-player attributes), so the start payload omits `setup` and stays backward-compatible. Because `setup` is
+`buildSetupFromLobbyState()` walks **both** rosters: every `players` entry (host, joined remote, pass-and-play
+local seat) under its own `playerId`, and every `kind: 'ai'` agent slot under the synthetic `ai-<slotIndex>` id
+the host seats it with — one map, keyed the same way whatever kind of seat it is. A `players` entry wins over an
+agent slot claiming the same id. A human-kind agent slot contributes nothing: it is a placeholder for a joining
+human whose own entry carries its attributes, and no synthetic seat is ever created for it. The function returns
+`undefined` when there is nothing to carry (no match settings and no seat attributes), so the start payload
+omits `setup` and stays backward-compatible. Because `setup` is
 **public host config** with no owner-only or per-viewer fields, `StateProjector.project()` copies it
 through unchanged — every viewer's projected snapshot exposes an identical `setup` (Invariant #101). This
 keeps simulation-affecting parameters in match config rather than in user settings (Invariant #36).
@@ -213,13 +244,16 @@ on `snapshot.setup`.
 
 ```
 simulation/foundation/
-├── game-lobby-contract.ts      # GameLobbySetup, GameSetupConfig, GameLobbyScreenProps, LobbyFieldOption
-└── messages-schemas.ts         # LobbyState.matchSettings?, LobbyPlayerEntry.attributes?
+├── game-lobby-contract.ts      # GameLobbySetup (incl. quickStart?), GameSetupConfig, GameLobbyScreenProps, LobbyFieldOption
+├── quick-start-contract.ts     # QuickStartConfig / QuickStartSeat / QuickStartAiSeat — zero-import leaf
+└── messages-schemas.ts         # LobbyState.matchSettings?, LobbyPlayerEntry.attributes?, LobbyAgentSlot.attributes?
 electron/
 ├── main/
 │   ├── lobby/
 │   │   ├── LobbyManager.ts          # Host-only setMatchSetting / owner-authored setPlayerAttribute + broadcast
 │   │   └── lobbySetupRegistry.ts    # createResolveLobbySetup, buildSetupFromLobbyState (game-agnostic; builder injected via MainGameContribution.lobbySetup)
+│   ├── runtime/
+│   │   └── syntheticAgentId.ts      # createSyntheticAIPlayerId — the one spelling of an AI seat's id
 │   └── ipc/
 │       ├── ipc-handlers.ts          # chimera:lobby:set-match-setting / set-player-attribute handlers
 │       └── ipc-schemas.ts           # SetMatchSettingPayloadSchema, SetPlayerAttributePayloadSchema

@@ -8,6 +8,11 @@
 // boundary.
 
 import { describe, expect, it } from 'vitest';
+import {
+    WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
+    WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
+} from '@chimera-engine/simulation/foundation/messages-schemas.js';
+import type { LobbyState } from '../api-types.js';
 import { MAX_SAVE_LABEL_LENGTH } from '../api-types.js';
 import {
     ActionRejectionSchema,
@@ -125,6 +130,141 @@ describe('LobbyStateSchema — player role (spectator)', () => {
             players: [{ playerId: 'P1', displayName: 'Alice', ready: true, role: 'observer' }],
         };
         expect(() => LobbyStateSchema.parse(state)).toThrow();
+    });
+});
+
+describe('LobbyStateSchema — nothing is stripped from chimera:lobby:get-current-state', () => {
+    // Every optional key of every nested shape, populated. `Required<…>` is the
+    // anchor: adding an optional field to `LobbyState`, `LobbyPlayerEntry`, or
+    // `LobbyAgentSlot` stops this fixture compiling until it is populated here,
+    // and the round-trip below then fails until the schema carries it. Written
+    // as literals, never a spread — a spread defeats excess-property checking.
+    // The element types are derived from `LobbyState` itself, so the fixture is
+    // pinned to exactly the shape this schema must carry — not to a
+    // same-named interface that could drift from it.
+    type FullAgentSlot = Required<NonNullable<LobbyState['agentSlots']>[number]>;
+    type FullPlayerEntry = Required<LobbyState['players'][number]>;
+
+    const agentSlot: FullAgentSlot = {
+        slotIndex: 1,
+        kind: 'ai',
+        omniscient: true,
+        attributes: { character: 'rogue' },
+    };
+    const playerEntry: FullPlayerEntry = {
+        playerId: 'P1',
+        displayName: 'Alice',
+        ready: true,
+        role: 'player',
+        attributes: { unitColor: 'red' },
+    };
+    const fullState: Required<LobbyState> = {
+        info: { sessionId: 'S1', hostId: 'P1', gameId: 'tactics' },
+        players: [playerEntry],
+        matchSettings: { boardColor: 'blue' },
+        agentSlots: [agentSlot],
+    };
+
+    it('round-trips a fully-populated LobbyState with no field dropped', () => {
+        expect(LobbyStateSchema.parse(fullState)).toEqual(fullState);
+    });
+
+    it('preserves host-authored matchSettings across the IPC boundary', () => {
+        expect(LobbyStateSchema.parse(fullState).matchSettings).toEqual({ boardColor: 'blue' });
+    });
+
+    it("preserves each player's owner-authored attributes across the IPC boundary", () => {
+        expect(LobbyStateSchema.parse(fullState).players[0]?.attributes).toEqual({
+            unitColor: 'red',
+        });
+    });
+
+    it('preserves an AI agent slot attributes map across the IPC boundary', () => {
+        expect(LobbyStateSchema.parse(fullState).agentSlots?.[0]?.attributes).toEqual({
+            character: 'rogue',
+        });
+    });
+
+    it('rejects a matchSettings entry with a non-string value', () => {
+        expect(() =>
+            LobbyStateSchema.parse({
+                info: fullState.info,
+                players: [{ playerId: 'P1', displayName: 'Alice', ready: true }],
+                matchSettings: { boardColor: 42 },
+            }),
+        ).toThrow();
+    });
+
+    it('rejects a player attributes entry with a non-string value', () => {
+        expect(() =>
+            LobbyStateSchema.parse({
+                info: fullState.info,
+                players: [
+                    { playerId: 'P1', displayName: 'Alice', ready: true, attributes: { c: 42 } },
+                ],
+            }),
+        ).toThrow();
+    });
+
+    it('rejects an agent-slot attributes entry with a non-string value', () => {
+        expect(() =>
+            LobbyStateSchema.parse({
+                info: fullState.info,
+                players: [{ playerId: 'P1', displayName: 'Alice', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai', attributes: { character: 42 } }],
+            }),
+        ).toThrow();
+    });
+
+    it('mirrors the wire caps on an agent slot: at the cap accepted, one over rejected', () => {
+        const slotWith = (attributes: Record<string, string>) => ({
+            info: fullState.info,
+            players: [{ playerId: 'P1', displayName: 'Alice', ready: true }],
+            agentSlots: [{ slotIndex: 1, kind: 'ai', attributes }],
+        });
+        const atCap = {
+            ['k'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH)]: 'v'.repeat(
+                WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
+            ),
+        };
+        expect(() => LobbyStateSchema.parse(slotWith(atCap))).not.toThrow();
+        expect(() =>
+            LobbyStateSchema.parse(
+                slotWith({ ['k'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH + 1)]: 'v' }),
+            ),
+        ).toThrow();
+        expect(() =>
+            LobbyStateSchema.parse(
+                slotWith({ c: 'v'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH + 1) }),
+            ),
+        ).toThrow();
+        expect(() => LobbyStateSchema.parse(slotWith({ '': 'v' }))).toThrow();
+    });
+
+    it('leaves matchSettings and player attributes uncapped, exactly as the wire does', () => {
+        // Their caps live on their own write frames, so capping them here would
+        // reject a state the host legitimately broadcast.
+        const long = 'v'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH + 1);
+        expect(() =>
+            LobbyStateSchema.parse({
+                info: fullState.info,
+                players: [
+                    { playerId: 'P1', displayName: 'Alice', ready: true, attributes: { c: long } },
+                ],
+                matchSettings: { boardColor: long },
+            }),
+        ).not.toThrow();
+    });
+
+    it('still accepts a bare state with every optional field absent', () => {
+        const bare = {
+            info: fullState.info,
+            players: [{ playerId: 'P1', displayName: 'Alice', ready: true }],
+        };
+        const parsed = LobbyStateSchema.parse(bare);
+        expect(parsed.matchSettings).toBeUndefined();
+        expect(parsed.agentSlots).toBeUndefined();
+        expect(parsed.players[0]?.attributes).toBeUndefined();
     });
 });
 

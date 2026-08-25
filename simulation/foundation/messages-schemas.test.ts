@@ -685,6 +685,88 @@ describe('ServerMessageSchema — LOBBY_STATE', () => {
     });
 });
 
+describe('LobbyAgentSlot attributes (AI seats carry picks like humans)', () => {
+    const stateWithSlot = (slot: Record<string, unknown>) => ({
+        type: 'LOBBY_STATE' as const,
+        state: {
+            info: defaultLobbyInfo,
+            players: [{ playerId: toPlayerId('p1'), displayName: 'Alice', ready: false }],
+            agentSlots: [slot],
+        },
+    });
+
+    it('carries an AI slot attributes map through the wire schema unchanged', () => {
+        const result = ServerMessageSchema.safeParse(
+            stateWithSlot({ slotIndex: 1, kind: 'ai', attributes: { character: 'rogue' } }),
+        );
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'LOBBY_STATE') {
+            // Asserts the VALUE survives, not merely that the frame parses — a
+            // stripped optional key parses with `success: true`.
+            expect(result.data.state.agentSlots?.[0]?.attributes).toEqual({ character: 'rogue' });
+        }
+    });
+
+    it('parses an AI slot with attributes absent (backward compatible)', () => {
+        const result = ServerMessageSchema.safeParse(stateWithSlot({ slotIndex: 1, kind: 'ai' }));
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'LOBBY_STATE') {
+            expect(result.data.state.agentSlots?.[0]?.attributes).toBeUndefined();
+        }
+    });
+
+    it('rejects an AI slot attributes entry with a non-string value', () => {
+        const result = ServerMessageSchema.safeParse(
+            stateWithSlot({ slotIndex: 1, kind: 'ai', attributes: { character: 7 } }),
+        );
+        expect(result.success).toBe(false);
+    });
+
+    it('accepts an attribute key and value exactly at the wire caps', () => {
+        const result = ServerMessageSchema.safeParse(
+            stateWithSlot({
+                slotIndex: 1,
+                kind: 'ai',
+                attributes: {
+                    ['k'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH)]: 'v'.repeat(
+                        WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
+                    ),
+                },
+            }),
+        );
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects an attribute key one over the wire cap', () => {
+        const result = ServerMessageSchema.safeParse(
+            stateWithSlot({
+                slotIndex: 1,
+                kind: 'ai',
+                attributes: { ['k'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH + 1)]: 'v' },
+            }),
+        );
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects an attribute value one over the wire cap', () => {
+        const result = ServerMessageSchema.safeParse(
+            stateWithSlot({
+                slotIndex: 1,
+                kind: 'ai',
+                attributes: { character: 'v'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH + 1) },
+            }),
+        );
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects an empty attribute key', () => {
+        const result = ServerMessageSchema.safeParse(
+            stateWithSlot({ slotIndex: 1, kind: 'ai', attributes: { '': 'v' } }),
+        );
+        expect(result.success).toBe(false);
+    });
+});
+
 describe('LobbyPlayerEntry role (who-is-watching flag)', () => {
     const entryWith = (role?: unknown) => ({
         type: 'LOBBY_STATE' as const,
