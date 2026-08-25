@@ -18,6 +18,7 @@ import { sceneId, type SceneRegistry } from '@chimera-engine/simulation/scene/in
 import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
 import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type * as LoadGameContentModule from './content/loadGameContent.js';
+import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 
 interface ProjectorOptionsForTest {
     readonly getUndoMeta?: (viewerId: PlayerId) => unknown;
@@ -40,10 +41,15 @@ vi.mock('pino', () => {
 // ── SaveManager mock (used by main() after the sync-helper removal) ──────────
 const {
     mockSaveManagerAutoSave,
+    mockSaveManagerList,
     mockSaveManagerRestoreFromSave,
     capturedSaveManagerRepoClassName,
+    capturedSlotsChangedListener,
 } = vi.hoisted(() => ({
     mockSaveManagerAutoSave: vi.fn<(file: unknown) => Promise<void>>(() => Promise.resolve()),
+    // Backs the slot-update push wiring: `refreshAndBroadcastSaveSlots` re-reads
+    // the game's slot list through the saves IPC port, which delegates here.
+    mockSaveManagerList: vi.fn<(gameId: string) => Promise<unknown[]>>(() => Promise.resolve([])),
     // Backs the saves:load wiring tests: individual tests seed the
     // SaveFile the "repository" returns for a load.
     mockSaveManagerRestoreFromSave: vi.fn<(slotId: string) => Promise<unknown>>(() =>
@@ -52,16 +58,31 @@ const {
     // Stores the constructor name of the first arg passed to SaveManager
     // for the BLOCK-1 assertion (avoids importing the real class).
     capturedSaveManagerRepoClassName: { value: '' },
+    // The third constructor argument: the composition root's slot-change
+    // listener. The real SaveManager runs it after every save / autosave
+    // (SaveManager.test.ts); these tests drive it directly to exercise what
+    // main() wired it to.
+    capturedSlotsChangedListener: {
+        current: undefined as ((gameId: string) => void) | undefined,
+    },
 }));
 
 vi.mock('./saves/SaveManager.js', () => ({
-    SaveManager: vi.fn((repo: { constructor?: { name?: string } }) => {
-        capturedSaveManagerRepoClassName.value = repo?.constructor?.name ?? '';
-        return {
-            autoSave: mockSaveManagerAutoSave,
-            restoreFromSave: mockSaveManagerRestoreFromSave,
-        };
-    }),
+    SaveManager: vi.fn(
+        (
+            repo: { constructor?: { name?: string } },
+            _logger: unknown,
+            onSlotsChanged?: (gameId: string) => void,
+        ) => {
+            capturedSaveManagerRepoClassName.value = repo?.constructor?.name ?? '';
+            capturedSlotsChangedListener.current = onSlotsChanged;
+            return {
+                autoSave: mockSaveManagerAutoSave,
+                list: mockSaveManagerList,
+                restoreFromSave: mockSaveManagerRestoreFromSave,
+            };
+        },
+    ),
 }));
 
 const { mockOsRelease } = vi.hoisted(() => ({
@@ -3839,6 +3860,62 @@ describe('main', () => {
             expect(secondMatchId).toMatch(UUID_RE);
             expect(secondMatchId).not.toBe(firstMatchId);
         });
+
+        it('crash-path autosave pushes the refreshed slot list, skipping dead windows', async () => {
+            // The crash reporter's capture is the autosave that reaches no IPC
+            // round-trip at all, so before the SaveManager seam existed nothing
+            // told the renderer about it. It must reach the push now — and it
+            // must survive a window that is already gone by the time the
+            // process is coming apart, since sending to one throws.
+            const { callbacks, hostId } = await hostSession(2);
+            callbacks.onGameStartRequested?.(makeLobbyState(hostId, [hostId]));
+
+            mockSaveManagerList.mockResolvedValueOnce([
+                {
+                    slotId: 'tactics/autosave',
+                    gameId: 'tactics',
+                    tick: 7,
+                    savedAt: 1_000,
+                    turnNumber: 3,
+                    playerNames: [],
+                    schemaVersion: 6,
+                    sizeBytes: 0,
+                },
+            ]);
+            // The real SaveManager runs `onSlotsChanged` after the write
+            // (SaveManager.test.ts pins that); the double honours the same
+            // contract so this case exercises the whole crash path.
+            mockSaveManagerAutoSave.mockImplementationOnce((file) => {
+                capturedSlotsChangedListener.current?.(
+                    (file as { header: { gameId: string } }).header.gameId,
+                );
+                return Promise.resolve();
+            });
+
+            const deadWin = new FakeBrowserWindow({ webPreferences: {} });
+            deadWin.isDestroyed.mockReturnValue(true);
+            const deadContentsWin = new FakeBrowserWindow({ webPreferences: {} });
+            deadContentsWin.webContents.isDestroyed.mockReturnValue(true);
+            const liveWin = new FakeBrowserWindow({ webPreferences: {} });
+            FakeBrowserWindow.getAllWindows.mockReturnValue([deadWin, deadContentsWin, liveWin]);
+
+            try {
+                const crashOptions = mockRegisterCrashReporter.mock.calls[0]?.[0];
+                await expect(crashOptions?.autosave?.()).resolves.toBeUndefined();
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(mockSaveManagerList).toHaveBeenCalledWith('tactics');
+                expect(deadWin.webContents.send).not.toHaveBeenCalled();
+                expect(deadContentsWin.webContents.send).not.toHaveBeenCalled();
+                expect(liveWin.webContents.send).toHaveBeenCalledExactlyOnceWith(
+                    SAVES_SLOT_UPDATE_CHANNEL,
+                    [{ slotId: 'tactics/autosave', gameId: 'tactics', tick: 7, savedAt: 1_000 }],
+                );
+            } finally {
+                FakeBrowserWindow.getAllWindows.mockImplementation(() => browserWindowInstances);
+                mockSaveManagerList.mockImplementation(() => Promise.resolve([]));
+            }
+        });
     });
 
     it('calls session.defaultSession.setPermissionRequestHandler with a deny-all handler (WARN-4)', async () => {
@@ -3894,6 +3971,106 @@ describe('main', () => {
 
         capturedSettingsBroadcastFn.current?.('tactics', { volume: 80 });
 
+        expect(win.webContents.send).not.toHaveBeenCalled();
+    });
+});
+
+// ─── chimera:saves:slot-update push after every write ─────────────────────────
+
+describe('main() — SaveManager slot-change listener', () => {
+    afterEach(() => {
+        FakeBrowserWindow.getAllWindows.mockImplementation(() => browserWindowInstances);
+        mockSaveManagerList.mockImplementation(() => Promise.resolve([]));
+    });
+
+    it('passes a slot-change listener to the SaveManager constructor', async () => {
+        await main(makeTestContributions());
+
+        expect(capturedSlotsChangedListener.current).toBeTypeOf('function');
+    });
+
+    it('re-lists the named game and pushes the preload-shaped slot list', async () => {
+        await main(makeTestContributions());
+        mockSaveManagerList.mockResolvedValueOnce([
+            {
+                slotId: 'tactics/autosave',
+                gameId: 'tactics',
+                tick: 7,
+                savedAt: 1_000,
+                turnNumber: 3,
+                playerNames: ['Alice'],
+                schemaVersion: 6,
+                sizeBytes: 512,
+            },
+        ]);
+        const win = new FakeBrowserWindow({ webPreferences: {} });
+        FakeBrowserWindow.getAllWindows.mockReturnValue([win]);
+
+        capturedSlotsChangedListener.current?.('tactics');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(mockSaveManagerList).toHaveBeenCalledWith('tactics');
+        // Simulation-only fields (playerNames, schemaVersion, sizeBytes) stay
+        // main-side; only the preload shape crosses (Invariant #1).
+        expect(win.webContents.send).toHaveBeenCalledExactlyOnceWith(SAVES_SLOT_UPDATE_CHANNEL, [
+            { slotId: 'tactics/autosave', gameId: 'tactics', tick: 7, savedAt: 1_000 },
+        ]);
+    });
+
+    it('skips a destroyed window and still reaches a live one', async () => {
+        await main(makeTestContributions());
+        const deadWin = new FakeBrowserWindow({ webPreferences: {} });
+        deadWin.isDestroyed.mockReturnValue(true);
+        const liveWin = new FakeBrowserWindow({ webPreferences: {} });
+        FakeBrowserWindow.getAllWindows.mockReturnValue([deadWin, liveWin]);
+
+        capturedSlotsChangedListener.current?.('tactics');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(deadWin.webContents.send).not.toHaveBeenCalled();
+        expect(liveWin.webContents.send).toHaveBeenCalledOnce();
+    });
+
+    it('skips a live window whose webContents is destroyed', async () => {
+        await main(makeTestContributions());
+        const win = new FakeBrowserWindow({ webPreferences: {} });
+        win.isDestroyed.mockReturnValue(false);
+        win.webContents.isDestroyed.mockReturnValue(true);
+        FakeBrowserWindow.getAllWindows.mockReturnValue([win]);
+
+        capturedSlotsChangedListener.current?.('tactics');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(win.webContents.send).not.toHaveBeenCalled();
+    });
+
+    it('swallows a rejected refresh — the write it follows is already durable', async () => {
+        // The listener runs after a persisted save. Letting a failed re-list
+        // escape would reject the save that succeeded, and on the crash path it
+        // would raise a second failure on top of the one being reported.
+        await main(makeTestContributions());
+        mockSaveManagerList.mockRejectedValueOnce(new Error('list failure'));
+        const win = new FakeBrowserWindow({ webPreferences: {} });
+        FakeBrowserWindow.getAllWindows.mockReturnValue([win]);
+
+        // A dropped `.catch` throws nothing at the call site — the failure is
+        // an UNHANDLED REJECTION one turn later, which the crash reporter logs
+        // as an error (`crash-reporter.ts`, path 2 of 3). Watching for it here
+        // is what makes this case fail by name rather than as an unattributed
+        // run error.
+        const unhandled: unknown[] = [];
+        const recordUnhandled = (reason: unknown): void => {
+            unhandled.push(reason);
+        };
+        process.on('unhandledRejection', recordUnhandled);
+        try {
+            expect(() => capturedSlotsChangedListener.current?.('tactics')).not.toThrow();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        } finally {
+            process.off('unhandledRejection', recordUnhandled);
+        }
+
+        expect(unhandled).toEqual([]);
         expect(win.webContents.send).not.toHaveBeenCalled();
     });
 });

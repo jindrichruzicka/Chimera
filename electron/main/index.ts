@@ -63,7 +63,9 @@ import type {
     PlayerLeftMatchEvent,
     ReplayNavigateKind,
     ReplayNavigatePayload,
+    SaveSlotMeta,
 } from '../preload/api-types.js';
+import { autosaveSlotId } from '@chimera-engine/simulation/foundation/save-slots.js';
 import { SettingsManager } from './settings/SettingsManager.js';
 import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import {
@@ -1480,6 +1482,19 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // Create the SaveManager with FileSaveRepository (invariant #37: concrete
     // repository chosen here in main(); SaveManager itself never imports it).
     // Saves are stored under <userData>/saves/<gameId>/<slotId>.chimera.
+    //
+    // The third argument is what makes an autosave observable: every save the
+    // manager performs refreshes the slot list and pushes it, so a renderer
+    // that never asked still sees it. Autosaves are why — no autosave reaches
+    // an IPC round-trip, neither the one an accepted `engine:end_turn`
+    // triggers nor the crash reporter's capture.
+    //
+    // `refreshAndBroadcastSaveSlots` is a hoisted function declaration reading
+    // `savesPort`, a `const` initialised further down this same scope. Safe for
+    // the same reason `autosaveActiveSessionBeforeCrash` (passed to
+    // `registerCrashReporter` above, and reading this very `saveManager`) is:
+    // nothing can write a save before `main()` has finished wiring. Should that
+    // ever stop being true, the manager reports the failure and keeps the save.
     const saveManager = new SaveManager(
         new FileSaveRepository(
             new JsonSaveSerializer(),
@@ -1487,6 +1502,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             path.join(userData, 'saves'),
         ),
         logger.child({ module: 'saves' }),
+        refreshAndBroadcastSaveSlots,
     );
 
     // ReplayManager owns live-match recording and replay persistence (§4.28).
@@ -3483,8 +3499,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // Register the `chimera:saves:*` channels backed by SaveManager.
     // The adapter converts the simulation-side SaveSlotMeta into the
     // preload-side shape, and `broadcastSlotsChanged` pushes the refreshed
-    // slot list via `chimera:saves:slot-update` after every save / delete
-    // so all open renderer windows stay coherent (§4.11, invariant #37).
+    // slot list via `chimera:saves:slot-update` after a delete, so all open
+    // renderer windows stay coherent (§4.11, invariant #37). Both kinds of
+    // SAVE — manual and auto — push from the SaveManager `onSlotsChanged` seam
+    // instead, which is why the handler's save arm does not broadcast: one
+    // push per save, from one owner.
     //
     // `captureSaveFile` reads the live snapshot from the active
     // `SessionRuntime` (see `onSessionHosted` above) and stamps a
@@ -3500,72 +3519,109 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // file's `session` manifest and applies the checkpoint through that same
     // helper.
     const savesLogger = logger.child({ module: 'saves' });
+    const savesPort = createSavesIpcPort({
+        saveManager,
+        captureSaveFile: (request) => {
+            if (activeSession === null) {
+                return Promise.reject(
+                    new Error(
+                        'saves:save invoked with no active hosted session — ' +
+                            'start a game before saving.',
+                    ),
+                );
+            }
+            return Promise.resolve(activeSession.captureSaveFile(request));
+        },
+        restoreSession: async (file) => {
+            if (file.header.gameId !== HOSTED_GAME_ID) {
+                throw new Error(
+                    `saves:load: save is for game "${file.header.gameId}" — ` +
+                        `this host runs "${HOSTED_GAME_ID}".`,
+                );
+            }
+            if (activeSession !== null) {
+                // In-session load: only the SAME match may be live-applied.
+                // A different match (or a hosted-but-unstarted lobby, where
+                // no match identity exists yet) must go through the menu
+                // flow so the roster is re-seated from the manifest.
+                if (currentMatchId !== null && file.session.matchId === currentMatchId) {
+                    applyRestoredFileToActiveSession(file);
+                    // The snapshot swapped underneath the live agents; rebuild
+                    // the roster so each re-seeds from the restored checkpoint.
+                    // Runs after the apply so the seed reads the restored
+                    // snapshot; the menu-restore flow (which re-seats via
+                    // `seatRestoredRoster`) never reaches this branch.
+                    rebuildAgentsAgainstRestoredSnapshot?.();
+                    return;
+                }
+                throw new Error(
+                    'saves:load: this save belongs to a different match than the ' +
+                        'active session — return to the main menu to load it.',
+                );
+            }
+            // A joined client has no `activeSession` but does hold a live
+            // provider session — routing into the menu-restore flow would
+            // surface LobbyManager's hosting-conflict error. Only the host
+            // may restore (Invariant #25); reject renderer-friendly.
+            if (joinedSessionActive) {
+                throw new Error(
+                    'saves:load: cannot load a save while joined to another session — ' +
+                        'leave the session first.',
+                );
+            }
+            // Menu flow: host a session seeded from the saved roster and
+            // apply the checkpoint.
+            await sessionRestoreCoordinator.restoreSession(file);
+        },
+        logger: savesLogger,
+    });
+
+    /**
+     * Push a slot list to every live renderer window over
+     * `chimera:saves:slot-update`.
+     *
+     * The destroyed checks mirror the settings broadcaster below, for the same
+     * reason: a window, or its `webContents` alone, can be gone by the time a
+     * push runs. The crash path is where that is likeliest — the reporter's
+     * autosave runs while the process is coming apart — and a push that fell
+     * over there would be a second failure on top of the one being reported.
+     */
+    function broadcastSaveSlots(slots: readonly SaveSlotMeta[]): void {
+        BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                win.webContents.send(SAVES_SLOT_UPDATE_CHANNEL, slots);
+            }
+        });
+    }
+
+    /**
+     * `SaveManager.onSlotsChanged`: re-read the game's slot list and push it.
+     *
+     * Never throws and never rejects — the write it follows is already durable,
+     * so a failed refresh is reported and dropped rather than surfaced as a
+     * failed save. One call per save; no debounce (see `SaveManager`).
+     */
+    function refreshAndBroadcastSaveSlots(gameId: string): void {
+        void savesPort
+            .list(gameId)
+            .then((slots) => {
+                broadcastSaveSlots(slots);
+            })
+            .catch((error: unknown) => {
+                savesLogger.warn('slot-update refresh failed; the write itself succeeded', {
+                    gameId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            });
+    }
+
     registerSavesHandlers({
         ipcMain,
         logger: savesLogger,
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
-        saves: createSavesIpcPort({
-            saveManager,
-            captureSaveFile: (request) => {
-                if (activeSession === null) {
-                    return Promise.reject(
-                        new Error(
-                            'saves:save invoked with no active hosted session — ' +
-                                'start a game before saving.',
-                        ),
-                    );
-                }
-                return Promise.resolve(activeSession.captureSaveFile(request));
-            },
-            restoreSession: async (file) => {
-                if (file.header.gameId !== HOSTED_GAME_ID) {
-                    throw new Error(
-                        `saves:load: save is for game "${file.header.gameId}" — ` +
-                            `this host runs "${HOSTED_GAME_ID}".`,
-                    );
-                }
-                if (activeSession !== null) {
-                    // In-session load: only the SAME match may be live-applied.
-                    // A different match (or a hosted-but-unstarted lobby, where
-                    // no match identity exists yet) must go through the menu
-                    // flow so the roster is re-seated from the manifest.
-                    if (currentMatchId !== null && file.session.matchId === currentMatchId) {
-                        applyRestoredFileToActiveSession(file);
-                        // The snapshot swapped underneath the live agents; rebuild
-                        // the roster so each re-seeds from the restored checkpoint.
-                        // Runs after the apply so the seed reads the restored
-                        // snapshot; the menu-restore flow (which re-seats via
-                        // `seatRestoredRoster`) never reaches this branch.
-                        rebuildAgentsAgainstRestoredSnapshot?.();
-                        return;
-                    }
-                    throw new Error(
-                        'saves:load: this save belongs to a different match than the ' +
-                            'active session — return to the main menu to load it.',
-                    );
-                }
-                // A joined client has no `activeSession` but does hold a live
-                // provider session — routing into the menu-restore flow would
-                // surface LobbyManager's hosting-conflict error. Only the host
-                // may restore (Invariant #25); reject renderer-friendly.
-                if (joinedSessionActive) {
-                    throw new Error(
-                        'saves:load: cannot load a save while joined to another session — ' +
-                            'leave the session first.',
-                    );
-                }
-                // Menu flow: host a session seeded from the saved roster and
-                // apply the checkpoint.
-                await sessionRestoreCoordinator.restoreSession(file);
-            },
-            logger: savesLogger,
-        }),
+        saves: savesPort,
         broadcastSlotsChanged: (_gameId, slots) => {
-            BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-                    win.webContents.send(SAVES_SLOT_UPDATE_CHANNEL, slots);
-                }
-            });
+            broadcastSaveSlots(slots);
         },
         // Abort a pending menu-load restore. A no-op outside an
         // in-flight restore — cancel never touches a completed live session.
@@ -3717,9 +3773,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         const file = activeSession.captureSaveFile({ gameId: activeSession.gameId });
         await saveManager.autoSave(file);
         if (resolvedE2eHooks !== undefined) {
-            // Slot id is derived from the naming convention used by SaveManager.autoSave()
-            // (`<gameId>/autosave`). If that convention changes, this line must be updated too.
-            resolvedE2eHooks.lastSavedSlotId = `${file.header.gameId}/autosave`;
+            resolvedE2eHooks.lastSavedSlotId = autosaveSlotId(file.header.gameId);
             resolvedE2eHooks.lastSavedTick = file.checkpoint.tick;
         }
     }

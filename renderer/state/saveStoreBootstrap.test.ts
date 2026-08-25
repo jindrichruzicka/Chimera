@@ -17,8 +17,9 @@ import type {
     SaveSlotMeta,
     Unsubscribe,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import { autosaveSlotId } from '@chimera-engine/simulation/foundation/save-slots.js';
 import { bootstrapSaveStore } from './saveStoreBootstrap';
-import { useSaveStore } from './saveStore';
+import { selectHasAutosave, useSaveStore } from './saveStore';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,40 @@ describe('bootstrapSaveStore()', () => {
         capturedCb!(newSlots);
 
         expect(useSaveStore.getState().slots).toEqual(newSlots);
+    });
+
+    it('flips selectHasAutosave to true when a slot-update push carries the autosave', () => {
+        // AC: a Continue button reading `selectHasAutosave` must react to the
+        // push the main process now sends after EVERY autosave, with no probe
+        // and no second fetch of its own.
+        let capturedCb: ((slots: SaveSlotMeta[]) => void) | undefined;
+        const api = makeSavesApi(undefined, (cb) => {
+            capturedCb = cb;
+            return vi.fn();
+        });
+
+        bootstrapSaveStore(api, 'tactics');
+        expect(selectHasAutosave('tactics')(useSaveStore.getState())).toBe(false);
+
+        capturedCb!([makeSlot(autosaveSlotId('tactics'), 20)]);
+
+        expect(selectHasAutosave('tactics')(useSaveStore.getState())).toBe(true);
+    });
+
+    it('flips selectHasAutosave back to false when a push drops the autosave', () => {
+        let capturedCb: ((slots: SaveSlotMeta[]) => void) | undefined;
+        const api = makeSavesApi(undefined, (cb) => {
+            capturedCb = cb;
+            return vi.fn();
+        });
+
+        bootstrapSaveStore(api, 'tactics');
+        capturedCb!([makeSlot(autosaveSlotId('tactics'), 20)]);
+        expect(selectHasAutosave('tactics')(useSaveStore.getState())).toBe(true);
+
+        capturedCb!([makeSlot('tactics/slot-1', 21)]);
+
+        expect(selectHasAutosave('tactics')(useSaveStore.getState())).toBe(false);
     });
 
     it('clears isLoading with empty slots when list() rejects', async () => {

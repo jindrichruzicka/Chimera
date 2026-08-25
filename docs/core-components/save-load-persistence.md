@@ -122,6 +122,17 @@ Stores files at `userData/saves/<gameId>/<slotId>.chimera`. All writes use a `.t
 > **Invariant #24** — `SessionRuntime.applyRestoredFile()` is the only entry point for replacing the live `GameSnapshot` from a file. The two-step load flow is (1) `SaveManager.restoreFromSave(slotId)` reads and migrates the file, then (2) `SessionRuntime.applyRestoredFile(file)` replaces the live snapshot. Its two callers — the in-session same-match load branch and the `SessionRestoreCoordinator` menu-restore flow — both funnel through the composition root's single apply helper.
 > **Invariant #25** — `engine:save` and `engine:load` are validated `EngineAction` types — only the designated host player may dispatch them.
 
+### The autosave slot
+
+Every game has one reserved slot the engine rewrites on each autosave. It is a contract, not a convention: `simulation/foundation/save-slots.ts` is the only production module that spells it, and `tools/autosave-slot-spelling.test.ts` fails on any other production spelling.
+
+```typescript
+export const AUTOSAVE_SLOT_NAME = 'autosave'; // the BARE name a SaveFile header carries
+export function autosaveSlotId(gameId: string): string; // the QUALIFIED repository id
+```
+
+Both halves exist because the slot is written under one spelling and read under the other: `SessionRuntime.captureSaveFile` and `SaveManager.autoSave` stamp the bare name into `SaveFile.header.slotId`, while the repository — and therefore `SaveSlotMeta.slotId` and the renderer's `selectHasAutosave(gameId)` — keys on `'<gameId>/autosave'`.
+
 ---
 
 ## SaveMigrator — Chain of Responsibility
@@ -170,12 +181,15 @@ registering migrations by hand. The shipped chain:
      checkpoint + pendingCommitments + stagedReveals, and records the live
      session manifest (matchId, maxPlayers, per-seat control kinds)
   2. SaveManager.save(file) → SaveRepository.save(file)   ← atomic .tmp rename
-  3. Push refreshed SaveSlotMeta[] → renderer (chimera:saves:slot-update)
+  3. SaveManager.onSlotsChanged(gameId) → re-list → push refreshed
+     SaveSlotMeta[] → renderer (chimera:saves:slot-update)
 
 ─── AUTO-SAVE ─────────────────────────────────────────────────────────────
 [HostSessionPipeline: engine:end_turn accepted]
   → fire-and-forget savePort.autoSave(gameId, snapshot)
-  → SaveManager.autoSave forces slotId = 'autosave'
+  → SaveManager.autoSave forces slotId = AUTOSAVE_SLOT_NAME
+  → SaveManager.onSlotsChanged(gameId) → the same push, so an autosave no
+    renderer asked for is still observable (one push per save, no debounce)
 
 ─── LOAD (in-session, same match) ─────────────────────────────────────────
 [Renderer] window.__chimera.saves.load('<game>/slot-1')

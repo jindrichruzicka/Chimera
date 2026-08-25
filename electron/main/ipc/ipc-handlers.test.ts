@@ -1169,7 +1169,12 @@ describe('registerSavesHandlers', () => {
             expect(fake.listCalls).toEqual(['sample-game']);
         });
 
-        it('save delegates to port, then broadcasts slot-update with refreshed list', async () => {
+        it('save delegates to port and broadcasts nothing — writes push from the SaveManager seam', async () => {
+            // The write already pushed: `saves.save` goes through `SaveManager`,
+            // whose `onSlotsChanged` refreshed and sent the list. Broadcasting
+            // again here would send the same list twice, and re-listing would
+            // cost a second repository round-trip for it. An autosave, which
+            // reaches no handler at all, is why the seam has to be the owner.
             const stub = makeSavesIpcMainStub();
             const fake = makeFakePort();
             const broadcasts: { gameId: string; slots: SaveSlotMeta[] }[] = [];
@@ -1182,20 +1187,18 @@ describe('registerSavesHandlers', () => {
                 },
             });
 
-            // Simulate that after the save completes, the port returns a
-            // longer slot list when re-queried (refreshed view).
+            // A refreshed view is available to be re-queried; the point is that
+            // the handler does not go and ask for it.
             fake.slotsByGameId.set('sample-game', [sampleMeta, refreshedMeta]);
 
-            const request: SaveRequest = { gameId: 'sample-game', label: 'autosave' };
+            const request: SaveRequest = { gameId: 'sample-game', label: 'manual' };
             const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
             const result = await Promise.resolve(handler?.({}, request));
 
             expect(result).toEqual(sampleMeta);
             expect(fake.saveCalls).toEqual([request]);
-            expect(fake.listCalls).toEqual(['sample-game']);
-            expect(broadcasts).toEqual([
-                { gameId: 'sample-game', slots: [sampleMeta, refreshedMeta] },
-            ]);
+            expect(fake.listCalls).toEqual([]);
+            expect(broadcasts).toEqual([]);
         });
 
         it('save records last saved slot and tick on the E2E hooks after a successful save', async () => {
@@ -1323,50 +1326,6 @@ describe('registerSavesHandlers', () => {
             );
             expect(fake.deleteCalls).toEqual([]);
             expect(fake.listCalls).toEqual([]);
-        });
-
-        it('does not broadcast on save when broadcastSlotsChanged is absent', async () => {
-            const stub = makeSavesIpcMainStub();
-            const fake = makeFakePort();
-            registerSavesHandlers({
-                ipcMain: stub.ipcMain,
-                saves: fake.port,
-                cancelRestore: noopCancelRestore,
-            });
-
-            const request: SaveRequest = { gameId: 'sample-game' };
-            const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
-            await Promise.resolve(handler?.({}, request));
-
-            // The port still receives the save call, but no slot list refresh
-            // is performed when there is no broadcast subscriber to inform.
-            expect(fake.saveCalls).toEqual([request]);
-            expect(fake.listCalls).toEqual([]);
-        });
-
-        it('save resolves with meta even when post-save list() throws', async () => {
-            const stub = makeSavesIpcMainStub();
-            const fake = makeFakePort({
-                list: () => Promise.reject(new Error('list failure')),
-            });
-            const broadcasts: unknown[] = [];
-            registerSavesHandlers({
-                ipcMain: stub.ipcMain,
-                saves: fake.port,
-                cancelRestore: noopCancelRestore,
-                broadcastSlotsChanged: (_, slots) => {
-                    broadcasts.push(slots);
-                },
-            });
-
-            const request: SaveRequest = { gameId: 'sample-game' };
-            const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
-            const result = await Promise.resolve(handler?.({}, request));
-
-            // Handler resolves with the saved meta — the failed list/broadcast
-            // must not surface as a rejection to the renderer.
-            expect(result).toEqual(sampleMeta);
-            expect(broadcasts).toEqual([]);
         });
 
         it('delete resolves even when post-delete list() throws', async () => {

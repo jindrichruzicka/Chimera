@@ -14,7 +14,7 @@
  *  - `applySaveSlots` is called by bootstrap/IPC wiring; do NOT call from components.
  *  - Holds only `SaveSlotMeta` (metadata). Never holds `GameSnapshot` or
  *    `SaveFile` content (Invariant #1).
- *  - Must NOT import from: electron/main/, simulation/, networking/.
+ *  - Import boundaries: `renderer/CLAUDE.md`.
  */
 
 import { createStore, useStore } from 'zustand';
@@ -23,6 +23,7 @@ import type {
     RestoreStatusEvent,
     SaveSlotMeta,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import { autosaveSlotId } from '@chimera-engine/simulation/foundation/save-slots.js';
 
 // ── Store shape ───────────────────────────────────────────────────────────────
 
@@ -190,3 +191,40 @@ export function useSaveStore<TSelected>(selector: (state: SaveStoreState) => TSe
 useSaveStore.getState = saveStoreInstance.getState.bind(saveStoreInstance);
 useSaveStore.setState = saveStoreInstance.setState.bind(saveStoreInstance);
 useSaveStore.subscribe = saveStoreInstance.subscribe.bind(saveStoreInstance);
+
+// ── Selectors ─────────────────────────────────────────────────────────────────
+
+/**
+ * Selector factory: whether `gameId` currently has an autosave slot.
+ *
+ * Matches on the FULLY-QUALIFIED slot id, which is what `SaveSlotMeta.slotId`
+ * carries — so a manual slot merely ending in the autosave name, and another
+ * game's autosave, both read as absent.
+ *
+ * A pure read of the current list, deliberately without a latch: the main
+ * process pushes a replacement list on `chimera:saves:slot-update` after every
+ * write, so deleting the autosave has to bring this back to `false`.
+ *
+ * ```typescript
+ * const hasAutosave = useSaveStore(selectHasAutosave(gameId));
+ * ```
+ */
+export function selectHasAutosave(gameId: string): (state: SaveStoreState) => boolean {
+    const slotId = autosaveSlotId(gameId);
+    return (state) => state.slots.some((slot) => slot.slotId === slotId);
+}
+
+/**
+ * Reactive twin of {@link selectHasAutosave} over the singleton store: `true`
+ * while `gameId` has an autosave to continue from.
+ *
+ * A component reading this needs no probe of its own: it re-renders when the
+ * slot list changes underneath it, on whatever terms `SaveStoreBootstrap`
+ * hydrates and subscribes on.
+ *
+ * The selector is rebuilt per call, which `useStore` tolerates because the
+ * selected value is a boolean and compares equal across renders.
+ */
+export function useHasAutosave(gameId: string): boolean {
+    return useSaveStore(selectHasAutosave(gameId));
+}

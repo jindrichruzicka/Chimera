@@ -793,9 +793,19 @@ export interface RegisterSavesHandlersOptions {
     readonly saves: SavesIpcPort;
     /**
      * Push `chimera:saves:slot-update` to all renderer windows after a
-     * successful `save` or `delete`. The handler computes the refreshed
-     * slot list (via `saves.list`) before invoking this callback. When
-     * absent, no broadcast — and no extra list call — is performed.
+     * successful `delete`. The handler computes the refreshed slot list (via
+     * `saves.list`) before invoking this callback. When absent, no broadcast —
+     * and no extra list call — is performed.
+     *
+     * Deliberately NOT invoked after `save`. A save writes through
+     * `SaveManager`, whose `onSlotsChanged` seam the composition root wires to
+     * this same push — an autosave reaches no handler at all, so both kinds of
+     * save push from there. Broadcasting here as well would send the same list
+     * twice for one manual save; the count is pinned by
+     * `electron/main/__tests__/saves-slot-update-push.integration.test.ts`.
+     * `delete` stays
+     * here because it is reached only through this round-trip, and its
+     * qualified `slotId` carries no gameId the manager is entitled to parse.
      */
     readonly broadcastSlotsChanged?: (gameId: string, slots: SaveSlotMeta[]) => void;
     /**
@@ -862,9 +872,10 @@ export function toRestoreStatusEvent(
  * Register every `chimera:saves:*` main-side channel.
  *
  * Requests are delegated to `options.saves` and — after every successful
- * `save` / `delete` — `broadcastSlotsChanged` is invoked with the refreshed
- * slot list so the renderer's `chimera:saves:slot-update` push channel can
- * be fired by the wiring code.
+ * `delete` — `broadcastSlotsChanged` is invoked with the refreshed slot list
+ * so the renderer's `chimera:saves:slot-update` push channel can be fired by
+ * the wiring code. A `save` pushes from `SaveManager.onSlotsChanged` instead;
+ * see {@link RegisterSavesHandlersOptions.broadcastSlotsChanged}.
  *
  * `chimera:saves:slot-update` and `chimera:saves:restore-status` are
  * intentionally absent from this registration: they are one-way pushes from
@@ -913,17 +924,9 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
             e2eHooks.lastSavedSlotId = meta.slotId;
             e2eHooks.lastSavedTick = meta.tick;
         }
-        if (broadcastSlotsChanged !== undefined) {
-            try {
-                const refreshed = await saves.list(validated.gameId);
-                broadcastSlotsChanged(validated.gameId, refreshed);
-            } catch (err) {
-                logger.warn('saves:save — post-save list/broadcast failed; save was persisted', {
-                    gameId: validated.gameId,
-                    error: err,
-                });
-            }
-        }
+        // No broadcast here: `saves.save` writes through `SaveManager`, whose
+        // `onSlotsChanged` seam already refreshed and pushed the list. See
+        // `broadcastSlotsChanged` above.
         return meta;
     });
 

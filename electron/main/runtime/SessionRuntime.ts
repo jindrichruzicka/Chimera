@@ -40,6 +40,7 @@ import {
     type SaveFile,
     type SaveSessionManifest,
 } from '@chimera-engine/simulation/persistence/index.js';
+import { AUTOSAVE_SLOT_NAME } from '@chimera-engine/simulation/foundation/save-slots.js';
 import { DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY } from '@chimera-engine/simulation/scene/SceneRegistry.js';
 import { isTransitionTimedOut } from '@chimera-engine/simulation/scene/index.js';
 import {
@@ -639,15 +640,15 @@ export class SessionRuntime {
      * persistence by `SaveManager.save()` / `SaveManager.autoSave()`.
      *
      * The header's `slotId` honours `request.slotId` (defaulting to
-     * `'autosave'` when absent so autosave round-trips through this
-     * function before reaching `SaveManager.autoSave`).  `playerNames`
+     * {@link AUTOSAVE_SLOT_NAME} when absent so autosave round-trips through
+     * this function before reaching `SaveManager.autoSave`).  `playerNames`
      * is derived from `snapshot.players` keys; once a real
      * `PlayerDirectory` is wired into the session the host can swap in
      * actual display names.
      */
     captureSaveFile(request: SaveRequest, snapshotOverride?: BaseGameSnapshot): SaveFile {
         const snapshot = snapshotOverride ?? this.snapshot;
-        const slotId = request.slotId ?? 'autosave';
+        const slotId = request.slotId ?? AUTOSAVE_SLOT_NAME;
         const playerNames = Object.keys(snapshot.players);
         return {
             header: {

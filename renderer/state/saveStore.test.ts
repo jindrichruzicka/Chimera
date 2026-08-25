@@ -12,8 +12,10 @@
  * only SaveSlotMeta (metadata), never GameSnapshot or SaveFile content.
  */
 
+import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createSaveStore, useSaveStore } from './saveStore';
+import { autosaveSlotId } from '@chimera-engine/simulation/foundation/save-slots.js';
+import { createSaveStore, selectHasAutosave, useHasAutosave, useSaveStore } from './saveStore';
 import { playerId, toSlotId } from '@chimera-engine/simulation/bridge/api-types.js';
 import type {
     RestoreStatusEvent,
@@ -298,5 +300,98 @@ describe('useSaveStore singleton', () => {
         useSaveStore.getState().applyRestoreStatus(event);
         expect(useSaveStore.getState().restore).toEqual(event);
         expect(useSaveStore.getState().restoreExpectedSeats).toBe(2);
+    });
+});
+
+// ── selectHasAutosave / useHasAutosave ────────────────────────────────────────
+
+describe('selectHasAutosave', () => {
+    it('is false while the slot list is empty', () => {
+        const store = createSaveStore();
+        expect(selectHasAutosave('tactics')(store.getState())).toBe(false);
+    });
+
+    it("is true when the game's autosave slot is listed", () => {
+        const store = createSaveStore();
+        store.getState().applySaveSlots([makeSlot(autosaveSlotId('tactics'))]);
+        expect(selectHasAutosave('tactics')(store.getState())).toBe(true);
+    });
+
+    it('is false when the game has manual slots but no autosave', () => {
+        const store = createSaveStore();
+        store.getState().applySaveSlots([makeSlot('tactics/slot-1'), makeSlot('tactics/slot-2')]);
+        expect(selectHasAutosave('tactics')(store.getState())).toBe(false);
+    });
+
+    it("is false when only another game's autosave is listed", () => {
+        // The gameId axis: the slot list a renderer holds is one game's, but a
+        // selector keyed on the bare slot name alone would answer `true` here.
+        const store = createSaveStore();
+        store.getState().applySaveSlots([makeSlot(autosaveSlotId('chess'), { gameId: 'chess' })]);
+        expect(selectHasAutosave('tactics')(store.getState())).toBe(false);
+    });
+
+    it('is false for a slot whose name merely ends in the autosave name', () => {
+        // `'tactics/pre-autosave'` ends with the bare slot name; only the
+        // qualified id is the autosave slot.
+        const store = createSaveStore();
+        store.getState().applySaveSlots([makeSlot('tactics/pre-autosave')]);
+        expect(selectHasAutosave('tactics')(store.getState())).toBe(false);
+    });
+
+    it('finds the autosave anywhere in the list, not just first', () => {
+        const store = createSaveStore();
+        store
+            .getState()
+            .applySaveSlots([makeSlot('tactics/slot-1'), makeSlot(autosaveSlotId('tactics'))]);
+        expect(selectHasAutosave('tactics')(store.getState())).toBe(true);
+    });
+
+    it('flips true then false as successive slot lists are applied', () => {
+        // What a slot-update push does to the store: replace the list. The
+        // selector is a pure read of the current one, so it must fall back to
+        // false when the autosave is deleted, not latch on the first sighting.
+        const store = createSaveStore();
+        store.getState().applySaveSlots([makeSlot(autosaveSlotId('tactics'))]);
+        expect(selectHasAutosave('tactics')(store.getState())).toBe(true);
+
+        store.getState().applySaveSlots([makeSlot('tactics/slot-1')]);
+        expect(selectHasAutosave('tactics')(store.getState())).toBe(false);
+    });
+});
+
+describe('useHasAutosave', () => {
+    it('re-renders with true when an autosave lands in the singleton store', () => {
+        useSaveStore.getState().applySaveSlots([]);
+
+        const { result } = renderHook(() => useHasAutosave('tactics'));
+        expect(result.current).toBe(false);
+
+        act(() => {
+            useSaveStore.getState().applySaveSlots([makeSlot(autosaveSlotId('tactics'))]);
+        });
+
+        expect(result.current).toBe(true);
+    });
+
+    it('re-renders with false when the autosave leaves the slot list', () => {
+        useSaveStore.getState().applySaveSlots([makeSlot(autosaveSlotId('tactics'))]);
+
+        const { result } = renderHook(() => useHasAutosave('tactics'));
+        expect(result.current).toBe(true);
+
+        act(() => {
+            useSaveStore.getState().applySaveSlots([]);
+        });
+
+        expect(result.current).toBe(false);
+    });
+
+    it('tracks the gameId it was given', () => {
+        useSaveStore.getState().applySaveSlots([makeSlot(autosaveSlotId('tactics'))]);
+
+        const { result } = renderHook(() => useHasAutosave('chess'));
+
+        expect(result.current).toBe(false);
     });
 });
