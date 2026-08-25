@@ -28,8 +28,8 @@ export interface LobbyUiStoreState {
 
     /**
      * Renderer-only intent: the local player is leaving the active match for the
-     * main menu (client leave path). Routing consumes and resets this flag after
-     * navigating; it is independent of the IPC-mirrored lobby state.
+     * main menu. Routing consumes and resets this flag after navigating; it is
+     * independent of the IPC-mirrored lobby state.
      */
     readonly leavingToMainMenu: boolean;
 
@@ -42,7 +42,7 @@ export interface LobbyUiStoreState {
     /** Set the authoritative session role, hydrated from the main process. */
     setLocalRole(role: 'player' | 'spectator'): void;
 
-    /** Set the leaving-to-main-menu intent flag (set on client leave, reset by routing). */
+    /** Set the leaving-to-main-menu intent flag (reset by routing once consumed). */
     setLeavingToMainMenu(leaving: boolean): void;
 }
 

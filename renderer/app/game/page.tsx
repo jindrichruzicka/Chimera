@@ -126,12 +126,12 @@ export default function GamePage(): React.ReactElement | null {
         [currentTick, isSpectator, sendActionToHost, snapshot],
     );
 
-    // Client leave-to-main-menu. useLeaveGame() sets this flag before the
-    // disconnect lands; routing owns the navigation + stale-snapshot reset. Latch
-    // the in-flight leave in a ref so the direct-boot effect below cannot hijack
-    // it to /lobby once the disconnect nulls both snapshot and lobbyState
+    // Leave-to-main-menu. useLeaveGame() raises this flag; routing owns the
+    // navigation + stale-snapshot reset. Latch the in-flight leave in a ref so
+    // the direct-boot effect below cannot hijack it to /lobby once a disconnect
+    // nulls both snapshot and lobbyState
     // (lobbyStoreBootstrap applies lobbyState=null on 'disconnected'). The flag is
-    // consumed (reset to false) right after navigating.
+    // consumed (reset to false) as the hop starts, before the fade.
     useEffect(() => {
         if (leavingToMainMenu && !leavingRef.current) {
             leavingRef.current = true;

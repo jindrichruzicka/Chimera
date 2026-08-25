@@ -219,6 +219,19 @@ export interface QuickStartParams extends QuickStartConfig {
     readonly gameId: string;
 }
 
+/**
+ * Parameters for `chimera:lobby:close-session` — the one decision an atomic
+ * session exit takes: whether to write the game's autosave before the session
+ * is torn down.
+ *
+ * Deliberately NOT the `gameplay.autoSave` user setting. That toggle governs
+ * turn-interval autosaves during play; reading it here would make a player who
+ * turned it off lose the match on the way out, silently.
+ */
+export interface CloseSessionParams {
+    readonly autosave: boolean;
+}
+
 /** Parameters for joining an existing lobby session. */
 export interface JoinLobbyParams {
     readonly address: string;
@@ -1019,6 +1032,19 @@ export interface LobbyAPI {
      * rejected quick start never leaves a session behind.
      */
     quickStart(params: QuickStartParams): Promise<LobbyInfo>;
+    /**
+     * Host-only: end the session in ONE call — capture the autosave when
+     * `autosave` is set, then tear the session down. Atomic by contract: a
+     * game-side "save, then leave" pair would race, because a leave that landed
+     * first leaves the capture with no session to read.
+     *
+     * Rejects whenever no hosted session is active — a joined (non-host)
+     * session included, which leaves through {@link leave} as before. The
+     * sibling host exit is {@link returnToLobby}: it keeps the session alive and
+     * rewinds it to the lobby phase, so a lobby-born match still has a lobby to
+     * go back to.
+     */
+    closeSession(params: CloseSessionParams): Promise<void>;
     /** Requests that the current host start the game for the active lobby. */
     startGame(): Promise<void>;
     /**

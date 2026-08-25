@@ -13,6 +13,7 @@ import {
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
+    LOBBY_CLOSE_SESSION_CHANNEL,
     LOBBY_QUICK_START_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     LOBBY_PLAYER_CONNECTION_CHANNEL,
@@ -184,6 +185,49 @@ describe('createLobbyApi', () => {
 
             await expect(api.quickStart({ gameId: 'sample-game' })).rejects.toThrow(
                 'a session is already active',
+            );
+        });
+    });
+
+    describe('closeSession()', () => {
+        it('invokes chimera:lobby:close-session with the autosave decision and resolves to void', async () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+
+            const result = await api.closeSession({ autosave: true });
+
+            expect(stub.invocations).toEqual([
+                { channel: LOBBY_CLOSE_SESSION_CHANNEL, arg: { autosave: true } },
+            ]);
+            expect(result).toBeUndefined();
+        });
+
+        it('carries autosave: false through unchanged — the discard arm is a decision too', async () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+
+            await api.closeSession({ autosave: false });
+
+            expect(stub.invocations).toEqual([
+                { channel: LOBBY_CLOSE_SESSION_CHANNEL, arg: { autosave: false } },
+            ]);
+        });
+
+        it('rejects when the main-process handler rejects', async () => {
+            const stub = makeIpcStub();
+            const port: LobbyApiIpcPort = {
+                ...stub.port,
+                invoke: (channel) => {
+                    if (channel === LOBBY_CLOSE_SESSION_CHANNEL) {
+                        return Promise.reject(new Error('no hosted session is active'));
+                    }
+                    return stub.port.invoke(channel);
+                },
+            };
+            const api = createLobbyApi(port);
+
+            await expect(api.closeSession({ autosave: true })).rejects.toThrow(
+                'no hosted session is active',
             );
         });
     });

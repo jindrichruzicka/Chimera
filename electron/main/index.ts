@@ -60,6 +60,7 @@ import { FileProfileRepository } from './profile/FileProfileRepository.js';
 import { FileSessionTicketStore } from './session/FileSessionTicketStore.js';
 import { createSnapshotTicketRecorder } from './session/snapshot-ticket-recorder.js';
 import type {
+    CloseSessionParams,
     PlayerLeftMatchEvent,
     ReplayNavigateKind,
     ReplayNavigatePayload,
@@ -3542,6 +3543,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         lobbyManager,
         profileManager,
         quickStart: (params) => quickStartCoordinator.quickStart(params),
+        closeSession: (params) => closeActiveSession(params),
         logger: logger.child({ module: 'lobby' }),
     });
 
@@ -3873,6 +3875,43 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             resolvedE2eHooks.lastSavedSlotId = autosaveSlotId(file.header.gameId);
             resolvedE2eHooks.lastSavedTick = file.checkpoint.tick;
         }
+    }
+
+    /**
+     * The `chimera:lobby:close-session` port: end the session in one call.
+     *
+     * Composes the SAME two steps the crash path above composes —
+     * `captureSaveFile` then `saveManager.autoSave` — and adds the teardown.
+     * There is no second save reader or writer here, and no `engine:save`
+     * dispatch: the capture stays an out-of-band host call (Invariant #25).
+     *
+     * Atomic because it is one call. A game-side "save, then leave" pair would
+     * race: a leave that landed first leaves the capture with no session to
+     * read. The capture is also the first thing this call does, with no `await`
+     * ahead of it, so no action can be applied between the request arriving and
+     * the snapshot being read.
+     *
+     * `activeSession !== null` IS the host gate — the reference is set only
+     * inside `onSessionHosted`, so a joined client reaches this with null and
+     * is refused; it leaves through `chimera:lobby:leave` as before. The
+     * teardown itself is `closeLobby()`, the same public verb the leave path
+     * uses: it runs the hosted teardown that nulls `activeSession` and fires
+     * `noteSessionClosed` (Invariant #108 — the restore funnel is untouched;
+     * this verb is exit-side only).
+     */
+    async function closeActiveSession(params: CloseSessionParams): Promise<void> {
+        const sessionRuntime = activeSession;
+        if (sessionRuntime === null) {
+            throw new Error(
+                'lobby:close-session: no hosted session is active — ' +
+                    'a joined client leaves through chimera:lobby:leave.',
+            );
+        }
+        if (params.autosave) {
+            const file = sessionRuntime.captureSaveFile({ gameId: sessionRuntime.gameId });
+            await saveManager.autoSave(file);
+        }
+        await lobbyManager.closeLobby();
     }
 
     // Register the `chimera:settings:*` channels backed by SettingsManager.

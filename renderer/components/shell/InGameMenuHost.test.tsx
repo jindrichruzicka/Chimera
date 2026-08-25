@@ -22,6 +22,12 @@ import { I18nProvider } from '../../i18n/I18nProvider.js';
 import type { InputActionId, InputEvent } from '../../input/InputAction.js';
 import type { InputManager } from '../../input/InputManager.js';
 import { InputManagerContext } from '../../input/InputManagerContext.js';
+import {
+    SESSION_MODE_QUICK,
+    SESSION_MODE_SETTING,
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
+import { useGameStore } from '../../state/gameStore.js';
 import { useLobbyStore } from '../../state/lobbyStore.js';
 import { useLobbyUiStore } from '../../state/lobbyUiStore.js';
 import { EscapeStackProvider, useEscapeLayer } from './EscapeStack.js';
@@ -123,6 +129,7 @@ describe('InGameMenuHost', () => {
         manager.stop();
         cleanup();
         vi.restoreAllMocks();
+        useGameStore.getState().reset();
         useLobbyStore.getState().applyLobbyState(null);
         useLobbyUiStore.getState().clearLocalLobbyContext();
         useLobbyUiStore.getState().setLeavingToMainMenu(false);
@@ -227,7 +234,10 @@ describe('InGameMenuHost', () => {
     it('routes a host leave through returnToLobby() via useLeaveGame', async () => {
         const leave = vi.fn(async () => undefined);
         const returnToLobby = vi.fn(async () => undefined);
-        (globalThis as { __chimera?: unknown }).__chimera = { lobby: { leave, returnToLobby } };
+        const closeSession = vi.fn(async () => undefined);
+        (globalThis as { __chimera?: unknown }).__chimera = {
+            lobby: { leave, returnToLobby, closeSession },
+        };
         useLobbyStore.getState().applyLobbyState(makeLobbyState('host'));
         useLobbyUiStore.getState().setLocalLobbyContext(playerId('host'), [playerId('host')]);
 
@@ -243,7 +253,10 @@ describe('InGameMenuHost', () => {
     it('routes a client leave through leave() and flags leaving-to-main-menu', async () => {
         const leave = vi.fn(async () => undefined);
         const returnToLobby = vi.fn(async () => undefined);
-        (globalThis as { __chimera?: unknown }).__chimera = { lobby: { leave, returnToLobby } };
+        const closeSession = vi.fn(async () => undefined);
+        (globalThis as { __chimera?: unknown }).__chimera = {
+            lobby: { leave, returnToLobby, closeSession },
+        };
         useLobbyStore.getState().applyLobbyState(makeLobbyState('host'));
         useLobbyUiStore.getState().setLocalLobbyContext(playerId('client'), [playerId('client')]);
 
@@ -257,6 +270,51 @@ describe('InGameMenuHost', () => {
         expect(useLobbyUiStore.getState().leavingToMainMenu).toBe(true);
     });
 
+    it("carries a game menu's autosave decision through to the close-session verb", async () => {
+        // The autosave-on-exit choice is a parameter of the GAME's leave call —
+        // a menu that offers "abandon" needs a way to say so, and the host is
+        // the only thing between the menu and the bridge.
+        const leave = vi.fn(async () => undefined);
+        const returnToLobby = vi.fn(async () => undefined);
+        const closeSession = vi.fn(async () => undefined);
+        (globalThis as { __chimera?: unknown }).__chimera = {
+            lobby: { leave, returnToLobby, closeSession },
+        };
+        useLobbyStore.getState().applyLobbyState(makeLobbyState('host'));
+        useLobbyUiStore.getState().setLocalLobbyContext(playerId('host'), [playerId('host')]);
+        useGameStore.getState().applySnapshot({
+            tick: 2,
+            phase: 'playing',
+            viewerId: 'host',
+            players: {},
+            undoMeta: { canUndo: false, canRedo: false },
+            setup: {
+                matchSettings: { [SESSION_MODE_SETTING]: SESSION_MODE_QUICK },
+                playerAttributes: {},
+            },
+        } as unknown as PlayerSnapshot);
+        const AbandonMenu = ({ leaveGame }: InGameMenuProps): React.ReactElement => (
+            <button
+                type="button"
+                onClick={() => {
+                    leaveGame({ autosave: false });
+                }}
+            >
+                Abandon
+            </button>
+        );
+
+        renderHost(<InGameMenuHost isHost inGameMenu={AbandonMenu} />);
+        toggleMenu();
+
+        fireEvent.click(screen.getByRole('button', { name: /abandon/i }));
+
+        await waitFor(() =>
+            expect(closeSession).toHaveBeenCalledExactlyOnceWith({ autosave: false }),
+        );
+        expect(returnToLobby).not.toHaveBeenCalled();
+    });
+
     it('uses the injected leaveGame override instead of the live-match leave', async () => {
         // A non-live-match surface (the replay player) injects its own leave. Even
         // with lobby state that would otherwise route to returnToLobby, the override
@@ -264,7 +322,10 @@ describe('InGameMenuHost', () => {
         const override = vi.fn(async () => undefined);
         const leave = vi.fn(async () => undefined);
         const returnToLobby = vi.fn(async () => undefined);
-        (globalThis as { __chimera?: unknown }).__chimera = { lobby: { leave, returnToLobby } };
+        const closeSession = vi.fn(async () => undefined);
+        (globalThis as { __chimera?: unknown }).__chimera = {
+            lobby: { leave, returnToLobby, closeSession },
+        };
         useLobbyStore.getState().applyLobbyState(makeLobbyState('host'));
         useLobbyUiStore.getState().setLocalLobbyContext(playerId('host'), [playerId('host')]);
 

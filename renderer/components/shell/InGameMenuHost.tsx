@@ -5,6 +5,7 @@ import type { PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import type {
     GameScreenComponent,
     InGameMenuProps,
+    LeaveGameOptions,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { useLeaveGame, type LeaveGame } from '../../bridge/useLeaveGame.js';
 import { IN_GAME_MENU_KEYS } from '../../i18n/engine-keys.js';
@@ -26,10 +27,9 @@ export interface InGameMenuHostProps {
     readonly localPlayerId?: PlayerId;
     /**
      * Overrides the leave action. Defaults to the role-aware live-match
-     * {@link useLeaveGame} (host → returnToLobby; client → disconnect). A surface
-     * that is not a live match — the replay player — injects its own context-aware
-     * leave (e.g. back to the lobby for a post-game replay, or the replay library
-     * for a library-opened one), since the live-match IPC leave does not apply.
+     * {@link useLeaveGame}. A surface that is not a live match — the replay
+     * player — injects its own context-aware leave (see its `handleLeaveReplay`),
+     * since the live-match IPC leave does not apply.
      */
     readonly leaveGame?: LeaveGame;
 }
@@ -83,9 +83,14 @@ export function InGameMenuHost({
     // transient overlay registered above it wins the Escape.
     useEscapeLayer(closeMenu, open && enabled);
 
-    const handleLeave = useCallback(() => {
-        void leaveGame();
-    }, [leaveGame]);
+    // Pass the menu's own options through: the autosave-on-exit decision is the
+    // game's to make, and this host is what carries it to the bridge.
+    const handleLeave = useCallback(
+        (options?: LeaveGameOptions) => {
+            void leaveGame(options);
+        },
+        [leaveGame],
+    );
 
     if (!enabled || !open) {
         return null;

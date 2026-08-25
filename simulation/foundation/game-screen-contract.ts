@@ -15,6 +15,24 @@ export interface GameResultBannerProps {
 }
 
 /**
+ * Options a game's in-game menu may pass to {@link InGameMenuProps.leaveGame}.
+ */
+export interface LeaveGameOptions {
+    /**
+     * Lobby-less (quick-started) sessions only: write the game's autosave
+     * before the session is torn down. Defaults to `true`, so the ordinary
+     * "leave" keeps the match and a menu must ASK to discard it.
+     *
+     * Deliberately not the `gameplay.autoSave` user setting — that toggle
+     * governs turn-interval autosaves during play, so reading it here would
+     * silently lose the match for a player who turned it off. Ignored when the
+     * session survives the leave (a lobby-born match returns to its lobby; a
+     * client disconnects from a session the host still holds).
+     */
+    readonly autosave?: boolean;
+}
+
+/**
  * Engine capabilities handed to a game's in-game menu component (§4.33–§4.34).
  * The menu is the Escape-toggled overlay shown during an in-progress match; the
  * engine supplies these callbacks so the game's menu can resume play or leave
@@ -25,11 +43,13 @@ export interface InGameMenuProps {
     /** Close the menu and return to the match (Resume). */
     readonly closeMenu: () => void;
     /**
-     * Leave the in-progress match. Role-aware in the engine: a host abandons the
-     * match and returns everyone to the lobby; a client disconnects to the main
-     * menu. The menu component need only invoke it.
+     * Leave the in-progress match. Role-aware in the engine: a host returns
+     * everyone to the lobby the match was started from, or — for a lobby-less
+     * quick-started session — ends the session and returns to the main menu; a
+     * client disconnects to the main menu. The menu component need only invoke
+     * it; {@link LeaveGameOptions} is for a menu that wants to say how.
      */
-    readonly leaveGame: () => void;
+    readonly leaveGame: (options?: LeaveGameOptions) => void;
     /** Whether the local player hosted this match (host vs. client copy/behaviour). */
     readonly isHost: boolean;
     /** The local player's id, or `undefined` for a purely local game with no lobby. */

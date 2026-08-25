@@ -28,6 +28,7 @@ import {
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
+    LOBBY_CLOSE_SESSION_CHANNEL,
     LOBBY_QUICK_START_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_CANCEL_RESTORE_CHANNEL,
@@ -133,6 +134,7 @@ import type {
     DeviceInfo,
     EngineAction,
     HostLobbyParams,
+    CloseSessionParams,
     QuickStartParams,
     JoinLobbyParams,
     PerspectiveReplayListItem,
@@ -544,6 +546,11 @@ function makeQuickStartStub(): (params: QuickStartParams) => Promise<LobbyInfo> 
     return vi.fn(() => Promise.resolve(QUICK_START_INFO));
 }
 
+/** Close-session port double: the handler's other injected collaborator. */
+function makeCloseSessionStub(): (params: CloseSessionParams) => Promise<void> {
+    return vi.fn(() => Promise.resolve());
+}
+
 describe('registerLobbyHandlers', () => {
     it('registers chimera:lobby:host as an invoke handler that calls lobbyManager.hostLobby', async () => {
         const stub = makeLobbyIpcMainStub();
@@ -553,6 +560,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
@@ -580,6 +588,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
@@ -615,6 +624,7 @@ describe('registerLobbyHandlers', () => {
             lobbyManager,
             profileManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
@@ -637,6 +647,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_LEAVE_CHANNEL);
@@ -653,6 +664,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_START_GAME_CHANNEL);
@@ -672,6 +684,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL);
@@ -688,6 +701,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_GET_LOCAL_ROLE_CHANNEL);
@@ -708,6 +722,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_GET_CURRENT_STATE_CHANNEL);
@@ -724,6 +739,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_UPDATE_READY_STATE_CHANNEL);
@@ -740,6 +756,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_UPDATE_READY_STATE_CHANNEL);
@@ -756,6 +773,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
@@ -772,6 +790,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
@@ -791,6 +810,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL);
@@ -807,6 +827,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL);
@@ -828,6 +849,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_ADD_AI_CHANNEL);
@@ -845,6 +867,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_REMOVE_AI_CHANNEL);
@@ -862,6 +885,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart,
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_QUICK_START_CHANNEL);
@@ -885,6 +909,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart,
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_QUICK_START_CHANNEL);
@@ -895,6 +920,87 @@ describe('registerLobbyHandlers', () => {
         expect(quickStart).not.toHaveBeenCalled();
     });
 
+    it('registers chimera:lobby:close-session as an invoke handler that calls the close port', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const closeSession = makeCloseSessionStub();
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+            closeSession,
+        });
+
+        const handler = stub.handled.get(LOBBY_CLOSE_SESSION_CHANNEL);
+        expect(handler).toBeDefined();
+
+        await Promise.resolve(handler?.({}, { autosave: true }));
+        expect(closeSession).toHaveBeenCalledExactlyOnceWith({ autosave: true });
+    });
+
+    it('carries a false autosave decision through to the close port unchanged', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const closeSession = makeCloseSessionStub();
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+            closeSession,
+        });
+
+        await Promise.resolve(
+            stub.handled.get(LOBBY_CLOSE_SESSION_CHANNEL)?.({}, { autosave: false }),
+        );
+
+        expect(closeSession).toHaveBeenCalledExactlyOnceWith({ autosave: false });
+    });
+
+    it('rejects invalid close-session payloads with IpcRequestValidationError', () => {
+        const stub = makeLobbyIpcMainStub();
+        const closeSession = makeCloseSessionStub();
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+            closeSession,
+        });
+
+        const handler = stub.handled.get(LOBBY_CLOSE_SESSION_CHANNEL);
+        expect(handler).toBeDefined();
+
+        // No decision at all, a truthy-but-unparsed string, and an extra field.
+        expect(() => handler?.({}, {})).toThrow(IpcRequestValidationError);
+        expect(() => handler?.({}, { autosave: 'true' })).toThrow(IpcRequestValidationError);
+        expect(() => handler?.({}, { autosave: true, slotId: 's' })).toThrow(
+            IpcRequestValidationError,
+        );
+        expect(closeSession).not.toHaveBeenCalled();
+    });
+
+    it('closes the session through the injected port, never through lobbyManager.closeLobby', async () => {
+        // The verb is capture-THEN-teardown. Wiring it straight to
+        // `closeLobby` would tear down with no capture at all, and the
+        // handler would still "work" — so the port is the contract.
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const closeLobby = vi.spyOn(lobbyManager, 'closeLobby').mockResolvedValue(undefined);
+        const closeSession = makeCloseSessionStub();
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+            closeSession,
+        });
+
+        await Promise.resolve(
+            stub.handled.get(LOBBY_CLOSE_SESSION_CHANNEL)?.({}, { autosave: true }),
+        );
+
+        // Both halves: the port ran, and the shortcut did not. Without the
+        // first, an unregistered channel would satisfy the second for free.
+        expect(closeSession).toHaveBeenCalledOnce();
+        expect(closeLobby).not.toHaveBeenCalled();
+    });
+
     it('refuses a set-match-setting write to the engine-owned session-mode key', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
@@ -903,6 +1009,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
@@ -921,6 +1028,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_REMOVE_AI_CHANNEL);
@@ -938,6 +1046,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_RETURN_TO_LOBBY_CHANNEL);
@@ -966,6 +1075,7 @@ describe('registerLobbyHandlers', () => {
                 ipcMain: stub.ipcMain,
                 lobbyManager: makeLobbyManagerStub(),
                 quickStart: makeQuickStartStub(),
+                closeSession: makeCloseSessionStub(),
             });
 
             const handler = stub.handled.get(channel);
@@ -986,6 +1096,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager,
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         const handler = stub.handled.get(LOBBY_LEAVE_CHANNEL);
@@ -999,6 +1110,7 @@ describe('registerLobbyHandlers', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
 
         // `chimera:lobby:update` is a one-way push from main → renderer via
@@ -1020,6 +1132,7 @@ describe('registerLobbyHandlers', () => {
                 LOBBY_ADD_AI_CHANNEL,
                 LOBBY_REMOVE_AI_CHANNEL,
                 LOBBY_QUICK_START_CHANNEL,
+                LOBBY_CLOSE_SESSION_CHANNEL,
             ].sort(),
         );
         expect(stub.handled.has(LOBBY_UPDATE_CHANNEL)).toBe(false);
@@ -1823,6 +1936,7 @@ describe('inbound IPC request validation', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
         const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
 
@@ -1840,6 +1954,7 @@ describe('inbound IPC request validation', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
         const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
 
@@ -1962,6 +2077,7 @@ describe('inbound IPC request validation', () => {
             ipcMain: stub.ipcMain,
             lobbyManager: makeLobbyManagerStub(),
             quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
         });
         const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
 

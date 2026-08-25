@@ -17,6 +17,7 @@
 //   This mirrors the pattern used by `host` and `join` (§4.14).
 
 import type {
+    CloseSessionParams,
     HostLobbyParams,
     JoinLobbyParams,
     LobbyAPI,
@@ -109,6 +110,14 @@ export const LOBBY_REMOVE_AI_CHANNEL = 'chimera:lobby:remove-ai';
 export const LOBBY_QUICK_START_CHANNEL = 'chimera:lobby:quick-start';
 
 /**
+ * `ipcRenderer.invoke` target for {@link LobbyAPI.closeSession}. Host-only:
+ * captures the autosave (when asked) and tears the session down in one
+ * round-trip, so no renderer sequence can put a leave in front of a capture.
+ * The main-side handler rejects it when no hosted session is active.
+ */
+export const LOBBY_CLOSE_SESSION_CHANNEL = 'chimera:lobby:close-session';
+
+/**
  * `ipcRenderer.on` target for {@link LobbyAPI.onUpdate}. Main pushes the
  * full {@link LobbyState} via `webContents.send` whenever the roster,
  * readiness, or lobby metadata changes.
@@ -174,6 +183,8 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
                 .then((value) =>
                     parseInvokeResponse(LobbyInfoSchema, LOBBY_QUICK_START_CHANNEL, value),
                 ),
+        closeSession: (params: CloseSessionParams): Promise<void> =>
+            ipc.invoke(LOBBY_CLOSE_SESSION_CHANNEL, params).then(() => undefined),
         startGame: (): Promise<void> => ipc.invoke(LOBBY_START_GAME_CHANNEL).then(() => undefined),
         returnToLobby: (): Promise<void> =>
             ipc.invoke(LOBBY_RETURN_TO_LOBBY_CHANNEL).then(() => undefined),

@@ -37,9 +37,8 @@ export function ReplayNavigationBridge(): null {
             const target = `/replays/player/?path=${encodeURIComponent(path)}&kind=${encodeURIComponent(kind)}${saveableQuery}`;
             // Carry the active `?gameId=` from the current URL onto the player
             // route. The shell (incl. the main-menu override) resolves only from
-            // this param, and leaving the replay (saveable → returnToLobby via
-            // GameStoreBootstrap, or library → /replays) re-reads it from the URL —
-            // dropping it here lands the eventual menu on the engine default.
+            // this param, and every exit from the replay re-reads it from the
+            // URL — dropping it here lands the eventual menu on the engine default.
             const gameId = resolveShellGameId(new URLSearchParams(window.location.search));
             router.push(withShellGameId(target, gameId));
         });

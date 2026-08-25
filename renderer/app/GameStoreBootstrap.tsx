@@ -104,10 +104,10 @@ export function GameStoreBootstrap(): null {
     // /lobby. Invariant #1: only PlayerSnapshot.phase drives this decision.
     //
     // The replay player route is included alongside /game: a post-game replay is
-    // opened from the live match's summary while the session is still alive, so
-    // its Leave (host returnToLobby) also broadcasts a phase:'lobby' snapshot.
-    // Without this, the host's return-to-lobby fires the IPC but nothing
-    // navigates — the leave silently does nothing from the replay player.
+    // opened from the live match's summary while the session is still alive, so a
+    // phase:'lobby' snapshot can land there too. Without this, the IPC that
+    // produced it fires and nothing navigates — the leave silently does nothing
+    // from the replay player.
     useEffect(() => {
         const browserPath = currentBrowserPathname(pathname);
         if (

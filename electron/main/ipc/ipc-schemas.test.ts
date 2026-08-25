@@ -11,6 +11,7 @@ import {
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { MAX_SAVE_LABEL_LENGTH } from '../../preload/api-types.js';
 import {
+    CloseSessionParamsSchema,
     EngineActionSchema,
     GameIdSchema,
     HostLobbyParamsSchema,
@@ -507,6 +508,37 @@ describe('QuickStartParamsSchema', () => {
                 localSeats: seats(8),
                 aiSeats: seats(8),
             }).success,
+        ).toBe(false);
+    });
+});
+
+describe('CloseSessionParamsSchema', () => {
+    it('accepts an explicit autosave decision, either way', () => {
+        expect(CloseSessionParamsSchema.safeParse({ autosave: true })).toMatchObject({
+            success: true,
+            data: { autosave: true },
+        });
+        expect(CloseSessionParamsSchema.safeParse({ autosave: false })).toMatchObject({
+            success: true,
+            data: { autosave: false },
+        });
+    });
+
+    it('rejects an omitted autosave — the exit must not guess whether to write', () => {
+        expect(CloseSessionParamsSchema.safeParse({}).success).toBe(false);
+        expect(CloseSessionParamsSchema.safeParse(undefined).success).toBe(false);
+    });
+
+    it('rejects a non-boolean autosave, truthy strings included', () => {
+        expect(CloseSessionParamsSchema.safeParse({ autosave: 'true' }).success).toBe(false);
+        expect(CloseSessionParamsSchema.safeParse({ autosave: 1 }).success).toBe(false);
+        expect(CloseSessionParamsSchema.safeParse({ autosave: null }).success).toBe(false);
+    });
+
+    it('stays strict — an unknown key is rejected', () => {
+        expect(
+            CloseSessionParamsSchema.safeParse({ autosave: true, slotId: 'tactics/manual-1' })
+                .success,
         ).toBe(false);
     });
 });

@@ -48,6 +48,7 @@ import { useTranslate } from '../../../i18n/useTranslate';
 import { useReplayApi } from '../../../hooks/useReplayApi';
 import { resolveShellGameId, withShellGameId } from '../../../shell/resolveMainMenuGameId';
 import { useGameStore } from '../../../state/gameStore';
+import { useLobbyUiStore } from '../../../state/lobbyUiStore';
 import { useGameContent } from '../../../state/useGameContent';
 import { useUiStore } from '../../../state/uiStore';
 
@@ -126,20 +127,31 @@ function ReplayPlayerView(): React.ReactElement {
     const t = useTranslate();
     const replayApi = useReplayApi();
     const router = useRouter();
-    // The role-aware live-match leave (host → returnToLobby), used only for a
-    // post-game replay where the session is still alive — see `handleLeaveReplay`.
+    // The role-aware live-match leave, used only for a post-game replay where
+    // the session is still alive — see `handleLeaveReplay`.
     const liveLeave = useLeaveGame();
     // Latched by the leave below so the beat stops issuing curtain commands the
     // moment another owner takes the screen. A ref, not state: it is set inside
     // a callback and read when a command would fire, never rendered.
     const leavingRef = React.useRef(false);
     const fade = useOptionalFade();
+    // Kept in a ref so the leave effect below does not re-run on the per-frame
+    // opacity changes the control publishes while a fade is in flight.
+    const fadeRef = React.useRef(fade);
+    fadeRef.current = fade;
     // The LIVE match's phase, not the replay's. A host's Leave from a post-game
     // replay broadcasts a phase:'lobby' snapshot, and `GameStoreBootstrap`
     // answers it — on this route too — with its own fade-out and a navigation
     // chained to that fade's promise. It arrives unannounced, without anything
     // on this page being clicked, so the leave latch below cannot see it.
     const livePhase = useGameStore((state) => state.snapshot?.phase);
+    // The live session's leave-to-main-menu intent, raised by `useLeaveGame` on
+    // every exit that ENDS the session rather than rewinding it: a client's
+    // disconnect, and a quick-started host's `closeSession`. Neither broadcasts a
+    // phase:'lobby' snapshot, so the effect below is what answers it on this
+    // route; the lobby-born host's `returnToLobby()` does broadcast one and stays
+    // `GameStoreBootstrap`'s to answer.
+    const leavingToMainMenu = useLobbyUiStore((state) => state.leavingToMainMenu);
     // `useSearchParams` reflects the live router state, so the `?path=`/`?kind=`
     // query is read reactively: a client (soft) navigation can mount the player
     // before the URL is committed, and this re-renders once it settles rather
@@ -411,13 +423,40 @@ function ReplayPlayerView(): React.ReactElement {
         setPlaybackSpeed(speed);
     }, []);
 
+    // Consume that intent: fade out, drop the dead session's snapshot, and hop to
+    // the main menu carrying the shell's `?gameId=` so the menu resolves the
+    // game's own override. Mirrors the `/game` route's effect (see its own leave
+    // effect). The `leavingRef` write below is redundant on every path there is
+    // today — `handleLeaveReplay` sets it before the leave that raises the intent
+    // — and is kept only so the beat's latch does not depend on that ordering.
+    React.useEffect(() => {
+        if (!leavingToMainMenu) {
+            return;
+        }
+        leavingRef.current = true;
+        useLobbyUiStore.getState().setLeavingToMainMenu(false);
+        const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
+        const finishLeave = (): void => {
+            useGameStore.getState().reset();
+            router.replace(withShellGameId('/main-menu', explicitGameId));
+        };
+        const control = fadeRef.current;
+        if (control === null) {
+            finishLeave();
+        } else {
+            void control.fadeOut(screenFadeMs()).then(finishLeave);
+        }
+    }, [leavingToMainMenu, router]);
+
     // Context-aware leave for the in-game menu (the live-match IPC leave does not
     // apply to a replay). `saveable` is the entry-point signal: it is set only when
     // the player was opened for the just-finished match (the post-game Replay), so
-    // a live lobby session is still alive — reuse the role-aware live leave (host →
-    // returnToLobby), and the app-global `GameStoreBootstrap` returns to the lobby
-    // once the broadcast phase:'lobby' snapshot lands. A library-opened replay has
-    // no session to return to, so it goes back to the replay library it came from.
+    // a live session is still alive — reuse the role-aware live leave. Its exits
+    // are answered on this route by two owners: the effect above for the ones that
+    // END the session, and the app-global `GameStoreBootstrap` for the one that
+    // rewinds it (it answers the broadcast phase:'lobby' snapshot). A
+    // library-opened replay has no session at all, so it goes back to the replay
+    // library it came from.
     const handleLeaveReplay = React.useCallback(async (): Promise<void> => {
         leavingRef.current = true;
         if (saveable) {

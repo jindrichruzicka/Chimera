@@ -474,6 +474,21 @@ export const QuickStartParamsSchema = z
     });
 
 /**
+ * Schema for {@link CloseSessionParams} accepted by
+ * `chimera:lobby:close-session`. `autosave` is required, not defaulted: the
+ * exit either writes the game's autosave or discards the match, and a boundary
+ * that guessed would decide that for the caller. `.strict()` (§9.1) keeps the
+ * frame that single decision — a slot id or a label would make the exit a
+ * save-authoring channel in its own right, where all it does today is compose
+ * the existing autosave path.
+ */
+export const CloseSessionParamsSchema = z
+    .object({
+        autosave: z.boolean(),
+    })
+    .strict();
+
+/**
  * Schema for {@link SaveRequest} accepted by `chimera:saves:save`.
  * Typed via an explicit cast — see the schema header for why `satisfies`
  * cannot be used with `exactOptionalPropertyTypes` + `.optional()`.

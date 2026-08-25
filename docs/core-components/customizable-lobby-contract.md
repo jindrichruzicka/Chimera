@@ -1,6 +1,6 @@
 ---
 title: 'Customizable Lobby Contract'
-description: 'Declarative contract for game-customizable multiplayer lobbies (F53). Defines the GameLobbySetup descriptor, the synced GameSetupConfig, GameLobbyScreenProps, the registry-loaded LobbyScreen slot, the lobby write path (renderer lobby API → IPC → LobbyManager) with host-authored match settings and owner-authored per-player attributes, and how snapshot.setup is projected to every peer verbatim. Ratifies invariants #99, #100, #101.'
+description: 'Declarative contract for game-customizable multiplayer lobbies (F53). Defines the GameLobbySetup descriptor, the synced GameSetupConfig, GameLobbyScreenProps, the registry-loaded LobbyScreen slot, the lobby write path (renderer lobby API → IPC → LobbyManager) with host-authored match settings and owner-authored per-player attributes, how snapshot.setup is projected to every peer verbatim, and the two host exits the session-mode stamp forks between (return-to-lobby vs the atomic close-session). Ratifies invariants #99, #100, #101.'
 tags:
     [
         lobby,
@@ -213,6 +213,44 @@ LobbyManager.startGame()
 
 ---
 
+## Leaving: two exits, forked on the stamp
+
+A lobby-born match has a lobby to go back to; a quick-started one does not. `useLeaveGame` (the hook
+behind `InGameMenuProps.leaveGame`) picks the exit by reading `engine.sessionMode` off the live
+snapshot's `setup` — the same stamp the quick-start road wrote, which is why the answer survives a
+window reload and a save restore.
+
+```
+InGameMenuProps.leaveGame(options?)   ← the GAME's leave call
+  ▼  useLeaveGame
+host + snapshot.setup.matchSettings['engine.sessionMode'] === 'quick'
+  ▼  chimera:lobby:close-session { autosave }  ── Zod-validated (CloseSessionParamsSchema)
+     SessionRuntime.captureSaveFile → SaveManager.autoSave   (only when autosave)
+     LobbyManager.closeLobby()                                (always)
+  ▼  renderer routing: leaving-to-main-menu intent → /main-menu, snapshot dropped
+host, no stamp   ▶  chimera:lobby:return-to-lobby → session survives at phase 'lobby' → /lobby
+client (any)     ▶  chimera:lobby:leave           → disconnect → /main-menu
+```
+
+- **Atomic by contract.** The capture and the teardown are one call. A game-side "save, then leave"
+  pair would race: a leave that landed first leaves the capture with no session to read. The capture
+  runs against the settled snapshot before anything is torn down.
+- **No second save writer.** The verb composes exactly the pair the crash path composes —
+  `SessionRuntime.captureSaveFile` then `SaveManager.autoSave` — so the autosave slot keeps one
+  owner and the `chimera:saves:slot-update` push fires from the `SaveManager.onSlotsChanged` seam as
+  it does for every other write. A "Continue" offered right after the exit therefore sees the fresh
+  autosave.
+- **Host-gated on the session, not on a second predicate.** `activeSession` is set only inside the
+  composition root's `onSessionHosted`, so a joined client reaches the verb with none and is refused;
+  it leaves through `chimera:lobby:leave` as before.
+- **`autosave` is a parameter of the leave call, never the `gameplay.autoSave` user setting.** That
+  toggle governs turn-interval autosaves during play; reading it here would silently lose the match for
+  a player who turned it off. It defaults to `true`, so a menu must ASK to discard.
+- **A stamp-less save keeps lobby semantics.** Every save written before the stamp existed leaves via
+  `return-to-lobby` — the documented degraded default, not a repair.
+
+---
+
 ## Snapshot Setup Projection
 
 When the host starts the match, the agreed configuration is built from the live `LobbyState` and carried
@@ -302,10 +340,10 @@ electron/
 │   │   ├── QuickStartCoordinator.ts # chimera:lobby:quick-start orchestration over public manager verbs
 │   │   └── syntheticAgentId.ts      # createSyntheticAIPlayerId — the one spelling of an AI seat's id
 │   └── ipc/
-│       ├── ipc-handlers.ts          # chimera:lobby:set-match-setting / set-player-attribute / quick-start handlers
-│       └── ipc-schemas.ts           # SetMatchSettingPayloadSchema, SetPlayerAttributePayloadSchema, QuickStartParamsSchema
+│       ├── ipc-handlers.ts          # chimera:lobby:set-match-setting / set-player-attribute / quick-start / close-session handlers
+│       └── ipc-schemas.ts           # SetMatchSettingPayloadSchema, SetPlayerAttributePayloadSchema, QuickStartParamsSchema, CloseSessionParamsSchema
 └── preload/
-    └── apis/lobby-api.ts            # LobbyAPI.setMatchSetting / setPlayerAttribute / quickStart + channel constants
+    └── apis/lobby-api.ts            # LobbyAPI.setMatchSetting / setPlayerAttribute / quickStart / closeSession + channel constants
 simulation/
 ├── engine/EngineActions.ts          # engine:start_game payload.setup → GameSnapshot.setup
 └── projection/StateProjector.ts     # passes fullState.setup through to PlayerSnapshot verbatim

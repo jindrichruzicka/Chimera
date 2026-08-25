@@ -12,6 +12,11 @@ import type {
     ReplayAPI,
     ReplayPlaybackInfo,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
+import {
+    SESSION_MODE_QUICK,
+    SESSION_MODE_SETTING,
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 
 // Stub the game renderer loader so the player page does not pull in real
 // apps/* screen modules under test. Routed through a hoisted mock so a case can
@@ -106,15 +111,23 @@ vi.mock('../../../components/shell/GameShell', () => ({
 // each test sets through `window.history.replaceState`. `useRouter` backs the
 // in-game-menu leave navigation (library replays push back to the library).
 const mockRouterPush = vi.fn();
+const mockRouterReplace = vi.fn();
+// One STABLE router object for the whole file: Next supplies the app router as a
+// module singleton through context, so a fresh object per call would make every
+// effect dependency list here unobservable.
+const mockRouter = { push: mockRouterPush, replace: mockRouterReplace };
 vi.mock('next/navigation', () => ({
     useSearchParams: () => new URLSearchParams(window.location.search),
-    useRouter: () => ({ push: mockRouterPush }),
+    useRouter: () => mockRouter,
 }));
 
 import { I18nProvider } from '../../../i18n/I18nProvider';
 import { EscapeStackProvider } from '../../../components/shell/EscapeStack';
+import { FadeContext } from '../../../components/shell/FadeContext';
 import { SCREEN_FADE_FAST_MS } from '../../../components/shell/screenFadeDuration';
 import { useGameStore } from '../../../state/gameStore';
+import { useLobbyStore } from '../../../state/lobbyStore';
+import { useLobbyUiStore } from '../../../state/lobbyUiStore';
 import { useUiStore } from '../../../state/uiStore';
 import { resetGameContentCache } from '../../../state/useGameContent';
 import ReplayPlayerPage from './page';
@@ -132,6 +145,44 @@ function render(
             <EscapeStackProvider>{ui}</EscapeStackProvider>
         </I18nProvider>,
     );
+}
+
+/**
+ * Render inside a fade control whose `fadeOut` resolves on demand. Every case
+ * without this sees `useOptionalFade() === null` and takes the no-fade arm; the
+ * app always mounts a `FadeProvider` above this route, so the fade arm is the
+ * only one production runs.
+ */
+function renderUnderFade(ui: React.ReactElement): { readonly settleFades: () => void } {
+    // The loading beat drives this same control, so hold EVERY pending fade and
+    // release them together rather than assuming which one is the leave's.
+    const pending: (() => void)[] = [];
+    const fadeOut = vi.fn(
+        () =>
+            new Promise<void>((resolve) => {
+                pending.push(resolve);
+            }),
+    );
+    const control = {
+        phase: 'idle' as const,
+        opacity: 0,
+        setPhase: vi.fn(),
+        fadeOut,
+        fadeIn: vi.fn(async () => undefined),
+        claim: vi.fn(() => ({
+            isActive: true,
+            fadeOut: async () => undefined,
+            fadeIn: async () => undefined,
+        })),
+    };
+    render(<FadeContext.Provider value={control}>{ui}</FadeContext.Provider>);
+    return {
+        settleFades: () => {
+            pending.splice(0).forEach((resolve) => {
+                resolve();
+            });
+        },
+    };
 }
 
 const PATH = '/replays/tactics/match.chimera-replay';
@@ -228,6 +279,7 @@ let managerDouble: ReturnType<typeof createManagerDouble>;
 
 beforeEach(() => {
     mockRouterPush.mockClear();
+    mockRouterReplace.mockClear();
     window.history.replaceState({}, '', `/replays/player?path=${encodeURIComponent(PATH)}`);
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({ registry: { screens: {} } });
@@ -244,6 +296,9 @@ afterEach(() => {
     // The game store is a module singleton, so a lobby snapshot set by one
     // case would suppress the beat in every case after it.
     useGameStore.getState().reset();
+    useLobbyStore.getState().applyLobbyState(null);
+    useLobbyUiStore.getState().clearLocalLobbyContext();
+    useLobbyUiStore.getState().setLeavingToMainMenu(false);
     Reflect.deleteProperty(window, '__chimera');
     resetGameContentCache();
     vi.restoreAllMocks();
@@ -532,6 +587,169 @@ describe('ReplayPlayerPage', () => {
             await waitFor(() => {
                 expect(mockRouterPush).toHaveBeenCalledWith('/replays?gameId=tactics');
             });
+        });
+    });
+
+    describe('leaving a post-game replay whose session ENDS', () => {
+        /** Put the page on the post-game (?saveable=1) branch of Leave. */
+        function openPostGameReplay(): void {
+            window.history.replaceState(
+                {},
+                '',
+                `/replays/player?path=${encodeURIComponent(PATH)}&saveable=1&gameId=tactics`,
+            );
+        }
+
+        /** Local player hosts, and the live snapshot carries the quick stamp. */
+        function seatQuickSessionHost(): void {
+            useLobbyStore.getState().applyLobbyState({
+                info: {
+                    sessionId: 'replay-close',
+                    hostId: playerId('replay-host'),
+                    gameId: 'tactics',
+                },
+                players: [],
+            });
+            useLobbyUiStore
+                .getState()
+                .setLocalLobbyContext(playerId('replay-host'), [playerId('replay-host')]);
+            useGameStore.getState().applySnapshot({
+                tick: 3,
+                phase: 'playing',
+                viewerId: 'replay-host',
+                players: {},
+                undoMeta: { canUndo: false, canRedo: false },
+                setup: {
+                    matchSettings: { [SESSION_MODE_SETTING]: SESSION_MODE_QUICK },
+                    playerAttributes: {},
+                },
+            } as unknown as PlayerSnapshot);
+        }
+
+        function installLobbyBridge(lobby: Record<string, unknown>): void {
+            Object.defineProperty(window, '__chimera', {
+                configurable: true,
+                value: { replay: makeBridge(), lobby },
+            });
+        }
+
+        it('carries a quick-session host to the main menu once the session is closed', async () => {
+            // The lobby-born host leaves by `returnToLobby()`, whose broadcast
+            // phase:'lobby' snapshot GameStoreBootstrap answers on this route.
+            // A quick session is TORN DOWN instead — no such snapshot is ever
+            // broadcast — so the main-menu intent this route raises has to be
+            // answered here or the host is stranded over a dead session.
+            openPostGameReplay();
+            const closeSession = vi.fn(async () => undefined);
+            installLobbyBridge({
+                leave: vi.fn(async () => undefined),
+                returnToLobby: vi.fn(async () => undefined),
+                closeSession,
+            });
+            seatQuickSessionHost();
+
+            render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            await userEvent.click(screen.getByTestId('shell-leave-btn'));
+
+            await waitFor(() => expect(closeSession).toHaveBeenCalledOnce());
+            await waitFor(() =>
+                expect(mockRouterReplace).toHaveBeenCalledWith('/main-menu?gameId=tactics'),
+            );
+        });
+
+        it('carries a leaving CLIENT to the main menu too', async () => {
+            // A client's disconnect broadcasts no phase:'lobby' snapshot either,
+            // so it raises the same intent and needs the same answer.
+            openPostGameReplay();
+            const leave = vi.fn(async () => undefined);
+            installLobbyBridge({
+                leave,
+                returnToLobby: vi.fn(async () => undefined),
+                closeSession: vi.fn(async () => undefined),
+            });
+
+            render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            await userEvent.click(screen.getByTestId('shell-leave-btn'));
+
+            await waitFor(() => expect(leave).toHaveBeenCalledOnce());
+            await waitFor(() =>
+                expect(mockRouterReplace).toHaveBeenCalledWith('/main-menu?gameId=tactics'),
+            );
+        });
+
+        it('holds the hop until the fade resolves, then clears the intent and the dead snapshot', async () => {
+            // The app always mounts a FadeProvider above this route, so the fade
+            // arm is the only one production takes and the hop has to be chained
+            // to its promise. What is left behind matters too: a raised flag is
+            // read at the next /game mount and bounces the player out of their
+            // next match, and a surviving phase:'playing' snapshot sends
+            // GameStoreBootstrap back to /game the next time /lobby is reached.
+            openPostGameReplay();
+            const closeSession = vi.fn(async () => undefined);
+            installLobbyBridge({
+                leave: vi.fn(async () => undefined),
+                returnToLobby: vi.fn(async () => undefined),
+                closeSession,
+            });
+            seatQuickSessionHost();
+
+            const { settleFades } = renderUnderFade(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            await userEvent.click(screen.getByTestId('shell-leave-btn'));
+
+            await waitFor(() => expect(closeSession).toHaveBeenCalledOnce());
+            // Chained, not fired-and-forgotten: the fade is still pending, so
+            // nothing has moved yet.
+            expect(mockRouterReplace).not.toHaveBeenCalled();
+
+            await act(async () => {
+                settleFades();
+                await Promise.resolve();
+            });
+
+            await waitFor(() =>
+                expect(mockRouterReplace).toHaveBeenCalledWith('/main-menu?gameId=tactics'),
+            );
+            expect(useLobbyUiStore.getState().leavingToMainMenu).toBe(false);
+            expect(useGameStore.getState().snapshot).toBeNull();
+        });
+
+        it('navigates nothing itself on the lobby-born host arm', async () => {
+            // The other arm, unchanged: returnToLobby() keeps the session alive,
+            // and the hop is GameStoreBootstrap's — which is not mounted here, so
+            // what this measures is only that THIS route stays out of the way.
+            openPostGameReplay();
+            const returnToLobby = vi.fn(async () => undefined);
+            installLobbyBridge({
+                leave: vi.fn(async () => undefined),
+                returnToLobby,
+                closeSession: vi.fn(async () => undefined),
+            });
+            useLobbyStore.getState().applyLobbyState({
+                info: {
+                    sessionId: 'replay-lobby',
+                    hostId: playerId('replay-host'),
+                    gameId: 'tactics',
+                },
+                players: [],
+            });
+            useLobbyUiStore
+                .getState()
+                .setLocalLobbyContext(playerId('replay-host'), [playerId('replay-host')]);
+
+            render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            await userEvent.click(screen.getByTestId('shell-leave-btn'));
+
+            await waitFor(() => expect(returnToLobby).toHaveBeenCalledOnce());
+            expect(mockRouterReplace).not.toHaveBeenCalled();
+            expect(mockRouterPush).not.toHaveBeenCalled();
         });
     });
 
@@ -1086,6 +1304,7 @@ describe('ReplayPlayerPage loading beat', () => {
                 lobby: {
                     leave: vi.fn(async () => undefined),
                     returnToLobby: vi.fn(async () => undefined),
+                    closeSession: vi.fn(async () => undefined),
                 },
             },
         });

@@ -36,6 +36,7 @@ import {
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
+    LOBBY_CLOSE_SESSION_CHANNEL,
     LOBBY_QUICK_START_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
 } from '../../preload/apis/lobby-api.js';
@@ -103,6 +104,7 @@ import type {
     PlayerProfile,
     PlayerId,
     PlayerSnapshot,
+    CloseSessionParams,
     QuickStartParams,
     RelayResult,
     ReplayListItem,
@@ -132,6 +134,7 @@ import {
     SetMatchSettingPayloadSchema,
     SetPlayerAttributePayloadSchema,
     SpectateSetTargetPayloadSchema,
+    CloseSessionParamsSchema,
     QuickStartParamsSchema,
     RemoveAiPayloadSchema,
     ReplayExportRequestSchema,
@@ -186,6 +189,7 @@ export {
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
+    LOBBY_CLOSE_SESSION_CHANNEL,
     LOBBY_QUICK_START_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_CANCEL_RESTORE_CHANNEL,
@@ -578,6 +582,13 @@ export interface RegisterLobbyHandlersOptions {
      * namespace with the verb missing.
      */
     readonly quickStart: (params: QuickStartParams) => Promise<LobbyInfo>;
+    /**
+     * Atomic session-exit entry point, bound at the composition root. Required
+     * for the same reason {@link RegisterLobbyHandlersOptions.quickStart} is:
+     * the port owns the capture that has to run BEFORE teardown, so a root
+     * cannot register the lobby namespace without deciding how it happens.
+     */
+    readonly closeSession: (params: CloseSessionParams) => Promise<void>;
     /** Supplies the local profile attestation attached to outbound JOIN requests. */
     readonly profileManager?: ProfileManagerPort;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
@@ -615,6 +626,7 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
             LOBBY_ADD_AI_CHANNEL,
             LOBBY_REMOVE_AI_CHANNEL,
+            LOBBY_CLOSE_SESSION_CHANNEL,
             LOBBY_QUICK_START_CHANNEL,
         ],
     });
@@ -663,6 +675,19 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
     ipcMain.handle(LOBBY_RETURN_TO_LOBBY_CHANNEL, (_event, payload) => {
         parseInvokeRequest(EmptyPayloadSchema, LOBBY_RETURN_TO_LOBBY_CHANNEL, payload);
         return lobbyManager.returnToLobby();
+    });
+
+    // Host-only: the atomic exit — capture the autosave when asked, then tear
+    // the session down. Both halves live behind the injected port so no
+    // renderer sequence can put the teardown in front of the capture; the
+    // handler owns only the boundary parse.
+    ipcMain.handle(LOBBY_CLOSE_SESSION_CHANNEL, (_event, params) => {
+        const validated = parseInvokeRequest(
+            CloseSessionParamsSchema,
+            LOBBY_CLOSE_SESSION_CHANNEL,
+            params,
+        );
+        return options.closeSession(validated);
     });
 
     ipcMain.handle(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, (_event, payload) => {

@@ -19,6 +19,10 @@ import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
 import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type * as LoadGameContentModule from './content/loadGameContent.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
+import {
+    SESSION_MODE_QUICK,
+    SESSION_MODE_SETTING,
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 
 interface ProjectorOptionsForTest {
     readonly getUndoMeta?: (viewerId: PlayerId) => unknown;
@@ -637,7 +641,8 @@ const { GAME_GET_CURRENT_SNAPSHOT_CHANNEL, GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CH
     await import('../preload/apis/game-api.js');
 const { SAVES_LOAD_CHANNEL, SAVES_RESTORE_STATUS_CHANNEL, SAVES_CANCEL_RESTORE_CHANNEL } =
     await import('../preload/apis/saves-api.js');
-const { LOBBY_QUICK_START_CHANNEL } = await import('../preload/apis/lobby-api.js');
+const { LOBBY_CLOSE_SESSION_CHANNEL, LOBBY_QUICK_START_CHANNEL } =
+    await import('../preload/apis/lobby-api.js');
 const {
     PERSPECTIVE_REPLAY_LIST_CHANNEL,
     PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
@@ -5990,6 +5995,271 @@ describe('main() — host return-to-lobby orchestration', () => {
 
         expect(broadcastsWithPhase('lobby')).toHaveLength(0);
         expect(mockAgentManagerInstance.clear).not.toHaveBeenCalled();
+    });
+});
+
+// ── Atomic close-session wiring ──────────────────────────────────────────────
+// Covers the `chimera:lobby:close-session` composition-root port: the capture
+// runs against the live session BEFORE the teardown, and the teardown runs even
+// when nothing was written. The handler factory is unit-tested in
+// `ipc-handlers.test.ts` against a port double; only this file can say what
+// `main()` bound that port to.
+describe('main() — atomic close-session wiring', () => {
+    interface CloseTransport {
+        onPlayerJoined: ReturnType<typeof vi.fn>;
+        onPlayerLeft: ReturnType<typeof vi.fn>;
+        onActionReceived: ReturnType<typeof vi.fn>;
+        setJoinClassifier: ReturnType<typeof vi.fn>;
+        onSpectateTargetUpdate: ReturnType<typeof vi.fn>;
+    }
+    interface CloseLobbyState {
+        readonly info: {
+            readonly sessionId: string;
+            readonly hostId: ReturnType<typeof playerId>;
+            readonly gameId: string;
+        };
+        readonly players: readonly {
+            readonly playerId: ReturnType<typeof playerId>;
+            readonly displayName: string;
+            readonly ready: boolean;
+        }[];
+        readonly matchSettings?: Readonly<Record<string, string>>;
+    }
+    interface CloseOptions {
+        onSessionHosted?: (
+            transport: CloseTransport,
+            metadata: { readonly hostId: ReturnType<typeof playerId>; readonly maxPlayers: number },
+        ) => (() => void) | void;
+        onSessionJoined?: (transport: unknown) => (() => void) | void;
+        onGameStartRequested?: (state: CloseLobbyState) => void;
+    }
+    interface ClosedSaveFile {
+        readonly header: { readonly gameId: string };
+        readonly checkpoint: {
+            readonly tick: number;
+            readonly matchId?: string;
+            readonly setup?: { readonly matchSettings: Readonly<Record<string, string>> };
+        };
+    }
+
+    const hostId = playerId('close-host');
+    const guestId = playerId('close-guest');
+    const MATCH_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+    let capturedJoin:
+        | ((entry: { readonly playerId: ReturnType<typeof playerId> }) => void)
+        | undefined;
+
+    const makeTransport = (): CloseTransport => {
+        capturedJoin = undefined;
+        return {
+            onPlayerJoined: vi.fn(
+                (cb: (entry: { readonly playerId: ReturnType<typeof playerId> }) => void) => {
+                    capturedJoin = cb;
+                    return () => {};
+                },
+            ),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn(() => () => {}),
+            setJoinClassifier: vi.fn(),
+            onSpectateTargetUpdate: vi.fn(() => () => {}),
+        };
+    };
+
+    const makeLobbyState = (matchSettings?: Readonly<Record<string, string>>): CloseLobbyState => ({
+        info: { sessionId: 'close-session', hostId, gameId: 'tactics' },
+        players: [
+            { playerId: hostId, displayName: 'Host', ready: true },
+            { playerId: guestId, displayName: 'Guest', ready: true },
+        ],
+        ...(matchSettings !== undefined ? { matchSettings } : {}),
+    });
+
+    const closeSessionHandler = ():
+        | ((event: unknown, params: unknown) => Promise<unknown>)
+        | undefined =>
+        ipcMainHandle.mock.calls.find(
+            ([channel]) => channel === LOBBY_CLOSE_SESSION_CHANNEL,
+        )?.[1] as ((event: unknown, params: unknown) => Promise<unknown>) | undefined;
+
+    /** Boot a hosted, started 2-player match with both players present. */
+    const startHostedMatch = async (
+        matchSettings?: Readonly<Record<string, string>>,
+    ): Promise<CloseOptions> => {
+        await main(makeTestContributions());
+        const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as CloseOptions;
+        // The real `LobbyManager.closeLobby()` runs the teardown `onSessionHosted`
+        // returned; the hoisted double runs whatever this ref holds, so hand it
+        // over here — hosting is driven directly rather than through hostLobby().
+        const teardown = options.onSessionHosted?.(makeTransport(), { hostId, maxPlayers: 2 });
+        hostedTeardownRef.current = typeof teardown === 'function' ? teardown : null;
+        capturedJoin?.({ playerId: guestId });
+        options.onGameStartRequested?.(makeLobbyState(matchSettings));
+        return options;
+    };
+
+    beforeEach(() => {
+        browserWindowInstances.length = 0;
+        appOn.mockClear();
+        appWhenReady.mockClear();
+        appWhenReady.mockImplementation(() => Promise.resolve());
+        appGetPath.mockClear();
+        appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
+        ipcMainHandle.mockClear();
+        fsExistsSync.mockClear();
+        mockRegisterCrashReporter.mockClear();
+        mockLobbyManagerCtor.mockClear();
+        mockLobbyManagerCloseLobby.mockClear();
+        mockSaveManagerAutoSave.mockClear();
+        mockSaveManagerList.mockClear();
+        mockSaveManagerList.mockImplementation(() => Promise.resolve([]));
+        hostedTeardownRef.current = null;
+    });
+
+    it('registers the close-session channel', async () => {
+        await main(makeTestContributions());
+        expect(closeSessionHandler()).toBeTypeOf('function');
+    });
+
+    it('with autosave: true writes the live match through saveManager.autoSave', async () => {
+        await startHostedMatch();
+
+        await closeSessionHandler()?.(undefined, { autosave: true });
+
+        expect(mockSaveManagerAutoSave).toHaveBeenCalledOnce();
+        const file = mockSaveManagerAutoSave.mock.calls[0]?.[0] as ClosedSaveFile;
+        // The file carries the host-minted matchId of the STARTED match, so the
+        // capture read this session's post-start snapshot rather than the
+        // pre-start lobby one.
+        expect(file.header.gameId).toBe('tactics');
+        expect(file.checkpoint.matchId).toMatch(MATCH_ID_RE);
+    });
+
+    it('captures BEFORE the teardown, never after', async () => {
+        await startHostedMatch();
+        mockSaveManagerAutoSave.mockClear();
+        mockLobbyManagerCloseLobby.mockClear();
+
+        await closeSessionHandler()?.(undefined, { autosave: true });
+
+        expect(mockSaveManagerAutoSave).toHaveBeenCalledOnce();
+        expect(mockLobbyManagerCloseLobby).toHaveBeenCalledOnce();
+        expect(mockSaveManagerAutoSave.mock.invocationCallOrder[0]).toBeLessThan(
+            mockLobbyManagerCloseLobby.mock.invocationCallOrder[0]!,
+        );
+    });
+
+    it('with autosave: false tears the session down without writing anything', async () => {
+        await startHostedMatch();
+        mockSaveManagerAutoSave.mockClear();
+        mockLobbyManagerCloseLobby.mockClear();
+
+        await closeSessionHandler()?.(undefined, { autosave: false });
+
+        expect(mockSaveManagerAutoSave).not.toHaveBeenCalled();
+        expect(mockLobbyManagerCloseLobby).toHaveBeenCalledOnce();
+    });
+
+    // The crash reporter's autosave is the one capture that reads `activeSession`
+    // directly, so it reports whether the teardown really ran — a close that only
+    // wrote a file would leave the session live behind it.
+    it.each([true, false])('leaves no active session behind (autosave: %s)', async (autosave) => {
+        await startHostedMatch();
+        const crashAutosave = mockRegisterCrashReporter.mock.calls[0]?.[0]?.autosave;
+        expect(crashAutosave).toBeTypeOf('function');
+
+        await closeSessionHandler()?.(undefined, { autosave });
+        mockSaveManagerAutoSave.mockClear();
+        await crashAutosave?.();
+
+        expect(mockSaveManagerAutoSave).not.toHaveBeenCalled();
+    });
+
+    it('refuses the verb from a joined client, which never sets activeSession', async () => {
+        await main(makeTestContributions());
+        const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as CloseOptions;
+        // A joined client never sets `activeSession`; the host gate is that
+        // absence, so the refusal must reach the renderer as a rejection.
+        options.onSessionJoined?.({
+            onSnapshotReceived: vi.fn(() => () => {}),
+            onReveal: vi.fn(() => () => {}),
+        });
+
+        await expect(closeSessionHandler()?.(undefined, { autosave: true })).rejects.toThrow(
+            /no hosted session/,
+        );
+        expect(mockSaveManagerAutoSave).not.toHaveBeenCalled();
+        expect(mockLobbyManagerCloseLobby).not.toHaveBeenCalled();
+    });
+
+    it('leaves the session alive when the autosave write fails', async () => {
+        // Capture-then-teardown also means a failed capture tears down nothing:
+        // the caller sees the failure and the match is still there to retry
+        // from, rather than gone along with the file that was never written.
+        await startHostedMatch();
+        mockSaveManagerAutoSave.mockRejectedValueOnce(new Error('disk full'));
+        const crashAutosave = mockRegisterCrashReporter.mock.calls[0]?.[0]?.autosave;
+
+        await expect(closeSessionHandler()?.(undefined, { autosave: true })).rejects.toThrow(
+            /disk full/,
+        );
+
+        expect(mockLobbyManagerCloseLobby).not.toHaveBeenCalled();
+        // Still hosting: the crash-path capture reads `activeSession` directly.
+        mockSaveManagerAutoSave.mockClear();
+        await crashAutosave?.();
+        expect(mockSaveManagerAutoSave).toHaveBeenCalledOnce();
+    });
+
+    it('pushes the refreshed slot list, so Continue right after the close finds the autosave', async () => {
+        await startHostedMatch();
+        mockSaveManagerList.mockResolvedValueOnce([
+            {
+                slotId: 'tactics/autosave',
+                gameId: 'tactics',
+                tick: 11,
+                savedAt: 2_000,
+                turnNumber: 4,
+                playerNames: [],
+                schemaVersion: 6,
+                sizeBytes: 0,
+            },
+        ]);
+        // The real SaveManager runs `onSlotsChanged` after every write
+        // (SaveManager.test.ts pins that); the double honours the same contract.
+        mockSaveManagerAutoSave.mockImplementationOnce((file) => {
+            capturedSlotsChangedListener.current?.((file as ClosedSaveFile).header.gameId);
+            return Promise.resolve();
+        });
+        const win = new FakeBrowserWindow({ webPreferences: {} });
+        FakeBrowserWindow.getAllWindows.mockReturnValue([win]);
+
+        try {
+            await closeSessionHandler()?.(undefined, { autosave: true });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(mockSaveManagerList).toHaveBeenCalledWith('tactics');
+            expect(win.webContents.send).toHaveBeenCalledExactlyOnceWith(
+                SAVES_SLOT_UPDATE_CHANNEL,
+                [{ slotId: 'tactics/autosave', gameId: 'tactics', tick: 11, savedAt: 2_000 }],
+            );
+        } finally {
+            FakeBrowserWindow.getAllWindows.mockImplementation(() => browserWindowInstances);
+        }
+    });
+
+    it('carries the session-mode stamp into the written checkpoint', async () => {
+        // The stamp rides `matchSettings` into `snapshot.setup`, so the autosave
+        // this verb writes still carries it. That is what lets a RESTORED quick
+        // session take the same Leave branch the original one took — the
+        // renderer reads the stamp off the restored snapshot, not off a
+        // renderer-held launch origin.
+        await startHostedMatch({ [SESSION_MODE_SETTING]: SESSION_MODE_QUICK });
+
+        await closeSessionHandler()?.(undefined, { autosave: true });
+
+        const file = mockSaveManagerAutoSave.mock.calls[0]?.[0] as ClosedSaveFile;
+        expect(file.checkpoint.setup?.matchSettings[SESSION_MODE_SETTING]).toBe(SESSION_MODE_QUICK);
     });
 });
 
