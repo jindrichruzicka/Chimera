@@ -38,10 +38,9 @@ reason it went unnoticed. All three are now declared, and `schemas.test.ts` roun
 until the schema carries it, so the strip cannot silently return.
 
 Wire caps: an agent slot's attributes are bounded by the same `WIRE_MAX_PLAYER_ATTRIBUTE_*` caps a
-human's own-seat write frame uses. There is no attribute-setter channel for an agent slot —
-`chimera:lobby:host` is the sole write path for its attributes — so the caps ride the state frame as well
-as the `.strict()` `HostLobbyParamsSchema`, whose transform now carries the field through.
-`matchSettings` and a
+human's own-seat write frame uses. There is no attribute-setter channel for an agent slot, so the
+caps ride the state frame as well as the `.strict()` `HostLobbyParamsSchema`, whose transform now
+carries the field through. `matchSettings` and a
 player's `attributes` stay uncapped on the state frame, exactly as before: capping them at the
 preload boundary would reject a state the host legitimately broadcast.
 
@@ -51,7 +50,6 @@ New: `simulation/foundation/quick-start-contract.ts`, a zero-import foundation l
 adds `omniscient?`) — a bare seat count can say how many seats to open but not what any of them is
 playing. It sits on the lobby setup rather than the manifest because a seat's attributes are drawn
 from the same vocabulary as `playerAttributeOptions`, and the lobby setup is built from the game's
-`GameContent`. The verb that consumes it lands separately; this is the type both ends compile
-against.
+`GameContent`. This is the type both ends compile against.
 
 Additive throughout — every new field is optional and backward-compatible.

@@ -96,7 +96,10 @@ import {
     resolveWindowTitle,
     type GameManifest,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
-import { readAllowSpectators } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import {
+    readAllowSpectators,
+    resolvePlayerAttributeDefaults,
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { classifyJoin } from './lobby/joinClassifier.js';
 import { SpectatorRegistry } from './lobby/SpectatorRegistry.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
@@ -135,6 +138,7 @@ import {
 } from './runtime/SessionRuntime.js';
 import { wireDefaultSceneActions } from './runtime/SceneActionWiring.js';
 import { SessionRestoreCoordinator } from './runtime/SessionRestoreCoordinator.js';
+import { QuickStartCoordinator } from './runtime/QuickStartCoordinator.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { ChatRelay } from './ChatRelay.js';
@@ -3485,6 +3489,37 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         });
     });
 
+    // Lobby-skipping match start (§4.37): orchestration sugar over the SAME
+    // public `LobbyManager` verbs the lobby screen drives. Every session is
+    // still born inside `onSessionHosted` — the coordinator constructs nothing
+    // and holds nothing, so there is no second session constructor to drift.
+    const quickStartCoordinator = new QuickStartCoordinator({
+        logger,
+        ports: {
+            // Any live lobby — hosted-but-unstarted, playing, or joined — makes
+            // this a re-host, which `LobbyManager.hostLobby` would reject anyway;
+            // refusing here keeps the message renderer-friendly.
+            hasActiveSession: () => lobbyManager.getCurrentState() !== null,
+            isRestoreActive: () => {
+                const { state } = sessionRestoreCoordinator.status();
+                return state === 'hosting' || state === 'waiting-for-players';
+            },
+            resolveQuickStartDefaults: (gameId) => resolveLobbySetup(gameId)?.quickStart,
+            resolveSeatDefaultAttributes: (gameId, seatIndex) => {
+                const setup = resolveLobbySetup(gameId);
+                return setup === undefined ? {} : resolvePlayerAttributeDefaults(setup, seatIndex);
+            },
+            hostLobby: (params) => lobbyManager.hostLobby(params),
+            setMatchSetting: (key, value) => lobbyManager.setMatchSetting(key, value),
+            setPlayerAttribute: (target, key, value) =>
+                lobbyManager.setPlayerAttribute(target, key, value),
+            addLocalSeat: (seatId, seatOptions) => lobbyManager.addLocalSeat(seatId, seatOptions),
+            updatePlayerReadyState: (ready) => lobbyManager.updatePlayerReadyState(ready),
+            startGame: () => lobbyManager.startGame(),
+            closeLobby: () => lobbyManager.closeLobby(),
+        },
+    });
+
     // Register the `chimera:game:*` channels.
     registerGameHandlers({
         ipcMain,
@@ -3506,6 +3541,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         ipcMain,
         lobbyManager,
         profileManager,
+        quickStart: (params) => quickStartCoordinator.quickStart(params),
         logger: logger.child({ module: 'lobby' }),
     });
 
@@ -3610,6 +3646,14 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 throw new Error(
                     'saves:load: this save belongs to a different match than the ' +
                         'active session — return to the main menu to load it.',
+                );
+            }
+            // A quick start between its guard and its `hostLobby` resolving has
+            // no `activeSession` yet, but a lobby is being born — the one window
+            // the check above cannot see.
+            if (quickStartCoordinator.isActive()) {
+                throw new Error(
+                    'saves:load: cannot load a save while a quick start is in progress.',
                 );
             }
             // A joined client has no `activeSession` but does hold a live

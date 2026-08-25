@@ -2368,6 +2368,83 @@ describe('LobbyManager — lobby setup defaults', () => {
 
         await manager.closeLobby();
     });
+
+    it('merges a caller-supplied local-seat attribute OVER the seat default', async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        // Seat 1's declared default is team=blue; the caller overrides only
+        // `team` and adds a key the descriptor never mentions.
+        await manager.addLocalSeat(playerId('seat-2'), {
+            ready: true,
+            attributes: { team: 'green' },
+        });
+
+        expect(
+            manager.getCurrentState()?.players.find((p) => p.playerId === playerId('seat-2'))
+                ?.attributes,
+        ).toEqual({ team: 'green' });
+
+        await manager.closeLobby();
+    });
+
+    it('keeps the seat defaults a caller-supplied attribute map does not name', async () => {
+        const twoAttributeSetup: GameLobbySetup = {
+            ...SAMPLE_SETUP,
+            resolveDefaultPlayerAttributes: (seatIndex) => ({
+                team: seatIndex % 2 === 0 ? 'red' : 'blue',
+                banner: 'wolf',
+            }),
+        };
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: () => twoAttributeSetup,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        await manager.addLocalSeat(playerId('seat-2'), { attributes: { team: 'green' } });
+
+        expect(
+            manager.getCurrentState()?.players.find((p) => p.playerId === playerId('seat-2'))
+                ?.attributes,
+        ).toEqual({ team: 'green', banner: 'wolf' });
+
+        await manager.closeLobby();
+    });
+
+    it('carries caller-supplied attributes even when the game declares no setup', async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: () => undefined,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        await manager.addLocalSeat(playerId('seat-2'), { attributes: { team: 'green' } });
+
+        expect(
+            manager.getCurrentState()?.players.find((p) => p.playerId === playerId('seat-2'))
+                ?.attributes,
+        ).toEqual({ team: 'green' });
+
+        await manager.closeLobby();
+    });
+
+    it("does not clobber an existing seat's attributes on a re-add that supplies none", async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+        await manager.addLocalSeat(playerId('seat-2'), { attributes: { team: 'green' } });
+
+        await manager.addLocalSeat(playerId('seat-2'), { displayName: 'Renamed' });
+
+        expect(
+            manager.getCurrentState()?.players.find((p) => p.playerId === playerId('seat-2'))
+                ?.attributes,
+        ).toEqual({ team: 'green' });
+
+        await manager.closeLobby();
+    });
 });
 
 describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerAttribute (F53)', () => {

@@ -24,6 +24,7 @@ import type { LogEntry } from '../foundation/logging.js';
 import type { ChatMessage, ChatScope, RelayResult } from '../foundation/chat.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '../foundation/messages-schemas.js';
 import type { GameContent, GameContentItem } from '../foundation/game-content-contract.js';
+import type { QuickStartConfig } from '../foundation/quick-start-contract.js';
 import type {
     PerspectiveReplayExportBridge,
     PerspectiveReplayListBridge,
@@ -206,6 +207,16 @@ export interface HostLobbyParams {
      * never broadcast or logged.
      */
     readonly password?: string;
+}
+
+/**
+ * Parameters for `chimera:lobby:quick-start` — a {@link QuickStartConfig}
+ * addressed at one game. The renderer's fields are merged OVER the game's own
+ * `GameLobbySetup.quickStart` defaults, so a caller that supplies only `gameId`
+ * starts the match the game itself declared.
+ */
+export interface QuickStartParams extends QuickStartConfig {
+    readonly gameId: string;
 }
 
 /** Parameters for joining an existing lobby session. */
@@ -996,6 +1007,18 @@ export interface LobbyAPI {
     host(params: HostLobbyParams): Promise<LobbyInfo>;
     join(params: JoinLobbyParams): Promise<LobbyInfo>;
     leave(): Promise<void>;
+    /**
+     * Open a match WITHOUT the lobby UI and resolve with the hosted
+     * {@link LobbyInfo}. Orchestration sugar only: main drives the same public
+     * lobby verbs the lobby screen drives (host with the AI roster pre-seeded →
+     * stamp the engine-owned session mode → apply match settings and seat
+     * attributes → ready → start), so the resulting session is indistinguishable
+     * from a lobby-born one except for that stamp. The roster is exactly full by
+     * design, and main rejects the call while a session or a save restore is
+     * already live. Any failure after the lobby exists tears it down, so a
+     * rejected quick start never leaves a session behind.
+     */
+    quickStart(params: QuickStartParams): Promise<LobbyInfo>;
     /** Requests that the current host start the game for the active lobby. */
     startGame(): Promise<void>;
     /**

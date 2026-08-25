@@ -6,6 +6,7 @@ import {
 import { UnknownActionTypeError } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import { ActionSchemaError } from '@chimera-engine/simulation/engine/StateReducer.js';
 import { CURRENT_MATCH_REPLAY_PATH } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
+import { SESSION_MODE_SETTING } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
@@ -27,6 +28,7 @@ import {
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
+    LOBBY_QUICK_START_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_CANCEL_RESTORE_CHANNEL,
     SAVES_DELETE_CHANNEL,
@@ -131,6 +133,7 @@ import type {
     DeviceInfo,
     EngineAction,
     HostLobbyParams,
+    QuickStartParams,
     JoinLobbyParams,
     PerspectiveReplayListItem,
     PerspectiveReplayPlaybackInfo,
@@ -530,12 +533,27 @@ function makeLobbyManagerStub(): LobbyManager {
     return new LobbyManager(new InMemoryMultiplayerProvider(), createNoopLogger());
 }
 
+const QUICK_START_INFO: LobbyInfo = {
+    sessionId: 'quick-session',
+    hostId: toPlayerId('quick-host'),
+    gameId: 'sample-game',
+};
+
+/** Quick-start port double: the handler's only collaborator besides the manager. */
+function makeQuickStartStub(): (params: QuickStartParams) => Promise<LobbyInfo> {
+    return vi.fn(() => Promise.resolve(QUICK_START_INFO));
+}
+
 describe('registerLobbyHandlers', () => {
     it('registers chimera:lobby:host as an invoke handler that calls lobbyManager.hostLobby', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'hostLobby');
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
         expect(handler).toBeDefined();
@@ -558,7 +576,11 @@ describe('registerLobbyHandlers', () => {
             gameId: 'tactics',
         };
         const spy = vi.spyOn(lobbyManager, 'joinLobby').mockResolvedValue(mockInfo);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
         expect(handler).toBeDefined();
@@ -588,7 +610,12 @@ describe('registerLobbyHandlers', () => {
             gameId: 'tactics',
         };
         const spy = vi.spyOn(lobbyManager, 'joinLobby').mockResolvedValue(mockInfo);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager, profileManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            profileManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
         expect(handler).toBeDefined();
@@ -606,7 +633,11 @@ describe('registerLobbyHandlers', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'closeLobby');
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_LEAVE_CHANNEL);
         expect(handler).toBeDefined();
@@ -618,7 +649,11 @@ describe('registerLobbyHandlers', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'startGame').mockResolvedValue(undefined);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_START_GAME_CHANNEL);
         expect(handler).toBeDefined();
@@ -633,7 +668,11 @@ describe('registerLobbyHandlers', () => {
         const spy = vi
             .spyOn(lobbyManager, 'getLocalPlayerId')
             .mockReturnValue(toPlayerId('player-2'));
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL);
         expect(handler).toBeDefined();
@@ -645,7 +684,11 @@ describe('registerLobbyHandlers', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'getLocalRole').mockReturnValue('spectator');
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_GET_LOCAL_ROLE_CHANNEL);
         expect(handler).toBeDefined();
@@ -661,7 +704,11 @@ describe('registerLobbyHandlers', () => {
             players: [{ playerId: toPlayerId('player-1'), displayName: 'Host', ready: true }],
         };
         const spy = vi.spyOn(lobbyManager, 'getCurrentState').mockReturnValue(currentState);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_GET_CURRENT_STATE_CHANNEL);
         expect(handler).toBeDefined();
@@ -673,7 +720,11 @@ describe('registerLobbyHandlers', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'updatePlayerReadyState').mockResolvedValue(undefined);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_UPDATE_READY_STATE_CHANNEL);
         expect(handler).toBeDefined();
@@ -685,7 +736,11 @@ describe('registerLobbyHandlers', () => {
 
     it('rejects invalid update-ready-state payloads with IpcRequestValidationError', async () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_UPDATE_READY_STATE_CHANNEL);
         expect(handler).toBeDefined();
@@ -697,7 +752,11 @@ describe('registerLobbyHandlers', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'setMatchSetting').mockResolvedValue(undefined);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
         expect(handler).toBeDefined();
@@ -709,7 +768,11 @@ describe('registerLobbyHandlers', () => {
 
     it('rejects invalid set-match-setting payloads with IpcRequestValidationError', () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
         expect(handler).toBeDefined();
@@ -724,7 +787,11 @@ describe('registerLobbyHandlers', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'setPlayerAttribute').mockResolvedValue(undefined);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL);
         expect(handler).toBeDefined();
@@ -736,7 +803,11 @@ describe('registerLobbyHandlers', () => {
 
     it('rejects invalid set-player-attribute payloads with IpcRequestValidationError', () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL);
         expect(handler).toBeDefined();
@@ -753,7 +824,11 @@ describe('registerLobbyHandlers', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'addAi').mockResolvedValue(undefined);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_ADD_AI_CHANNEL);
         expect(handler).toBeDefined();
@@ -766,7 +841,11 @@ describe('registerLobbyHandlers', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'removeAi').mockResolvedValue(undefined);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_REMOVE_AI_CHANNEL);
         expect(handler).toBeDefined();
@@ -776,9 +855,73 @@ describe('registerLobbyHandlers', () => {
         expect(spy).toHaveBeenCalledWith(2);
     });
 
+    it('registers chimera:lobby:quick-start as an invoke handler that calls the quick-start port', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const quickStart = makeQuickStartStub();
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart,
+        });
+
+        const handler = stub.handled.get(LOBBY_QUICK_START_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const result = await Promise.resolve(
+            handler?.({}, { gameId: 'sample-game', aiSeats: [{ omniscient: true }] }),
+        );
+        expect(quickStart).toHaveBeenCalledOnce();
+        expect(quickStart).toHaveBeenCalledWith({
+            gameId: 'sample-game',
+            aiSeats: [{ omniscient: true }],
+        });
+        expect(result).toEqual(QUICK_START_INFO);
+    });
+
+    it('rejects invalid quick-start payloads with IpcRequestValidationError', () => {
+        const stub = makeLobbyIpcMainStub();
+        const quickStart = makeQuickStartStub();
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart,
+        });
+
+        const handler = stub.handled.get(LOBBY_QUICK_START_CHANNEL);
+        expect(handler).toBeDefined();
+
+        expect(() => handler?.({}, {})).toThrow(IpcRequestValidationError);
+        expect(() => handler?.({}, { gameId: 'g', bogus: 1 })).toThrow(IpcRequestValidationError);
+        expect(quickStart).not.toHaveBeenCalled();
+    });
+
+    it('refuses a set-match-setting write to the engine-owned session-mode key', () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'setMatchSetting').mockResolvedValue(undefined);
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
+
+        const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
+        expect(handler).toBeDefined();
+
+        expect(() => handler?.({}, { key: SESSION_MODE_SETTING, value: 'quick' })).toThrow(
+            IpcRequestValidationError,
+        );
+        // The refusal is at the boundary — the manager is never reached.
+        expect(spy).not.toHaveBeenCalled();
+    });
+
     it('rejects invalid remove-ai payloads with IpcRequestValidationError', () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_REMOVE_AI_CHANNEL);
         expect(handler).toBeDefined();
@@ -791,7 +934,11 @@ describe('registerLobbyHandlers', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'returnToLobby').mockResolvedValue(undefined);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_RETURN_TO_LOBBY_CHANNEL);
         expect(handler).toBeDefined();
@@ -815,7 +962,11 @@ describe('registerLobbyHandlers', () => {
         'rejects a non-empty payload on the no-arg channel %s with IpcRequestValidationError',
         (_name, channel) => {
             const stub = makeLobbyIpcMainStub();
-            registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+            registerLobbyHandlers({
+                ipcMain: stub.ipcMain,
+                lobbyManager: makeLobbyManagerStub(),
+                quickStart: makeQuickStartStub(),
+            });
 
             const handler = stub.handled.get(channel);
             expect(handler).toBeDefined();
@@ -831,7 +982,11 @@ describe('registerLobbyHandlers', () => {
         const lobbyManager = makeLobbyManagerStub();
         const error = new Error('WebSocket in CLOSING state');
         vi.spyOn(lobbyManager, 'closeLobby').mockRejectedValue(error);
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager,
+            quickStart: makeQuickStartStub(),
+        });
 
         const handler = stub.handled.get(LOBBY_LEAVE_CHANNEL);
         expect(handler).toBeDefined();
@@ -840,7 +995,11 @@ describe('registerLobbyHandlers', () => {
 
     it('registers exactly the lobby request channels (update is push-only, not registered here)', () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+        });
 
         // `chimera:lobby:update` is a one-way push from main → renderer via
         // `webContents.send`. It must NOT appear as a main-side listener or
@@ -860,6 +1019,7 @@ describe('registerLobbyHandlers', () => {
                 LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
                 LOBBY_ADD_AI_CHANNEL,
                 LOBBY_REMOVE_AI_CHANNEL,
+                LOBBY_QUICK_START_CHANNEL,
             ].sort(),
         );
         expect(stub.handled.has(LOBBY_UPDATE_CHANNEL)).toBe(false);
@@ -1659,7 +1819,11 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:lobby:host rejects a malformed HostLobbyParams', async () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+        });
         const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
 
         await expect(
@@ -1672,7 +1836,11 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:lobby:join rejects a malformed JoinLobbyParams', async () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+        });
         const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
 
         await expect(Promise.resolve().then(() => handler?.({}, {}))).rejects.toBeInstanceOf(
@@ -1790,7 +1958,11 @@ describe('inbound IPC request validation', () => {
         // test exercises an `ipcMain.handle`-style channel where the throw
         // still surfaces as a renderer-side promise rejection.
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+        });
         const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
 
         try {

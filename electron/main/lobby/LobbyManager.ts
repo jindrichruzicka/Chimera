@@ -149,6 +149,18 @@ export interface LobbyManagerOptions {
 export interface AddLocalSeatOptions {
     readonly displayName?: string;
     readonly ready?: boolean;
+    /**
+     * Per-seat attributes for this local seat, merged OVER whatever the seat
+     * already carries — the descriptor's defaults for a fresh seat, the seat
+     * owner's own picks on a re-add — so a caller may name one attribute
+     * without dropping the rest.
+     *
+     * This is how a pass-and-play seat's picks are authored: it has no
+     * connection of its own, so the own-seat {@link LobbyManager.setPlayerAttribute}
+     * channel cannot reach it. Host-time seeding only; there is no runtime
+     * attribute channel for a local seat (Invariant #99).
+     */
+    readonly attributes?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -953,7 +965,7 @@ export class LobbyManager {
         // A brand-new local seat (AI / pass-and-play) is a real game seat, so it
         // is seeded with the descriptor's default attributes for its seat index.
         // A re-add preserves any owner-authored attributes already set.
-        const entry: LobbyPlayerEntry =
+        const seededEntry: LobbyPlayerEntry =
             existing === undefined
                 ? this.seedSeatAttributes(
                       baseEntry,
@@ -965,6 +977,15 @@ export class LobbyManager {
                       ...(existing.attributes !== undefined
                           ? { attributes: existing.attributes }
                           : {}),
+                  };
+        // Caller-supplied picks win per KEY over whatever the seat already
+        // carries, so seeding `team` never discards a defaulted `banner`.
+        const entry: LobbyPlayerEntry =
+            options.attributes === undefined
+                ? seededEntry
+                : {
+                      ...seededEntry,
+                      attributes: { ...seededEntry.attributes, ...options.attributes },
                   };
         const wasLocal = this.localSeatIds.has(playerId);
         this.localSeatIds.add(playerId);

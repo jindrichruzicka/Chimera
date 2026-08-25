@@ -4,6 +4,11 @@ import {
     WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
     WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
 } from '@chimera-engine/simulation/foundation/messages-schemas.js';
+import {
+    ALLOW_SPECTATORS_SETTING,
+    SESSION_MODE_QUICK,
+    SESSION_MODE_SETTING,
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { MAX_SAVE_LABEL_LENGTH } from '../../preload/api-types.js';
 import {
     EngineActionSchema,
@@ -12,6 +17,7 @@ import {
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
     PlayerIdSchema,
+    QuickStartParamsSchema,
     SetMatchSettingPayloadSchema,
     SetPlayerAttributePayloadSchema,
     SpectateSetTargetPayloadSchema,
@@ -356,6 +362,151 @@ describe('SetMatchSettingPayloadSchema', () => {
         expect(
             SetMatchSettingPayloadSchema.safeParse({ key: 'boardColor', value: 'red', extra: 1 })
                 .success,
+        ).toBe(false);
+    });
+
+    it('rejects the engine-owned session-mode key — no lobby screen may flip it', () => {
+        const result = SetMatchSettingPayloadSchema.safeParse({
+            key: SESSION_MODE_SETTING,
+            value: SESSION_MODE_QUICK,
+        });
+        expect(result.success).toBe(false);
+        expect(JSON.stringify(result.error?.issues)).toContain(SESSION_MODE_SETTING);
+    });
+
+    it('rejects the session-mode key whatever value is offered', () => {
+        expect(
+            SetMatchSettingPayloadSchema.safeParse({ key: SESSION_MODE_SETTING, value: 'lobby' })
+                .success,
+        ).toBe(false);
+        expect(
+            SetMatchSettingPayloadSchema.safeParse({ key: SESSION_MODE_SETTING, value: '' })
+                .success,
+        ).toBe(false);
+    });
+
+    it('still accepts the OTHER reserved engine key — it is host-settable by design', () => {
+        expect(
+            SetMatchSettingPayloadSchema.safeParse({
+                key: ALLOW_SPECTATORS_SETTING,
+                value: 'true',
+            }).success,
+        ).toBe(true);
+    });
+});
+
+describe('QuickStartParamsSchema', () => {
+    it("accepts a bare {gameId} — the game's own declared defaults fill the rest", () => {
+        const result = QuickStartParamsSchema.safeParse({ gameId: 'sample-game' });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data).toEqual({ gameId: 'sample-game' });
+        }
+    });
+
+    it('carries every seat kind through the transform unchanged', () => {
+        const result = QuickStartParamsSchema.safeParse({
+            gameId: 'sample-game',
+            matchSettings: { mapSize: 'small' },
+            hostAttributes: { team: 'red' },
+            localSeats: [{ attributes: { team: 'blue' } }],
+            aiSeats: [{ omniscient: true, attributes: { team: 'green' } }],
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data).toEqual({
+                gameId: 'sample-game',
+                matchSettings: { mapSize: 'small' },
+                hostAttributes: { team: 'red' },
+                localSeats: [{ attributes: { team: 'blue' } }],
+                aiSeats: [{ omniscient: true, attributes: { team: 'green' } }],
+            });
+        }
+    });
+
+    it('omits an absent optional rather than setting it to undefined', () => {
+        const result = QuickStartParamsSchema.safeParse({ gameId: 'sample-game', aiSeats: [{}] });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect('matchSettings' in result.data).toBe(false);
+            expect('localSeats' in result.data).toBe(false);
+            expect('attributes' in (result.data.aiSeats?.[0] ?? {})).toBe(false);
+        }
+    });
+
+    it('rejects a missing or empty gameId', () => {
+        expect(QuickStartParamsSchema.safeParse({}).success).toBe(false);
+        expect(QuickStartParamsSchema.safeParse({ gameId: '' }).success).toBe(false);
+    });
+
+    it('stays strict — an unknown key on the request or on a seat is rejected', () => {
+        expect(QuickStartParamsSchema.safeParse({ gameId: 'sample-game', bogus: 1 }).success).toBe(
+            false,
+        );
+        expect(
+            QuickStartParamsSchema.safeParse({ gameId: 'sample-game', localSeats: [{ bogus: 1 }] })
+                .success,
+        ).toBe(false);
+        // omniscient is an AI-only field; a local seat must not smuggle it.
+        expect(
+            QuickStartParamsSchema.safeParse({
+                gameId: 'sample-game',
+                localSeats: [{ omniscient: true }],
+            }).success,
+        ).toBe(false);
+    });
+
+    it('rejects the engine-owned session-mode key in matchSettings', () => {
+        expect(
+            QuickStartParamsSchema.safeParse({
+                gameId: 'sample-game',
+                matchSettings: { [SESSION_MODE_SETTING]: 'quick' },
+            }).success,
+        ).toBe(false);
+    });
+
+    it('mirrors the wire attribute bounds on every seat kind', () => {
+        const overlongKey = 'k'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH + 1);
+        const overlongValue = 'v'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH + 1);
+        expect(
+            QuickStartParamsSchema.safeParse({
+                gameId: 'g',
+                hostAttributes: { [overlongKey]: 'v' },
+            }).success,
+        ).toBe(false);
+        expect(
+            QuickStartParamsSchema.safeParse({
+                gameId: 'g',
+                localSeats: [{ attributes: { k: overlongValue } }],
+            }).success,
+        ).toBe(false);
+        expect(
+            QuickStartParamsSchema.safeParse({
+                gameId: 'g',
+                aiSeats: [{ attributes: { [overlongKey]: 'v' } }],
+            }).success,
+        ).toBe(false);
+        expect(
+            QuickStartParamsSchema.safeParse({ gameId: 'g', matchSettings: { k: overlongValue } })
+                .success,
+        ).toBe(false);
+    });
+
+    it('rejects a roster that could never fill its own seats', () => {
+        const seats = (count: number) => Array.from({ length: count }, () => ({}));
+        // 1 host + 15 = the wire join-claim ceiling; one more cannot be reclaimed.
+        expect(QuickStartParamsSchema.safeParse({ gameId: 'g', aiSeats: seats(15) }).success).toBe(
+            true,
+        );
+        expect(QuickStartParamsSchema.safeParse({ gameId: 'g', aiSeats: seats(16) }).success).toBe(
+            false,
+        );
+        expect(
+            QuickStartParamsSchema.safeParse({
+                gameId: 'g',
+                localSeats: seats(8),
+                aiSeats: seats(8),
+            }).success,
         ).toBe(false);
     });
 });

@@ -42,6 +42,8 @@ import {
     ALLOW_SPECTATORS_SETTING,
     ALLOW_SPECTATORS_DEFAULT,
     DEFAULT_ATTRIBUTE_VALUE_CAP,
+    SESSION_MODE_SETTING,
+    SESSION_MODE_QUICK,
 } from './game-lobby-contract.js';
 import { WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH } from './messages-schemas.js';
 
@@ -365,5 +367,21 @@ describe('resolveAttributeValueCap', () => {
         expect(resolveAttributeValueCap({ ...setup, maxAttributeValueLength: 1.5 })).toBe(
             DEFAULT_ATTRIBUTE_VALUE_CAP,
         );
+    });
+});
+
+// ─── Reserved engine-owned session-mode key ─────────────────────────────────────
+
+describe('SESSION_MODE_SETTING', () => {
+    it('is the engine-namespaced key a quick-started session is stamped with', () => {
+        expect(SESSION_MODE_SETTING).toBe('engine.sessionMode');
+        expect(SESSION_MODE_QUICK).toBe('quick');
+    });
+
+    it('shares the engine. namespace with the other reserved key', () => {
+        // Both reserved keys are the engine's, never a game's (Invariant #107
+        // spirit) — a game reading its own vocabulary never collides with them.
+        expect(SESSION_MODE_SETTING.startsWith('engine.')).toBe(true);
+        expect(SESSION_MODE_SETTING).not.toBe(ALLOW_SPECTATORS_SETTING);
     });
 });

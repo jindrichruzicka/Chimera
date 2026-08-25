@@ -13,6 +13,7 @@ import {
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
+    LOBBY_QUICK_START_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     LOBBY_PLAYER_CONNECTION_CHANNEL,
     LOBBY_PLAYER_LEFT_CHANNEL,
@@ -31,6 +32,7 @@ import type {
     PlayerConnectionEvent,
     PlayerLeftMatchEvent,
     ProfileRejection,
+    QuickStartParams,
 } from '../api-types.js';
 
 /**
@@ -128,6 +130,60 @@ describe('createLobbyApi', () => {
 
             await expect(api.join({ address: 'ws://127.0.0.1:7777' })).rejects.toBeInstanceOf(
                 PreloadIpcValidationError,
+            );
+        });
+    });
+
+    describe('quickStart()', () => {
+        it('invokes chimera:lobby:quick-start with the params and resolves to LobbyInfo', async () => {
+            const stub = makeIpcStub();
+            const expected = makeLobbyInfo();
+            stub.invokeResults.set(LOBBY_QUICK_START_CHANNEL, expected);
+            const api = createLobbyApi(stub.port);
+            const params: QuickStartParams = {
+                gameId: 'sample-game',
+                matchSettings: { mapSize: 'small' },
+                localSeats: [{ attributes: { team: 'blue' } }],
+                aiSeats: [{ omniscient: true }],
+            };
+
+            const result = await api.quickStart(params);
+
+            expect(stub.invocations).toEqual([{ channel: LOBBY_QUICK_START_CHANNEL, arg: params }]);
+            expect(result).toStrictEqual(expected);
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
+            const stub = makeIpcStub();
+            // Every LobbyInfo field is declared in the response schema, so a
+            // payload missing one is caught here rather than surfacing as an
+            // undefined read inside a React component.
+            stub.invokeResults.set(LOBBY_QUICK_START_CHANNEL, {
+                sessionId: 'sess-1',
+                hostId: 'p1',
+            });
+            const api = createLobbyApi(stub.port);
+
+            await expect(api.quickStart({ gameId: 'sample-game' })).rejects.toBeInstanceOf(
+                PreloadIpcValidationError,
+            );
+        });
+
+        it('rejects when the main-process handler rejects', async () => {
+            const stub = makeIpcStub();
+            const port: LobbyApiIpcPort = {
+                ...stub.port,
+                invoke: (channel) => {
+                    if (channel === LOBBY_QUICK_START_CHANNEL) {
+                        return Promise.reject(new Error('a session is already active'));
+                    }
+                    return stub.port.invoke(channel);
+                },
+            };
+            const api = createLobbyApi(port);
+
+            await expect(api.quickStart({ gameId: 'sample-game' })).rejects.toThrow(
+                'a session is already active',
             );
         });
     });

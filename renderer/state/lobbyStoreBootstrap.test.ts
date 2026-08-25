@@ -48,6 +48,7 @@ function makeLobbyApi(onUpdateImpl?: (cb: (lobby: LobbyState) => void) => Unsubs
         getLocalPlayerId: vi.fn(async () => null),
         getLocalRole: vi.fn(async () => 'player' as const),
         leave: vi.fn(),
+        quickStart: vi.fn(),
         startGame: vi.fn(),
         returnToLobby: vi.fn(),
         updatePlayerReadyState: vi.fn(),

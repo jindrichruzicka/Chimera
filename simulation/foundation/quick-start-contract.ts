@@ -12,7 +12,7 @@
  * not: it can say how many seats to open but not what any of them is playing,
  * which is why the seat lists hold objects.
  *
- * The verb that consumes this config lands separately; this module is the
+ * `chimera:lobby:quick-start` consumes this config; this module is the
  * contract both ends compile against.
  *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract

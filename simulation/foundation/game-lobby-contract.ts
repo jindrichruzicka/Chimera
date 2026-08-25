@@ -263,3 +263,23 @@ export const ALLOW_SPECTATORS_DEFAULT = 'false';
 export function readAllowSpectators(matchSettings?: Readonly<Record<string, string>>): boolean {
     return matchSettings?.[ALLOW_SPECTATORS_SETTING] === 'true';
 }
+
+// ─── Reserved session-mode match-setting ────────────────────────────────────────
+
+/**
+ * Reserved, engine-owned match-setting key recording HOW the session was born.
+ * `engine.`-prefixed for the same reason as {@link ALLOW_SPECTATORS_SETTING} —
+ * the prefix is the engine's, never a game's.
+ *
+ * Unlike the spectator toggle, this key is NOT host-settable: it is stamped by
+ * the quick-start orchestrator and the `chimera:lobby:set-match-setting`
+ * boundary rejects it, so no lobby screen can flip it. It rides `matchSettings`
+ * so it reaches `snapshot.setup` (Invariant #101) and therefore survives a
+ * window reload and a restore, which a renderer-held launch origin would not.
+ *
+ * Absence means the session was born in the lobby.
+ */
+export const SESSION_MODE_SETTING = 'engine.sessionMode';
+
+/** The one value {@link SESSION_MODE_SETTING} is ever stamped with. */
+export const SESSION_MODE_QUICK = 'quick';

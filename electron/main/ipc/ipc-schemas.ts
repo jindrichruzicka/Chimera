@@ -17,9 +17,11 @@
 
 import { z } from 'zod';
 import {
+    WIRE_MAX_JOIN_CLAIMS,
     WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
     WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
 } from '@chimera-engine/simulation/foundation/messages-schemas.js';
+import { SESSION_MODE_SETTING } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { ChatScopeSchema } from '@chimera-engine/simulation/foundation/chat-schemas.js';
 import type { ChatScope } from '@chimera-engine/simulation/foundation/chat.js';
 import { MAX_SAVE_LABEL_LENGTH, toSlotId, playerId } from '../../preload/api-types.js';
@@ -28,6 +30,7 @@ import type {
     HostLobbyParams,
     JoinLobbyParams,
     LobbyAgentSlot,
+    QuickStartParams,
     ReplayExportIntent,
     RestoreStatusEvent,
     SaveRequest,
@@ -265,9 +268,9 @@ const LobbyAgentSlotSchema = z
         kind: z.enum(['human', 'ai']),
         omniscient: z.boolean().optional(),
         // Host-authored per-seat attributes for this slot (e.g. an AI's
-        // character). `chimera:lobby:host` is the sole write path for them, so
-        // this is where the host enforces the per-attribute wire bounds — the
-        // same caps `SetPlayerAttributePayloadSchema` applies to an
+        // character). An agent slot has no attribute-SETTER channel, so each
+        // frame that carries a slot enforces the per-attribute wire bounds —
+        // the same caps `SetPlayerAttributePayloadSchema` applies to an
         // owner-authored human seat.
         attributes: z
             .record(
@@ -344,7 +347,15 @@ export const SetMatchSettingPayloadSchema = z
         key: NonEmptyStringSchema,
         value: z.string(),
     })
-    .strict();
+    .strict()
+    // `engine.sessionMode` is engine-owned, not host-authored: it records HOW
+    // the session was born, so a custom lobby screen must not be able to flip
+    // it. The sibling reserved key (`engine.allowSpectators`) stays settable —
+    // it IS a host toggle.
+    .refine((payload) => payload.key !== SESSION_MODE_SETTING, {
+        message: `"${SESSION_MODE_SETTING}" is engine-owned and cannot be set over IPC`,
+        path: ['key'],
+    });
 
 /**
  * Schema for the `{playerId, key, value}` payload accepted by
@@ -377,6 +388,90 @@ export const RemoveAiPayloadSchema = z
         slotIndex: z.number().int().nonnegative(),
     })
     .strict();
+
+/**
+ * Per-attribute bounds for a quick-start seat, mirroring the wire frame's
+ * coarse caps exactly as {@link SetPlayerAttributePayloadSchema} and the
+ * agent-slot schema above do. The precise per-game cap
+ * (`GameLobbySetup.maxAttributeValueLength`) is enforced behind this boundary
+ * by `LobbyManager.setPlayerAttribute` on the paths that travel it.
+ */
+const QuickStartAttributesSchema = z.record(
+    NonEmptyStringSchema.max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
+    z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH),
+);
+
+const QuickStartSeatSchema = z
+    .object({ attributes: QuickStartAttributesSchema.optional() })
+    .strict();
+
+const QuickStartAiSeatSchema = z
+    .object({
+        omniscient: z.boolean().optional(),
+        attributes: QuickStartAttributesSchema.optional(),
+    })
+    .strict();
+
+/**
+ * Upper bound on a quick-started roster, tracking {@link WIRE_MAX_JOIN_CLAIMS}
+ * for the same reason `MAX_RESTORED_SEATS` does: a session larger than the
+ * claim wire cap could never fully reclaim its seats after a restore. The host
+ * seat is implicit, so the two seat lists together may fill the remainder.
+ */
+const MAX_QUICK_START_SEATS = WIRE_MAX_JOIN_CLAIMS - 1;
+
+/**
+ * Schema for {@link QuickStartParams} accepted by `chimera:lobby:quick-start`.
+ * `.strict()` at every level (§9.1) so a seat cannot smuggle an unknown field —
+ * notably `omniscient`, which is an AI-seat-only flag.
+ */
+export const QuickStartParamsSchema = z
+    .object({
+        gameId: NonEmptyStringSchema,
+        matchSettings: z
+            .record(NonEmptyStringSchema, z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH))
+            .optional(),
+        hostAttributes: QuickStartAttributesSchema.optional(),
+        localSeats: z.array(QuickStartSeatSchema).max(MAX_QUICK_START_SEATS).optional(),
+        aiSeats: z.array(QuickStartAiSeatSchema).max(MAX_QUICK_START_SEATS).optional(),
+    })
+    .strict()
+    // The stamp is the coordinator's to write.
+    .refine((value) => !Object.hasOwn(value.matchSettings ?? {}, SESSION_MODE_SETTING), {
+        message: `"${SESSION_MODE_SETTING}" is engine-owned and cannot be requested`,
+        path: ['matchSettings'],
+    })
+    .refine(
+        (value) =>
+            (value.localSeats?.length ?? 0) + (value.aiSeats?.length ?? 0) <= MAX_QUICK_START_SEATS,
+        {
+            message: `a quick-started roster may hold at most ${String(WIRE_MAX_JOIN_CLAIMS)} seats`,
+        },
+    )
+    .transform((value): QuickStartParams => {
+        // Each optional field is spread only when present, never set to
+        // `undefined` — the repo runs with `exactOptionalPropertyTypes`.
+        return {
+            gameId: value.gameId,
+            ...(value.matchSettings !== undefined ? { matchSettings: value.matchSettings } : {}),
+            ...(value.hostAttributes !== undefined ? { hostAttributes: value.hostAttributes } : {}),
+            ...(value.localSeats !== undefined
+                ? {
+                      localSeats: value.localSeats.map((seat) =>
+                          seat.attributes !== undefined ? { attributes: seat.attributes } : {},
+                      ),
+                  }
+                : {}),
+            ...(value.aiSeats !== undefined
+                ? {
+                      aiSeats: value.aiSeats.map((seat) => ({
+                          ...(seat.omniscient !== undefined ? { omniscient: seat.omniscient } : {}),
+                          ...(seat.attributes !== undefined ? { attributes: seat.attributes } : {}),
+                      })),
+                  }
+                : {}),
+        };
+    });
 
 /**
  * Schema for {@link SaveRequest} accepted by `chimera:saves:save`.

@@ -26,6 +26,7 @@ import type {
     PlayerConnectionEvent,
     PlayerLeftMatchEvent,
     ProfileRejection,
+    QuickStartParams,
     Unsubscribe,
 } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
@@ -100,6 +101,14 @@ export const LOBBY_ADD_AI_CHANNEL = 'chimera:lobby:add-ai';
 export const LOBBY_REMOVE_AI_CHANNEL = 'chimera:lobby:remove-ai';
 
 /**
+ * `ipcRenderer.invoke` target for {@link LobbyAPI.quickStart}. Opens a match
+ * without the lobby UI by driving the same public `LobbyManager` verbs the
+ * lobby screen drives; the main-side handler rejects it while a session or a
+ * restore is already live.
+ */
+export const LOBBY_QUICK_START_CHANNEL = 'chimera:lobby:quick-start';
+
+/**
  * `ipcRenderer.on` target for {@link LobbyAPI.onUpdate}. Main pushes the
  * full {@link LobbyState} via `webContents.send` whenever the roster,
  * readiness, or lobby metadata changes.
@@ -159,6 +168,12 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
                 .invoke(LOBBY_JOIN_CHANNEL, params)
                 .then((value) => parseInvokeResponse(LobbyInfoSchema, LOBBY_JOIN_CHANNEL, value)),
         leave: (): Promise<void> => ipc.invoke(LOBBY_LEAVE_CHANNEL).then(() => undefined),
+        quickStart: (params: QuickStartParams): Promise<LobbyInfo> =>
+            ipc
+                .invoke(LOBBY_QUICK_START_CHANNEL, params)
+                .then((value) =>
+                    parseInvokeResponse(LobbyInfoSchema, LOBBY_QUICK_START_CHANNEL, value),
+                ),
         startGame: (): Promise<void> => ipc.invoke(LOBBY_START_GAME_CHANNEL).then(() => undefined),
         returnToLobby: (): Promise<void> =>
             ipc.invoke(LOBBY_RETURN_TO_LOBBY_CHANNEL).then(() => undefined),

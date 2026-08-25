@@ -36,6 +36,7 @@ import {
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
+    LOBBY_QUICK_START_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
 } from '../../preload/apis/lobby-api.js';
 import { CONTENT_GET_COLLECTIONS_CHANNEL } from '../../preload/apis/content-api.js';
@@ -97,10 +98,12 @@ import type {
     DeviceInfo,
     EngineAction,
     PerspectiveReplayListItem,
+    LobbyInfo,
     PerspectiveReplayPlaybackInfo,
     PlayerProfile,
     PlayerId,
     PlayerSnapshot,
+    QuickStartParams,
     RelayResult,
     ReplayListItem,
     ReplayPlaybackInfo,
@@ -129,6 +132,7 @@ import {
     SetMatchSettingPayloadSchema,
     SetPlayerAttributePayloadSchema,
     SpectateSetTargetPayloadSchema,
+    QuickStartParamsSchema,
     RemoveAiPayloadSchema,
     ReplayExportRequestSchema,
     PerspectiveReplayExportRequestSchema,
@@ -182,6 +186,7 @@ export {
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
+    LOBBY_QUICK_START_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_CANCEL_RESTORE_CHANNEL,
     SAVES_DELETE_CHANNEL,
@@ -566,6 +571,13 @@ export interface RegisterLobbyHandlersOptions {
     readonly ipcMain: LobbyHandlersIpcMain;
     /** Real LobbyManager that handles host / join / leave. */
     readonly lobbyManager: LobbyManager;
+    /**
+     * Quick-start orchestrator entry point, bound at the composition root to
+     * `QuickStartCoordinator.quickStart`. Required rather than optional so a
+     * composition root that forgot to wire it cannot silently register a lobby
+     * namespace with the verb missing.
+     */
+    readonly quickStart: (params: QuickStartParams) => Promise<LobbyInfo>;
     /** Supplies the local profile attestation attached to outbound JOIN requests. */
     readonly profileManager?: ProfileManagerPort;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
@@ -603,6 +615,7 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
             LOBBY_ADD_AI_CHANNEL,
             LOBBY_REMOVE_AI_CHANNEL,
+            LOBBY_QUICK_START_CHANNEL,
         ],
     });
 
@@ -620,6 +633,18 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             ...validated,
             profile: options.profileManager.currentAttestation(),
         });
+    });
+
+    // Lobby-skipping match start. The handler owns only the boundary parse; the
+    // whole sequence — and every guard on it — lives in the injected
+    // coordinator, which composes public `LobbyManager` verbs.
+    ipcMain.handle(LOBBY_QUICK_START_CHANNEL, (_event, params) => {
+        const validated = parseInvokeRequest(
+            QuickStartParamsSchema,
+            LOBBY_QUICK_START_CHANNEL,
+            params,
+        );
+        return options.quickStart(validated);
     });
 
     ipcMain.handle(LOBBY_LEAVE_CHANNEL, (_event, payload) => {

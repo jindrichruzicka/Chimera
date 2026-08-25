@@ -171,6 +171,8 @@ const {
     mockLobbyManagerHostLobby,
     mockLobbyManagerAddLocalSeat,
     mockLobbyManagerCloseLobby,
+    mockLobbyManagerGetCurrentState,
+    mockLobbyManagerSetMatchSetting,
     mockLobbyManagerLocalSeatIds,
     hostedTeardownRef,
     hostedTransportJoinRef,
@@ -224,11 +226,23 @@ const {
         hostedTeardownRef.current = null;
         return Promise.resolve();
     });
+    // The quick-start ports reach these; `getCurrentState` backs the
+    // "a session is already active" guard, so tests drive it directly.
+    const mockLobbyManagerGetCurrentState = vi.fn<() => unknown>(() => null);
+    const mockLobbyManagerSetMatchSetting = vi.fn(() => Promise.resolve());
+    const mockLobbyManagerSetPlayerAttribute = vi.fn(() => Promise.resolve());
+    const mockLobbyManagerUpdatePlayerReadyState = vi.fn(() => Promise.resolve());
+    const mockLobbyManagerStartGame = vi.fn(() => Promise.resolve());
     return {
         mockLobbyManagerIsLocalSeat,
         mockLobbyManagerHostLobby,
         mockLobbyManagerAddLocalSeat,
         mockLobbyManagerCloseLobby,
+        mockLobbyManagerGetCurrentState,
+        mockLobbyManagerSetMatchSetting,
+        mockLobbyManagerSetPlayerAttribute,
+        mockLobbyManagerUpdatePlayerReadyState,
+        mockLobbyManagerStartGame,
         mockLobbyManagerLocalSeatIds,
         hostedTeardownRef,
         hostedTransportJoinRef,
@@ -239,6 +253,11 @@ const {
                 hostLobby: mockLobbyManagerHostLobby,
                 addLocalSeat: mockLobbyManagerAddLocalSeat,
                 closeLobby: mockLobbyManagerCloseLobby,
+                getCurrentState: mockLobbyManagerGetCurrentState,
+                setMatchSetting: mockLobbyManagerSetMatchSetting,
+                setPlayerAttribute: mockLobbyManagerSetPlayerAttribute,
+                updatePlayerReadyState: mockLobbyManagerUpdatePlayerReadyState,
+                startGame: mockLobbyManagerStartGame,
             };
         }),
     };
@@ -618,6 +637,7 @@ const { GAME_GET_CURRENT_SNAPSHOT_CHANNEL, GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CH
     await import('../preload/apis/game-api.js');
 const { SAVES_LOAD_CHANNEL, SAVES_RESTORE_STATUS_CHANNEL, SAVES_CANCEL_RESTORE_CHANNEL } =
     await import('../preload/apis/saves-api.js');
+const { LOBBY_QUICK_START_CHANNEL } = await import('../preload/apis/lobby-api.js');
 const {
     PERSPECTIVE_REPLAY_LIST_CHANNEL,
     PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
@@ -691,6 +711,31 @@ function makeTestContributions(): MainGameContribution[] {
  * exist before they can say anything about when the host arms it.
  */
 const REALTIME_TICK_MS = 50;
+
+/**
+ * The tactics contribution with a declared quick-start block and seat-index
+ * defaults layered onto its real lobby setup. Backs the composition-root
+ * quick-start tests: without it, `resolveQuickStartDefaults` and
+ * `resolveSeatDefaultAttributes` have nothing to resolve, so a port that
+ * returned `undefined`/`{}` would be indistinguishable from a working one.
+ */
+const QUICK_START_DECLARED_SETTING = 'declaredByTheGame';
+
+function makeQuickStartTestContributions(): MainGameContribution[] {
+    return makeTestContributions().map((contribution) => ({
+        ...contribution,
+        lobbySetup: (content: Parameters<NonNullable<MainGameContribution['lobbySetup']>>[0]) => ({
+            ...contribution.lobbySetup!(content),
+            resolveDefaultPlayerAttributes: (seatIndex: number) => ({
+                seat: `seat-${String(seatIndex)}`,
+            }),
+            quickStart: {
+                matchSettings: { [QUICK_START_DECLARED_SETTING]: 'yes' },
+                aiSeats: [{}],
+            },
+        }),
+    }));
+}
 
 function makeRealtimeTestContributions(): MainGameContribution[] {
     return makeTestContributions().map((contribution) => ({
@@ -6094,6 +6139,9 @@ describe('main() — session restore wiring', () => {
         mockRegisterCrashReporter.mockClear();
         mockSaveManagerAutoSave.mockClear();
         mockSaveManagerRestoreFromSave.mockReset();
+        mockLobbyManagerGetCurrentState.mockReset();
+        mockLobbyManagerGetCurrentState.mockReturnValue(null);
+        mockLobbyManagerSetMatchSetting.mockClear();
         mockSimulationHostInstance.onGameStart.mockClear();
         mockStateBroadcasterInstance.broadcast.mockClear();
         hostedTeardownRef.current = null;
@@ -6303,6 +6351,117 @@ describe('main() — session restore wiring', () => {
             /joined to another session/,
         );
         expect(mockLobbyManagerHostLobby).not.toHaveBeenCalled();
+    });
+
+    // ── quick start ↔ restore interleavings, at the composition root ──────────
+    //
+    // `QuickStartCoordinator`'s own state machine is unit-tested against port
+    // stubs; these assert the wiring `main()` binds those ports to — the two
+    // guard predicates and the `saves:load` refusal that closes the window in
+    // which a quick start is hosting but `activeSession` is still null.
+    describe('quick start wiring', () => {
+        const findQuickStartHandler = ():
+            | ((event: unknown, params: unknown) => Promise<unknown>)
+            | undefined =>
+            ipcMainHandle.mock.calls.find(
+                ([channel]) => channel === LOBBY_QUICK_START_CHANNEL,
+            )?.[1] as ((event: unknown, params: unknown) => Promise<unknown>) | undefined;
+
+        /**
+         * Make the next `hostLobby` hang WITHOUT firing `onSessionHosted` —
+         * the real shape of a provider still coming up, and the only window in
+         * which a quick start is under way while `activeSession` is null.
+         */
+        function hangNextHostLobby(): void {
+            mockLobbyManagerHostLobby.mockImplementationOnce(() => new Promise<never>(() => {}));
+        }
+
+        it('refuses a menu load while a quick start is still hosting', async () => {
+            await main(makeTestContributions());
+            hangNextHostLobby();
+
+            const quickStart = findQuickStartHandler();
+            expect(quickStart).toBeTypeOf('function');
+            void quickStart?.(undefined, { gameId: TACTICS_GAME_ID });
+
+            await expect(loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER))).rejects.toThrow(
+                /quick start is in progress/,
+            );
+            // The restore never reached the coordinator, so no second host ran.
+            expect(mockLobbyManagerHostLobby).toHaveBeenCalledTimes(1);
+        });
+
+        it("resolves the GAME's declared quickStart block for the requested gameId", async () => {
+            await main(makeQuickStartTestContributions());
+
+            // Only `gameId` is supplied, so every seat and setting below can
+            // only have come from the game's own declaration.
+            await findQuickStartHandler()?.(undefined, { gameId: TACTICS_GAME_ID });
+
+            expect(mockLobbyManagerHostLobby).toHaveBeenCalledTimes(1);
+            expect(mockLobbyManagerHostLobby.mock.calls[0]?.[0]).toMatchObject({
+                gameId: TACTICS_GAME_ID,
+                // 1 host + the one AI seat the game declared.
+                maxPlayers: 2,
+            });
+            expect(mockLobbyManagerSetMatchSetting).toHaveBeenCalledWith(
+                QUICK_START_DECLARED_SETTING,
+                'yes',
+            );
+        });
+
+        it("seeds a declared AI seat with the GAME's seat-index default attributes", async () => {
+            await main(makeQuickStartTestContributions());
+
+            await findQuickStartHandler()?.(undefined, { gameId: TACTICS_GAME_ID });
+
+            // An agent slot is the one seat kind LobbyManager never seeds, so
+            // the attributes below can only come from the resolver port.
+            expect(mockLobbyManagerHostLobby.mock.calls[0]?.[0]).toMatchObject({
+                agentSlots: [{ slotIndex: 1, kind: 'ai', attributes: { seat: 'seat-1' } }],
+            });
+        });
+
+        it('refuses a quick start while a session is already active', async () => {
+            await main(makeTestContributions());
+            mockLobbyManagerGetCurrentState.mockReturnValueOnce({
+                info: { sessionId: 's', hostId: 'host-1', gameId: TACTICS_GAME_ID },
+                players: [],
+            });
+
+            await expect(
+                findQuickStartHandler()?.(undefined, { gameId: TACTICS_GAME_ID }),
+            ).rejects.toThrow(/session is already active/);
+            expect(mockLobbyManagerHostLobby).not.toHaveBeenCalled();
+        });
+
+        it('refuses a quick start while a restore is still hosting', async () => {
+            await main(makeTestContributions());
+            hangNextHostLobby();
+            void loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER));
+            // Let the saves handler reach the coordinator's hostLobby port.
+            await Promise.resolve();
+            await Promise.resolve();
+
+            await expect(
+                findQuickStartHandler()?.(undefined, { gameId: TACTICS_GAME_ID }),
+            ).rejects.toThrow(/restore is in progress/);
+            expect(mockLobbyManagerHostLobby).toHaveBeenCalledTimes(1);
+        });
+
+        it('refuses a quick start while a restore waits for a saved remote seat', async () => {
+            await main(makeTestContributions());
+            await loadSlot(makeRestoreSaveFile(MIXED_ROSTER));
+            mockLobbyManagerHostLobby.mockClear();
+
+            // 'waiting-for-players', not 'hosting' — a distinct arm of the same
+            // predicate, and the one a restore parks in for as long as a seat
+            // is missing.
+            await expect(
+                findQuickStartHandler()?.(undefined, { gameId: TACTICS_GAME_ID }),
+            ).rejects.toThrow(/restore is in progress/);
+            expect(mockLobbyManagerHostLobby).not.toHaveBeenCalled();
+        });
     });
 
     describe('with an active session', () => {
