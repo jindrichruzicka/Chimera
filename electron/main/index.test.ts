@@ -635,6 +635,8 @@ const { ProfileManager } = await import('./profile/ProfileManager.js');
 const { SessionRuntime, SessionCommitmentRuntime } = await import('./runtime/SessionRuntime.js');
 const { ReplayManager } = await import('./replay/replay-manager.js');
 const { PerspectiveReplayManager } = await import('./replay/PerspectiveReplayManager.js');
+const { RealtimeTicker } = await import('./runtime/RealtimeTicker.js');
+const { InMemoryUndoManager } = await import('@chimera-engine/simulation/engine/UndoManager.js');
 
 // ── Tactics contribution fixture for main() ──────────────────────────────────
 // main() is now game-agnostic: it hosts whatever MainGameContribution set it is
@@ -678,6 +680,23 @@ function makeTestContributions(): MainGameContribution[] {
             resolveIsMyTurn: tacticsResolveIsMyTurn,
         },
     ];
+}
+
+/**
+ * The same tactics contribution with a wall-clock heartbeat declared.
+ *
+ * Tactics is the turn-based reference game (`realtime: false`), so
+ * `resolveTickerHz` returns null for its real manifest and `main()` builds NO
+ * `RealtimeTicker` at all. The match-start-lifecycle cases need the heartbeat to
+ * exist before they can say anything about when the host arms it.
+ */
+const REALTIME_TICK_MS = 50;
+
+function makeRealtimeTestContributions(): MainGameContribution[] {
+    return makeTestContributions().map((contribution) => ({
+        ...contribution,
+        manifest: { ...contribution.manifest, realtime: true, tickRateMs: REALTIME_TICK_MS },
+    }));
 }
 
 const PRELOAD = '/abs/path/preload/api.js';
@@ -1881,7 +1900,19 @@ interface SpectatorViewSourceLike {
     followedBy(spectatorId: string): string | undefined;
 }
 
+/** A lobby AI-seat declaration, as both the host metadata and the lobby state carry it. */
+interface HarnessAgentSlot {
+    readonly slotIndex: number;
+    readonly kind: 'human' | 'ai';
+    readonly omniscient?: boolean;
+}
+
 interface SpectatorSessionOptions {
+    /**
+     * Returns the session teardown. Declared (rather than `=> void`) because a
+     * session that armed the real-time heartbeat keeps a live timer chain
+     * dispatching into its pipeline until torn down.
+     */
     onSessionHosted?: (
         transport: {
             readonly onPlayerJoined: ReturnType<typeof vi.fn>;
@@ -1893,8 +1924,9 @@ interface SpectatorSessionOptions {
         metadata: {
             readonly hostId: ReturnType<typeof playerId>;
             readonly maxPlayers: number;
+            readonly agentSlots?: readonly HarnessAgentSlot[];
         },
-    ) => void;
+    ) => (() => void) | void;
     onGameStartRequested?: (state: {
         readonly info: {
             readonly sessionId: string;
@@ -1906,6 +1938,7 @@ interface SpectatorSessionOptions {
             readonly displayName: string;
             readonly ready: boolean;
         }[];
+        readonly agentSlots?: readonly HarnessAgentSlot[];
     }) => void;
 }
 
@@ -3311,6 +3344,177 @@ describe('main', () => {
         expect(mockSimulationHostInstance.registerAgent.mock.invocationCallOrder[1]).toBeLessThan(
             mockSimulationHostInstance.onGameStart.mock.invocationCallOrder[0]!,
         );
+    });
+
+    // ── Match start + the pre-start window ───────────────────────────────────
+    // Two halves of one gate (`tryStartGame` in index.ts): the roster can
+    // complete on either side of `engine:start_game`, and only one of those
+    // sides may arm the wall-clock heartbeat.
+
+    it('starts the match for a roster that only completes at game-start (host + lobby-added AI)', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockSimulationHostInstance.onGameStart.mockClear();
+        const tickerStart = vi.spyOn(RealtimeTicker.prototype, 'start');
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeRealtimeTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-ai-completed');
+            // Hosted with an EMPTY agent roster — the UI adds AI only after
+            // hosting — so at host time the session is one seat short of
+            // `maxPlayers` and the start gate stays shut.
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+            expect(mockSimulationHostInstance.onGameStart).not.toHaveBeenCalled();
+            expect(tickerStart).not.toHaveBeenCalled();
+
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-ai-completed', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+            });
+
+            // The AI seat completes the roster inside the start request, so this
+            // is the only moment the lifecycle can fire at all.
+            expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
+            expect(tickerStart).toHaveBeenCalledOnce();
+        } finally {
+            teardown?.();
+            tickerStart.mockRestore();
+        }
+    });
+
+    it('seeds the first player turn memento before telling the agents the match started', async () => {
+        mockLobbyManagerCtor.mockClear();
+        const saveTurnMemento = vi.spyOn(InMemoryUndoManager.prototype, 'saveTurnMemento');
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-memento-order');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+
+            // Scope the ordering window to the start request alone — over an
+            // uncleared mock `invocationCallOrder[0]` would only prove that SOME
+            // earlier call came first.
+            saveTurnMemento.mockClear();
+            mockSimulationHostInstance.onGameStart.mockClear();
+
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-memento-order', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+            });
+
+            // Exactly one of each inside the window, so the first call order of
+            // each spy is the call this claim is about.
+            expect(saveTurnMemento).toHaveBeenCalledOnce();
+            expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
+            // `onGameStart` reaches an AI brain's state machine synchronously and
+            // its dispatch runs straight back out through the host action path, so
+            // a memento seeded after it would take the first (always human)
+            // player's undo baseline from a snapshot that already carries an AI's
+            // move.
+            expect(saveTurnMemento.mock.invocationCallOrder[0]!).toBeLessThan(
+                mockSimulationHostInstance.onGameStart.mock.invocationCallOrder[0]!,
+            );
+        } finally {
+            teardown?.();
+            saveTurnMemento.mockRestore();
+        }
+    });
+
+    it('starts an under-cap match when the host closes the roster early (host + one AI in a 3-seat lobby)', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockSimulationHostInstance.onGameStart.mockClear();
+        const tickerStart = vi.spyOn(RealtimeTicker.prototype, 'start');
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeRealtimeTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-under-cap');
+            teardown = options?.onSessionHosted?.(transport, { hostId, maxPlayers: 3 });
+
+            options?.onGameStartRequested?.({
+                info: { sessionId: 'session-under-cap', hostId, gameId: 'tactics' },
+                players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+            });
+
+            // Two seats of three. `LobbyManager.startGame` gates on readiness,
+            // never on a full lobby, so the host can close the roster early —
+            // and nothing will ever fill the third seat, which makes this start
+            // the only chance the lifecycle gets.
+            expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
+            expect(tickerStart).toHaveBeenCalledOnce();
+        } finally {
+            teardown?.();
+            tickerStart.mockRestore();
+        }
+    });
+
+    it('records no engine:tick ahead of engine:start_game when the roster is already full at host time', async () => {
+        mockLobbyManagerCtor.mockClear();
+        const recordAction = vi.spyOn(ReplayManager.prototype, 'recordAction');
+        const recordedTypes = (): readonly string[] =>
+            recordAction.mock.calls.map(([entry]) => entry.action.type);
+        let teardown: (() => void) | void = undefined;
+        try {
+            await main(makeRealtimeTestContributions());
+
+            const { transport, options } = makeSpectatorSessionHarness();
+            const hostId = playerId('host-prestart-window');
+            // Only a dev/e2e build records a deterministic replay at all
+            // (`createDeterministicReplayPort` returns undefined when packaged,
+            // which is what this suite's electron double reports). The port is
+            // built inside `onSessionHosted`, so the flip lands after main()'s
+            // own `isPackaged` reads — path resolution keeps the packaged walk
+            // this suite's content load depends on.
+            mockAppIsPackaged.value = false;
+            vi.useFakeTimers();
+            try {
+                // Host-time `agentSlots` fill the roster to `maxPlayers` before
+                // `startGame()` is ever called — the quick-start shape.
+                teardown = options?.onSessionHosted?.(transport, {
+                    hostId,
+                    maxPlayers: 2,
+                    agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+                });
+
+                // Ten heartbeat periods of lobby time. A lobby-phase
+                // `engine:tick` is admitted by the reducer and advances the
+                // clock (EngineActions.test.ts), so an armed ticker here would
+                // beat straight into the recording.
+                vi.advanceTimersByTime(REALTIME_TICK_MS * 10);
+                expect(recordedTypes()).toStrictEqual([]);
+
+                options?.onGameStartRequested?.({
+                    info: { sessionId: 'session-prestart-window', hostId, gameId: 'tactics' },
+                    players: [{ playerId: hostId, displayName: 'Host', ready: true }],
+                    agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+                });
+                expect(recordedTypes()).toStrictEqual(['engine:start_game']);
+
+                // Positive control: the heartbeat is armed by the start, not
+                // disabled by the gate. The chain is absolute-target scheduled
+                // from `start()`, so three periods are exactly three beats.
+                vi.advanceTimersByTime(REALTIME_TICK_MS * 3);
+                expect(recordedTypes()).toStrictEqual([
+                    'engine:start_game',
+                    'engine:tick',
+                    'engine:tick',
+                    'engine:tick',
+                ]);
+            } finally {
+                teardown?.();
+                vi.useRealTimers();
+                mockAppIsPackaged.value = true;
+            }
+        } finally {
+            recordAction.mockRestore();
+        }
     });
 
     it('forwards lobby connection-status updates to live renderer windows', async () => {
@@ -5798,7 +6002,18 @@ describe('main() — session restore wiring', () => {
 
     function makeRestoreSaveFile(
         seats: readonly RestoreSeatFixture[],
-        overrides: { matchId?: string; gameId?: string; tick?: number; maxPlayers?: number } = {},
+        overrides: {
+            matchId?: string;
+            gameId?: string;
+            tick?: number;
+            maxPlayers?: number;
+            /**
+             * The saved in-match phase. Defaults to the engine's own `'playing'`,
+             * but a game owns its phase vocabulary past the lobby, so a save can
+             * legitimately carry any other value.
+             */
+            phase?: string;
+        } = {},
     ): unknown {
         const tick = overrides.tick ?? 42;
         return {
@@ -5814,7 +6029,7 @@ describe('main() — session restore wiring', () => {
             },
             checkpoint: {
                 tick,
-                phase: 'playing',
+                phase: overrides.phase ?? 'playing',
                 turnNumber: 4,
                 players: Object.fromEntries(seats.map((s) => [s.playerId, {}])),
                 matchId: overrides.matchId ?? RESTORED_MATCH_ID,
@@ -5979,6 +6194,34 @@ describe('main() — session restore wiring', () => {
             control: 'remote',
             slotIndex: 3,
         });
+    });
+
+    it('leaves the real-time heartbeat unarmed while a saved remote seat is still missing', async () => {
+        const tickerStart = vi.spyOn(RealtimeTicker.prototype, 'start');
+        try {
+            await main(makeRealtimeTestContributions());
+
+            // A save whose in-match phase is the GAME's word, not the engine's
+            // `'playing'` — the arm gate asks whether the session has left the
+            // lobby, so it must not be an allow-list of engine phase names.
+            await loadSlot(makeRestoreSaveFile(MIXED_ROSTER, { phase: 'skirmish' }));
+
+            // The restored checkpoint is already out of the lobby (tick 42), so
+            // the phase half of the arm gate is open. The roster half is not: a
+            // remote seat has yet to reconnect and no agent has been told the
+            // match started, so a heartbeat here would beat a match nobody is
+            // playing.
+            expect(mockSimulationHostInstance.onGameStart).not.toHaveBeenCalled();
+            expect(tickerStart).not.toHaveBeenCalled();
+
+            hostedTransportJoinRef.current?.({ playerId: 'remote-restored' });
+
+            expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledTimes(1);
+            expect(tickerStart).toHaveBeenCalledOnce();
+        } finally {
+            hostedTeardownRef.current?.();
+            tickerStart.mockRestore();
+        }
     });
 
     it('rejects a menu load whose save belongs to a different game', async () => {

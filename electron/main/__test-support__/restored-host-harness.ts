@@ -161,6 +161,8 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
     let seatLobbyAgentsForGameStart:
         | ((slots: readonly LobbyAgentSlot[]) => readonly PlayerId[])
         | null = null;
+    /** Match-start gate seam — assigned in `onSessionHosted`. */
+    let startActiveSessionMatch: (() => void) | null = null;
     let syncLiveAgentSlots: ((slots: readonly LobbyAgentSlot[]) => void) | null = null;
     /** AI-removal host-ledger reconcile seam — assigned in `onSessionHosted`. */
     let removeAiSeat: ((slotIndex: number) => void) | null = null;
@@ -431,11 +433,11 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
 
             // mirrors index.ts::tryStartGame — the restore start gate,
             // instrumented with the ordered `game-start` event.
-            const tryStartGame = (): void => {
+            const tryStartGame = (rosterFinal = false): void => {
                 if (restoreSeatingActive) {
                     return;
                 }
-                if (!gameStarted && activePlayers.size >= metadata.maxPlayers) {
+                if (!gameStarted && (rosterFinal || activePlayers.size >= metadata.maxPlayers)) {
                     gameStarted = true;
                     events.push({
                         kind: 'game-start',
@@ -443,7 +445,11 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                     });
                     simulationHost.onGameStart(sessionRuntime.getSnapshot());
                 }
+                // index.ts arms the real-time heartbeat here, gated on the
+                // session having left the lobby phase. The harness hosts no
+                // ticker, so only the gate's other half is mirrored.
             };
+            startActiveSessionMatch = () => tryStartGame(true);
 
             const broadcastCurrentGameSnapshot = (viewerId: PlayerId): void => {
                 const snapshot = sessionRuntime.getSnapshot();
@@ -668,6 +674,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                     saveInitialTurnMemento = null;
                     handleHostedLocalSeatAdded = null;
                     seatLobbyAgentsForGameStart = null;
+                    startActiveSessionMatch = null;
                     syncLiveAgentSlots = null;
                     removeAiSeat = null;
                     seatRestoredRoster = null;
@@ -733,6 +740,10 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 },
             });
             saveInitialTurnMemento?.(firstPlayer);
+            // mirrors index.ts: fire the match-start lifecycle last, so a roster
+            // that `seatLobbyAgentsForGameStart` just completed starts over the
+            // started snapshot.
+            startActiveSessionMatch?.();
         },
 
         // mirrors electron/main/index.ts::onReturnToLobbyRequested —

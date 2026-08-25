@@ -1707,6 +1707,13 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     let seatLobbyAgentsForGameStart:
         | ((agentSlots: readonly LobbyAgentSlot[]) => readonly PlayerId[])
         | null = null;
+    // Drives the hosted session's match-start gate with the roster declared
+    // FINAL — the one thing only the start request knows. Assigned inside
+    // `onSessionHosted` (the `seatLobbyAgentsForGameStart` pattern) so
+    // `onGameStartRequested` can fire the lifecycle for the roster
+    // `seatLobbyAgentsForGameStart` just settled, and arm the heartbeat the
+    // lobby phase held back; null when no hosted session is live.
+    let startActiveSessionMatch: (() => void) | null = null;
     // Mirrors the live lobby AI roster into the hosted session as `addAi()`
     // mutates it during the lobby. Assigned inside `onSessionHosted` (the
     // `seatLobbyAgentsForGameStart` pattern) so `onLobbyStateChanged` can keep
@@ -2538,21 +2545,55 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 return assignedSlotIndexes.size;
             };
 
-            const tryStartGame = (): void => {
+            // The match-start lifecycle gate, re-entered from each seam that can
+            // move the session toward a live match. Its two halves answer
+            // different questions, so they are gated separately.
+            //
+            // `onGameStart` fires once the roster is SETTLED — every agent that
+            // will play is registered, so they may be told the match is theirs.
+            // Settled normally means full, because the seats that are still
+            // missing are ones the session is waiting for: a client that has not
+            // joined yet, a saved remote seat that has not reconnected. But
+            // `LobbyManager.startGame` gates on readiness and NOT on a full
+            // lobby, so a host may close an under-cap roster by hand — at which
+            // point no further seat is coming and waiting for one freezes the
+            // match. `rosterFinal` is that declaration, and only the start
+            // request makes it.
+            //
+            // The heartbeat arms once the session has LEFT THE LOBBY. Roster
+            // completion is the wrong signal for it: a roster can be full before
+            // `engine:start_game` (host-time `agentSlots`, or every human joined
+            // while the host still holds the lobby open), and a lobby-phase
+            // `engine:tick` is not inert — the reducer admits it in every phase
+            // and advances the clock, so an early arm shifts the tick that
+            // `engine:start_game` is stamped with and writes pre-start beats into
+            // the deterministic recording, which `startSessionRecordings` arms at
+            // host time in the dev/e2e builds that record one (Invariant #71).
+            //
+            // The test is an EXCLUSION of `lobby`, never an allow-list of
+            // 'playing'. A game names its own in-match phases, and a restored
+            // save carries whichever one it was in, so an allow-list goes inert
+            // for any game that does not spell its match phase the engine's way
+            // — measured by the restore case in `index.test.ts`.
+            const tryStartGame = (rosterFinal = false): void => {
                 // Mid-restore the roster is incomplete and the checkpoint may not
                 // be applied yet — `seatRestoredRoster` retries once seating is
                 // done.
                 if (restoreSeatingActive) {
                     return;
                 }
-                if (!gameStarted && activePlayers.size >= metadata.maxPlayers) {
+                if (!gameStarted && (rosterFinal || activePlayers.size >= metadata.maxPlayers)) {
                     gameStarted = true;
                     simulationHost.onGameStart(sessionRuntime.getSnapshot());
-                    // Begin the wall-clock heartbeat for real-time games (no-op for
-                    // turn-based games, whose ticker is null). Idempotent start().
+                }
+                // No-op for turn-based games, whose ticker is null. `start()` is
+                // idempotent, so the seams that re-enter this after the match is
+                // live (a reconnect, a restore) cost nothing.
+                if (gameStarted && sessionRuntime.getSnapshot().phase !== gamePhase('lobby')) {
                     realtimeTicker?.start();
                 }
             };
+            startActiveSessionMatch = () => tryStartGame(true);
 
             // Host-local match-state reset for return-to-lobby. The
             // `engine:return_to_lobby` dispatch (in `onReturnToLobbyRequested`)
@@ -2561,8 +2602,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // restartable. It must NOT close the lobby or fire the match-end /
             // replay-finalise path (the action keeps `gameResult` null).
             resetActiveSessionToLobby = (): void => {
-                // Halt the heartbeat while returning to lobby; `tryStartGame` at
-                // the end of this reset re-starts it once every seat re-joins.
+                // Halt the heartbeat while returning to lobby. The next match's
+                // start request re-arms it — see `tryStartGame`.
                 realtimeTicker?.stop();
                 // Per-session host-local state must not bleed into the next
                 // match (host-local state-ownership theme, Invariant #3).
@@ -3047,6 +3088,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     saveInitialTurnMemento = null;
                     handleHostedLocalSeatAdded = null;
                     seatLobbyAgentsForGameStart = null;
+                    startActiveSessionMatch = null;
                     syncLiveAgentSlots = null;
                     removeAiSeat = null;
                     broadcastRestoredSnapshot = null;
@@ -3179,6 +3221,17 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // Non-active players receive their memento when engine:end_turn fires and
             // their turn begins.
             saveInitialTurnMemento?.(firstPlayer);
+            // Fire the match-start lifecycle, with the roster now final. Placed
+            // behind the memento seed: `onGameStart` reaches an AI brain's state
+            // machine synchronously and its dispatch runs straight back out
+            // through the host action path, so a memento seeded after it would
+            // take the first (always human) player's undo baseline from a
+            // snapshot already carrying an AI's move. The host has closed the
+            // roster here, so a gate that keeps waiting for a seat leaves the
+            // match unstarted. For a roster that filled earlier this re-enters a
+            // spent one-shot and only arms the heartbeat, which the lobby phase
+            // held back until now.
+            startActiveSessionMatch?.();
         },
         onReturnToLobbyRequested: (state) => {
             // Reverse of `onGameStartRequested`: abandon the live match

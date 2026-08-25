@@ -31,7 +31,7 @@ import {
 } from './EngineActions.js';
 import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId, ReduceContext, ValidationResult } from './types.js';
-import { entityId, isReduceContext, playerId as toPlayerId, sceneId } from './types.js';
+import { entityId, gamePhase, isReduceContext, playerId as toPlayerId, sceneId } from './types.js';
 import type { GameTimer, TimerId, TimerRegistry } from './GameTimer.js';
 import { TimerManager } from './GameTimer.js';
 import type { AnimationWindowId, AnimationWindowRegistry } from './AnimationWindow.js';
@@ -235,6 +235,33 @@ describe('engine:tick definition', () => {
         const snapshot = makeSnapshot();
         const frozen = Object.freeze({ ...snapshot });
         expect(() => definition().reduce(frozen, { seed: 7 }, hostId, stubCtx)).not.toThrow();
+    });
+
+    // A lobby-phase beat is NOT inert. `validate` admits `engine:tick` in every
+    // phase, so a heartbeat armed before the match begins still advances the
+    // clock — shifting the tick the eventual `engine:start_game` is stamped
+    // with, and landing in the deterministic recording ahead of it. That is
+    // what makes the host's pre-start window a correctness question rather than
+    // a tolerable one; the host gate that closes it lives in
+    // `electron/main/index.ts::tryStartGame`.
+    it('reduce on a lobby-phase snapshot advances the tick and leaves every other field alone', () => {
+        const snapshot: BaseGameSnapshot = {
+            ...makeSnapshot(hostId),
+            phase: gamePhase('lobby'),
+            tick: 4,
+        };
+        expect(definition().reduce(snapshot, { seed: 7 }, hostId, stubCtx)).toStrictEqual({
+            tick: 5,
+            seed: 42,
+            players: {},
+            entities: {},
+            phase: gamePhase('lobby'),
+            events: [],
+            turnNumber: 0,
+            timers: {},
+            gameResult: null,
+            hostPlayerId: hostId,
+        });
     });
 });
 

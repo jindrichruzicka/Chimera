@@ -10,6 +10,14 @@
  * `getEnvelope` factory that has live access to the current snapshot so it
  * can stamp the correct `tick`, `seed`, and `playerId` every time.
  *
+ * WHEN the host arms one is not this module's decision but it constrains this
+ * module's contract: `engine:tick` is admitted by the reducer in every phase, so
+ * a ticker started while the session is still in the lobby advances the clock
+ * ahead of `engine:start_game` and writes pre-start beats into the deterministic
+ * recording. The gate that forbids that is `tryStartGame` in
+ * `electron/main/index.ts`, which arms a ticker only once the session snapshot
+ * has left the lobby phase.
+ *
  * Two scheduling paths, chosen once per `start()` by whether the caller wired
  * `getRateScalePermille`:
  *
