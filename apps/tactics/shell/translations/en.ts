@@ -45,8 +45,7 @@ export const tacticsBundleEn: Readonly<Record<string, string>> = {
 
     // ── in-game (leave) menu ────────────────────────────────────────────────────
     'game.tactics.inGameMenu.leaveTitle': 'Leave the battle?',
-    'game.tactics.inGameMenu.leavePromptHost':
-        'Leaving ends the battle for everyone and returns all players to the lobby.',
+    'game.tactics.inGameMenu.leavePromptHost': 'Leaving ends the battle for everyone.',
     'game.tactics.inGameMenu.leavePromptClient':
         'Leaving disconnects you from the battle and returns you to the main menu.',
     'game.tactics.inGameMenu.cancel': 'Cancel',
@@ -103,6 +102,8 @@ export const tacticsBundleEn: Readonly<Record<string, string>> = {
     'game.tactics.lobby.removeAiAriaLabel': 'Remove AI Player {n}',
 
     // ── main menu ───────────────────────────────────────────────────────────────
+    'game.tactics.menu.continue': 'Continue',
+    'game.tactics.menu.quickMatch': 'Quick Match',
     'game.tactics.menu.newGame': 'New Game',
     'game.tactics.menu.loadGame': 'Load Game',
     'game.tactics.menu.settings': 'Settings',

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { tacticsMainMenuDefinition } from '../shell/main-menu.js';
 import { tacticsManifest } from '../manifest.js';
 import { loadTacticsRendererGame, loadTacticsRendererGameShell } from './loaders';
 
@@ -28,18 +29,14 @@ describe('tactics renderer loaders', () => {
         ]);
     });
 
-    it('loadTacticsRendererGameShell exposes the main menu buttons and an empty command registry', async () => {
+    it('loadTacticsRendererGameShell exposes the menu definition itself and an empty command registry', async () => {
         const shell = await loadTacticsRendererGameShell();
 
-        // Labels are `game.tactics.menu.*` translation-token keys; the engine
-        // renderer resolves each through `t()` at render.
-        expect(shell.mainMenu?.buttons.map((button) => button.label)).toEqual([
-            'game.tactics.menu.newGame',
-            'game.tactics.menu.loadGame',
-            'game.tactics.menu.settings',
-            'game.tactics.menu.replays',
-            'game.tactics.menu.quit',
-        ]);
+        // Identity, not a second roll-call of the entries: what the loader owes
+        // is the game's OWN definition, and the entries themselves are pinned in
+        // `shell/main-menu.test.ts`. A list repeated here would be a copy of that
+        // claim, falsified by every menu edit without measuring anything new.
+        expect(shell.mainMenu).toBe(tacticsMainMenuDefinition);
         expect(shell.menuCommands).toEqual({});
         expect(shell.shellBackground).toBeDefined();
         expect(shell.LobbyScreen).toBeDefined();

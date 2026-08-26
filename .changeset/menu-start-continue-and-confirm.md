@@ -14,8 +14,7 @@ concrete game, so rendering either with no `gameId` in context throws at render 
 unregistered `command.commandId` already does.
 
 Routing is not part of that change: neither verb navigates, each issues its IPC call and returns.
-The hop into the match belongs to the renderer's snapshot→`/game` effect. No shipped game declares
-either verb.
+The hop into the match belongs to the renderer's snapshot→`/game` effect.
 
 Availability is engine-computed and **reactive**, an honest change to §4.37.5's resolve-once model:
 `RenderMainMenuDefinition` subscribes to `saveStore` and `lobbyStore`. A `continue` button enables

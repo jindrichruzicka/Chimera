@@ -232,8 +232,7 @@ export const engineBundleEn: TranslationBundle = {
     'engine.inGameMenu.title': 'Menu',
     'engine.inGameMenu.resume': 'Resume',
     'engine.inGameMenu.leaveMatch': 'Leave match',
-    'engine.inGameMenu.leavePromptHost':
-        'Leave the match? This ends it for everyone and returns all players to the lobby.',
+    'engine.inGameMenu.leavePromptHost': 'Leave the match? This ends it for everyone.',
     'engine.inGameMenu.leavePromptClient':
         'Leave the match? You will disconnect and return to the main menu.',
 

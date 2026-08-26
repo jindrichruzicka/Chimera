@@ -62,9 +62,19 @@ describe('button labels', () => {
         expect(findButton('game.tactics.menu.replays')).toBeDefined();
     });
 
-    it('buttons appear in the correct order: New Game, Load Game, Settings, Replays, Quit', () => {
+    it('includes a "Continue" button', () => {
+        expect(findButton('game.tactics.menu.continue')).toBeDefined();
+    });
+
+    it('includes a "Quick Match" button', () => {
+        expect(findButton('game.tactics.menu.quickMatch')).toBeDefined();
+    });
+
+    it('lists the two match entries above the lobby flow, then the browsers, then Quit', () => {
         const labels = tacticsMainMenuDefinition.buttons.map((b) => b.label);
         expect(labels).toEqual([
+            'game.tactics.menu.continue',
+            'game.tactics.menu.quickMatch',
             'game.tactics.menu.newGame',
             'game.tactics.menu.loadGame',
             'game.tactics.menu.settings',
@@ -116,6 +126,49 @@ describe('button actions', () => {
         const btn = findButton('game.tactics.menu.quit');
         expect(btn.action.type).toBe('quit');
     });
+
+    it('"Continue" resumes through the engine verb, naming no save slot of its own', () => {
+        const btn = findButton('game.tactics.menu.continue');
+        expect(btn.action).toStrictEqual({ type: 'continue' });
+    });
+
+    it('"Quick Match" starts host-vs-one-AI and declares nothing else', () => {
+        const btn = findButton('game.tactics.menu.quickMatch');
+        // toStrictEqual, not toEqual: an explicitly `undefined` matchSettings /
+        // localSeats / hostAttributes key would satisfy toEqual against this
+        // literal, and the claim here is that the button declares NONE of them —
+        // one AI seat with no attributes, every other field the game's own.
+        expect(btn.action).toStrictEqual({
+            type: 'start-game',
+            config: { aiSeats: [{}] },
+        });
+    });
+});
+
+// ─── Test-id slugs ────────────────────────────────────────────────────────────
+//
+// `GameMainMenuButton.id` is the slug the engine renders as `main-menu-<id>`.
+// The engine derives one from the action for every entry it can name, so an
+// entry declares `id` only where that derivation cannot: `start-game` derives
+// `main-menu-start`, which says nothing about WHICH start this is once a game
+// declares more than one. `continue` needs none — the engine's own derivation
+// already names it `main-menu-continue`. Both testids are cross-checked against
+// the POM in `apps/tactics/e2e/pages/MainMenuPage.testid-alignment.test.ts`.
+
+describe('button test-id slugs', () => {
+    function findButton(label: string) {
+        const btn = tacticsMainMenuDefinition.buttons.find((b) => b.label === label);
+        if (!btn) throw new Error(`Button "${label}" not found`);
+        return btn;
+    }
+
+    it('names "Quick Match" explicitly, because the action derives only main-menu-start', () => {
+        expect(findButton('game.tactics.menu.quickMatch').id).toBe('quick-match');
+    });
+
+    it('leaves "Continue" to the engine derivation', () => {
+        expect(findButton('game.tactics.menu.continue').id).toBeUndefined();
+    });
 });
 
 // ─── Button variants ──────────────────────────────────────────────────────────
@@ -135,6 +188,12 @@ describe('button variants', () => {
 
     it('"Replays" is secondary variant', () => {
         expect(findButton('game.tactics.menu.replays').variant).toBe('secondary');
+    });
+
+    it('gives every match entry the primary variant (§4.37.2 — game start)', () => {
+        expect(findButton('game.tactics.menu.continue').variant).toBe('primary');
+        expect(findButton('game.tactics.menu.quickMatch').variant).toBe('primary');
+        expect(findButton('game.tactics.menu.newGame').variant).toBe('primary');
     });
 });
 
@@ -234,6 +293,24 @@ describe('Replays button disabled() check', () => {
         setBridge(undefined);
 
         await expect(getDisabledCheck()()).resolves.toBe(true);
+    });
+});
+
+// ─── Confirmation ─────────────────────────────────────────────────────────────
+
+describe('button confirmations', () => {
+    it('asks before nothing: no entry declares a confirm dialog', () => {
+        // Neither entry declares one, which is what the issue specified. Note
+        // this is NOT the same as "neither could want one": the game keeps a
+        // single autosave slot, and the match Quick Match opens rewrites it on
+        // its first accepted end-turn, so a player holding a Continue point
+        // loses it without being asked. `confirm.when: 'autosave-exists'`
+        // exists for exactly that case (§4.37.5); whether to spend it here is a
+        // UX call left open rather than answered by this assertion.
+        const withConfirm = tacticsMainMenuDefinition.buttons
+            .filter((b) => b.confirm !== undefined)
+            .map((b) => b.label);
+        expect(withConfirm).toEqual([]);
     });
 });
 

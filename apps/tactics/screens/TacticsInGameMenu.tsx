@@ -14,9 +14,14 @@ import { IN_GAME_MENU_KEYS } from '../shell/translations/keys.js';
  *
  * A single confirmation step: Cancel resumes the match (`closeMenu`), Leave
  * abandons it (`leaveGame`, role-aware in the engine). The copy switches on
- * `isHost` — a host returns everyone to the lobby; a client disconnects to the
- * main menu. The component reaches the shell only through the provided setters
- * (Invariant #100): it never calls `useLeaveGame()` and never opens IPC.
+ * `isHost`: a client is told it disconnects to the main menu, while the host
+ * copy names no destination at all — a host's exit depends on how the session
+ * was born (back to the lobby it came from, or out of a lobby-less quick
+ * session), and `InGameMenuProps` carries no way to tell those apart, so
+ * naming either would be false for the other. The component reaches the shell
+ * only through the provided setters (Invariant #80 — the `inGameMenu` slot
+ * reaches the engine through the registry): it never calls `useLeaveGame()`
+ * and never opens IPC.
  */
 export function TacticsInGameMenu({
     closeMenu,

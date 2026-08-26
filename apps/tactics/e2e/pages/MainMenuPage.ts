@@ -17,6 +17,10 @@ export class MainMenuPage {
     readonly componentGalleryButton: Locator;
     readonly replaysButton: Locator;
     readonly loadGameButton: Locator;
+    /** Game-contributed "Continue" — resumes the active game's autosave. */
+    readonly continueButton: Locator;
+    /** Game-contributed "Quick Match" — host versus one AI, no lobby screen. */
+    readonly quickMatchButton: Locator;
     readonly menu: Locator;
 
     public constructor(private readonly page: Page) {
@@ -29,6 +33,13 @@ export class MainMenuPage {
         // Game-contributed "Replays" menu button, located by its accessible name.
         // Disabled until at least one perspective replay exists for the active game.
         this.replaysButton = page.getByRole('button', { name: 'Replays' });
+        // The two lobby-less match entries. Their testids come from different
+        // places — `main-menu-continue` is the engine's own derivation for a
+        // `continue` action, `main-menu-quick-match` is the slug the tactics
+        // definition declares — and the alignment guard beside this file resolves
+        // each against its own source.
+        this.continueButton = page.getByTestId('main-menu-continue');
+        this.quickMatchButton = page.getByTestId('main-menu-quick-match');
         this.menu = page.getByTestId('main-menu');
     }
 
@@ -51,6 +62,20 @@ export class MainMenuPage {
 
     public async quit(): Promise<void> {
         await this.quitButton.click();
+    }
+
+    /**
+     * Start a lobby-less match. Neither this nor {@link continueLastMatch}
+     * navigates — see the header of `renderer/shell/renderMainMenuDefinition.tsx`
+     * for what carries the window into the match.
+     */
+    public async startQuickMatch(): Promise<void> {
+        await this.quickMatchButton.click();
+    }
+
+    /** Resume the active game's autosave. */
+    public async continueLastMatch(): Promise<void> {
+        await this.continueButton.click();
     }
 
     public async openComponentGallery(): Promise<void> {

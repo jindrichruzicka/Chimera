@@ -72,6 +72,33 @@ export const tacticsMainMenuDefinition: GameMainMenuDefinition = {
     // boundary-restricted (no renderer/i18n import), and the engine renderer
     // resolves each label through `t()` at render (an identity for non-token text).
     buttons: [
+        // The two lobby-less match entries sit above the lobby flow: a returning
+        // player resumes, a new one starts playing, and the lobby stays one click
+        // away for a match against another person. Every one of the three is a
+        // game start, which §4.37.2 assigns `primary` — the variant carries the
+        // kind of action, and the order carries the emphasis.
+        //
+        // Neither entry declares `disabled`. Both availability answers are
+        // engine-computed and reactive (§4.37.5): Continue follows the live save
+        // slot list, and both go disabled while a session is live.
+        {
+            label: 'game.tactics.menu.continue',
+            action: { type: 'continue' },
+            variant: 'primary',
+        },
+        {
+            // Slug declared because the engine derives `main-menu-start` from the
+            // action alone, which would not distinguish a second start if this
+            // menu ever grew one.
+            id: 'quick-match',
+            label: 'game.tactics.menu.quickMatch',
+            // Host versus one AI, and nothing else said: the AI seat declares no
+            // attributes, so its colour comes from `resolveDefaultPlayerAttributes`
+            // exactly as a lobby-added AI's does, and the match settings are the
+            // ones `buildTacticsLobbySetup` already declares.
+            action: { type: 'start-game', config: { aiSeats: [{}] } },
+            variant: 'primary',
+        },
         {
             label: 'game.tactics.menu.newGame',
             action: { type: 'open-lobby' },

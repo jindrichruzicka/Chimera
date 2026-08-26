@@ -37,8 +37,7 @@ reached from the renderer as `window.__chimera.lobby.closeSession`. `RegisterLob
 gains a required `closeSession` port, mirroring `quickStart` — a composition root that forgot to wire
 it cannot register a lobby namespace with the verb silently missing.
 
-No shipped game calls `quickStart`, so no session carries the stamp yet and the fork itself changes
-nothing reachable today. Two things outside it do change. The renderer's lobby-bridge resolver now
+Two things outside the fork also change. The renderer's lobby-bridge resolver now
 also requires `closeSession`, so a bridge double in a game's own tests needs the third verb. And the
 replay player now answers the leave-to-main-menu intent itself, which fixes a client's Leave from a
 post-game replay: it raised that intent, and on that route nothing consumed it, so the leave

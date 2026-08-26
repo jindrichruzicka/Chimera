@@ -104,6 +104,8 @@ export const LOBBY_KEYS = {
 
 /** Main-menu button labels (resolved by the engine renderer from the data def). */
 export const MENU_KEYS = {
+    continue: translationKey('game.tactics.menu.continue'),
+    quickMatch: translationKey('game.tactics.menu.quickMatch'),
     newGame: translationKey('game.tactics.menu.newGame'),
     loadGame: translationKey('game.tactics.menu.loadGame'),
     settings: translationKey('game.tactics.menu.settings'),

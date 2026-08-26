@@ -6,7 +6,9 @@
  *   1. Escape toggles the tactics in-game menu; an open chat drawer consumes
  *      Escape first (the drawer closes without the menu opening in its place).
  *   2. A host's Leave game returns the host AND the connected client to the
- *      lobby (#736 return-to-lobby), from which a new match starts.
+ *      lobby, from which a new match starts. That is the exit a LOBBY-BORN
+ *      session takes, which is the only kind this spec's fixture opens; a
+ *      lobby-less one ends instead, and is covered in quick-match-continue.spec.ts.
  *   3. A client's Leave game returns that client to the main menu while
  *      the host's match keeps advancing.
  *
@@ -63,8 +65,10 @@ test.describe('in-game menu and role-aware leave', () => {
         const clientLobby = new LobbyPage(clientWindow);
 
         await hostMenu.openViaEscape();
-        // Role-aware copy: the host is warned the match ends for everyone.
-        await expect(hostMenu.prompt).toContainText('returns all players to the lobby');
+        // Role-aware copy: the host is warned the match ends for everyone. The
+        // copy names no destination — where a host's leave lands depends on how
+        // the session was born, and the menu component is handed no way to tell.
+        await expect(hostMenu.prompt).toContainText('ends the battle for everyone');
         await hostMenu.confirmLeave();
 
         // Return-to-lobby: both windows land back on the lobby screen,

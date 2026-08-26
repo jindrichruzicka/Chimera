@@ -77,13 +77,28 @@ describe('TacticsInGameMenu', () => {
         expect(leaveGame).not.toHaveBeenCalled();
     });
 
-    it('shows host copy (returns everyone to the lobby) when isHost', () => {
-        renderMenu({ isHost: true });
+    it.each([
+        ['English', tacticsBundleEn, 'en-US', /everyone/i],
+        ['Czech', tacticsBundleCs, 'cs-CZ', /všechny/i],
+    ] as const)(
+        'shows host copy in %s that ends the battle for everyone, naming neither the lobby nor the main menu',
+        (_language, bundle: TranslationBundle, locale: string, everyone: RegExp) => {
+            renderMenu({ isHost: true }, bundle, locale);
 
-        const prompt = screen.getByTestId('tactics-leave-prompt').textContent ?? '';
-        expect(prompt).toMatch(/lobby/i);
-        expect(prompt).not.toMatch(/main menu/i);
-    });
+            const prompt = screen.getByTestId('tactics-leave-prompt').textContent ?? '';
+            expect(prompt).toMatch(everyone);
+            // A host's exit depends on how the session was born — back to the
+            // lobby it came from, or out of a lobby-less quick session to the
+            // main menu — and this component is handed no way to tell which.
+            // Naming either destination would be false for the other, so the
+            // deleted clause must not come back in either language. These are
+            // the two phrasings that carried it, not a general check that no
+            // destination is named at all — no assertion on free text can be
+            // that.
+            expect(prompt).not.toMatch(/lobby/i);
+            expect(prompt).not.toMatch(/main menu|hlavního menu/i);
+        },
+    );
 
     it('shows client copy (disconnect to the main menu) when not host', () => {
         renderMenu({ isHost: false });
@@ -99,6 +114,7 @@ describe('TacticsInGameMenu', () => {
         expect(screen.getByRole('dialog', { name: 'Opustit bitvu?' })).toBeTruthy();
         expect(screen.getByTestId('tactics-leave-cancel')).toHaveTextContent('Zrušit');
         expect(screen.getByTestId('tactics-leave-confirm')).toHaveTextContent('Opustit bitvu');
-        expect(screen.getByTestId('tactics-leave-prompt').textContent).toContain('lobby');
+        // The Czech host PROMPT is asserted by the host-copy case above, in both
+        // languages; repeating it here would be a second copy of that claim.
     });
 });

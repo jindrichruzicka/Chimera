@@ -69,7 +69,7 @@ const buildPageDouble = (): {
 };
 
 describe('MainMenuPage', () => {
-    it('binds play, settings, quit, component gallery, and menu locators using test ids', () => {
+    it('binds every test-id-located control the page object exposes', () => {
         const { page, requestedTestIds } = buildPageDouble();
 
         const mainMenu = new MainMenuPage(page);
@@ -80,12 +80,16 @@ describe('MainMenuPage', () => {
         expect(mainMenu.componentGalleryButton).toBeDefined();
         expect(mainMenu.replaysButton).toBeDefined();
         expect(mainMenu.loadGameButton).toBeDefined();
+        expect(mainMenu.continueButton).toBeDefined();
+        expect(mainMenu.quickMatchButton).toBeDefined();
         expect(mainMenu.menu).toBeDefined();
         expect(requestedTestIds).toContain('main-menu-play');
         expect(requestedTestIds).toContain('main-menu-settings');
         expect(requestedTestIds).toContain('main-menu-quit');
         expect(requestedTestIds).toContain('main-menu-component-gallery');
         expect(requestedTestIds).toContain('main-menu-load-game');
+        expect(requestedTestIds).toContain('main-menu-continue');
+        expect(requestedTestIds).toContain('main-menu-quick-match');
         expect(requestedTestIds).toContain('main-menu');
     });
 
@@ -105,6 +109,24 @@ describe('MainMenuPage', () => {
         await mainMenu.navigateToSettings();
 
         expect(clickedTestIds).toEqual(['main-menu-settings']);
+    });
+
+    it('clicks the quick match button when startQuickMatch() is called', async () => {
+        const { page, clickedTestIds } = buildPageDouble();
+        const mainMenu = new MainMenuPage(page);
+
+        await mainMenu.startQuickMatch();
+
+        expect(clickedTestIds).toEqual(['main-menu-quick-match']);
+    });
+
+    it('clicks the continue button when continueLastMatch() is called', async () => {
+        const { page, clickedTestIds } = buildPageDouble();
+        const mainMenu = new MainMenuPage(page);
+
+        await mainMenu.continueLastMatch();
+
+        expect(clickedTestIds).toEqual(['main-menu-continue']);
     });
 
     it('clicks the quit button when quit() is called', async () => {

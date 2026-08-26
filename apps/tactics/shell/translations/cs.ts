@@ -224,8 +224,7 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.inGameMenu.title': 'Menu',
     'engine.inGameMenu.resume': 'Pokračovat',
     'engine.inGameMenu.leaveMatch': 'Opustit zápas',
-    'engine.inGameMenu.leavePromptHost':
-        'Opustit zápas? Tím ho ukončíš pro všechny a vrátíš všechny hráče do lobby.',
+    'engine.inGameMenu.leavePromptHost': 'Opustit zápas? Tím ho ukončíš pro všechny.',
     'engine.inGameMenu.leavePromptClient':
         'Opustit zápas? Odpojíš se a vrátíš se do hlavního menu.',
 
@@ -322,8 +321,7 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
 
     // ── in-game (leave) menu ────────────────────────────────────────────────────
     'game.tactics.inGameMenu.leaveTitle': 'Opustit bitvu?',
-    'game.tactics.inGameMenu.leavePromptHost':
-        'Odchodem ukončíš bitvu pro všechny a vrátíš všechny hráče do lobby.',
+    'game.tactics.inGameMenu.leavePromptHost': 'Odchodem ukončíš bitvu pro všechny.',
     'game.tactics.inGameMenu.leavePromptClient':
         'Odchodem se odpojíš od bitvy a vrátíš se do hlavního menu.',
     'game.tactics.inGameMenu.cancel': 'Zrušit',
@@ -382,6 +380,8 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'game.tactics.lobby.removeAiAriaLabel': 'Odebrat hráče AI {n}',
 
     // ── main menu ───────────────────────────────────────────────────────────────
+    'game.tactics.menu.continue': 'Pokračovat',
+    'game.tactics.menu.quickMatch': 'Rychlý zápas',
     'game.tactics.menu.newGame': 'Nová hra',
     'game.tactics.menu.loadGame': 'Načíst hru',
     'game.tactics.menu.settings': 'Nastavení',

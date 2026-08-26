@@ -606,3 +606,209 @@ describe('GameStoreBootstrap + ShellStateBridge — the gate re-evaluates on the
         expect(mockPush).not.toHaveBeenCalled();
     });
 });
+
+describe('GameStoreBootstrap — the match-entry matrix', () => {
+    // Every way a match can be opened, as the gate sees it. The rows are
+    // JOURNEYS, not just surfaces: two of them stand on the same surface and
+    // are separated by the snapshot that lands there, which is the whole point
+    // of listing them apart. A gate that added a condition on the session-mode
+    // stamp, or on a fresh match's tick, would still pass `quick-from-menu` and
+    // fail `continue-from-menu` — and a matrix keyed on the surface alone
+    // could not tell.
+    //
+    // `refusesLobbyPhase` is the second half of each row. The allow-set is
+    // enumerated rather than a deny-list, so what has to be pinned is not only
+    // that each member is admitted but that a return-to-lobby broadcast does
+    // NOT bounce it through /game — with `lobby` itself the one exception,
+    // whose arm is phase-independent because its own snapshot is what starts
+    // the match.
+
+    /** A lobby-born session: no `engine.sessionMode` stamp on the setup. */
+    const LOBBY_BORN_SETUP = {
+        matchSettings: { boardColor: 'slate' },
+        playerAttributes: {},
+    } as const;
+    /** A quick-started session, stamped by `QuickStartCoordinator`. */
+    const QUICK_SETUP = {
+        matchSettings: { boardColor: 'slate', 'engine.sessionMode': 'quick' },
+        playerAttributes: {},
+    } as const;
+
+    interface MatchEntryFlow {
+        readonly flow: string;
+        /** The snapshot this journey delivers to the gate. */
+        readonly snapshot: PlayerSnapshot;
+        /** Mount the tree on the surface this journey is standing on. */
+        readonly drive: (snapshot: PlayerSnapshot) => Promise<void>;
+        readonly expectedPush: string;
+        readonly refusesLobbyPhase: boolean;
+    }
+
+    /** Publish a surface synchronously, then mount the gate alone. */
+    function onSurface(
+        surface: ShellSurface,
+        pathname: string,
+    ): (snapshot: PlayerSnapshot) => Promise<void> {
+        return async (snapshot: PlayerSnapshot): Promise<void> => {
+            setSurface(surface, pathname, 'tactics');
+            mockSnapshot = snapshot;
+            render(<GameStoreBootstrap />);
+            await Promise.resolve();
+        };
+    }
+
+    /**
+     * The reload case: the window comes up on a game-declared page with the
+     * match already live, so the snapshot is there before the declaration that
+     * classifies the route is. Drives the REAL bridge, and releases the shell
+     * payload only after asserting the gate has not yet fired.
+     */
+    async function onLateResolvedPage(snapshot: PlayerSnapshot): Promise<void> {
+        let releaseShell: (shell: { shellRoutes: readonly `/${string}`[] }) => void = () => {};
+        mockLoadRendererGameShell.mockReturnValue(
+            new Promise<{ shellRoutes: readonly `/${string}`[] }>((resolve) => {
+                releaseShell = resolve;
+            }),
+        );
+        setRoute('/credits', 'gameId=tactics');
+        mockSnapshot = snapshot;
+
+        render(
+            <>
+                <ShellStateBridge />
+                <GameStoreBootstrap />
+            </>,
+        );
+
+        expect(getShellState().surface).toBe('boot');
+        expect(mockPush).not.toHaveBeenCalled();
+
+        await act(async () => {
+            releaseShell({ shellRoutes: ['/credits'] });
+        });
+    }
+
+    const MATCH_ENTRY_FLOWS: readonly MatchEntryFlow[] = [
+        {
+            // Menu Continue: the autosave of a LOBBY-born match, restored from
+            // the menu. Mid-match tick, no session-mode stamp.
+            flow: 'continue-from-menu',
+            snapshot: makeSnapshot({
+                phase: gamePhase('playing'),
+                tick: 42,
+                setup: LOBBY_BORN_SETUP,
+            }),
+            drive: onSurface('main-menu', '/main-menu'),
+            expectedPush: '/game?gameId=tactics',
+            refusesLobbyPhase: true,
+        },
+        {
+            // Menu Quick Match: a brand-new session, stamped quick, at tick 0.
+            flow: 'quick-from-menu',
+            snapshot: makeSnapshot({ phase: gamePhase('playing'), tick: 0, setup: QUICK_SETUP }),
+            drive: onSurface('main-menu', '/main-menu'),
+            expectedPush: '/game?gameId=tactics',
+            refusesLobbyPhase: true,
+        },
+        {
+            // The same verb from a game's own declared shell page — a character
+            // select calling `useQuickStart().start()`.
+            flow: 'quick-from-page',
+            snapshot: makeSnapshot({ phase: gamePhase('playing'), tick: 0, setup: QUICK_SETUP }),
+            drive: onSurface('page', '/credits'),
+            expectedPush: '/game?gameId=tactics',
+            refusesLobbyPhase: true,
+        },
+        {
+            // The classic flow: the host presses Start and the lobby's own
+            // snapshot carries both windows in.
+            flow: 'classic-lobby',
+            snapshot: makeSnapshot({
+                phase: gamePhase('playing'),
+                tick: 0,
+                setup: LOBBY_BORN_SETUP,
+            }),
+            drive: onSurface('lobby', '/lobby'),
+            expectedPush: '/game?gameId=tactics',
+            refusesLobbyPhase: false,
+        },
+        {
+            // A restore driven from the saves browser: the load parks in
+            // waiting-for-players and the page stays put until the restored
+            // match snapshot finally lands.
+            flow: 'restore-waiting',
+            snapshot: makeSnapshot({
+                phase: gamePhase('playing'),
+                tick: 42,
+                setup: LOBBY_BORN_SETUP,
+            }),
+            drive: onSurface('saves', '/saves'),
+            expectedPush: '/game?gameId=tactics',
+            refusesLobbyPhase: true,
+        },
+        {
+            flow: 'reload-mid-match-late-shell-resolve',
+            snapshot: makeSnapshot({ phase: gamePhase('playing'), tick: 42, setup: QUICK_SETUP }),
+            drive: onLateResolvedPage,
+            expectedPush: '/game?gameId=tactics',
+            refusesLobbyPhase: true,
+        },
+    ];
+
+    it('lists the six flows this matrix was built for, each exactly once', () => {
+        // The table is the claim; this keeps a row from being quietly dropped
+        // or duplicated as the matrix is edited. It cannot see a flow nobody
+        // added — no assertion against a literal in the same file can.
+        const names = MATCH_ENTRY_FLOWS.map((entry) => entry.flow);
+        expect(names).toEqual([
+            'continue-from-menu',
+            'quick-from-menu',
+            'quick-from-page',
+            'classic-lobby',
+            'restore-waiting',
+            'reload-mid-match-late-shell-resolve',
+        ]);
+    });
+
+    it.each(MATCH_ENTRY_FLOWS)('$flow enters the match', async (entry: MatchEntryFlow) => {
+        await entry.drive(entry.snapshot);
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockPush).toHaveBeenCalledWith(entry.expectedPush);
+        // The forward hop must never drop the match snapshot on the way in —
+        // that is the reverse hop's move, and doing both would bounce.
+        expect(mockReset).not.toHaveBeenCalled();
+    });
+
+    it.each(MATCH_ENTRY_FLOWS)(
+        '$flow answers a phase:lobby snapshot on the same surface per its own arm',
+        async (entry: MatchEntryFlow) => {
+            await entry.drive({ ...entry.snapshot, phase: gamePhase('lobby') });
+
+            if (entry.refusesLobbyPhase) {
+                expect(mockPush).not.toHaveBeenCalled();
+            } else {
+                expect(mockPush).toHaveBeenCalledWith(entry.expectedPush);
+            }
+        },
+    );
+
+    it('arms a to-match transition on every one of them', async () => {
+        // Asserted once per flow rather than folded into the hop assertion
+        // above: the arm is what a game's background times its dolly-in on, and
+        // an entry that navigated without arming would pass every route check.
+        for (const entry of MATCH_ENTRY_FLOWS) {
+            _resetShellStateForTest();
+            mockPush.mockClear();
+            mockLoadRendererGameShell.mockReset();
+            mockLoadRendererGameShell.mockResolvedValue({});
+            cleanup();
+
+            await entry.drive(entry.snapshot);
+
+            const { transition } = getShellState();
+            expect(transition, entry.flow).not.toBeNull();
+            expect(transition?.kind, entry.flow).toBe('to-match');
+        }
+    });
+});

@@ -209,7 +209,21 @@ export default function MainMenuPage() {
 
     return (
         <main data-testid="main-menu" style={styles.container}>
-            {/* POM alignment guard literals: data-testid="main-menu-play" data-testid="main-menu-settings" data-testid="main-menu-load-game" data-testid="main-menu-replays" data-testid="main-menu-quit" data-testid="main-menu-component-gallery" */}
+            {/*
+                POM alignment guard literals, spelled out in source so a page
+                object can be checked against them. A testid a GAME names through
+                `GameMainMenuButton.id` is not in this list and is checked
+                against that game's own menu definition instead.
+
+                data-testid="main-menu-play"
+                data-testid="main-menu-settings"
+                data-testid="main-menu-load-game"
+                data-testid="main-menu-replays"
+                data-testid="main-menu-continue"
+                data-testid="main-menu-start"
+                data-testid="main-menu-quit"
+                data-testid="main-menu-component-gallery"
+            */}
             <RenderMainMenuDefinition
                 definition={definition}
                 gameId={gameId}

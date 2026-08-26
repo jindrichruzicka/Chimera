@@ -12,7 +12,9 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * nothing else is on the shared Escape stack; a second Escape — or Cancel —
  * closes it. {@link confirmButton} ("Leave battle") routes through the
  * role-aware `useLeaveGame` hook; the {@link prompt} copy differs for host vs
- * client (host returns everyone to the lobby; client disconnects to main menu).
+ * client — a client is told it disconnects to the main menu, while the host
+ * copy names no destination, because a host's exit depends on how the session
+ * was born.
  */
 export class InGameMenuPage {
     /** The leave dialog — named "Leave the battle?" to disambiguate it from the chat drawer. */

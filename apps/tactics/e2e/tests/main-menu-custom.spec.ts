@@ -101,10 +101,12 @@ test.describe('Game-customized main menu (§4.37)', () => {
     /**
      * Scenario 2 — Tactics custom menu:
      * When the main-menu URL declares gameId=tactics, the main menu must show
-     * the game-specific buttons contributed by the tactics shell:
-     * New Game, Load Game, Settings, Quit — each with matching accessible text.
+     * the game-specific buttons contributed by the tactics shell, each with
+     * matching accessible text, and never the engine default "Play". The four
+     * checked below are a sample of that set, not the whole of it — the set
+     * itself is enumerated in `apps/tactics/shell/main-menu.test.ts`.
      */
-    test('tactics override — URL game context shows New Game, Load Game, Settings, Quit', async ({
+    test('tactics override — URL game context shows the game-contributed buttons, never Play', async ({
         electronApp,
     }) => {
         const window = await electronApp.firstWindow();
