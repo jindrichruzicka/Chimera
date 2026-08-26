@@ -160,9 +160,14 @@ function isPublicR3fBarrelImport(source: string): boolean {
     );
 }
 
-// The renderer game-registration seam: the public `@chimera-engine/renderer/game`
-// export a consumer app's renderer composition root uses to register its game's
-// renderer contribution (`registerRendererGame`, `RendererGameContribution`).
+// The public `@chimera-engine/renderer/game` barrel: the registration seam a
+// consumer app's renderer composition root calls (`registerRendererGame`,
+// `RendererGameContribution`) AND the shell page services a game's own screens
+// and shell contributions read (`useShellState` / `getShellState` /
+// `setShellDraft` / `useShellNavigate` / `useQuickStart`, §4.37.18). Like every
+// sibling predicate this matches the SPECIFIER and never the imported names, so
+// it stays true whatever the barrel grows — `renderer/game/index.ts` is the
+// enumeration.
 function isPublicGameSeamImport(source: string): boolean {
     return (
         source === '@chimera-engine/renderer/game' ||

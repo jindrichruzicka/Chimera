@@ -6,6 +6,10 @@
  *
  *   - which entry points exist is asserted by the sorted key list and the per-key
  *     `toEqual` blocks below; this header enumerates none of them;
+ *   - the pin runs in BOTH directions: every key resolves to a declared dist
+ *     path, AND every declared dist path has the source module the build emits
+ *     it from. Half a pin lets the map name a file nothing will ever produce,
+ *     which is green here and a broken subpath in an adopter's install;
  *   - there is no `.` barrel (there is intentionally no `renderer/index.ts`) and
  *     no deep internal subpath (Invariant #96);
  *   - #773 emitted the dist/ build, so each barrel's `types` AND `default`
@@ -22,7 +26,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -79,10 +83,13 @@ describe('@chimera-engine/renderer package surface', () => {
             default: './dist/components/r3f/index.js',
         });
 
-        // #784: the game-registration seam resolves to the built dist/ registry.
+        // The game subpath resolves to a CURATED barrel, not to the registry
+        // module: it carries the registration seam plus the §4.37.18 page
+        // services, and mapping it at the module would publish the registry's
+        // test-only reset alongside them.
         expect(exportsMap['./game']).toEqual({
-            types: './dist/game/rendererGameRegistry.d.ts',
-            default: './dist/game/rendererGameRegistry.js',
+            types: './dist/game/index.d.ts',
+            default: './dist/game/index.js',
         });
 
         // F71 i18n: the engine i18n runtime (I18nProvider + useTranslate + the
@@ -154,6 +161,45 @@ describe('@chimera-engine/renderer package surface', () => {
                     key === './styles/*.css',
             ).toBe(true);
         }
+    });
+
+    it('names a dist path the build has a source module for — the reverse half of the pin', () => {
+        // A map entry is only half the contract: `./game` pointing at
+        // `dist/game/index.js` is green here whether or not `renderer/game/index.ts`
+        // exists, and the failure would surface first in an adopter's install.
+        // Wildcard subpaths are skipped by NAME rather than by shape, so a new
+        // one has to be looked at instead of silently joining the exemption.
+        const wildcardKeys = new Set(['./shell/*', './styles/*.css']);
+        const exportsMap = manifest.exports ?? {};
+        const checked: string[] = [];
+
+        for (const [key, entry] of Object.entries(exportsMap)) {
+            if (wildcardKeys.has(key)) continue;
+            const distPath = typeof entry === 'string' ? entry : entry.default;
+            expect(distPath, key).toBeDefined();
+            const sourceStem = (distPath ?? '').replace(/^\.\/dist\//u, '').replace(/\.js$/u, '');
+            const candidates = ['ts', 'tsx'].map((extension) =>
+                resolve(__dirname, `../${sourceStem}.${extension}`),
+            );
+            expect(
+                candidates.some((candidate) => existsSync(candidate)),
+                `${key} → ${String(distPath)} has no source module`,
+            ).toBe(true);
+            checked.push(key);
+        }
+
+        // The walk itself is a claim: a filter that matched nothing would pass
+        // every assertion above.
+        expect(checked.sort()).toEqual([
+            './assets',
+            './audio',
+            './components/chat',
+            './components/r3f',
+            './components/ui',
+            './game',
+            './i18n',
+            './input',
+        ]);
     });
 
     it('depends on @chimera-engine/simulation only among @chimera-engine/* packages', () => {

@@ -2,37 +2,20 @@
 
 import React from 'react';
 import type { ComponentType } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
 import { loadRendererGameShell } from '../../game/rendererGameRegistry';
-import { resolveShellGameId } from '../../shell/resolveMainMenuGameId';
-import {
-    isEngineOwnedRoute,
-    matchesDeclaredShellRoute,
-    normalizeRoutePath,
-} from '../../shell/shellRoutes';
-
-/**
- * The engine's own shell routes that carry the background (§4.37.9). A game
- * widens this set with `LoadedRendererGameShell.shellRoutes`, so the host mounts
- * on this set UNION the game's declared pages — which is what keeps ONE pinned
- * background instance alive across `/main-menu → /<game page> → /settings`.
- */
-const SHELL_BACKGROUND_ROUTES = new Set(['/main-menu', '/settings', '/lobby']);
+import { SHELL_BACKGROUND_SURFACES } from '../../shell/shellRoutes';
+import { useShellState } from '../../shell/shellStateStore';
 
 let nextShellBackgroundInstanceId = 1;
 
 type LoadedShellBackground = Readonly<{
     gameId: string | null;
     Background: ComponentType | null;
-    shellRoutes: readonly string[];
 }>;
-
-const NO_SHELL_ROUTES: readonly string[] = Object.freeze([]);
 
 const UNRESOLVED: LoadedShellBackground = {
     gameId: null,
     Background: null,
-    shellRoutes: NO_SHELL_ROUTES,
 };
 
 const hostStyle = {
@@ -44,28 +27,25 @@ const hostStyle = {
     backgroundColor: 'var(--ch-color-surface)',
 } satisfies React.CSSProperties;
 
+/**
+ * The shell background mount (§4.37.9).
+ *
+ * It classifies nothing: `ShellStateBridge` publishes the surface and the game
+ * context on the shell-state store, and this component decides on those two
+ * alone (§4.37.18). Mounting on a set of SURFACES — the three engine screens
+ * plus every game-declared page — is what keeps ONE pinned background instance
+ * alive across `/main-menu → /<game page> → /settings`.
+ */
 export function ShellBackgroundHost(): React.ReactElement | null {
-    const pathname = usePathname();
-    const searchParams = useSearchParams();
-    const routePath = normalizeRoutePath(pathname);
-    const search = searchParams.toString();
-    // Whether the shell PAYLOAD is worth fetching here — decided before the
-    // declaration can be read, so it cannot depend on it. An engine route
-    // outside the background set (`/game`, `/saves`, …) is a page the engine
-    // itself ships, so no declaration can make it a game page and the payload is
-    // never fetched to ask. Every other route is a candidate.
-    const shouldResolveShell =
-        SHELL_BACKGROUND_ROUTES.has(routePath) || !isEngineOwnedRoute(routePath);
-    const gameId = React.useMemo(
-        () => (shouldResolveShell ? resolveShellGameId(new URLSearchParams(search)) : null),
-        [shouldResolveShell, search],
-    );
+    const surface = useShellState((state) => state.surface);
+    const gameId = useShellState((state) => state.gameId);
+    const isShellBackgroundSurface = SHELL_BACKGROUND_SURFACES.has(surface);
     const instanceIdRef = React.useRef(String(nextShellBackgroundInstanceId++));
     const [loadedBackground, setLoadedBackground] =
         React.useState<LoadedShellBackground>(UNRESOLVED);
 
     React.useEffect(() => {
-        if (!shouldResolveShell || gameId === null) {
+        if (!isShellBackgroundSurface || gameId === null) {
             setLoadedBackground(UNRESOLVED);
             return;
         }
@@ -75,44 +55,29 @@ export function ShellBackgroundHost(): React.ReactElement | null {
         loadRendererGameShell(gameId)
             .then((shell) => {
                 if (!disposed) {
-                    setLoadedBackground({
-                        gameId,
-                        Background: shell.shellBackground ?? null,
-                        shellRoutes: shell.shellRoutes ?? NO_SHELL_ROUTES,
-                    });
+                    setLoadedBackground({ gameId, Background: shell.shellBackground ?? null });
                 }
             })
             .catch(() => {
                 if (!disposed) {
-                    setLoadedBackground({
-                        gameId,
-                        Background: null,
-                        shellRoutes: NO_SHELL_ROUTES,
-                    });
+                    setLoadedBackground({ gameId, Background: null });
                 }
             });
 
         return () => {
             disposed = true;
         };
-    }, [gameId, shouldResolveShell]);
+    }, [gameId, isShellBackgroundSurface]);
 
     // A payload answers only for the game context it was loaded for. Anything
     // else is stale — a context change whose load is still in flight, or a route
     // that dropped `?gameId=` before the effect above cleared the state — and a
-    // stale payload answers NOTHING: neither which routes are declared nor which
-    // component to paint. Read ONCE, through the destructuring below, so no later
-    // line can reach past it to the raw state.
+    // stale payload answers NOTHING. Read ONCE, through the destructuring below,
+    // so no later line can reach past it to the raw state.
     const payloadIsForThisContext = loadedBackground.gameId === gameId;
-    const { Background, shellRoutes: declaredRoutes } = payloadIsForThisContext
-        ? loadedBackground
-        : UNRESOLVED;
+    const { Background } = payloadIsForThisContext ? loadedBackground : UNRESOLVED;
 
-    const isShellBackgroundRoute =
-        SHELL_BACKGROUND_ROUTES.has(routePath) ||
-        matchesDeclaredShellRoute(routePath, declaredRoutes);
-
-    if (!isShellBackgroundRoute) {
+    if (!isShellBackgroundSurface) {
         return null;
     }
 

@@ -40,6 +40,7 @@ import type { TranslationBundle } from '../i18n/translation-bundle';
 import { useConfirmDialogStore } from '../state/confirmDialogStore';
 import { useLobbyStore } from '../state/lobbyStore';
 import { useSaveStore } from '../state/saveStore';
+import { _resetShellStateForTest, getShellState } from './shellStateStore';
 import { RenderMainMenuDefinition } from './renderMainMenuDefinition';
 
 // The renderer translates the three engine-default button labels through
@@ -72,6 +73,7 @@ const mockSavesLoad = vi.fn(async (): Promise<void> => undefined);
 const mockQuickStart = vi.fn(async (): Promise<void> => undefined);
 
 beforeEach(() => {
+    _resetShellStateForTest();
     Object.defineProperty(window, '__chimera', {
         configurable: true,
         value: {
@@ -989,6 +991,64 @@ describe('start-game action', () => {
         }).toThrow(/start-game/u);
 
         errorSpy.mockRestore();
+    });
+});
+
+describe('the engine verbs arm the shell transition', () => {
+    it('arms a to-match transition when start-game is invoked', () => {
+        renderMenuWithConfirmSurface(startMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        expect(getShellState().transition).toMatchObject({ kind: 'to-match' });
+    });
+
+    it('clears the transition when the quick start is refused', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        mockQuickStart.mockRejectedValueOnce(new Error('a session is already active'));
+        renderMenuWithConfirmSurface(startMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(getShellState().transition).toBeNull();
+        errorSpy.mockRestore();
+    });
+
+    it('arms a to-match transition when continue is invoked', () => {
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        renderMenuWithConfirmSurface(continueMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+        expect(getShellState().transition).toMatchObject({ kind: 'to-match' });
+    });
+
+    it('clears the transition when the autosave load is refused', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        mockSavesLoad.mockRejectedValueOnce(new Error('no such slot'));
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        renderMenuWithConfirmSurface(continueMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(getShellState().transition).toBeNull();
+        errorSpy.mockRestore();
+    });
+
+    it('arms nothing for a plain navigate button', () => {
+        renderMenuWithConfirmSurface({
+            buttons: [{ label: 'Settings', action: { type: 'navigate', target: '/settings' } }],
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+
+        expect(getShellState().transition).toBeNull();
     });
 });
 

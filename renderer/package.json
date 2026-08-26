@@ -46,8 +46,8 @@
             "default": "./dist/input/index.js"
         },
         "./game": {
-            "types": "./dist/game/rendererGameRegistry.d.ts",
-            "default": "./dist/game/rendererGameRegistry.js"
+            "types": "./dist/game/index.d.ts",
+            "default": "./dist/game/index.js"
         },
         "./shell/*": {
             "types": "./dist/app/*.d.ts",

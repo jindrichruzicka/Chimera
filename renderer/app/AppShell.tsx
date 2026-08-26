@@ -11,6 +11,7 @@ import { RestoreWaitingOverlay } from '../components/shell/RestoreWaitingOverlay
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { ScreenFadeRoot } from '../components/shell/ScreenFadeRoot';
 import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
+import { ShellStateBridge } from '../components/shell/ShellStateBridge';
 import { ToastHost } from '../components/shell/ToastHost';
 import { ActiveGameIconProvider } from '../components/ui/icons/ActiveGameIconProvider';
 import { TokenModeI18nProvider } from '../i18n/TokenModeI18nProvider';
@@ -92,7 +93,15 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                                 <PlayerConnectionToastBridge />
                                 <PlayerLeftToastBridge />
                                 <ProfileRejectedToastBridge />
+                                {/*
+                                 * The shell-state spine (§4.37.18) — see
+                                 * ShellStateBridge's own header for what it
+                                 * publishes and why. The boundary is for the
+                                 * bridge: it calls `useSearchParams()`, which
+                                 * forces one under `output: 'export'`.
+                                 */}
                                 <React.Suspense fallback={null}>
+                                    <ShellStateBridge />
                                     <ShellBackgroundHost />
                                 </React.Suspense>
                                 <div style={{ position: 'relative', zIndex: 'var(--ch-z-raised)' }}>

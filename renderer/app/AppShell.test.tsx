@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installMatchMedia } from '../__test-support__/installMatchMedia';
 import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi';
 import { selectPendingConfirm, useConfirmDialogStore } from '../state/confirmDialogStore';
+import { _resetShellStateForTest, getShellState } from '../shell/shellStateStore';
 import { AppShell } from './AppShell';
 
 const audioMocks = vi.hoisted(() => ({
@@ -33,10 +34,12 @@ vi.mock('../audio/AudioManager', () => ({
     createAudioManager: audioMocks.createAudioManager,
 }));
 
+const navigationState = { pathname: '/', search: '' };
+
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-    usePathname: () => '/',
-    useSearchParams: () => new URLSearchParams(),
+    usePathname: () => navigationState.pathname,
+    useSearchParams: () => new URLSearchParams(navigationState.search),
 }));
 
 const TOAST_ID = '00000000-0000-4000-8000-000000000001';
@@ -50,6 +53,10 @@ beforeEach(() => {
     originalError = console.error;
     logsApi = createRecordingLogsApi();
     audioMocks.createAudioManager.mockClear();
+    navigationState.pathname = '/';
+    navigationState.search = '';
+    window.history.replaceState({}, '', '/');
+    _resetShellStateForTest();
 
     vi.useFakeTimers();
     vi.stubGlobal('crypto', { randomUUID: vi.fn(() => TOAST_ID) });
@@ -225,5 +232,50 @@ describe('AppShell — confirm surface', () => {
 
         await expect(answer).resolves.toBe(true);
         expect(selectPendingConfirm(useConfirmDialogStore.getState())).toBeNull();
+    });
+});
+
+describe('AppShell — shell-state bridge', () => {
+    it('mounts the bridge, so every consumer under the shell reads one classified route', () => {
+        // Driven off the boot route on purpose: the store's INITIAL value is
+        // `{surface: 'boot', pathname: '/'}`, which is exactly what the bridge
+        // publishes for `/`. A case that stayed there could not tell a mounted
+        // bridge from an absent one.
+        navigationState.pathname = '/main-menu';
+        navigationState.search = 'gameId=tactics';
+        window.history.replaceState({}, '', '/main-menu?gameId=tactics');
+
+        render(
+            <AppShell>
+                <div />
+            </AppShell>,
+        );
+
+        expect(getShellState()).toMatchObject({
+            surface: 'main-menu',
+            pathname: '/main-menu',
+            gameId: 'tactics',
+        });
+    });
+
+    it('keeps publishing after a route change, so the shell follows the router', () => {
+        navigationState.pathname = '/main-menu';
+        window.history.replaceState({}, '', '/main-menu');
+        const view = render(
+            <AppShell>
+                <div />
+            </AppShell>,
+        );
+        expect(getShellState().surface).toBe('main-menu');
+
+        navigationState.pathname = '/settings';
+        window.history.replaceState({}, '', '/settings');
+        view.rerender(
+            <AppShell>
+                <div />
+            </AppShell>,
+        );
+
+        expect(getShellState().surface).toBe('settings');
     });
 });

@@ -6,10 +6,12 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    classifyShellSurface,
     ENGINE_OWNED_ROUTES,
     isEngineOwnedRoute,
     matchesDeclaredShellRoute,
     normalizeRoutePath,
+    SHELL_BACKGROUND_SURFACES,
 } from './shellRoutes';
 
 describe('normalizeRoutePath', () => {
@@ -126,5 +128,94 @@ describe('matchesDeclaredShellRoute — absent pathname', () => {
         // normalizes to '/', which a declaration could otherwise match.
         expect(matchesDeclaredShellRoute(undefined, ['/'])).toBe(false);
         expect(matchesDeclaredShellRoute(null, ['/'])).toBe(false);
+    });
+});
+
+describe('classifyShellSurface — the engine surfaces', () => {
+    it.each([
+        ['/main-menu', 'main-menu'],
+        ['/settings', 'settings'],
+        ['/lobby', 'lobby'],
+        ['/saves', 'saves'],
+        ['/replays', 'replays'],
+        ['/replays/player', 'replay-player'],
+        ['/game', 'match'],
+    ] as const)('classifies %s as %s', (pathname, surface) => {
+        expect(classifyShellSurface(pathname, [])).toBe(surface);
+    });
+
+    it('classifies the replay BROWSER apart from the replay PLAYER', () => {
+        // The reverse navigation gate acts on the player and not on the
+        // browser, so one member for both would silently widen it.
+        expect(classifyShellSurface('/replays', [])).not.toBe(
+            classifyShellSurface('/replays/player', []),
+        );
+    });
+
+    it.each(['/', '/logo-screen', '/debug', '/component-gallery'])(
+        'classifies the engine route %s as boot — it carries no shell surface',
+        (pathname) => {
+            expect(classifyShellSurface(pathname, [])).toBe('boot');
+        },
+    );
+
+    it('classifies every engine-owned route without consulting the declaration', () => {
+        for (const route of ENGINE_OWNED_ROUTES) {
+            expect(classifyShellSurface(route, [route])).toBe(classifyShellSurface(route, []));
+        }
+    });
+});
+
+describe('classifyShellSurface — declared game pages', () => {
+    it('classifies a declared route as a page', () => {
+        expect(classifyShellSurface('/credits', ['/credits'])).toBe('page');
+    });
+
+    it('classifies an UNdeclared non-engine route as boot rather than a page', () => {
+        expect(classifyShellSurface('/credits', ['/atlas'])).toBe('boot');
+    });
+
+    it('classifies a declared route as a page before the declaration resolves only when it is in it', () => {
+        expect(classifyShellSurface('/credits', [])).toBe('boot');
+    });
+
+    it('normalizes both sides, so every static-export spelling agrees', () => {
+        expect(classifyShellSurface('/credits/', ['/credits'])).toBe('page');
+        expect(classifyShellSurface('/credits/index.html', ['/credits'])).toBe('page');
+        expect(classifyShellSurface('/credits', ['/credits/'])).toBe('page');
+    });
+
+    it('normalizes the engine spellings too', () => {
+        expect(classifyShellSurface('/main-menu/', [])).toBe('main-menu');
+        expect(classifyShellSurface('/replays/player/index.html', [])).toBe('replay-player');
+    });
+
+    it('never lets a declaration turn an engine route into a page', () => {
+        expect(classifyShellSurface('/game', ['/game'])).toBe('match');
+        expect(classifyShellSurface('/debug', ['/debug'])).toBe('boot');
+    });
+
+    it('classifies an absent pathname as boot', () => {
+        expect(classifyShellSurface(null, ['/credits'])).toBe('boot');
+        expect(classifyShellSurface(undefined, ['/credits'])).toBe('boot');
+    });
+});
+
+describe('SHELL_BACKGROUND_SURFACES', () => {
+    it('holds the three engine screens the background mounts on plus every game page', () => {
+        expect([...SHELL_BACKGROUND_SURFACES].sort()).toEqual([
+            'lobby',
+            'main-menu',
+            'page',
+            'settings',
+        ]);
+    });
+
+    it('excludes the match surface, so the background never paints over a match', () => {
+        expect(SHELL_BACKGROUND_SURFACES.has('match')).toBe(false);
+    });
+
+    it('excludes boot, so an unclassified route paints nothing', () => {
+        expect(SHELL_BACKGROUND_SURFACES.has('boot')).toBe(false);
     });
 });

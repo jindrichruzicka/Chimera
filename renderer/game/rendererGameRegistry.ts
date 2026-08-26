@@ -64,16 +64,16 @@ export interface LoadedRendererGameShell {
      *
      * One declaration, three effects:
      *
-     *   1. {@link ShellBackgroundHost} mounts on the engine's shell-background
-     *      routes UNION these, so the pinned same-instance background persists
-     *      across `/main-menu → /<page> → /settings`.
-     *   2. `GameStoreBootstrap`'s snapshot → `/game` gate admits these routes, so
+     *   1. A declared route classifies as the `page` shell surface, which is a
+     *      background surface — so the pinned same-instance background persists
+     *      across `/main-menu → /<page> → /settings` (§4.37.18).
+     *   2. `GameStoreBootstrap`'s snapshot → `/game` gate admits that surface, so
      *      a match started from a custom page carries the player into the match
      *      instead of stranding them on the page.
      *   3. Menu `navigate` reaches them as an ordinary instant hop with the
      *      `?gameId=` context preserved.
      *
-     * Comparisons normalize both sides (`normalizeRoutePath`): the static export
+     * The classification normalizes both sides (`normalizeRoutePath`): the static export
      * sets `trailingSlash: true`, so the router reports `/credits/` for a route
      * declared as `'/credits'`, and the packaged app can serve it as
      * `/credits/index.html`.

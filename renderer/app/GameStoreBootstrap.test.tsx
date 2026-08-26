@@ -11,6 +11,12 @@
  * and the pre-existing /lobby → /game redirect on the first match snapshot still
  * works.
  *
+ * Since §4.37.18 the routes themselves are not this component's business: it
+ * gates on the SURFACE `ShellStateBridge` publishes on the shell-state store,
+ * so each case below publishes one rather than mocking a pathname. The last
+ * block mounts the bridge with it, because "the gate re-evaluates when the
+ * declaration resolves" is a property of the pair.
+ *
  * The IPC/perf bootstrap effects no-op here: globalThis.__chimera is left unset
  * so they early-return, and the bootstrap functions are mocked.
  *
@@ -27,6 +33,14 @@ import {
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { FadeProvider } from '../components/shell/FadeContext';
+import { screenFadeMs } from '../components/shell/screenFadeDuration';
+import { ShellStateBridge } from '../components/shell/ShellStateBridge';
+import {
+    _resetShellStateForTest,
+    getShellState,
+    setShellRoute,
+    type ShellSurface,
+} from '../shell/shellStateStore';
 import { GameStoreBootstrap } from './GameStoreBootstrap';
 
 const { mockLoadRendererGameShell } = vi.hoisted(() => ({
@@ -36,6 +50,7 @@ const { mockLoadRendererGameShell } = vi.hoisted(() => ({
 const mockPush = vi.fn();
 const mockReset = vi.fn();
 let mockPathname = '/game';
+let mockSearch = '';
 let mockSnapshot: PlayerSnapshot | null = null;
 
 // ONE router object for every render. A fresh `{ push }` per call would hand
@@ -47,6 +62,7 @@ const mockRouter = { push: mockPush };
 vi.mock('next/navigation', () => ({
     useRouter: () => mockRouter,
     usePathname: () => mockPathname,
+    useSearchParams: () => new URLSearchParams(mockSearch),
 }));
 
 vi.mock('../state/gameStore', () => ({
@@ -109,8 +125,26 @@ beforeEach(() => {
     mockReset.mockReset();
     mockSnapshot = null;
     mockPathname = '/game';
+    mockSearch = '';
     window.history.replaceState({}, '', '/game');
+    _resetShellStateForTest();
 });
+
+/** Publish a classified route, exactly as `ShellStateBridge` does. */
+function setSurface(surface: ShellSurface, pathname: string, gameId: string | null = null): void {
+    setShellRoute({ surface, pathname, gameId });
+}
+
+/**
+ * Drive the REAL bridge. `window.history` is set alongside the router mock so
+ * the two never disagree here — which route source the bridge reads is its own
+ * test's business, not this file's.
+ */
+function setRoute(pathname: string, search = ''): void {
+    mockPathname = pathname;
+    mockSearch = search;
+    window.history.replaceState({}, '', `${pathname}${search === '' ? '' : `?${search}`}`);
+}
 
 afterEach(() => {
     cleanup();
@@ -119,8 +153,7 @@ afterEach(() => {
 
 describe('GameStoreBootstrap — /game → /lobby on a phase:lobby snapshot', () => {
     it('pushes /lobby and resets the store when a phase:lobby snapshot arrives on /game', () => {
-        window.history.replaceState({}, '', '/game');
-        mockPathname = '/game';
+        setSurface('match', '/game');
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
 
         render(<GameStoreBootstrap />);
@@ -130,8 +163,7 @@ describe('GameStoreBootstrap — /game → /lobby on a phase:lobby snapshot', ()
     });
 
     it('preserves the game context (?gameId) when returning to /lobby', () => {
-        window.history.replaceState({}, '', '/game?gameId=tactics');
-        mockPathname = '/game';
+        setSurface('match', '/game', 'tactics');
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
 
         render(<GameStoreBootstrap />);
@@ -140,8 +172,7 @@ describe('GameStoreBootstrap — /game → /lobby on a phase:lobby snapshot', ()
     });
 
     it('does not navigate for a non-lobby snapshot on /game', () => {
-        window.history.replaceState({}, '', '/game');
-        mockPathname = '/game';
+        setSurface('match', '/game');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
@@ -151,8 +182,7 @@ describe('GameStoreBootstrap — /game → /lobby on a phase:lobby snapshot', ()
     });
 
     it('does not navigate when there is no snapshot on /game', () => {
-        window.history.replaceState({}, '', '/game');
-        mockPathname = '/game';
+        setSurface('match', '/game');
         mockSnapshot = null;
 
         render(<GameStoreBootstrap />);
@@ -166,8 +196,7 @@ describe('GameStoreBootstrap — /replays/player → /lobby on a phase:lobby sna
         // A post-game replay leaves the live session alive; the host's Leave
         // (returnToLobby) broadcasts a phase:'lobby' snapshot, and the replay route
         // must navigate to the lobby just like /game does.
-        window.history.replaceState({}, '', '/replays/player');
-        mockPathname = '/replays/player';
+        setSurface('replay-player', '/replays/player');
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
 
         render(<GameStoreBootstrap />);
@@ -177,8 +206,7 @@ describe('GameStoreBootstrap — /replays/player → /lobby on a phase:lobby sna
     });
 
     it('does not navigate for a non-lobby snapshot on the replay player', () => {
-        window.history.replaceState({}, '', '/replays/player');
-        mockPathname = '/replays/player';
+        setSurface('replay-player', '/replays/player');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
@@ -190,8 +218,7 @@ describe('GameStoreBootstrap — /replays/player → /lobby on a phase:lobby sna
 
 describe('GameStoreBootstrap — existing /lobby → /game redirect (regression)', () => {
     it('pushes /game when a snapshot arrives on /lobby', () => {
-        window.history.replaceState({}, '', '/lobby');
-        mockPathname = '/lobby';
+        setSurface('lobby', '/lobby');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
@@ -205,8 +232,7 @@ describe('GameStoreBootstrap — existing /lobby → /game redirect (regression)
         // /lobby does not, and did not before this task. Pinned so a reordering
         // that pulled it under the phase gate is a failing test, not a silent
         // change to the route the lobby⇄game pair is built around.
-        window.history.replaceState({}, '', '/lobby');
-        mockPathname = '/lobby';
+        setSurface('lobby', '/lobby');
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
 
         render(<GameStoreBootstrap />);
@@ -215,8 +241,7 @@ describe('GameStoreBootstrap — existing /lobby → /game redirect (regression)
     });
 
     it('preserves the game context (?gameId) when redirecting to /game', () => {
-        window.history.replaceState({}, '', '/lobby?gameId=tactics');
-        mockPathname = '/lobby';
+        setSurface('lobby', '/lobby', 'tactics');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
@@ -228,8 +253,7 @@ describe('GameStoreBootstrap — existing /lobby → /game redirect (regression)
 
 describe('GameStoreBootstrap — /saves → /game redirect on a playing snapshot', () => {
     it('pushes /game when a playing snapshot arrives on /saves (restore completed)', () => {
-        window.history.replaceState({}, '', '/saves');
-        mockPathname = '/saves';
+        setSurface('saves', '/saves');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
@@ -239,8 +263,7 @@ describe('GameStoreBootstrap — /saves → /game redirect on a playing snapshot
     });
 
     it('preserves the game context (?gameId) when redirecting from /saves', () => {
-        window.history.replaceState({}, '', '/saves?gameId=tactics');
-        mockPathname = '/saves';
+        setSurface('saves', '/saves', 'tactics');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
@@ -249,8 +272,7 @@ describe('GameStoreBootstrap — /saves → /game redirect on a playing snapshot
     });
 
     it('does not navigate when there is no snapshot on /saves', () => {
-        window.history.replaceState({}, '', '/saves');
-        mockPathname = '/saves';
+        setSurface('saves', '/saves');
         mockSnapshot = null;
 
         render(<GameStoreBootstrap />);
@@ -261,8 +283,7 @@ describe('GameStoreBootstrap — /saves → /game redirect on a playing snapshot
     it('does not navigate for a phase:lobby snapshot on /saves', () => {
         // A return-to-lobby broadcast must not bounce /saves through /game into
         // the game→lobby effect's reset; only a live match snapshot navigates.
-        window.history.replaceState({}, '', '/saves');
-        mockPathname = '/saves';
+        setSurface('saves', '/saves');
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
 
         render(<GameStoreBootstrap />);
@@ -294,8 +315,7 @@ describe('GameStoreBootstrap — app-level screen fade gates the navigation', ()
     });
 
     it('fades out to black BEFORE resetting + navigating on a phase:lobby snapshot (game→lobby)', async () => {
-        window.history.replaceState({}, '', '/game');
-        mockPathname = '/game';
+        setSurface('match', '/game');
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
 
         render(
@@ -322,8 +342,7 @@ describe('GameStoreBootstrap — app-level screen fade gates the navigation', ()
     it('fades out before navigating to /game on a snapshot arriving on /main-menu', async () => {
         // The match-entry fade is the point of the gate, not an accident of the
         // /lobby arm: a menu-born session must reach the scene the same way.
-        window.history.replaceState({}, '', '/main-menu');
-        mockPathname = '/main-menu';
+        setSurface('main-menu', '/main-menu');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(
@@ -344,8 +363,7 @@ describe('GameStoreBootstrap — app-level screen fade gates the navigation', ()
     });
 
     it('fades out before navigating to /game on a snapshot arriving in the lobby (lobby→game)', async () => {
-        window.history.replaceState({}, '', '/lobby');
-        mockPathname = '/lobby';
+        setSurface('lobby', '/lobby');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(
@@ -367,13 +385,11 @@ describe('GameStoreBootstrap — app-level screen fade gates the navigation', ()
 });
 
 describe('GameStoreBootstrap — the snapshot gate reaches the main menu and game shell pages', () => {
-    // The allow-set the effect gates on is `/lobby` ∪ `/saves` ∪ `/main-menu` ∪
-    // the game's declared `shellRoutes`; the last three additionally require a
-    // non-'lobby' phase so a return-to-lobby broadcast cannot bounce them
-    // through /game.
+    // The allow-set the effect gates on is the `lobby`, `saves`, `main-menu`
+    // and `page` surfaces; the last three additionally require a non-'lobby'
+    // phase so a return-to-lobby broadcast cannot bounce them through /game.
     it('pushes /game when a playing snapshot arrives on /main-menu', () => {
-        window.history.replaceState({}, '', '/main-menu');
-        mockPathname = '/main-menu';
+        setSurface('main-menu', '/main-menu');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
@@ -383,8 +399,7 @@ describe('GameStoreBootstrap — the snapshot gate reaches the main menu and gam
     });
 
     it('preserves the game context (?gameId) when redirecting from /main-menu', () => {
-        window.history.replaceState({}, '', '/main-menu?gameId=tactics');
-        mockPathname = '/main-menu';
+        setSurface('main-menu', '/main-menu', 'tactics');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
@@ -393,8 +408,7 @@ describe('GameStoreBootstrap — the snapshot gate reaches the main menu and gam
     });
 
     it('does not navigate for a phase:lobby snapshot on /main-menu', () => {
-        window.history.replaceState({}, '', '/main-menu');
-        mockPathname = '/main-menu';
+        setSurface('main-menu', '/main-menu');
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
 
         render(<GameStoreBootstrap />);
@@ -403,92 +417,192 @@ describe('GameStoreBootstrap — the snapshot gate reaches the main menu and gam
         expect(mockReset).not.toHaveBeenCalled();
     });
 
-    it('pushes /game when a playing snapshot arrives on a declared shell page', async () => {
-        mockLoadRendererGameShell.mockResolvedValue({ shellRoutes: ['/credits'] });
-        window.history.replaceState({}, '', '/credits?gameId=tactics');
-        mockPathname = '/credits';
+    it('pushes /game when a playing snapshot arrives on a game page surface', () => {
+        setSurface('page', '/credits', 'tactics');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
 
-        await waitFor(() => {
-            expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
-        });
+        expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
     });
 
-    it('matches a declared page reached on the exported trailing-slash spelling', async () => {
-        mockLoadRendererGameShell.mockResolvedValue({ shellRoutes: ['/credits'] });
-        window.history.replaceState({}, '', '/credits/?gameId=tactics');
-        mockPathname = '/credits/';
-        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
-
-        render(<GameStoreBootstrap />);
-
-        await waitFor(() => {
-            expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
-        });
-    });
-
-    it('does not navigate for a phase:lobby snapshot on a declared shell page', async () => {
-        mockLoadRendererGameShell.mockResolvedValue({ shellRoutes: ['/credits'] });
-        window.history.replaceState({}, '', '/credits?gameId=tactics');
-        mockPathname = '/credits';
+    it('does not navigate for a phase:lobby snapshot on a game page surface', () => {
+        setSurface('page', '/credits', 'tactics');
         mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
 
         render(<GameStoreBootstrap />);
 
-        await waitFor(() => {
-            expect(mockLoadRendererGameShell).toHaveBeenCalledWith('tactics');
-        });
         expect(mockPush).not.toHaveBeenCalled();
     });
 
-    it('does not navigate from an undeclared route with the same game context', async () => {
-        mockLoadRendererGameShell.mockResolvedValue({ shellRoutes: ['/credits'] });
-        window.history.replaceState({}, '', '/atlas?gameId=tactics');
-        mockPathname = '/atlas';
+    it('does not navigate from an unclassified route with a live game context', () => {
+        // An UNdeclared page classifies as boot, and boot is outside the
+        // allow-set — which is what keeps a route nobody named out of the hop.
+        setSurface('boot', '/atlas', 'tactics');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
 
-        await waitFor(() => {
-            expect(mockLoadRendererGameShell).toHaveBeenCalledWith('tactics');
-        });
         expect(mockPush).not.toHaveBeenCalled();
     });
+
+    it.each([
+        ['replays', '/replays'],
+        ['replay-player', '/replays/player'],
+        ['settings', '/settings'],
+    ] as const)(
+        'does not navigate from the %s surface on a playing snapshot',
+        (surface: ShellSurface, pathname: string) => {
+            setSurface(surface, pathname, 'tactics');
+            mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+            render(<GameStoreBootstrap />);
+
+            expect(mockPush).not.toHaveBeenCalled();
+        },
+    );
 
     it('does not navigate from /debug, an engine route outside the allow-set', () => {
-        window.history.replaceState({}, '', '/debug?gameId=tactics');
-        mockPathname = '/debug';
+        setSurface('boot', '/debug', 'tactics');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
         render(<GameStoreBootstrap />);
 
         expect(mockPush).not.toHaveBeenCalled();
     });
+});
+
+describe('GameStoreBootstrap — the gate arms the shell transition', () => {
+    it('arms a to-match transition the moment the entry begins, not when it lands', () => {
+        setSurface('main-menu', '/main-menu', 'tactics');
+        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+        render(<GameStoreBootstrap />);
+
+        // `screenFadeMs()` collapses to 0 under the e2e flag and reduced motion;
+        // what the arm carries is whatever the fade this hop runs on is.
+        expect(getShellState().transition).toEqual({
+            kind: 'to-match',
+            durationMs: screenFadeMs(),
+        });
+    });
+
+    it('arms a to-shell transition on the reverse hop out of the match', () => {
+        setSurface('match', '/game', 'tactics');
+        mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
+
+        render(<GameStoreBootstrap />);
+
+        expect(getShellState().transition).toEqual({
+            kind: 'to-shell',
+            durationMs: screenFadeMs(),
+        });
+    });
+
+    it('arms nothing when the gate does not fire', () => {
+        setSurface('settings', '/settings', 'tactics');
+        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+        render(<GameStoreBootstrap />);
+
+        expect(getShellState().transition).toBeNull();
+    });
+
+    it('arms BEFORE the fade completes, so a background has the whole fade to move', async () => {
+        vi.useFakeTimers();
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+            return globalThis.setTimeout(() => {
+                callback(Date.now());
+            }, 16) as unknown as number;
+        });
+        vi.stubGlobal('cancelAnimationFrame', (frameId: number): void => {
+            globalThis.clearTimeout(frameId);
+        });
+        try {
+            setSurface('lobby', '/lobby', 'tactics');
+            mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+            render(
+                <FadeProvider>
+                    <GameStoreBootstrap />
+                </FadeProvider>,
+            );
+
+            expect(mockPush).not.toHaveBeenCalled();
+            expect(getShellState().transition).toEqual({
+                kind: 'to-match',
+                durationMs: screenFadeMs(),
+            });
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(400);
+            });
+            expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
+        } finally {
+            vi.unstubAllGlobals();
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe('GameStoreBootstrap + ShellStateBridge — the gate re-evaluates on the declaration', () => {
+    function Shell(): React.ReactElement {
+        return (
+            <>
+                <ShellStateBridge />
+                <GameStoreBootstrap />
+            </>
+        );
+    }
 
     it('navigates once the shell payload resolves, when the snapshot landed first', async () => {
         // A reload straight onto a game page can deliver the match snapshot
-        // before `shellRoutes` is known. The gate must RE-EVALUATE on the
-        // resolve rather than strand the player on the page with a live match.
+        // before `shellRoutes` is known. The classification must RE-EVALUATE on
+        // the resolve rather than strand the player on the page with a live match.
         let releaseShell: (shell: { shellRoutes: readonly `/${string}`[] }) => void = () => {};
         mockLoadRendererGameShell.mockReturnValue(
             new Promise<{ shellRoutes: readonly `/${string}`[] }>((resolve) => {
                 releaseShell = resolve;
             }),
         );
-        window.history.replaceState({}, '', '/credits?gameId=tactics');
-        mockPathname = '/credits';
+        setRoute('/credits', 'gameId=tactics');
         mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
 
-        render(<GameStoreBootstrap />);
+        render(<Shell />);
 
+        expect(getShellState().surface).toBe('boot');
         expect(mockPush).not.toHaveBeenCalled();
 
         await act(async () => {
             releaseShell({ shellRoutes: ['/credits'] });
         });
 
+        expect(getShellState().surface).toBe('page');
         expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
+    });
+
+    it('matches a declared page reached on the exported trailing-slash spelling', async () => {
+        mockLoadRendererGameShell.mockResolvedValue({ shellRoutes: ['/credits'] });
+        setRoute('/credits/', 'gameId=tactics');
+        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+        render(<Shell />);
+
+        await waitFor(() => {
+            expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
+        });
+    });
+
+    it('leaves an UNdeclared page with the same game context alone', async () => {
+        mockLoadRendererGameShell.mockResolvedValue({ shellRoutes: ['/credits'] });
+        setRoute('/atlas', 'gameId=tactics');
+        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+        render(<Shell />);
+
+        await waitFor(() => {
+            expect(mockLoadRendererGameShell).toHaveBeenCalledWith('tactics');
+        });
+        expect(mockPush).not.toHaveBeenCalled();
     });
 });

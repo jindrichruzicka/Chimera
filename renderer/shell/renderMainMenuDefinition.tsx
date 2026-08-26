@@ -9,9 +9,12 @@
 //
 // Two of the actions are engine-implemented rather than routed: `start-game`
 // invokes the quick-start verb and `continue` loads the game autosave through
-// the ordinary `saves.load` restore funnel. Neither navigates: each issues its
-// verb and returns. The hop into the match belongs to GameStoreBootstrap's
-// snapshot→/game effect, whose entry allow-set covers /main-menu (§4.37.17).
+// the ordinary `saves.load` restore funnel. Both go through `matchEntryVerbs`,
+// which owns the shell transition protocol around them (§4.37.18) and is shared
+// with the `useQuickStart()` facade a game's own page calls. Neither navigates:
+// each issues its verb and returns. The hop into the match belongs to
+// GameStoreBootstrap's snapshot→/game effect, whose entry allow-set covers
+// /main-menu (§4.37.17).
 //
 // `continue`'s availability is engine-computed and REACTIVE: it subscribes to
 // the save slot list, so a `saves:slot-update` push flips the button without the
@@ -28,17 +31,12 @@ import type {
     GameMainMenuLayout,
     GameMenuCommandId,
 } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
-import type {
-    LobbyAPI,
-    QuickStartParams,
-    SlotId,
-} from '@chimera-engine/simulation/bridge/api-types.js';
-import { autosaveSlotId } from '@chimera-engine/simulation/foundation/save-slots.js';
+import type { QuickStartParams } from '@chimera-engine/simulation/bridge/api-types.js';
 import { Button } from '../components/ui/Button';
 import { useConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useScreenFadeNavigate } from '../components/shell/useScreenFadeNavigate';
 import { getSystemBridge } from '../bridge/system-bridge';
-import { getSavesBridge } from '../hooks/useSavesApi';
+import { continueFromAutosave, startQuickMatch } from './matchEntryVerbs';
 import { MENU_KEYS } from '../i18n/engine-keys';
 import { useTranslate } from '../i18n/useTranslate';
 import type { TranslateFn } from '../i18n/i18n-context';
@@ -178,18 +176,6 @@ function defaultVariant(
  */
 function resolveText(t: TranslateFn, text: string): string {
     return t(text as unknown as Parameters<TranslateFn>[0]);
-}
-
-/**
- * Narrow resolver for the quick-start slice of the preload lobby bridge.
- * Deliberately not `getLobbyBridge()` from the lobby page's hook: that helper
- * also demands `__chimera.system`, an unrelated dependency this call never
- * touches (the same reason `useLeaveGame` resolves its own).
- */
-function resolveQuickStartApi(): Pick<LobbyAPI, 'quickStart'> | null {
-    const bridge = globalThis as { readonly __chimera?: { readonly lobby?: LobbyAPI } };
-    const lobby = bridge.__chimera?.lobby;
-    return lobby === undefined || typeof lobby.quickStart !== 'function' ? null : lobby;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -374,9 +360,7 @@ export function RenderMainMenuDefinition({
                     gameId: requireGameId('start-game'),
                 };
                 return (): void => {
-                    const lobby = resolveQuickStartApi();
-                    if (!lobby) throw new Error('Chimera lobby API not available');
-                    void lobby.quickStart(params).catch((error: unknown) => {
+                    void startQuickMatch(params).catch((error: unknown) => {
                         console.error(
                             '[RenderMainMenuDefinition] start-game: the quick start was refused.',
                             error,
@@ -389,11 +373,9 @@ export function RenderMainMenuDefinition({
                 // `saves.load` the saves browser issues, so the whole restore
                 // funnel — including the waiting overlay a multiplayer autosave
                 // needs — is reused rather than rebuilt.
-                const slotId = autosaveSlotId(requireGameId('continue')) as SlotId;
+                const continuedGameId = requireGameId('continue');
                 return (): void => {
-                    const saves = getSavesBridge();
-                    if (!saves) throw new Error('Chimera saves API not available');
-                    void saves.load(slotId).catch((error: unknown) => {
+                    void continueFromAutosave(continuedGameId).catch((error: unknown) => {
                         console.error(
                             '[RenderMainMenuDefinition] continue: loading the autosave failed.',
                             error,

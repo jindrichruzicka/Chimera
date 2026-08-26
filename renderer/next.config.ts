@@ -78,20 +78,29 @@ const nextConfig: NextConfig = {
             // resolve to two physical copies (dist + source) duplicates every
             // module-level singleton they carry — the EscapeStack React context
             // (provider mounted from source, consumers pulled from dist), the
-            // chat/lobby/toast Zustand stores, and the `@chimera-engine/renderer/game`
-            // registration registry (apps/tactics registers into it, renderer
-            // pages read from it) — so context identity breaks
+            // chat/lobby/toast Zustand stores, and the singletons behind the
+            // `@chimera-engine/renderer/game` barrel — among them the registration
+            // registry (apps/tactics registers into it, renderer pages read from
+            // it) and the shell-state store (`ShellStateBridge` publishes into it,
+            // a game's own page reads from it, §4.37.18); what that barrel's graph
+            // reaches is pinned by `game-barrel-side-effects.test.ts` — so context
+            // identity breaks
             // (`useEscapeLayer() must be used within <EscapeStackProvider>`),
             // game ChatPanels subscribe to a different store than the IPC bridge
-            // writes to, and `registerRendererGame` would populate a registry the
-            // pages never see (silent UnknownRendererGameError). Alias these
+            // writes to, `registerRendererGame` would populate a registry the
+            // pages never see (silent UnknownRendererGameError), and a game page
+            // would read a shell state nothing ever publishes into. Alias these
             // shared module surfaces back onto their source dirs so this bundle
-            // holds exactly one instance of each. The `dist` build remains the
+            // holds exactly one instance of each. Each `@chimera-engine/renderer/*`
+            // alias must land on the same source module the package's `exports`
+            // map publishes for that subpath;
+            // `renderer/__tests__/next-alias-exports-agreement.test.ts` holds the
+            // two halves to each other. The `dist` build remains the
             // typecheck/contract surface; `*.css` subpaths stay on `dist`
             // (stylesheet duplication is inert).
             '@chimera-engine/renderer/components/ui': path.join(root, 'renderer/components/ui'),
             '@chimera-engine/renderer/components/chat': path.join(root, 'renderer/components/chat'),
-            '@chimera-engine/renderer/game': path.join(root, 'renderer/game/rendererGameRegistry'),
+            '@chimera-engine/renderer/game': path.join(root, 'renderer/game'),
             // Measured, not reasoned. This preview was built with a tactics
             // shell surface calling `useInputManager()` through the public
             // `@chimera-engine/renderer/input` barrel and loaded in a browser:

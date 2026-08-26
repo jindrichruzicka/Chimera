@@ -247,6 +247,8 @@ chimera/
 │   ├── components/
 │   │   ├── shell/                   # Engine-provided navigation chrome
 │   │   │   ├── GameShell.tsx       # Hosts the active game's screen registry; game-agnostic
+│   │   │   ├── ShellStateBridge.tsx # The single route-classification site; publishes the shell state (§4.37.18)
+│   │   │   ├── ShellBackgroundHost.tsx  # Mounts the game's background on the shell surfaces (§4.37.9)
 │   │   │   ├── SpectatorHud.tsx     # Read-only spectator overlay: followed-seat name + Tab switch hotkey (Invariants #114/#115)
 │   │   │   ├── RootErrorBoundary.tsx  # Top-level React error boundary; see §4.27
 │   │   │   ├── ToastHost.tsx        # Renders transient notifications; see §4.30
@@ -300,7 +302,8 @@ chimera/
 │   │   ├── spriteAtlas.ts           # parseSpriteAtlas — public via the barrel; measures atlas cells to raw flipY UVs
 │   │   ├── useAnimationSheet.ts     # Model sheet, memoised on metadata IDENTITY
 │   │   └── useAsset.ts
-│   ├── game/
+│   ├── game/                        # Public barrel: @chimera-engine/renderer/game
+│   │   ├── index.ts                 # Public barrel — registration seam + the §4.37.18 shell page services
 │   │   ├── rendererGameRegistry.ts  # Game shell/screen/asset registration bridge; budgeted, fail-open shell warm-up
 │   │   ├── gameShellAssetSource.ts  # Local game-asset-ref resolver for shell fonts/images/cursors
 │   │   ├── GameFontLoader.ts        # Loads GameFontFace self-hosted fonts through the renderer protocol
@@ -349,17 +352,21 @@ chimera/
 │   │   └── useAnimationTimeScale.ts # Read seam onto that float; the one module here re-exported from the components/r3f barrel
 │   ├── shell/
 │   │   ├── SettingsLanguageSelector.tsx  # Store-connected wrapper for the settings Language field (§4.39)
-│   │   ├── shellRoutes.ts            # Route normalizer + ENGINE_OWNED_ROUTES + declared-route matcher (§4.37.17)
-│   │   └── useGameShellRoutes.ts     # Resolves a game's declared shellRoutes for the navigation gate (§4.37.17)
+│   │   ├── shellRoutes.ts            # Route vocabulary: normalizer, ShellSurface, ENGINE_ROUTE_SURFACES, classifyShellSurface (§4.37.17, §4.37.18)
+│   │   ├── __tests__/routeClassificationCensus.ts  # Census predicates: the one classifier and the store's enumerated writers (§4.37.18)
+│   │   ├── shellStateStore.ts        # Shell-state singleton: surface/pathname/gameId/transition/draft (§4.37.18)
+│   │   ├── matchEntryVerbs.ts        # startQuickMatch / continueFromAutosave under the transition arm-clear protocol (§4.37.18)
+│   │   └── useShellNavigate.ts       # Context-preserving instant hop; public via the game barrel (§4.37.18)
 │   ├── logging/
 │   │   └── rendererLogger.ts        # see §4.27
 │   ├── utils/                       # INTERNAL directory; curves.ts is re-exported by the components/r3f barrel
 │   │   └── curves.ts                # Pure math: lerp, linear, easeIn, easeOut, easeInOut, EasingFn; see §4.21
-│   ├── hooks/                       # INTERNAL directory; the first four are re-exported by the components/r3f barrel
-│   │   ├── useTween.ts              # see §4.21
-│   │   ├── useTweenCallback.ts      # see §4.21
-│   │   ├── useCamera.ts             # see §4.22
-│   │   ├── useGameInteraction.ts    # see §4.23
+│   ├── hooks/                       # INTERNAL directory; each entry below states which barrel, if any, re-exports it
+│   │   ├── useTween.ts              # components/r3f barrel; see §4.21
+│   │   ├── useTweenCallback.ts      # components/r3f barrel; see §4.21
+│   │   ├── useCamera.ts             # components/r3f barrel; see §4.22
+│   │   ├── useGameInteraction.ts    # components/r3f barrel; see §4.23
+│   │   ├── useQuickStart.ts         # game barrel; the §4.37.18 session facade (start/close/continueFromAutosave/hasAutosave)
 │   │   ├── useReplayApi.ts          # Shell-only, NOT re-exported; see §4.28
 │   │   └── useSavesApi.ts           # Shell-only, NOT re-exported; see §4.11
 │   └── bridge/

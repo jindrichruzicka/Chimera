@@ -1,18 +1,36 @@
 // @vitest-environment jsdom
 
+/**
+ * renderer/components/shell/ShellBackgroundHost.test.tsx
+ *
+ * The background mount. Since §4.37.18 this component classifies nothing: it
+ * reads the SURFACE `ShellStateBridge` published on the shell-state store and
+ * loads the active game's background component for it. Which pathname is which
+ * surface is the bridge's test; what is measured here is the mount decision,
+ * the payload's game tagging, and the one-instance persistence across shell
+ * surfaces (§4.37.17).
+ *
+ * The last block mounts the bridge WITH the host, because the property it holds
+ * — the pinned instance surviving `/main-menu → /credits` — spans the pair and
+ * neither half can show it alone.
+ */
+
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
+import {
+    _resetShellStateForTest,
+    setShellRoute,
+    type ShellSurface,
+} from '../../shell/shellStateStore';
 import { ShellBackgroundHost } from './ShellBackgroundHost';
+import { ShellStateBridge } from './ShellStateBridge';
 
 const { mockLoadRendererGameShell, navigationState } = vi.hoisted(() => ({
     mockLoadRendererGameShell: vi.fn(),
-    navigationState: {
-        pathname: '/main-menu',
-        search: '',
-    },
+    navigationState: { pathname: '/main-menu', search: '' },
 }));
 
 vi.mock('next/navigation', () => ({
@@ -31,12 +49,26 @@ function TacticsBackground(): React.ReactElement {
     return <div data-testid="tactics-shell-background" />;
 }
 
+/** Publish a classified route, exactly as the bridge does. */
+function setSurface(surface: ShellSurface, pathname: string, gameId: string | null = null): void {
+    act(() => {
+        setShellRoute({ surface, pathname, gameId });
+    });
+}
+
+/**
+ * Drive the REAL bridge. `window.history` is set alongside the router mock so
+ * the two never disagree here — which route source the bridge reads is its own
+ * test's business, not this file's.
+ */
 function setRoute(pathname: string, search = ''): void {
     navigationState.pathname = pathname;
     navigationState.search = search;
+    window.history.replaceState({}, '', `${pathname}${search === '' ? '' : `?${search}`}`);
 }
 
 beforeEach(() => {
+    _resetShellStateForTest();
     tacticsBackgroundRenders = 0;
     setRoute('/main-menu');
     mockLoadRendererGameShell.mockReset();
@@ -49,7 +81,9 @@ afterEach(() => {
 });
 
 describe('ShellBackgroundHost', () => {
-    it('renders the engine default solid background on shell routes without a game context', () => {
+    it('renders the engine default solid background on a shell surface without a game context', () => {
+        setSurface('main-menu', '/main-menu');
+
         render(<ShellBackgroundHost />);
 
         const host = screen.getByTestId('shell-background');
@@ -58,8 +92,8 @@ describe('ShellBackgroundHost', () => {
         expect(mockLoadRendererGameShell).not.toHaveBeenCalled();
     });
 
-    it('loads and renders a game shell background component when a shell route has game context', async () => {
-        setRoute('/main-menu', 'gameId=tactics');
+    it('loads and renders a game shell background component when the surface has game context', async () => {
+        setSurface('main-menu', '/main-menu', 'tactics');
         mockLoadRendererGameShell.mockResolvedValue({
             shellBackground: TacticsBackground,
         } satisfies LoadedRendererGameShell);
@@ -75,7 +109,7 @@ describe('ShellBackgroundHost', () => {
     });
 
     it('does not paint the engine default background while a game shell background is loading', () => {
-        setRoute('/main-menu', 'gameId=tactics');
+        setSurface('main-menu', '/main-menu', 'tactics');
         mockLoadRendererGameShell.mockReturnValue(new Promise<LoadedRendererGameShell>(() => {}));
 
         render(<ShellBackgroundHost />);
@@ -84,8 +118,8 @@ describe('ShellBackgroundHost', () => {
         expect(screen.queryByTestId('shell-background')).toBeNull();
     });
 
-    it('keeps the engine default background when the lobby route omits gameId', () => {
-        setRoute('/lobby');
+    it('keeps the engine default background when the lobby surface carries no gameId', () => {
+        setSurface('lobby', '/lobby');
 
         render(<ShellBackgroundHost />);
 
@@ -96,8 +130,8 @@ describe('ShellBackgroundHost', () => {
         expect(mockLoadRendererGameShell).not.toHaveBeenCalled();
     });
 
-    it('uses explicit URL game context on the lobby route', async () => {
-        setRoute('/lobby', 'gameId=tactics');
+    it('mounts on the lobby surface with an explicit game context', async () => {
+        setSurface('lobby', '/lobby', 'tactics');
         mockLoadRendererGameShell.mockResolvedValue({
             shellBackground: TacticsBackground,
         } satisfies LoadedRendererGameShell);
@@ -108,84 +142,14 @@ describe('ShellBackgroundHost', () => {
         expect(await screen.findByTestId('tactics-shell-background')).toBeTruthy();
     });
 
-    it('keeps the engine default background when the lobby route declares an explicit theme without gameId', () => {
-        setRoute('/lobby', 'themeId=engine-default');
-
-        render(<ShellBackgroundHost />);
-
-        expect(screen.getByTestId('shell-background')).toHaveAttribute(
-            'data-shell-background-kind',
-            'engine-default',
-        );
-        expect(mockLoadRendererGameShell).not.toHaveBeenCalled();
-    });
-
-    it('does not render or load a shell background on the game route', () => {
-        setRoute('/game', 'gameId=tactics');
-
-        render(<ShellBackgroundHost />);
-
-        expect(screen.queryByTestId('shell-background')).toBeNull();
-        expect(mockLoadRendererGameShell).not.toHaveBeenCalled();
-    });
-
-    it('keeps the same mounted host instance while navigating between shell routes', async () => {
-        setRoute('/main-menu', 'gameId=tactics');
+    it('mounts on a game page surface', async () => {
+        setSurface('page', '/credits', 'tactics');
         mockLoadRendererGameShell.mockResolvedValue({
             shellBackground: TacticsBackground,
         } satisfies LoadedRendererGameShell);
 
-        const rendered = render(<ShellBackgroundHost />);
-
-        const firstHost = await screen.findByTestId('shell-background');
-        const firstInstanceId = firstHost.getAttribute('data-shell-background-instance-id');
-
-        setRoute('/settings', 'gameId=tactics');
-        rendered.rerender(<ShellBackgroundHost />);
-
-        await waitFor(() => {
-            expect(screen.getByTestId('shell-background')).toHaveAttribute(
-                'data-shell-background-instance-id',
-                firstInstanceId,
-            );
-        });
-    });
-
-    it('keeps the same mounted host instance from main menu to lobby when game context is explicit', async () => {
-        setRoute('/main-menu', 'gameId=tactics');
-        mockLoadRendererGameShell.mockResolvedValue({
-            shellBackground: TacticsBackground,
-        } satisfies LoadedRendererGameShell);
-
-        const rendered = render(<ShellBackgroundHost />);
-
-        const firstHost = await screen.findByTestId('shell-background');
-        const firstInstanceId = firstHost.getAttribute('data-shell-background-instance-id');
-
-        setRoute('/lobby', 'gameId=tactics');
-        rendered.rerender(<ShellBackgroundHost />);
-
-        await waitFor(() => {
-            expect(screen.getByTestId('shell-background')).toHaveAttribute(
-                'data-shell-background-instance-id',
-                firstInstanceId,
-            );
-        });
-    });
-});
-
-describe('ShellBackgroundHost — game-declared shell routes', () => {
-    function declaringShell(): LoadedRendererGameShell {
-        return { shellBackground: TacticsBackground, shellRoutes: ['/credits'] };
-    }
-
-    it('mounts the game background on a declared shell route', async () => {
-        setRoute('/credits', 'gameId=tactics');
-        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
-
         render(<ShellBackgroundHost />);
 
-        expect(mockLoadRendererGameShell).toHaveBeenCalledWith('tactics');
         expect(await screen.findByTestId('tactics-shell-background')).toBeTruthy();
         expect(screen.getByTestId('shell-background')).toHaveAttribute(
             'data-shell-background-kind',
@@ -193,32 +157,29 @@ describe('ShellBackgroundHost — game-declared shell routes', () => {
         );
     });
 
-    it('matches a declared route reached on the exported trailing-slash spelling', async () => {
-        // `trailingSlash: true` means the router reports `/credits/` for the page
-        // the game declared as `'/credits'`; a raw === comparison never matches.
-        setRoute('/credits/', 'gameId=tactics');
-        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
+    it.each([
+        ['match', '/game'],
+        ['saves', '/saves'],
+        ['replays', '/replays'],
+        ['replay-player', '/replays/player'],
+        ['boot', '/debug'],
+    ] as const)(
+        'neither renders nor loads on the %s surface',
+        (surface: ShellSurface, pathname: string) => {
+            setSurface(surface, pathname, 'tactics');
 
-        render(<ShellBackgroundHost />);
+            render(<ShellBackgroundHost />);
 
-        expect(await screen.findByTestId('tactics-shell-background')).toBeTruthy();
-    });
+            expect(screen.queryByTestId('shell-background')).toBeNull();
+            expect(mockLoadRendererGameShell).not.toHaveBeenCalled();
+        },
+    );
 
-    it('does not mount on a non-engine route the game did not declare', async () => {
-        setRoute('/atlas', 'gameId=tactics');
-        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
-
-        render(<ShellBackgroundHost />);
-
-        await waitFor(() => {
-            expect(mockLoadRendererGameShell).toHaveBeenCalledWith('tactics');
-        });
-        expect(screen.queryByTestId('shell-background')).toBeNull();
-    });
-
-    it('keeps the SAME mounted host instance across /main-menu → /credits → /settings → /main-menu', async () => {
-        setRoute('/main-menu', 'gameId=tactics');
-        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
+    it('keeps the same mounted host instance across every background surface', async () => {
+        setSurface('main-menu', '/main-menu', 'tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+        } satisfies LoadedRendererGameShell);
 
         const rendered = render(<ShellBackgroundHost />);
 
@@ -229,14 +190,19 @@ describe('ShellBackgroundHost — game-declared shell routes', () => {
 
         // The instance id lives in a ref, so it survives a remount of the host's
         // subtree — a `key` on the rendered element would tear the background
-        // down and rebuild it on every hop and the id would not notice. Counting
-        // the background component's renders is what makes persistence mean what
-        // it says: the SAME mounted component, not a new one with the same id.
+        // down and rebuild it on every hop and the id would not notice. Holding
+        // the background component's DOM NODE is what makes persistence mean
+        // what it says: the SAME mounted component, not a new one with the same id.
         expect(tacticsBackgroundRenders).toBeGreaterThan(0);
         const firstBackgroundNode = screen.getByTestId('tactics-shell-background');
 
-        for (const pathname of ['/credits', '/settings', '/main-menu']) {
-            setRoute(pathname, 'gameId=tactics');
+        for (const [surface, pathname] of [
+            ['page', '/credits'],
+            ['settings', '/settings'],
+            ['lobby', '/lobby'],
+            ['main-menu', '/main-menu'],
+        ] as const) {
+            setSurface(surface, pathname, 'tactics');
             rendered.rerender(<ShellBackgroundHost />);
 
             await waitFor(() => {
@@ -249,26 +215,7 @@ describe('ShellBackgroundHost — game-declared shell routes', () => {
             });
         }
 
-        // React re-renders a mounted component on a state or prop change, so the
-        // count may rise; what a remount would show is the component being torn
-        // down and rebuilt, which `TacticsBackground` cannot survive — its module
-        // counter is the only witness either way, so assert the element identity
-        // too: a remount replaces the DOM node.
         expect(screen.getByTestId('tactics-shell-background')).toBe(firstBackgroundNode);
-    });
-
-    it('leaves a game that declares nothing on the engine route set alone', async () => {
-        setRoute('/credits', 'gameId=tactics');
-        mockLoadRendererGameShell.mockResolvedValue({
-            shellBackground: TacticsBackground,
-        } satisfies LoadedRendererGameShell);
-
-        render(<ShellBackgroundHost />);
-
-        await waitFor(() => {
-            expect(mockLoadRendererGameShell).toHaveBeenCalledWith('tactics');
-        });
-        expect(screen.queryByTestId('shell-background')).toBeNull();
     });
 
     it('never paints the previous game context payload, not even for one commit', async () => {
@@ -278,14 +225,16 @@ describe('ShellBackgroundHost — game-declared shell routes', () => {
         // component's RENDERS is what makes that commit observable — and a
         // one-frame flash of the previous game's background on a route with no
         // game context is exactly what the render-time staleness check prevents.
-        setRoute('/main-menu', 'gameId=tactics');
-        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
+        setSurface('main-menu', '/main-menu', 'tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+        } satisfies LoadedRendererGameShell);
 
         const rendered = render(<ShellBackgroundHost />);
         await screen.findByTestId('tactics-shell-background');
 
         tacticsBackgroundRenders = 0;
-        setRoute('/main-menu');
+        setSurface('main-menu', '/main-menu');
         rendered.rerender(<ShellBackgroundHost />);
 
         await waitFor(() => {
@@ -297,14 +246,98 @@ describe('ShellBackgroundHost — game-declared shell routes', () => {
         expect(tacticsBackgroundRenders).toBe(0);
     });
 
-    it('does not load the shell on an engine route outside the background set', () => {
-        // /saves is the engine's own page: no declaration can make it a game
-        // page, so the payload is never fetched to ask.
-        setRoute('/saves', 'gameId=tactics');
+    it('re-loads for the next game when the game context changes under one surface', async () => {
+        setSurface('main-menu', '/main-menu', 'tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+        } satisfies LoadedRendererGameShell);
+        const rendered = render(<ShellBackgroundHost />);
+        await screen.findByTestId('tactics-shell-background');
+
+        // The mock is swapped BEFORE the publish: `act` flushes the render and
+        // the effect together, so a mock set after it would arrive too late.
+        mockLoadRendererGameShell.mockResolvedValue({} satisfies LoadedRendererGameShell);
+        setSurface('main-menu', '/main-menu', 'other');
+        rendered.rerender(<ShellBackgroundHost />);
+
+        await waitFor(() => {
+            expect(mockLoadRendererGameShell).toHaveBeenCalledWith('other');
+        });
+        expect(screen.getByTestId('shell-background')).toHaveAttribute(
+            'data-shell-background-kind',
+            'engine-default',
+        );
+    });
+
+    it('paints the engine default when the shell payload fails to load', async () => {
+        setSurface('main-menu', '/main-menu', 'tactics');
+        mockLoadRendererGameShell.mockRejectedValue(new Error('nope'));
 
         render(<ShellBackgroundHost />);
 
-        expect(mockLoadRendererGameShell).not.toHaveBeenCalled();
+        await waitFor(() => {
+            expect(screen.getByTestId('shell-background')).toHaveAttribute(
+                'data-shell-background-kind',
+                'engine-default',
+            );
+        });
+    });
+});
+
+describe('ShellBackgroundHost + ShellStateBridge — the pinned instance across a real hop', () => {
+    function Shell(): React.ReactElement {
+        return (
+            <>
+                <ShellStateBridge />
+                <ShellBackgroundHost />
+            </>
+        );
+    }
+
+    it('keeps the SAME background component mounted across /main-menu → /credits → /settings', async () => {
+        setRoute('/main-menu', 'gameId=tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+            shellRoutes: ['/credits'],
+        } satisfies LoadedRendererGameShell);
+
+        const rendered = render(<Shell />);
+        const firstBackgroundNode = await screen.findByTestId('tactics-shell-background');
+        const firstInstanceId = screen
+            .getByTestId('shell-background')
+            .getAttribute('data-shell-background-instance-id');
+
+        for (const pathname of ['/credits', '/settings', '/main-menu']) {
+            setRoute(pathname, 'gameId=tactics');
+            rendered.rerender(<Shell />);
+
+            // No `waitFor` on the FIRST assertion: a classification that arrived
+            // a commit late would unmount the background for that commit, and a
+            // settled-DOM check would never see it.
+            const host = screen.getByTestId('shell-background');
+            expect(host).toHaveAttribute(
+                'data-shell-background-instance-id',
+                firstInstanceId ?? '',
+            );
+            expect(host).toHaveAttribute('data-shell-background-kind', 'game');
+        }
+
+        expect(screen.getByTestId('tactics-shell-background')).toBe(firstBackgroundNode);
+    });
+
+    it('unmounts the background on the hop into the match', async () => {
+        setRoute('/main-menu', 'gameId=tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+            shellRoutes: ['/credits'],
+        } satisfies LoadedRendererGameShell);
+
+        const rendered = render(<Shell />);
+        await screen.findByTestId('tactics-shell-background');
+
+        setRoute('/game', 'gameId=tactics');
+        rendered.rerender(<Shell />);
+
         expect(screen.queryByTestId('shell-background')).toBeNull();
     });
 });

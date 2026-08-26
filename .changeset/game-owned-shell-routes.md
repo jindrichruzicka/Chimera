@@ -7,8 +7,8 @@ Make a game's own Next routes first-class shell pages. `LoadedRendererGameShell`
 tree (`apps/<game>/renderer/app/<route>/page.tsx`), the logo-screen and model-showcase precedent
 promoted to a supported pattern (§4.37.17).
 
-One declaration, three effects. `ShellBackgroundHost` mounts on the engine's background routes UNION
-the declared ones, so one background instance survives `/main-menu → /<page> → /settings`. The
+One declaration, three effects. The shell background mounts on a declared page, so one background
+instance survives `/main-menu → /<page> → /settings`. The
 renderer's snapshot→`/game` gate admits the declared routes, so a match started from a game page
 carries the player into the scene. A `navigate` menu action reaches a declared page as an ordinary
 instant hop with `?gameId=` preserved — the treatment `/settings` and `/saves` already get.
@@ -26,9 +26,9 @@ Every route comparison normalizes both sides (`renderer/shell/shellRoutes.ts`). 
 static export with `trailingSlash: true`, so the router reports `/credits/` for a route declared as
 `'/credits'`, and the packaged app can serve it as `/credits/index.html`; a raw `===` comparison
 would silently never match. The same module names `ENGINE_OWNED_ROUTES`, the engine's own page tree
-— a declared route is by definition one the engine does not ship, which is what lets the background
-host and the gate decide whether a route could be a game page before the payload has resolved, and
-keeps `/game` from paying for a second shell load.
+— a declared route is by definition one the engine does not ship, which is what lets the shell
+decide whether a route could be a game page before the payload has resolved, and keeps `/game` from
+paying for a second shell load.
 
 New `@chimera-engine/renderer/shell/shellPageChrome` exports `ShellPageChrome`, the settings-style
 permanently-open modal a game page composes so it looks like one of the engine's own without
