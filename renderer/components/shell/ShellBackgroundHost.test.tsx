@@ -24,7 +24,10 @@ vi.mock('../../game/rendererGameRegistry', () => ({
     loadRendererGameShell: mockLoadRendererGameShell,
 }));
 
+let tacticsBackgroundRenders = 0;
+
 function TacticsBackground(): React.ReactElement {
+    tacticsBackgroundRenders += 1;
     return <div data-testid="tactics-shell-background" />;
 }
 
@@ -34,6 +37,7 @@ function setRoute(pathname: string, search = ''): void {
 }
 
 beforeEach(() => {
+    tacticsBackgroundRenders = 0;
     setRoute('/main-menu');
     mockLoadRendererGameShell.mockReset();
     mockLoadRendererGameShell.mockResolvedValue({} satisfies LoadedRendererGameShell);
@@ -167,5 +171,140 @@ describe('ShellBackgroundHost', () => {
                 firstInstanceId,
             );
         });
+    });
+});
+
+describe('ShellBackgroundHost — game-declared shell routes', () => {
+    function declaringShell(): LoadedRendererGameShell {
+        return { shellBackground: TacticsBackground, shellRoutes: ['/credits'] };
+    }
+
+    it('mounts the game background on a declared shell route', async () => {
+        setRoute('/credits', 'gameId=tactics');
+        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
+
+        render(<ShellBackgroundHost />);
+
+        expect(mockLoadRendererGameShell).toHaveBeenCalledWith('tactics');
+        expect(await screen.findByTestId('tactics-shell-background')).toBeTruthy();
+        expect(screen.getByTestId('shell-background')).toHaveAttribute(
+            'data-shell-background-kind',
+            'game',
+        );
+    });
+
+    it('matches a declared route reached on the exported trailing-slash spelling', async () => {
+        // `trailingSlash: true` means the router reports `/credits/` for the page
+        // the game declared as `'/credits'`; a raw === comparison never matches.
+        setRoute('/credits/', 'gameId=tactics');
+        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
+
+        render(<ShellBackgroundHost />);
+
+        expect(await screen.findByTestId('tactics-shell-background')).toBeTruthy();
+    });
+
+    it('does not mount on a non-engine route the game did not declare', async () => {
+        setRoute('/atlas', 'gameId=tactics');
+        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
+
+        render(<ShellBackgroundHost />);
+
+        await waitFor(() => {
+            expect(mockLoadRendererGameShell).toHaveBeenCalledWith('tactics');
+        });
+        expect(screen.queryByTestId('shell-background')).toBeNull();
+    });
+
+    it('keeps the SAME mounted host instance across /main-menu → /credits → /settings → /main-menu', async () => {
+        setRoute('/main-menu', 'gameId=tactics');
+        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
+
+        const rendered = render(<ShellBackgroundHost />);
+
+        const firstInstanceId = (await screen.findByTestId('shell-background')).getAttribute(
+            'data-shell-background-instance-id',
+        );
+        expect(firstInstanceId).not.toBeNull();
+
+        // The instance id lives in a ref, so it survives a remount of the host's
+        // subtree — a `key` on the rendered element would tear the background
+        // down and rebuild it on every hop and the id would not notice. Counting
+        // the background component's renders is what makes persistence mean what
+        // it says: the SAME mounted component, not a new one with the same id.
+        expect(tacticsBackgroundRenders).toBeGreaterThan(0);
+        const firstBackgroundNode = screen.getByTestId('tactics-shell-background');
+
+        for (const pathname of ['/credits', '/settings', '/main-menu']) {
+            setRoute(pathname, 'gameId=tactics');
+            rendered.rerender(<ShellBackgroundHost />);
+
+            await waitFor(() => {
+                const host = screen.getByTestId('shell-background');
+                expect(host).toHaveAttribute(
+                    'data-shell-background-instance-id',
+                    firstInstanceId ?? '',
+                );
+                expect(host).toHaveAttribute('data-shell-background-kind', 'game');
+            });
+        }
+
+        // React re-renders a mounted component on a state or prop change, so the
+        // count may rise; what a remount would show is the component being torn
+        // down and rebuilt, which `TacticsBackground` cannot survive — its module
+        // counter is the only witness either way, so assert the element identity
+        // too: a remount replaces the DOM node.
+        expect(screen.getByTestId('tactics-shell-background')).toBe(firstBackgroundNode);
+    });
+
+    it('leaves a game that declares nothing on the engine route set alone', async () => {
+        setRoute('/credits', 'gameId=tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+        } satisfies LoadedRendererGameShell);
+
+        render(<ShellBackgroundHost />);
+
+        await waitFor(() => {
+            expect(mockLoadRendererGameShell).toHaveBeenCalledWith('tactics');
+        });
+        expect(screen.queryByTestId('shell-background')).toBeNull();
+    });
+
+    it('never paints the previous game context payload, not even for one commit', async () => {
+        // The settled DOM cannot see this: the effect clears the payload as soon
+        // as the game context goes away, so a render that used the stale one
+        // would be corrected on the very next commit. Counting the background
+        // component's RENDERS is what makes that commit observable — and a
+        // one-frame flash of the previous game's background on a route with no
+        // game context is exactly what the render-time staleness check prevents.
+        setRoute('/main-menu', 'gameId=tactics');
+        mockLoadRendererGameShell.mockResolvedValue(declaringShell());
+
+        const rendered = render(<ShellBackgroundHost />);
+        await screen.findByTestId('tactics-shell-background');
+
+        tacticsBackgroundRenders = 0;
+        setRoute('/main-menu');
+        rendered.rerender(<ShellBackgroundHost />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('shell-background')).toHaveAttribute(
+                'data-shell-background-kind',
+                'engine-default',
+            );
+        });
+        expect(tacticsBackgroundRenders).toBe(0);
+    });
+
+    it('does not load the shell on an engine route outside the background set', () => {
+        // /saves is the engine's own page: no declaration can make it a game
+        // page, so the payload is never fetched to ask.
+        setRoute('/saves', 'gameId=tactics');
+
+        render(<ShellBackgroundHost />);
+
+        expect(mockLoadRendererGameShell).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('shell-background')).toBeNull();
     });
 });

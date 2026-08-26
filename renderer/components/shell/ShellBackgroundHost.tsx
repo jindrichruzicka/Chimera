@@ -5,7 +5,18 @@ import type { ComponentType } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { loadRendererGameShell } from '../../game/rendererGameRegistry';
 import { resolveShellGameId } from '../../shell/resolveMainMenuGameId';
+import {
+    isEngineOwnedRoute,
+    matchesDeclaredShellRoute,
+    normalizeRoutePath,
+} from '../../shell/shellRoutes';
 
+/**
+ * The engine's own shell routes that carry the background (§4.37.9). A game
+ * widens this set with `LoadedRendererGameShell.shellRoutes`, so the host mounts
+ * on this set UNION the game's declared pages — which is what keeps ONE pinned
+ * background instance alive across `/main-menu → /<game page> → /settings`.
+ */
 const SHELL_BACKGROUND_ROUTES = new Set(['/main-menu', '/settings', '/lobby']);
 
 let nextShellBackgroundInstanceId = 1;
@@ -13,7 +24,16 @@ let nextShellBackgroundInstanceId = 1;
 type LoadedShellBackground = Readonly<{
     gameId: string | null;
     Background: ComponentType | null;
+    shellRoutes: readonly string[];
 }>;
+
+const NO_SHELL_ROUTES: readonly string[] = Object.freeze([]);
+
+const UNRESOLVED: LoadedShellBackground = {
+    gameId: null,
+    Background: null,
+    shellRoutes: NO_SHELL_ROUTES,
+};
 
 const hostStyle = {
     position: 'fixed',
@@ -29,20 +49,24 @@ export function ShellBackgroundHost(): React.ReactElement | null {
     const searchParams = useSearchParams();
     const routePath = normalizeRoutePath(pathname);
     const search = searchParams.toString();
-    const isShellBackgroundRoute = SHELL_BACKGROUND_ROUTES.has(routePath);
+    // Whether the shell PAYLOAD is worth fetching here — decided before the
+    // declaration can be read, so it cannot depend on it. An engine route
+    // outside the background set (`/game`, `/saves`, …) is a page the engine
+    // itself ships, so no declaration can make it a game page and the payload is
+    // never fetched to ask. Every other route is a candidate.
+    const shouldResolveShell =
+        SHELL_BACKGROUND_ROUTES.has(routePath) || !isEngineOwnedRoute(routePath);
     const gameId = React.useMemo(
-        () => resolveShellBackgroundGameId(routePath, new URLSearchParams(search)),
-        [routePath, search],
+        () => (shouldResolveShell ? resolveShellGameId(new URLSearchParams(search)) : null),
+        [shouldResolveShell, search],
     );
     const instanceIdRef = React.useRef(String(nextShellBackgroundInstanceId++));
-    const [loadedBackground, setLoadedBackground] = React.useState<LoadedShellBackground>({
-        gameId: null,
-        Background: null,
-    });
+    const [loadedBackground, setLoadedBackground] =
+        React.useState<LoadedShellBackground>(UNRESOLVED);
 
     React.useEffect(() => {
-        if (!isShellBackgroundRoute || gameId === null) {
-            setLoadedBackground({ gameId: null, Background: null });
+        if (!shouldResolveShell || gameId === null) {
+            setLoadedBackground(UNRESOLVED);
             return;
         }
 
@@ -51,29 +75,54 @@ export function ShellBackgroundHost(): React.ReactElement | null {
         loadRendererGameShell(gameId)
             .then((shell) => {
                 if (!disposed) {
-                    setLoadedBackground({ gameId, Background: shell.shellBackground ?? null });
+                    setLoadedBackground({
+                        gameId,
+                        Background: shell.shellBackground ?? null,
+                        shellRoutes: shell.shellRoutes ?? NO_SHELL_ROUTES,
+                    });
                 }
             })
             .catch(() => {
                 if (!disposed) {
-                    setLoadedBackground({ gameId, Background: null });
+                    setLoadedBackground({
+                        gameId,
+                        Background: null,
+                        shellRoutes: NO_SHELL_ROUTES,
+                    });
                 }
             });
 
         return () => {
             disposed = true;
         };
-    }, [gameId, isShellBackgroundRoute]);
+    }, [gameId, shouldResolveShell]);
+
+    // A payload answers only for the game context it was loaded for. Anything
+    // else is stale — a context change whose load is still in flight, or a route
+    // that dropped `?gameId=` before the effect above cleared the state — and a
+    // stale payload answers NOTHING: neither which routes are declared nor which
+    // component to paint. Read ONCE, through the destructuring below, so no later
+    // line can reach past it to the raw state.
+    const payloadIsForThisContext = loadedBackground.gameId === gameId;
+    const { Background, shellRoutes: declaredRoutes } = payloadIsForThisContext
+        ? loadedBackground
+        : UNRESOLVED;
+
+    const isShellBackgroundRoute =
+        SHELL_BACKGROUND_ROUTES.has(routePath) ||
+        matchesDeclaredShellRoute(routePath, declaredRoutes);
 
     if (!isShellBackgroundRoute) {
         return null;
     }
 
-    if (gameId !== null && loadedBackground.gameId !== gameId) {
+    // With a game in context, nothing is painted until that game's payload has
+    // landed: an engine default drawn here would flash before the game's own
+    // background replaced it a frame later.
+    if (gameId !== null && !payloadIsForThisContext) {
         return null;
     }
 
-    const Background = loadedBackground.gameId === gameId ? loadedBackground.Background : null;
     const backgroundKind = Background === null ? 'engine-default' : 'game';
 
     return (
@@ -88,23 +137,4 @@ export function ShellBackgroundHost(): React.ReactElement | null {
             {Background === null ? null : <Background />}
         </div>
     );
-}
-
-function normalizeRoutePath(pathname: string | null): string {
-    if (pathname === null || pathname.length === 0) {
-        return '/';
-    }
-
-    return pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
-}
-
-function resolveShellBackgroundGameId(
-    routePath: string,
-    searchParams: URLSearchParams,
-): string | null {
-    if (SHELL_BACKGROUND_ROUTES.has(routePath)) {
-        return resolveShellGameId(searchParams);
-    }
-
-    return null;
 }

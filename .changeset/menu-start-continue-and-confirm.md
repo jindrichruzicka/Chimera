@@ -13,11 +13,9 @@ same call the saves browser issues, so no restore machinery is added. Both verbs
 concrete game, so rendering either with no `gameId` in context throws at render time, the way an
 unregistered `command.commandId` already does.
 
-Routing is deliberately not part of this change, and the buttons are contract surface rather than a
-finished flow: the renderer's snapshot→`/game` effect fires on `/lobby` and `/saves` only, so a
-session started or restored from the main menu leaves the player on `/main-menu`. Carrying a
-menu-born session into `/game` is a change to that navigation gate. No shipped game declares either
-verb.
+Routing is not part of that change: neither verb navigates, each issues its IPC call and returns.
+The hop into the match belongs to the renderer's snapshot→`/game` effect. No shipped game declares
+either verb.
 
 Availability is engine-computed and **reactive**, an honest change to §4.37.5's resolve-once model:
 `RenderMainMenuDefinition` subscribes to `saveStore` and `lobbyStore`. A `continue` button enables

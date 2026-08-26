@@ -18,6 +18,7 @@ import { test, expect } from '../fixtures/game.fixture';
 import { GamePage } from '../pages/GamePage';
 import { MainMenuPage } from '../pages/MainMenuPage';
 import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
+import { endHostSession } from '../helpers/lobby-match';
 
 const TACTICS_GAME_ID = 'tactics';
 
@@ -52,6 +53,11 @@ test.describe('Replay browser — delete', () => {
         await expect(player.playButton).toBeVisible({ timeout: 30_000 });
         await expect(player.saveButton).toBeEnabled();
         await player.save();
+
+        // The fixture leaves this window in a live session, which now steers it:
+        // /main-menu is in the match-entry allow-set (§4.37.17). Reaching the
+        // library the way a player does starts with leaving the session.
+        await endHostSession(hostWindow);
 
         // Reach the library the way a player does: main menu → Replays.
         const mainMenu = new MainMenuPage(hostWindow);

@@ -10,10 +10,11 @@
  * pushes from the main process are routed into gameStore via
  * `confirmPrediction` + `applySnapshot`.
  *
- * Also handles automatic navigation: when a snapshot arrives (game started)
- * and the current path is /lobby — or /saves for a completed session restore
- * — navigates to /game. This drives the CLIENT window's navigation without
- * requiring a snapshot subscription in lobby/page or saves/page.
+ * Also handles automatic navigation: when a snapshot arrives (game started) on
+ * a route in the entry allow-set — /lobby, /saves, /main-menu, or one of the
+ * game's declared shell pages (see `entersMatchFromRoute`) — navigates to
+ * /game. This drives the CLIENT window's navigation without requiring a
+ * snapshot subscription in the pages themselves.
  *
  * Architecture reference: §4.4 — Renderer State Stores;
  *                         §6  — simulation/engine/prediction · Client Prediction
@@ -34,9 +35,15 @@ import { useLobbyUiStore } from '../state/lobbyUiStore';
 import { useOptionalFade } from '../components/shell/FadeContext.js';
 import { screenFadeMs } from '../components/shell/screenFadeDuration.js';
 import { resolveShellGameId, withShellGameId } from '../shell/resolveMainMenuGameId';
+import { useGameShellRoutes } from '../shell/useGameShellRoutes';
+import { matchesDeclaredShellRoute } from '../shell/shellRoutes';
 import { bootstrapPerfStore } from '../components/shell/perf/perfStoreBootstrap.js';
 import { usePerfStore, type PerfStoreState } from '../components/shell/perf/perfStore.js';
-import type { GameAPI, LobbyAPI } from '@chimera-engine/simulation/bridge/api-types.js';
+import type {
+    GameAPI,
+    LobbyAPI,
+    PlayerSnapshot,
+} from '@chimera-engine/simulation/bridge/api-types.js';
 
 export function GameStoreBootstrap(): null {
     const router = useRouter();
@@ -53,6 +60,9 @@ export function GameStoreBootstrap(): null {
     // effect (and re-runs of this one during the async fade) must stand down.
     // This also prevents the effect-B reset()→snapshot-null→effect-A bounce.
     const transitioningRef = useRef(false);
+    // The active game's declared shell pages (empty until the shell payload
+    // resolves, and on every route the engine itself ships).
+    const shellRoutes = useGameShellRoutes();
 
     useEffect(() => {
         return () => {
@@ -71,14 +81,22 @@ export function GameStoreBootstrap(): null {
     // carries the host (and single-player loads) into /game. Restricted to
     // non-'lobby' phases there so a return-to-lobby broadcast cannot bounce
     // /saves through /game into the reverse effect's reset() below.
+    //
+    // /main-menu and the game's declared shell pages join it on the same terms
+    // (§4.37.17): a match can now be born from a menu verb (`start-game`,
+    // `continue`) or from a game-owned page, and without them the session starts
+    // and the player is left staring at the screen that started it.
+    //
+    // `shellRoutes` arrives ASYNCHRONOUSLY, so it is a dependency of this effect
+    // rather than a value read once: a reload straight onto a game page can
+    // deliver the snapshot before the declaration is known, and re-evaluating on
+    // the resolve is what carries the player into the match instead of stranding
+    // them there.
     useEffect(() => {
         const browserPath = currentBrowserPathname(pathname);
         if (
             snapshot === null ||
-            !(
-                isLobbyPath(browserPath) ||
-                (isSavesPath(browserPath) && snapshot.phase !== 'lobby')
-            ) ||
+            !entersMatchFromRoute(browserPath, snapshot.phase, shellRoutes) ||
             transitioningRef.current
         ) {
             return;
@@ -94,7 +112,7 @@ export function GameStoreBootstrap(): null {
         } else {
             void control.fadeOut(screenFadeMs()).then(go);
         }
-    }, [snapshot, router, pathname]);
+    }, [snapshot, router, pathname, shellRoutes]);
 
     // Symmetric reverse of the /lobby → /game redirect above: when a
     // phase:'lobby' snapshot arrives on /game (host return-to-lobby plus every
@@ -189,6 +207,14 @@ function isGamePath(pathname: string | null): boolean {
     return pathname === '/game' || pathname === '/game/' || pathname === '/game/index.html';
 }
 
+function isMainMenuPath(pathname: string | null): boolean {
+    return (
+        pathname === '/main-menu' ||
+        pathname === '/main-menu/' ||
+        pathname === '/main-menu/index.html'
+    );
+}
+
 function isSavesPath(pathname: string | null): boolean {
     return pathname === '/saves' || pathname === '/saves/' || pathname === '/saves/index.html';
 }
@@ -218,4 +244,37 @@ function currentBrowserGameId(): string | null {
     }
 
     return resolveShellGameId(new URLSearchParams(window.location.search));
+}
+
+/**
+ * The allow-set the snapshot → /game hop gates on, as an enumerated union
+ * rather than "everything except /game" (§4.37.17). A deny-list would drag
+ * every present and future engine route — /debug, /component-gallery, a game's
+ * own undeclared pages — into a hop none of them asked for; an allow-set only
+ * ever admits a route someone named.
+ *
+ * `/lobby` is admitted on ANY phase: it is the route the lobby⇄game pair is
+ * built around, and its own snapshot is what starts the match. Every other
+ * member additionally requires a non-'lobby' phase, so a return-to-lobby
+ * broadcast cannot bounce a menu, a saves browser or a game page through /game
+ * into the reverse effect's reset().
+ */
+function entersMatchFromRoute(
+    browserPath: string | null,
+    phase: PlayerSnapshot['phase'],
+    shellRoutes: readonly string[],
+): boolean {
+    if (isLobbyPath(browserPath)) {
+        return true;
+    }
+
+    if (phase === 'lobby') {
+        return false;
+    }
+
+    return (
+        isSavesPath(browserPath) ||
+        isMainMenuPath(browserPath) ||
+        matchesDeclaredShellRoute(browserPath, shellRoutes)
+    );
 }

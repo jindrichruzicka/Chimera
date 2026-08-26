@@ -33,6 +33,7 @@ import type { LobbyState } from '@chimera-engine/simulation/foundation/messages-
 import type { QuickStartConfig } from '@chimera-engine/simulation/foundation/quick-start-contract.js';
 import { autosaveSlotId } from '@chimera-engine/simulation/foundation/save-slots.js';
 import { ConfirmDialogHost } from '../components/shell/ConfirmDialogHost';
+import { FadeProvider } from '../components/shell/FadeContext';
 import { EscapeStackProvider } from '../components/shell/EscapeStack';
 import { I18nProvider } from '../i18n/I18nProvider';
 import type { TranslationBundle } from '../i18n/translation-bundle';
@@ -1341,5 +1342,42 @@ describe('start-game during a live session', () => {
         });
 
         expect(screen.getByRole('button', { name: 'Settings' })).not.toBeDisabled();
+    });
+});
+
+// ─── navigate reaches a game shell page (§4.37.17) ───────────────────────────
+
+describe('navigate → a game-declared shell page', () => {
+    // Mounted under a real <FadeProvider>, so the two branches of the
+    // `target === '/game'` fork are distinguishable: an instant hop pushes
+    // during the click, a faded one only after the overlay reaches black.
+    function renderFaded(definition: GameMainMenuDefinition, gameId: string): void {
+        render(
+            <FadeProvider>
+                <RenderMainMenuDefinition definition={definition} gameId={gameId} />
+            </FadeProvider>,
+        );
+    }
+
+    it('pushes a declared game page during the click, with ?gameId= preserved', () => {
+        renderFaded(
+            { buttons: [{ label: 'Credits', action: { type: 'navigate', target: '/credits' } }] },
+            'tactics',
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Credits' }));
+
+        expect(mockPush).toHaveBeenCalledWith('/credits?gameId=tactics');
+    });
+
+    it('holds the /game hop behind the match-entry fade instead', () => {
+        renderFaded(
+            { buttons: [{ label: 'Enter', action: { type: 'navigate', target: '/game' } }] },
+            'tactics',
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Enter' }));
+
+        expect(mockPush).not.toHaveBeenCalled();
     });
 });

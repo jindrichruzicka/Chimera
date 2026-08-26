@@ -32,6 +32,7 @@ import { GamePage } from '../pages/GamePage';
 import { LobbyPage } from '../pages/LobbyPage';
 import { MainMenuPage } from '../pages/MainMenuPage';
 import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
+import { endHostSession } from '../helpers/lobby-match';
 // §13.4 renderer-heap budget during replay playback, from the single
 // source of truth, imported rather than re-declared so the gate can never drift;
 // simulation/foundation/perf-budget.test.ts locks the canonical value. Replay reuses the live
@@ -232,6 +233,11 @@ test.describe('Tactics replay lifecycle', () => {
     });
 
     test('main-menu Replays button is disabled when no replays exist', async ({ hostWindow }) => {
+        // The fixture leaves this window in a live session, which now steers it:
+        // /main-menu is in the match-entry allow-set (§4.37.17). End the session
+        // first — which is also what the player whose menu this is would have done.
+        await endHostSession(hostWindow);
+
         const mainMenu = new MainMenuPage(hostWindow);
         // Open the Tactics main menu before any match has been completed, so no
         // perspective replay exists yet. (gameId selects the Tactics menu, which
@@ -252,6 +258,11 @@ test.describe('Tactics replay lifecycle', () => {
         await playToGameOver(hostGame);
         await goToPostGameSummary(hostWindow, hostGame);
         await saveDeterministicReplayFromSummary(hostWindow, hostGame, 'Grand Finale');
+
+        // The fixture leaves this window in a live session, which now steers it:
+        // /main-menu is in the match-entry allow-set (§4.37.17). The saved replay
+        // is already on disk, so ending the session costs the assertion nothing.
+        await endHostSession(hostWindow);
 
         const mainMenu = new MainMenuPage(hostWindow);
         await mainMenu.goto({ gameId: TACTICS_GAME_ID });
@@ -276,6 +287,11 @@ test.describe('Tactics replay lifecycle', () => {
         // match must NOT auto-save any replay, so the Replays button stays disabled.
         await playToGameOver(hostGame);
         await goToPostGameSummary(hostWindow, hostGame);
+
+        // The fixture leaves this window in a live session, which now steers it:
+        // /main-menu is in the match-entry allow-set (§4.37.17). Ending it saves no
+        // replay either, so the button must still be disabled on the other side.
+        await endHostSession(hostWindow);
 
         const mainMenu = new MainMenuPage(hostWindow);
         await mainMenu.goto({ gameId: TACTICS_GAME_ID });
@@ -415,6 +431,11 @@ test.describe('Tactics replay lifecycle', () => {
         // it also enables the Replays button (which gates on any saved replay).
         await saveDeterministicReplayFromSummary(hostWindow, hostGame);
         const player = new ReplayPlayerPage(hostWindow);
+
+        // The fixture leaves this window in a live session, which now steers it:
+        // /main-menu is in the match-entry allow-set (§4.37.17). Reaching the
+        // library the way a player does starts with leaving the session.
+        await endHostSession(hostWindow);
 
         // Reach the library the way a player does: main menu → Replays.
         const mainMenu = new MainMenuPage(hostWindow);

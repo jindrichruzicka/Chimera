@@ -55,6 +55,34 @@ export interface LoadedRendererGameShell {
      * lobby page never imports `apps/*` directly (Invariant #94).
      */
     readonly LobbyScreen?: ComponentType<GameLobbyScreenProps>;
+    /**
+     * Optional game-owned Next routes promoted to first-class shell pages
+     * (§4.37.17). Each entry names a PHYSICAL page in the game's own host tree
+     * (`apps/<game>/renderer/app/<route>/page.tsx`) — the logo-screen and
+     * model-showcase precedent turned into a supported pattern — declared with a
+     * leading slash and no trailing one (`'/credits'`).
+     *
+     * One declaration, three effects:
+     *
+     *   1. {@link ShellBackgroundHost} mounts on the engine's shell-background
+     *      routes UNION these, so the pinned same-instance background persists
+     *      across `/main-menu → /<page> → /settings`.
+     *   2. `GameStoreBootstrap`'s snapshot → `/game` gate admits these routes, so
+     *      a match started from a custom page carries the player into the match
+     *      instead of stranding them on the page.
+     *   3. Menu `navigate` reaches them as an ordinary instant hop with the
+     *      `?gameId=` context preserved.
+     *
+     * Comparisons normalize both sides (`normalizeRoutePath`): the static export
+     * sets `trailingSlash: true`, so the router reports `/credits/` for a route
+     * declared as `'/credits'`, and the packaged app can serve it as
+     * `/credits/index.html`.
+     *
+     * A declared route with no physical page is a Next 404 the engine never
+     * observes at runtime, so it is caught statically instead — see
+     * `tools/shell-page-routes.test.ts`.
+     */
+    readonly shellRoutes?: readonly `/${string}`[];
     readonly fonts?: readonly GameFontFace[];
     /**
      * Optional shell images to warm when the game (shell) loads — local game

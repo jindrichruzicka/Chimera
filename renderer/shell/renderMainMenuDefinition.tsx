@@ -10,10 +10,8 @@
 // Two of the actions are engine-implemented rather than routed: `start-game`
 // invokes the quick-start verb and `continue` loads the game autosave through
 // the ordinary `saves.load` restore funnel. Neither navigates: each issues its
-// verb and returns. Note what that does NOT yet amount to: GameStoreBootstrap's
-// snapshot→/game effect fires on /lobby and /saves only, so a session born from
-// this menu leaves the player on /main-menu. Carrying a menu-born session into
-// /game is a change to that gate, not to this file.
+// verb and returns. The hop into the match belongs to GameStoreBootstrap's
+// snapshot→/game effect, whose entry allow-set covers /main-menu (§4.37.17).
 //
 // `continue`'s availability is engine-computed and REACTIVE: it subscribes to
 // the save slot list, so a `saves:slot-update` push flips the button without the
@@ -370,8 +368,7 @@ export function RenderMainMenuDefinition({
                 // Merged over the game's own `GameLobbySetup.quickStart` defaults
                 // by the main process; a button that declares nothing starts
                 // exactly the match the game declared. The handler issues the
-                // verb and returns — see the header on what routing it does not
-                // do.
+                // verb and returns — see the header on the routing.
                 const params: QuickStartParams = {
                     ...(action.config ?? {}),
                     gameId: requireGameId('start-game'),

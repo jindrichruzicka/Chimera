@@ -376,11 +376,9 @@ context is a malformed declaration and throws at render time, exactly as an unre
 
 ### Routing
 
-Neither verb navigates: each issues its IPC call and returns. The renderer's snapshot→`/game`
-effect (`renderer/app/GameStoreBootstrap.tsx`) fires on `/lobby`, and on `/saves` for a non-lobby
-phase — `/main-menu` is in neither set. So a session started or restored from the main menu leaves
-the player on `/main-menu` at this tree. Carrying a menu-born session into `/game` is a change to
-that navigation gate, not to the menu, and no shipped game declares either verb.
+Neither verb navigates: each issues its IPC call and returns. The hop into the match belongs to the
+renderer's snapshot → `/game` effect (`renderer/app/GameStoreBootstrap.tsx`), whose entry allow-set
+covers `/main-menu` — see §4.37.17.
 
 ### Confirmation
 
@@ -564,10 +562,10 @@ export interface LoadedRendererGameShell {
 }
 ```
 
-`renderer/components/shell/ShellBackgroundHost.tsx` is mounted once from the root renderer layout.
-It renders behind route content on `/main-menu`, `/settings`, and `/lobby`, and returns `null` for
-`/game` and other non-shell routes. This keeps menu/settings/lobby navigation SPA-like while
-preventing menu background components from entering the match scene.
+`renderer/components/shell/ShellBackgroundHost.tsx` is mounted once from the root renderer layout
+and renders behind route content on the shell routes — the engine's own, plus whatever the game
+declares through `shellRoutes` (§4.37.17) — returning `null` everywhere else. This keeps shell
+navigation SPA-like while preventing menu background components from entering the match scene.
 
 ### Background Fallback Chain
 
@@ -575,7 +573,7 @@ preventing menu background components from entering the match scene.
    render that component.
 2. If the loaded shell omits `shellBackground`, shell loading fails, or no game context exists,
    render the engine default solid surface using `--ch-color-surface`.
-3. If the current route is not `/main-menu`, `/settings`, or `/lobby`, render no shell background.
+3. If the current route is not a shell route (§4.37.17), render no shell background.
 
 The host passes no props to the game component. Background components that need animation, canvas,
 or media own those renderer-local details internally. They must not dispatch gameplay actions or
@@ -778,6 +776,8 @@ renderer/
 │   ├── renderMainMenuDefinition.tsx # Engine renderer for GameMainMenuDefinition
 │   ├── SettingsLanguageSelector.tsx # Store-connected wrapper mounting <LanguageSelector> for gameplay.language (§4.37.10)
 │   ├── useActiveShellGameId.ts # Shared active-gameId resolver (i18n + icons; usePathname, export-safe)
+│   ├── shellRoutes.ts          # Route normalizer, ENGINE_OWNED_ROUTES, declared-route matcher (§4.37.17)
+│   ├── useGameShellRoutes.ts   # Resolves shell.shellRoutes for the navigation gate (§4.37.17)
 │   └── resolveMainMenuGameId.ts     # URL game context resolver for main menu
 ├── styles/
 │   └── tokens.css              # Engine default --ch-* tokens (§4.35)
@@ -796,6 +796,7 @@ renderer/
 │       └── icons/              # <Icon>, ICON_REGISTRY, IconProvider/ActiveGameIconProvider, useActiveGameIcons — game glyphs via shell.icons (§4.37.16)
 └── app/
     ├── layout.tsx              # Imports tokens.css globally
+    ├── shellPageChrome.tsx     # <ShellPageChrome> for a game's own shell page (§4.37.17)
     ├── logo-screen/
     │   └── page.tsx            # Engine boot logo splash → /main-menu (§4.37.15)
     ├── main-menu/
@@ -806,8 +807,12 @@ renderer/
     │   └── page.tsx            # Chrome-less <Modal size="lg" fixedHeight>; footer Reset (danger, dismiss:false) + Close
     └── saves/
         └── page.tsx            # Chrome-less <Modal size="lg">; footer Close; nested delete-confirm Modal
+tools/
+└── shell-page-routes.ts        # Static check: every declared shellRoute has a page (§4.37.17)
 apps/
 └── <game>/
+    ├── renderer/app/
+    │   └── <route>/page.tsx    # A declared shellRoutes page, in the game's OWN tree (§4.37.17)
     └── shell/
     ├── ShellBackground.tsx # Optional shellBackground component contribution
         ├── main-menu.ts        # Sample GameMainMenuDefinition + menuCommands registry
@@ -1025,6 +1030,95 @@ set. The public `components/ui` barrel exposes `Icon`, `IconProvider`, and the `
 deliberately **withholds** `ICON_REGISTRY` — games consume icons only through `<Icon name>`
 (invariants #96, #113). By convention a game namespaces its keys `game.<gameId>.<name>` so a glyph
 never silently overrides an engine built-in.
+
+## 4.37.17 Game-Owned Shell Routes
+
+A game may promote its own Next routes to first-class shell pages — a credits screen, an atlas, a
+codex — by declaring them on the renderer shell payload:
+
+```typescript
+export interface LoadedRendererGameShell {
+    readonly shellRoutes?: readonly `/${string}`[];
+}
+```
+
+Each entry names a **physical page** in the game's own host tree,
+`apps/<game>/renderer/app/<route>/page.tsx`. Nothing is generated: the logo-screen and
+model-showcase routes already worked this way, and this section makes the pattern supported rather
+than incidental. The declaration is what tells the engine that a route it does not ship is
+nevertheless part of the shell.
+
+### One declaration, three effects
+
+1. **Background continuity.** `ShellBackgroundHost` mounts on the engine's own background routes
+   (§4.37.9) **union** the declared routes, so the same background instance survives
+   `/main-menu → /<page> → /settings` rather than remounting per hop.
+2. **Match entry.** The renderer's snapshot → `/game` effect (`GameStoreBootstrap`) admits the
+   declared routes, so a match started from a game page carries the player into the scene.
+3. **Menu reach.** A `navigate` menu action reaches a declared page as an ordinary instant hop with
+   `?gameId=` preserved — the same treatment `/settings` and `/saves` get.
+
+### Route matching
+
+Every comparison normalizes both sides through `normalizeRoutePath` (`renderer/shell/shellRoutes.ts`).
+The renderer is a static export with `trailingSlash: true`, so the router reports `/credits/` for a
+route declared as `'/credits'`, and the packaged app can serve it as `/credits/index.html`. A raw
+`'/credits' === pathname` comparison would never match, and the symptom — a missing background, a
+match that never enters — looks nothing like a spelling problem.
+
+`ENGINE_OWNED_ROUTES` in the same module names the engine's own page tree. A declared route is by
+definition one the engine does not ship, which is what lets `ShellBackgroundHost` and
+`useGameShellRoutes` decide whether a route could be a game page **before** the shell payload
+carrying the declaration has resolved — and keeps `/game` from paying for a second shell load.
+
+### The entry allow-set
+
+`GameStoreBootstrap`'s snapshot → `/game` gate is an enumerated union, never "everything except
+`/game`":
+
+| Route                         | Admitted when       |
+| ----------------------------- | ------------------- |
+| `/lobby`                      | any snapshot phase  |
+| `/saves`                      | `phase !== 'lobby'` |
+| `/main-menu`                  | `phase !== 'lobby'` |
+| a declared `shellRoutes` page | `phase !== 'lobby'` |
+
+The phase condition on the last three is what keeps a return-to-lobby broadcast from bouncing a
+menu, a saves browser or a game page through `/game` into the reverse effect's `reset()`. A
+deny-list inversion would instead drag `/debug`, `/component-gallery` and every undeclared game
+route into a hop none of them asked for.
+
+`shellRoutes` resolves **asynchronously**, so the gate re-evaluates when the payload lands: a reload
+straight onto a game page can deliver a live match snapshot before the declaration is known, and a
+gate that read the declaration once would leave the player stranded on the page with a match
+running.
+
+### Page chrome
+
+`@chimera-engine/renderer/shell/shellPageChrome` exports `ShellPageChrome` — the settings-style
+permanently-open modal, so a game page looks like one of the engine's own without importing a
+renderer internal. It sits under the same `shell/*` allowance as `gameAssetSession` (Invariant #96)
+and is importable only from the app's Next host tree (`apps/<game>/renderer/app/**`). The page owns
+its body; geometry, the action row and the exit are declarations, and the default exit returns to
+`/main-menu` with the URL's `?gameId=` carried along.
+
+Assets on a game page need nothing new: `GameAssetSession` from
+`@chimera-engine/renderer/shell/gameAssetSession` builds, publishes and disposes a real game-asset
+manager for a declared manifest outside a match (Invariant #21), exactly as the model-showcase route
+already does.
+
+### The static cross-check
+
+A declared route with no physical page cannot be caught at runtime: under `output: 'export'` the
+route is simply not emitted, so the navigation is a static 404 the renderer never observes.
+`tools/shell-page-routes.ts` therefore checks the two halves against each other statically, and
+`tools/shell-page-routes.test.ts` is what runs it (`pnpm test`, and CI with it). It parses each
+game's sources for `shellRoutes` declarations off the TypeScript AST and asks the game's own Next
+tree which routes it serves. Three things are findings: a declared route the tree does not serve, a
+declared route the ENGINE owns (a game page cannot shadow an engine route, so the declaration would
+be inert), and an initializer the scan cannot read statically (a computed call, an imported
+constant) — the last because a computed declaration would silently switch the check off for that
+game.
 
 ---
 

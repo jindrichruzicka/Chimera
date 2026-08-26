@@ -239,6 +239,7 @@ chimera/
 │   ├── app/                         # Next.js App Router pages
 │   │   ├── layout.tsx
 │   │   ├── page.tsx                 # Main menu entry
+│   │   ├── shellPageChrome.tsx      # <ShellPageChrome> a game's own shell page composes (§4.37.17)
 │   │   ├── game/page.tsx            # Thin shell: mounts GameShell
 │   │   ├── lobby/page.tsx
 │   │   ├── settings/page.tsx
@@ -347,7 +348,9 @@ chimera/
 │   │   ├── timeScaleStore.ts        # One float: the authoritative dilation multiplier, derived only via timeScaleMultiplier (Invariant #130)
 │   │   └── useAnimationTimeScale.ts # Read seam onto that float; the one module here re-exported from the components/r3f barrel
 │   ├── shell/
-│   │   └── SettingsLanguageSelector.tsx  # Store-connected wrapper for the settings Language field (§4.39)
+│   │   ├── SettingsLanguageSelector.tsx  # Store-connected wrapper for the settings Language field (§4.39)
+│   │   ├── shellRoutes.ts            # Route normalizer + ENGINE_OWNED_ROUTES + declared-route matcher (§4.37.17)
+│   │   └── useGameShellRoutes.ts     # Resolves a game's declared shellRoutes for the navigation gate (§4.37.17)
 │   ├── logging/
 │   │   └── rendererLogger.ts        # see §4.27
 │   ├── utils/                       # INTERNAL directory; curves.ts is re-exported by the components/r3f barrel

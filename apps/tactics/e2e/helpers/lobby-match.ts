@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import type { LobbyPage } from '../pages/LobbyPage';
+import { LobbyPage } from '../pages/LobbyPage';
 import { GamePage } from '../pages/GamePage';
 
 /**
@@ -85,4 +85,39 @@ export async function waitForGameRevealed(window: Page): Promise<void> {
     await expect(window.getByTestId('screen-fade-overlay')).toHaveCSS('opacity', '0');
     await expect(window.getByTestId('route-entry-loading-cover')).toHaveCount(0);
     await expect(window.getByTestId('game-hud-slot')).toBeVisible();
+}
+
+/**
+ * End the host's live session so the main menu and the replay library are
+ * reachable without a snapshot steering the window.
+ *
+ * Two exits, because the two navigation gates in `GameStoreBootstrap` read
+ * different phases. `returnToLobby()` ends the MATCH, dropping the non-'lobby'
+ * snapshot the match-entry allow-set admits on /main-menu and on a game's
+ * declared shell pages (§4.37.17). Leaving the lobby then ends the SESSION,
+ * dropping the phase:'lobby' snapshot the reverse gate admits on /game and
+ * /replays/player — which would otherwise bounce a library-opened replay
+ * straight back to the lobby.
+ *
+ * The match exit is driven through the same `lobby.returnToLobby()` the in-game
+ * menu's Leave calls for a host, rather than through that dialog: this is setup
+ * for the screen under test, and callers reach it from three different screens
+ * (a live match, a post-game summary, a replay player) whose Escape handling
+ * differs. The lobby exit then goes through the lobby UI, which is where a
+ * player leaves from in any case.
+ */
+export async function endHostSession(hostWindow: Page): Promise<void> {
+    await hostWindow.evaluate(async () => {
+        const bridge = globalThis as unknown as {
+            readonly __chimera: { readonly lobby: { returnToLobby(): Promise<void> } };
+        };
+        await bridge.__chimera.lobby.returnToLobby();
+    });
+
+    // The host's own return-to-lobby broadcast is what carries this window off
+    // the match route, so waiting on the lobby screen is what makes the leave
+    // below — and the caller's next navigation — deterministic.
+    const hostLobby = new LobbyPage(hostWindow);
+    await expect(hostLobby.lobbyScreen).toBeVisible({ timeout: 30_000 });
+    await hostLobby.leaveLobby();
 }
