@@ -20,12 +20,15 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import type { QuickStartConfig } from './quick-start-contract.js';
 import type {
     GameMenuCommandId,
     GameMainMenuLayout,
     GameMainMenuButton,
     GameMainMenuAction,
     GameMainMenuDefinition,
+    GameMenuConfirm,
+    GameMenuConfirmTrigger,
     GameFontDisplay,
     GameFontFace,
     GameFontStyle,
@@ -201,11 +204,35 @@ describe('GameMainMenuAction', () => {
         }
     });
 
+    it('start-game variant has type "start-game" and an optional QuickStartConfig', () => {
+        const config: QuickStartConfig = { aiSeats: [{ attributes: { team: 'green' } }] };
+        const action: GameMainMenuAction = { type: 'start-game', config };
+        expect(action.type).toBe('start-game');
+        if (action.type === 'start-game') {
+            expect(action.config?.aiSeats).toEqual([{ attributes: { team: 'green' } }]);
+        }
+    });
+
+    it('start-game variant accepts an omitted config (the game declares its own defaults)', () => {
+        const action: GameMainMenuAction = { type: 'start-game' };
+        expect(action.type).toBe('start-game');
+        if (action.type === 'start-game') {
+            expect(action.config).toBeUndefined();
+        }
+    });
+
+    it('continue variant has type "continue" only', () => {
+        const action: GameMainMenuAction = { type: 'continue' };
+        expect(action.type).toBe('continue');
+    });
+
     it('discriminant narrows each variant correctly', () => {
         const actions: GameMainMenuAction[] = [
             { type: 'navigate', target: '/settings' },
             { type: 'quit' },
             { type: 'open-lobby' },
+            { type: 'start-game', config: { matchSettings: { mapSize: 'small' } } },
+            { type: 'continue' },
             { type: 'command', commandId: 'game:credits' as GameMenuCommandId },
         ];
 
@@ -219,6 +246,12 @@ describe('GameMainMenuAction', () => {
                     break;
                 case 'open-lobby':
                     expect(action.type).toBe('open-lobby');
+                    break;
+                case 'start-game':
+                    expect(action.config?.matchSettings).toEqual({ mapSize: 'small' });
+                    break;
+                case 'continue':
+                    expect(action.type).toBe('continue');
                     break;
                 case 'command':
                     expect(typeof action.commandId).toBe('string');
@@ -248,6 +281,10 @@ describe('GameMainMenuAction', () => {
                     return 'quit';
                 case 'open-lobby':
                     return 'open-lobby';
+                case 'start-game':
+                    return `start-game: ${JSON.stringify(action.config ?? null)}`;
+                case 'continue':
+                    return 'continue';
                 case 'command':
                     return `command: ${action.commandId}`;
                 default:
@@ -258,6 +295,8 @@ describe('GameMainMenuAction', () => {
         expect(describe_action({ type: 'navigate', target: '/lobby' })).toBe('navigate to /lobby');
         expect(describe_action({ type: 'quit' })).toBe('quit');
         expect(describe_action({ type: 'open-lobby' })).toBe('open-lobby');
+        expect(describe_action({ type: 'start-game' })).toBe('start-game: null');
+        expect(describe_action({ type: 'continue' })).toBe('continue');
         expect(
             describe_action({
                 type: 'command',
@@ -281,6 +320,62 @@ describe('GameMainMenuAction', () => {
     it('rejects command action missing commandId at compile time', () => {
         // @ts-expect-error: command variant requires a commandId field
         const _: GameMainMenuAction = { type: 'command' };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects a continue action carrying a slot id at compile time', () => {
+        // The engine picks the slot (`autosaveSlotId(gameId)`); a game cannot name one.
+        // @ts-expect-error: the continue variant declares no slotId field
+        const _: GameMainMenuAction = { type: 'continue', slotId: 'tactics/autosave' };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects a start-game config with an unknown field at compile time', () => {
+        const _: GameMainMenuAction = {
+            type: 'start-game',
+            // @ts-expect-error: QuickStartConfig declares no `seatCount` — seat LISTS carry the count
+            config: { seatCount: 2 },
+        };
+        expect(_).toBeDefined();
+    });
+});
+
+// ─── GameMenuConfirm ──────────────────────────────────────────────────────────
+
+describe('GameMenuConfirm', () => {
+    it('accepts a fully-specified confirm declaration', () => {
+        const confirm: GameMenuConfirm = {
+            when: 'autosave-exists',
+            title: 'game.tactics.confirm.overwriteTitle',
+            body: 'game.tactics.confirm.overwriteBody',
+            confirmLabel: 'game.tactics.confirm.overwriteConfirm',
+            cancelLabel: 'game.tactics.confirm.overwriteCancel',
+        };
+        expect(confirm.when).toBe('autosave-exists');
+        expect(confirm.body).toBe('game.tactics.confirm.overwriteBody');
+    });
+
+    it('accepts a title-only declaration (engine supplies body and labels)', () => {
+        const confirm: GameMenuConfirm = { when: 'always', title: 'Are you sure?' };
+        expect(confirm.body).toBeUndefined();
+        expect(confirm.confirmLabel).toBeUndefined();
+        expect(confirm.cancelLabel).toBeUndefined();
+    });
+
+    it('enumerates exactly the two triggers', () => {
+        const triggers: GameMenuConfirmTrigger[] = ['always', 'autosave-exists'];
+        expect(triggers).toEqual(['always', 'autosave-exists']);
+    });
+
+    it('rejects an unknown trigger at compile time', () => {
+        // @ts-expect-error: 'never' is not a GameMenuConfirmTrigger
+        const _: GameMenuConfirm = { when: 'never', title: 'X' };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects a confirm declaration missing a title at compile time', () => {
+        // @ts-expect-error: GameMenuConfirm requires a title field
+        const _: GameMenuConfirm = { when: 'always' };
         expect(_).toBeDefined();
     });
 });
@@ -342,6 +437,33 @@ describe('GameMainMenuButton', () => {
             action: { type: 'quit' },
             // @ts-expect-error: 'info' is not a valid variant value
             variant: 'info',
+        };
+        expect(_).toBeDefined();
+    });
+
+    it('accepts an id slug and a confirm declaration', () => {
+        const button: GameMainMenuButton = {
+            id: 'credits',
+            label: 'Credits',
+            action: { type: 'command', commandId: 'tactics:credits' as GameMenuCommandId },
+            confirm: { when: 'always', title: 'Leave the match?' },
+        };
+        expect(button.id).toBe('credits');
+        expect(button.confirm?.when).toBe('always');
+    });
+
+    it('leaves id and confirm optional', () => {
+        const button: GameMainMenuButton = { label: 'Quit', action: { type: 'quit' } };
+        expect(button.id).toBeUndefined();
+        expect(button.confirm).toBeUndefined();
+    });
+
+    it('rejects a non-string id at compile time', () => {
+        const _: GameMainMenuButton = {
+            label: 'X',
+            action: { type: 'quit' },
+            // @ts-expect-error: id is a testid slug (string), not an index
+            id: 3,
         };
         expect(_).toBeDefined();
     });

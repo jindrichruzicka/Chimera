@@ -39,6 +39,8 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
 
     // ── menu ──────────────────────────────────────────────────────────────────
     'engine.menu.play': 'Hrát',
+    'engine.menu.continue': 'Pokračovat',
+    'engine.menu.start': 'Spustit hru',
     'engine.menu.settings': 'Nastavení',
     'engine.menu.quit': 'Ukončit',
 

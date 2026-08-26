@@ -28,8 +28,17 @@ import type {
     GameMainMenuDefinition,
     GameMenuCommandId,
 } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
+import type { SaveSlotMeta, SlotId } from '@chimera-engine/simulation/bridge/api-types.js';
+import type { LobbyState } from '@chimera-engine/simulation/foundation/messages-schemas.js';
+import type { QuickStartConfig } from '@chimera-engine/simulation/foundation/quick-start-contract.js';
+import { autosaveSlotId } from '@chimera-engine/simulation/foundation/save-slots.js';
+import { ConfirmDialogHost } from '../components/shell/ConfirmDialogHost';
+import { EscapeStackProvider } from '../components/shell/EscapeStack';
 import { I18nProvider } from '../i18n/I18nProvider';
 import type { TranslationBundle } from '../i18n/translation-bundle';
+import { useConfirmDialogStore } from '../state/confirmDialogStore';
+import { useLobbyStore } from '../state/lobbyStore';
+import { useSaveStore } from '../state/saveStore';
 import { RenderMainMenuDefinition } from './renderMainMenuDefinition';
 
 // The renderer translates the three engine-default button labels through
@@ -57,15 +66,23 @@ vi.mock('next/navigation', () => ({
 
 // ── System bridge mock ────────────────────────────────────────────────────────
 
+const mockQuit = vi.fn();
+const mockSavesLoad = vi.fn(async (): Promise<void> => undefined);
+const mockQuickStart = vi.fn(async (): Promise<void> => undefined);
+
 beforeEach(() => {
     Object.defineProperty(window, '__chimera', {
         configurable: true,
         value: {
-            system: {
-                quit: vi.fn(),
-            },
+            system: { quit: mockQuit },
+            saves: { load: mockSavesLoad },
+            lobby: { quickStart: mockQuickStart },
         },
     });
+    // The two engine verbs read the live save slot list and lobby state off the
+    // singleton stores, so each test starts from a hydrated, session-less shell.
+    useSaveStore.setState({ slots: [], isLoading: false });
+    useLobbyStore.getState().applyLobbyState(null);
 });
 
 afterEach(() => {
@@ -73,6 +90,14 @@ afterEach(() => {
     Reflect.deleteProperty(window, '__chimera');
     vi.restoreAllMocks();
     mockPush.mockReset();
+    mockQuit.mockReset();
+    mockSavesLoad.mockReset();
+    mockQuickStart.mockReset();
+    // Drain anything a test left queued so the confirm singleton stays clean.
+    for (const entry of useConfirmDialogStore.getState().queue) {
+        useConfirmDialogStore.getState().settle(entry.id, false);
+    }
+    useLobbyStore.getState().applyLobbyState(null);
     currentOverride = undefined;
 });
 
@@ -726,5 +751,595 @@ describe('quit action — bridge unavailable', () => {
 
         expect(firedError).not.toBeNull();
         expect(firedError!.message).toBe('Chimera system API not available');
+    });
+});
+
+// ─── Engine verbs: continue / start-game, and the confirm primitive ───────────
+//
+// These two verbs are engine-implemented, so the renderer — not the game — owns
+// their availability and their IPC call. `continue` is the first button whose
+// disabled state is REACTIVE: it follows the save slot list rather than being
+// resolved once at render, so a `saves:slot-update` push flips it live.
+
+const GAME_ID = 'tactics';
+
+function autosaveSlot(gameId: string): SaveSlotMeta {
+    return {
+        slotId: autosaveSlotId(gameId) as SlotId,
+        gameId,
+        savedAt: 1,
+        label: 'Autosave',
+    } as SaveSlotMeta;
+}
+
+function makeLobbyState(gameId: string): LobbyState {
+    return {
+        info: { sessionId: 'session-1', hostId: 'p1', gameId },
+        players: [{ playerId: 'p1', displayName: 'Player One', ready: true }],
+    };
+}
+
+/**
+ * Renders the menu with the single confirm surface mounted above it, which is
+ * the composition AppShell provides on every route. Without the host a
+ * confirmed button's promise never settles, so a confirm test that omits it
+ * would prove nothing about the action ever running.
+ */
+function renderMenuWithConfirmSurface(
+    definition: GameMainMenuDefinition,
+    gameId: string | null = GAME_ID,
+): void {
+    // Same gameOverride plumbing as render() above, so a confirm test can prove
+    // its declared tokens resolve through the active translator.
+    const providerProps = currentOverride !== undefined ? { gameOverride: currentOverride } : {};
+    baseRender(
+        <I18nProvider {...providerProps}>
+            <EscapeStackProvider>
+                <RenderMainMenuDefinition definition={definition} gameId={gameId} />
+                <ConfirmDialogHost />
+            </EscapeStackProvider>
+        </I18nProvider>,
+    );
+}
+
+function continueMenu(): GameMainMenuDefinition {
+    return { buttons: [{ label: 'Continue', action: { type: 'continue' } }] };
+}
+
+describe('continue action', () => {
+    it('renders disabled when the active game has no autosave', () => {
+        renderMenuWithConfirmSurface(continueMenu());
+
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    });
+
+    it('renders enabled when the slot list already carries the game autosave', () => {
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+
+        renderMenuWithConfirmSurface(continueMenu());
+
+        expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled();
+    });
+
+    it('flips enabled the moment a slot-update push lands', () => {
+        renderMenuWithConfirmSurface(continueMenu());
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+
+        act(() => {
+            useSaveStore.getState().applySaveSlots([autosaveSlot(GAME_ID)]);
+        });
+
+        expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled();
+    });
+
+    it('flips back to disabled when the autosave is deleted', () => {
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        renderMenuWithConfirmSurface(continueMenu());
+        expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled();
+
+        act(() => {
+            useSaveStore.getState().applySaveSlots([]);
+        });
+
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    });
+
+    it('ignores another game autosave — the slot id is fully qualified', () => {
+        useSaveStore.setState({ slots: [autosaveSlot('other-game')], isLoading: false });
+
+        renderMenuWithConfirmSurface(continueMenu());
+
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    });
+
+    it('renders disabled while joined to a session, autosave or not', () => {
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        useLobbyStore.getState().applyLobbyState(makeLobbyState(GAME_ID));
+
+        renderMenuWithConfirmSurface(continueMenu());
+
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    });
+
+    it('re-enables when the session ends while the menu is on screen', () => {
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        useLobbyStore.getState().applyLobbyState(makeLobbyState(GAME_ID));
+        renderMenuWithConfirmSurface(continueMenu());
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+
+        act(() => {
+            useLobbyStore.getState().applyLobbyState(null);
+        });
+
+        expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled();
+    });
+
+    it('loads the game autosave slot through the ordinary restore funnel', () => {
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        renderMenuWithConfirmSurface(continueMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+        expect(mockSavesLoad).toHaveBeenCalledTimes(1);
+        expect(mockSavesLoad).toHaveBeenCalledWith(autosaveSlotId(GAME_ID));
+    });
+
+    it('issues the load and nothing else — the handler never routes', () => {
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        renderMenuWithConfirmSurface(continueMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+        expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('reports a rejected load rather than leaving an unhandled rejection', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        mockSavesLoad.mockRejectedValueOnce(new Error('no such slot'));
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        renderMenuWithConfirmSurface(continueMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('continue'),
+            expect.any(Error),
+        );
+    });
+
+    it('refuses to render without a game context — the slot cannot be named', () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        expect(() => {
+            renderMenuWithConfirmSurface(continueMenu(), null);
+        }).toThrow(/continue/u);
+
+        errorSpy.mockRestore();
+    });
+});
+
+// ─── start-game ───────────────────────────────────────────────────────────────
+
+function startMenu(config?: QuickStartConfig): GameMainMenuDefinition {
+    return {
+        buttons: [
+            {
+                label: 'Quick Match',
+                action:
+                    config === undefined ? { type: 'start-game' } : { type: 'start-game', config },
+            },
+        ],
+    };
+}
+
+describe('start-game action', () => {
+    it('invokes the quick-start verb for the active game exactly once', () => {
+        renderMenuWithConfirmSurface(startMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        expect(mockQuickStart).toHaveBeenCalledTimes(1);
+        expect(mockQuickStart).toHaveBeenCalledWith({ gameId: GAME_ID });
+    });
+
+    it('passes the declared config alongside the game id', () => {
+        renderMenuWithConfirmSurface(startMenu({ aiSeats: [{ attributes: { team: 'green' } }] }));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        expect(mockQuickStart).toHaveBeenCalledWith({
+            gameId: GAME_ID,
+            aiSeats: [{ attributes: { team: 'green' } }],
+        });
+    });
+
+    it('issues the verb and nothing else — the handler never routes', () => {
+        renderMenuWithConfirmSurface(startMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('reports a rejected quick start rather than leaving an unhandled rejection', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        mockQuickStart.mockRejectedValueOnce(new Error('a session is already active'));
+        renderMenuWithConfirmSurface(startMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('start-game'),
+            expect.any(Error),
+        );
+    });
+
+    it('refuses to render without a game context — there is no game to start', () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        expect(() => {
+            renderMenuWithConfirmSurface(startMenu(), null);
+        }).toThrow(/start-game/u);
+
+        errorSpy.mockRestore();
+    });
+});
+
+// ─── confirm ──────────────────────────────────────────────────────────────────
+
+function confirmedStartMenu(
+    confirm: NonNullable<GameMainMenuDefinition['buttons'][number]['confirm']>,
+): GameMainMenuDefinition {
+    return {
+        buttons: [{ label: 'Quick Match', action: { type: 'start-game' }, confirm }],
+    };
+}
+
+describe('button confirmation', () => {
+    it('asks before running the action and holds the verb until the answer', () => {
+        renderMenuWithConfirmSurface(
+            confirmedStartMenu({ when: 'always', title: 'Start a new match?' }),
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        expect(screen.getByTestId('confirm-dialog')).toBeInTheDocument();
+        expect(screen.getByText('Start a new match?')).toBeInTheDocument();
+        expect(mockQuickStart).not.toHaveBeenCalled();
+    });
+
+    it('runs the action exactly once when the player accepts', async () => {
+        renderMenuWithConfirmSurface(
+            confirmedStartMenu({ when: 'always', title: 'Start a new match?' }),
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
+        });
+
+        expect(mockQuickStart).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+    });
+
+    it('keeps the menu and never runs the action when the player declines', async () => {
+        renderMenuWithConfirmSurface(
+            confirmedStartMenu({ when: 'always', title: 'Start a new match?' }),
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('confirm-dialog-cancel'));
+        });
+
+        expect(mockQuickStart).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Quick Match' })).toBeInTheDocument();
+    });
+
+    it('treats Escape as a decline', async () => {
+        renderMenuWithConfirmSurface(
+            confirmedStartMenu({ when: 'always', title: 'Start a new match?' }),
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        await act(async () => {
+            fireEvent.keyDown(window, { key: 'Escape' });
+        });
+
+        expect(mockQuickStart).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+    });
+
+    it('resolves the declared title, body and labels through the active translator', () => {
+        currentOverride = {
+            'game.tactics.confirm.title': 'Overwrite your save?',
+            'game.tactics.confirm.body': 'The autosave will be replaced.',
+            'game.tactics.confirm.ok': 'Overwrite',
+            'game.tactics.confirm.no': 'Keep it',
+        };
+        renderMenuWithConfirmSurface(
+            confirmedStartMenu({
+                when: 'always',
+                title: 'game.tactics.confirm.title',
+                body: 'game.tactics.confirm.body',
+                confirmLabel: 'game.tactics.confirm.ok',
+                cancelLabel: 'game.tactics.confirm.no',
+            }),
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        expect(screen.getByText('Overwrite your save?')).toBeInTheDocument();
+        expect(screen.getByTestId('confirm-dialog-body')).toHaveTextContent(
+            'The autosave will be replaced.',
+        );
+        expect(screen.getByTestId('confirm-dialog-confirm')).toHaveTextContent('Overwrite');
+        expect(screen.getByTestId('confirm-dialog-cancel')).toHaveTextContent('Keep it');
+    });
+
+    it('asks under when: autosave-exists while the game has an autosave', () => {
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        renderMenuWithConfirmSurface(
+            confirmedStartMenu({ when: 'autosave-exists', title: 'Overwrite your save?' }),
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        expect(screen.getByTestId('confirm-dialog')).toBeInTheDocument();
+        expect(mockQuickStart).not.toHaveBeenCalled();
+    });
+
+    it('skips the question under when: autosave-exists when there is no autosave', () => {
+        renderMenuWithConfirmSurface(
+            confirmedStartMenu({ when: 'autosave-exists', title: 'Overwrite your save?' }),
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+        expect(mockQuickStart).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds the button disabled until the slot list hydrates, so a first-run player is never asked', () => {
+        useSaveStore.setState({ slots: [], isLoading: true });
+        renderMenuWithConfirmSurface(
+            confirmedStartMenu({ when: 'autosave-exists', title: 'Overwrite your save?' }),
+        );
+
+        const button = screen.getByRole('button', { name: 'Quick Match' });
+        expect(button).toBeDisabled();
+
+        fireEvent.click(button);
+        expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+        expect(mockQuickStart).not.toHaveBeenCalled();
+
+        act(() => {
+            useSaveStore.getState().applySaveSlots([]);
+        });
+
+        expect(screen.getByRole('button', { name: 'Quick Match' })).not.toBeDisabled();
+    });
+
+    it('does not hold a when: always button while the slot list is loading', () => {
+        useSaveStore.setState({ slots: [], isLoading: true });
+        renderMenuWithConfirmSurface(
+            confirmedStartMenu({ when: 'always', title: 'Start a new match?' }),
+        );
+
+        expect(screen.getByRole('button', { name: 'Quick Match' })).not.toBeDisabled();
+    });
+
+    it('does not hold a when: autosave-exists button with no game context — no game, no autosave', () => {
+        useSaveStore.setState({ slots: [], isLoading: true });
+        renderMenuWithConfirmSurface(
+            {
+                buttons: [
+                    {
+                        label: 'Quit',
+                        action: { type: 'quit' },
+                        confirm: { when: 'autosave-exists', title: 'Overwrite your save?' },
+                    },
+                ],
+            },
+            null,
+        );
+
+        expect(screen.getByRole('button', { name: 'Quit' })).not.toBeDisabled();
+    });
+
+    it('gates any action type, not just the engine verbs', async () => {
+        renderMenuWithConfirmSurface({
+            buttons: [
+                {
+                    label: 'Quit',
+                    action: { type: 'quit' },
+                    confirm: { when: 'always', title: 'Really quit?' },
+                },
+            ],
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quit' }));
+        expect(mockQuit).not.toHaveBeenCalled();
+
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
+        });
+
+        expect(mockQuit).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs a button with no confirm declaration immediately', () => {
+        renderMenuWithConfirmSurface(startMenu());
+
+        fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+
+        expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+        expect(mockQuickStart).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ─── Engine verbs — bridge unavailable ───────────────────────────────────────
+//
+// Both verbs reach the preload bridge at CALL time, so each carries its own
+// missing-bridge guard. Without a positive control the guard is a branch no
+// fixture trips, and dropping it would surface as a bare TypeError instead.
+
+describe('engine verbs — bridge unavailable', () => {
+    function captureUncaughtError(run: () => void): Error | null {
+        let fired: Error | null = null;
+        const listener = (event: ErrorEvent): void => {
+            fired = event.error as Error;
+            event.preventDefault();
+        };
+        window.addEventListener('error', listener);
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        run();
+
+        window.removeEventListener('error', listener);
+        consoleSpy.mockRestore();
+        return fired;
+    }
+
+    it('fires a bridge-unavailable error when continue is clicked without a saves bridge', () => {
+        // The slot list lives in renderer state, so the button stays enabled
+        // after the bridge itself is gone — which is what reaches the guard.
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        renderMenuWithConfirmSurface(continueMenu());
+        Reflect.deleteProperty(window, '__chimera');
+
+        const fired = captureUncaughtError(() => {
+            fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        });
+
+        expect(fired).not.toBeNull();
+        expect(fired?.message).toBe('Chimera saves API not available');
+    });
+
+    it('fires a bridge-unavailable error when start-game is clicked without a lobby bridge', () => {
+        renderMenuWithConfirmSurface(startMenu());
+        Reflect.deleteProperty(window, '__chimera');
+
+        const fired = captureUncaughtError(() => {
+            fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+        });
+
+        expect(fired).not.toBeNull();
+        expect(fired?.message).toBe('Chimera lobby API not available');
+    });
+
+    it('fires a bridge-unavailable error when the lobby bridge carries no quick-start verb', () => {
+        renderMenuWithConfirmSurface(startMenu());
+        Object.defineProperty(window, '__chimera', {
+            configurable: true,
+            value: { system: { quit: mockQuit }, lobby: {} },
+        });
+
+        const fired = captureUncaughtError(() => {
+            fireEvent.click(screen.getByRole('button', { name: 'Quick Match' }));
+        });
+
+        expect(fired).not.toBeNull();
+        expect(fired?.message).toBe('Chimera lobby API not available');
+    });
+});
+
+// ─── Engine gates vs a game's own `disabled` ─────────────────────────────────
+//
+// The two engine gates answer conditions the game cannot see, so they are
+// resolved BEFORE a declared `disabled` and win over it. Without a fixture that
+// declares `disabled: false` on a gated button, demoting the gates below the
+// declaration changes nothing any test can see.
+
+describe('engine gates outrank a declared disabled', () => {
+    it('keeps continue disabled with no autosave even when the game declares disabled: false', () => {
+        renderMenuWithConfirmSurface({
+            buttons: [{ label: 'Continue', action: { type: 'continue' }, disabled: false }],
+        });
+
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    });
+
+    it('keeps continue disabled during a session even when the game declares disabled: false', () => {
+        useSaveStore.setState({ slots: [autosaveSlot(GAME_ID)], isLoading: false });
+        useLobbyStore.getState().applyLobbyState(makeLobbyState(GAME_ID));
+
+        renderMenuWithConfirmSurface({
+            buttons: [{ label: 'Continue', action: { type: 'continue' }, disabled: false }],
+        });
+
+        expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    });
+
+    it('keeps start-game disabled during a session even when the game declares disabled: false', () => {
+        useLobbyStore.getState().applyLobbyState(makeLobbyState(GAME_ID));
+
+        renderMenuWithConfirmSurface({
+            buttons: [{ label: 'Quick Match', action: { type: 'start-game' }, disabled: false }],
+        });
+
+        expect(screen.getByRole('button', { name: 'Quick Match' })).toBeDisabled();
+    });
+
+    it('holds an unhydrated autosave-exists confirm even when the game declares disabled: false', () => {
+        useSaveStore.setState({ slots: [], isLoading: true });
+
+        renderMenuWithConfirmSurface({
+            buttons: [
+                {
+                    label: 'Quit',
+                    action: { type: 'quit' },
+                    disabled: false,
+                    confirm: { when: 'autosave-exists', title: 'Overwrite your save?' },
+                },
+            ],
+        });
+
+        expect(screen.getByRole('button', { name: 'Quit' })).toBeDisabled();
+    });
+});
+
+// ─── start-game while a session is live ──────────────────────────────────────
+//
+// `QuickStartCoordinator` refuses a quick start while any lobby session exists,
+// so an enabled Quick Match there could only produce a rejected invoke with no
+// visible feedback. The same live-session condition therefore gates both engine
+// verbs.
+
+describe('start-game during a live session', () => {
+    it('renders disabled while a session is live', () => {
+        useLobbyStore.getState().applyLobbyState(makeLobbyState(GAME_ID));
+
+        renderMenuWithConfirmSurface(startMenu());
+
+        expect(screen.getByRole('button', { name: 'Quick Match' })).toBeDisabled();
+    });
+
+    it('re-enables when the session ends while the menu is on screen', () => {
+        useLobbyStore.getState().applyLobbyState(makeLobbyState(GAME_ID));
+        renderMenuWithConfirmSurface(startMenu());
+        expect(screen.getByRole('button', { name: 'Quick Match' })).toBeDisabled();
+
+        act(() => {
+            useLobbyStore.getState().applyLobbyState(null);
+        });
+
+        expect(screen.getByRole('button', { name: 'Quick Match' })).not.toBeDisabled();
+    });
+
+    it('leaves a navigate button untouched during a session', () => {
+        useLobbyStore.getState().applyLobbyState(makeLobbyState(GAME_ID));
+
+        renderMenuWithConfirmSurface({
+            buttons: [{ label: 'Settings', action: { type: 'navigate', target: '/settings' } }],
+        });
+
+        expect(screen.getByRole('button', { name: 'Settings' })).not.toBeDisabled();
     });
 });

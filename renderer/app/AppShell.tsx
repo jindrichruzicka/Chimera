@@ -5,6 +5,7 @@ import { ProfileRejectedToastBridge } from '../components/lobby/ProfileRejectedT
 import { ReplayExportToastBridge } from '../components/replay/ReplayExportToastBridge';
 import { ReplayNavigationBridge } from '../components/replay/ReplayNavigationBridge';
 import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusIndicator';
+import { ConfirmDialogHost } from '../components/shell/ConfirmDialogHost';
 import { I18nTokenModeToggle } from '../components/shell/debug/I18nTokenModeToggle';
 import { RestoreWaitingOverlay } from '../components/shell/RestoreWaitingOverlay';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
@@ -102,6 +103,15 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                                      * /saves → /game route hop mid-restore.
                                      */}
                                     <RestoreWaitingOverlay />
+                                    {/*
+                                     * The single confirm surface (Invariant
+                                     * #96 barrel hook useConfirmDialog()).
+                                     * App-level for the same reason as the
+                                     * overlay above: a question asked on one
+                                     * route must still be answerable after the
+                                     * asking screen navigates away.
+                                     */}
+                                    <ConfirmDialogHost />
                                     <ToastHost />
                                 </div>
                             </ScreenFadeRoot>

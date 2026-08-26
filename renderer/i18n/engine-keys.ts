@@ -45,6 +45,13 @@ export const CHAT_KEYS = {
 /** Engine-default main-menu button labels. */
 export const MENU_KEYS = {
     play: translationKey('engine.menu.play'),
+    // Engine-supplied labels for the two engine-implemented verbs
+    // (`start-game` / `continue`). No engine-default button carries them — the
+    // default menu is Play / Settings / Quit — so they exist for a game that
+    // declares those verbs, which names the token as a raw string and lets the
+    // renderer resolve it through t() at the render site.
+    continue: translationKey('engine.menu.continue'),
+    start: translationKey('engine.menu.start'),
     settings: translationKey('engine.menu.settings'),
     quit: translationKey('engine.menu.quit'),
 } as const;

@@ -36,7 +36,19 @@ const styles = {
     },
 } satisfies Record<string, React.CSSProperties>;
 
+/**
+ * Derive a button's `data-testid`.
+ *
+ * A declared `id` wins: it is the author naming the entry, and it reaches the
+ * cases the built-in derivation cannot — a `command`, or a navigation to a
+ * game-owned route. Everything else falls back to the built-in map, which is
+ * kept exactly as it was so an existing game's page objects keep resolving.
+ * An unmapped entry with no `id` stays untagged, as before.
+ */
 function getMainMenuButtonTestId(button: GameMainMenuButton): string | undefined {
+    if (button.id !== undefined) {
+        return `main-menu-${button.id}`;
+    }
     switch (button.action.type) {
         case 'open-lobby':
             return 'main-menu-play';
@@ -54,6 +66,10 @@ function getMainMenuButtonTestId(button: GameMainMenuButton): string | undefined
                 return 'main-menu-replays';
             }
             return undefined;
+        case 'start-game':
+            return 'main-menu-start';
+        case 'continue':
+            return 'main-menu-continue';
         case 'quit':
             return 'main-menu-quit';
         case 'command':

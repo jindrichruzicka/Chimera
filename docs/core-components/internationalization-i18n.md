@@ -34,12 +34,12 @@ Three properties define the design:
 
 ## Design Patterns
 
-| Pattern                           | Where used                                                            | Why                                                                                    |
-| --------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| **Layered override / merge**      | `resolveTranslation()` (`translation-bundle.ts`)                      | Game override → engine English → raw key; override wins, never deletes                 |
-| **Provider + context hook**       | `<I18nProvider>` + `useTranslate()`                                   | One provider high in the tree; consumers read a stable `t` by context                  |
-| **Registry indirection**          | `GameTranslations` via `LoadedRendererGameShell.translations`         | Game bundles reach the provider by prop, never an `apps/*` import (Invariants #80/#94) |
-| **Pure presentational + wrapper** | `<LanguageSelector>` (ui barrel) + `SettingsLanguageSelector` (shell) | Keeps the `components/ui` barrel side-effect-free (Invariant #96)                      |
+| Pattern                           | Where used                                                            | Why                                                                                                                    |
+| --------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Layered override / merge**      | `resolveTranslation()` (`translation-bundle.ts`)                      | Game override → engine English → raw key; override wins, never deletes                                                 |
+| **Provider + context hook**       | `<I18nProvider>` + `useTranslate()`                                   | One provider high in the tree; consumers read a stable `t` by context                                                  |
+| **Registry indirection**          | `GameTranslations` via `LoadedRendererGameShell.translations`         | Game bundles reach the provider by prop, never an `apps/*` import (Invariants #80/#94)                                 |
+| **Pure presentational + wrapper** | `<LanguageSelector>` (ui barrel) + `SettingsLanguageSelector` (shell) | The primitive takes its languages and its callback from the caller; the shell wrapper owns the settings-store coupling |
 
 ---
 
@@ -167,8 +167,8 @@ pure presentational control: it renders the supplied `languages` (endonym labels
 and calls `onLanguageChange` with the chosen BCP-47 code. It **self-hides** (returns `null`) for
 fewer than two languages, so a game can drop it in unconditionally. Variants: `'select'` (default,
 native `<select>`) and `'inline'` (segmented `role="radiogroup"` toggles). It reads only the i18n
-React context (its label via `useTranslate()`), never a store — keeping the barrel side-effect-free
-(Invariant #96).
+React context (its label via `useTranslate()`), never a store. What the `components/ui` barrel does
+and does not reach is measured by `renderer/components/ui/__tests__/ui-barrel-side-effects.test.ts`.
 
 The store coupling lives in the shell wrapper `SettingsLanguageSelector.tsx`: it resolves the game
 context, loads declared languages through the `translations.languages` seam, reads the persisted

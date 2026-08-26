@@ -38,6 +38,8 @@ export const engineBundleEn: TranslationBundle = {
 
     // ── menu ──────────────────────────────────────────────────────────────────
     'engine.menu.play': 'Play',
+    'engine.menu.continue': 'Continue',
+    'engine.menu.start': 'Start Game',
     'engine.menu.settings': 'Settings',
     'engine.menu.quit': 'Quit',
 

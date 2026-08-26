@@ -8,9 +8,10 @@
 // import, Invariants #80/#94), reads the persisted `gameplay.language`, and writes
 // the chosen locale back through the settings store's existing IPC path.
 //
-// The store coupling lives HERE, not in `components/ui/LanguageSelector`, so the
-// public ui barrel stays side-effect-free: importing a design primitive never
-// drags in `renderer/state/`. Games mount this wrapper (or supply their own
+// The settings-store coupling lives HERE, not in `components/ui/LanguageSelector`,
+// which keeps the primitive injectable — see
+// `renderer/components/ui/__tests__/ui-barrel-side-effects.test.ts` for what the
+// barrel actually reaches. Games mount this wrapper (or supply their own
 // languages to the primitive directly); the settings language field renders it
 // too.
 

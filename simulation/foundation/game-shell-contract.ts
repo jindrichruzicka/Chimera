@@ -7,9 +7,12 @@
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
  *
  * Module boundary (§3 Module Boundary Table): `simulation/` must not import from
- * `renderer/` or `apps/*`. This module has zero imports — the constraint is
- * structurally enforced.
+ * `renderer/` or `apps/*`. Its only import is the sibling
+ * `quick-start-contract.js`, itself a zero-import foundation leaf, so this
+ * module's whole transitive graph stays inside `simulation/foundation/`.
  */
+
+import type { QuickStartConfig } from './quick-start-contract.js';
 
 // ─── Branded types ────────────────────────────────────────────────────────────
 
@@ -127,11 +130,77 @@ export type GameMainMenuAction =
           readonly type: 'open-lobby';
       }
     | {
+          /**
+           * Start a match without passing through the lobby: the renderer
+           * invokes the `chimera:lobby:quick-start` verb for the active game.
+           *
+           * The button invokes the verb and does nothing else — in particular
+           * it never routes.
+           */
+          readonly type: 'start-game';
+          /**
+           * Per-button overrides merged OVER the game's own
+           * `GameLobbySetup.quickStart` defaults by the main process. Omit to
+           * start exactly the match the game itself declared.
+           */
+          readonly config?: QuickStartConfig;
+      }
+    | {
+          /**
+           * Resume the active game's autosave. The renderer loads
+           * `autosaveSlotId(gameId)` through the ordinary `saves.load` restore
+           * funnel — the same call the saves browser issues — so this verb adds
+           * no restore machinery of its own. Like `start-game` it never routes.
+           *
+           * The slot is engine-chosen: a game names no slot here, and the
+           * renderer computes the button's disabled state from the live save
+           * slot list rather than asking the game to probe.
+           */
+          readonly type: 'continue';
+      }
+    | {
           /** Invoke a game-registered named command (see `GameMenuCommandId`). */
           readonly type: 'command';
           /** Branded identifier for the registered command implementation. */
           readonly commandId: GameMenuCommandId;
       };
+
+// ─── Confirmation ─────────────────────────────────────────────────────────────
+
+/**
+ * When a button's confirmation dialog is shown.
+ *
+ * - `'always'` — every activation asks first.
+ * - `'autosave-exists'` — asks only while the active game has an autosave that
+ *   the action would overwrite. The renderer waits for the save slot list to
+ *   hydrate before it can answer, so a first-run player is never told they are
+ *   about to overwrite a save that does not exist.
+ */
+export type GameMenuConfirmTrigger = 'always' | 'autosave-exists';
+
+/**
+ * Declarative confirmation for a main-menu button. The renderer resolves it
+ * through the single engine confirm surface; the action runs only when the
+ * player accepts.
+ *
+ * `title`, `body`, `confirmLabel` and `cancelLabel` are display strings and may
+ * equally be translation tokens — the renderer resolves each through `t()`,
+ * which is an identity for text with no matching token (the same rule
+ * `GameMainMenuButton.label` follows). Omitted labels fall back to the engine's
+ * own `engine.common.confirm` / `engine.common.cancel` tokens.
+ */
+export interface GameMenuConfirm {
+    /** Which activations ask first. */
+    readonly when: GameMenuConfirmTrigger;
+    /** Dialog heading. */
+    readonly title: string;
+    /** Optional explanatory paragraph under the heading. */
+    readonly body?: string;
+    /** Label for the accepting button. Engine default when omitted. */
+    readonly confirmLabel?: string;
+    /** Label for the dismissing button. Engine default when omitted. */
+    readonly cancelLabel?: string;
+}
 
 // ─── Button ───────────────────────────────────────────────────────────────────
 
@@ -141,11 +210,26 @@ export type GameMainMenuAction =
  * Invariant #92 — only `<Button>` variants from §4.37.2 are permitted.
  */
 export interface GameMainMenuButton {
+    /**
+     * Stable slug identifying this entry, used by the renderer to derive the
+     * button's `data-testid` (`main-menu-<id>`). Supply one for a
+     * game-specific entry the engine's own derivation cannot name — a
+     * `command` action, or a `navigate` to a game-owned route. The engine's
+     * built-in entries need none.
+     */
+    readonly id?: string;
+
     /** Visible button label text. */
     readonly label: string;
 
     /** Action triggered when the button is activated. */
     readonly action: GameMainMenuAction;
+
+    /**
+     * Ask the player to confirm before the action runs. Omitted means the
+     * action runs immediately.
+     */
+    readonly confirm?: GameMenuConfirm;
 
     /**
      * Visual variant for the `<Button>` component.
@@ -164,7 +248,8 @@ export interface GameMainMenuButton {
      *   button renders disabled while the check is pending; a thrown or rejected
      *   check is treated as `true` (fail-safe — the renderer logs at `warn`).
      *
-     * Omitted means the button is always enabled.
+     * The renderer resolves its own availability gates ahead of this field —
+     * see §4.37.5, "Engine-Computed Availability".
      */
     readonly disabled?: boolean | (() => Promise<boolean>);
 }

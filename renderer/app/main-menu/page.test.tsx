@@ -495,3 +495,117 @@ describe('MainMenuPage — app-level screen fade', () => {
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
     });
 });
+
+// ─── Testid derivation for the engine verbs and game-declared entries ─────────
+//
+// The existing hardcoded target map (`/saves`, `/replays`, …) is deliberately
+// RETAINED so tactics' page objects keep resolving; the two engine verbs get
+// their own slugs, and `id` names whatever the map cannot.
+
+describe('MainMenuPage — button testid derivation', () => {
+    beforeEach(() => {
+        setMainMenuUrl('?gameId=tactics');
+        Object.defineProperty(window, '__chimera', {
+            configurable: true,
+            value: {
+                system: { quit: vi.fn() },
+                saves: { load: vi.fn(async () => undefined) },
+                lobby: { quickStart: vi.fn(async () => undefined) },
+            },
+        });
+    });
+
+    function loadMenu(buttons: readonly unknown[]): void {
+        mockLoadRendererGameShell.mockResolvedValue({
+            mainMenu: { buttons },
+            menuCommands: {},
+        });
+    }
+
+    it('tags a continue button with data-testid="main-menu-continue"', async () => {
+        loadMenu([{ label: 'Continue', action: { type: 'continue' } }]);
+
+        renderMainMenuPage();
+
+        expect(await screen.findByTestId('main-menu-continue')).toBeTruthy();
+    });
+
+    it('tags a start-game button with data-testid="main-menu-start"', async () => {
+        loadMenu([{ label: 'Quick Match', action: { type: 'start-game' } }]);
+
+        renderMainMenuPage();
+
+        expect(await screen.findByTestId('main-menu-start')).toBeTruthy();
+    });
+
+    it('derives a declared id into main-menu-<id>', async () => {
+        loadMenu([
+            {
+                id: 'credits',
+                label: 'Credits',
+                action: { type: 'navigate', target: '/credits' },
+            },
+        ]);
+
+        renderMainMenuPage();
+
+        expect(await screen.findByTestId('main-menu-credits')).toBeTruthy();
+    });
+
+    it('lets a declared id name a command entry the target map cannot', async () => {
+        mockLoadRendererGameShell.mockResolvedValue({
+            mainMenu: {
+                buttons: [
+                    {
+                        id: 'tutorial',
+                        label: 'Tutorial',
+                        action: { type: 'command', commandId: 'tactics:tutorial' },
+                    },
+                ],
+            },
+            menuCommands: { 'tactics:tutorial': vi.fn() },
+        });
+
+        renderMainMenuPage();
+
+        expect(await screen.findByTestId('main-menu-tutorial')).toBeTruthy();
+    });
+
+    it('lets a declared id win over the built-in target map', async () => {
+        loadMenu([
+            { id: 'archive', label: 'Load Game', action: { type: 'navigate', target: '/saves' } },
+        ]);
+
+        renderMainMenuPage();
+
+        expect(await screen.findByTestId('main-menu-archive')).toBeTruthy();
+        expect(screen.queryByTestId('main-menu-load-game')).toBeNull();
+    });
+
+    it('keeps the built-in target map for an entry that declares no id', async () => {
+        loadMenu([
+            { label: 'New Game', action: { type: 'navigate', target: '/game' } },
+            { label: 'Load Game', action: { type: 'navigate', target: '/saves' } },
+            { label: 'Settings', action: { type: 'navigate', target: '/settings' } },
+            { label: 'Replays', action: { type: 'navigate', target: '/replays' } },
+            { label: 'Quit', action: { type: 'quit' } },
+        ]);
+
+        renderMainMenuPage();
+
+        expect(await screen.findByTestId('main-menu-play')).toBeTruthy();
+        expect(screen.getByTestId('main-menu-load-game')).toBeTruthy();
+        expect(screen.getByTestId('main-menu-settings')).toBeTruthy();
+        expect(screen.getByTestId('main-menu-replays')).toBeTruthy();
+        expect(screen.getByTestId('main-menu-quit')).toBeTruthy();
+    });
+
+    it('leaves an unmapped entry with no id untagged', async () => {
+        loadMenu([{ label: 'Credits', action: { type: 'navigate', target: '/credits' } }]);
+
+        renderMainMenuPage();
+
+        const credits = await screen.findByRole('button', { name: 'Credits' });
+        expect(credits.hasAttribute('data-testid')).toBe(false);
+    });
+});

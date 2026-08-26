@@ -240,7 +240,7 @@ renderer/audio/
 | Category       | Examples                                                 |
 | -------------- | -------------------------------------------------------- |
 | **Actions**    | `Button`, `IconButton`, `ToggleButton`, `SaveGameButton` |
-| **Overlays**   | `Modal`, `Drawer`, `Tooltip`, `Popover`                  |
+| **Overlays**   | `Modal`, `ConfirmDialog`, `Drawer`, `Tooltip`, `Popover` |
 | **Containers** | `Panel`, `Card`, `Divider`, `ScrollArea`, `Tabs`         |
 | **Forms**      | `Slider`, `Toggle`, `TextInput`, `Select`, `NumberInput` |
 | **Feedback**   | `ProgressBar`, `Spinner`, `Badge`                        |
@@ -272,6 +272,21 @@ Modals nest: the focus trap is active only while a modal is the **topmost** laye
 `EscapeStack` (`useEscapeLayer(...).isTopLayer()`), so a confirm Modal opened over a page-level
 Modal owns both Escape and Tab until it closes.
 
+**`ConfirmDialog`** is the engine's two-choice question, built on `Modal`: a title, an
+optional body paragraph, and a Cancel / Confirm row whose labels default to the
+`engine.common.cancel` / `engine.common.confirm` tokens. Cancel is listed first so it takes
+initial focus — the safe answer for a question worth asking. Both controls declare
+`dismiss: false`: the dialog answers nothing on its own, and its owner closes it. That owner is
+`ConfirmDialogHost`, mounted **once** by `AppShell` beside `ToastHost` and `RestoreWaitingOverlay`,
+which renders the head of a promise-resolving queue in `renderer/state/confirmDialogStore.ts`.
+A caller asks through `useConfirmDialog()` (public through the `components/ui` barrel), which
+returns `(options) => Promise<boolean>`, resolving `true` on accept and `false` on Cancel or
+Escape. The host shows only the head of its queue, so a second question asked through it waits its
+turn rather than stealing the surface. The store is created lazily, so importing the barrel
+constructs nothing. A declarative `GameMainMenuButton.confirm` resolves through the same store
+(§4.37.5), which is what makes it one surface rather than one per caller. `ConfirmDialog` itself is
+also exported, for a surface that owns its own dialog state and does not want the shared queue.
+
 **`SaveGameButton`** is the Actions category's one composite: a save trigger that opens a
 save-name prompt (`Modal` + `TextInput`, name bounded to `MAX_SAVE_LABEL_LENGTH`) and calls
 `onSave(trimmedLabel)` exactly once on confirm; the label resets each time the dialog opens.
@@ -299,7 +314,7 @@ exposes the public barrels enumerated by Invariant #96, and those are the only r
 game may use:
 
 ```typescript
-// Tier 1 — stateless design primitives (this section, §4.35):
+// Tier 1 — design primitives (this section, §4.35):
 import { Button, Card, Heading } from '@chimera-engine/renderer/components/ui/index.js';
 
 // Tier 2 — the shared chat component (§4.35.1):
@@ -361,9 +376,8 @@ visual customization.
 
 ### 4.35.1 Chat Component (`renderer/components/chat/`)
 
-The chat barrel is the second tier of the shared component library: a higher-level,
-**stateful** feature component wired to renderer stores and the host IPC bridge — in
-contrast to the stateless primitives of `renderer/components/ui/`. It carries a
+The chat barrel is the second tier of the shared component library: a higher-level
+feature component wired to renderer stores and the host IPC bridge. It carries a
 different stability and review bar, so it lives behind its own public specifier
 `@chimera-engine/renderer/components/chat` (whitelisted alongside the UI barrel by the
 `chimera/no-game-renderer-internals` lint rule; deep imports into the directory stay
@@ -810,6 +824,7 @@ renderer/
 └── components/
     └── ui/
         ├── Button.tsx
+        ├── ConfirmDialog.tsx
         ├── Modal.tsx
         ├── Panel.tsx
         ├── Slider.tsx

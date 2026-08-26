@@ -15,11 +15,12 @@
 // packaged binary leaves behind.
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installMatchMedia } from '../__test-support__/installMatchMedia';
 import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi';
+import { selectPendingConfirm, useConfirmDialogStore } from '../state/confirmDialogStore';
 import { AppShell } from './AppShell';
 
 const audioMocks = vi.hoisted(() => ({
@@ -157,5 +158,72 @@ describe('AppShell — renderer logging install ordering', () => {
         rendered.unmount();
 
         expect(console.warn).toBe(patchedOver);
+    });
+});
+
+// ── The single confirm surface ────────────────────────────────────────────────
+//
+// `useConfirmDialog()` hands back a promise that only a mounted host can settle,
+// so "AppShell mounts exactly one ConfirmDialogHost" is not a detail of the tree
+// — it is what makes the hook work on every route. Asserting through the shell
+// (rather than on the host in isolation) is what catches the host being dropped
+// from this composition root.
+describe('AppShell — confirm surface', () => {
+    afterEach(() => {
+        for (const entry of useConfirmDialogStore.getState().queue) {
+            useConfirmDialogStore.getState().settle(entry.id, false);
+        }
+    });
+
+    it('shows a queued confirm request, so a request made on any route reaches a host', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        render(
+            <AppShell>
+                <main />
+            </AppShell>,
+        );
+
+        act(() => {
+            void useConfirmDialogStore.getState().request({ title: 'Overwrite your save?' });
+        });
+
+        expect(screen.getByTestId('confirm-dialog')).toBeInTheDocument();
+        expect(screen.getByText('Overwrite your save?')).toBeInTheDocument();
+    });
+
+    it('mounts exactly one host — a second surface would answer the same question twice', () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        render(
+            <AppShell>
+                <main />
+            </AppShell>,
+        );
+
+        act(() => {
+            void useConfirmDialogStore.getState().request({ title: 'Overwrite your save?' });
+        });
+
+        expect(screen.getAllByTestId('confirm-dialog')).toHaveLength(1);
+    });
+
+    it('settles the request from the shell-mounted host', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        render(
+            <AppShell>
+                <main />
+            </AppShell>,
+        );
+
+        let answer!: Promise<boolean>;
+        act(() => {
+            answer = useConfirmDialogStore.getState().request({ title: 'Overwrite your save?' });
+        });
+
+        act(() => {
+            screen.getByTestId('confirm-dialog-confirm').click();
+        });
+
+        await expect(answer).resolves.toBe(true);
+        expect(selectPendingConfirm(useConfirmDialogStore.getState())).toBeNull();
     });
 });

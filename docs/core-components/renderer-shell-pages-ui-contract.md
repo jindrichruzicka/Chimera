@@ -281,13 +281,27 @@ export type GameMainMenuAction =
     | { readonly type: 'navigate'; readonly target: string }
     | { readonly type: 'quit' }
     | { readonly type: 'open-lobby' }
+    | { readonly type: 'start-game'; readonly config?: QuickStartConfig }
+    | { readonly type: 'continue' }
     | { readonly type: 'command'; readonly commandId: GameMenuCommandId };
 
+export type GameMenuConfirmTrigger = 'always' | 'autosave-exists';
+
+export interface GameMenuConfirm {
+    readonly when: GameMenuConfirmTrigger;
+    readonly title: string;
+    readonly body?: string;
+    readonly confirmLabel?: string;
+    readonly cancelLabel?: string;
+}
+
 export interface GameMainMenuButton {
+    readonly id?: string;
     readonly label: string;
     readonly action: GameMainMenuAction;
     readonly variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
     readonly disabled?: boolean | (() => Promise<boolean>);
+    readonly confirm?: GameMenuConfirm;
 }
 
 export interface GameMainMenuDefinition {
@@ -313,16 +327,20 @@ menu.
 
 ### Button and Action Semantics
 
-| Field / variant     | Required? | Meaning                                                                                                                                                                                                                                            |
-| ------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `label`             | Yes       | Visible button text rendered as the children of the shared `<Button>`.                                                                                                                                                                             |
-| `action.type`       | Yes       | Discriminant for the action union.                                                                                                                                                                                                                 |
-| `navigate.target`   | Yes       | Internal renderer route passed to `router.push(target)`, for example `'/settings'`, `'/saves'`, or `'/game'`.                                                                                                                                      |
-| `quit`              | Yes       | Calls `window.__chimera.system.quit()` through the renderer system bridge.                                                                                                                                                                         |
-| `open-lobby`        | Yes       | Engine shortcut for `router.push('/lobby')`; this is the engine default Play action.                                                                                                                                                               |
-| `command.commandId` | Yes       | Branded `GameMenuCommandId` resolved against the game's registered `menuCommands` registry.                                                                                                                                                        |
-| `variant`           | No        | Passed to the shared `<Button>` as `primary`, `secondary`, `ghost`, or `danger`.                                                                                                                                                                   |
-| `disabled`          | No        | Controls the `<Button>` disabled state. `boolean` is a static state evaluated at render time; `() => Promise<boolean>` is an async availability check the renderer awaits (e.g. "are there any replays to browse?"). Omitted means always enabled. |
+| Field / variant     | Required? | Meaning                                                                                                                                                                                                                                                                                           |
+| ------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label`             | Yes       | Visible button text rendered as the children of the shared `<Button>`.                                                                                                                                                                                                                            |
+| `action.type`       | Yes       | Discriminant for the action union.                                                                                                                                                                                                                                                                |
+| `navigate.target`   | Yes       | Internal renderer route passed to `router.push(target)`, for example `'/settings'`, `'/saves'`, or `'/game'`.                                                                                                                                                                                     |
+| `quit`              | Yes       | Calls `window.__chimera.system.quit()` through the renderer system bridge.                                                                                                                                                                                                                        |
+| `open-lobby`        | Yes       | Engine shortcut for `router.push('/lobby')`; this is the engine default Play action.                                                                                                                                                                                                              |
+| `start-game`        | Yes       | Invokes `chimera:lobby:quick-start` for the active game, with the optional `config` merged over the game's own `GameLobbySetup.quickStart` defaults. Does **not** navigate — see _Routing_ below.                                                                                                 |
+| `continue`          | Yes       | Loads `autosaveSlotId(gameId)` through the ordinary restore funnel (`saves.load`), so no restore machinery is added. The engine picks the slot; a game names none. Does **not** navigate.                                                                                                         |
+| `command.commandId` | Yes       | Branded `GameMenuCommandId` resolved against the game's registered `menuCommands` registry.                                                                                                                                                                                                       |
+| `id`                | No        | Testid slug: the renderer tags the button `main-menu-<id>`. Supply one for an entry the built-in derivation cannot name (a `command`, or a navigation to a game-owned route).                                                                                                                     |
+| `variant`           | No        | Passed to the shared `<Button>` as `primary`, `secondary`, `ghost`, or `danger`.                                                                                                                                                                                                                  |
+| `disabled`          | No        | Controls the `<Button>` disabled state. `boolean` is a static state evaluated at render time; `() => Promise<boolean>` is an async availability check the renderer awaits (e.g. "are there any replays to browse?"). See _Engine-Computed Availability_ below for the gates resolved ahead of it. |
+| `confirm`           | No        | Asks the player before the action runs, through the single engine confirm surface (§4.35). Omitted means the action runs immediately.                                                                                                                                                             |
 
 When `variant` is omitted, `RenderMainMenuDefinition` assigns a renderer default: `danger` for
 `quit`, `primary` for the first non-quit button, and `secondary` for all remaining buttons.
@@ -331,8 +349,69 @@ When `variant` is omitted, `RenderMainMenuDefinition` assigns a renderer default
 async form, `RenderMainMenuDefinition` evaluates the check once per button (in a `useEffect` keyed
 on the `buttons` array) and stores the result per index. The button renders **disabled while the
 check is pending** — a fail-safe that avoids a flash of enabled→disabled — and a thrown or rejected
-check is likewise treated as `true` (disabled) and logged at `warn`. Omitting `disabled` leaves the
-button always enabled.
+check is likewise treated as `true` (disabled) and logged at `warn`.
+
+### Engine-Computed Availability
+
+These conditions are the renderer's to answer, not the game's, so they are evaluated **before** a
+declared `disabled` and win over it — a declaration cannot offer a Continue with nothing to
+continue:
+
+- Both engine verbs are disabled while a lobby session is live (host or joined alike): the menu is
+  not the surface for acting on a session already in progress.
+- A `continue` button is additionally disabled while the active game has no autosave.
+- A button whose `confirm.when` is `'autosave-exists'` is disabled while the save slot list is still
+  loading **and** a game is in context: until that list arrives, "is there a save to overwrite?" has
+  no answer, and a first-run player must never be told they are about to overwrite a save that does
+  not exist. With no game in context there is nothing to list, so that case never waits.
+
+These are **reactive** — an honest change from the resolve-once model the async `disabled` check
+follows. `RenderMainMenuDefinition` subscribes to `saveStore` and `lobbyStore`, so a
+`chimera:saves:slot-update` push flips a Continue button live: enabled the moment an autosave
+lands, disabled again the moment one is deleted, with no game-side probe.
+
+`start-game` and `continue` each address one concrete game. Rendering either with no `gameId` in
+context is a malformed declaration and throws at render time, exactly as an unregistered
+`command.commandId` does.
+
+### Routing
+
+Neither verb navigates: each issues its IPC call and returns. The renderer's snapshot→`/game`
+effect (`renderer/app/GameStoreBootstrap.tsx`) fires on `/lobby`, and on `/saves` for a non-lobby
+phase — `/main-menu` is in neither set. So a session started or restored from the main menu leaves
+the player on `/main-menu` at this tree. Carrying a menu-born session into `/game` is a change to
+that navigation gate, not to the menu, and no shipped game declares either verb.
+
+### Confirmation
+
+`confirm` resolves through the one `ConfirmDialogHost` that `AppShell` mounts (§4.35) — the same
+surface `useConfirmDialog()` writes to. `when: 'always'` asks on every activation;
+`when: 'autosave-exists'` asks only while the active game has an autosave the action would
+overwrite, and runs the action straight through when it does not. Declining — the Cancel control or
+Escape — leaves the menu untouched and the action unrun.
+
+`title`, `body`, `confirmLabel` and `cancelLabel` resolve through `t()` at the render site on the
+same terms as `label`: a translation token resolves, and text with no matching token passes through
+unchanged. Omitted control labels fall back to the engine's `engine.common.confirm` /
+`engine.common.cancel` tokens.
+
+### Button Testids
+
+`RenderMainMenuDefinition` takes the derivation as a `getButtonTestId` prop;
+`renderer/app/main-menu/page.tsx` supplies it. A declared `id` wins and becomes `main-menu-<id>`.
+Otherwise the built-in map applies, unchanged from before the two engine verbs landed, so an
+existing game's page objects keep resolving:
+
+| Entry                                     | Testid                |
+| ----------------------------------------- | --------------------- |
+| `open-lobby`, or `navigate` to `/game`    | `main-menu-play`      |
+| `navigate` to `/settings`                 | `main-menu-settings`  |
+| `navigate` to `/saves`                    | `main-menu-load-game` |
+| `navigate` to `/replays`                  | `main-menu-replays`   |
+| `start-game`                              | `main-menu-start`     |
+| `continue`                                | `main-menu-continue`  |
+| `quit`                                    | `main-menu-quit`      |
+| `command`, or any other `navigate` target | untagged              |
 
 ## 4.37.6 Main Menu Fallback Chain
 

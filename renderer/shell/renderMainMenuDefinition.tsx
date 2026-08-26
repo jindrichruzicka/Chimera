@@ -7,22 +7,45 @@
 // All interactive actions use <Button> from renderer/components/ui/ (Invariant #92).
 // Must NOT import from apps/* (Invariant #94).
 //
+// Two of the actions are engine-implemented rather than routed: `start-game`
+// invokes the quick-start verb and `continue` loads the game autosave through
+// the ordinary `saves.load` restore funnel. Neither navigates: each issues its
+// verb and returns. Note what that does NOT yet amount to: GameStoreBootstrap's
+// snapshot→/game effect fires on /lobby and /saves only, so a session born from
+// this menu leaves the player on /main-menu. Carrying a menu-born session into
+// /game is a change to that gate, not to this file.
+//
+// `continue`'s availability is engine-computed and REACTIVE: it subscribes to
+// the save slot list, so a `saves:slot-update` push flips the button without the
+// game probing anything.
+//
 // Architecture reference: §4.37 — Renderer Shell Pages UI Contract
 
 import React, { type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import type {
+    GameMainMenuAction,
     GameMainMenuButton,
     GameMainMenuDefinition,
     GameMainMenuLayout,
     GameMenuCommandId,
 } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
+import type {
+    LobbyAPI,
+    QuickStartParams,
+    SlotId,
+} from '@chimera-engine/simulation/bridge/api-types.js';
+import { autosaveSlotId } from '@chimera-engine/simulation/foundation/save-slots.js';
 import { Button } from '../components/ui/Button';
+import { useConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useScreenFadeNavigate } from '../components/shell/useScreenFadeNavigate';
 import { getSystemBridge } from '../bridge/system-bridge';
+import { getSavesBridge } from '../hooks/useSavesApi';
 import { MENU_KEYS } from '../i18n/engine-keys';
 import { useTranslate } from '../i18n/useTranslate';
 import type { TranslateFn } from '../i18n/i18n-context';
+import { useLobbyStore } from '../state/lobbyStore';
+import { selectHasAutosave, useSaveStore } from '../state/saveStore';
 import { withShellGameId } from './resolveMainMenuGameId';
 
 // ─── Engine default ───────────────────────────────────────────────────────────
@@ -149,13 +172,26 @@ function defaultVariant(
 }
 
 /**
- * Resolve a button label through the active translator. Both the engine default
- * (`engine.menu.*`) and a game-provided definition may store a translation-token
- * key as the label; a label with no matching token falls back to itself, so a
- * literal display string passes through unchanged.
+ * Resolve a declared display string through the active translator. Both the
+ * engine default (`engine.menu.*`) and a game-provided definition may store a
+ * translation-token key wherever text is declared — a button label, a confirm
+ * title, body or control label; text with no matching token falls back to
+ * itself, so a literal display string passes through unchanged.
  */
-function resolveButtonLabel(t: TranslateFn, label: string): string {
-    return t(label as unknown as Parameters<TranslateFn>[0]);
+function resolveText(t: TranslateFn, text: string): string {
+    return t(text as unknown as Parameters<TranslateFn>[0]);
+}
+
+/**
+ * Narrow resolver for the quick-start slice of the preload lobby bridge.
+ * Deliberately not `getLobbyBridge()` from the lobby page's hook: that helper
+ * also demands `__chimera.system`, an unrelated dependency this call never
+ * touches (the same reason `useLeaveGame` resolves its own).
+ */
+function resolveQuickStartApi(): Pick<LobbyAPI, 'quickStart'> | null {
+    const bridge = globalThis as { readonly __chimera?: { readonly lobby?: LobbyAPI } };
+    const lobby = bridge.__chimera?.lobby;
+    return lobby === undefined || typeof lobby.quickStart !== 'function' ? null : lobby;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -178,6 +214,25 @@ export function RenderMainMenuDefinition({
     const router = useRouter();
     const fadeOutThenNavigate = useScreenFadeNavigate();
     const t = useTranslate();
+    const requestConfirm = useConfirmDialog();
+
+    // Reactive engine-computed availability (§4.37.5). `continue` follows the
+    // live save slot list and the live session, so it enables the moment an
+    // autosave lands and disables again the moment one is deleted or a session
+    // is joined — no game-side probe, and no resolve-once snapshot to go stale.
+    // The selector is rebuilt per render, which `useStore` tolerates because the
+    // selected value is a boolean and compares equal across renders.
+    const hasAutosave = useSaveStore((state) =>
+        gameId === null ? false : selectHasAutosave(gameId)(state),
+    );
+    // Hydration matters only to `when: 'autosave-exists'`: until the list has
+    // arrived, "is there a save to overwrite?" has no answer. With no game there
+    // is nothing to list and nothing to overwrite, so that case never waits.
+    const saveSlotsLoading = useSaveStore((state) => state.isLoading);
+    const autosaveUnknown = gameId !== null && saveSlotsLoading;
+    // Covers both roles: a joined client and a host that walked back to the menu
+    // both hold a live session.
+    const sessionActive = useLobbyStore((state) => state.lobbyState !== null);
 
     // Every button label is resolved through `t()`, whether it comes from the
     // engine default (`engine.menu.*` tokens) or a game-provided definition (the
@@ -187,8 +242,7 @@ export function RenderMainMenuDefinition({
     const def = definition ?? ENGINE_DEFAULT_DEFINITION;
     const { layout, buttons } = def;
 
-    const displayLabel = (button: GameMainMenuButton): string =>
-        resolveButtonLabel(t, button.label);
+    const displayLabel = (button: GameMainMenuButton): string => resolveText(t, button.label);
 
     // ── Disabled resolution ─────────────────────────────────────────────────────
     // Buttons may declare `disabled` as a plain boolean or as an async check
@@ -238,20 +292,51 @@ export function RenderMainMenuDefinition({
         };
     }, [buttons]);
 
+    // Engine-owned gates run FIRST and win over a game's own `disabled`: the two
+    // engine verbs and the autosave-conditioned confirm are conditions the game
+    // cannot see, and a declaration saying `disabled: false` must not be able to
+    // offer a Continue with nothing to continue.
     const resolveDisabled = (button: GameMainMenuButton, index: number): boolean => {
+        const actionType = button.action.type;
+        // The menu is not the surface for acting on a session already in
+        // progress.
+        if ((actionType === 'continue' || actionType === 'start-game') && sessionActive) {
+            return true;
+        }
+        if (actionType === 'continue' && !hasAutosave) return true;
+        if (button.confirm?.when === 'autosave-exists' && autosaveUnknown) return true;
         const { disabled } = button;
         if (typeof disabled === 'boolean') return disabled;
         if (typeof disabled === 'function') return asyncDisabled[index] ?? true;
         return false;
     };
 
+    /**
+     * The two engine verbs address one concrete game. Reaching them with no game
+     * context is a malformed declaration, not a runtime condition, so it fails
+     * fast at render exactly as an unregistered `command` id does — rather than
+     * shipping a button whose handler could only no-op.
+     */
+    const requireGameId = (verb: string): string => {
+        if (gameId === null) {
+            throw new Error(
+                `[RenderMainMenuDefinition] '${verb}' needs an active game; the menu was rendered with no gameId`,
+            );
+        }
+        return gameId;
+    };
+
     // ── Handler resolution ────────────────────────────────────────────────────
-    // `command` actions fail-fast at render time (unknown commandId → throw
-    // before any JSX is produced). Other action types return a stable handler
-    // reference; the handler may throw at call time (e.g. `quit` when the
-    // preload bridge is absent — caught by the nearest error boundary).
-    const handlers = buttons.map((button) => {
-        const { action } = button;
+    // `command` actions and the two engine verbs fail-fast at render time (an
+    // unknown commandId, or a verb with no game context → throw before any JSX
+    // is produced). Other action types return a stable handler reference; the
+    // handler may throw at call time (e.g. `quit` when the preload bridge is
+    // absent — caught by the nearest error boundary).
+    //
+    // The switch has no `default`: with a declared `() => void` return, a new
+    // action variant makes this function fall off its end and TypeScript rejects
+    // it, so the contract cannot widen without a decision here.
+    const resolveActionRunner = (action: GameMainMenuAction): (() => void) => {
         switch (action.type) {
             case 'open-lobby':
                 return (): void => {
@@ -281,6 +366,44 @@ export function RenderMainMenuDefinition({
                     if (!system) throw new Error('Chimera system API not available');
                     system.quit();
                 };
+            case 'start-game': {
+                // Merged over the game's own `GameLobbySetup.quickStart` defaults
+                // by the main process; a button that declares nothing starts
+                // exactly the match the game declared. The handler issues the
+                // verb and returns — see the header on what routing it does not
+                // do.
+                const params: QuickStartParams = {
+                    ...(action.config ?? {}),
+                    gameId: requireGameId('start-game'),
+                };
+                return (): void => {
+                    const lobby = resolveQuickStartApi();
+                    if (!lobby) throw new Error('Chimera lobby API not available');
+                    void lobby.quickStart(params).catch((error: unknown) => {
+                        console.error(
+                            '[RenderMainMenuDefinition] start-game: the quick start was refused.',
+                            error,
+                        );
+                    });
+                };
+            }
+            case 'continue': {
+                // The engine picks the slot; the call behind it is the same
+                // `saves.load` the saves browser issues, so the whole restore
+                // funnel — including the waiting overlay a multiplayer autosave
+                // needs — is reused rather than rebuilt.
+                const slotId = autosaveSlotId(requireGameId('continue')) as SlotId;
+                return (): void => {
+                    const saves = getSavesBridge();
+                    if (!saves) throw new Error('Chimera saves API not available');
+                    void saves.load(slotId).catch((error: unknown) => {
+                        console.error(
+                            '[RenderMainMenuDefinition] continue: loading the autosave failed.',
+                            error,
+                        );
+                    });
+                };
+            }
             case 'command': {
                 const handler = menuCommands?.[action.commandId];
                 if (!handler) {
@@ -291,7 +414,50 @@ export function RenderMainMenuDefinition({
                 return handler;
             }
         }
-    });
+    };
+
+    // ── Confirmation ──────────────────────────────────────────────────────────
+    // A declared `confirm` sits between the click and the action. `always` asks
+    // every time; `autosave-exists` asks only while there is a save the action
+    // would overwrite — and the button stays disabled until the slot list can
+    // answer that (see resolveDisabled), so a first-run player is never told
+    // they are about to overwrite a save that does not exist.
+    const withConfirmation = (button: GameMainMenuButton, run: () => void): (() => void) => {
+        const { confirm } = button;
+        if (confirm === undefined) return run;
+
+        return (): void => {
+            if (confirm.when === 'autosave-exists' && !hasAutosave) {
+                run();
+                return;
+            }
+            void requestConfirm({
+                title: resolveText(t, confirm.title),
+                ...(confirm.body === undefined ? {} : { body: resolveText(t, confirm.body) }),
+                ...(confirm.confirmLabel === undefined
+                    ? {}
+                    : { confirmLabel: resolveText(t, confirm.confirmLabel) }),
+                ...(confirm.cancelLabel === undefined
+                    ? {}
+                    : { cancelLabel: resolveText(t, confirm.cancelLabel) }),
+            })
+                .then((accepted) => {
+                    if (accepted) run();
+                })
+                .catch((error: unknown) => {
+                    // The action ran inside a promise continuation, so a throw
+                    // here would surface as an unhandled rejection instead of
+                    // reaching an error boundary. console.error IS the renderer
+                    // logging bridge (Invariant #67), so the Error still lands
+                    // in the log file with its stack.
+                    console.error('[RenderMainMenuDefinition] confirmed action failed.', error);
+                });
+        };
+    };
+
+    const handlers = buttons.map((button) =>
+        withConfirmation(button, resolveActionRunner(button.action)),
+    );
 
     // ── Layout ────────────────────────────────────────────────────────────────
     const orientation = layout?.orientation ?? 'vertical';

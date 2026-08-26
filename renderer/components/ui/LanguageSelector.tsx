@@ -8,9 +8,9 @@
 //
 // PURE / presentational by design: it reads no store and dispatches nothing —
 // the settings read/write is injected by the caller (a game HUD, or the shell's
-// store-connected `SettingsLanguageSelector`). This keeps the public
-// `components/ui` barrel side-effect-free (Invariant #96): importing a design
-// primitive must never drag in `renderer/state/` or the IPC bridge. Its own
+// store-connected `SettingsLanguageSelector`). What the barrel does and does not
+// reach is measured by
+// `renderer/components/ui/__tests__/ui-barrel-side-effects.test.ts`. Its own
 // accessible label comes from `useTranslate()` (React context — no store).
 //
 // Shown nowhere by default: a game mounts it wherever it wants. Single-language
