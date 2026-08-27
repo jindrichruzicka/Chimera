@@ -210,4 +210,61 @@ test.describe('Game-customized main menu (§4.37)', () => {
         expect(labels).toContain('Settings');
         expect(labels).not.toContain('Play');
     });
+
+    /**
+     * Scenario — the hero block and the menu column are two independently
+     * positioned layers (§4.37): the game paints title + subtitle as background
+     * chrome offset above centre, while the engine lays the buttons out from the
+     * definition's own `offsetY`. Nothing in either layer knows the other's
+     * extent, so growing the menu by a button walks its top edge up into the
+     * subtitle — which is exactly what adding Continue did.
+     *
+     * This pins the property the two offsets exist to produce, not the offsets
+     * themselves: the subtitle clears the first button by a visible margin, and
+     * the whole column stays inside the window. A menu that grows by one more
+     * entry moves its top edge up by half a button-plus-gap (32px), which eats
+     * the clearance below the threshold and reds this test rather than shipping
+     * another overlap.
+     */
+    test('the tactics hero clears the menu column and the whole menu fits the window', async ({
+        electronApp,
+    }) => {
+        const window = await electronApp.firstWindow();
+        await window.waitForLoadState('domcontentloaded');
+
+        const menu = new MainMenuPage(window);
+        await menu.goto({ gameId: 'tactics' });
+        await expect.poll(() => menu.getButtonLabels(), { timeout: 15_000 }).toContain('New Game');
+
+        const title = window.getByTestId('tactics-shell-background-title');
+        const subtitle = window.getByTestId('tactics-shell-background-subtitle');
+        await expect(title).toBeVisible();
+        await expect(subtitle).toBeVisible();
+
+        const menuColumn = window.getByTestId('menu-container');
+        const titleBox = await title.boundingBox();
+        const subtitleBox = await subtitle.boundingBox();
+        const columnBox = await menuColumn.boundingBox();
+        expect(titleBox).not.toBeNull();
+        expect(subtitleBox).not.toBeNull();
+        expect(columnBox).not.toBeNull();
+        if (titleBox === null || subtitleBox === null || columnBox === null) return;
+
+        const viewportHeight = await window.evaluate(
+            () => (globalThis as unknown as { innerHeight: number }).innerHeight,
+        );
+
+        // Clearance between the bottom of the hero block and the top of the
+        // first button. `--ch-space-lg` is the smallest gap that still reads as
+        // a break between two groups rather than as list spacing.
+        const MIN_HERO_TO_MENU_CLEARANCE_PX = 24;
+        const clearance = columnBox.y - (subtitleBox.y + subtitleBox.height);
+        expect(clearance).toBeGreaterThanOrEqual(MIN_HERO_TO_MENU_CLEARANCE_PX);
+
+        // Both layers stay wholly on screen: the title is not pushed off the top
+        // to buy that clearance, and the last button is not pushed off the
+        // bottom.
+        expect(titleBox.y).toBeGreaterThan(0);
+        expect(columnBox.y + columnBox.height).toBeLessThanOrEqual(viewportHeight);
+    });
 });

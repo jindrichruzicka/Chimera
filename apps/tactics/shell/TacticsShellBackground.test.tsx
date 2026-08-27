@@ -161,10 +161,10 @@ describe('TacticsShellBackground', () => {
         );
     });
 
-    it('shifts the main-menu overlay content 160px above center', () => {
+    it('shifts the main-menu overlay content 240px above center', () => {
         const overlayRule = /\.main-menu-overlay\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
 
-        expect(overlayRule).toContain('transform: translateY(-160px);');
+        expect(overlayRule).toContain('transform: translateY(-240px);');
     });
 
     it('defines the hero title and subtitle rules, drawing the title font from the button token', () => {

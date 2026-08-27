@@ -52,7 +52,19 @@
     align-items: center;
     justify-content: center;
     text-align: center;
-    transform: translateY(-160px);
+    /*
+     * The hero sits above the menu column, but the two are independently
+     * positioned layers: this offset is measured against where the engine lays
+     * the buttons out from `tacticsMainMenuDefinition.layout.offsetY`, and
+     * neither side can see the other's extent. A button added to the menu grows
+     * the column symmetrically about its centre, walking its top edge up into
+     * this block by half a button-plus-gap — which is what closed the gap when
+     * Continue joined Quick Match. Raising the hero rather than dropping the
+     * menu keeps the column's own bottom margin intact.
+     * `main-menu-custom.spec.ts` measures the resulting clearance in the real
+     * window, so the number below cannot drift back into an overlap unnoticed.
+     */
+    transform: translateY(-240px);
 }
 
 .game-title {
