@@ -3491,9 +3491,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     });
 
     // Lobby-skipping match start (§4.37): orchestration sugar over the SAME
-    // public `LobbyManager` verbs the lobby screen drives. Every session is
-    // still born inside `onSessionHosted` — the coordinator constructs nothing
-    // and holds nothing, so there is no second session constructor to drift.
+    // public `LobbyManager` verbs the lobby screen drives. A quick-started
+    // session reaches `onSessionHosted` by that road — the coordinator
+    // constructs nothing and holds nothing, so it is no second session
+    // constructor to drift.
     const quickStartCoordinator = new QuickStartCoordinator({
         logger,
         ports: {

@@ -42,7 +42,7 @@
  *    heading that names invariants. A bare-number first cell carries no marker of
  *    its own, so the enclosing section is the only thing that says which ledger
  *    the number indexes; a table of issue numbers written this way would resolve
- *    against the invariants. Measured at this tree: all 98 such cells sit under
+ *    against the invariants. Measured at this tree: every such cell sits under
  *    one of `Invariants`, `Invariant`, `Relevant Invariants`, and
  *    `Invariants introduced by this design (#116–#126)`.
  * 3. **The source-comment entry**, in two markers that need different evidence:
@@ -51,11 +51,11 @@
  *      wherever it appears, and most of this tree's source citations are written
  *      that way with no block anywhere near them.
  *    - `#nn — <text>` carries the number alone, so it is read only inside a
- *      block opened by an `Invariants …:` heading — 183 such blocks at this
- *      tree. Outside a block a bare `#nn` opening a comment line says nothing
- *      about which ledger it indexes: this repo writes issue numbers in that
- *      exact shape, and a handful of citations lose their `Invariant` word to a
- *      `prettier` wrap. Reading the citations among them would mean reading the
+ *      block opened by an `Invariants …:` heading. Outside a block a bare `#nn`
+ *      opening a comment line says nothing about which ledger it indexes: this
+ *      repo writes issue numbers in that exact shape, and a handful of citations
+ *      lose their `Invariant` word to a `prettier` wrap. Reading the citations
+ *      among them would mean reading the
  *      issue references too, so the rule leaves them all alone.
  *
  * An entry that states a property the ledger has no row for carries NO number.
@@ -86,7 +86,7 @@
  *   because a table cell restates its row nearly verbatim. The 0-, 1- and
  *   2-share cells were all three defects, but three points do not make a gap,
  *   and a bar of 3 fitted to them is a constant chosen to match the answer. At
- *   this tree, 98 cells remain and the lowest is 3.
+ *   this tree the lowest share among the remaining cells is 3.
  *
  * So the bar stays at one shared term for every shape — the rule the ledger
  * states — and the extra reach a stronger rule would buy is bought by reading
@@ -107,9 +107,8 @@
  *   BEST term match" rule was measured against BOTH doc shapes and rejected
  *   twice. On bullets it reports `module-boundaries-file-tree.md`'s faithful #48
  *   bullet, which loses on shared vocabulary to #80 and #96. On table rows it
- *   reported 11 cells at `main` and reports 6 at this tree — every one of the 6
- *   faithful, and all 6 in `replay-system.md`'s single table, because a table of
- *   adjacent invariants shares vocabulary row to row. That weakness is why the
+ *   reports faithful cells too, because a table of adjacent invariants shares
+ *   vocabulary row to row. That weakness is why the
  *   table rows this branch corrected were found by reading, and only one of them
  *   by the rule.
  * - A reference that names no rule at all. A mid-sentence `(Invariant #114)` and
@@ -133,9 +132,9 @@
  * as an example is not resolved against the ledger.
  *
  * Every repo-wide pass is pinned by anti-vacuity floors AND by named sentinels,
- * because a count floor cannot catch a listing that narrowed: 72 markdown files
- * clears any floor worth setting, and so does a `.ts`-only source listing that
- * dropped every `.tsx`. The sentinels below name one file per axis a narrowing
+ * because a count floor cannot catch a listing that narrowed: a docs listing
+ * missing a whole depth clears any floor worth setting, and so does a `.ts`-only
+ * source listing that dropped every `.tsx`. The sentinels below name one file per axis a narrowing
  * would drop. The issue-reference decision needs no separate tree assertion:
  * an issue number that leaked into the source pass is four digits, so conjunct 1
  * reports it as naming no row.
@@ -156,10 +155,8 @@ const INVARIANTS_DOC = 'docs/executive-architecture/architecture-invariants.md';
  * The lowest totals each pass may see before it is measuring nothing. The ledger
  * floor sits exactly on the count present when this was written — invariant
  * numbers are never reused, so the ledger only grows. Every other floor sits
- * below its measured count (77 markdown files, 58 bullets, 98 table rows, 1 450
- * source files, 183 comment blocks, and the comment citations `MINIMUM_COMMENT_CITATIONS`
- * floors), because deleting a
- * doc, a bullet, a row, or a file is ordinary and must not fail this guard.
+ * below its measured count, because deleting a doc, a bullet, a row, or a file
+ * is ordinary and must not fail this guard.
  */
 const MINIMUM_LEDGER_ROWS = 134;
 const MINIMUM_DOCS_SCANNED = 60;
@@ -171,9 +168,9 @@ const MINIMUM_COMMENT_CITATIONS = 450;
 
 /**
  * One tracked doc at each depth the tree has. The depth-1 sentinel is exactly
- * what the pathspec this guard started with dropped, and 72 files still clears
- * every count floor worth setting — so a name is what catches that revert, not a
- * total. Both are source-of-truth docs; neither moves without a decision.
+ * what the pathspec this guard started with dropped, and the narrowed listing
+ * still clears every count floor worth setting — so a name is what catches that
+ * revert, not a total. Both are source-of-truth docs; neither moves without a decision.
  */
 const SENTINEL_DOCS = ['docs/architecture-overview.md', INVARIANTS_DOC];
 

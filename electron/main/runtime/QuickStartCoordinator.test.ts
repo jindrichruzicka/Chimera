@@ -16,6 +16,8 @@
  * Architecture reference: §4.14
  */
 
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it, vi } from 'vitest';
 import { playerId } from '@chimera-engine/simulation/engine/index.js';
 import type { LobbyAgentSlot, LobbyInfo } from '@chimera-engine/networking';
@@ -423,6 +425,70 @@ describe('QuickStartCoordinator.quickStart — failure teardown', () => {
             'start refused',
         );
     });
+});
+
+describe('QuickStartCoordinator names no session door of its own', () => {
+    /**
+     * The compile-time pin above holds that every port the coordinator declares
+     * EXISTS on the public manager. It cannot see a reach that bypasses the
+     * ports entirely — a `new SessionRuntime(...)`, a dispatched
+     * `engine:start_game` — because such a reach declares no port at all. That
+     * is a source read, taken over the module's own code with its comments
+     * stripped, so the prose explaining why there is none does not satisfy the
+     * scan.
+     */
+    const stripComments = (source: string): string =>
+        source.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/(^|[^:])\/\/.*$/gmu, '$1');
+
+    const CODE = stripComments(
+        readFileSync(new URL('./QuickStartCoordinator.ts', import.meta.url), 'utf8'),
+    );
+
+    /**
+     * The doors, assembled at runtime so this file never becomes its own match
+     * if the scan is ever widened to the census itself.
+     */
+    const FORBIDDEN_DOORS = [`Session${'Runtime'}`, `engine:${'start_game'}`] as const;
+
+    /**
+     * A real module that names each door, keyed by the door.
+     *
+     * `FORBIDDEN_DOORS` is a literal nothing else reads, so a name deleted from
+     * it would leave the scan green while it quietly stopped looking for that
+     * door. Pinning the two against each other anchors the list to modules that
+     * genuinely carry the name, and doubles as the positive control that the
+     * scan can see a real one.
+     */
+    const DOOR_CONTROLS: Readonly<Record<string, URL>> = {
+        [`Session${'Runtime'}`]: new URL('./SessionRuntime.ts', import.meta.url),
+        [`engine:${'start_game'}`]: new URL(
+            '../../../simulation/engine/EngineActions.ts',
+            import.meta.url,
+        ),
+    };
+
+    it('still carries its declarations after the comment strip, so the scan is not vacuous', () => {
+        expect(CODE).toContain('export class QuickStartCoordinator');
+        expect(CODE).toContain('hostLobby');
+        expect(CODE).not.toContain('never a second session constructor');
+    });
+
+    it('names neither a session constructor nor a start-game action', () => {
+        expect(FORBIDDEN_DOORS.filter((name) => CODE.includes(name))).toEqual([]);
+    });
+
+    it('scans for exactly the doors a control module is named for', () => {
+        expect([...FORBIDDEN_DOORS].sort()).toEqual(Object.keys(DOOR_CONTROLS).sort());
+    });
+
+    it.each(Object.entries(DOOR_CONTROLS))(
+        'reports %s on a module that really names it',
+        (door, control) => {
+            const source = stripComments(readFileSync(control, 'utf8'));
+
+            expect(FORBIDDEN_DOORS.filter((name) => source.includes(name))).toContain(door);
+        },
+    );
 });
 
 // Referenced so the compile-time pin is not tree-shaken as unused.

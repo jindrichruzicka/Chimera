@@ -4,12 +4,13 @@
  * Quick-start orchestrator: the one-click path from a shell screen into a
  * playable match, skipping the lobby UI. Sibling of `SessionRestoreCoordinator.ts`.
  *
- * It is orchestration SUGAR, never a second session constructor. Every session
- * is still born inside the composition root's `onSessionHosted`, so the
- * coordinator composes only public `LobbyManager` verbs — hosting with the AI
- * roster pre-seeded through the existing `HostLobbyParams.agentSlots` seam
- * (one atomic decision, where an `addAi()` loop would instead allocate each
- * slot against the roster as it stood at that moment), stamping the
+ * It is orchestration SUGAR, never a second session constructor: a quick-started
+ * session reaches the composition root's `onSessionHosted` by the road the lobby
+ * screen drives, because the coordinator composes only public `LobbyManager`
+ * verbs — hosting with the AI roster pre-seeded through the existing
+ * `HostLobbyParams.agentSlots` seam (one atomic decision, where an `addAi()`
+ * loop would instead allocate each slot against the roster as it stood at that
+ * moment), stamping the
  * engine-owned session-mode key, applying the merged match settings and seat
  * attributes, readying up, and starting.
  *

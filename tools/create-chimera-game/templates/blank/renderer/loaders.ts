@@ -29,8 +29,24 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
 
 // The engine renders its default main menu, settings, lobby, and background.
 // Only the `shell/fonts.ts` declaration site is wired so far; every other
-// `LoadedRendererGameShell` field (`mainMenu`, `settings`, `icons`, …) is an
-// optional customisation returned here.
+// `LoadedRendererGameShell` field (`mainMenu`, `settings`, `icons`,
+// `shellRoutes`, …) is an optional customisation returned here.
+//
+// Two of those are worth knowing about before the menu is customised:
+//
+//   - A `mainMenu` button may declare `{ type: 'start-game' }` to open a match
+//     without the lobby UI (optionally with a `QuickStartConfig` naming match
+//     settings and per-seat attributes) or `{ type: 'continue' }` to reload the
+//     game's autosave. Neither navigates: the engine's snapshot gate carries the
+//     player into the match, fade included. A button may also declare `confirm`
+//     to ask first, through the engine's one confirm dialog.
+//   - `shellRoutes` promotes this app's OWN Next routes — a credits screen, a
+//     codex — to first-class shell pages: declare `['/credits']` here, add
+//     `renderer/app/credits/page.tsx`, and the game background persists behind
+//     it, a menu `navigate` reaches it with `?gameId=` preserved, and a match
+//     started from it lands in `/game`. A declared route needs a real page in
+//     this app's tree: the static export emits nothing for a route it cannot
+//     find, so the navigation is a 404 the renderer never observes.
 export function load__GamePascal__RendererGameShell(): Promise<LoadedRendererGameShell> {
     return Promise.resolve({
         // The manifest's cursor declaration, forwarded verbatim: the renderer

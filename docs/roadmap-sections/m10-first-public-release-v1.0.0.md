@@ -731,6 +731,175 @@ per-play jitter. A game authors its own, and a jitter that has to be **reproduci
 at a call site that knows the occurrence — `EventAudioOverrides.rate` reaches the play options,
 but `GameEvent` carries no payload for a resolver to key on — all candidates for a follow-up.
 
+### F87 — Quick Start, Menu Verbs & Game Shell Pages `§4.37, §4.41`
+
+**Status: implemented across [#1051](https://github.com/jindrichruzicka/Chimera/issues/1051)–[#1060](https://github.com/jindrichruzicka/Chimera/issues/1060).**
+The F87 feature-review gate had not run when this section landed; its record joins the
+[invariant roll-call](../executive-architecture/invariant-roll-call.md) beside F82–F86's when it
+does. Before F87 the shell already carried most of a customization story — a declarative main menu,
+a game background that persists across `/main-menu → /settings → /lobby`, a declarative settings
+page, a customizable in-lobby `LobbyScreen`, and a save system behind a snapshot-driven restore
+funnel. What it could not express was any flow that did not pass through the lobby modal: no
+production verb started a match without the lobby UI (the pattern existed only in
+`DevHarnessCoordinator`), there was no `continue` verb and no Invariant-#96-legal path from a
+`menuCommands` callback to the saves API, a game could not contribute a page over the persisting
+background, and nothing told a background what the shell around it was doing.
+
+**One rule holds the whole feature: every layer changes what the renderer SHOWS, never how a match
+is BORN.** A Quick Match button takes the same road a player clicking through the lobby dialog
+takes; what "skipping the lobby" skips is the UI, not the lifecycle. The contract is
+[§4.41 — Quick Start, Session Mode & the Shell Flow Layer](../core-components/quick-start-and-shell-flow.md),
+with the presentation halves in §4.37.5, §4.37.17 and §4.37.18.
+
+**Quick start is sugar, and the sugar is the design.** `QuickStartCoordinator` — the third member of
+the `SessionRestoreCoordinator` / `DevHarnessCoordinator` family — drives public `LobbyManager`
+verbs in one fixed order and holds no session object. Its lobby ports are declared as a structural
+slice of the manager rather than imported, and `LobbyManager` is pinned assignable to that slice, so
+a port grown into a bespoke door reds `pnpm typecheck`. That pin is weaker than it first looks:
+TypeScript's method bivariance and structural extra-property tolerance let
+`addLocalSeat({ attributes })` compile green while the manager dropped the map — only a runtime test
+found it, which is why the pin is recorded as measuring that every verb EXISTS with a compatible
+signature rather than that a port can never drift. The AI roster rides on `hostLobby`'s existing
+`agentSlots` seam rather than an `addAi()` loop, because a loop allocates each slot against a
+roster that keeps moving; and an agent slot is
+the one seat kind `LobbyManager` never seeds, which is why the coordinator carries its own
+`resolveSeatDefaultAttributes` port — without it, the contract's standing "absent ⇒ the game's
+defaults apply" promise would be false for exactly one seat kind.
+
+**Two latent defects underneath were load-bearing and are fixed here.** `SaveManager.autoSave` never
+fired the `chimera:saves:slot-update` push — only the manual save/delete handler path did — so a
+Continue button would have gone stale the moment an esc-exit wrote a save behind it; the fix is an
+injected `onSlotsChanged` seam, and adding it meant REMOVING the handler's own save-arm broadcast,
+since two seams that each push need an integration test neither can see. And
+`seatLobbyAgentsForGameStart` never called `tryStartGame()` after seating AI, so an AI-completed
+roster never fired `SimulationHost.onGameStart` / `RealtimeTicker.start()`. Fixing that opened a
+window the design had flagged: `tryStartGame` now has two independently gated halves — `onGameStart`
+fires when the roster is SETTLED, while the heartbeat arms only once the snapshot has left the lobby
+phase, and `onGameStartRequested` re-enters the gate LAST, after `applyAction` and after
+`saveInitialTurnMemento`. The engine-level phase test is `!== 'lobby'`, never `=== 'playing'`: a
+game owns its in-match vocabulary and a restored save carries whichever phase it was in.
+
+**Seats widen honestly.** `LobbyAgentSlot` gained `attributes`, and `buildSetupFromLobbyState`
+carries them into `snapshot.setup` keyed under the same synthetic `ai-<slotIndex>` id the host seats
+the agent with, so one map answers "what is seat N playing?" for every seat kind (Invariant #101).
+Two paths have to agree on that id, so the minter moved to its own `syntheticAgentId.ts` leaf —
+reaching into `HostedSessionAgents.ts` for it would drag `@chimera-engine/ai/engine` into the lobby
+registry's module graph. Pass-and-play local seats needed less than the issue predicted: `addLocalSeat`
+already made one a real `players` entry with seeded attributes, so that half was pinned rather than
+built.
+
+**`engine.sessionMode` is the launch origin, because the alternatives do not survive.** A
+renderer-store flag survives neither a window reload nor a session restore; the stamp rides in
+`snapshot.setup.matchSettings`, which survives both. It is engine-owned rather than host-authored,
+refused by `SetMatchSettingPayloadSchema`, by `QuickStartParamsSchema`, and once more by the
+coordinator after merging — the last arm being the one that catches a GAME's own declared
+`quickStart` defaults authoring it. `useLeaveGame` forks on it: a client disconnects, a lobby-born
+host returns to its lobby, and a quick-session host takes the atomic
+`chimera:lobby:close-session { autosave }` exit. Atomic because a game-side "save, then leave" pair
+races — a leave that lands first leaves the capture with no session to read.
+
+**Custom pages are physical Next routes.** `LoadedRendererGameShell.shellRoutes` declares them, and
+one declaration buys three effects: the background classifies the route as a background surface, the
+snapshot → `/game` gate admits it, and a `navigate` menu action reaches it with `?gameId=` preserved.
+A `?shellPage=` query machine was rejected to mechanisms rather than taste — query-only changes never
+re-fire a pathname-keyed observation, a pathname classifier would bleed a game's menu overlay over
+every custom page, and a `shell/*.tsx` page has no legal asset path. Because the renderer is a static
+export with `trailingSlash: true`, every comparison normalizes through `normalizeRoutePath`; a raw
+`'/credits' === pathname` never matches and the symptom — a missing background, a match that never
+enters — looks nothing like a spelling problem. A declared route with no physical page cannot be
+caught at runtime at all (under `output: 'export'` the route is simply not emitted), so
+`tools/shell-page-routes.ts` cross-checks the two halves statically, and it ASKS each game's tree
+which routes it serves rather than probing for `app/<route>/page.tsx` — Next drops route-group
+`(name)` and parallel-slot `@name` segments from the URL, so a probe fails pages that work.
+
+**One store is the reactivity spine.** `shellStateStore` carries `surface`, `pathname`, `gameId`,
+`transition` and a game-writable `draft`; `ShellStateBridge` is the single route-classification site,
+and a census over `renderer/` holds it to one — with a second arm for the store's WRITERS, because a
+module calling `setShellRoute` with a literal surface imports no vocabulary verb and would pass the
+classifier arm clean. The bridge takes its pathname from `usePathname()` and deliberately not from
+`window.location`: Next writes the history entry in a passive effect AFTER the navigation commits, so
+the render that first sees the new pathname still reads the old location — and nothing re-renders the
+bridge to correct it. `transition` arms when a match entry BEGINS rather than when it lands, carrying
+the screen-fade duration so a background has the whole fade to move, and it clears on ARRIVAL and on
+IPC REJECTION — arrival asked on a route CHANGE only, since a `to-shell` arm raised from the replay
+player already satisfies "not the match" and would otherwise clear on the spot.
+
+**Defects worth recording**, because each was found by something that did not exist when the code was
+written. The **webpack alias**: `renderer/next.config.ts` aliases each shared subpath back onto SOURCE
+so the renderer's own build holds one copy of every singleton, which restates the `exports` map with
+nothing tying the two together — repointing `./game` at the barrel left the alias on the registry
+module, so every new page service failed to resolve in that one bundle while `registerRendererGame`
+worked. Invisible to `typecheck` (which resolves through `exports`), to the barrel's own guard (which
+imports relatively), and to e2e (which builds a tree declaring no source-twin aliases). The guard that
+closed it converged only by IMPORTING the config and RUNNING the webpack hook: a shape-recognising
+parse was an unbounded chase, and a shape it silently skipped left a SMALLER census that passed every
+assertion a full one does. The **gate widening**: adding `/main-menu` to the snapshot → `/game`
+allow-set broke replay specs, because there is no renderer-visible difference between "reloaded
+mid-match onto /main-menu" and "a test jumped to /main-menu by URL" — the repair belonged in the
+specs, which now end the session rather than only the match. The **double read**: `ShellBackgroundHost`
+read its loaded payload twice, and a mutant reaching past one of them was unkillable by a settled-DOM
+test because the effect clears the stale payload on the very next commit; destructuring once leaves no
+second site to mutate. And the **Page double**: an `evaluate: vi.fn(async (fn) => fn())` runs a
+recorder with its lexical scope intact, so a module-scope reference works in jsdom and throws in the
+renderer — Playwright ships the function's SOURCE, so the double has to re-evaluate it from
+`toString()` for the "close over nothing" rule to be pinned by anything.
+
+**Invariants.** Four minted — #137 quick start is sugar, #138 the engine-owned session-mode key, #139
+shell-state discipline, #140 one confirm surface — each with its roll-call row in the same commit.
+Three amended: #99 gains the third Zod-validated channel and the sentence that a host connection owns
+every pass-and-play local seat; #101 gains AI and local-seat attributes beside human ones, with the
+verbatim-projection guarantee unchanged; #96's prose grows by the `game` barrel's page services, with
+the barrel count still eight. #99's old "the two lobby channels are the sole config write path"
+quantifier came out rather than being re-enumerated: `chimera:lobby:host` also seeds `matchSettings`
+and accepts agent-slot attributes, and funnels through neither manager verb.
+
+| Task                                                                                    | Issue                                                           |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Make the autosave slot a contract and push slot updates after every autosave            | [#1051](https://github.com/jindrichruzicka/Chimera/issues/1051) |
+| Fire the match-start lifecycle for AI-completed rosters and pin the pre-start window    | [#1052](https://github.com/jindrichruzicka/Chimera/issues/1052) |
+| Widen the seat contracts: agent-slot attributes, local seats and the un-stripped schema | [#1053](https://github.com/jindrichruzicka/Chimera/issues/1053) |
+| Add QuickStartCoordinator and the chimera:lobby:quick-start verb                        | [#1054](https://github.com/jindrichruzicka/Chimera/issues/1054) |
+| Add the close-session verb and fork Leave on the session stamp                          | [#1055](https://github.com/jindrichruzicka/Chimera/issues/1055) |
+| Extend the menu contract with start-game, continue and the confirm primitive            | [#1056](https://github.com/jindrichruzicka/Chimera/issues/1056) |
+| Make game shell routes first-class behind the widened navigation gate                   | [#1057](https://github.com/jindrichruzicka/Chimera/issues/1057) |
+| Add the shell-state store and the game-barrel page services                             | [#1058](https://github.com/jindrichruzicka/Chimera/issues/1058) |
+| Give tactics Quick Match and Continue and prove the flows end-to-end                    | [#1059](https://github.com/jindrichruzicka/Chimera/issues/1059) |
+| Author §4.41, mint the F87 invariant rows and open the review gate                      | [#1060](https://github.com/jindrichruzicka/Chimera/issues/1060) |
+
+Feature issue: [#1050](https://github.com/jindrichruzicka/Chimera/issues/1050).
+
+**Out of scope (deferred):** S6 **write facades** — `useLobbySession()`, `useEngineSettings()`, and a
+game taking over the lobby or settings page. The page mechanism gives them a home, but they
+renegotiate §4.37.4's "lobby screens render body content only" chrome contract and drag #99/#100
+amendments with them; The **live shell background** — assets, interaction, pre-match input and shell
+audio — which is F88; **Runtime local-seat attribute editing**, a lobby-phase "player 2 changes their
+character" channel. Host-time seeding only; a live channel is a genuinely new write path; A **chosen
+RNG seed** on quick start — the seed stays host-minted at `hostLobby` time; **Spreadable engine
+default buttons**, so §4.37.6's no-partial-merge contract stays literally true; A **bespoke session
+constructor**, which Invariant #137 now bars, and a `LobbyManager.quickStart()` manager method — the
+guards and collaborators live at the composition root, which is why all three coordinators are
+ports-injected classes.
+
+Three things were measured during the arc and recorded rather than fixed, each on its issue's close
+comment: a **quick session's Leave autosaves**, and `HostSessionPipeline` also autosaves on every
+accepted `engine:end_turn`, so Quick Match silently overwrites the only autosave slot — a UX
+question, not a defect; on `/game`, `closeLobby()` publishes `'disconnected'` synchronously, so
+`GameShell` unmounts while the invoke is still in flight, ahead of the fade meant to hide it — the
+fix is a fade-vs-close ownership redesign; and an agent action accepted inside `onGameStart` sits in
+the first human's undo range, since `UndoManager` reads `sinceLastMemento()` unfiltered by player —
+latent in-tree, because tactics' AI is turn-gated and no shipped game declares `manifest.realtime`.
+
+#### Scope decisions
+
+| Asked                                                           | Delivered                                                                                                                     | Why                                                                                                                                                                                                                                                                    |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pass-and-play seats declared as a bare COUNT                    | Every seat kind carries its own `attributes` object.                                                                          | A count says how many seats to open but not what any of them is playing, so a game whose seats differ by character or colour could not express its own quick start — and the seats would then need a second, later widening to say it.                                 |
+| An `ai.1.character` match-settings convention for AI attributes | `LobbyAgentSlot.attributes`, travelling the same road a human seat's attributes travel.                                       | The convention needs a second parsing path beside the one `snapshot.setup` already has, and two parsers of one fact drift.                                                                                                                                             |
+| A `?shellPage=` page machine on `/main-menu`                    | Physical Next routes declared through `shellRoutes`.                                                                          | A query-only change never re-fires the pathname-keyed observation pattern; a pathname classifier misclassifies (a game's hero overlay bleeds over every custom page); deep links race the shell load state; and a `shell/*.tsx` page has no legal asset path.          |
+| Spreadable engine default menu buttons (`[...ENGINE_DEFAULTS]`) | Games restate their button list.                                                                                              | Restating roughly six lines is what keeps §4.37.6's no-partial-merge contract literally true; a spread makes "a provided definition owns its button list" a sentence with an exception.                                                                                |
+| A renderer-store launch origin for the Leave fork               | The `engine.sessionMode` stamp in `snapshot.setup`.                                                                           | A renderer store survives neither a window reload nor a restore, and both are ordinary on this path — the fork would silently take the lobby exit out of a lobby-less session.                                                                                         |
+| Tactics declaring a `shellRoutes` page as the reference adopter | Tactics adopts Quick Match and Continue only, and declares NO `shellRoutes`; the route mechanism is proven by its own guards. | The issue required tactics' existing menu e2e to pass pixel-identical, so `routesDeclared === 0` is asserted as a hostage rather than left as a silence — and the static cross-check is fixture-driven, which is what lets it cover shapes the one shipped game lacks. |
+
 ### F89 — Blended Clip Transitions, Finished-Clip Pose Retention & Authored Blend Durations `§4.40`
 
 Two defects sat under F82's animation layer, and the second is the reason the first was worth
