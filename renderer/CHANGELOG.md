@@ -1,5 +1,279 @@
 # @chimera-engine/renderer
 
+## 1.0.0-rc.11
+
+### Minor Changes
+
+- c37293d: Make the autosave slot a contract, and push a slot update after every autosave.
+
+    The reserved autosave slot used to be a naming convention three modules kept by hand:
+    `SaveManager.autoSave` rewrote the header to the inline literal `'autosave'`,
+    `SessionRuntime.captureSaveFile` defaulted to the same literal, and the crash path built
+    `` `${gameId}/autosave` `` under a comment asking whoever changed one to remember the others.
+    `simulation/foundation/save-slots.ts` now owns both spellings — `AUTOSAVE_SLOT_NAME` (the bare
+    name a `SaveFile` header carries) and `autosaveSlotId(gameId)` (the qualified id the repository,
+    `SaveSlotMeta.slotId` and the renderer all key on) — and `tools/autosave-slot-spelling.test.ts`
+    fails on any other production spelling. It parses rather than greps, because the tree is full of
+    prose about the slot: the census reads string values only, and only where the name occupies a
+    whole `/`-delimited segment, so comments and log messages such as "autosave failed after
+    engine:end_turn" are invisible to it.
+
+    `SaveManager` takes an optional third constructor argument, `onSlotsChanged(gameId)`, fired after
+    `save()` and after `autoSave()`. The composition root wires it to re-list the game's slots and
+    send `chimera:saves:slot-update` to every live window. Before this, only the manual save and
+    delete IPC round-trips pushed, so an autosave — after an accepted `engine:end_turn` or from the
+    crash reporter — changed the slot list with nothing telling the renderer. A reactive "does an
+    autosave exist" consumer went permanently stale after either.
+
+    One push per save, no coalescing and no debounce: the notification count is a fact about writes.
+    The saves IPC handler's **save** arm no longer broadcasts — the write already pushed through the
+    manager, and doing both would send the same list twice and pay for a second re-list. Its
+    **delete** arm still does, because delete is reached only through that round-trip and its
+    qualified `slotId` carries no gameId the manager may parse. A listener that throws is reported
+    and swallowed, and the composition root's push swallows a rejected re-list: the file is already
+    durable by then, and on the crash path a failed refresh must not raise a second failure on top of
+    the one being reported. That push skips destroyed windows and destroyed `webContents`, which the
+    crash path is the reason for.
+
+    Renderer: `selectHasAutosave(gameId)` and its hook `useHasAutosave(gameId)` on `saveStore`. Both
+    match the qualified id, so another game's autosave and a slot merely ending in the name read as
+    absent, and both fall back to `false` when the autosave is deleted rather than latching.
+
+    The save file format, the repository and the restore funnel are untouched (Invariants #24, #59,
+    #108).
+
+- 4eb8781: Add the `chimera:lobby:close-session` verb and fork the in-game Leave on the session-mode stamp — the
+  exit a lobby-less, quick-started session needs, since it has no lobby to go back to.
+
+    `closeSession({ autosave })` is atomic by contract: one call captures the game's autosave (when
+    asked) and then tears the session down. A game-side "save, then leave" pair would race — a leave that
+    landed first leaves the capture with no session to read — so the pair is not offered. The composition
+    root's port composes exactly the two steps the crash path already composes,
+    `SessionRuntime.captureSaveFile` → `SaveManager.autoSave`, and then the public `closeLobby()`; there
+    is no second save reader or writer and no `engine:save` dispatch, so the capture stays an out-of-band
+    host call and the `chimera:saves:slot-update` push still fires from the single `SaveManager`
+    `onSlotsChanged` seam. A "Continue" offered right after the exit therefore finds the fresh autosave.
+    `activeSession !== null` is the host gate: the reference is set only inside `onSessionHosted`, so a
+    joined client is refused and leaves through `chimera:lobby:leave` as before.
+
+    `useLeaveGame`'s host path now picks its exit by reading `engine.sessionMode` off the live snapshot's
+    `setup`: `'quick'` closes the session and raises the leaving-to-main-menu intent (routing owns the
+    fade, the snapshot reset and the navigation); anything else — including every save written before the
+    stamp existed — keeps today's `returnToLobby()` → `/lobby` path byte for byte. Reading the stamp off
+    the snapshot rather than off renderer-held state is what makes the answer survive a window reload and
+    a save restore.
+
+    `InGameMenuProps.leaveGame` widens to `(options?: LeaveGameOptions) => void`, and the renderer's
+    `LeaveGame` type with it. `autosave` defaults to `true`, so an Escape-exit keeps the match and a menu
+    that offers "abandon" must ask to discard. It is deliberately NOT the `gameplay.autoSave` user
+    setting: that toggle governs turn-interval autosaves during play, so reading it here would silently
+    lose the match for a player who turned it off. The option is ignored wherever the session survives
+    the leave.
+
+    New on the bridge contract: `CloseSessionParams` and `LobbyAPI.closeSession(params): Promise<void>`,
+    reached from the renderer as `window.__chimera.lobby.closeSession`. `RegisterLobbyHandlersOptions`
+    gains a required `closeSession` port, mirroring `quickStart` — a composition root that forgot to wire
+    it cannot register a lobby namespace with the verb silently missing.
+
+    Two things outside the fork also change. The renderer's lobby-bridge resolver now
+    also requires `closeSession`, so a bridge double in a game's own tests needs the third verb. And the
+    replay player now answers the leave-to-main-menu intent itself, which fixes a client's Leave from a
+    post-game replay: it raised that intent, and on that route nothing consumed it, so the leave
+    disconnected and then went nowhere. It now lands on the main menu.
+
+- edcc2e6: Make a game's own Next routes first-class shell pages. `LoadedRendererGameShell` gains
+  ``shellRoutes?: readonly `/${string}`[]`` — each entry naming a PHYSICAL page in the game's own host
+  tree (`apps/<game>/renderer/app/<route>/page.tsx`), the logo-screen and model-showcase precedent
+  promoted to a supported pattern (§4.37.17).
+
+    One declaration, three effects. The shell background mounts on a declared page, so one background
+    instance survives `/main-menu → /<page> → /settings`. The
+    renderer's snapshot→`/game` gate admits the declared routes, so a match started from a game page
+    carries the player into the scene. A `navigate` menu action reaches a declared page as an ordinary
+    instant hop with `?gameId=` preserved — the treatment `/settings` and `/saves` already get.
+
+    The gate is an enumerated allow-set — `/lobby` on any phase, plus `/saves`, `/main-menu` and the
+    declared pages on a non-`'lobby'` phase — never a deny-list inversion, which would drag `/debug`,
+    `/component-gallery` and every undeclared route into a hop none of them asked for. The phase
+    condition is what keeps a return-to-lobby broadcast from bouncing those routes through `/game` into
+    the reverse effect's `reset()`. `shellRoutes` resolves asynchronously, so the gate re-evaluates when
+    the payload lands: a reload straight onto a game page can deliver a live match snapshot before the
+    declaration is known, and reading it once would strand the player on the page with a match running.
+    A game that declares nothing keeps the engine's route sets exactly as they were.
+
+    Every route comparison normalizes both sides (`renderer/shell/shellRoutes.ts`). The renderer is a
+    static export with `trailingSlash: true`, so the router reports `/credits/` for a route declared as
+    `'/credits'`, and the packaged app can serve it as `/credits/index.html`; a raw `===` comparison
+    would silently never match. The same module names `ENGINE_OWNED_ROUTES`, the engine's own page tree
+    — a declared route is by definition one the engine does not ship, which is what lets the shell
+    decide whether a route could be a game page before the payload has resolved, and keeps `/game` from
+    paying for a second shell load.
+
+    New `@chimera-engine/renderer/shell/shellPageChrome` exports `ShellPageChrome`, the settings-style
+    permanently-open modal a game page composes so it looks like one of the engine's own without
+    importing a renderer internal — the same `shell/*` allowance `gameAssetSession` uses, importable
+    only from the app's Next host tree. The page owns its body; geometry, the action row and the exit
+    are declarations, and the default exit returns to `/main-menu` with `?gameId=` carried along.
+
+    A declared route with no physical page cannot be caught at runtime — under a static export the
+    route is simply not emitted, so the navigation is a 404 the renderer never observes.
+    `tools/shell-page-routes.ts` checks the two halves against each other statically, and
+    `tools/shell-page-routes.test.ts` runs it under `pnpm test`. It reads `shellRoutes` off the
+    TypeScript AST per game and asks that game's own Next tree which routes it serves — asking rather
+    than probing for a guessed file path, so a page served from inside a route group counts. Three
+    things are findings: a declared route the tree does not serve, a declared route the engine owns (a
+    consumer app re-exports every engine route, so the page exists and the declaration is still inert),
+    and an initializer the scan cannot read statically, since a computed declaration would switch the
+    check off for that game.
+
+- 26cab08: Extend the declarative main-menu contract with the two engine-implemented verbs and a confirmation
+  primitive, so a game can express Continue and a lobby-skipping Start as pure menu data.
+
+    `GameMainMenuAction` gains `{ type: 'start-game'; config?: QuickStartConfig }` and
+    `{ type: 'continue' }`. Neither navigates: `start-game` invokes `chimera:lobby:quick-start` and
+    `continue` loads `autosaveSlotId(gameId)` through the ordinary `saves.load` restore funnel — the
+    same call the saves browser issues, so no restore machinery is added. Both verbs address one
+    concrete game, so rendering either with no `gameId` in context throws at render time, the way an
+    unregistered `command.commandId` already does.
+
+    Routing is not part of that change: neither verb navigates, each issues its IPC call and returns.
+    The hop into the match belongs to the renderer's snapshot→`/game` effect.
+
+    Availability is engine-computed and **reactive**, an honest change to §4.37.5's resolve-once model:
+    `RenderMainMenuDefinition` subscribes to `saveStore` and `lobbyStore`. A `continue` button enables
+    the moment a `chimera:saves:slot-update` push carries an autosave in and disables again when one is
+    deleted; both verbs stay disabled while a lobby session is live — host or joined alike — because
+    the menu is not the surface for acting on a session already in progress. The engine gates are resolved before a
+    game's own `disabled` and win over it, so a declaration cannot offer a Continue with nothing to
+    continue.
+
+    `GameMainMenuButton` gains `id?` (a testid slug the renderer renders as `main-menu-<id>`, for
+    entries the built-in derivation cannot name) and `confirm?: GameMenuConfirm`
+    (`when: 'always' | 'autosave-exists'`, plus title, body and control labels that resolve through
+    `t()` on the same terms as `label`). The existing hardcoded target map is retained, so an existing
+    game's page objects keep resolving; the two verbs add `main-menu-start` and `main-menu-continue`.
+
+    Confirmation is one primitive with two disclosure levels. `ConfirmDialogHost` is mounted once by
+    `AppShell` beside `ToastHost`, backed by a promise-resolving queue store, and `useConfirmDialog()`
+    — new on the `components/ui` barrel — returns `(options) => Promise<boolean>` that resolves `false`
+    on Cancel or Escape. The declarative `confirm` field resolves through that same store, and the host
+    shows only the head of its queue, so a question asked while one is open waits its turn rather than
+    stealing the surface. `when: 'autosave-exists'` holds its button disabled until the save slot list
+    has hydrated: until then "is there a save to overwrite?" has no answer, and a first-run player must
+    never be told they are about to overwrite a save that does not exist.
+
+    `ConfirmDialog` is also exported as a primitive for a surface that owns its own dialog state. Note
+    that the `components/ui` barrel now reaches one `renderer/state/` module — the confirm store — where
+    it previously reached none, so Invariant #96 and the §4.35 tier list drop the "stateless" qualifier
+    from the barrel's description. The store is created lazily, so importing
+    the barrel still constructs nothing, and the barrel guard now asserts that exact single-module set
+    rather than a blanket absence.
+
+    New engine tokens `engine.menu.continue` and `engine.menu.start` are the engine-supplied labels for
+    the two verbs, for a game menu definition to name as raw token strings. The confirm dialog's default
+    control labels reuse the existing `engine.common.confirm` / `engine.common.cancel` tokens, which had
+    no consumer until now.
+
+- e670ba7: Ship the shell reactivity spine as ONE store, and publish the page services a game's own shell
+  surfaces need on `@chimera-engine/renderer/game` (§4.37.18).
+
+    `renderer/shell/shellStateStore.ts` is a module singleton carrying
+    `{ surface, pathname, gameId, transition, draft }`. The state is plain data, which is what makes
+    `getShellState()` a read a `useFrame` callback can make every frame without subscribing —
+    `useShellState(selector)` is the React half, and a per-frame read through it would re-render the
+    subscriber on every write it observes.
+
+    One classifier. A new `ShellStateBridge`, mounted beside `ShellBackgroundHost` inside `AppShell`'s
+    Suspense boundary, is the only module in `renderer/` that turns a pathname into a `ShellSurface`.
+    Before it there were three independent derivations — the background host, the snapshot navigation
+    gate, and the hook that resolved a game's declared shell routes — each with its own pathname source,
+    its own `?gameId=` read and its own route-set membership test; they agreed by review, and nothing
+    held them together. `useGameShellRoutes` is gone, and both surviving consumers read the published
+    surface. A census parses every production module under `renderer/` and asserts exactly one imports a
+    pathname-consuming helper from the route vocabulary.
+
+    `replay-player` is a surface of its own rather than a member of `replays`, because the reverse
+    navigation gate acts on the player route — a post-game replay opened over a still-live session — and
+    not on the browser; one member for both would widen a gate that was scoped on purpose. `boot` is the
+    catch-all: the initial state, `/`, `/logo-screen`, the engine developer routes, and any non-engine
+    route the active game has not declared.
+
+    The transition is armed the moment a match entry BEGINS — not when it lands — carrying the
+    screen-fade duration this hop runs on, so a background timing a dolly-in has the whole fade to move.
+    It clears on arrival, and on IPC REJECTION: a quick start the main process refuses must not leave a
+    background dollied into a match that never came, nor make the next unrelated route change read as a
+    match entry. The two match-entry verbs behind `start-game` / `continue` moved into
+    `renderer/shell/matchEntryVerbs.ts`, which owns that protocol for the menu and the facade alike.
+
+    `@chimera-engine/renderer/game` becomes a curated barrel (`renderer/game/index.ts`) instead of the
+    registry module itself. The registration seam's exports are unchanged; `_resetRendererGameRegistryForTest`
+    is no longer reachable, which is what the `_` prefix always meant. Added: `useShellState`,
+    `getShellState`, `setShellDraft`, `useShellNavigate()`, and
+    `useQuickStart()` — `{ start(config?), close(options?), continueFromAutosave(), hasAutosave }`.
+
+    `setShellDraft` is the only shell-state writer a game can reach; the barrel publishes no setter for
+    `surface`, `pathname`, `gameId` or `transition`, so a game reacts to a route change and never
+    authors one. The draft is a `QuickStartConfig`, so what a character-select page accumulates is
+    exactly what `start()` hands to `chimera:lobby:quick-start`: calling `start()` with nothing starts
+    the draft, and an explicit config merges over it per key. The draft is read at call time and never
+    subscribed to, so a component that only starts a match does not re-render on every keystroke a
+    sibling page makes; `hasAutosave` is the opposite by design and follows the live slot list.
+
+    Every `useQuickStart()` member rejects rather than throwing, including for a missing game context
+    and a missing preload bridge — a `Promise`-returning method that sometimes throws synchronously
+    breaks `void start().catch(report)`. The engine's own menu verbs keep an absent bridge a synchronous
+    throw, so an engine defect still reaches the crash fallback instead of a console line.
+
+### Patch Changes
+
+- 18dffa6: Give the tactics menu **Continue** and **Quick Match**, and prove both flows end to end — the F87
+  seams now have a shipped consumer instead of only a contract.
+
+    `apps/tactics/shell/main-menu.ts` gains two entries above the lobby flow: `{ type: 'continue' }`,
+    and `{ type: 'start-game', config: { aiSeats: [{}] } }` — host versus one AI, nothing else declared,
+    so the AI seat's colour comes from `resolveDefaultPlayerAttributes` exactly as a lobby-added AI's
+    does and the match settings are the ones `buildTacticsLobbySetup` already declares. New Game →
+    lobby is untouched, which is the point: the two exits of the in-game Leave now both have a live
+    caller on the same menu. Neither entry declares `disabled` — the engine's own gates answer for both,
+    so Continue is dark on a fresh profile and enables the moment the close's autosave lands. Quick
+    Match declares `id: 'quick-match'` because the engine derives only `main-menu-start` from the action
+    and could not distinguish a second start; Continue declares none, since `main-menu-continue` is
+    already the engine's own derivation.
+
+    **A user-facing correction rides with it.** The host leave prompt said the leave "returns all
+    players to the lobby". A host's exit depends on how the session was born — back to the lobby it came
+    from, or out of a lobby-less quick session to the main menu — and `InGameMenuProps` carries no way
+    to tell those apart, so the destination clause is now deleted rather than narrowed, in the engine
+    default menu and in both tactics bundles. The client copy is unchanged: a client always disconnects
+    to the main menu. Naming the destination again would need the engine to hand the menu the session's
+    exit, which is a contract widening this change deliberately does not make.
+
+    New e2e: `quick-match-continue.spec.ts` drives the shipped UI — the real `chimera:lobby:quick-start`
+    verb, never the `CHIMERA_E2E` direct-game latch, since a spec that booted into a match would leave
+    the verb untested. It proves the fresh-profile gate, a quick start that reaches `/game` without ever
+    visiting `/lobby`, a leave that lands on `/main-menu`, a Continue that returns the board as it stood
+    before the leave, a second leave that still lands on the menu (the session-mode stamp survived the
+    save file), and — beside them, on the same menu — New Game still opening the lobby and a lobby-born
+    session still returning to it.
+
+    New helper: `apps/tactics/e2e/helpers/route-trace.ts` records the routes a window VISITS by wrapping
+    `history.pushState` / `replaceState` and listening for `popstate`. `expect(page).toHaveURL()` samples
+    the URL that is current when it runs, so a route entered and left inside one commit is invisible to
+    it — and "the lobby was never passed through" is exactly a claim about routes that were not passed
+    through.
+
+    `GameStoreBootstrap`'s match-entry gate gains a matrix over the six flows the issue names.
+    Two of its rows stand on the same surface and are separated by the snapshot that lands there, which
+    is what a matrix keyed on the surface alone could not do: a gate conditioned on the session-mode
+    stamp, or on a fresh match's tick, passes `quick-from-menu` and fails `continue-from-menu`.
+
+- Updated dependencies [c37293d]
+- Updated dependencies [4eb8781]
+- Updated dependencies [26cab08]
+- Updated dependencies [50290b4]
+- Updated dependencies [e0bc9a7]
+    - @chimera-engine/simulation@1.0.0-rc.11
+
 ## 1.0.0-rc.10
 
 ### Minor Changes

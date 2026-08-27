@@ -1,5 +1,225 @@
 # @chimera-engine/electron
 
+## 1.0.0-rc.11
+
+### Minor Changes
+
+- c37293d: Make the autosave slot a contract, and push a slot update after every autosave.
+
+    The reserved autosave slot used to be a naming convention three modules kept by hand:
+    `SaveManager.autoSave` rewrote the header to the inline literal `'autosave'`,
+    `SessionRuntime.captureSaveFile` defaulted to the same literal, and the crash path built
+    `` `${gameId}/autosave` `` under a comment asking whoever changed one to remember the others.
+    `simulation/foundation/save-slots.ts` now owns both spellings — `AUTOSAVE_SLOT_NAME` (the bare
+    name a `SaveFile` header carries) and `autosaveSlotId(gameId)` (the qualified id the repository,
+    `SaveSlotMeta.slotId` and the renderer all key on) — and `tools/autosave-slot-spelling.test.ts`
+    fails on any other production spelling. It parses rather than greps, because the tree is full of
+    prose about the slot: the census reads string values only, and only where the name occupies a
+    whole `/`-delimited segment, so comments and log messages such as "autosave failed after
+    engine:end_turn" are invisible to it.
+
+    `SaveManager` takes an optional third constructor argument, `onSlotsChanged(gameId)`, fired after
+    `save()` and after `autoSave()`. The composition root wires it to re-list the game's slots and
+    send `chimera:saves:slot-update` to every live window. Before this, only the manual save and
+    delete IPC round-trips pushed, so an autosave — after an accepted `engine:end_turn` or from the
+    crash reporter — changed the slot list with nothing telling the renderer. A reactive "does an
+    autosave exist" consumer went permanently stale after either.
+
+    One push per save, no coalescing and no debounce: the notification count is a fact about writes.
+    The saves IPC handler's **save** arm no longer broadcasts — the write already pushed through the
+    manager, and doing both would send the same list twice and pay for a second re-list. Its
+    **delete** arm still does, because delete is reached only through that round-trip and its
+    qualified `slotId` carries no gameId the manager may parse. A listener that throws is reported
+    and swallowed, and the composition root's push swallows a rejected re-list: the file is already
+    durable by then, and on the crash path a failed refresh must not raise a second failure on top of
+    the one being reported. That push skips destroyed windows and destroyed `webContents`, which the
+    crash path is the reason for.
+
+    Renderer: `selectHasAutosave(gameId)` and its hook `useHasAutosave(gameId)` on `saveStore`. Both
+    match the qualified id, so another game's autosave and a slot merely ending in the name read as
+    absent, and both fall back to `false` when the autosave is deleted rather than latching.
+
+    The save file format, the repository and the restore funnel are untouched (Invariants #24, #59,
+    #108).
+
+- 4eb8781: Add the `chimera:lobby:close-session` verb and fork the in-game Leave on the session-mode stamp — the
+  exit a lobby-less, quick-started session needs, since it has no lobby to go back to.
+
+    `closeSession({ autosave })` is atomic by contract: one call captures the game's autosave (when
+    asked) and then tears the session down. A game-side "save, then leave" pair would race — a leave that
+    landed first leaves the capture with no session to read — so the pair is not offered. The composition
+    root's port composes exactly the two steps the crash path already composes,
+    `SessionRuntime.captureSaveFile` → `SaveManager.autoSave`, and then the public `closeLobby()`; there
+    is no second save reader or writer and no `engine:save` dispatch, so the capture stays an out-of-band
+    host call and the `chimera:saves:slot-update` push still fires from the single `SaveManager`
+    `onSlotsChanged` seam. A "Continue" offered right after the exit therefore finds the fresh autosave.
+    `activeSession !== null` is the host gate: the reference is set only inside `onSessionHosted`, so a
+    joined client is refused and leaves through `chimera:lobby:leave` as before.
+
+    `useLeaveGame`'s host path now picks its exit by reading `engine.sessionMode` off the live snapshot's
+    `setup`: `'quick'` closes the session and raises the leaving-to-main-menu intent (routing owns the
+    fade, the snapshot reset and the navigation); anything else — including every save written before the
+    stamp existed — keeps today's `returnToLobby()` → `/lobby` path byte for byte. Reading the stamp off
+    the snapshot rather than off renderer-held state is what makes the answer survive a window reload and
+    a save restore.
+
+    `InGameMenuProps.leaveGame` widens to `(options?: LeaveGameOptions) => void`, and the renderer's
+    `LeaveGame` type with it. `autosave` defaults to `true`, so an Escape-exit keeps the match and a menu
+    that offers "abandon" must ask to discard. It is deliberately NOT the `gameplay.autoSave` user
+    setting: that toggle governs turn-interval autosaves during play, so reading it here would silently
+    lose the match for a player who turned it off. The option is ignored wherever the session survives
+    the leave.
+
+    New on the bridge contract: `CloseSessionParams` and `LobbyAPI.closeSession(params): Promise<void>`,
+    reached from the renderer as `window.__chimera.lobby.closeSession`. `RegisterLobbyHandlersOptions`
+    gains a required `closeSession` port, mirroring `quickStart` — a composition root that forgot to wire
+    it cannot register a lobby namespace with the verb silently missing.
+
+    Two things outside the fork also change. The renderer's lobby-bridge resolver now
+    also requires `closeSession`, so a bridge double in a game's own tests needs the third verb. And the
+    replay player now answers the leave-to-main-menu intent itself, which fixes a client's Leave from a
+    post-game replay: it raised that intent, and on that route nothing consumed it, so the leave
+    disconnected and then went nowhere. It now lands on the main menu.
+
+- 50290b4: Add the `chimera:lobby:quick-start` verb and the `QuickStartCoordinator` behind it — the one-click
+  path from a shell screen into a playable match, skipping the lobby UI.
+
+    It is orchestration sugar, never a second session constructor. `QuickStartCoordinator`
+    (`electron/main/runtime/QuickStartCoordinator.ts`, beside `SessionRestoreCoordinator`) is
+    ports-injected and holds no session objects; the lobby half of its ports is a structural slice of the
+    public `LobbyManager`, pinned assignable at compile time by its own test, so a port cannot grow into
+    a bespoke session door. The sequence: guards (active session, active restore, quick start already in
+    flight) → merge the game's `GameLobbySetup.quickStart` defaults UNDER the request →
+    `maxPlayers = 1 + localSeats.length + aiSeats.length`, a roster exactly full by design →
+    `hostLobby({ gameId, maxPlayers, agentSlots })` with the AI roster pre-seeded atomically through the
+    existing `agentSlots` seam (never an `addAi()` loop against a roster still being filled) → stamp
+    `engine.sessionMode` → apply the merged match settings, the host's attributes and each pass-and-play
+    seat's → ready → start.
+    Any throw after the lobby exists tears it down with `closeLobby()`, so a failed start never leaves a
+    session behind; a failure of the teardown itself is logged and the caller still sees the failure that
+    broke the start.
+
+    New reserved match-setting key `SESSION_MODE_SETTING` (`'engine.sessionMode'`) and its one value
+    `SESSION_MODE_QUICK` (`'quick'`) in `foundation/game-lobby-contract`, joining
+    `ALLOW_SPECTATORS_SETTING` under the engine's `engine.` namespace. Unlike that one it is not
+    host-settable: `SetMatchSettingPayloadSchema` refuses the key and `QuickStartParamsSchema` refuses it
+    inside a requested `matchSettings` map, so neither a custom lobby screen nor a game's own quick-start
+    defaults can flip it. It rides `matchSettings` into `snapshot.setup`, so it survives a window reload
+    and a restore; its absence means the session was born in the lobby.
+
+    New on the bridge contract: `QuickStartParams` (a `QuickStartConfig` addressed at one `gameId`) and
+    `LobbyAPI.quickStart(params): Promise<LobbyInfo>`, reached from the renderer as
+    `window.__chimera.lobby.quickStart`.
+
+    `AddLocalSeatOptions` gains `attributes`, merged per key OVER whatever the seat already carries — the
+    descriptor's seat defaults for a fresh seat, the seat's own picks on a re-add. This is how a
+    pass-and-play seat's picks are authored: such a seat has no connection, so the own-seat
+    `setPlayerAttribute` channel cannot reach it, and on a shared machine the host connection owns it.
+    Host-time seeding only; there is still no runtime attribute channel for a local seat.
+
+    Behaviour-neutral for every existing flow: `buildSetupFromLobbyState` and `matchId` minting are
+    untouched, no shipped flow ever authored `engine.sessionMode` on the newly-refusing
+    `chimera:lobby:set-match-setting` boundary, and a game that declares no `quickStart` block simply
+    has no quick-start defaults to merge.
+
+- e0bc9a7: Widen the seat contracts so every seat kind can carry picks, and stop the preload schema from
+  stripping the fields that depend on it.
+
+    `LobbyAgentSlot` gains `attributes?: Readonly<Record<string, string>>` — the agent-slot twin of
+    `LobbyPlayerEntry.attributes`. An AI seat is never a `players` entry: it lives in `agentSlots` and
+    is seated at match start under the synthetic `ai-<slotIndex>` id, so before this it had no carrier
+    at all and a game could not say what its AI was playing.
+
+    `buildSetupFromLobbyState()` now walks BOTH rosters into one `playerAttributes` map: every `players`
+    entry (host, joined remote, pass-and-play local seat) under its own `playerId`, and every
+    `kind: 'ai'` agent slot under `createSyntheticAIPlayerId(slotIndex)` — the same id
+    `collectGameStartAiPlayerSlots` seats the agent with, so `setup` never describes a seat that does
+    not exist. A reducer asks "what is seat N playing?" once, against one map, whatever kind of seat N
+    is. A `players` entry wins over an agent slot claiming the same id (`??=`, players walked first). A
+    human-kind agent slot contributes nothing — it is a placeholder for a joining human whose own entry
+    carries its attributes, and no synthetic seat is ever created for it. Invariant #101 widens by the
+    new carrier; the verbatim-projection guarantee is unchanged, and an integration test runs the real
+    road — lobby state → setup builder → `engine:start_game` validate + reduce → `StateProjector` — and
+    asserts every viewer's `setup` is the same object, AI seat included.
+
+    `createSyntheticAIPlayerId` moves to its own `electron/main/runtime/syntheticAgentId.ts` leaf
+    (re-exported from `HostedSessionAgents.ts`, so every existing import path is unchanged) so the
+    lobby-setup registry can share the one spelling of an AI seat's id without pulling the AI engine
+    into its module graph.
+
+    The preload `LobbyStateSchema` no longer strips. It is a plain `z.object`, so an undeclared key is
+    parsed away with `success: true` and the `satisfies z.ZodType<LobbyState>` guard still passes — an
+    absent optional is assignable. `chimera:lobby:get-current-state` therefore dropped `matchSettings`
+    and every per-player `attributes` map, and the live `lobby.onUpdate` push (unvalidated) was the only
+    reason it went unnoticed. All three are now declared, and `schemas.test.ts` round-trips a
+    `Required<LobbyState>` fixture: adding an optional field to the wire contract fails to compile there
+    until the schema carries it, so the strip cannot silently return.
+
+    Wire caps: an agent slot's attributes are bounded by the same `WIRE_MAX_PLAYER_ATTRIBUTE_*` caps a
+    human's own-seat write frame uses. There is no attribute-setter channel for an agent slot, so the
+    caps ride the state frame as well as the `.strict()` `HostLobbyParamsSchema`, whose transform now
+    carries the field through. `matchSettings` and a
+    player's `attributes` stay uncapped on the state frame, exactly as before: capping them at the
+    preload boundary would reject a state the host legitimately broadcast.
+
+    New: `simulation/foundation/quick-start-contract.ts`, a zero-import foundation leaf declaring
+    `QuickStartConfig` / `QuickStartSeat` / `QuickStartAiSeat`, plus the optional
+    `GameLobbySetup.quickStart` defaults block. Every seat kind carries its own `attributes` (an AI seat
+    adds `omniscient?`) — a bare seat count can say how many seats to open but not what any of them is
+    playing. It sits on the lobby setup rather than the manifest because a seat's attributes are drawn
+    from the same vocabulary as `playerAttributeOptions`, and the lobby setup is built from the game's
+    `GameContent`. This is the type both ends compile against.
+
+    Additive throughout — every new field is optional and backward-compatible.
+
+### Patch Changes
+
+- a338540: Fire the match-start lifecycle for AI-completed rosters, and hold the wall-clock heartbeat until
+  the session leaves the lobby.
+
+    `seatLobbyAgentsForGameStart` seated the lobby's AI into the active roster but never re-entered
+    the start gate, so a roster that only reached its seat count inside `onGameStartRequested` —
+    host plus lobby-added AI, the ordinary single-player shape — never fired
+    `SimulationHost.onGameStart` and never started `RealtimeTicker`. Tactics survived because its AI
+    is pumped from `afterTick`; a `manifest.realtime` game would have started frozen.
+    `onGameStartRequested` now re-enters the gate itself, after `engine:start_game` is applied and
+    after the first player's turn memento is seeded — `onGameStart` reaches an AI brain's state
+    machine synchronously, so a memento seeded behind it would take a human's undo baseline from a
+    snapshot already carrying an AI's move.
+
+    The gate's two halves ask different questions and are now gated separately. `onGameStart` fires
+    once the roster is SETTLED, which normally means full — the missing seats are ones the session is
+    waiting for — but `LobbyManager.startGame` gates on readiness and not on a full lobby, so the
+    start request additionally declares the roster final and an under-cap start no longer waits for a
+    seat that is never coming.
+
+    The heartbeat now arms on the session having LEFT THE LOBBY, not on roster completion. The two
+    are not the same moment: a roster can be full while the host still holds the lobby open (host-time
+    `agentSlots`, or every human already joined), and a lobby-phase `engine:tick` is not inert — the
+    reducer admits it in every phase and advances the clock. An early arm therefore shifted the tick
+    `engine:start_game` is stamped with and wrote pre-start beats into the deterministic recording,
+    which is armed back at host time. Measured before the fix: ten lobby heartbeat periods produced
+    ten `engine:tick` envelopes in the recording ahead of `engine:start_game`; after it, the first
+    recorded action is `engine:start_game`. The arm EXCLUDES `lobby` rather than allow-listing
+    `playing`, because a game names its own in-match phases and a restored save carries whichever one
+    it was in.
+
+    Recording arming stays in `onSessionHosted` and `engine:start_game` semantics are unchanged
+    (Invariants #71, #101).
+
+- Updated dependencies [c37293d]
+- Updated dependencies [4eb8781]
+- Updated dependencies [edcc2e6]
+- Updated dependencies [26cab08]
+- Updated dependencies [50290b4]
+- Updated dependencies [e0bc9a7]
+- Updated dependencies [e670ba7]
+- Updated dependencies [18dffa6]
+    - @chimera-engine/simulation@1.0.0-rc.11
+    - @chimera-engine/renderer@1.0.0-rc.11
+    - @chimera-engine/networking@1.0.0-rc.11
+    - @chimera-engine/ai@1.0.0-rc.11
+
 ## 1.0.0-rc.10
 
 ### Patch Changes

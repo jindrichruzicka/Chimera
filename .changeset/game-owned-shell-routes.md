@@ -3,7 +3,7 @@
 ---
 
 Make a game's own Next routes first-class shell pages. `LoadedRendererGameShell` gains
-`shellRoutes?: readonly \`/${string}\`[]` — each entry naming a PHYSICAL page in the game's own host
+``shellRoutes?: readonly `/${string}`[]`` — each entry naming a PHYSICAL page in the game's own host
 tree (`apps/<game>/renderer/app/<route>/page.tsx`), the logo-screen and model-showcase precedent
 promoted to a supported pattern (§4.37.17).
 

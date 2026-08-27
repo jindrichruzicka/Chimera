@@ -11,11 +11,12 @@ It is orchestration sugar, never a second session constructor. `QuickStartCoordi
 ports-injected and holds no session objects; the lobby half of its ports is a structural slice of the
 public `LobbyManager`, pinned assignable at compile time by its own test, so a port cannot grow into
 a bespoke session door. The sequence: guards (active session, active restore, quick start already in
-flight) → merge the game's `GameLobbySetup.quickStart` defaults UNDER the request → `maxPlayers = 1 +
-localSeats.length + aiSeats.length`, a roster exactly full by design → `hostLobby({ gameId,
-maxPlayers, agentSlots })` with the AI roster pre-seeded atomically through the existing `agentSlots`
-seam (never an `addAi()` loop against a roster still being filled) → stamp `engine.sessionMode` →
-apply the merged match settings, the host's attributes and each pass-and-play seat's → ready → start.
+flight) → merge the game's `GameLobbySetup.quickStart` defaults UNDER the request →
+`maxPlayers = 1 + localSeats.length + aiSeats.length`, a roster exactly full by design →
+`hostLobby({ gameId, maxPlayers, agentSlots })` with the AI roster pre-seeded atomically through the
+existing `agentSlots` seam (never an `addAi()` loop against a roster still being filled) → stamp
+`engine.sessionMode` → apply the merged match settings, the host's attributes and each pass-and-play
+seat's → ready → start.
 Any throw after the lobby exists tears it down with `closeLobby()`, so a failed start never leaves a
 session behind; a failure of the teardown itself is logged and the caller still sees the failure that
 broke the start.
