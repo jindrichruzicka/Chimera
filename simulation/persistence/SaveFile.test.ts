@@ -794,8 +794,11 @@ describe('JsonSaveSerializer — checkpoint.timeScalePermille', () => {
 
     it('needs no schema version bump and no new migration', () => {
         // The field is OPTIONAL, so a save written before F82 parses unchanged:
-        // there is nothing for a migration to backfill.
-        expect(CURRENT_SCHEMA_VERSION).toBe(6);
+        // there is nothing for a migration to backfill. The engine's schema
+        // version has since moved for an unrelated reason (the v6→v7 rename of
+        // `checkpoint.setup.matchSettings`), so what is pinned below is that no
+        // registered step reads a file already AT the current version — never
+        // the literal value, which `SaveMigrator.test.ts` owns.
 
         const file = makeSaveFile({
             header: { ...makeSaveFile().header, schemaVersion: CURRENT_SCHEMA_VERSION },
@@ -815,16 +818,15 @@ describe('JsonSaveSerializer — checkpoint.timeScalePermille', () => {
 
         // Identity, not equality: `migrate()` returns its input by reference
         // when no registered migration matches the file's version. Registering a
-        // v6→v7 step (and bumping CURRENT_SCHEMA_VERSION to match) would return
-        // a rebuilt object and red this line.
+        // step whose `fromVersion` is CURRENT_SCHEMA_VERSION (and bumping the
+        // constant to match) would return a rebuilt object and red this line.
         expect(createDefaultMigrator().migrate(file)).toBe(file);
     });
 
     it('a v5 save DOES get rebuilt by the same migrator (control)', () => {
         // Opposite polarity for the identity assertion above: `migrate()` is
         // capable of returning something other than its input, so the identity
-        // check is about there being no v6 migration and not about `migrate()`
-        // being a pass-through for every file.
+        // check is not about `migrate()` being a pass-through for every file.
         const file = makeSaveFile({
             header: { ...makeSaveFile().header, schemaVersion: 5 },
         });

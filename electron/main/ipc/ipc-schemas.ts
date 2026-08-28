@@ -21,7 +21,7 @@ import {
     WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
     WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
 } from '@chimera-engine/simulation/foundation/messages-schemas.js';
-import { SESSION_MODE_SETTING } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import { SESSION_MODE_PARAM } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { ChatScopeSchema } from '@chimera-engine/simulation/foundation/chat-schemas.js';
 import type { ChatScope } from '@chimera-engine/simulation/foundation/chat.js';
 import { MAX_SAVE_LABEL_LENGTH, toSlotId, playerId } from '../../preload/api-types.js';
@@ -338,11 +338,11 @@ export const LobbyReadyStateSchema = z.boolean();
 
 /**
  * Schema for the `{key, value}` payload accepted by
- * `chimera:lobby:set-match-setting` (host-only). `value` may be empty (e.g. a
- * "none" option); `key` must be a non-empty setting id. `.strict()` rejects
+ * `chimera:lobby:set-game-param` (host-only). `value` may be empty (e.g. a
+ * "none" option); `key` must be a non-empty game-param id. `.strict()` rejects
  * unknown keys at the boundary (§9.1).
  */
-export const SetMatchSettingPayloadSchema = z
+export const SetGameParamPayloadSchema = z
     .object({
         key: NonEmptyStringSchema,
         value: z.string(),
@@ -352,8 +352,8 @@ export const SetMatchSettingPayloadSchema = z
     // the session was born, so a custom lobby screen must not be able to flip
     // it. The sibling reserved key (`engine.allowSpectators`) stays settable —
     // it IS a host toggle.
-    .refine((payload) => payload.key !== SESSION_MODE_SETTING, {
-        message: `"${SESSION_MODE_SETTING}" is engine-owned and cannot be set over IPC`,
+    .refine((payload) => payload.key !== SESSION_MODE_PARAM, {
+        message: `"${SESSION_MODE_PARAM}" is engine-owned and cannot be set over IPC`,
         path: ['key'],
     });
 
@@ -428,7 +428,7 @@ const MAX_QUICK_START_SEATS = WIRE_MAX_JOIN_CLAIMS - 1;
 export const QuickStartParamsSchema = z
     .object({
         gameId: NonEmptyStringSchema,
-        matchSettings: z
+        gameParams: z
             .record(NonEmptyStringSchema, z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH))
             .optional(),
         hostAttributes: QuickStartAttributesSchema.optional(),
@@ -437,9 +437,9 @@ export const QuickStartParamsSchema = z
     })
     .strict()
     // The stamp is the coordinator's to write.
-    .refine((value) => !Object.hasOwn(value.matchSettings ?? {}, SESSION_MODE_SETTING), {
-        message: `"${SESSION_MODE_SETTING}" is engine-owned and cannot be requested`,
-        path: ['matchSettings'],
+    .refine((value) => !Object.hasOwn(value.gameParams ?? {}, SESSION_MODE_PARAM), {
+        message: `"${SESSION_MODE_PARAM}" is engine-owned and cannot be requested`,
+        path: ['gameParams'],
     })
     .refine(
         (value) =>
@@ -453,7 +453,7 @@ export const QuickStartParamsSchema = z
         // `undefined` — the repo runs with `exactOptionalPropertyTypes`.
         return {
             gameId: value.gameId,
-            ...(value.matchSettings !== undefined ? { matchSettings: value.matchSettings } : {}),
+            ...(value.gameParams !== undefined ? { gameParams: value.gameParams } : {}),
             ...(value.hostAttributes !== undefined ? { hostAttributes: value.hostAttributes } : {}),
             ...(value.localSeats !== undefined
                 ? {

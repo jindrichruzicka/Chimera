@@ -1024,7 +1024,7 @@ export interface LobbyAPI {
      * Open a match WITHOUT the lobby UI and resolve with the hosted
      * {@link LobbyInfo}. Orchestration sugar only: main drives the same public
      * lobby verbs the lobby screen drives (host with the AI roster pre-seeded →
-     * stamp the engine-owned session mode → apply match settings and seat
+     * stamp the engine-owned session mode → apply game params and seat
      * attributes → ready → start), so the resulting session is indistinguishable
      * from a lobby-born one except for that stamp. The roster is exactly full by
      * design, and main rejects the call while a session or a save restore is
@@ -1067,11 +1067,11 @@ export interface LobbyAPI {
     getLocalRole(): Promise<'player' | 'spectator'>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
     /**
-     * Host-only: set a host-authored match setting (e.g. board colour). The main
+     * Host-only: set a host-authored game param (e.g. board colour). The main
      * process rejects this from a joined (non-host) session, then rebroadcasts
      * the full {@link LobbyState} to every client.
      */
-    setMatchSetting(key: string, value: string): Promise<void>;
+    setGameParam(key: string, value: string): Promise<void>;
     /**
      * Owner-authored: set an attribute on the local player's OWN seat at
      * `playerId` (e.g. unit colour); `playerId` must be the local player. The main

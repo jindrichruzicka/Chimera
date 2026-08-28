@@ -73,7 +73,7 @@ This makes hidden-information games auditable without a trusted third party. A c
 
 ## Commit-then-Sync Turns (Commitment as a Turn Mechanism)
 
-The scheme above protects **host-generated** values (a shuffled deck, a die roll). The same primitive also underpins an opt-in **simultaneous turn mode**, where the protected secret is instead **each player's chosen actions, kept hidden from peers until reveal**. A game enables this through a synced, host-authored match setting that is **off by default** (Invariant #103); the default sequential turn flow is untouched for games that do not opt in.
+The scheme above protects **host-generated** values (a shuffled deck, a die roll). The same primitive also underpins an opt-in **simultaneous turn mode**, where the protected secret is instead **each player's chosen actions, kept hidden from peers until reveal**. A game enables this through a synced, host-authored game param that is **off by default** (Invariant #103); the default sequential turn flow is untouched for games that do not opt in.
 
 The engine stays game-agnostic: the host drives the entire sequence through a game-supplied `CommitmentTurnOrchestration` (`simulation/projection/CommitmentOrchestration.ts`) and never branches on a specific game id.
 

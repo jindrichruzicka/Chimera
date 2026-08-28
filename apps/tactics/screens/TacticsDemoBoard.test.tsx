@@ -294,7 +294,7 @@ function makeSnapshot(
         };
     }
 
-    const matchSettings: Record<string, string> = {
+    const gameParams: Record<string, string> = {
         ...(options.includeSetup ? { boardColor: 'navy' } : {}),
         ...(options.commitment ? { turnMode: 'commitment' } : {}),
     };
@@ -316,7 +316,7 @@ function makeSnapshot(
         ...(options.includeSetup || options.commitment
             ? {
                   setup: {
-                      matchSettings,
+                      gameParams,
                       playerAttributes: options.includeSetup
                           ? {
                                 [viewerId]: { color: 'green' },

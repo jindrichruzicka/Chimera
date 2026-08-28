@@ -161,7 +161,7 @@ describe('LobbyStateSchema — nothing is stripped from chimera:lobby:get-curren
     const fullState: Required<LobbyState> = {
         info: { sessionId: 'S1', hostId: 'P1', gameId: 'tactics' },
         players: [playerEntry],
-        matchSettings: { boardColor: 'blue' },
+        gameParams: { boardColor: 'blue' },
         agentSlots: [agentSlot],
     };
 
@@ -169,8 +169,8 @@ describe('LobbyStateSchema — nothing is stripped from chimera:lobby:get-curren
         expect(LobbyStateSchema.parse(fullState)).toEqual(fullState);
     });
 
-    it('preserves host-authored matchSettings across the IPC boundary', () => {
-        expect(LobbyStateSchema.parse(fullState).matchSettings).toEqual({ boardColor: 'blue' });
+    it('preserves host-authored gameParams across the IPC boundary', () => {
+        expect(LobbyStateSchema.parse(fullState).gameParams).toEqual({ boardColor: 'blue' });
     });
 
     it("preserves each player's owner-authored attributes across the IPC boundary", () => {
@@ -185,12 +185,12 @@ describe('LobbyStateSchema — nothing is stripped from chimera:lobby:get-curren
         });
     });
 
-    it('rejects a matchSettings entry with a non-string value', () => {
+    it('rejects a gameParams entry with a non-string value', () => {
         expect(() =>
             LobbyStateSchema.parse({
                 info: fullState.info,
                 players: [{ playerId: 'P1', displayName: 'Alice', ready: true }],
-                matchSettings: { boardColor: 42 },
+                gameParams: { boardColor: 42 },
             }),
         ).toThrow();
     });
@@ -241,7 +241,7 @@ describe('LobbyStateSchema — nothing is stripped from chimera:lobby:get-curren
         expect(() => LobbyStateSchema.parse(slotWith({ '': 'v' }))).toThrow();
     });
 
-    it('leaves matchSettings and player attributes uncapped, exactly as the wire does', () => {
+    it('leaves gameParams and player attributes uncapped, exactly as the wire does', () => {
         // Their caps live on their own write frames, so capping them here would
         // reject a state the host legitimately broadcast.
         const long = 'v'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH + 1);
@@ -251,7 +251,7 @@ describe('LobbyStateSchema — nothing is stripped from chimera:lobby:get-curren
                 players: [
                     { playerId: 'P1', displayName: 'Alice', ready: true, attributes: { c: long } },
                 ],
-                matchSettings: { boardColor: long },
+                gameParams: { boardColor: long },
             }),
         ).not.toThrow();
     });
@@ -262,7 +262,7 @@ describe('LobbyStateSchema — nothing is stripped from chimera:lobby:get-curren
             players: [{ playerId: 'P1', displayName: 'Alice', ready: true }],
         };
         const parsed = LobbyStateSchema.parse(bare);
-        expect(parsed.matchSettings).toBeUndefined();
+        expect(parsed.gameParams).toBeUndefined();
         expect(parsed.agentSlots).toBeUndefined();
         expect(parsed.players[0]?.attributes).toBeUndefined();
     });

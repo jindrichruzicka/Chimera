@@ -655,7 +655,7 @@ describe('buildInitialTacticsEntities start positions', () => {
 
     it('accepts an optional setup argument without changing positions', () => {
         const setup = {
-            matchSettings: { boardColor: 'navy' },
+            gameParams: { boardColor: 'navy' },
             playerAttributes: { [P1]: { color: 'blue' }, [P2]: { color: 'red' } },
         };
 

@@ -5,7 +5,7 @@
  * under `dev/profiles/` and every scenario under `dev/scenarios/` must parse
  * against the engine's fixture schemas, and every scenario value must belong
  * to this game's own lobby vocabulary (content-driven colours, turn modes) —
- * so a palette or setting rename can never silently strand the fixtures.
+ * so a palette or game-param rename can never silently strand the fixtures.
  *
  * This file is the pattern a game copies to keep its own `dev/` honest.
  * Reading the co-located fixture JSON is static test data, not runtime FS.
@@ -22,10 +22,10 @@ import {
     type DevScenario,
 } from '@chimera-engine/simulation/foundation/dev-fixture-contract.js';
 import { EngineProfileSchema } from '@chimera-engine/simulation/profile/ProfileSchema.js';
-import { ALLOW_SPECTATORS_SETTING } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import { ALLOW_SPECTATORS_PARAM } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
     TACTICS_GAME_ID,
-    TACTICS_TURN_MODE_SETTING,
+    TACTICS_TURN_MODE_PARAM,
 } from '@chimera-engine/tactics/simulation/constants.js';
 import { TACTICS_MAX_PLAYERS } from '@chimera-engine/tactics/lobby/lobby-setup.js';
 
@@ -104,20 +104,20 @@ describe('tactics dev fixtures — scenarios', () => {
         }
     });
 
-    it("uses only this game's match-setting vocabulary and content-palette values", () => {
-        const knownSettings = new Set([
+    it("uses only this game's game-param vocabulary and content-palette values", () => {
+        const knownParams = new Set([
             'boardColor',
-            TACTICS_TURN_MODE_SETTING,
-            ALLOW_SPECTATORS_SETTING,
+            TACTICS_TURN_MODE_PARAM,
+            ALLOW_SPECTATORS_PARAM,
         ]);
         for (const [name, json] of scenarios) {
             const scenario: DevScenario = DevScenarioSchema.parse(json);
-            for (const [key, value] of Object.entries(scenario.matchSettings ?? {})) {
-                expect(knownSettings.has(key), `${name} match setting "${key}"`).toBe(true);
+            for (const [key, value] of Object.entries(scenario.gameParams ?? {})) {
+                expect(knownParams.has(key), `${name} game param "${key}"`).toBe(true);
                 if (key === 'boardColor') {
                     expect(boardColorIds, `${name} boardColor "${value}"`).toContain(value);
                 }
-                if (key === TACTICS_TURN_MODE_SETTING) {
+                if (key === TACTICS_TURN_MODE_PARAM) {
                     expect(turnModes, `${name} turnMode "${value}"`).toContain(value);
                 }
             }

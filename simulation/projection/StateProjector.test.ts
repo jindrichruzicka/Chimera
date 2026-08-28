@@ -534,7 +534,7 @@ describe('DefaultStateProjector.project()', () => {
 
     describe('setup passthrough (host-authored lobby config)', () => {
         const setup = {
-            matchSettings: { boardColor: 'blue' },
+            gameParams: { boardColor: 'blue' },
             playerAttributes: {
                 [P1]: { color: 'red' },
                 [P2]: { color: 'black' },

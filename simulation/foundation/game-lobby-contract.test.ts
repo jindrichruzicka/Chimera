@@ -4,7 +4,7 @@
  * Type-level and runtime unit tests for the customizable-lobby contract types:
  * LobbyFieldOption, GameLobbySetup, GameSetupConfig, LobbyPendingAction,
  * GameLobbyScreenProps, plus the pure default-resolution / option-lookup helpers
- * (resolveMatchSettingsDefaults, resolvePlayerAttributeDefaults, lookupFieldOption,
+ * (resolveGameParamDefaults, resolvePlayerAttributeDefaults, lookupFieldOption,
  * optionLabel).
  *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
@@ -33,16 +33,16 @@ import type {
 } from './game-lobby-contract.js';
 import type { QuickStartConfig } from './quick-start-contract.js';
 import {
-    resolveMatchSettingsDefaults,
+    resolveGameParamDefaults,
     resolvePlayerAttributeDefaults,
     lookupFieldOption,
     optionLabel,
     readAllowSpectators,
     resolveAttributeValueCap,
-    ALLOW_SPECTATORS_SETTING,
+    ALLOW_SPECTATORS_PARAM,
     ALLOW_SPECTATORS_DEFAULT,
     DEFAULT_ATTRIBUTE_VALUE_CAP,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
     SESSION_MODE_QUICK,
 } from './game-lobby-contract.js';
 import { WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH } from './messages-schemas.js';
@@ -55,14 +55,14 @@ const teamOptions: readonly LobbyFieldOption[] = [
 ];
 
 /**
- * A representative game setup: two match settings with defaults + options, one
+ * A representative game setup: two game params with defaults + options, one
  * player attribute ("team"), and seat-index-based default attributes that
  * alternate teams so different seats yield different defaults.
  */
 const setup: GameLobbySetup = {
     maxPlayers: 4,
-    matchSettingsDefaults: { mapSize: 'medium', fogOfWar: 'on' },
-    matchSettingsOptions: {
+    gameParamDefaults: { mapSize: 'medium', fogOfWar: 'on' },
+    gameParamOptions: {
         mapSize: [
             { value: 'small', label: 'Small' },
             { value: 'medium', label: 'Medium' },
@@ -115,7 +115,7 @@ describe('GameLobbySetup.quickStart', () => {
         const quickStartSetup: GameLobbySetup = {
             ...setup,
             quickStart: {
-                matchSettings: { mapSize: 'small' },
+                gameParams: { mapSize: 'small' },
                 hostAttributes: { team: 'red' },
                 localSeats: [{ attributes: { team: 'blue' } }],
                 aiSeats: [{ attributes: { team: 'blue' }, omniscient: true }],
@@ -123,7 +123,7 @@ describe('GameLobbySetup.quickStart', () => {
         };
 
         const quickStart: QuickStartConfig | undefined = quickStartSetup.quickStart;
-        expect(quickStart?.matchSettings).toEqual({ mapSize: 'small' });
+        expect(quickStart?.gameParams).toEqual({ mapSize: 'small' });
         expect(quickStart?.hostAttributes).toEqual({ team: 'red' });
         expect(quickStart?.localSeats?.[0]?.attributes).toEqual({ team: 'blue' });
         expect(quickStart?.aiSeats?.[0]?.omniscient).toBe(true);
@@ -139,20 +139,20 @@ describe('resolvePlayerAttributeDefaults', () => {
     });
 });
 
-// ─── resolveMatchSettingsDefaults (pure helper) ─────────────────────────────────
+// ─── resolveGameParamDefaults (pure helper) ─────────────────────────────────────
 
-describe('resolveMatchSettingsDefaults', () => {
-    it('returns the configured match-setting defaults', () => {
-        expect(resolveMatchSettingsDefaults(setup)).toEqual({
+describe('resolveGameParamDefaults', () => {
+    it('returns the configured game-param defaults', () => {
+        expect(resolveGameParamDefaults(setup)).toEqual({
             mapSize: 'medium',
             fogOfWar: 'on',
         });
     });
 
     it('returns a copy that does not alias or mutate the setup defaults', () => {
-        const resolved = resolveMatchSettingsDefaults(setup);
+        const resolved = resolveGameParamDefaults(setup);
         resolved['mapSize'] = 'large';
-        expect(setup.matchSettingsDefaults['mapSize']).toBe('medium');
+        expect(setup.gameParamDefaults['mapSize']).toBe('medium');
     });
 });
 
@@ -183,49 +183,49 @@ describe('optionLabel', () => {
     });
 });
 
-// ─── readAllowSpectators (reserved engine match-setting reader) ──────────────────
+// ─── readAllowSpectators (reserved engine game-param reader) ────────────────────
 
 describe('readAllowSpectators', () => {
     it('exposes the reserved engine-owned key and its OFF default', () => {
-        expect(ALLOW_SPECTATORS_SETTING).toBe('engine.allowSpectators');
+        expect(ALLOW_SPECTATORS_PARAM).toBe('engine.allowSpectators');
         expect(ALLOW_SPECTATORS_DEFAULT).toBe('false');
     });
 
-    it('returns false when there are no match settings — fail-safe closed', () => {
+    it('returns false when there are no game params — fail-safe closed', () => {
         expect(readAllowSpectators(undefined)).toBe(false);
         expect(readAllowSpectators({})).toBe(false);
     });
 
-    it("returns false when the setting is explicitly 'false'", () => {
-        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: 'false' })).toBe(false);
+    it("returns false when the param is explicitly 'false'", () => {
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_PARAM]: 'false' })).toBe(false);
     });
 
-    it("returns true only when the setting is exactly 'true'", () => {
-        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: 'true' })).toBe(true);
+    it("returns true only when the param is exactly 'true'", () => {
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_PARAM]: 'true' })).toBe(true);
     });
 
     it('returns false for any non-true value — fail-safe closed', () => {
-        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: '1' })).toBe(false);
-        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: 'yes' })).toBe(false);
-        expect(readAllowSpectators({ [ALLOW_SPECTATORS_SETTING]: 'TRUE' })).toBe(false);
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_PARAM]: '1' })).toBe(false);
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_PARAM]: 'yes' })).toBe(false);
+        expect(readAllowSpectators({ [ALLOW_SPECTATORS_PARAM]: 'TRUE' })).toBe(false);
     });
 });
 
 // ─── GameSetupConfig ────────────────────────────────────────────────────────────
 
 describe('GameSetupConfig', () => {
-    it('carries chosen match settings and per-player attributes keyed by PlayerId', () => {
+    it('carries chosen game params and per-player attributes keyed by PlayerId', () => {
         const p1: PlayerId = 'p1';
         const p2: PlayerId = 'p2';
         const config: GameSetupConfig = {
-            matchSettings: { mapSize: 'large', fogOfWar: 'off' },
+            gameParams: { mapSize: 'large', fogOfWar: 'off' },
             playerAttributes: {
                 [p1]: { team: 'red' },
                 [p2]: { team: 'blue' },
             },
         };
 
-        expect(config.matchSettings['mapSize']).toBe('large');
+        expect(config.gameParams['mapSize']).toBe('large');
         expect(config.playerAttributes[p1]).toEqual({ team: 'red' });
     });
 });
@@ -266,7 +266,7 @@ describe('GameLobbyScreenProps', () => {
         isHost: true,
         canStartGame: false,
         pendingAction: null,
-        setMatchSetting: () => undefined,
+        setGameParam: () => undefined,
         setPlayerAttribute: () => undefined,
         addAiPlayer: () => Promise.resolve(),
         removeAiPlayer: () => Promise.resolve(),
@@ -286,10 +286,10 @@ describe('GameLobbyScreenProps', () => {
         const attrCalls: [PlayerId, string, string][] = [];
         const props: GameLobbyScreenProps = {
             ...baseProps,
-            setMatchSetting: (key, value) => matchCalls.push([key, value]),
+            setGameParam: (key, value) => matchCalls.push([key, value]),
             setPlayerAttribute: (playerId, key, value) => attrCalls.push([playerId, key, value]),
         };
-        props.setMatchSetting('mapSize', 'large');
+        props.setGameParam('mapSize', 'large');
         props.setPlayerAttribute('p1', 'team', 'blue');
         expect(matchCalls).toEqual([['mapSize', 'large']]);
         expect(attrCalls).toEqual([['p1', 'team', 'blue']]);
@@ -309,7 +309,7 @@ describe('GameLobbyScreenProps', () => {
             isHost: true,
             canStartGame: false,
             pendingAction: null,
-            setMatchSetting: () => undefined,
+            setGameParam: () => undefined,
             setPlayerAttribute: () => undefined,
             onToggleReady: () => Promise.resolve(),
             onStartGame: () => Promise.resolve(),
@@ -320,10 +320,9 @@ describe('GameLobbyScreenProps', () => {
     it('rejects a setter requiring more arguments than the contract supplies', () => {
         const _: GameLobbyScreenProps = {
             ...baseProps,
-            // @ts-expect-error: the contract calls setMatchSetting with (key, value);
+            // @ts-expect-error: the contract calls setGameParam with (key, value);
             // a signature that requires a third argument is not assignable.
-            setMatchSetting: (key: string, value: string, extra: string) =>
-                void [key, value, extra],
+            setGameParam: (key: string, value: string, extra: string) => void [key, value, extra],
         };
         expect(_).toBeDefined();
     });
@@ -372,16 +371,16 @@ describe('resolveAttributeValueCap', () => {
 
 // ─── Reserved engine-owned session-mode key ─────────────────────────────────────
 
-describe('SESSION_MODE_SETTING', () => {
+describe('SESSION_MODE_PARAM', () => {
     it('is the engine-namespaced key a quick-started session is stamped with', () => {
-        expect(SESSION_MODE_SETTING).toBe('engine.sessionMode');
+        expect(SESSION_MODE_PARAM).toBe('engine.sessionMode');
         expect(SESSION_MODE_QUICK).toBe('quick');
     });
 
     it('shares the engine. namespace with the other reserved key', () => {
         // Both reserved keys are the engine's, never a game's (Invariant #107
         // spirit) — a game reading its own vocabulary never collides with them.
-        expect(SESSION_MODE_SETTING.startsWith('engine.')).toBe(true);
-        expect(SESSION_MODE_SETTING).not.toBe(ALLOW_SPECTATORS_SETTING);
+        expect(SESSION_MODE_PARAM.startsWith('engine.')).toBe(true);
+        expect(SESSION_MODE_PARAM).not.toBe(ALLOW_SPECTATORS_PARAM);
     });
 });

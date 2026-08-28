@@ -134,7 +134,7 @@ describe('button actions', () => {
 
     it('"Quick Match" starts host-vs-one-AI and declares nothing else', () => {
         const btn = findButton('game.tactics.menu.quickMatch');
-        // toStrictEqual, not toEqual: an explicitly `undefined` matchSettings /
+        // toStrictEqual, not toEqual: an explicitly `undefined` gameParams /
         // localSeats / hostAttributes key would satisfy toEqual against this
         // literal, and the claim here is that the button declares NONE of them —
         // one AI seat with no attributes, every other field the game's own.

@@ -231,7 +231,7 @@ describe('GameMainMenuAction', () => {
             { type: 'navigate', target: '/settings' },
             { type: 'quit' },
             { type: 'open-lobby' },
-            { type: 'start-game', config: { matchSettings: { mapSize: 'small' } } },
+            { type: 'start-game', config: { gameParams: { mapSize: 'small' } } },
             { type: 'continue' },
             { type: 'command', commandId: 'game:credits' as GameMenuCommandId },
         ];
@@ -248,7 +248,7 @@ describe('GameMainMenuAction', () => {
                     expect(action.type).toBe('open-lobby');
                     break;
                 case 'start-game':
-                    expect(action.config?.matchSettings).toEqual({ mapSize: 'small' });
+                    expect(action.config?.gameParams).toEqual({ mapSize: 'small' });
                     break;
                 case 'continue':
                     expect(action.type).toBe('continue');

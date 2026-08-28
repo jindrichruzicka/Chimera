@@ -20,7 +20,7 @@
  *     when no useful action remains — via `engine:end_turn` in sequential mode,
  *     or `tactics:commit` in commitment (simultaneous) mode (see
  *     {@link finishTurnAction}). The turn mode is read off the projected
- *     `setup.matchSettings`, so the decision stays a pure function of the snapshot.
+ *     `setup.gameParams`, so the decision stays a pure function of the snapshot.
  *
  * Honest vs omniscient (Invariant #17): the policy is built for the honest,
  * projected snapshot (the shipping path — `omniscient` is opt-in and off by
@@ -236,7 +236,7 @@ function commitAction(viewerId: PlayerId, tick: number): EngineAction {
  * commit set completes (`tacticsCommitmentOrchestration.shouldAutoEndTurn`), and
  * after committing the AI's projected `isMyTurn` flips false — so it stops acting
  * and never double-commits. The mode is read from the projected
- * `setup.matchSettings` (projected verbatim by the StateProjector), keeping this a
+ * `setup.gameParams` (projected verbatim by the StateProjector), keeping this a
  * pure projection-only decision with no host-local field.
  */
 function finishTurnAction(
@@ -244,7 +244,7 @@ function finishTurnAction(
     viewerId: PlayerId,
     tick: number,
 ): EngineAction {
-    return readTacticsTurnMode(snapshot.setup?.matchSettings) === 'commitment'
+    return readTacticsTurnMode(snapshot.setup?.gameParams) === 'commitment'
         ? commitAction(viewerId, tick)
         : endTurnAction(viewerId, tick);
 }

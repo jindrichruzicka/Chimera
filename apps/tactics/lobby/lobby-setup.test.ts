@@ -14,11 +14,11 @@
 import { describe, it, expect } from 'vitest';
 import {
     ALLOW_SPECTATORS_DEFAULT,
-    ALLOW_SPECTATORS_SETTING,
+    ALLOW_SPECTATORS_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
     TACTICS_DEFAULT_TURN_MODE,
-    TACTICS_TURN_MODE_SETTING,
+    TACTICS_TURN_MODE_PARAM,
 } from '@chimera-engine/tactics/simulation/constants.js';
 import {
     buildTacticsLobbySetup,
@@ -55,16 +55,16 @@ describe('buildTacticsLobbySetup', () => {
         // off-by-default commitment battle mode (T7 → snapshot.setup for T8), and
         // engine.allowSpectators is seeded 'false' so the host toggle is present
         // and off by default.
-        expect(buildTacticsLobbySetup(PALETTE).matchSettingsDefaults).toEqual({
+        expect(buildTacticsLobbySetup(PALETTE).gameParamDefaults).toEqual({
             boardColor: DEFAULT_BOARD_COLOR,
-            [TACTICS_TURN_MODE_SETTING]: TACTICS_DEFAULT_TURN_MODE,
-            [ALLOW_SPECTATORS_SETTING]: ALLOW_SPECTATORS_DEFAULT,
+            [TACTICS_TURN_MODE_PARAM]: TACTICS_DEFAULT_TURN_MODE,
+            [ALLOW_SPECTATORS_PARAM]: ALLOW_SPECTATORS_DEFAULT,
         });
     });
 
     it('wires the board and player options from the supplied palette', () => {
         const setup = buildTacticsLobbySetup(PALETTE);
-        expect(setup.matchSettingsOptions['boardColor']).toBe(PALETTE.boardColors);
+        expect(setup.gameParamOptions['boardColor']).toBe(PALETTE.boardColors);
         expect(setup.playerAttributeOptions['color']).toBe(PALETTE.playerColors);
     });
 

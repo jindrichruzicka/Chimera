@@ -173,7 +173,7 @@ export function clearShellTransition(): void {
 
 /**
  * The one game-reachable writer. Merges per key — a page that names only
- * `hostAttributes` leaves a sibling page's `matchSettings` alone — and publishes
+ * `hostAttributes` leaves a sibling page's `gameParams` alone — and publishes
  * a NEW draft object so a selector on it compares unequal and re-renders.
  *
  * A key the patch names is REPLACED, never deep-merged: seat lists replace

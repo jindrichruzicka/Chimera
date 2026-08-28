@@ -309,7 +309,7 @@ describe('createBaseReplayInitialSnapshot setup seeding', () => {
     // must lift setup from the first engine:start_game action — otherwise the
     // first replay frame renders with default colours until that action replays.
     const startGameSetup = {
-        matchSettings: {},
+        gameParams: {},
         playerAttributes: {
             p1: { color: 'green' },
             p2: { color: 'red' },

@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     CURRENT_SCHEMA_VERSION,
+    checkpointGameParamsMigration,
     checkpointGameResultMigration,
     checkpointTurnNumberMigration,
     createDefaultMigrator,
@@ -67,8 +68,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // ─── CURRENT_SCHEMA_VERSION ───────────────────────────────────────────────────
 
 describe('CURRENT_SCHEMA_VERSION', () => {
-    it('equals 6', () => {
-        expect(CURRENT_SCHEMA_VERSION).toBe(6);
+    it('equals 7', () => {
+        expect(CURRENT_SCHEMA_VERSION).toBe(7);
     });
 });
 
@@ -331,6 +332,133 @@ describe('sessionManifestMigration (v5 → v6)', () => {
         expect(result.header.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
         expect(result.session.matchId).toMatch(UUID_RE);
         expect(result.session.seats).toHaveLength(4);
+    });
+});
+
+// ─── checkpointGameParamsMigration (v6 → v7) ──────────────────────────────────
+
+describe('checkpointGameParamsMigration (v6 → v7)', () => {
+    /** A v6 `setup` as written on disk, before the key rename. */
+    const LEGACY_SETUP = {
+        matchSettings: { turnMode: 'commitment', boardColor: 'crimson' },
+        playerAttributes: { alice: { unitColor: 'azure' } },
+    };
+
+    /** The same setup after the rename. */
+    const MIGRATED_SETUP = {
+        gameParams: { turnMode: 'commitment', boardColor: 'crimson' },
+        playerAttributes: { alice: { unitColor: 'azure' } },
+    };
+
+    /**
+     * A v6 file whose checkpoint carries `setup`. The checkpoint sub-schema does
+     * not declare `setup` and `GameSetupConfig` no longer names the legacy key,
+     * so the fixture is assembled through a widened copy.
+     */
+    function makeV6FileWithSetup(setup: unknown): SaveFile {
+        const v6 = makeFileAtVersion(6);
+        return { ...v6, checkpoint: { ...v6.checkpoint, setup } } as unknown as SaveFile;
+    }
+
+    /** Read `checkpoint.setup` off a file without the static-type narrowing. */
+    function readSetup(file: SaveFile): unknown {
+        return (file.checkpoint as unknown as Record<string, unknown>)['setup'];
+    }
+
+    it('is a SaveMigration with fromVersion 6', () => {
+        expect(checkpointGameParamsMigration.fromVersion).toBe(6);
+    });
+
+    it('renames checkpoint.setup.matchSettings to checkpoint.setup.gameParams', () => {
+        const result = checkpointGameParamsMigration.apply(makeV6FileWithSetup(LEGACY_SETUP));
+
+        expect(readSetup(result)).toEqual(MIGRATED_SETUP);
+    });
+
+    it('leaves no matchSettings key behind on the migrated setup', () => {
+        const result = checkpointGameParamsMigration.apply(makeV6FileWithSetup(LEGACY_SETUP));
+
+        expect(Object.keys(readSetup(result) as Record<string, unknown>)).not.toContain(
+            'matchSettings',
+        );
+    });
+
+    it('renames in place so the setup key order is unchanged', () => {
+        const result = checkpointGameParamsMigration.apply(makeV6FileWithSetup(LEGACY_SETUP));
+
+        expect(Object.keys(readSetup(result) as Record<string, unknown>)).toEqual([
+            'gameParams',
+            'playerAttributes',
+        ]);
+    });
+
+    it('preserves every other checkpoint field verbatim', () => {
+        const legacy = makeV6FileWithSetup(LEGACY_SETUP);
+
+        const result = checkpointGameParamsMigration.apply(legacy);
+
+        expect(result.checkpoint.tick).toBe(legacy.checkpoint.tick);
+        expect(result.checkpoint.seed).toBe(legacy.checkpoint.seed);
+        expect(result.checkpoint.turnNumber).toBe(legacy.checkpoint.turnNumber);
+        expect(result.checkpoint.gameResult).toBe(legacy.checkpoint.gameResult);
+    });
+
+    it('returns the file untouched when the checkpoint carries no setup (idempotent)', () => {
+        const file = makeFileAtVersion(6);
+
+        const result = checkpointGameParamsMigration.apply(file);
+
+        expect(result).toBe(file);
+    });
+
+    it('returns the file untouched when the setup is already migrated (idempotent)', () => {
+        const file = makeV6FileWithSetup(MIGRATED_SETUP);
+
+        const result = checkpointGameParamsMigration.apply(file);
+
+        expect(result).toBe(file);
+    });
+
+    it('returns the file untouched when setup is null rather than an object', () => {
+        const file = makeV6FileWithSetup(null);
+
+        const result = checkpointGameParamsMigration.apply(file);
+
+        expect(result).toBe(file);
+    });
+
+    it('does not mutate the input file', () => {
+        const legacy = makeV6FileWithSetup(LEGACY_SETUP);
+        const originalCheckpoint = legacy.checkpoint;
+
+        checkpointGameParamsMigration.apply(legacy);
+
+        expect(legacy.checkpoint).toBe(originalCheckpoint);
+        expect(readSetup(legacy)).toEqual(LEGACY_SETUP);
+    });
+
+    it('createDefaultMigrator upgrades a v6 file to v7 with the setup key renamed', () => {
+        const migrator = createDefaultMigrator();
+
+        const result = migrator.migrate(makeV6FileWithSetup(LEGACY_SETUP));
+
+        expect(result.header.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+        expect(readSetup(result)).toEqual(MIGRATED_SETUP);
+    });
+
+    it('carries a legacy v1 save all the way to v7 through the whole chain', () => {
+        const migrator = createDefaultMigrator();
+        const v1 = makeV6FileWithSetup(LEGACY_SETUP);
+        const widened = {
+            ...v1,
+            header: { ...v1.header, schemaVersion: 1 },
+        } as unknown as Record<string, unknown>;
+        delete widened['session'];
+
+        const result = migrator.migrate(widened as unknown as SaveFile);
+
+        expect(result.header.schemaVersion).toBe(7);
+        expect(readSetup(result)).toEqual(MIGRATED_SETUP);
     });
 });
 

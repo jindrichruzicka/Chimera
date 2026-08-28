@@ -296,7 +296,7 @@ describe('ActionRegistry game definitions', () => {
         registry.registerGame('tactics', definition);
 
         const setup: GameSetupConfig = {
-            matchSettings: { boardColor: 'blue' },
+            gameParams: { boardColor: 'blue' },
             playerAttributes: { [toPlayerId('p1')]: { color: 'red' } },
         };
         registry.resolveGame('tactics')?.buildInitialEntities?.([toPlayerId('p1')], setup);

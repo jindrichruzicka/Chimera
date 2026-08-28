@@ -21,7 +21,7 @@ import type * as LoadGameContentModule from './content/loadGameContent.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import {
     SESSION_MODE_QUICK,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 
 interface ProjectorOptionsForTest {
@@ -176,7 +176,7 @@ const {
     mockLobbyManagerAddLocalSeat,
     mockLobbyManagerCloseLobby,
     mockLobbyManagerGetCurrentState,
-    mockLobbyManagerSetMatchSetting,
+    mockLobbyManagerSetGameParam,
     mockLobbyManagerLocalSeatIds,
     hostedTeardownRef,
     hostedTransportJoinRef,
@@ -233,7 +233,7 @@ const {
     // The quick-start ports reach these; `getCurrentState` backs the
     // "a session is already active" guard, so tests drive it directly.
     const mockLobbyManagerGetCurrentState = vi.fn<() => unknown>(() => null);
-    const mockLobbyManagerSetMatchSetting = vi.fn(() => Promise.resolve());
+    const mockLobbyManagerSetGameParam = vi.fn(() => Promise.resolve());
     const mockLobbyManagerSetPlayerAttribute = vi.fn(() => Promise.resolve());
     const mockLobbyManagerUpdatePlayerReadyState = vi.fn(() => Promise.resolve());
     const mockLobbyManagerStartGame = vi.fn(() => Promise.resolve());
@@ -243,7 +243,7 @@ const {
         mockLobbyManagerAddLocalSeat,
         mockLobbyManagerCloseLobby,
         mockLobbyManagerGetCurrentState,
-        mockLobbyManagerSetMatchSetting,
+        mockLobbyManagerSetGameParam,
         mockLobbyManagerSetPlayerAttribute,
         mockLobbyManagerUpdatePlayerReadyState,
         mockLobbyManagerStartGame,
@@ -258,7 +258,7 @@ const {
                 addLocalSeat: mockLobbyManagerAddLocalSeat,
                 closeLobby: mockLobbyManagerCloseLobby,
                 getCurrentState: mockLobbyManagerGetCurrentState,
-                setMatchSetting: mockLobbyManagerSetMatchSetting,
+                setGameParam: mockLobbyManagerSetGameParam,
                 setPlayerAttribute: mockLobbyManagerSetPlayerAttribute,
                 updatePlayerReadyState: mockLobbyManagerUpdatePlayerReadyState,
                 startGame: mockLobbyManagerStartGame,
@@ -735,7 +735,7 @@ function makeQuickStartTestContributions(): MainGameContribution[] {
                 seat: `seat-${String(seatIndex)}`,
             }),
             quickStart: {
-                matchSettings: { [QUICK_START_DECLARED_SETTING]: 'yes' },
+                gameParams: { [QUICK_START_DECLARED_SETTING]: 'yes' },
                 aiSeats: [{}],
             },
         }),
@@ -6023,7 +6023,7 @@ describe('main() — atomic close-session wiring', () => {
             readonly displayName: string;
             readonly ready: boolean;
         }[];
-        readonly matchSettings?: Readonly<Record<string, string>>;
+        readonly gameParams?: Readonly<Record<string, string>>;
     }
     interface CloseOptions {
         onSessionHosted?: (
@@ -6038,7 +6038,7 @@ describe('main() — atomic close-session wiring', () => {
         readonly checkpoint: {
             readonly tick: number;
             readonly matchId?: string;
-            readonly setup?: { readonly matchSettings: Readonly<Record<string, string>> };
+            readonly setup?: { readonly gameParams: Readonly<Record<string, string>> };
         };
     }
 
@@ -6066,13 +6066,13 @@ describe('main() — atomic close-session wiring', () => {
         };
     };
 
-    const makeLobbyState = (matchSettings?: Readonly<Record<string, string>>): CloseLobbyState => ({
+    const makeLobbyState = (gameParams?: Readonly<Record<string, string>>): CloseLobbyState => ({
         info: { sessionId: 'close-session', hostId, gameId: 'tactics' },
         players: [
             { playerId: hostId, displayName: 'Host', ready: true },
             { playerId: guestId, displayName: 'Guest', ready: true },
         ],
-        ...(matchSettings !== undefined ? { matchSettings } : {}),
+        ...(gameParams !== undefined ? { gameParams } : {}),
     });
 
     const closeSessionHandler = ():
@@ -6084,7 +6084,7 @@ describe('main() — atomic close-session wiring', () => {
 
     /** Boot a hosted, started 2-player match with both players present. */
     const startHostedMatch = async (
-        matchSettings?: Readonly<Record<string, string>>,
+        gameParams?: Readonly<Record<string, string>>,
     ): Promise<CloseOptions> => {
         await main(makeTestContributions());
         const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as CloseOptions;
@@ -6094,7 +6094,7 @@ describe('main() — atomic close-session wiring', () => {
         const teardown = options.onSessionHosted?.(makeTransport(), { hostId, maxPlayers: 2 });
         hostedTeardownRef.current = typeof teardown === 'function' ? teardown : null;
         capturedJoin?.({ playerId: guestId });
-        options.onGameStartRequested?.(makeLobbyState(matchSettings));
+        options.onGameStartRequested?.(makeLobbyState(gameParams));
         return options;
     };
 
@@ -6249,17 +6249,17 @@ describe('main() — atomic close-session wiring', () => {
     });
 
     it('carries the session-mode stamp into the written checkpoint', async () => {
-        // The stamp rides `matchSettings` into `snapshot.setup`, so the autosave
+        // The stamp rides `gameParams` into `snapshot.setup`, so the autosave
         // this verb writes still carries it. That is what lets a RESTORED quick
         // session take the same Leave branch the original one took — the
         // renderer reads the stamp off the restored snapshot, not off a
         // renderer-held launch origin.
-        await startHostedMatch({ [SESSION_MODE_SETTING]: SESSION_MODE_QUICK });
+        await startHostedMatch({ [SESSION_MODE_PARAM]: SESSION_MODE_QUICK });
 
         await closeSessionHandler()?.(undefined, { autosave: true });
 
         const file = mockSaveManagerAutoSave.mock.calls[0]?.[0] as ClosedSaveFile;
-        expect(file.checkpoint.setup?.matchSettings[SESSION_MODE_SETTING]).toBe(SESSION_MODE_QUICK);
+        expect(file.checkpoint.setup?.gameParams[SESSION_MODE_PARAM]).toBe(SESSION_MODE_QUICK);
     });
 });
 
@@ -6411,7 +6411,7 @@ describe('main() — session restore wiring', () => {
         mockSaveManagerRestoreFromSave.mockReset();
         mockLobbyManagerGetCurrentState.mockReset();
         mockLobbyManagerGetCurrentState.mockReturnValue(null);
-        mockLobbyManagerSetMatchSetting.mockClear();
+        mockLobbyManagerSetGameParam.mockClear();
         mockSimulationHostInstance.onGameStart.mockClear();
         mockStateBroadcasterInstance.broadcast.mockClear();
         hostedTeardownRef.current = null;
@@ -6674,7 +6674,7 @@ describe('main() — session restore wiring', () => {
                 // 1 host + the one AI seat the game declared.
                 maxPlayers: 2,
             });
-            expect(mockLobbyManagerSetMatchSetting).toHaveBeenCalledWith(
+            expect(mockLobbyManagerSetGameParam).toHaveBeenCalledWith(
                 QUICK_START_DECLARED_SETTING,
                 'yes',
             );

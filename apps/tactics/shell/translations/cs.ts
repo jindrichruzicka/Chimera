@@ -126,7 +126,7 @@ export const tacticsBundleCs: Readonly<Record<string, string>> = {
     'engine.lobby.leaveFailed': 'Nepodařilo se opustit lobby',
     'engine.lobby.readyFailed': 'Nepodařilo se změnit stav připravenosti',
     'engine.lobby.startFailed': 'Nepodařilo se spustit hru',
-    'engine.lobby.matchSettingFailed': 'Nepodařilo se změnit nastavení zápasu',
+    'engine.lobby.gameParamFailed': 'Nepodařilo se změnit parametr hry',
     'engine.lobby.playerAttrFailed': 'Nepodařilo se změnit atribut hráče',
     'engine.lobby.addAiFailed': 'Nepodařilo se přidat hráče AI',
     'engine.lobby.removeAiFailed': 'Nepodařilo se odebrat hráče AI',

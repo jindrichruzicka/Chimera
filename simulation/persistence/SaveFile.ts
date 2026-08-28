@@ -166,8 +166,7 @@ export interface SaveFile {
      * and per-seat control kinds so a restore can rebuild the session. Host-local
      * orchestration metadata — no profile data (Invariant #59), never projected
      * or sent over IPC (Invariant #1), and deliberately excluded from the body
-     * checksum (like the header) so pre-v6 checksums still verify after the
-     * v5→v6 migration backfills it.
+     * checksum, like the header.
      *
      * Typed non-optional following the `stagedReveals` precedent: every writer
      * (`captureSaveFile`) and the migrator guarantee presence; the serializer

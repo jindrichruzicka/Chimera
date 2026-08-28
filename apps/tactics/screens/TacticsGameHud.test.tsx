@@ -139,7 +139,7 @@ function makeCommitmentSnapshot(
         entities: {
             'unit-1': { id: entityId('unit-1'), kind: 'unit', ownerId: p1, x: 0, y: 0, hp: 1 },
         } as unknown as PlayerSnapshot['entities'],
-        setup: { matchSettings: { turnMode: 'commitment' }, playerAttributes: {} },
+        setup: { gameParams: { turnMode: 'commitment' }, playerAttributes: {} },
     });
 }
 

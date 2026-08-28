@@ -63,8 +63,8 @@ const HOST_PARAMS: HostLobbyParams = { gameId: 'tactics', maxPlayers: 2 };
  */
 const SAMPLE_SETUP: GameLobbySetup = {
     maxPlayers: 4,
-    matchSettingsDefaults: { mapSize: 'medium' },
-    matchSettingsOptions: {
+    gameParamDefaults: { mapSize: 'medium' },
+    gameParamOptions: {
         mapSize: [
             { value: 'small', label: 'Small' },
             { value: 'medium', label: 'Medium' },
@@ -2254,14 +2254,14 @@ describe('LobbyManager — profile rejection forwarding', () => {
 // ── Lobby setup defaults & host-only writes ──────────────────────────────────
 
 describe('LobbyManager — lobby setup defaults', () => {
-    it('seeds matchSettings and the host (seat 0) attributes from the descriptor on host', async () => {
+    it('seeds gameParams and the host (seat 0) attributes from the descriptor on host', async () => {
         const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
             resolveLobbySetup: resolveSampleSetup,
         });
         const info = await manager.hostLobby(HOST_PARAMS);
 
         const state = manager.getCurrentState();
-        expect(state?.matchSettings).toEqual({ mapSize: 'medium' });
+        expect(state?.gameParams).toEqual({ mapSize: 'medium' });
         const host = state?.players.find((p) => p.playerId === info.hostId);
         expect(host?.attributes).toEqual({ team: 'red' });
 
@@ -2273,7 +2273,7 @@ describe('LobbyManager — lobby setup defaults', () => {
         const info = await manager.hostLobby(HOST_PARAMS);
 
         const state = manager.getCurrentState();
-        expect(state?.matchSettings).toBeUndefined();
+        expect(state?.gameParams).toBeUndefined();
         const host = state?.players.find((p) => p.playerId === info.hostId);
         expect(host?.attributes).toBeUndefined();
 
@@ -2287,7 +2287,7 @@ describe('LobbyManager — lobby setup defaults', () => {
         const info = await manager.hostLobby(HOST_PARAMS);
 
         const state = manager.getCurrentState();
-        expect(state?.matchSettings).toBeUndefined();
+        expect(state?.gameParams).toBeUndefined();
         expect(state?.players.find((p) => p.playerId === info.hostId)?.attributes).toBeUndefined();
 
         await manager.closeLobby();
@@ -2447,8 +2447,8 @@ describe('LobbyManager — lobby setup defaults', () => {
     });
 });
 
-describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerAttribute (F53)', () => {
-    it('setMatchSetting merges into matchSettings, republishes, and broadcasts', async () => {
+describe('LobbyManager — host-only setGameParam / owner-authored setPlayerAttribute (F53)', () => {
+    it('setGameParam merges into gameParams, republishes, and broadcasts', async () => {
         let capturedTransport: HostTransport | null = null;
         const states: LobbyState[] = [];
         const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
@@ -2461,18 +2461,18 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         await manager.hostLobby(HOST_PARAMS);
         const broadcastSpy = vi.spyOn(capturedTransport!, 'broadcastLobbyState');
 
-        await manager.setMatchSetting('boardColor', 'crimson');
+        await manager.setGameParam('boardColor', 'crimson');
 
-        expect(manager.getCurrentState()?.matchSettings).toEqual({
+        expect(manager.getCurrentState()?.gameParams).toEqual({
             mapSize: 'medium',
             boardColor: 'crimson',
         });
         expect(broadcastSpy).toHaveBeenCalledOnce();
-        expect(broadcastSpy.mock.calls[0]?.[0].matchSettings).toEqual({
+        expect(broadcastSpy.mock.calls[0]?.[0].gameParams).toEqual({
             mapSize: 'medium',
             boardColor: 'crimson',
         });
-        expect(states[states.length - 1]?.matchSettings).toEqual({
+        expect(states[states.length - 1]?.gameParams).toEqual({
             mapSize: 'medium',
             boardColor: 'crimson',
         });
@@ -2500,9 +2500,9 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         await manager.closeLobby();
     });
 
-    it('rejects setMatchSetting / setPlayerAttribute without an active session', async () => {
+    it('rejects setGameParam / setPlayerAttribute without an active session', async () => {
         const manager = makeManager();
-        await expect(manager.setMatchSetting('boardColor', 'crimson')).rejects.toThrow(
+        await expect(manager.setGameParam('boardColor', 'crimson')).rejects.toThrow(
             /active session/i,
         );
         await expect(manager.setPlayerAttribute(playerId('p1'), 'team', 'red')).rejects.toThrow(
@@ -2510,7 +2510,7 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         );
     });
 
-    it('setMatchSetting still rejects from a joined (non-host) session', async () => {
+    it('setGameParam still rejects from a joined (non-host) session', async () => {
         const provider = makeProvider();
         const hostManager = makeManager(provider);
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
@@ -2518,7 +2518,7 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         const joinManager = makeManager(provider);
         await joinManager.joinLobby({ address: hostInfo.sessionId });
 
-        await expect(joinManager.setMatchSetting('boardColor', 'crimson')).rejects.toThrow(
+        await expect(joinManager.setGameParam('boardColor', 'crimson')).rejects.toThrow(
             /only hosted sessions/i,
         );
 

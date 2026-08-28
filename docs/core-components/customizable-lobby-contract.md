@@ -1,6 +1,6 @@
 ---
 title: 'Customizable Lobby Contract'
-description: 'Declarative contract for game-customizable multiplayer lobbies (F53). Defines the GameLobbySetup descriptor, the synced GameSetupConfig, GameLobbyScreenProps, the registry-loaded LobbyScreen slot, the lobby write path (renderer lobby API → IPC → LobbyManager) with host-authored match settings and owner-authored per-player attributes, how snapshot.setup is projected to every peer verbatim, and the two host exits the session-mode stamp forks between (return-to-lobby vs the atomic close-session). Ratifies invariants #99, #100, #101.'
+description: 'Declarative contract for game-customizable multiplayer lobbies (F53). Defines the GameLobbySetup descriptor, the synced GameSetupConfig, GameLobbyScreenProps, the registry-loaded LobbyScreen slot, the lobby write path (renderer lobby API → IPC → LobbyManager) with host-authored game params and owner-authored per-player attributes, how snapshot.setup is projected to every peer verbatim, and the two host exits the session-mode stamp forks between (return-to-lobby vs the atomic close-session). Ratifies invariants #99, #100, #101.'
 tags:
     [
         lobby,
@@ -26,20 +26,20 @@ tags:
 The lobby is an **engine-owned shell page** (`renderer/app/lobby/page.tsx`, §4.37.4) whose chrome —
 dialog, host/join tabs, player roster, ready and start controls — is fixed by the engine. The
 Leave/Start controls in particular are the engine dialog's **modal footer actions** (§4.37.4): a
-game `LobbyScreen` must not render its own. A game customizes only the **match configuration** it
-needs: a set of host-chosen _match settings_ (e.g. board colour) and per-seat _player attributes_
+game `LobbyScreen` must not render its own. A game customizes only the **configuration** it
+needs: a set of host-chosen _game params_ (e.g. board colour) and per-seat _player attributes_
 (e.g. unit colour). A game declares this surface declaratively through a `GameLobbySetup`
 descriptor and, optionally, ships a registry-loaded `LobbyScreen` React component that renders
 those controls inside the engine dialog.
 
-The contract splits authorship by scope: **match settings are host-authored** (only the host edits them;
+The contract splits authorship by scope: **game params are host-authored** (only the host edits them;
 clients read), while **per-player attributes are owner-authored** — each player edits only its OWN seat,
 the host stays authoritative and rebroadcasts. Every accepted edit is broadcast through `LobbyState` so
 all peers converge, and the agreed-upon configuration is carried into the match as `snapshot.setup`,
 projected to every viewer verbatim. Tactics is the first adopter (the host picks a shared board colour
 and each player picks their own unit colour).
 
-This contract ratifies invariants **#99** (host-authored match settings / owner-authored player
+This contract ratifies invariants **#99** (host-authored game params / owner-authored player
 attributes), **#100** (no direct privileged writes from game lobby UI), and **#101** (`snapshot.setup`
 is public, projected verbatim).
 
@@ -52,7 +52,7 @@ foundation contract module with no cross-package imports (mechanical Check 13), 
 in both `main` and the renderer (mirroring `game-shell-contract.ts`).
 
 ```ts
-/** A single selectable value for a match setting or player attribute. */
+/** A single selectable value for a game param or player attribute. */
 export interface LobbyFieldOption {
     readonly value: string;
     readonly label: string;
@@ -65,8 +65,8 @@ export interface LobbyFieldOption {
  */
 export interface GameLobbySetup {
     readonly maxPlayers: number;
-    readonly matchSettingsDefaults: Record<string, string>;
-    readonly matchSettingsOptions: Record<string, readonly LobbyFieldOption[]>;
+    readonly gameParamDefaults: Record<string, string>;
+    readonly gameParamOptions: Record<string, readonly LobbyFieldOption[]>;
     readonly playerAttributeOptions: Record<string, readonly LobbyFieldOption[]>;
     resolveDefaultPlayerAttributes(seatIndex: number): Record<string, string>;
 }
@@ -76,7 +76,7 @@ export interface GameLobbySetup {
  * peer agrees on the configuration.
  */
 export interface GameSetupConfig {
-    readonly matchSettings: Record<string, string>;
+    readonly gameParams: Record<string, string>;
     readonly playerAttributes: Record<PlayerId, Record<string, string>>;
 }
 
@@ -90,7 +90,7 @@ export interface GameLobbyScreenProps {
     readonly isHost: boolean;
     readonly canStartGame: boolean;
     readonly pendingAction: LobbyPendingAction;
-    readonly setMatchSetting: (key: string, value: string) => void;
+    readonly setGameParam: (key: string, value: string) => void;
     readonly setPlayerAttribute: (playerId: PlayerId, key: string, value: string) => void;
     readonly onToggleReady: (ready: boolean) => Promise<void>;
     readonly onStartGame: () => Promise<void>;
@@ -101,9 +101,11 @@ export interface GameLobbyScreenProps {
 The blocks above are abridged to the fields this contract explains; each cited module is the full surface.
 
 The synced state lives on the wire types in [`simulation/foundation/messages-schemas.ts`](../../simulation/foundation/messages-schemas.ts):
-`LobbyState.matchSettings?`, `LobbyPlayerEntry.attributes?`, and `LobbyAgentSlot.attributes?` — the last being an
+`LobbyState.gameParams?`, `LobbyPlayerEntry.attributes?`, and `LobbyAgentSlot.attributes?` — the last being an
 AI seat's host-authored picks, since an AI seat is never a `players` entry and so has no other carrier.
-All three are **optional and backward-compatible** — absent on older clients and on games with no lobby setup.
+All three are **optional** — absent on games with no lobby setup. `gameParams` alone is not
+compatible across its rename: a peer still sending `matchSettings` has it stripped by this
+non-strict object, so its lobby renders with defaults and nothing warns.
 There is no attribute-setter channel for an agent slot, so its per-attribute caps ride the state frame and the
 host-request frames that carry a slot (`chimera:lobby:host`, `chimera:lobby:quick-start`); a player's
 attributes are bounded at `chimera:lobby:set-player-attribute` instead.
@@ -115,7 +117,7 @@ a zero-import foundation leaf) declares what match a game opens when the player 
 
 ```ts
 export interface QuickStartConfig {
-    readonly matchSettings?: Readonly<Record<string, string>>;
+    readonly gameParams?: Readonly<Record<string, string>>;
     readonly hostAttributes?: Readonly<Record<string, string>>;
     readonly localSeats?: readonly QuickStartSeat[];
     readonly aiSeats?: readonly QuickStartAiSeat[];
@@ -130,22 +132,22 @@ consumes it — see [Quick start](#quick-start-skipping-the-lobby) below.
 
 ---
 
-## Write Path (host-authored settings, owner-authored attributes)
+## Write Path (host-authored params, owner-authored attributes)
 
 A lobby edit never touches privileged state directly. It travels engine-owned indirection from the game
 lobby screen to the authoritative `LobbyManager`, which is the sole writer and broadcasts back to peers.
-The host authors match **settings**; each player authors only its OWN seat's **attributes**:
+The host authors the **game params**; each player authors only its OWN seat's **attributes**:
 
 ```
 LobbyScreen                                          all peers
-  │  setMatchSetting (host)  setPlayerAttribute (own seat)   ▲
+  │  setGameParam (host)     setPlayerAttribute (own seat)   ▲
   ▼  (GameLobbyScreenProps)                                  │ re-render from broadcast
 useLobbyApi()  (renderer/app/lobby/useLobbyApi.ts)           │
   ▼  ipcRenderer.invoke                                      │
-chimera:lobby:set-match-setting                              │
+chimera:lobby:set-game-param                                 │
 chimera:lobby:set-player-attribute   ── Zod-validated ───────┤  (ipc-schemas.ts)
   ▼  ipcMain.handle (ipc-handlers.ts)                        │
-LobbyManager.setMatchSetting    → HOST-ONLY (rejects joined) │
+LobbyManager.setGameParam       → HOST-ONLY (rejects joined) │
 LobbyManager.setPlayerAttribute → OWN-SEAT only:            │
   • hosted: merge own seat ────────────────────────────────┤
   • joined: send PLAYER_ATTRIBUTE_UPDATE to host ───────────┘
@@ -155,13 +157,13 @@ LobbyManager.setPlayerAttribute → OWN-SEAT only:            │
 
 - **Write path.** Three Zod-validated renderer channels funnel into these same two manager verbs — the
   two above, plus `chimera:lobby:quick-start`, which drives them from main rather than adding a door of
-  its own. `setMatchSetting()` rejects (returns a rejected
+  its own. `setGameParam()` rejects (returns a rejected
   `Promise`) when the active session is not a hosted session. `setPlayerAttribute()` rejects any
   `playerId` other than the caller's own seat; a joined client's own-seat write is forwarded to the host,
   which applies it to the connection-derived sender seat — never a client-supplied id (Invariant #99).
   This mirrors the owner-authored `ready` flow.
 - **No direct privileged writes from the game UI.** A `LobbyScreen` calls the engine-provided
-  `setMatchSetting` / `setPlayerAttribute` props only. It must not write the IPC-mirrored `lobbyStore`,
+  `setGameParam` / `setPlayerAttribute` props only. It must not write the IPC-mirrored `lobbyStore`,
   call `LobbyManager`, or open IPC channels itself (Invariant #100).
 - **Read-only where you have no authority.** A `LobbyScreen` disables the board-colour control for a
   non-host (`isHost === false`) and disables every per-player colour control except the local player's
@@ -185,8 +187,8 @@ QuickStartCoordinator.quickStart
   │  seats:  maxPlayers = 1 + localSeats.length + aiSeats.length   (exactly full)
   ▼
 LobbyManager.hostLobby({ gameId, maxPlayers, agentSlots })   ← AI roster pre-seeded, atomically
-LobbyManager.setMatchSetting('engine.sessionMode', 'quick')  ← the engine stamp, first
-LobbyManager.setMatchSetting(…merged match settings…)
+LobbyManager.setGameParam('engine.sessionMode', 'quick')  ← the engine stamp, first
+LobbyManager.setGameParam(…merged game params…)
 LobbyManager.setPlayerAttribute(hostId, …hostAttributes…)
 LobbyManager.addLocalSeat(<host>-local-N, { ready, attributes })
 LobbyManager.updatePlayerReadyState(true)
@@ -202,10 +204,10 @@ LobbyManager.startGame()
   `setPlayerAttribute` channel cannot reach it. Its picks are seeded at host time through
   `addLocalSeat`, merged over the descriptor's seat defaults. There is no runtime attribute channel for
   a local seat.
-- **The `engine.sessionMode` stamp is engine-owned.** `SetMatchSettingPayloadSchema` refuses
-  `SESSION_MODE_SETTING` (`'engine.sessionMode'`) and `QuickStartParamsSchema` refuses it inside a
-  requested `matchSettings` map, so no lobby screen and no game default can flip it.
-  It rides `matchSettings` into `snapshot.setup`, which is why it survives a window reload and a restore.
+- **The `engine.sessionMode` stamp is engine-owned.** `SetGameParamPayloadSchema` refuses
+  `SESSION_MODE_PARAM` (`'engine.sessionMode'`) and `QuickStartParamsSchema` refuses it inside a
+  requested `gameParams` map, so no lobby screen and no game default can flip it.
+  It rides `gameParams` into `snapshot.setup`, which is why it survives a window reload and a restore.
   Its absence means the session was born in the lobby. The sibling reserved key `engine.allowSpectators`
   stays host-settable — it IS a host toggle.
 - **Failure leaves nothing behind.** Any throw after the lobby exists tears it down via `closeLobby()`;
@@ -223,7 +225,7 @@ window reload and a save restore.
 ```
 InGameMenuProps.leaveGame(options?)   ← the GAME's leave call
   ▼  useLeaveGame
-host + snapshot.setup.matchSettings['engine.sessionMode'] === 'quick'
+host + snapshot.setup.gameParams['engine.sessionMode'] === 'quick'
   ▼  chimera:lobby:close-session { autosave }  ── Zod-validated (CloseSessionParamsSchema)
      SessionRuntime.captureSaveFile → SaveManager.autoSave   (only when autosave)
      LobbyManager.closeLobby()                                (always)
@@ -272,11 +274,11 @@ local seat) under its own `playerId`, and every `kind: 'ai'` agent slot under th
 the host seats it with — one map, keyed the same way whatever kind of seat it is. A `players` entry wins over an
 agent slot claiming the same id. A human-kind agent slot contributes nothing: it is a placeholder for a joining
 human whose own entry carries its attributes, and no synthetic seat is ever created for it. The function returns
-`undefined` when there is nothing to carry (no match settings and no seat attributes), so the start payload
-omits `setup` and stays backward-compatible. Because `setup` is
+`undefined` when there is nothing to carry (no game params and no seat attributes), so the start payload
+omits `setup` — which is what a game with no lobby setup sends. Because `setup` is
 **public host config** with no owner-only or per-viewer fields, `StateProjector.project()` copies it
 through unchanged — every viewer's projected snapshot exposes an identical `setup` (Invariant #101). This
-keeps simulation-affecting parameters in match config rather than in user settings (Invariant #36).
+keeps simulation-affecting values in lobby-agreed game params rather than in user settings (Invariant #36).
 
 ---
 
@@ -305,8 +307,8 @@ package into the shell or host:
 ```ts
 export const tacticsLobbySetup: GameLobbySetup = {
     maxPlayers: 4,
-    matchSettingsDefaults: { boardColor: DEFAULT_BOARD_COLOR }, // 'slate'
-    matchSettingsOptions: { boardColor: TACTICS_BOARD_COLORS }, // slate | stone | navy
+    gameParamDefaults: { boardColor: DEFAULT_BOARD_COLOR }, // 'slate'
+    gameParamOptions: { boardColor: TACTICS_BOARD_COLORS }, // slate | stone | navy
     playerAttributeOptions: { color: TACTICS_PLAYER_COLORS }, // blue | red | green | amber
     resolveDefaultPlayerAttributes(seatIndex) {
         // Seat n defaults to palette colour n, wrapping via modulo to stay total.
@@ -328,22 +330,22 @@ on `snapshot.setup`.
 
 ```
 simulation/foundation/
-├── game-lobby-contract.ts      # GameLobbySetup (incl. quickStart?), GameSetupConfig, GameLobbyScreenProps, LobbyFieldOption, SESSION_MODE_SETTING
+├── game-lobby-contract.ts      # GameLobbySetup (incl. quickStart?), GameSetupConfig, GameLobbyScreenProps, LobbyFieldOption, SESSION_MODE_PARAM
 ├── quick-start-contract.ts     # QuickStartConfig / QuickStartSeat / QuickStartAiSeat — zero-import leaf
-└── messages-schemas.ts         # LobbyState.matchSettings?, LobbyPlayerEntry.attributes?, LobbyAgentSlot.attributes?
+└── messages-schemas.ts         # LobbyState.gameParams?, LobbyPlayerEntry.attributes?, LobbyAgentSlot.attributes?
 electron/
 ├── main/
 │   ├── lobby/
-│   │   ├── LobbyManager.ts          # Host-only setMatchSetting / owner-authored setPlayerAttribute + broadcast
+│   │   ├── LobbyManager.ts          # Host-only setGameParam / owner-authored setPlayerAttribute + broadcast
 │   │   └── lobbySetupRegistry.ts    # createResolveLobbySetup, buildSetupFromLobbyState (game-agnostic; builder injected via MainGameContribution.lobbySetup)
 │   ├── runtime/
 │   │   ├── QuickStartCoordinator.ts # chimera:lobby:quick-start orchestration over public manager verbs
 │   │   └── syntheticAgentId.ts      # createSyntheticAIPlayerId — the one spelling of an AI seat's id
 │   └── ipc/
-│       ├── ipc-handlers.ts          # chimera:lobby:set-match-setting / set-player-attribute / quick-start / close-session handlers
-│       └── ipc-schemas.ts           # SetMatchSettingPayloadSchema, SetPlayerAttributePayloadSchema, QuickStartParamsSchema, CloseSessionParamsSchema
+│       ├── ipc-handlers.ts          # chimera:lobby:set-game-param / set-player-attribute / quick-start / close-session handlers
+│       └── ipc-schemas.ts           # SetGameParamPayloadSchema, SetPlayerAttributePayloadSchema, QuickStartParamsSchema, CloseSessionParamsSchema
 └── preload/
-    └── apis/lobby-api.ts            # LobbyAPI.setMatchSetting / setPlayerAttribute / quickStart / closeSession + channel constants
+    └── apis/lobby-api.ts            # LobbyAPI.setGameParam / setPlayerAttribute / quickStart / closeSession + channel constants
 simulation/
 ├── engine/EngineActions.ts          # engine:start_game payload.setup → GameSnapshot.setup
 └── projection/StateProjector.ts     # passes fullState.setup through to PlayerSnapshot verbatim
@@ -351,7 +353,7 @@ renderer/
 ├── game/rendererGameRegistry.ts     # GameScreenRegistry.LobbyScreen slot (registry-loaded)
 └── app/lobby/
     ├── page.tsx                     # Engine lobby route; renders gameShell.LobbyScreen when present
-    └── useLobbyApi.ts               # setMatchSetting / setPlayerAttribute → IPC
+    └── useLobbyApi.ts               # setGameParam / setPlayerAttribute → IPC
 apps/
 └── tactics/
     ├── lobby/lobby-setup.ts         # tacticsLobbySetup descriptor + colour palettes
@@ -362,13 +364,13 @@ apps/
 
 ## Invariants
 
-| #    | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #36  | Settings remain outside simulation state and the `ActionPipeline`. Any game parameter that affects simulation outcomes belongs in match config transmitted during lobby setup — i.e. `GameSetupConfig`, not user settings.                                                                                                                                                                                                                                                                                                                     |
-| #80  | The `GameScreenRegistry` is the sole coupling point between the engine renderer and a game's React code. The `LobbyScreen` slot follows the same registry indirection.                                                                                                                                                                                                                                                                                                                                                                         |
-| #99  | Lobby match settings are **host-authored**; per-player attributes are **owner-authored**. `LobbyManager.setMatchSetting()` rejects a non-hosted session; `setPlayerAttribute()` rejects any seat but the caller's own and (for a joined client) forwards the own-seat intent to the host, which applies it to the connection-derived sender seat. Three Zod-validated IPC channels funnel into those verbs; changes broadcast to every peer. The host connection owns every pass-and-play local seat on a shared machine, seeded at host time. |
-| #100 | Game `LobbyScreen` components perform **no privileged writes directly** — they call the engine-provided `setMatchSetting` / `setPlayerAttribute` props (routed renderer API → IPC → `LobbyManager`) and never write `lobbyStore`, call `LobbyManager`, or open IPC channels themselves.                                                                                                                                                                                                                                                        |
-| #101 | `GameSnapshot.setup` / `PlayerSnapshot.setup` is **public host config** passed through `StateProjector.project()` **verbatim** — no owner-only or per-viewer fields — so every viewer's projected snapshot carries an identical `setup`.                                                                                                                                                                                                                                                                                                       |
+| #    | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #36  | Settings remain outside simulation state and the `ActionPipeline`. Any value that affects simulation outcomes belongs in the lobby-agreed `gameParams` map transmitted during lobby setup — i.e. `GameSetupConfig`, not user settings.                                                                                                                                                                                                                                                                                                   |
+| #80  | The `GameScreenRegistry` is the sole coupling point between the engine renderer and a game's React code. The `LobbyScreen` slot follows the same registry indirection.                                                                                                                                                                                                                                                                                                                                                                   |
+| #99  | Lobby game params are **host-authored**; per-player attributes are **owner-authored**. `LobbyManager.setGameParam()` rejects a non-hosted session; `setPlayerAttribute()` rejects any seat but the caller's own and (for a joined client) forwards the own-seat intent to the host, which applies it to the connection-derived sender seat. Three Zod-validated IPC channels funnel into those verbs; changes broadcast to every peer. The host connection owns every pass-and-play local seat on a shared machine, seeded at host time. |
+| #100 | Game `LobbyScreen` components perform **no privileged writes directly** — they call the engine-provided `setGameParam` / `setPlayerAttribute` props (routed renderer API → IPC → `LobbyManager`) and never write `lobbyStore`, call `LobbyManager`, or open IPC channels themselves.                                                                                                                                                                                                                                                     |
+| #101 | `GameSnapshot.setup` / `PlayerSnapshot.setup` is **public host config** passed through `StateProjector.project()` **verbatim** — no owner-only or per-viewer fields — so every viewer's projected snapshot carries an identical `setup`.                                                                                                                                                                                                                                                                                                 |
 
 ---
 

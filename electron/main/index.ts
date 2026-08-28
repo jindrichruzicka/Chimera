@@ -2865,7 +2865,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // capability AND the host enabled it, else a clean REJECT. The
             // policy is injected here — where the host knows the manifest and
             // live snapshot — so LobbyManager/providers stay provider-agnostic
-            // (Invariant #38). Match settings come from the running snapshot's
+            // (Invariant #38). Game params come from the running snapshot's
             // `setup` (projected verbatim, Invariant #101).
             transport.setJoinClassifier((pid, ctx) =>
                 classifyJoin({
@@ -2880,7 +2880,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                             ? undefined
                             : resolveSpectatorSupport(hostedGame.manifest),
                     allowSpectators: readAllowSpectators(
-                        sessionRuntime.getSnapshot().setup?.matchSettings,
+                        sessionRuntime.getSnapshot().setup?.gameParams,
                     ),
                 }),
             );
@@ -3512,7 +3512,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 return setup === undefined ? {} : resolvePlayerAttributeDefaults(setup, seatIndex);
             },
             hostLobby: (params) => lobbyManager.hostLobby(params),
-            setMatchSetting: (key, value) => lobbyManager.setMatchSetting(key, value),
+            setGameParam: (key, value) => lobbyManager.setGameParam(key, value),
             setPlayerAttribute: (target, key, value) =>
                 lobbyManager.setPlayerAttribute(target, key, value),
             addLocalSeat: (seatId, seatOptions) => lobbyManager.addLocalSeat(seatId, seatOptions),

@@ -65,7 +65,7 @@ export interface DevHarnessLobbyPort {
         address: string;
         profile?: unknown;
     }): Promise<{ readonly sessionId: string; readonly hostId: PlayerId }>;
-    setMatchSetting(key: string, value: string): Promise<void>;
+    setGameParam(key: string, value: string): Promise<void>;
     setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
     addAi(): Promise<void>;
@@ -162,8 +162,8 @@ export class DevHarnessCoordinator {
         this.log.info('dev harness: auto-hosting', { gameId: hostedGameId, maxPlayers });
         const info = await lobby.hostLobby({ gameId: hostedGameId, maxPlayers });
 
-        for (const [key, value] of Object.entries(scenario?.matchSettings ?? {})) {
-            await lobby.setMatchSetting(key, value);
+        for (const [key, value] of Object.entries(scenario?.gameParams ?? {})) {
+            await lobby.setGameParam(key, value);
         }
 
         const hostSeat = scenario !== undefined ? devScenarioSeat(scenario, 1) : undefined;
@@ -178,7 +178,7 @@ export class DevHarnessCoordinator {
 
         // Announce ONLY after all seeding: the orchestrator's announce-wait
         // doubles as the "host fully seeded" barrier, so a client can never
-        // join a lobby whose match settings are still being applied.
+        // join a lobby whose game params are still being applied.
         if (flags.announceFile !== undefined) {
             await this.opts.writeAnnounce(flags.announceFile, {
                 lobbyCode: info.sessionId,

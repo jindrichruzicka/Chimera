@@ -112,8 +112,8 @@ describe('createMainGameRegistry', () => {
     it('derives the gameId → lobby-setup builder map only for contributions that declare one', () => {
         const lobbySetup = (): GameLobbySetup => ({
             maxPlayers: 2,
-            matchSettingsDefaults: {},
-            matchSettingsOptions: {},
+            gameParamDefaults: {},
+            gameParamOptions: {},
             playerAttributeOptions: {},
             resolveDefaultPlayerAttributes: () => ({}),
         });

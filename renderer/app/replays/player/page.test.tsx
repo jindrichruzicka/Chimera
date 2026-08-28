@@ -15,7 +15,7 @@ import type {
 import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import {
     SESSION_MODE_QUICK,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 
 // Stub the game renderer loader so the player page does not pull in real
@@ -620,7 +620,7 @@ describe('ReplayPlayerPage', () => {
                 players: {},
                 undoMeta: { canUndo: false, canRedo: false },
                 setup: {
-                    matchSettings: { [SESSION_MODE_SETTING]: SESSION_MODE_QUICK },
+                    gameParams: { [SESSION_MODE_PARAM]: SESSION_MODE_QUICK },
                     playerAttributes: {},
                 },
             } as unknown as PlayerSnapshot);

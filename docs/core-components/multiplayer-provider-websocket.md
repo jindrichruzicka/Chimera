@@ -162,7 +162,7 @@ type JoinClassification =
     | { reject: string }; // REJECT { reason } + close
 ```
 
-The classifier is **host policy**, injected at the composition root (`electron/main/index.ts` `onSessionHosted`), where the host knows the live `GameSnapshot.phase`, the game's `resolveSpectatorSupport(manifest)` capability, and the `readAllowSpectators(matchSettings)` toggle — so `LobbyManager`/providers stay provider-agnostic (Invariant #38). The pure decision lives in `electron/main/lobby/joinClassifier.ts`:
+The classifier is **host policy**, injected at the composition root (`electron/main/index.ts` `onSessionHosted`), where the host knows the live `GameSnapshot.phase`, the game's `resolveSpectatorSupport(manifest)` capability, and the `readAllowSpectators(gameParams)` toggle — so `LobbyManager`/providers stay provider-agnostic (Invariant #38). The pure decision lives in `electron/main/lobby/joinClassifier.ts`:
 
 - `lobby` phase, or a reconnect (retained/restored seat) → `{ role: 'player' }` (unchanged).
 - running-match fresh join, game spectator-capable **and** host toggle on → `{ role: 'spectator' }`.

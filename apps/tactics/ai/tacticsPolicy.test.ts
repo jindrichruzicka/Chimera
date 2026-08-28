@@ -24,7 +24,7 @@ import {
     TACTICS_COMMIT_ACTION,
     TACTICS_MAX_STAMINA,
     TACTICS_MOVE_UNIT_ACTION,
-    TACTICS_TURN_MODE_SETTING,
+    TACTICS_TURN_MODE_PARAM,
 } from '../simulation/constants.js';
 import type { EntityId, PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import { entityId, playerId } from '@chimera-engine/simulation/engine/types.js';
@@ -85,7 +85,7 @@ function makeSnapshot(opts: {
             ? {}
             : {
                   setup: {
-                      matchSettings: { [TACTICS_TURN_MODE_SETTING]: opts.turnMode },
+                      gameParams: { [TACTICS_TURN_MODE_PARAM]: opts.turnMode },
                       playerAttributes: {},
                   },
               }),
@@ -226,7 +226,7 @@ describe('decideTacticsAction', () => {
  * In commitment mode End Turn is gated until every seat commits, so the AI must
  * end its turn by emitting `tactics:commit` (the host then auto-synthesises the
  * reveal End Turn once the set completes). Sequential mode is unchanged. The AI
- * reads the mode off the projected `setup.matchSettings` (projected verbatim by
+ * reads the mode off the projected `setup.gameParams` (projected verbatim by
  * the StateProjector), so it never needs a host-local field.
  */
 describe('decideTacticsAction — commitment (simultaneous) turn mode', () => {

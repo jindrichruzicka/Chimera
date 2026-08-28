@@ -412,7 +412,7 @@ const BOARD_COLOR_HEX: Readonly<Record<string, string>> = {
 describe('resolveTacticsBoardColor', () => {
     it('maps the host-configured board colour name to its hex', () => {
         const setup: GameSetupConfig = {
-            matchSettings: { boardColor: 'navy' },
+            gameParams: { boardColor: 'navy' },
             playerAttributes: {},
         };
 
@@ -425,7 +425,7 @@ describe('resolveTacticsBoardColor', () => {
 
     it('falls back to the default slate hex for an off-palette board colour name', () => {
         const setup: GameSetupConfig = {
-            matchSettings: { boardColor: 'periwinkle' },
+            gameParams: { boardColor: 'periwinkle' },
             playerAttributes: {},
         };
 
@@ -434,7 +434,7 @@ describe('resolveTacticsBoardColor', () => {
 
     it('falls back to the default slate hex when the hex map is empty (content not loaded)', () => {
         const setup: GameSetupConfig = {
-            matchSettings: { boardColor: 'navy' },
+            gameParams: { boardColor: 'navy' },
             playerAttributes: {},
         };
 
@@ -445,7 +445,7 @@ describe('resolveTacticsBoardColor', () => {
 describe('resolveTacticsUnitColor', () => {
     it("maps each owner's host-assigned colour name to its hex", () => {
         const setup: GameSetupConfig = {
-            matchSettings: {},
+            gameParams: {},
             playerAttributes: {
                 [LOCAL_PLAYER]: { color: 'green' },
                 [OPPONENT_PLAYER]: { color: 'amber' },
@@ -462,7 +462,7 @@ describe('resolveTacticsUnitColor', () => {
 
     it('falls back to the default blue hex for an owner with no assigned colour', () => {
         const setup: GameSetupConfig = {
-            matchSettings: {},
+            gameParams: {},
             playerAttributes: { [LOCAL_PLAYER]: { color: 'green' } },
         };
 
@@ -471,7 +471,7 @@ describe('resolveTacticsUnitColor', () => {
 
     it('falls back to the default blue hex for an off-palette colour name', () => {
         const setup: GameSetupConfig = {
-            matchSettings: {},
+            gameParams: {},
             playerAttributes: { [LOCAL_PLAYER]: { color: 'chartreuse' } },
         };
 
@@ -480,7 +480,7 @@ describe('resolveTacticsUnitColor', () => {
 
     it('falls back to the default blue hex when the hex map is empty (content not loaded)', () => {
         const setup: GameSetupConfig = {
-            matchSettings: {},
+            gameParams: {},
             playerAttributes: { [LOCAL_PLAYER]: { color: 'green' } },
         };
 

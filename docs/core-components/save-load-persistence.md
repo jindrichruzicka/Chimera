@@ -1,6 +1,6 @@
 ---
 title: 'Save / Load Persistence'
-description: 'SaveFile schema (v6: session manifest + matchId), SaveSerializer strategies (JSON/Compressed), SaveRepository interface, FileSaveRepository atomic write, SaveMigrator chain, SessionRestoreCoordinator menu-load restore, multiplayer save constraints, and saveStore.'
+description: 'SaveFile schema (session manifest + matchId), SaveSerializer strategies (JSON/Compressed), SaveRepository interface, FileSaveRepository atomic write, SaveMigrator chain, SessionRestoreCoordinator menu-load restore, multiplayer save constraints, and saveStore.'
 tags: [save-load, persistence, memento, repository, migration, restore]
 ---
 
@@ -37,7 +37,7 @@ interface SaveFileHeader {
     readonly turnNumber: number;
     readonly playerNames: readonly string[];
     readonly thumbnailDataUrl?: string; // Base64 PNG (optional)
-    readonly checksum?: string; // SHA-256 of the body {checkpoint, deltaActions, pendingCommitments}; verified on load
+    readonly checksum?: string; // SHA-256 of the `SaveBody` fields; verified on load, against the file AS STORED
 }
 
 interface SaveSeat {
@@ -138,7 +138,7 @@ Both halves exist because the slot is written under one spelling and read under 
 ## SaveMigrator — Chain of Responsibility
 
 ```typescript
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 export interface SaveMigration {
     readonly fromVersion: number;
@@ -167,6 +167,7 @@ registering migrations by hand. The shipped chain:
 | v3→v4 | `checkpointGameResultMigration` | `checkpoint.gameResult: null` (§4.38)                                                                                                          |
 | v4→v5 | `stagedRevealsMigration`        | top-level `stagedReveals: {}` (F54, Invariant #26)                                                                                             |
 | v5→v6 | `sessionManifestMigration`      | top-level `session` via `deriveSessionManifest(checkpoint)` — control kinds from id heuristics, `maxPlayers` = seat-count floor, fresh matchId |
+| v6→v7 | `checkpointGameParamsMigration` | renames `checkpoint.setup.matchSettings` to `checkpoint.setup.gameParams`                                                                      |
 
 ---
 
@@ -194,7 +195,7 @@ registering migrations by hand. The shipped chain:
 ─── LOAD (in-session, same match) ─────────────────────────────────────────
 [Renderer] window.__chimera.saves.load('<game>/slot-1')
   → IPC → [SavesIpcAdapter.restoreSession]
-  1. SaveManager.restoreFromSave(slotId)   ← reads + auto-migrates to v6
+  1. SaveManager.restoreFromSave(slotId)   ← reads + auto-migrates to v7
   2. Guard: file.header.gameId matches the hosted game AND
      file.session.matchId === the active session's matchId
      (a different match rejects renderer-friendly: return to the menu first)

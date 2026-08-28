@@ -19,7 +19,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playerId, type LobbyState } from '@chimera-engine/electron/preload/api-types.js';
 import {
-    ALLOW_SPECTATORS_SETTING,
+    ALLOW_SPECTATORS_PARAM,
     type GameLobbyScreenProps,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
@@ -69,7 +69,7 @@ function makeLobbyState(overrides: Partial<LobbyState> = {}): LobbyState {
             { playerId: HOST_ID, displayName: 'Alice', ready: true, attributes: { color: 'blue' } },
             { playerId: CLIENT_ID, displayName: 'Bob', ready: false, attributes: { color: 'red' } },
         ],
-        matchSettings: { boardColor: 'navy' },
+        gameParams: { boardColor: 'navy' },
         ...overrides,
     };
 }
@@ -82,7 +82,7 @@ function makeProps(overrides: Partial<GameLobbyScreenProps> = {}): GameLobbyScre
         isHost: true,
         canStartGame: true,
         pendingAction: null,
-        setMatchSetting: vi.fn(),
+        setGameParam: vi.fn(),
         setPlayerAttribute: vi.fn(),
         addAiPlayer: vi.fn(async () => undefined),
         removeAiPlayer: vi.fn(async () => undefined),
@@ -311,16 +311,16 @@ describe('TacticsLobbyScreen', () => {
     });
 
     describe('board colour (host-authored)', () => {
-        it('gives the host an editable board-colour select that routes to setMatchSetting', () => {
-            const setMatchSetting = vi.fn();
-            render(<TacticsLobbyScreen {...makeProps({ setMatchSetting })} />);
+        it('gives the host an editable board-colour select that routes to setGameParam', () => {
+            const setGameParam = vi.fn();
+            render(<TacticsLobbyScreen {...makeProps({ setGameParam })} />);
 
             const boardSelect = screen.getByTestId('tactics-board-color-select');
             expect(boardSelect).toBeEnabled();
             expect(boardSelect).toHaveValue('navy');
 
             fireEvent.change(boardSelect, { target: { value: 'stone' } });
-            expect(setMatchSetting).toHaveBeenCalledWith('boardColor', 'stone');
+            expect(setGameParam).toHaveBeenCalledWith('boardColor', 'stone');
         });
 
         it('renders the board-colour select disabled for a non-host client', () => {
@@ -341,26 +341,26 @@ describe('TacticsLobbyScreen', () => {
             expect(screen.queryByText(/act in secret/i)).not.toBeInTheDocument();
         });
 
-        it('gives the host an enabled toggle, off by default, that routes to setMatchSetting', () => {
-            const setMatchSetting = vi.fn();
-            render(<TacticsLobbyScreen {...makeProps({ setMatchSetting })} />);
+        it('gives the host an enabled toggle, off by default, that routes to setGameParam', () => {
+            const setGameParam = vi.fn();
+            render(<TacticsLobbyScreen {...makeProps({ setGameParam })} />);
 
             const toggle = screen.getByTestId('tactics-commitment-scheme-toggle');
             expect(toggle).toBeEnabled();
             expect(toggle).not.toBeChecked();
 
             fireEvent.click(toggle);
-            expect(setMatchSetting).toHaveBeenCalledWith('turnMode', 'commitment');
+            expect(setGameParam).toHaveBeenCalledWith('turnMode', 'commitment');
         });
 
         it('reflects an enabled commitment mode and toggles back to sequential', () => {
-            const setMatchSetting = vi.fn();
+            const setGameParam = vi.fn();
             render(
                 <TacticsLobbyScreen
                     {...makeProps({
-                        setMatchSetting,
+                        setGameParam,
                         lobbyState: makeLobbyState({
-                            matchSettings: { boardColor: 'navy', turnMode: 'commitment' },
+                            gameParams: { boardColor: 'navy', turnMode: 'commitment' },
                         }),
                     })}
                 />,
@@ -370,7 +370,7 @@ describe('TacticsLobbyScreen', () => {
             expect(toggle).toBeChecked();
 
             fireEvent.click(toggle);
-            expect(setMatchSetting).toHaveBeenCalledWith('turnMode', 'sequential');
+            expect(setGameParam).toHaveBeenCalledWith('turnMode', 'sequential');
         });
 
         it('renders the commitment toggle disabled (read-only) for a non-host client', () => {
@@ -390,28 +390,28 @@ describe('TacticsLobbyScreen', () => {
             );
         });
 
-        it('gives the host an enabled toggle, off by default, that routes to setMatchSetting', () => {
-            const setMatchSetting = vi.fn();
-            render(<TacticsLobbyScreen {...makeProps({ setMatchSetting })} />);
+        it('gives the host an enabled toggle, off by default, that routes to setGameParam', () => {
+            const setGameParam = vi.fn();
+            render(<TacticsLobbyScreen {...makeProps({ setGameParam })} />);
 
             const toggle = screen.getByTestId('tactics-allow-spectators-toggle');
             expect(toggle).toBeEnabled();
             expect(toggle).not.toBeChecked();
 
             fireEvent.click(toggle);
-            expect(setMatchSetting).toHaveBeenCalledWith(ALLOW_SPECTATORS_SETTING, 'true');
+            expect(setGameParam).toHaveBeenCalledWith(ALLOW_SPECTATORS_PARAM, 'true');
         });
 
         it('reflects an enabled state and toggles back off', () => {
-            const setMatchSetting = vi.fn();
+            const setGameParam = vi.fn();
             render(
                 <TacticsLobbyScreen
                     {...makeProps({
-                        setMatchSetting,
+                        setGameParam,
                         lobbyState: makeLobbyState({
-                            matchSettings: {
+                            gameParams: {
                                 boardColor: 'navy',
-                                [ALLOW_SPECTATORS_SETTING]: 'true',
+                                [ALLOW_SPECTATORS_PARAM]: 'true',
                             },
                         }),
                     })}
@@ -422,7 +422,7 @@ describe('TacticsLobbyScreen', () => {
             expect(toggle).toBeChecked();
 
             fireEvent.click(toggle);
-            expect(setMatchSetting).toHaveBeenCalledWith(ALLOW_SPECTATORS_SETTING, 'false');
+            expect(setGameParam).toHaveBeenCalledWith(ALLOW_SPECTATORS_PARAM, 'false');
         });
 
         it('renders the toggle disabled (read-only) for a non-host client', () => {

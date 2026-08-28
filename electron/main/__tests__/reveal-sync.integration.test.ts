@@ -39,7 +39,7 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_COMMIT_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
-    TACTICS_TURN_MODE_SETTING,
+    TACTICS_TURN_MODE_PARAM,
 } from '@chimera-engine/tactics/simulation/constants.js';
 import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
 import {
@@ -84,7 +84,7 @@ function makeSnapshot(turnMode: 'commitment' | 'sequential', hp: number): BaseGa
         timers: {},
         gameResult: null,
         turnClock: { activePlayerId: P1, deadlineMs: 60_000 },
-        setup: { matchSettings: { [TACTICS_TURN_MODE_SETTING]: turnMode }, playerAttributes: {} },
+        setup: { gameParams: { [TACTICS_TURN_MODE_PARAM]: turnMode }, playerAttributes: {} },
     };
 }
 

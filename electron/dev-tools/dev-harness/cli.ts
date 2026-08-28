@@ -7,7 +7,7 @@
  * N-1 auto-joining clients, relaying the host's announced lobby code:
  *
  *   chimera-dev-mp 3                       # 1 host + 2 clients, default profiles
- *   chimera-dev-mp --scenario skirmish     # seats/settings from dev/scenarios/
+ *   chimera-dev-mp --scenario skirmish     # seats/game params from dev/scenarios/
  *   chimera-dev-mp 2 --dry-run             # print the spawn plan JSON, spawn nothing
  *
  * Published as the `chimera-dev-mp` bin of `@chimera-engine/electron`, so a

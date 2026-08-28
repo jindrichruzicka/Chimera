@@ -24,7 +24,7 @@ import type { InputManager } from '../../input/InputManager.js';
 import { InputManagerContext } from '../../input/InputManagerContext.js';
 import {
     SESSION_MODE_QUICK,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import type { PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useGameStore } from '../../state/gameStore.js';
@@ -289,7 +289,7 @@ describe('InGameMenuHost', () => {
             players: {},
             undoMeta: { canUndo: false, canRedo: false },
             setup: {
-                matchSettings: { [SESSION_MODE_SETTING]: SESSION_MODE_QUICK },
+                gameParams: { [SESSION_MODE_PARAM]: SESSION_MODE_QUICK },
                 playerAttributes: {},
             },
         } as unknown as PlayerSnapshot);

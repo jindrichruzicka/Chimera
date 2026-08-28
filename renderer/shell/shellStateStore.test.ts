@@ -62,12 +62,12 @@ describe('setShellRoute', () => {
     });
 
     it('leaves the draft and an armed transition untouched', () => {
-        setShellDraft({ matchSettings: { mapSize: 'small' } });
+        setShellDraft({ gameParams: { mapSize: 'small' } });
         armShellTransition({ kind: 'to-match', durationMs: 200 });
 
         setShellRoute({ surface: 'page', pathname: '/character-select', gameId: 'tactics' });
 
-        expect(getShellState().draft).toEqual({ matchSettings: { mapSize: 'small' } });
+        expect(getShellState().draft).toEqual({ gameParams: { mapSize: 'small' } });
         expect(getShellState().transition).toEqual({ kind: 'to-match', durationMs: 200 });
     });
 
@@ -180,12 +180,12 @@ describe('transition arm/clear', () => {
 
 describe('setShellDraft', () => {
     it('merges per key rather than replacing the draft', () => {
-        setShellDraft({ matchSettings: { mapSize: 'small' } });
+        setShellDraft({ gameParams: { mapSize: 'small' } });
 
         setShellDraft({ hostAttributes: { team: 'red' } });
 
         expect(getShellState().draft).toEqual({
-            matchSettings: { mapSize: 'small' },
+            gameParams: { mapSize: 'small' },
             hostAttributes: { team: 'red' },
         });
     });
@@ -200,7 +200,7 @@ describe('setShellDraft', () => {
 
     it('round-trips a draft written by one reader to a second reader', () => {
         const written: QuickStartConfig = {
-            matchSettings: { mapSize: 'large' },
+            gameParams: { mapSize: 'large' },
             localSeats: [{ attributes: { team: 'blue' } }],
         };
 

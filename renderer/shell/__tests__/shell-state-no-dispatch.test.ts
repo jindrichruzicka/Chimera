@@ -85,7 +85,7 @@ describe('the published shell state carries no dispatcher', () => {
     function fullyWrittenState(): ShellState {
         setShellRoute({ surface: 'page', pathname: '/codex', gameId: 'tactics' });
         armShellTransition({ kind: 'to-match', durationMs: 320 });
-        setShellDraft({ matchSettings: { difficulty: 'hard' }, aiSeats: [{}] });
+        setShellDraft({ gameParams: { difficulty: 'hard' }, aiSeats: [{}] });
         return getShellState();
     }
 

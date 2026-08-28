@@ -4,7 +4,7 @@
  * (F54) — the HEADLINE spec. Drives the commitment-scheme battle mode
  * end-to-end across a real host+client match:
  *   - the host enables the Battle Setup toggle; it syncs to the client (read-only)
- *     and is carried into the match as `setup.matchSettings.turnMode='commitment'`;
+ *     and is carried into the match as `setup.gameParams.turnMode='commitment'`;
  *   - both seats are active SIMULTANEOUSLY (parallel local play);
  *   - a buffered move decrements stamina OPTIMISTICALLY and is NOT dispatched
  *     (the host's projected snapshot is unchanged → the client never sees it);
@@ -82,8 +82,8 @@ test.describe('Tactics commitment battle mode (headline)', () => {
         // The agreed mode is carried into the match on both peers.
         const hostSetup = await host.waitForGameSetup();
         const clientSetup = await client.waitForGameSetup();
-        expect(hostSetup.matchSettings['turnMode']).toBe('commitment');
-        expect(clientSetup.matchSettings['turnMode']).toBe('commitment');
+        expect(hostSetup.gameParams['turnMode']).toBe('commitment');
+        expect(clientSetup.gameParams['turnMode']).toBe('commitment');
 
         // ── Parallel play: BOTH seats are active at once; End Turn IS the commit ─
         await expect.poll(() => host.turnStatusText(), { timeout: 20_000 }).toBe('Your turn');

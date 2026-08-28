@@ -52,7 +52,7 @@ export function createResolveLobbySetup(
 
 /**
  * Build the synced `GameSetupConfig` carried into `engine:start_game` from the
- * values already present on `LobbyState`: the host-authored match settings and
+ * values already present on `LobbyState`: the host-authored game params and
  * every seat's attributes.
  *
  * "Every seat" spans both rosters. A human seat — the host, a joined remote, or
@@ -68,18 +68,18 @@ export function createResolveLobbySetup(
  * `players` entry WINS over an agent slot claiming the same id — a real seat's
  * owner-authored value is authoritative for its own id.
  *
- * Returns `undefined` when there is nothing to carry — no (non-empty) match
- * settings and no seat with (non-empty) attributes — so the start payload
- * omits `setup` and stays backward-compatible with games that have no lobby
- * setup. When defined, both `GameSetupConfig` keys are always present (the
- * shape is never partial); `playerAttributes` includes only seats whose
- * attributes are present and non-empty.
+ * Returns `undefined` when there is nothing to carry — no (non-empty) game
+ * params and no seat with (non-empty) attributes — so the start payload omits
+ * `setup`, which is what a game with no lobby setup sends. When defined, both
+ * `GameSetupConfig` keys are always present (the shape is never partial);
+ * `playerAttributes` includes only seats whose attributes are present and
+ * non-empty.
  *
  * Every map in the returned config is a copy: the config is carried onto the
  * snapshot and projected, so it shares no object with the live lobby state.
  */
 export function buildSetupFromLobbyState(state: LobbyState): GameSetupConfig | undefined {
-    const matchSettings = { ...state.matchSettings };
+    const gameParams = { ...state.gameParams };
 
     const playerAttributes: Record<string, Record<string, string>> = {};
     const carry = (seatId: string, attributes: Readonly<Record<string, string>> | undefined) => {
@@ -100,9 +100,9 @@ export function buildSetupFromLobbyState(state: LobbyState): GameSetupConfig | u
         }
     }
 
-    if (Object.keys(matchSettings).length === 0 && Object.keys(playerAttributes).length === 0) {
+    if (Object.keys(gameParams).length === 0 && Object.keys(playerAttributes).length === 0) {
         return undefined;
     }
 
-    return { matchSettings, playerAttributes };
+    return { gameParams, playerAttributes };
 }

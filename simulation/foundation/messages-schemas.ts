@@ -233,9 +233,12 @@ const LobbyAgentSlot = z.object({
 const LobbyState = z.object({
     info: LobbyInfo,
     players: z.array(LobbyPlayerEntry).readonly(),
-    // Host-authored match settings (e.g. board colour) synced to all clients on
-    // every LobbyState broadcast. Optional and backward-compatible.
-    matchSettings: z.record(z.string(), z.string()).optional(),
+    // Host-authored game params (e.g. board colour) synced to all clients on
+    // every LobbyState broadcast. Optional: absent on games with no lobby setup.
+    // This object is NOT strict, so a peer still sending the pre-rename
+    // `matchSettings` key has it stripped with `success: true` — that peer's
+    // lobby renders with defaults and nothing warns.
+    gameParams: z.record(z.string(), z.string()).optional(),
     // Host-configured AI agent slots, synced to all clients so every peer sees
     // the AI roster. Optional and backward-compatible:
     // absent on games with no AI and on older clients.
@@ -243,12 +246,12 @@ const LobbyState = z.object({
 });
 
 /**
- * Synced match-setup config carried on `PlayerSnapshot.setup`. Runtime mirror of
+ * Synced setup config carried on `PlayerSnapshot.setup`. Runtime mirror of
  * the `GameSetupConfig` interface in `simulation/foundation/game-lobby-contract.ts`: the chosen
- * match settings plus each player's attributes keyed by player id.
+ * game params plus each player's attributes keyed by player id.
  */
 const GameSetupConfig = z.object({
-    matchSettings: z.record(z.string(), z.string()),
+    gameParams: z.record(z.string(), z.string()),
     playerAttributes: z.record(z.string(), z.record(z.string(), z.string())),
 });
 
@@ -271,9 +274,11 @@ const PlayerSnapshot = z.object({
     events: z.array(z.object({ type: z.string() }).passthrough()),
     gameResult: GameResult.nullable(),
     commitments: z.record(z.string(), WireCommitmentEnvelope).optional(),
-    // Public agreed lobby setup (host-authored match settings + owner-authored
-    // per-player attributes), passed through projection verbatim. Optional and
-    // backward-compatible.
+    // Public agreed lobby setup (host-authored game params + owner-authored
+    // per-player attributes), passed through projection verbatim. Optional:
+    // absent on games with no lobby setup. `gameParams` is REQUIRED inside it,
+    // so a peer sending the pre-rename `matchSettings` key fails this schema
+    // and `ServerConnection` discards the WHOLE frame, not the field.
     setup: GameSetupConfig.optional(),
     // Host-minted stable match identity, projected verbatim like `setup`
     // (Invariant #101). Optional and backward-compatible.

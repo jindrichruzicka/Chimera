@@ -31,7 +31,7 @@ export interface JoinClassificationInput {
     readonly reconnect: boolean;
     /** Resolved game spectator capability (`resolveSpectatorSupport(manifest)`). */
     readonly spectatorSupport: GameSpectatorSupport | undefined;
-    /** Host `allowSpectators` match-setting (`readAllowSpectators(matchSettings)`). */
+    /** Host `allowSpectators` game-param (`readAllowSpectators(gameParams)`). */
     readonly allowSpectators: boolean;
 }
 

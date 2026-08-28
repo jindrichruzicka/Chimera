@@ -209,7 +209,7 @@ chimera/
 │       │                            #   and the R3F contributions (playfield meshes, selection markers, camera model)
 │       ├── shell/                   # Declarative shell contributions (main menu, settings page, fonts, backgrounds)
 │       ├── styles/                  # Design-token overrides (tokens-override.css + registration)
-│       ├── lobby/                   # Lobby-setup contribution (agent slots, match settings)
+│       ├── lobby/                   # Lobby-setup contribution (agent slots, game params)
 │       ├── renderer/                # Per-app Next.js app (output: export) + register.ts game-registration seam
 │       ├── electron/                # Electron main composition root (main.ts) + build-main.ts, the thin driver over the engine `@chimera-engine/electron/build-main` bundle plan (paths, module resolution, esbuild)
 │       ├── dev/                     # Dev-harness fixtures — profiles/ and scenarios/ (starter set scaffolded)

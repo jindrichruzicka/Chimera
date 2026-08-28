@@ -45,18 +45,18 @@ exactly as before F72.
   the game declares it, else `undefined`. It never throws — an absent field is a
   first-class "not supported".
 
-**Host match-setting** — `simulation/foundation/game-lobby-contract.ts`:
+**Host game-param** — `simulation/foundation/game-lobby-contract.ts`:
 
-- `ALLOW_SPECTATORS_SETTING = 'engine.allowSpectators'` — a reserved,
-  `engine.`-namespaced, host-authored match setting (Invariant #99). It is
+- `ALLOW_SPECTATORS_PARAM = 'engine.allowSpectators'` — a reserved,
+  `engine.`-namespaced, host-authored game param (Invariant #99). It is
   synced verbatim into the running match via `snapshot.setup` (Invariant #101),
   which is where the join classifier reads it.
 - `ALLOW_SPECTATORS_DEFAULT = 'false'` — off until the host turns it on.
-- `readAllowSpectators(matchSettings)` returns `true` **only** when the value is
+- `readAllowSpectators(gameParams)` returns `true` **only** when the value is
   exactly `'true'` (fail-safe closed).
 
 A game surfaces the toggle in its lobby screen as a host-only control that calls
-the engine-provided `setMatchSetting(ALLOW_SPECTATORS_SETTING, next ? 'true' :
+the engine-provided `setGameParam(ALLOW_SPECTATORS_PARAM, next ? 'true' :
 'false')` (Invariant #100). Tactics is the reference adopter
 (`apps/tactics/manifest.ts` declares the capability; `TacticsLobbyScreen` renders
 the toggle).
@@ -68,7 +68,7 @@ JOIN and decides the role. The pure decision lives in
 `electron/main/lobby/joinClassifier.ts`; the policy is injected at the
 composition root (`electron/main/index.ts` `onSessionHosted`), where the host
 knows the live `GameSnapshot.phase`, `resolveSpectatorSupport(manifest)`, and
-`readAllowSpectators(matchSettings)` — so `LobbyManager`/providers stay
+`readAllowSpectators(gameParams)` — so `LobbyManager`/providers stay
 provider-agnostic (Invariant #38).
 
 ```ts
@@ -173,7 +173,7 @@ peer.
 - [Multiplayer Provider (WebSocket)](multiplayer-provider-websocket.md) — the
   join classifier admission seam and REJECT reasons.
 - [Customizable Lobby Contract](customizable-lobby-contract.md) — host-authored
-  match settings and the `snapshot.setup` projection the toggle rides on.
+  game params and the `snapshot.setup` projection the toggle rides on.
 - [State Projection Interfaces](state-projection-interfaces.md) — the single
   `StateProjector.project()` gate that produces every spectator perspective.
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md)

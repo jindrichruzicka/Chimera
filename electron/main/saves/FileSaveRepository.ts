@@ -172,11 +172,14 @@ export class FileSaveRepository implements SaveRepository {
         const file = await this.serializer.deserialize(raw);
         const migrated = this.migrator.migrate(file);
 
-        // Verify integrity checksum if the file was written with one.
+        // Verify the integrity checksum if the file was written with one, against
+        // the body AS STORED rather than the migrated one: the stored digest
+        // covers the bytes that were written, and a migration may legitimately
+        // rewrite hashed fields (v6→v7 renames `checkpoint.setup.matchSettings`).
         // Absent checksum means a legacy save — load it without error (backwards-compat).
-        if (migrated.header.checksum !== undefined) {
-            const expected = await computeBodyChecksum(migrated);
-            if (expected !== migrated.header.checksum) {
+        if (file.header.checksum !== undefined) {
+            const expected = await computeBodyChecksum(file);
+            if (expected !== file.header.checksum) {
                 throw new SaveIntegrityError(slotId);
             }
         }

@@ -77,7 +77,7 @@ const SCENARIO = JSON.stringify({
     gameId: 'my-game',
     seats: [{ profile: 'alice.json', attributes: { deck: '["strike"]' } }, { profile: 'bob.json' }],
     aiSeats: 1,
-    matchSettings: { arena: 'lava-pit' },
+    gameParams: { arena: 'lava-pit' },
 });
 
 function appFiles(extra: Record<string, string> = {}): Record<string, string> {

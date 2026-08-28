@@ -14,7 +14,7 @@
  * Architecture: §4.14 — LobbyManager / session lifecycle; §4.6 — projection
  *
  * Invariants upheld:
- *   #99 — the coordinator authors match settings as the HOST and seat
+ *   #99 — the coordinator authors game params as the HOST and seat
  *         attributes as the SEAT OWNER; the host connection owns every local
  *         seat on a shared machine, seeded at host time.
  *   #101 — `setup` is passed through `StateProjector.project()` VERBATIM, so
@@ -40,7 +40,7 @@ import { makeStubRng } from '@chimera-engine/simulation/engine/__test-support__/
 import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
     SESSION_MODE_QUICK,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
     resolvePlayerAttributeDefaults,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { DefaultStateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
@@ -59,8 +59,8 @@ const SETUP: GameLobbySetup = {
     maxPlayers: 4,
     // Two settings on purpose: the "rides beside" test overrides one and must
     // be able to see the other survive.
-    matchSettingsDefaults: { mapSize: 'medium', fogOfWar: 'on' },
-    matchSettingsOptions: {},
+    gameParamDefaults: { mapSize: 'medium', fogOfWar: 'on' },
+    gameParamOptions: {},
     playerAttributeOptions: {},
     resolveDefaultPlayerAttributes: (seatIndex) => ({
         team: seatIndex % 2 === 0 ? 'red' : 'blue',
@@ -105,7 +105,7 @@ function makeHarness(): Harness {
             resolveSeatDefaultAttributes: (gameId, seatIndex) =>
                 gameId === GAME_ID ? resolvePlayerAttributeDefaults(SETUP, seatIndex) : {},
             hostLobby: (params) => manager.hostLobby(params),
-            setMatchSetting: (key, value) => manager.setMatchSetting(key, value),
+            setGameParam: (key, value) => manager.setGameParam(key, value),
             setPlayerAttribute: (target, key, value) =>
                 manager.setPlayerAttribute(target, key, value),
             addLocalSeat: (seatId, options) => manager.addLocalSeat(seatId, options),
@@ -173,7 +173,7 @@ describe('quick start — the engine.sessionMode stamp', () => {
         expect(state).not.toBeNull();
         const { started, viewers, views } = projectStartedMatch(state!);
 
-        expect(started.setup?.matchSettings[SESSION_MODE_SETTING]).toBe(SESSION_MODE_QUICK);
+        expect(started.setup?.gameParams[SESSION_MODE_PARAM]).toBe(SESSION_MODE_QUICK);
         for (const viewer of viewers) {
             // Verbatim passthrough — the same reference, not a per-viewer copy.
             expect(views.get(viewer)?.setup).toBe(started.setup);
@@ -185,18 +185,18 @@ describe('quick start — the engine.sessionMode stamp', () => {
 
         await harness.coordinator.quickStart({
             gameId: GAME_ID,
-            matchSettings: { mapSize: 'small' },
+            gameParams: { mapSize: 'small' },
         });
 
         const { started } = projectStartedMatch(harness.startedWith()!);
 
-        expect(started.setup?.matchSettings).toEqual({
+        expect(started.setup?.gameParams).toEqual({
             // The request's override of a declared default …
             mapSize: 'small',
             // … a declared default the request never names, still standing …
             fogOfWar: 'on',
             // … and the stamp beside both.
-            [SESSION_MODE_SETTING]: SESSION_MODE_QUICK,
+            [SESSION_MODE_PARAM]: SESSION_MODE_QUICK,
         });
     });
 
@@ -211,7 +211,7 @@ describe('quick start — the engine.sessionMode stamp', () => {
         // lobby-born session — the hosting push, and only it.
         expect(harness.pushes.length).toBeGreaterThan(1);
         const stamps = harness.pushes.map(
-            (state) => state.matchSettings?.[SESSION_MODE_SETTING] ?? null,
+            (state) => state.gameParams?.[SESSION_MODE_PARAM] ?? null,
         );
         expect(stamps[0]).toBeNull();
         expect(stamps.slice(1)).toEqual(
@@ -325,7 +325,7 @@ describe('quick start — failure teardown', () => {
                 resolveQuickStartDefaults: () => undefined,
                 resolveSeatDefaultAttributes: () => ({}),
                 hostLobby: (params) => harness.manager.hostLobby(params),
-                setMatchSetting: (key, value) => harness.manager.setMatchSetting(key, value),
+                setGameParam: (key, value) => harness.manager.setGameParam(key, value),
                 setPlayerAttribute: (target, key, value) =>
                     harness.manager.setPlayerAttribute(target, key, value),
                 addLocalSeat: (seatId) => harness.manager.addLocalSeat(seatId, { ready: false }),

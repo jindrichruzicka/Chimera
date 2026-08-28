@@ -74,10 +74,10 @@ export const LOBBY_GET_CURRENT_STATE_CHANNEL = 'chimera:lobby:get-current-state'
 export const LOBBY_UPDATE_READY_STATE_CHANNEL = 'chimera:lobby:update-ready-state';
 
 /**
- * `ipcRenderer.invoke` target for {@link LobbyAPI.setMatchSetting}. Host-only:
+ * `ipcRenderer.invoke` target for {@link LobbyAPI.setGameParam}. Host-only:
  * the main-side handler rejects writes from a joined (non-host) session.
  */
-export const LOBBY_SET_MATCH_SETTING_CHANNEL = 'chimera:lobby:set-match-setting';
+export const LOBBY_SET_GAME_PARAM_CHANNEL = 'chimera:lobby:set-game-param';
 
 /**
  * `ipcRenderer.invoke` target for {@link LobbyAPI.setPlayerAttribute}.
@@ -218,8 +218,8 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
                 ),
         updatePlayerReadyState: (ready: boolean): Promise<void> =>
             ipc.invoke(LOBBY_UPDATE_READY_STATE_CHANNEL, ready).then(() => undefined),
-        setMatchSetting: (key: string, value: string): Promise<void> =>
-            ipc.invoke(LOBBY_SET_MATCH_SETTING_CHANNEL, { key, value }).then(() => undefined),
+        setGameParam: (key: string, value: string): Promise<void> =>
+            ipc.invoke(LOBBY_SET_GAME_PARAM_CHANNEL, { key, value }).then(() => undefined),
         setPlayerAttribute: (playerId: PlayerId, key: string, value: string): Promise<void> =>
             ipc
                 .invoke(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL, { playerId, key, value })

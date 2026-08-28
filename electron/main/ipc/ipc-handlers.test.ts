@@ -6,7 +6,7 @@ import {
 import { UnknownActionTypeError } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import { ActionSchemaError } from '@chimera-engine/simulation/engine/StateReducer.js';
 import { CURRENT_MATCH_REPLAY_PATH } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
-import { SESSION_MODE_SETTING } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import { SESSION_MODE_PARAM } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
@@ -24,7 +24,7 @@ import {
     LOBBY_START_GAME_CHANNEL,
     LOBBY_RETURN_TO_LOBBY_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
-    LOBBY_SET_MATCH_SETTING_CHANNEL,
+    LOBBY_SET_GAME_PARAM_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
@@ -765,10 +765,10 @@ describe('registerLobbyHandlers', () => {
         expect(() => handler?.({}, 'yes')).toThrow(IpcRequestValidationError);
     });
 
-    it('registers chimera:lobby:set-match-setting as an invoke handler that calls lobbyManager.setMatchSetting', async () => {
+    it('registers chimera:lobby:set-game-param as an invoke handler that calls lobbyManager.setGameParam', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
-        const spy = vi.spyOn(lobbyManager, 'setMatchSetting').mockResolvedValue(undefined);
+        const spy = vi.spyOn(lobbyManager, 'setGameParam').mockResolvedValue(undefined);
         registerLobbyHandlers({
             ipcMain: stub.ipcMain,
             lobbyManager,
@@ -776,7 +776,7 @@ describe('registerLobbyHandlers', () => {
             closeSession: makeCloseSessionStub(),
         });
 
-        const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
+        const handler = stub.handled.get(LOBBY_SET_GAME_PARAM_CHANNEL);
         expect(handler).toBeDefined();
 
         await Promise.resolve(handler?.({}, { key: 'boardColor', value: 'crimson' }));
@@ -784,7 +784,11 @@ describe('registerLobbyHandlers', () => {
         expect(spy).toHaveBeenCalledWith('boardColor', 'crimson');
     });
 
-    it('rejects invalid set-match-setting payloads with IpcRequestValidationError', () => {
+    // Main-side twin of `preload/contract.test.ts` › 'setGameParam() invokes
+    // chimera:lobby:set-game-param …'. Both spell the channel LITERAL rather
+    // than the shared constant, so moving the value reds the registration here
+    // as well as the renderer-facing route there.
+    it('registers chimera:lobby:set-game-param under that exact literal channel name', () => {
         const stub = makeLobbyIpcMainStub();
         registerLobbyHandlers({
             ipcMain: stub.ipcMain,
@@ -793,7 +797,19 @@ describe('registerLobbyHandlers', () => {
             closeSession: makeCloseSessionStub(),
         });
 
-        const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
+        expect(stub.handled.has('chimera:lobby:set-game-param')).toBe(true);
+    });
+
+    it('rejects invalid set-game-param payloads with IpcRequestValidationError', () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({
+            ipcMain: stub.ipcMain,
+            lobbyManager: makeLobbyManagerStub(),
+            quickStart: makeQuickStartStub(),
+            closeSession: makeCloseSessionStub(),
+        });
+
+        const handler = stub.handled.get(LOBBY_SET_GAME_PARAM_CHANNEL);
         expect(handler).toBeDefined();
 
         expect(() => handler?.({}, { key: '', value: 'crimson' })).toThrow(
@@ -1001,10 +1017,10 @@ describe('registerLobbyHandlers', () => {
         expect(closeLobby).not.toHaveBeenCalled();
     });
 
-    it('refuses a set-match-setting write to the engine-owned session-mode key', () => {
+    it('refuses a set-game-param write to the engine-owned session-mode key', () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
-        const spy = vi.spyOn(lobbyManager, 'setMatchSetting').mockResolvedValue(undefined);
+        const spy = vi.spyOn(lobbyManager, 'setGameParam').mockResolvedValue(undefined);
         registerLobbyHandlers({
             ipcMain: stub.ipcMain,
             lobbyManager,
@@ -1012,10 +1028,10 @@ describe('registerLobbyHandlers', () => {
             closeSession: makeCloseSessionStub(),
         });
 
-        const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
+        const handler = stub.handled.get(LOBBY_SET_GAME_PARAM_CHANNEL);
         expect(handler).toBeDefined();
 
-        expect(() => handler?.({}, { key: SESSION_MODE_SETTING, value: 'quick' })).toThrow(
+        expect(() => handler?.({}, { key: SESSION_MODE_PARAM, value: 'quick' })).toThrow(
             IpcRequestValidationError,
         );
         // The refusal is at the boundary — the manager is never reached.
@@ -1127,7 +1143,7 @@ describe('registerLobbyHandlers', () => {
                 LOBBY_START_GAME_CHANNEL,
                 LOBBY_RETURN_TO_LOBBY_CHANNEL,
                 LOBBY_UPDATE_READY_STATE_CHANNEL,
-                LOBBY_SET_MATCH_SETTING_CHANNEL,
+                LOBBY_SET_GAME_PARAM_CHANNEL,
                 LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
                 LOBBY_ADD_AI_CHANNEL,
                 LOBBY_REMOVE_AI_CHANNEL,

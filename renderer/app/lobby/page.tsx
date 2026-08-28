@@ -299,9 +299,9 @@ export default function LobbyPage() {
                   isHost: localPlayerId === lobbyState.info.hostId,
                   canStartGame,
                   pendingAction,
-                  setMatchSetting: (key, value) => {
-                      lobbyApi.setMatchSetting(key, value).catch((err: unknown) => {
-                          reportSetupError(err, t(LOBBY_KEYS.matchSettingFailed));
+                  setGameParam: (key, value) => {
+                      lobbyApi.setGameParam(key, value).catch((err: unknown) => {
+                          reportSetupError(err, t(LOBBY_KEYS.gameParamFailed));
                       });
                   },
                   setPlayerAttribute: (attributePlayerId, key, value) => {

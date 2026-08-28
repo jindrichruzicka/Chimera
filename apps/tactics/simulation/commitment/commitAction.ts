@@ -30,7 +30,7 @@ export const tacticsCommitDefinition: ActionDefinition<TacticsCommitPayload, Bas
     },
 
     validate(_payload, state, playerId): ValidationResult {
-        if (readTacticsTurnMode(state.setup?.matchSettings) !== 'commitment') {
+        if (readTacticsTurnMode(state.setup?.gameParams) !== 'commitment') {
             return { ok: false, reason: 'not_commitment_mode' };
         }
         if (!(playerId in state.players)) {

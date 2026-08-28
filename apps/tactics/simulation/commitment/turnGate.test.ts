@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TACTICS_TURN_MODE_SETTING } from '../constants.js';
+import { TACTICS_TURN_MODE_PARAM } from '../constants.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import { gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import {
@@ -38,7 +38,7 @@ function makeSnapshot(
             ? {}
             : {
                   setup: {
-                      matchSettings: { [TACTICS_TURN_MODE_SETTING]: options.turnMode },
+                      gameParams: { [TACTICS_TURN_MODE_PARAM]: options.turnMode },
                       playerAttributes: {},
                   },
               }),
@@ -48,7 +48,7 @@ function makeSnapshot(
 }
 
 describe('isTacticsCommitmentMode', () => {
-    it('is true only when matchSettings.turnMode === commitment', () => {
+    it('is true only when gameParams.turnMode === commitment', () => {
         expect(isTacticsCommitmentMode(makeSnapshot({ turnMode: 'commitment' }))).toBe(true);
         expect(isTacticsCommitmentMode(makeSnapshot({ turnMode: 'sequential' }))).toBe(false);
         expect(isTacticsCommitmentMode(makeSnapshot())).toBe(false);

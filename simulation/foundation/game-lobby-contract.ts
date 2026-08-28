@@ -4,10 +4,10 @@
  * Shared declarative contract for customizable game lobbies (§4.37).
  * This is the data contract every game's lobby builds on:
  *   - `GameLobbySetup`   — a pure setup descriptor `main` reads for defaults and
- *                          validation (max players, available match settings and
+ *                          validation (max players, available game params and
  *                          their options, player-attribute options, and
  *                          seat-based default-attribute resolution).
- *   - `GameSetupConfig`  — the synced match-setup shape (chosen match settings +
+ *   - `GameSetupConfig`  — the synced setup shape (chosen game params +
  *                          per-player attributes) carried alongside the snapshot.
  *   - `GameLobbyScreenProps` — props passed to a game's lobby-screen component.
  *
@@ -34,7 +34,7 @@ import { WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH } from './messages-schemas.js';
 // ─── Field options ──────────────────────────────────────────────────────────────
 
 /**
- * A single selectable value for a match setting or player attribute: the stored
+ * A single selectable value for a game param or player attribute: the stored
  * `value` paired with the human-readable `label` the lobby renders.
  */
 export interface LobbyFieldOption {
@@ -54,11 +54,11 @@ export interface GameLobbySetup {
     /** Maximum number of seats this game's lobby admits. */
     readonly maxPlayers: number;
 
-    /** Default value for each match setting, keyed by setting id. */
-    readonly matchSettingsDefaults: Record<string, string>;
+    /** Default value for each game param, keyed by param id. */
+    readonly gameParamDefaults: Record<string, string>;
 
-    /** Selectable options for each match setting, keyed by setting id. */
-    readonly matchSettingsOptions: Record<string, readonly LobbyFieldOption[]>;
+    /** Selectable options for each game param, keyed by param id. */
+    readonly gameParamOptions: Record<string, readonly LobbyFieldOption[]>;
 
     /** Selectable options for each per-player attribute, keyed by attribute id. */
     readonly playerAttributeOptions: Record<string, readonly LobbyFieldOption[]>;
@@ -95,13 +95,13 @@ export interface GameLobbySetup {
 // ─── Synced setup config ──────────────────────────────────────────────────────
 
 /**
- * The resolved, synced match-setup shape: the match settings chosen for the
+ * The resolved, synced setup shape: the game params chosen for the
  * session plus every seat's attributes, keyed by `PlayerId` — a human seat's
  * own picks and an AI seat's host-authored ones alike. Carried alongside the
  * snapshot so every peer agrees on the agreed-upon configuration.
  */
 export interface GameSetupConfig {
-    readonly matchSettings: Record<string, string>;
+    readonly gameParams: Record<string, string>;
     readonly playerAttributes: Record<PlayerId, Record<string, string>>;
 }
 
@@ -117,8 +117,7 @@ export interface GameSetupConfig {
  * `playerId` must be the local player. `main` rejects a write to any other seat
  * and, for a joined client, forwards the own-seat intent to the authoritative
  * host (`chimera:lobby:set-player-attribute`), which applies it and rebroadcasts
- * (owner-authored). Match settings remain host-authored via
- * `setMatchSetting`.
+ * (owner-authored). Game params remain host-authored via `setGameParam`.
  */
 export type LobbyPendingAction =
     | 'hosting'
@@ -148,7 +147,7 @@ export interface GameLobbyScreenProps {
     readonly isHost: boolean;
     readonly canStartGame: boolean;
     readonly pendingAction: LobbyPendingAction;
-    readonly setMatchSetting: (key: string, value: string) => void;
+    readonly setGameParam: (key: string, value: string) => void;
     readonly setPlayerAttribute: (playerId: PlayerId, key: string, value: string) => void;
     /**
      * Host-only: append an AI agent slot to the lobby roster. The host assigns
@@ -179,11 +178,11 @@ export interface GameLobbyScreenProps {
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 /**
- * Returns a defensive shallow copy of the setup's match-setting defaults, so
+ * Returns a defensive shallow copy of the setup's game-param defaults, so
  * callers can seed editable lobby state without aliasing the immutable setup.
  */
-export function resolveMatchSettingsDefaults(setup: GameLobbySetup): Record<string, string> {
-    return { ...setup.matchSettingsDefaults };
+export function resolveGameParamDefaults(setup: GameLobbySetup): Record<string, string> {
+    return { ...setup.gameParamDefaults };
 }
 
 /**
@@ -239,47 +238,47 @@ export function resolveAttributeValueCap(setup: GameLobbySetup | undefined): num
     return Math.min(declared, WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH);
 }
 
-// ─── Reserved spectator match-setting ───────────────────────────────────────────
+// ─── Reserved spectator game-param ──────────────────────────────────────────────
 
 /**
- * Reserved, engine-owned match-setting key: the host toggle for allowing
+ * Reserved, engine-owned game-param key: the host toggle for allowing
  * spectators. `engine.`-prefixed so it is namespaced away from any game's own
- * match-setting vocabulary (the Invariant #107 spirit — the `engine.` prefix is
+ * game-param vocabulary (the Invariant #107 spirit — the `engine.` prefix is
  * the engine's, never a game's). Read by the host join classifier;
- * `LobbyManager.setMatchSetting` stores it verbatim, so no lobby-write change is
+ * `LobbyManager.setGameParam` stores it verbatim, so no lobby-write change is
  * needed.
  */
-export const ALLOW_SPECTATORS_SETTING = 'engine.allowSpectators';
+export const ALLOW_SPECTATORS_PARAM = 'engine.allowSpectators';
 
 /** Default: spectating is OFF until the host turns it on. */
 export const ALLOW_SPECTATORS_DEFAULT = 'false';
 
 /**
  * Pure reader: is spectating enabled for this match? `true` only when the
- * reserved {@link ALLOW_SPECTATORS_SETTING} key is exactly `'true'`; `false`
+ * reserved {@link ALLOW_SPECTATORS_PARAM} key is exactly `'true'`; `false`
  * for absent / `'false'` / any other value (fail-safe closed). Never throws,
  * never mutates.
  */
-export function readAllowSpectators(matchSettings?: Readonly<Record<string, string>>): boolean {
-    return matchSettings?.[ALLOW_SPECTATORS_SETTING] === 'true';
+export function readAllowSpectators(gameParams?: Readonly<Record<string, string>>): boolean {
+    return gameParams?.[ALLOW_SPECTATORS_PARAM] === 'true';
 }
 
-// ─── Reserved session-mode match-setting ────────────────────────────────────────
+// ─── Reserved session-mode game-param ───────────────────────────────────────────
 
 /**
- * Reserved, engine-owned match-setting key recording HOW the session was born.
- * `engine.`-prefixed for the same reason as {@link ALLOW_SPECTATORS_SETTING} —
+ * Reserved, engine-owned game-param key recording HOW the session was born.
+ * `engine.`-prefixed for the same reason as {@link ALLOW_SPECTATORS_PARAM} —
  * the prefix is the engine's, never a game's.
  *
  * Unlike the spectator toggle, this key is NOT host-settable: it is stamped by
- * the quick-start orchestrator and the `chimera:lobby:set-match-setting`
- * boundary rejects it, so no lobby screen can flip it. It rides `matchSettings`
+ * the quick-start orchestrator and the `chimera:lobby:set-game-param`
+ * boundary rejects it, so no lobby screen can flip it. It rides `gameParams`
  * so it reaches `snapshot.setup` (Invariant #101) and therefore survives a
  * window reload and a restore, which a renderer-held launch origin would not.
  *
  * Absence means the session was born in the lobby.
  */
-export const SESSION_MODE_SETTING = 'engine.sessionMode';
+export const SESSION_MODE_PARAM = 'engine.sessionMode';
 
-/** The one value {@link SESSION_MODE_SETTING} is ever stamped with. */
+/** The one value {@link SESSION_MODE_PARAM} is ever stamped with. */
 export const SESSION_MODE_QUICK = 'quick';

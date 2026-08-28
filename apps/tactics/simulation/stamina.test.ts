@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TACTICS_MAX_STAMINA, TACTICS_TURN_MODE_SETTING } from './constants.js';
+import { TACTICS_MAX_STAMINA, TACTICS_TURN_MODE_PARAM } from './constants.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import { gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import { engineStartGameDefinition } from '@chimera-engine/simulation/engine/EngineActions.js';
@@ -34,7 +34,7 @@ function makeSnapshot(
             ? {}
             : {
                   setup: {
-                      matchSettings: { [TACTICS_TURN_MODE_SETTING]: options.turnMode },
+                      gameParams: { [TACTICS_TURN_MODE_PARAM]: options.turnMode },
                       playerAttributes: {},
                   },
               }),

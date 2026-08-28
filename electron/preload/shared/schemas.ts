@@ -133,7 +133,7 @@ export const LobbyInfoSchema = z.object({
 // `simulation/foundation/messages-schemas.ts` EXACTLY — main forwards the wire
 // `LobbyState` verbatim, so validating tighter here would reject a payload the
 // host legitimately produced, and validating looser would let drift through.
-// `matchSettings` and a player's `attributes` are unbounded on the state frame
+// `gameParams` and a player's `attributes` are unbounded on the state frame
 // (their write frames carry the caps); an agent slot has no write frame of its
 // own, so its caps ride the state frame.
 const StringMapSchema = z.record(z.string(), z.string());
@@ -167,11 +167,11 @@ const LobbyAgentSlotSchema = z.object({
 export const LobbyStateSchema = z.object({
     info: LobbyInfoSchema,
     players: z.array(LobbyPlayerEntrySchema).readonly(),
-    // Host-authored match settings, mirrored from the wire. Load-bearing beyond
-    // game config: the engine's own reserved `engine.`-namespaced settings ride
+    // Host-authored game params, mirrored from the wire. Load-bearing beyond
+    // game config: the engine's own reserved `engine.`-namespaced params ride
     // here, so a window hydrated by invoke rather than by the live push must
     // see them.
-    matchSettings: StringMapSchema.optional(),
+    gameParams: StringMapSchema.optional(),
     // Synced AI agent slots so a renderer reading the snapshot (e.g. on initial
     // load / replay) sees the AI roster, not just the live `onUpdate` push.
     agentSlots: z.array(LobbyAgentSlotSchema).readonly().optional(),

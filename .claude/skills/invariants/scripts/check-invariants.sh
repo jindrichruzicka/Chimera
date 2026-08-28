@@ -708,7 +708,7 @@ done
 # ─── Check 23: game lobby/shell surfaces perform no privileged lobby writes (inv 100) ─
 # A game's lobby/shell/screen surfaces must not write the IPC-mirrored lobbyStore,
 # call LobbyManager, or reach the lobby through the debug bridge; they receive
-# setMatchSetting/setPlayerAttribute as props and call those engine-provided
+# setGameParam/setPlayerAttribute as props and call those engine-provided
 # setters (Invariant #100). Scans apps/<game>/{shell,screens,components} for a
 # LobbyManager or lobbyStore reference, or a `__chimera.….lobby` access. The
 # legitimate `__chimera.replay` reads (the replay export bridge) do not match, and

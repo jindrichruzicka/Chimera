@@ -25,7 +25,7 @@ export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapsh
     /**
      * Called once by the host when a session is being created for this game.
      * Receives the player IDs in insertion order and, optionally, the
-     * host-authored lobby `setup` (chosen match settings + per-player
+     * host-authored lobby `setup` (chosen game params + per-player
      * attributes) so the game can seed starting entities from it (§4.37).
      * `setup` is optional and absent for games with no lobby config.
      */

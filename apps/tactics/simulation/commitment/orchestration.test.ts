@@ -13,7 +13,7 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_COMMIT_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
-    TACTICS_TURN_MODE_SETTING,
+    TACTICS_TURN_MODE_PARAM,
 } from '../constants.js';
 import type { ActionEnvelope, BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
 import {
@@ -56,7 +56,7 @@ function snapshot(
         timers: {},
         gameResult: null,
         ...(committedTurns === undefined ? {} : { committedTurns }),
-        setup: { matchSettings: { [TACTICS_TURN_MODE_SETTING]: turnMode }, playerAttributes: {} },
+        setup: { gameParams: { [TACTICS_TURN_MODE_PARAM]: turnMode }, playerAttributes: {} },
     };
 }
 

@@ -452,7 +452,7 @@ describe('setup passthrough: host-authored lobby config crosses verbatim to ever
                 for (const pid of allPlayerIds) {
                     playerAttributes[pid] = { seat: pid };
                 }
-                const setup = { matchSettings: { boardColor: 'blue' }, playerAttributes };
+                const setup = { gameParams: { boardColor: 'blue' }, playerAttributes };
                 const snapshot: ArbitraryGameSnapshot = { ...base, setup };
 
                 for (const viewerId of allPlayerIds) {

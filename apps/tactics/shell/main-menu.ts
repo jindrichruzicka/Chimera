@@ -94,7 +94,7 @@ export const tacticsMainMenuDefinition: GameMainMenuDefinition = {
             label: 'game.tactics.menu.quickMatch',
             // Host versus one AI, and nothing else said: the AI seat declares no
             // attributes, so its colour comes from `resolveDefaultPlayerAttributes`
-            // exactly as a lobby-added AI's does, and the match settings are the
+            // exactly as a lobby-added AI's does, and the game params are the
             // ones `buildTacticsLobbySetup` already declares.
             action: { type: 'start-game', config: { aiSeats: [{}] } },
             variant: 'primary',

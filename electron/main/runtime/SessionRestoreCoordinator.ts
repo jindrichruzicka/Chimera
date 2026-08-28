@@ -2,7 +2,7 @@
  * electron/main/runtime/SessionRestoreCoordinator.ts
  *
  * Menu-load restore orchestrator. When `chimera:saves:load` arrives with no
- * active session, the coordinator turns a v6 `SaveFile` into a live hosted
+ * active session, the coordinator turns a `SaveFile` into a live hosted
  * session: it sanitizes the saved `session` manifest, hosts a lobby
  * pre-seeded with the saved roster (`hostLobby({ restore })` seam), applies
  * the checkpoint through the composition root's single Invariant #24 entry
@@ -106,7 +106,7 @@ export function sanitizeRestoreManifest(session: SaveSessionManifest): Sanitized
     const seenSlots = new Set<number>();
     const seenPlayers = new Set<PlayerId>();
     for (const seatEntry of session.seats) {
-        // The v6 serializer schema only requires a string here, so a corrupted
+        // The serializer schema only requires a string here, so a corrupted
         // file can carry empty or oversized ids; anything beyond the JOIN-claim
         // wire bound could never be reclaimed by its returning player anyway.
         if (

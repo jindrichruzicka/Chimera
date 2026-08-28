@@ -54,8 +54,8 @@ function makeLobby(localId: PlayerId = HOST_ID): DevHarnessLobbyPort & {
             calls.push(`joinLobby:${params.address}`);
             return Promise.resolve({ sessionId: params.address, hostId: HOST_ID });
         },
-        setMatchSetting(key: string, value: string) {
-            calls.push(`setMatchSetting:${key}=${value}`);
+        setGameParam(key: string, value: string) {
+            calls.push(`setGameParam:${key}=${value}`);
             return Promise.resolve();
         },
         setPlayerAttribute(id: PlayerId, key: string, value: string) {
@@ -140,7 +140,7 @@ const SCENARIO = {
         { profile: 'bob.json', attributes: { deck: '["fang"]' } },
     ],
     aiSeats: 1,
-    matchSettings: { arena: 'lava-pit', turnMode: 'commitment' },
+    gameParams: { arena: 'lava-pit', turnMode: 'commitment' },
 };
 
 describe('DevHarnessCoordinator — host bootstrap', () => {
@@ -159,8 +159,8 @@ describe('DevHarnessCoordinator — host bootstrap', () => {
 
         expect(lobby.calls).toEqual([
             'hostLobby:sample:3', // 2 human seats + 1 AI seat
-            'setMatchSetting:arena=lava-pit',
-            'setMatchSetting:turnMode=commitment',
+            'setGameParam:arena=lava-pit',
+            'setGameParam:turnMode=commitment',
             `setPlayerAttribute:${HOST_ID}:deck=["strike"]`,
             'addAi',
             'announce:/ud/p1/announce.json:127.0.0.1:52110:tok3n',

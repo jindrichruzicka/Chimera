@@ -11,7 +11,7 @@
  * `HostLobbyParams.agentSlots` seam (one atomic decision, where an `addAi()`
  * loop would instead allocate each slot against the roster as it stood at that
  * moment), stamping the
- * engine-owned session-mode key, applying the merged match settings and seat
+ * engine-owned session-mode key, applying the merged game params and seat
  * attributes, readying up, and starting.
  *
  * The coordinator holds NO session objects — only its own in-flight flag — and
@@ -30,7 +30,7 @@
  *
  * Invariants upheld:
  *   #37/#67 — every collaborator (ports, logger) is constructor-injected.
- *   #99 — the coordinator authors match settings as the HOST and seat
+ *   #99 — the coordinator authors game params as the HOST and seat
  *         attributes as the SEAT OWNER: the host connection owns every
  *         pass-and-play local seat on a shared machine, and they are seeded at
  *         host time through `addLocalSeat`, not through a runtime attribute
@@ -41,7 +41,7 @@ import type { LobbyAgentSlot, LobbyInfo, PlayerId } from '@chimera-engine/networ
 import { playerId } from '@chimera-engine/networking';
 import {
     SESSION_MODE_QUICK,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import type {
     QuickStartAiSeat,
@@ -87,7 +87,7 @@ export interface QuickStartLobbyVerbs {
         readonly maxPlayers: number;
         readonly agentSlots: readonly LobbyAgentSlot[];
     }) => Promise<LobbyInfo>;
-    readonly setMatchSetting: (key: string, value: string) => Promise<void>;
+    readonly setGameParam: (key: string, value: string) => Promise<void>;
     readonly setPlayerAttribute: (target: PlayerId, key: string, value: string) => Promise<void>;
     readonly addLocalSeat: (
         seatId: PlayerId,
@@ -130,7 +130,7 @@ export interface QuickStartCoordinatorOptions {
 
 /** A {@link QuickStartConfig} with every optional field resolved. */
 interface ResolvedQuickStartConfig {
-    readonly matchSettings: Readonly<Record<string, string>>;
+    readonly gameParams: Readonly<Record<string, string>>;
     readonly hostAttributes: Readonly<Record<string, string>>;
     readonly localSeats: readonly QuickStartSeat[];
     readonly aiSeats: readonly QuickStartAiSeat[];
@@ -139,7 +139,7 @@ interface ResolvedQuickStartConfig {
 /**
  * Merge a game's declared defaults UNDER a request.
  *
- * The two maps merge per KEY, so a request that names one setting keeps the
+ * The two maps merge per KEY, so a request that names one game param keeps the
  * game's other defaults. The two seat LISTS do not: a list's length is its seat
  * count, so a positional merge would silently invent seats. A request that
  * supplies a list replaces the declared one whole; a request that omits it
@@ -150,7 +150,7 @@ function mergeQuickStartConfig(
     request: QuickStartConfig,
 ): ResolvedQuickStartConfig {
     return {
-        matchSettings: { ...defaults?.matchSettings, ...request.matchSettings },
+        gameParams: { ...defaults?.gameParams, ...request.gameParams },
         hostAttributes: { ...defaults?.hostAttributes, ...request.hostAttributes },
         localSeats: [...(request.localSeats ?? defaults?.localSeats ?? [])],
         aiSeats: [...(request.aiSeats ?? defaults?.aiSeats ?? [])],
@@ -198,8 +198,8 @@ export class QuickStartCoordinator {
      * {@link LobbyInfo}.
      *
      * Sequence — guards, then merge, then the public verbs in this order:
-     * `hostLobby({ agentSlots })` → stamp `engine.sessionMode` → merged match
-     * settings → host attributes → local seats → ready → `startGame()`. The
+     * `hostLobby({ agentSlots })` → stamp `engine.sessionMode` → merged game
+     * params → host attributes → local seats → ready → `startGame()`. The
      * stamp goes first so it is present for every write that follows and for
      * every lobby-state broadcast after the hosting one.
      *
@@ -225,10 +225,10 @@ export class QuickStartCoordinator {
             this.ports.resolveQuickStartDefaults(request.gameId),
             request,
         );
-        if (Object.hasOwn(config.matchSettings, SESSION_MODE_SETTING)) {
+        if (Object.hasOwn(config.gameParams, SESSION_MODE_PARAM)) {
             throw new QuickStartError(
-                `lobby:quick-start: "${SESSION_MODE_SETTING}" is engine-owned and cannot be ` +
-                    `authored by a match-settings request.`,
+                `lobby:quick-start: "${SESSION_MODE_PARAM}" is engine-owned and cannot be ` +
+                    `authored by a game-params request.`,
             );
         }
 
@@ -264,9 +264,9 @@ export class QuickStartCoordinator {
             });
             hosted = true;
 
-            await this.ports.setMatchSetting(SESSION_MODE_SETTING, SESSION_MODE_QUICK);
-            for (const [key, value] of sortedEntries(config.matchSettings)) {
-                await this.ports.setMatchSetting(key, value);
+            await this.ports.setGameParam(SESSION_MODE_PARAM, SESSION_MODE_QUICK);
+            for (const [key, value] of sortedEntries(config.gameParams)) {
+                await this.ports.setGameParam(key, value);
             }
             for (const [key, value] of sortedEntries(config.hostAttributes)) {
                 await this.ports.setPlayerAttribute(info.hostId, key, value);

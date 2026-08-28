@@ -34,27 +34,27 @@ export type TacticsTurnMode = 'sequential' | 'commitment';
 
 /**
  * Key under which the turn mode lives in the synced host-authored
- * `GameSetupConfig.matchSettings` (and therefore in `snapshot.setup`). The
+ * `GameSetupConfig.gameParams` (and therefore in `snapshot.setup`). The
  * Battle Setup checkbox writes this through the existing
- * `chimera:lobby:set-match-setting` path; reducers and the renderer read it via
+ * `chimera:lobby:set-game-param` path; reducers and the renderer read it via
  * {@link readTacticsTurnMode}.
  */
-export const TACTICS_TURN_MODE_SETTING = 'turnMode';
+export const TACTICS_TURN_MODE_PARAM = 'turnMode';
 
-/** Turn mode for a match with no explicit setting — commitment mode is opt-in. */
+/** Turn mode when the game params name none — commitment mode is opt-in. */
 export const TACTICS_DEFAULT_TURN_MODE: TacticsTurnMode = 'sequential';
 
 /**
- * Pure reader for the tactics turn mode. Accepts the raw match-settings record
- * (from the lobby's `matchSettings` or `snapshot.setup?.matchSettings`) so both
+ * Pure reader for the tactics turn mode. Accepts the raw game-params record
+ * (from the lobby's `gameParams` or `snapshot.setup?.gameParams`) so both
  * the renderer and the simulation can share one decode without a cross-module
  * type dependency. Fail-safe: anything other than the exact literal
  * `'commitment'` resolves to {@link TACTICS_DEFAULT_TURN_MODE}.
  */
 export function readTacticsTurnMode(
-    matchSettings: Readonly<Record<string, string>> | undefined,
+    gameParams: Readonly<Record<string, string>> | undefined,
 ): TacticsTurnMode {
-    return matchSettings?.[TACTICS_TURN_MODE_SETTING] === 'commitment'
+    return gameParams?.[TACTICS_TURN_MODE_PARAM] === 'commitment'
         ? 'commitment'
         : TACTICS_DEFAULT_TURN_MODE;
 }

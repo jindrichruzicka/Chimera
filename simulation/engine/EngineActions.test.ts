@@ -968,14 +968,14 @@ describe('engine:start_game definition', () => {
             definition().parsePayload({
                 playerIds: ['p1', 'p2'],
                 setup: {
-                    matchSettings: { boardColor: 'blue' },
+                    gameParams: { boardColor: 'blue' },
                     playerAttributes: { p1: { color: 'red' }, p2: { color: 'black' } },
                 },
             }),
         ).toEqual({
             playerIds: ['p1', 'p2'],
             setup: {
-                matchSettings: { boardColor: 'blue' },
+                gameParams: { boardColor: 'blue' },
                 playerAttributes: { p1: { color: 'red' }, p2: { color: 'black' } },
             },
         });
@@ -985,11 +985,11 @@ describe('engine:start_game definition', () => {
         expect(definition().parsePayload({ playerIds: ['p1'] })).not.toHaveProperty('setup');
     });
 
-    it('parsePayload rejects a setup whose matchSettings is not a string map', () => {
+    it('parsePayload rejects a setup whose gameParams is not a string map', () => {
         expect(() =>
             definition().parsePayload({
                 playerIds: ['p1'],
-                setup: { matchSettings: { boardColor: 7 }, playerAttributes: {} },
+                setup: { gameParams: { boardColor: 7 }, playerAttributes: {} },
             }),
         ).toThrow(TypeError);
     });
@@ -998,14 +998,14 @@ describe('engine:start_game definition', () => {
         // Built via JSON.parse so `__proto__` is a real own enumerable key, as it
         // would be on wire-delivered input (a source literal would instead set the
         // prototype and create no own key).
-        const setup = JSON.parse('{"matchSettings":{"__proto__":"x"},"playerAttributes":{}}');
+        const setup = JSON.parse('{"gameParams":{"__proto__":"x"},"playerAttributes":{}}');
         expect(() => definition().parsePayload({ playerIds: ['p1'], setup })).toThrow(TypeError);
     });
 
     it('reduce writes snapshot.setup from the payload', () => {
         const snapshot = makeSnapshot(hostId);
         const setup = {
-            matchSettings: { boardColor: 'blue' },
+            gameParams: { boardColor: 'blue' },
             playerAttributes: { [hostId]: { color: 'red' } },
         };
 
@@ -1035,7 +1035,7 @@ describe('engine:start_game definition', () => {
                 frozen,
                 {
                     playerIds: [hostId],
-                    setup: { matchSettings: { boardColor: 'blue' }, playerAttributes: {} },
+                    setup: { gameParams: { boardColor: 'blue' }, playerAttributes: {} },
                 },
                 hostId,
                 stubCtx,
@@ -1191,7 +1191,7 @@ describe('engine:return_to_lobby definition', () => {
 
     const unit = entityId('unit-return-lobby');
     const setup = {
-        matchSettings: { boardColor: 'blue' },
+        gameParams: { boardColor: 'blue' },
         playerAttributes: { [hostId]: { color: 'red' } },
     };
 

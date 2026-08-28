@@ -72,10 +72,12 @@ export interface LobbyState {
     readonly info: LobbyInfo;
     readonly players: readonly LobbyPlayerEntry[];
     /**
-     * Host-authored match settings (e.g. board colour) synced to all clients on
-     * every LobbyState broadcast. Optional and backward-compatible.
+     * Host-authored game params (e.g. board colour) synced to all clients on
+     * every LobbyState broadcast. Optional: absent on games with no lobby setup.
+     * The wire object is not strict, so a peer still sending the pre-rename
+     * `matchSettings` key has it silently stripped.
      */
-    readonly matchSettings?: Record<string, string>;
+    readonly gameParams?: Record<string, string>;
     /**
      * Host-configured AI agent slots, synced to all clients so every peer sees
      * the AI roster. Optional and backward-compatible: absent on games with no

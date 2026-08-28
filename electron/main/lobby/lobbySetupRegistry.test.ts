@@ -28,8 +28,8 @@ const SAMPLE_CONTENT: GameContent = {
 // `MainGameContribution.lobbySetup`, derived by the host into this map.
 const SAMPLE_SETUP: GameLobbySetup = {
     maxPlayers: 4,
-    matchSettingsDefaults: {},
-    matchSettingsOptions: {},
+    gameParamDefaults: {},
+    gameParamOptions: {},
     playerAttributeOptions: {},
     resolveDefaultPlayerAttributes: () => ({}),
 };
@@ -81,7 +81,7 @@ describe('createResolveLobbySetup', () => {
 describe('QuickStartConfig from electron/', () => {
     it('type-checks and carries every seat kind on a resolved GameLobbySetup', () => {
         const quickStart: QuickStartConfig = {
-            matchSettings: { mapSize: 'small' },
+            gameParams: { mapSize: 'small' },
             hostAttributes: { team: 'red' },
             localSeats: [{ attributes: { team: 'blue' } }],
             aiSeats: [{ attributes: { team: 'green' }, omniscient: true }],
@@ -95,17 +95,17 @@ describe('QuickStartConfig from electron/', () => {
 });
 
 describe('buildSetupFromLobbyState', () => {
-    it('returns undefined when there are no match settings and no player attributes', () => {
+    it('returns undefined when there are no game params and no player attributes', () => {
         expect(buildSetupFromLobbyState(makeState())).toBeUndefined();
     });
 
-    it('returns undefined when matchSettings is an empty object and no attributes exist', () => {
-        expect(buildSetupFromLobbyState(makeState({ matchSettings: {} }))).toBeUndefined();
+    it('returns undefined when gameParams is an empty object and no attributes exist', () => {
+        expect(buildSetupFromLobbyState(makeState({ gameParams: {} }))).toBeUndefined();
     });
 
-    it('builds a full config with empty playerAttributes when only matchSettings exist', () => {
-        const result = buildSetupFromLobbyState(makeState({ matchSettings: { mapSize: 'small' } }));
-        expect(result).toEqual({ matchSettings: { mapSize: 'small' }, playerAttributes: {} });
+    it('builds a full config with empty playerAttributes when only gameParams exist', () => {
+        const result = buildSetupFromLobbyState(makeState({ gameParams: { mapSize: 'small' } }));
+        expect(result).toEqual({ gameParams: { mapSize: 'small' }, playerAttributes: {} });
     });
 
     it('keys playerAttributes by playerId and omits players without attributes', () => {
@@ -128,7 +128,7 @@ describe('buildSetupFromLobbyState', () => {
         });
         const result = buildSetupFromLobbyState(state);
         expect(result).toEqual({
-            matchSettings: {},
+            gameParams: {},
             playerAttributes: { host: { team: 'red' }, p3: { team: 'blue' } },
         });
     });
@@ -148,12 +148,12 @@ describe('buildSetupFromLobbyState', () => {
     });
 
     it('carries the host-authored turn mode through to the match setup (T7 → T8)', () => {
-        // The synced commitment battle-mode flag rides matchSettings verbatim into
+        // The synced commitment battle-mode flag rides gameParams verbatim into
         // engine:start_game → snapshot.setup so T8 can read it via readTacticsTurnMode.
         const result = buildSetupFromLobbyState(
-            makeState({ matchSettings: { turnMode: 'commitment' } }),
+            makeState({ gameParams: { turnMode: 'commitment' } }),
         );
-        expect(result?.matchSettings['turnMode']).toBe('commitment');
+        expect(result?.gameParams['turnMode']).toBe('commitment');
     });
 
     it('keys an AI agent slot\'s attributes by its synthetic "ai-<slotIndex>" player id', () => {
@@ -161,7 +161,7 @@ describe('buildSetupFromLobbyState', () => {
             agentSlots: [{ slotIndex: 1, kind: 'ai', attributes: { character: 'rogue' } }],
         });
         expect(buildSetupFromLobbyState(state)).toEqual({
-            matchSettings: {},
+            gameParams: {},
             playerAttributes: { 'ai-1': { character: 'rogue' } },
         });
     });
@@ -191,7 +191,7 @@ describe('buildSetupFromLobbyState', () => {
             ],
         });
         expect(buildSetupFromLobbyState(state)).toEqual({
-            matchSettings: {},
+            gameParams: {},
             playerAttributes: { 'ai-3': { character: 'rogue' } },
         });
     });
@@ -254,9 +254,9 @@ describe('buildSetupFromLobbyState', () => {
         });
     });
 
-    it('carries host, local, AI seats and match settings into one config', () => {
+    it('carries host, local, AI seats and game params into one config', () => {
         const state = makeState({
-            matchSettings: { mapSize: 'large' },
+            gameParams: { mapSize: 'large' },
             players: [
                 {
                     playerId: playerId('host'),
@@ -274,7 +274,7 @@ describe('buildSetupFromLobbyState', () => {
             agentSlots: [{ slotIndex: 2, kind: 'ai', attributes: { team: 'green' } }],
         });
         expect(buildSetupFromLobbyState(state)).toEqual({
-            matchSettings: { mapSize: 'large' },
+            gameParams: { mapSize: 'large' },
             playerAttributes: {
                 host: { team: 'red' },
                 'host-local-2': { team: 'blue' },
@@ -288,9 +288,9 @@ describe('buildSetupFromLobbyState', () => {
         // lobby edit must not be able to reach into a started match's `setup`.
         const hostAttributes = { team: 'red' };
         const slotAttributes = { team: 'green' };
-        const matchSettings = { mapSize: 'large' };
+        const gameParams = { mapSize: 'large' };
         const state = makeState({
-            matchSettings,
+            gameParams,
             players: [
                 {
                     playerId: playerId('host'),
@@ -304,17 +304,17 @@ describe('buildSetupFromLobbyState', () => {
 
         const result = buildSetupFromLobbyState(state);
 
-        expect(result?.matchSettings).toEqual(matchSettings);
-        expect(result?.matchSettings).not.toBe(matchSettings);
+        expect(result?.gameParams).toEqual(gameParams);
+        expect(result?.gameParams).not.toBe(gameParams);
         expect(result?.playerAttributes['host']).toEqual(hostAttributes);
         expect(result?.playerAttributes['host']).not.toBe(hostAttributes);
         expect(result?.playerAttributes['ai-1']).toEqual(slotAttributes);
         expect(result?.playerAttributes['ai-1']).not.toBe(slotAttributes);
     });
 
-    it('combines matchSettings and per-player attributes into one config', () => {
+    it('combines gameParams and per-player attributes into one config', () => {
         const state = makeState({
-            matchSettings: { mapSize: 'large' },
+            gameParams: { mapSize: 'large' },
             players: [
                 {
                     playerId: playerId('host'),
@@ -325,7 +325,7 @@ describe('buildSetupFromLobbyState', () => {
             ],
         });
         expect(buildSetupFromLobbyState(state)).toEqual({
-            matchSettings: { mapSize: 'large' },
+            gameParams: { mapSize: 'large' },
             playerAttributes: { host: { team: 'red' } },
         });
     });

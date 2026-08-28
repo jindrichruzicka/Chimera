@@ -47,7 +47,7 @@ import type { E2eHooks } from '../runtime/e2e-hooks.js';
 import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { resolveAttributeValueCap } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
-    resolveMatchSettingsDefaults,
+    resolveGameParamDefaults,
     resolvePlayerAttributeDefaults,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 
@@ -128,7 +128,7 @@ export interface LobbyManagerOptions {
      * Resolves the host-authored lobby-setup descriptor for a `gameId`, or
      * `undefined` when the game declares none. Injected from the
      * composition root (`electron/main/index.ts`) so the manager can seed
-     * default match settings and per-player attributes without importing
+     * default game params and per-player attributes without importing
      * `apps/*` directly. When omitted — or when it returns
      * `undefined` — all seeding no-ops and behavior stays backward-compatible.
      */
@@ -293,23 +293,23 @@ export class LobbyManager {
 
     /**
      * Rebuild a full {@link LobbyState} from `base` with a new `players` roster,
-     * preserving the host-authored top-level `matchSettings` and the
+     * preserving the host-authored top-level `gameParams` and the
      * synced AI `agentSlots`. Roster mutations must funnel through here so
-     * seeded match settings and the AI roster survive every join / leave / ready
+     * seeded game params and the AI roster survive every join / leave / ready
      * / profile update broadcast.
      */
     private static withPlayers(base: LobbyState, players: readonly LobbyPlayerEntry[]): LobbyState {
         return {
             info: base.info,
             players,
-            ...(base.matchSettings !== undefined ? { matchSettings: base.matchSettings } : {}),
+            ...(base.gameParams !== undefined ? { gameParams: base.gameParams } : {}),
             ...(base.agentSlots !== undefined ? { agentSlots: base.agentSlots } : {}),
         };
     }
 
     /**
      * Rebuild a full {@link LobbyState} from `base` with a new AI `agentSlots`
-     * roster, preserving `players` and host-authored `matchSettings`. The
+     * roster, preserving `players` and host-authored `gameParams`. The
      * key is dropped when `agentSlots` is empty so the state stays clean. Used by
      * the host-only add/remove-AI paths and the join-overflow auto-remove.
      */
@@ -320,7 +320,7 @@ export class LobbyManager {
         return {
             info: base.info,
             players: base.players,
-            ...(base.matchSettings !== undefined ? { matchSettings: base.matchSettings } : {}),
+            ...(base.gameParams !== undefined ? { gameParams: base.gameParams } : {}),
             ...(agentSlots.length > 0 ? { agentSlots } : {}),
         };
     }
@@ -517,7 +517,7 @@ export class LobbyManager {
 
         // Seed host-authored defaults from the game's lobby-setup descriptor.
         // The host occupies seat 0. No-ops when no descriptor resolves,
-        // leaving `matchSettings`/`attributes` absent (backward-compatible).
+        // leaving `gameParams`/`attributes` absent (backward-compatible).
         const setup = this.resolveLobbySetup?.(params.gameId);
         const hostEntry: LobbyPlayerEntry = {
             playerId: info.hostId,
@@ -530,7 +530,7 @@ export class LobbyManager {
         const initialState: LobbyState = {
             info,
             players: [hostEntry],
-            ...(setup !== undefined ? { matchSettings: resolveMatchSettingsDefaults(setup) } : {}),
+            ...(setup !== undefined ? { gameParams: resolveGameParamDefaults(setup) } : {}),
             ...(initialAgentSlots.length > 0 ? { agentSlots: initialAgentSlots } : {}),
         };
         // Wire the profile gate BEFORE publishing the lobby state so there is
@@ -1007,22 +1007,22 @@ export class LobbyManager {
     }
 
     /**
-     * Set a host-authored match setting and rebroadcast the full lobby state.
+     * Set a host-authored game param and rebroadcast the full lobby state.
      * Host-only: rejects from a joined (non-host) session — the host is
-     * the sole authority for match settings. The value is merged into the
-     * existing `matchSettings`, the renderer is re-pushed via
+     * the sole authority for game params. The value is merged into the
+     * existing `gameParams`, the renderer is re-pushed via
      * {@link publishLobbyState}, and clients receive the full updated state.
      */
-    setMatchSetting(key: string, value: string): Promise<void> {
+    setGameParam(key: string, value: string): Promise<void> {
         const session = this.session;
         if (session === null) {
             return Promise.reject(
-                new Error('LobbyManager: setting a match setting requires an active session'),
+                new Error('LobbyManager: setting a game param requires an active session'),
             );
         }
         if (!('close' in session)) {
             return Promise.reject(
-                new Error('LobbyManager: only hosted sessions can set match settings'),
+                new Error('LobbyManager: only hosted sessions can set game params'),
             );
         }
         if (this.lobbyState === null) {
@@ -1031,7 +1031,7 @@ export class LobbyManager {
 
         const nextState: LobbyState = {
             ...this.lobbyState,
-            matchSettings: { ...this.lobbyState.matchSettings, [key]: value },
+            gameParams: { ...this.lobbyState.gameParams, [key]: value },
         };
         this.publishLobbyState(nextState);
         this.broadcastLobbyStateIfHosted(nextState);
@@ -1040,7 +1040,7 @@ export class LobbyManager {
 
     /**
      * Host-only: request a return to the lobby for the active hosted session
-     * — the reverse of {@link startGame}. Mirrors {@link setMatchSetting}'s
+     * — the reverse of {@link startGame}. Mirrors {@link setGameParam}'s
      * host-only guard: rejects from a joined (non-host) session or when no
      * session is active. Clears every player's `ready` flag first (the reverse of
      * startGame's all-ready gate) so the returned-to lobby is a clean slate, then
@@ -1068,9 +1068,9 @@ export class LobbyManager {
 
         // Reset every player's ready flag so the returned-to lobby starts a fresh
         // ready round. Only `ready` changes — per-player attributes (e.g. colour),
-        // displayName, matchSettings and agentSlots are preserved (withPlayers).
+        // displayName, gameParams and agentSlots are preserved (withPlayers).
         // Publish to the host renderer and broadcast to clients via the live
-        // LobbyState push (not a side channel), mirroring setMatchSetting.
+        // LobbyState push (not a side channel), mirroring setGameParam.
         const resetState = LobbyManager.withPlayers(
             this.lobbyState,
             this.lobbyState.players.map((entry) => ({ ...entry, ready: false })),
@@ -1184,7 +1184,7 @@ export class LobbyManager {
 
     /**
      * Host-only: append an AI agent slot to the lobby roster and rebroadcast the
-     * full {@link LobbyState}. Mirrors {@link setMatchSetting}'s host-only
+     * full {@link LobbyState}. Mirrors {@link setGameParam}'s host-only
      * guard (rejects a joined/non-host session). Rejects when the lobby is full
      * — total occupancy (humans + AI) has reached `maxPlayers`. The host assigns
      * the lowest free slot index in `[1, maxPlayers)`; clients observe the new

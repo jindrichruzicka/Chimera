@@ -117,7 +117,7 @@ Spectating is **opt-in per game and off per match**, reusing the established
 **manifest-declaration → registry-forward → host-toggle** shape: a game declares
 the capability in `GameManifest` (`spectators: { mode: 'perspective' }`), and the
 host enables it per match through the reserved, host-authored `engine.allowSpectators`
-match setting (off by default, synced verbatim in `snapshot.setup`). The host's
+game param (off by default, synced verbatim in `snapshot.setup`). The host's
 join classifier admits a running-match join as a spectator only when both gates
 pass, else cleanly rejects it (`spectators_disabled` when the capability is
 present but the toggle is off, `match_in_progress` when the game declares none) —
@@ -134,7 +134,7 @@ perspective switch); see the [Spectator Mode Contract](../core-components/specta
 | Task                                                                   | Issue                                                         |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Spectator contract & wire types (roles, WELCOME role, reject, message) | [#876](https://github.com/jindrichruzicka/Chimera/issues/876) |
-| `GameManifest.spectators` capability, resolver, reserved match-setting | [#877](https://github.com/jindrichruzicka/Chimera/issues/877) |
+| `GameManifest.spectators` capability, resolver, reserved game-param    | [#877](https://github.com/jindrichruzicka/Chimera/issues/877) |
 | Classify a running-match join as spectator or reject                   | [#878](https://github.com/jindrichruzicka/Chimera/issues/878) |
 | Spectator viewer registry + perspective projection broadcast           | [#879](https://github.com/jindrichruzicka/Chimera/issues/879) |
 | Perspective switching (`SPECTATE_TARGET_UPDATE` message + IPC)         | [#880](https://github.com/jindrichruzicka/Chimera/issues/880) |
@@ -790,8 +790,8 @@ built.
 
 **`engine.sessionMode` is the launch origin, because the alternatives do not survive.** A
 renderer-store flag survives neither a window reload nor a session restore; the stamp rides in
-`snapshot.setup.matchSettings`, which survives both. It is engine-owned rather than host-authored,
-refused by `SetMatchSettingPayloadSchema`, by `QuickStartParamsSchema`, and once more by the
+`snapshot.setup.gameParams`, which survives both. It is engine-owned rather than host-authored,
+refused by `SetGameParamPayloadSchema`, by `QuickStartParamsSchema`, and once more by the
 coordinator after merging — the last arm being the one that catches a GAME's own declared
 `quickStart` defaults authoring it. `useLeaveGame` forks on it: a client disconnects, a lobby-born
 host returns to its lobby, and a quick-session host takes the atomic
@@ -850,7 +850,7 @@ Three amended: #99 gains the third Zod-validated channel and the sentence that a
 every pass-and-play local seat; #101 gains AI and local-seat attributes beside human ones, with the
 verbatim-projection guarantee unchanged; #96's prose grows by the `game` barrel's page services, with
 the barrel count still eight. #99's old "the two lobby channels are the sole config write path"
-quantifier came out rather than being re-enumerated: `chimera:lobby:host` also seeds `matchSettings`
+quantifier came out rather than being re-enumerated: `chimera:lobby:host` also seeds `gameParams`
 and accepts agent-slot attributes, and funnels through neither manager verb.
 
 | Task                                                                                    | Issue                                                           |
@@ -894,7 +894,7 @@ latent in-tree, because tactics' AI is turn-gated and no shipped game declares `
 | Asked                                                           | Delivered                                                                                                                     | Why                                                                                                                                                                                                                                                                    |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pass-and-play seats declared as a bare COUNT                    | Every seat kind carries its own `attributes` object.                                                                          | A count says how many seats to open but not what any of them is playing, so a game whose seats differ by character or colour could not express its own quick start — and the seats would then need a second, later widening to say it.                                 |
-| An `ai.1.character` match-settings convention for AI attributes | `LobbyAgentSlot.attributes`, travelling the same road a human seat's attributes travel.                                       | The convention needs a second parsing path beside the one `snapshot.setup` already has, and two parsers of one fact drift.                                                                                                                                             |
+| An `ai.1.character` game-params convention for AI attributes    | `LobbyAgentSlot.attributes`, travelling the same road a human seat's attributes travel.                                       | The convention needs a second parsing path beside the one `snapshot.setup` already has, and two parsers of one fact drift.                                                                                                                                             |
 | A `?shellPage=` page machine on `/main-menu`                    | Physical Next routes declared through `shellRoutes`.                                                                          | A query-only change never re-fires the pathname-keyed observation pattern; a pathname classifier misclassifies (a game's hero overlay bleeds over every custom page); deep links race the shell load state; and a `shell/*.tsx` page has no legal asset path.          |
 | Spreadable engine default menu buttons (`[...ENGINE_DEFAULTS]`) | Games restate their button list.                                                                                              | Restating roughly six lines is what keeps §4.37.6's no-partial-merge contract literally true; a spread makes "a provided definition owns its button list" a sentence with an exception.                                                                                |
 | A renderer-store launch origin for the Leave fork               | The `engine.sessionMode` stamp in `snapshot.setup`.                                                                           | A renderer store survives neither a window reload nor a restore, and both are ordinary on this path — the fork would silently take the lobby exit out of a lobby-less session.                                                                                         |

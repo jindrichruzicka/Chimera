@@ -32,7 +32,7 @@
  * one it captured, and the mismatch would read as a broken restore.
  *
  * Invariants exercised end to end:
- *   #99/#101 — the quick start authors match settings as the host and seat
+ *   #99/#101 — the quick start authors game params as the host and seat
  *      attributes as the seat owner, and both ride into `snapshot.setup`; the
  *      engine-owned `engine.sessionMode` stamp travels with them, which is what
  *      the second leave in test 2 reads after a restore.

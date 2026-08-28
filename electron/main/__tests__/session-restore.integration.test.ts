@@ -39,7 +39,7 @@ import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine
 import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
 import {
     ALLOW_SPECTATORS_DEFAULT,
-    ALLOW_SPECTATORS_SETTING,
+    ALLOW_SPECTATORS_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
 
@@ -55,7 +55,7 @@ import {
     TACTICS_GAME_ID,
     TACTICS_MAX_STAMINA,
     TACTICS_MOVE_UNIT_ACTION,
-    TACTICS_TURN_MODE_SETTING,
+    TACTICS_TURN_MODE_PARAM,
 } from '@chimera-engine/tactics/simulation/constants.js';
 import {
     buildTacticsLobbySetup,
@@ -308,10 +308,10 @@ describe('session restore protocol (F68) — integration', () => {
             current: TACTICS_MAX_STAMINA - 2,
             max: TACTICS_MAX_STAMINA,
         });
-        expect(restored.setup?.matchSettings).toStrictEqual({
+        expect(restored.setup?.gameParams).toStrictEqual({
             boardColor: 'slate',
-            [TACTICS_TURN_MODE_SETTING]: 'sequential',
-            [ALLOW_SPECTATORS_SETTING]: ALLOW_SPECTATORS_DEFAULT,
+            [TACTICS_TURN_MODE_PARAM]: 'sequential',
+            [ALLOW_SPECTATORS_PARAM]: ALLOW_SPECTATORS_DEFAULT,
         });
         expect(restored.setup?.playerAttributes).toStrictEqual({
             [String(hostInfo.hostId)]: { color: 'red' },
@@ -1392,7 +1392,7 @@ describe('session restore protocol (F68) — integration', () => {
         const seatA = clientA.manager.getLocalPlayerId();
         const seatB = clientB.manager.getLocalPlayerId();
 
-        await host.lobbyManager.setMatchSetting(TACTICS_TURN_MODE_SETTING, 'commitment');
+        await host.lobbyManager.setGameParam(TACTICS_TURN_MODE_PARAM, 'commitment');
         await clientA.manager.updatePlayerReadyState(true);
         await clientB.manager.updatePlayerReadyState(true);
         await host.lobbyManager.updatePlayerReadyState(true);
@@ -1400,7 +1400,7 @@ describe('session restore protocol (F68) — integration', () => {
         await flushProviderEvents();
 
         const runtime = host.activeRuntime();
-        expect(runtime!.getSnapshot().setup?.matchSettings?.[TACTICS_TURN_MODE_SETTING]).toBe(
+        expect(runtime!.getSnapshot().setup?.gameParams?.[TACTICS_TURN_MODE_PARAM]).toBe(
             'commitment',
         );
 

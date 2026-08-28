@@ -64,7 +64,7 @@ vi.mock('../../game/rendererGameRegistry', () => ({
 function StubLobbyScreen({
     isHost,
     localPlayerId,
-    setMatchSetting,
+    setGameParam,
     setPlayerAttribute,
 }: GameLobbyScreenProps): React.ReactElement {
     return (
@@ -74,7 +74,7 @@ function StubLobbyScreen({
                 <button
                     data-testid="stub-edit-board"
                     onClick={() => {
-                        setMatchSetting('boardColor', 'amber');
+                        setGameParam('boardColor', 'amber');
                     }}
                     type="button"
                 >
@@ -883,7 +883,7 @@ describe('LobbyPage password (F56)', () => {
 });
 
 describe('LobbyPage game-provided lobby screen', () => {
-    let setMatchSetting: ReturnType<typeof vi.fn>;
+    let setGameParam: ReturnType<typeof vi.fn>;
     let setPlayerAttribute: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
@@ -903,7 +903,7 @@ describe('LobbyPage game-provided lobby screen', () => {
         // context — the URL must carry ?gameId= (no default-game fallback).
         window.history.pushState({}, '', '/lobby?gameId=tactics');
 
-        setMatchSetting = vi.fn(async () => undefined);
+        setGameParam = vi.fn(async () => undefined);
         setPlayerAttribute = vi.fn(async () => undefined);
 
         Object.defineProperty(window, '__chimera', {
@@ -916,7 +916,7 @@ describe('LobbyPage game-provided lobby screen', () => {
                     leave: vi.fn(async () => undefined),
                     startGame: vi.fn(async () => undefined),
                     updatePlayerReadyState: vi.fn(async () => undefined),
-                    setMatchSetting,
+                    setGameParam,
                     setPlayerAttribute,
                 },
                 system: { onConnectionStatus: vi.fn(() => () => undefined) },
@@ -998,7 +998,7 @@ describe('LobbyPage game-provided lobby screen', () => {
         fireEvent.click(screen.getByTestId('stub-edit-color'));
 
         await waitFor(() => {
-            expect(setMatchSetting).toHaveBeenCalledWith('boardColor', 'amber');
+            expect(setGameParam).toHaveBeenCalledWith('boardColor', 'amber');
             expect(setPlayerAttribute).toHaveBeenCalledWith(playerId('p1'), 'color', 'blue');
         });
     });

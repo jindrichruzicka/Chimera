@@ -24,7 +24,7 @@ import { TACTICS_GAME_ID } from './simulation/constants.js';
  * `spectators` opts Tactics into read-only spectator mode: a spectator follows a
  * seat's projected perspective (switchable via hotkey). The capability alone is
  * behaviour-neutral — a running-match join is admitted as a spectator only when
- * the host also enables the `engine.allowSpectators` match setting (surfaced by
+ * the host also enables the `engine.allowSpectators` game param (surfaced by
  * the lobby's "Allow spectators" toggle).
  */
 export const tacticsManifest: GameManifest = {

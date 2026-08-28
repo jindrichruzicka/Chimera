@@ -72,7 +72,7 @@ describe('loadDevScenario', () => {
             '/app/dev/scenarios/skirmish.json': JSON.stringify({
                 gameId: 'sample',
                 seats: [{ profile: 'alice.json' }, {}],
-                matchSettings: { arena: 'lava-pit' },
+                gameParams: { arena: 'lava-pit' },
             }),
         });
 
@@ -80,7 +80,7 @@ describe('loadDevScenario', () => {
 
         expect(scenario.gameId).toBe('sample');
         expect(scenario.seats).toHaveLength(2);
-        expect(scenario.matchSettings).toEqual({ arena: 'lava-pit' });
+        expect(scenario.gameParams).toEqual({ arena: 'lava-pit' });
     });
 
     it('throws a DevFixtureError naming the file on malformed JSON', async () => {

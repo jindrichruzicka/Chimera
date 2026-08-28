@@ -79,7 +79,7 @@ describe('useQuickStart — start', () => {
 
     it('starts the DRAFT the pages accumulated when called with nothing', async () => {
         act(() => {
-            setShellDraft({ matchSettings: { mapSize: 'small' } });
+            setShellDraft({ gameParams: { mapSize: 'small' } });
             setShellDraft({ hostAttributes: { team: 'red' } });
         });
         const { result } = renderHook(() => useQuickStart());
@@ -90,14 +90,14 @@ describe('useQuickStart — start', () => {
 
         expect(quickStart).toHaveBeenCalledWith({
             gameId: GAME_ID,
-            matchSettings: { mapSize: 'small' },
+            gameParams: { mapSize: 'small' },
             hostAttributes: { team: 'red' },
         });
     });
 
     it('merges an explicit config OVER the draft, per key', async () => {
         act(() => {
-            setShellDraft({ matchSettings: { mapSize: 'small' }, hostAttributes: { team: 'red' } });
+            setShellDraft({ gameParams: { mapSize: 'small' }, hostAttributes: { team: 'red' } });
         });
         const { result } = renderHook(() => useQuickStart());
 
@@ -107,7 +107,7 @@ describe('useQuickStart — start', () => {
 
         expect(quickStart).toHaveBeenCalledWith({
             gameId: GAME_ID,
-            matchSettings: { mapSize: 'small' },
+            gameParams: { mapSize: 'small' },
             hostAttributes: { team: 'blue' },
         });
     });

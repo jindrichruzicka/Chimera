@@ -625,12 +625,12 @@ describe('GameStoreBootstrap — the match-entry matrix', () => {
 
     /** A lobby-born session: no `engine.sessionMode` stamp on the setup. */
     const LOBBY_BORN_SETUP = {
-        matchSettings: { boardColor: 'slate' },
+        gameParams: { boardColor: 'slate' },
         playerAttributes: {},
     } as const;
     /** A quick-started session, stamped by `QuickStartCoordinator`. */
     const QUICK_SETUP = {
-        matchSettings: { boardColor: 'slate', 'engine.sessionMode': 'quick' },
+        gameParams: { boardColor: 'slate', 'engine.sessionMode': 'quick' },
         playerAttributes: {},
     } as const;
 

@@ -71,11 +71,11 @@ A fully peer-trustless variant (client-side commit so even the host process neve
 
 ## 1. Mode toggle (T7)
 
-The mode is a **synced, host-authored match setting**, off by default. It rides the F53 customizable-lobby plumbing with no new IPC:
+The mode is a **synced, host-authored game param**, off by default. It rides the F53 customizable-lobby plumbing with no new IPC:
 
-- Key `TACTICS_TURN_MODE_SETTING = 'turnMode'` on `GameSetupConfig.matchSettings`, union `TacticsTurnMode = 'sequential' | 'commitment'`, default `'sequential'` (`TACTICS_DEFAULT_TURN_MODE`). Defined in [`apps/tactics/simulation/constants.ts`](../../apps/tactics/simulation/constants.ts).
-- T7 adds a host-only Battle Setup checkbox in `TacticsLobbyScreen.tsx` (same gating as `boardColor`), written through the existing `chimera:lobby:set-match-setting` → `LobbyManager.setMatchSetting()` path; every accepted change rebroadcasts to all peers.
-- The agreed config is carried into the match by `engine:start_game` → `snapshot.setup` and projected verbatim by `StateProjector`. Reducers and the renderer decode it with the single pure reader `readTacticsTurnMode(matchSettings)` — fail-safe: anything but the exact literal `'commitment'` is `'sequential'`.
+- Key `TACTICS_TURN_MODE_PARAM = 'turnMode'` on `GameSetupConfig.gameParams`, union `TacticsTurnMode = 'sequential' | 'commitment'`, default `'sequential'` (`TACTICS_DEFAULT_TURN_MODE`). Defined in [`apps/tactics/simulation/constants.ts`](../../apps/tactics/simulation/constants.ts).
+- T7 adds a host-only Battle Setup checkbox in `TacticsLobbyScreen.tsx` (same gating as `boardColor`), written through the existing `chimera:lobby:set-game-param` → `LobbyManager.setGameParam()` path; every accepted change rebroadcasts to all peers.
+- The agreed config is carried into the match by `engine:start_game` → `snapshot.setup` and projected verbatim by `StateProjector`. Reducers and the renderer decode it with the single pure reader `readTacticsTurnMode(gameParams)` — fail-safe: anything but the exact literal `'commitment'` is `'sequential'`.
 
 ## 2. Local play & the action buffer (T8)
 
@@ -143,16 +143,16 @@ A save taken mid-commit (some players committed, awaiting others) must still be 
 
 ## Phase → existing primitive map
 
-| Phase             | Concrete existing function / channel                                                                                                                     |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mode select       | `GameSetupConfig.matchSettings['turnMode']` → `chimera:lobby:set-match-setting` → `engine:start_game` → `snapshot.setup`; decode `readTacticsTurnMode()` |
-| Local play        | per-instance `LocalActionBuffer` + pure optimistic view over `PlayerSnapshot`; `stamina.ts` `readStamina` (local)                                        |
-| Commit            | `SessionRuntime.commit` → `SessionCommitmentRuntime.commit` (+ `RevealStagingPort.stage`)                                                                |
-| Envelope egress   | `StateProjector.project()` `getPendingCommitments` → `PlayerSnapshot.commitments` (Invariant #8 gate)                                                    |
-| End turn / reveal | `HostTransport.sendReveal('broadcast', reveal)` in `resolveRevealOrder()` order                                                                          |
-| Verify            | `ClientTransport.onReveal` → `SessionCommitmentRuntime.verifyReveal` → `CommitmentScheme.verify()` (Invariant #9)                                        |
-| Apply             | host re-dispatches revealed actions through `ActionPipeline`; `resolveTacticsGameResult()` on attack                                                     |
-| Persist           | `RevealStagingPort.capture`/`restore` beside `SaveFile.pendingCommitments` (Invariant #26)                                                               |
+| Phase             | Concrete existing function / channel                                                                                                               |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mode select       | `GameSetupConfig.gameParams['turnMode']` → `chimera:lobby:set-game-param` → `engine:start_game` → `snapshot.setup`; decode `readTacticsTurnMode()` |
+| Local play        | per-instance `LocalActionBuffer` + pure optimistic view over `PlayerSnapshot`; `stamina.ts` `readStamina` (local)                                  |
+| Commit            | `SessionRuntime.commit` → `SessionCommitmentRuntime.commit` (+ `RevealStagingPort.stage`)                                                          |
+| Envelope egress   | `StateProjector.project()` `getPendingCommitments` → `PlayerSnapshot.commitments` (Invariant #8 gate)                                              |
+| End turn / reveal | `HostTransport.sendReveal('broadcast', reveal)` in `resolveRevealOrder()` order                                                                    |
+| Verify            | `ClientTransport.onReveal` → `SessionCommitmentRuntime.verifyReveal` → `CommitmentScheme.verify()` (Invariant #9)                                  |
+| Apply             | host re-dispatches revealed actions through `ActionPipeline`; `resolveTacticsGameResult()` on attack                                               |
+| Persist           | `RevealStagingPort.capture`/`restore` beside `SaveFile.pendingCommitments` (Invariant #26)                                                         |
 
 ---
 
@@ -166,7 +166,7 @@ A save taken mid-commit (some players committed, awaiting others) must still be 
 
 ### New invariants ratified here (#103–#105, T11 / #731)
 
-- **Mode is toggle-gated — #103.** Commitment turn mode is enabled **only** by the synced `turnMode === 'commitment'` match setting carried in `snapshot.setup`; `sequential` is the default and is unchanged. The host drives the whole loop through the game-supplied `CommitmentTurnOrchestration` and never names a game.
+- **Mode is toggle-gated — #103.** Commitment turn mode is enabled **only** by the synced `turnMode === 'commitment'` game param carried in `snapshot.setup`; `sequential` is the default and is unchanged. The host drives the whole loop through the game-supplied `CommitmentTurnOrchestration` and never names a game.
 - **End turn is reveal-only while awaiting commitment — #103 (engine mechanism #102).** In commitment mode `End Turn` triggers reveal and is enabled only once every seated player has staged a commitment for the current turn.
 - **Reveal order is deterministic — #104.** Reveal order is derived from `(snapshot.seed, snapshot.tick)`, grouped by player, attack-committers before non-attack-committers — never host-discretionary; `CommitmentScheme.verify()` (#9) gates every revealed bundle.
 - **Per-turn resource state is deterministic and projection-only — #105.** The stamina spent and refunded around commit (§2, §6) lives in `GameSnapshot`, is seeded/refreshed/decremented only by reducers, and reaches clients only via `StateProjector.project()`.
@@ -184,6 +184,6 @@ A save taken mid-commit (some players committed, awaiting others) must still be 
 ## Cross-references
 
 - [Fog of War & Cryptographic Commitment](fog-of-war-cryptographic-commitment.md) — the commit/reveal primitive this mode reuses (host-generated `committed` values vs. the player-authored actions committed here).
-- [Customizable Lobby Contract](../core-components/customizable-lobby-contract.md) — F53 `matchSettings` sync + `snapshot.setup` projection the toggle rides.
+- [Customizable Lobby Contract](../core-components/customizable-lobby-contract.md) — F53 `gameParams` sync + `snapshot.setup` projection the toggle rides.
 - [State Projection Interfaces](../core-components/state-projection-interfaces.md) — `PlayerSnapshot.commitments`, `StateProjector.project()`.
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md) — #3, #8, #9, #26, #71; end-turn gate #102; commit-then-sync turns #103–#105.

@@ -134,7 +134,7 @@ test.describe('Tactics lobby colour sync', () => {
         const clientSetup = await clientGame.waitForGameSetup();
 
         expect(clientSetup).toEqual(hostSetup);
-        expect(hostSetup.matchSettings['boardColor']).toBe(BOARD_COLOR);
+        expect(hostSetup.gameParams['boardColor']).toBe(BOARD_COLOR);
         expect(hostSetup.playerAttributes[hostPlayerId]?.['color']).toBe(HOST_COLOR);
         expect(hostSetup.playerAttributes[clientPlayerId]?.['color']).toBe(CLIENT_COLOR);
 

@@ -19,7 +19,7 @@ tags: [profiles, identity, lobby, attestation, sanitization, directory]
 | **Directory**   | `PlayerDirectory` lives on the host; aggregates every connected client's sanitised profile.                       |
 | **Attestation** | At join time the client attests its profile; the host sanitises and admits it into the directory.                 |
 
-> **Key rule:** profile data is **strictly cosmetic**. It never enters `GameSnapshot`, `PlayerSnapshot`, `SaveFile`, or the action pipeline. Game mechanics that depend on player identity must be match-config values set at lobby setup.
+> **Key rule:** profile data is **strictly cosmetic**. It never enters `GameSnapshot`, `PlayerSnapshot`, `SaveFile`, or the action pipeline. Game mechanics that depend on player identity must travel as lobby setup, never as profile data (Invariant #36).
 
 ---
 

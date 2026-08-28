@@ -79,7 +79,7 @@ const lobbySnapshot: BaseGameSnapshot = {
  */
 const lobbyState: LobbyState = {
     info: { sessionId: 'session-1', hostId: HOST, gameId: 'sample' },
-    matchSettings: { boardColor: 'slate' },
+    gameParams: { boardColor: 'slate' },
     players: [
         { playerId: HOST, displayName: 'Host', ready: true, attributes: { color: 'blue' } },
         { playerId: GUEST, displayName: 'Guest', ready: true, attributes: { color: 'red' } },
@@ -119,7 +119,7 @@ describe('AI-seat attributes reach every viewer’s snapshot.setup', () => {
         const { started } = projectStartedMatch(lobbyState);
 
         expect(started.setup).toEqual({
-            matchSettings: { boardColor: 'slate' },
+            gameParams: { boardColor: 'slate' },
             playerAttributes: {
                 host: { color: 'blue' },
                 guest: { color: 'red' },

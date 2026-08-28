@@ -5,9 +5,9 @@ import {
     WIRE_MAX_PLAYER_ATTRIBUTE_VALUE_LENGTH,
 } from '@chimera-engine/simulation/foundation/messages-schemas.js';
 import {
-    ALLOW_SPECTATORS_SETTING,
+    ALLOW_SPECTATORS_PARAM,
     SESSION_MODE_QUICK,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { MAX_SAVE_LABEL_LENGTH } from '../../preload/api-types.js';
 import {
@@ -19,7 +19,7 @@ import {
     JoinLobbyParamsSchema,
     PlayerIdSchema,
     QuickStartParamsSchema,
-    SetMatchSettingPayloadSchema,
+    SetGameParamPayloadSchema,
     SetPlayerAttributePayloadSchema,
     SpectateSetTargetPayloadSchema,
     LogEntrySchema,
@@ -333,63 +333,60 @@ describe('JoinLobbyParamsSchema', () => {
     });
 });
 
-describe('SetMatchSettingPayloadSchema', () => {
+describe('SetGameParamPayloadSchema', () => {
     it('accepts a well-formed {key, value}', () => {
         expect(
-            SetMatchSettingPayloadSchema.safeParse({ key: 'boardColor', value: 'red' }).success,
+            SetGameParamPayloadSchema.safeParse({ key: 'boardColor', value: 'red' }).success,
         ).toBe(true);
     });
 
     it('accepts an empty value (e.g. "none")', () => {
-        expect(
-            SetMatchSettingPayloadSchema.safeParse({ key: 'boardColor', value: '' }).success,
-        ).toBe(true);
+        expect(SetGameParamPayloadSchema.safeParse({ key: 'boardColor', value: '' }).success).toBe(
+            true,
+        );
     });
 
     it('rejects a missing or empty key', () => {
-        expect(SetMatchSettingPayloadSchema.safeParse({ value: 'red' }).success).toBe(false);
-        expect(SetMatchSettingPayloadSchema.safeParse({ key: '', value: 'red' }).success).toBe(
+        expect(SetGameParamPayloadSchema.safeParse({ value: 'red' }).success).toBe(false);
+        expect(SetGameParamPayloadSchema.safeParse({ key: '', value: 'red' }).success).toBe(false);
+    });
+
+    it('rejects a non-string value', () => {
+        expect(SetGameParamPayloadSchema.safeParse({ key: 'boardColor', value: 42 }).success).toBe(
             false,
         );
     });
 
-    it('rejects a non-string value', () => {
-        expect(
-            SetMatchSettingPayloadSchema.safeParse({ key: 'boardColor', value: 42 }).success,
-        ).toBe(false);
-    });
-
     it('rejects unknown keys', () => {
         expect(
-            SetMatchSettingPayloadSchema.safeParse({ key: 'boardColor', value: 'red', extra: 1 })
+            SetGameParamPayloadSchema.safeParse({ key: 'boardColor', value: 'red', extra: 1 })
                 .success,
         ).toBe(false);
     });
 
     it('rejects the engine-owned session-mode key — no lobby screen may flip it', () => {
-        const result = SetMatchSettingPayloadSchema.safeParse({
-            key: SESSION_MODE_SETTING,
+        const result = SetGameParamPayloadSchema.safeParse({
+            key: SESSION_MODE_PARAM,
             value: SESSION_MODE_QUICK,
         });
         expect(result.success).toBe(false);
-        expect(JSON.stringify(result.error?.issues)).toContain(SESSION_MODE_SETTING);
+        expect(JSON.stringify(result.error?.issues)).toContain(SESSION_MODE_PARAM);
     });
 
     it('rejects the session-mode key whatever value is offered', () => {
         expect(
-            SetMatchSettingPayloadSchema.safeParse({ key: SESSION_MODE_SETTING, value: 'lobby' })
+            SetGameParamPayloadSchema.safeParse({ key: SESSION_MODE_PARAM, value: 'lobby' })
                 .success,
         ).toBe(false);
         expect(
-            SetMatchSettingPayloadSchema.safeParse({ key: SESSION_MODE_SETTING, value: '' })
-                .success,
+            SetGameParamPayloadSchema.safeParse({ key: SESSION_MODE_PARAM, value: '' }).success,
         ).toBe(false);
     });
 
     it('still accepts the OTHER reserved engine key — it is host-settable by design', () => {
         expect(
-            SetMatchSettingPayloadSchema.safeParse({
-                key: ALLOW_SPECTATORS_SETTING,
+            SetGameParamPayloadSchema.safeParse({
+                key: ALLOW_SPECTATORS_PARAM,
                 value: 'true',
             }).success,
         ).toBe(true);
@@ -408,7 +405,7 @@ describe('QuickStartParamsSchema', () => {
     it('carries every seat kind through the transform unchanged', () => {
         const result = QuickStartParamsSchema.safeParse({
             gameId: 'sample-game',
-            matchSettings: { mapSize: 'small' },
+            gameParams: { mapSize: 'small' },
             hostAttributes: { team: 'red' },
             localSeats: [{ attributes: { team: 'blue' } }],
             aiSeats: [{ omniscient: true, attributes: { team: 'green' } }],
@@ -417,7 +414,7 @@ describe('QuickStartParamsSchema', () => {
         if (result.success) {
             expect(result.data).toEqual({
                 gameId: 'sample-game',
-                matchSettings: { mapSize: 'small' },
+                gameParams: { mapSize: 'small' },
                 hostAttributes: { team: 'red' },
                 localSeats: [{ attributes: { team: 'blue' } }],
                 aiSeats: [{ omniscient: true, attributes: { team: 'green' } }],
@@ -429,9 +426,25 @@ describe('QuickStartParamsSchema', () => {
         const result = QuickStartParamsSchema.safeParse({ gameId: 'sample-game', aiSeats: [{}] });
         expect(result.success).toBe(true);
         if (result.success) {
-            expect('matchSettings' in result.data).toBe(false);
+            expect('gameParams' in result.data).toBe(false);
             expect('localSeats' in result.data).toBe(false);
             expect('attributes' in (result.data.aiSeats?.[0] ?? {})).toBe(false);
+        }
+
+        // Positive control for the three bare string probes above: each reports
+        // TRUE when the field IS supplied. Without it a schema that declared no
+        // such field at all would satisfy every assertion vacuously.
+        const populated = QuickStartParamsSchema.safeParse({
+            gameId: 'sample-game',
+            gameParams: { mapSize: 'small' },
+            localSeats: [{}],
+            aiSeats: [{ attributes: { team: 'red' } }],
+        });
+        expect(populated.success).toBe(true);
+        if (populated.success) {
+            expect('gameParams' in populated.data).toBe(true);
+            expect('localSeats' in populated.data).toBe(true);
+            expect('attributes' in (populated.data.aiSeats?.[0] ?? {})).toBe(true);
         }
     });
 
@@ -457,11 +470,11 @@ describe('QuickStartParamsSchema', () => {
         ).toBe(false);
     });
 
-    it('rejects the engine-owned session-mode key in matchSettings', () => {
+    it('rejects the engine-owned session-mode key in gameParams', () => {
         expect(
             QuickStartParamsSchema.safeParse({
                 gameId: 'sample-game',
-                matchSettings: { [SESSION_MODE_SETTING]: 'quick' },
+                gameParams: { [SESSION_MODE_PARAM]: 'quick' },
             }).success,
         ).toBe(false);
     });
@@ -488,7 +501,7 @@ describe('QuickStartParamsSchema', () => {
             }).success,
         ).toBe(false);
         expect(
-            QuickStartParamsSchema.safeParse({ gameId: 'g', matchSettings: { k: overlongValue } })
+            QuickStartParamsSchema.safeParse({ gameId: 'g', gameParams: { k: overlongValue } })
                 .success,
         ).toBe(false);
     });

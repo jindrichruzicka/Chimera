@@ -322,13 +322,13 @@ describe('FileSaveRepository — integrity checksum', () => {
         const repo = makeRepo(tmpDir);
 
         // Build the exact on-disk v5 shape: no `session`, schemaVersion 5, and a
-        // checksum computed over the v5 body (load verifies the checksum on the
-        // MIGRATED file, so this only passes if `session` stays out of the hash).
-        const v6 = makeFile('tactics', 'autosave');
-        const widened = { ...v6 } as Record<string, unknown>;
+        // checksum computed over the v5 body. `session` stays out of the hash
+        // entirely, so the digest matches whichever shape it is checked against.
+        const current = makeFile('tactics', 'autosave');
+        const widened = { ...current } as Record<string, unknown>;
         delete widened['session'];
         const checksum = await computeBodyChecksum(widened as unknown as SaveBody);
-        widened['header'] = { ...v6.header, schemaVersion: 5, checksum };
+        widened['header'] = { ...current.header, schemaVersion: 5, checksum };
 
         const dir = path.join(tmpDir, 'tactics');
         await fs.mkdir(dir, { recursive: true });
@@ -339,6 +339,65 @@ describe('FileSaveRepository — integrity checksum', () => {
         expect(loaded.header.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
         expect(loaded.session).toBeDefined();
         expect(typeof loaded.session.matchId).toBe('string');
+    });
+
+    it('a v6 save with a valid stored checksum still verifies after the v6→v7 gameParams rename', async () => {
+        const repo = makeRepo(tmpDir);
+
+        // Build the exact on-disk v6 shape: `checkpoint.setup.matchSettings`,
+        // schemaVersion 6, and a checksum computed over the v6 body. The rename
+        // rewrites the checkpoint, which IS hashed — this only passes because
+        // load() verifies the stored digest against the file AS STORED, never
+        // against the object the migration chain returns.
+        const v7 = makeFile('tactics', 'autosave');
+        const legacyCheckpoint = {
+            ...v7.checkpoint,
+            setup: {
+                matchSettings: { turnMode: 'commitment' },
+                playerAttributes: {},
+            },
+        };
+        const widened = {
+            ...v7,
+            checkpoint: legacyCheckpoint,
+        } as unknown as Record<string, unknown>;
+        const checksum = await computeBodyChecksum(widened as unknown as SaveBody);
+        widened['header'] = { ...v7.header, schemaVersion: 6, checksum };
+
+        const dir = path.join(tmpDir, 'tactics');
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, 'autosave.chimera'), JSON.stringify(widened, null, 2));
+
+        const loaded = await repo.load('tactics/autosave');
+
+        expect(loaded.header.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+        expect(
+            (loaded.checkpoint as unknown as Record<string, Record<string, unknown>>)['setup'],
+        ).toEqual({ gameParams: { turnMode: 'commitment' }, playerAttributes: {} });
+    });
+
+    it('still rejects a v6 save whose stored checksum does not cover its checkpoint', async () => {
+        const repo = makeRepo(tmpDir);
+
+        // Same v6 shape, but the stored digest is computed over a DIFFERENT
+        // checkpoint — verifying the body AS STORED must still catch it, so the
+        // switch did not turn integrity checking off for legacy saves.
+        const v7 = makeFile('tactics', 'autosave');
+        const widened = {
+            ...v7,
+            checkpoint: {
+                ...v7.checkpoint,
+                setup: { matchSettings: { turnMode: 'commitment' }, playerAttributes: {} },
+            },
+        } as unknown as Record<string, unknown>;
+        const foreignChecksum = await computeBodyChecksum(v7);
+        widened['header'] = { ...v7.header, schemaVersion: 6, checksum: foreignChecksum };
+
+        const dir = path.join(tmpDir, 'tactics');
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, 'autosave.chimera'), JSON.stringify(widened, null, 2));
+
+        await expect(repo.load('tactics/autosave')).rejects.toBeInstanceOf(SaveIntegrityError);
     });
 });
 
@@ -405,5 +464,34 @@ describe('FileSaveRepository — SaveSchemaTooNewError propagation', () => {
             expect(typed.fileVersion).toBe(futureVersion);
             expect(typed.engineVersion).toBe(CURRENT_SCHEMA_VERSION);
         }
+    });
+
+    it('a future schema version wins over a mismatched checksum on the same file', async () => {
+        const repo = makeRepo(tmpDir);
+
+        // Both failure modes armed at once: a version this engine cannot read AND
+        // a stored digest that does not cover the body. `load()` runs the migrator
+        // before it verifies, so the version verdict is the one the caller sees —
+        // "written by a newer engine", not "this file is corrupted". Hoisting the
+        // checksum block above `migrate()` swaps the error and reds this case.
+        const futureVersion = CURRENT_SCHEMA_VERSION + 1;
+        const base = makeFile('tactics', 'future-save');
+        const file = {
+            ...base,
+            header: {
+                ...base.header,
+                schemaVersion: futureVersion,
+                checksum: 'f'.repeat(64),
+            },
+        };
+
+        const dir = path.join(tmpDir, 'tactics');
+        await fs.mkdir(dir, { recursive: true });
+        const serializer = new JsonSaveSerializer();
+        await fs.writeFile(path.join(dir, 'future-save.chimera'), await serializer.serialize(file));
+
+        await expect(repo.load('tactics/future-save')).rejects.toBeInstanceOf(
+            SaveSchemaTooNewError,
+        );
     });
 });

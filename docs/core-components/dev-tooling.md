@@ -17,7 +17,7 @@ Running multiplayer scenarios by hand is the single biggest development friction
 
 ```bash
 pnpm dev:mp 3                       # 1 host + 2 auto-joining clients, generated profiles
-pnpm dev:mp --scenario skirmish     # seats, profiles and match config from the game's dev/ fixtures
+pnpm dev:mp --scenario skirmish     # seats, profiles and game params from the game's dev/ fixtures
 pnpm dev:mp 2 --dry-run             # print the validated spawn plan as JSON; spawn nothing
 ```
 
@@ -31,7 +31,7 @@ Its sources live at **`electron/dev-tools/dev-harness/`** — `dev-tools/` is th
 
 ## Scope and Non-Goals
 
-- **In scope**: spawn N Electron instances on localhost, auto host + join + ready + start, game-owned fixture injection (profiles, per-seat attributes, match settings, AI seats), per-instance data isolation, graceful teardown on Ctrl+C.
+- **In scope**: spawn N Electron instances on localhost, auto host + join + ready + start, game-owned fixture injection (profiles, per-seat attributes, game params, AI seats), per-instance data isolation, graceful teardown on Ctrl+C.
 - **Out of scope**: performance measurement (N renderers sharing one GPU), production packaging (refused), automated match-outcome assertions (that is the Playwright E2E suite, §13).
 
 ---
@@ -59,7 +59,7 @@ A scenario (validated by `DevScenarioSchema`, `simulation/foundation/dev-fixture
         { "profile": "bob.json", "attributes": { "deck": "[\"fang\"]" }, "ready": false }
     ],
     "aiSeats": 1,
-    "matchSettings": { "arena": "lava-pit" },
+    "gameParams": { "arena": "lava-pit" },
     "autoStart": true
 }
 ```
@@ -70,13 +70,13 @@ Where each piece of game data goes — the same sanctioned channels a real playe
 | --------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `seats[i].profile`    | Seeded into the profile repository, then the normal join attestation                             | Cosmetic only (Invariant #59). Engine-shaped; unknown game fields in the file are tolerated and **stripped** at parse.                                                      |
 | `seats[i].attributes` | Owner-authored per-seat lobby attributes → `GameSetupConfig.playerAttributes` → `snapshot.setup` | Game-defined keys/values (opaque strings; JSON-encode structured payloads such as a deck). Values are capped per game — see `GameLobbySetup.maxAttributeValueLength` below. |
-| `matchSettings`       | Host-authored `setMatchSetting` merges over the game's `lobbySetup` defaults                     | Game-defined vocabulary (e.g. an arena id, a turn mode). Host-authored, so no wire cap applies.                                                                             |
+| `gameParams`          | Host-authored `setGameParam` merges over the game's `lobbySetup` defaults                        | Game-defined vocabulary (e.g. an arena id, a turn mode). Host-authored, so no wire cap applies.                                                                             |
 | `aiSeats`             | Host-side `addAi()` after the human seats                                                        | The auto-start latch waits for exactly this many AI slots.                                                                                                                  |
 | `autoStart`           | Host calls `startGame()` once the roster is complete and every seat is ready                     | Default `true`. `false` (or a seat's `ready: false`) leaves the seeded lobby waiting for manual interaction — the lobby-iteration workflow.                                 |
 
 With **no fixtures at all**, `pnpm dev:mp N` still works: each instance gets a generated `Dev Player <n>` profile and the game's `lobbySetup` defaults.
 
-A game should keep its fixtures honest with a contract test that cross-validates them against its own lobby vocabulary — see `apps/<game>/dev/fixtures.test.ts` in the reference app for the pattern (profiles parse, scenario parses, every settings key/value belongs to the game's declared options).
+A game should keep its fixtures honest with a contract test that cross-validates them against its own lobby vocabulary — see `apps/<game>/dev/fixtures.test.ts` in the reference app for the pattern (profiles parse, scenario parses, every game-param key/value belongs to the game's declared options).
 
 ### Attribute value caps (deck-sized payloads)
 
@@ -384,7 +384,7 @@ Parsed by `parseHarnessFlags` (`electron/main/index.ts`); every flag is ignored 
 | `--dev-auto-join=<lobbyCode>` | Join the full `host:port:token` code relayed from the host's announce file.                      |
 | `--dev-profile-file=<path>`   | Seed this profile JSON into the repository as the active profile (the §4.24 seed-copy).          |
 | `--dev-profile-id=<id>`       | Active-profile id; `dev-p<N>` ids get a generated "Dev Player N" identity when no file is given. |
-| `--dev-scenario-file=<path>`  | The scenario driving the auto-flow (settings, attributes, AI seats, auto-start).                 |
+| `--dev-scenario-file=<path>`  | The scenario driving the auto-flow (game params, attributes, AI seats, auto-start).              |
 | `--dev-seat=<n>`              | This instance's 1-based seat in the scenario (seat 1 = host).                                    |
 | `--dev-players=<n>`           | Expected human seats for a scenario-less auto-host (the auto-start latch waits for them).        |
 | `--dev-announce-file=<path>`  | Host only: where to write the announce payload (inside its own userData dir, Invariant #78).     |
@@ -404,7 +404,7 @@ resetDevUserDataDirs (wipe + recreate)
 spawn host ─────────────────────────────►  seed profile → ensureActiveProfile
                                            DevHarnessCoordinator.bootstrap():
                                              hostLobby(maxPlayers = seats+aiSeats)
-                                             setMatchSetting × scenario.matchSettings
+                                             setGameParam × scenario.gameParams
                                              setPlayerAttribute (seat 1)
                                              addAi × aiSeats
                                              write announce {lobbyCode} (atomic)

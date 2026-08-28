@@ -23,7 +23,7 @@ import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engi
 
 /** True iff this match runs the commitment (simultaneous) turn mode. */
 export function isTacticsCommitmentMode(state: Readonly<BaseGameSnapshot>): boolean {
-    return readTacticsTurnMode(state.setup?.matchSettings) === 'commitment';
+    return readTacticsTurnMode(state.setup?.gameParams) === 'commitment';
 }
 
 /**

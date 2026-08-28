@@ -23,7 +23,7 @@ import { playerId } from '@chimera-engine/simulation/engine/index.js';
 import type { LobbyAgentSlot, LobbyInfo } from '@chimera-engine/networking';
 import {
     SESSION_MODE_QUICK,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { createNoopLogger } from '../logging/logger.js';
 import type { LobbyManager } from '../lobby/LobbyManager.js';
@@ -69,8 +69,8 @@ function makeHarness(overrides: Partial<QuickStartPorts> = {}): Harness {
             calls.push(`hostLobby:${params.gameId}:${String(params.maxPlayers)}`);
             return Promise.resolve(LOBBY_INFO);
         },
-        setMatchSetting: (key, value) => {
-            calls.push(`setMatchSetting:${key}=${value}`);
+        setGameParam: (key, value) => {
+            calls.push(`setGameParam:${key}=${value}`);
             return Promise.resolve();
         },
         setPlayerAttribute: (target, key, value) => {
@@ -121,7 +121,7 @@ describe('QuickStartCoordinator.quickStart — driven sequence', () => {
 
         await harness.coordinator.quickStart({
             gameId: GAME_ID,
-            matchSettings: { mapSize: 'small' },
+            gameParams: { mapSize: 'small' },
             hostAttributes: { team: 'red' },
             localSeats: [{ attributes: { team: 'blue' } }],
             aiSeats: [{ omniscient: true }],
@@ -130,9 +130,9 @@ describe('QuickStartCoordinator.quickStart — driven sequence', () => {
         expect(harness.calls).toEqual([
             // Roster is exactly full by design: host + 1 local + 1 AI.
             `hostLobby:${GAME_ID}:3`,
-            // The engine stamp lands FIRST, before any game-authored setting.
-            `setMatchSetting:${SESSION_MODE_SETTING}=${SESSION_MODE_QUICK}`,
-            'setMatchSetting:mapSize=small',
+            // The engine stamp lands FIRST, before any game-authored param.
+            `setGameParam:${SESSION_MODE_PARAM}=${SESSION_MODE_QUICK}`,
+            'setGameParam:mapSize=small',
             `setPlayerAttribute:${String(HOST_ID)}:team=red`,
             'addLocalSeat:host-1-local-2:ready=true:{"team":"blue"}',
             'updatePlayerReadyState:true',
@@ -179,7 +179,7 @@ describe('QuickStartCoordinator.quickStart — driven sequence', () => {
         expect(harness.hostedAgentSlots()).toEqual([]);
         expect(harness.calls).toEqual([
             `hostLobby:${GAME_ID}:1`,
-            `setMatchSetting:${SESSION_MODE_SETTING}=${SESSION_MODE_QUICK}`,
+            `setGameParam:${SESSION_MODE_PARAM}=${SESSION_MODE_QUICK}`,
             'updatePlayerReadyState:true',
             'startGame',
         ]);
@@ -198,23 +198,23 @@ describe('QuickStartCoordinator.quickStart — defaults merge', () => {
     it("merges the game's quickStart defaults UNDER the request, per key", async () => {
         const harness = makeHarness({
             resolveQuickStartDefaults: () => ({
-                matchSettings: { mapSize: 'small', mode: 'skirmish' },
+                gameParams: { mapSize: 'small', mode: 'skirmish' },
                 hostAttributes: { team: 'red', banner: 'wolf' },
             }),
         });
 
         await harness.coordinator.quickStart({
             gameId: GAME_ID,
-            matchSettings: { mapSize: 'large' },
+            gameParams: { mapSize: 'large' },
             hostAttributes: { team: 'blue' },
         });
 
         // Sorted key order keeps the driven sequence deterministic.
         expect(harness.calls).toEqual([
             `hostLobby:${GAME_ID}:1`,
-            `setMatchSetting:${SESSION_MODE_SETTING}=${SESSION_MODE_QUICK}`,
-            'setMatchSetting:mapSize=large',
-            'setMatchSetting:mode=skirmish',
+            `setGameParam:${SESSION_MODE_PARAM}=${SESSION_MODE_QUICK}`,
+            'setGameParam:mapSize=large',
+            'setGameParam:mode=skirmish',
             `setPlayerAttribute:${String(HOST_ID)}:banner=wolf`,
             `setPlayerAttribute:${String(HOST_ID)}:team=blue`,
             'updatePlayerReadyState:true',
@@ -356,16 +356,16 @@ describe('QuickStartCoordinator.quickStart — guards', () => {
         await expect(
             harness.coordinator.quickStart({
                 gameId: GAME_ID,
-                matchSettings: { [SESSION_MODE_SETTING]: 'lobby' },
+                gameParams: { [SESSION_MODE_PARAM]: 'lobby' },
             }),
-        ).rejects.toThrow(SESSION_MODE_SETTING);
+        ).rejects.toThrow(SESSION_MODE_PARAM);
         expect(harness.calls).toEqual([]);
     });
 
     it("rejects when the GAME's own quickStart defaults author the session-mode key", async () => {
         const harness = makeHarness({
             resolveQuickStartDefaults: () => ({
-                matchSettings: { [SESSION_MODE_SETTING]: 'lobby' },
+                gameParams: { [SESSION_MODE_PARAM]: 'lobby' },
             }),
         });
 
@@ -378,7 +378,7 @@ describe('QuickStartCoordinator.quickStart — guards', () => {
 
 describe('QuickStartCoordinator.quickStart — failure teardown', () => {
     const failingSteps: readonly (readonly [string, Partial<QuickStartPorts>])[] = [
-        ['setMatchSetting', { setMatchSetting: () => Promise.reject(new Error('boom')) }],
+        ['setGameParam', { setGameParam: () => Promise.reject(new Error('boom')) }],
         ['setPlayerAttribute', { setPlayerAttribute: () => Promise.reject(new Error('boom')) }],
         ['addLocalSeat', { addLocalSeat: () => Promise.reject(new Error('boom')) }],
         [

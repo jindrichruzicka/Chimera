@@ -307,8 +307,8 @@ describe('useLobbyApi', () => {
         await expect(result.current.startGame()).rejects.toThrow('Chimera API not available');
     });
 
-    it('delegates setMatchSetting and setPlayerAttribute to the bridge lobby API', async () => {
-        const setMatchSetting = vi.fn(async () => undefined);
+    it('delegates setGameParam and setPlayerAttribute to the bridge lobby API', async () => {
+        const setGameParam = vi.fn(async () => undefined);
         const setPlayerAttribute = vi.fn(async () => undefined);
 
         Object.defineProperty(globalThis, '__chimera', {
@@ -321,7 +321,7 @@ describe('useLobbyApi', () => {
                     leave: vi.fn(),
                     startGame: vi.fn(),
                     updatePlayerReadyState: vi.fn(),
-                    setMatchSetting,
+                    setGameParam,
                     setPlayerAttribute,
                     onUpdate: vi.fn(),
                 },
@@ -333,10 +333,10 @@ describe('useLobbyApi', () => {
 
         const { result } = renderHook(() => useLobbyApi());
 
-        await result.current.setMatchSetting('boardColor', 'amber');
+        await result.current.setGameParam('boardColor', 'amber');
         await result.current.setPlayerAttribute(playerId('p2'), 'color', 'blue');
 
-        expect(setMatchSetting).toHaveBeenCalledWith('boardColor', 'amber');
+        expect(setGameParam).toHaveBeenCalledWith('boardColor', 'amber');
         expect(setPlayerAttribute).toHaveBeenCalledWith(playerId('p2'), 'color', 'blue');
     });
 
@@ -380,10 +380,10 @@ describe('useLobbyApi', () => {
         await expect(result.current.removeAiPlayer(1)).rejects.toThrow('Chimera API not available');
     });
 
-    it('throws when calling setMatchSetting without preload bridge', async () => {
+    it('throws when calling setGameParam without preload bridge', async () => {
         const { result } = renderHook(() => useLobbyApi());
 
-        await expect(result.current.setMatchSetting('boardColor', 'amber')).rejects.toThrow(
+        await expect(result.current.setGameParam('boardColor', 'amber')).rejects.toThrow(
             'Chimera API not available',
         );
     });

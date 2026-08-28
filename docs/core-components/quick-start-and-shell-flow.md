@@ -46,15 +46,15 @@ The flow layer spans two documents on purpose: §4.37 owns the shell's **present
 already carries the declarative surfaces, so restating them here would mint a second copy to keep
 true. This section owns the **session** half and points at the other.
 
-| What                                                                 | Where                                                                                        |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `start-game` / `continue` menu actions, `confirm`, button testids    | [§4.37.5](renderer-shell-pages-ui-contract.md#4375-game-customizable-main-menu-definition)   |
-| `menuCommands` — renderer-local callbacks off a `command` action     | [§4.37.8](renderer-shell-pages-ui-contract.md#4378-game-menu-command-registry)               |
-| `shellRoutes`, page chrome, the entry allow-set, the static check    | [§4.37.17](renderer-shell-pages-ui-contract.md#43717-game-owned-shell-routes)                |
-| `shellStateStore` fields, surfaces, writers, the game barrel         | [§4.37.18](renderer-shell-pages-ui-contract.md#43718-shell-state-and-the-game-page-services) |
-| `setMatchSetting` / `setPlayerAttribute` authority, `snapshot.setup` | [§4.37.12](customizable-lobby-contract.md)                                                   |
-| The quick-start contract, the coordinator, the session stamp         | here                                                                                         |
-| `close-session`, the Leave fork, the autosave slot contract          | here                                                                                         |
+| What                                                              | Where                                                                                        |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `start-game` / `continue` menu actions, `confirm`, button testids | [§4.37.5](renderer-shell-pages-ui-contract.md#4375-game-customizable-main-menu-definition)   |
+| `menuCommands` — renderer-local callbacks off a `command` action  | [§4.37.8](renderer-shell-pages-ui-contract.md#4378-game-menu-command-registry)               |
+| `shellRoutes`, page chrome, the entry allow-set, the static check | [§4.37.17](renderer-shell-pages-ui-contract.md#43717-game-owned-shell-routes)                |
+| `shellStateStore` fields, surfaces, writers, the game barrel      | [§4.37.18](renderer-shell-pages-ui-contract.md#43718-shell-state-and-the-game-page-services) |
+| `setGameParam` / `setPlayerAttribute` authority, `snapshot.setup` | [§4.37.12](customizable-lobby-contract.md)                                                   |
+| The quick-start contract, the coordinator, the session stamp      | here                                                                                         |
+| `close-session`, the Leave fork, the autosave slot contract       | here                                                                                         |
 
 ---
 
@@ -67,8 +67,8 @@ and nothing else:
 
 ```text
 hostLobby({ gameId, maxPlayers, agentSlots })   ← the AI roster, pre-seeded, one atomic decision
-  → setMatchSetting('engine.sessionMode', 'quick')
-  → setMatchSetting(k, v)          for each merged match setting, in key order
+  → setGameParam('engine.sessionMode', 'quick')
+  → setGameParam(k, v)             for each merged game param, in key order
   → setPlayerAttribute(hostId, k, v)  for each host attribute, in key order
   → addLocalSeat(seatId, { ready: true, attributes })  for each pass-and-play seat
   → updatePlayerReadyState(true)
@@ -116,7 +116,7 @@ interface QuickStartAiSeat extends QuickStartSeat {
     readonly omniscient?: boolean;
 }
 interface QuickStartConfig {
-    readonly matchSettings?: Readonly<Record<string, string>>;
+    readonly gameParams?: Readonly<Record<string, string>>;
     readonly hostAttributes?: Readonly<Record<string, string>>;
     readonly localSeats?: readonly QuickStartSeat[];
     readonly aiSeats?: readonly QuickStartAiSeat[];
@@ -129,10 +129,10 @@ not what any of them is playing, which is why the seat lists hold objects. The h
 
 A game declares its defaults on `GameLobbySetup.quickStart`; a request merges **over** them:
 
-| Field                             | Merge                                                                                                     |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `matchSettings`, `hostAttributes` | per KEY — a request naming one setting keeps the game's other defaults                                    |
-| `localSeats`, `aiSeats`           | WHOLESALE — a list's length is its seat count, so a positional merge would silently invent or drop a seat |
+| Field                          | Merge                                                                                                     |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `gameParams`, `hostAttributes` | per KEY — a request naming one param keeps the game's other defaults                                      |
+| `localSeats`, `aiSeats`        | WHOLESALE — a list's length is its seat count, so a positional merge would silently invent or drop a seat |
 
 AI slots sit **above** the local seats in the slot ledger, so a local seat's roster position equals
 its ledger slot index and therefore equals the seat index its declared default attributes resolve
@@ -149,20 +149,20 @@ one (Invariant #99).
 
 ## `engine.sessionMode` — the stamp that survives
 
-`SESSION_MODE_SETTING` (`'engine.sessionMode'`) is a match-setting key that is **engine-owned**, not
+`SESSION_MODE_PARAM` (`'engine.sessionMode'`) is a game-param key that is **engine-owned**, not
 host-authored. `QuickStartCoordinator` is what stamps it, on every quick start and with one value:
 `SESSION_MODE_QUICK` (`'quick'`). **Absence means the session was born in the lobby.**
 
 Three refusals guard the key:
 
-- `SetMatchSettingPayloadSchema` rejects the key, so no lobby screen may flip it.
-- `QuickStartParamsSchema` rejects it inside a request's `matchSettings`, so a quick-start caller
+- `SetGameParamPayloadSchema` rejects the key, so no lobby screen may flip it.
+- `QuickStartParamsSchema` rejects it inside a request's `gameParams`, so a quick-start caller
   cannot smuggle it in.
 - `QuickStartCoordinator` refuses it once more **after** merging, which is what catches a **game's
   own declared `GameLobbySetup.quickStart` defaults** authoring it — main-process code, which
   neither schema sees.
 
-It rides in `snapshot.setup.matchSettings`, which is why it is the launch origin the renderer trusts:
+It rides in `snapshot.setup.gameParams`, which is why it is the launch origin the renderer trusts:
 a renderer-store flag survives neither a window reload nor a session restore, and the snapshot does
 both.
 
@@ -253,37 +253,37 @@ default control labels.
 
 ## Invariants
 
-| #    | Rule                                                                                                                                                                                                                                                                               |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #137 | Quick start is SUGAR: `QuickStartCoordinator` composes only public `LobbyManager` verbs, so a quick-started session is born inside `onSessionHosted` like any other — held by the port slice, the ordered call log, and a scan of the coordinator's own source.                    |
-| #138 | `engine.sessionMode` is engine-owned: `SetMatchSettingPayloadSchema`, `QuickStartParamsSchema` and the coordinator's own post-merge check each refuse the key, and `QuickStartCoordinator` stamps it on every quick start, so its absence means the session was born in the lobby. |
-| #139 | Shell-state discipline: the route fields are written by enumerated engine sites and `draft` by the game, and reading or reacting to any of it opens no IPC channel, advances no tick and dispatches no `EngineAction`.                                                             |
-| #140 | One confirm surface: a single `ConfirmDialogHost` mounted once by `AppShell`, reached by the declarative `GameMenuConfirm` and the imperative `useConfirmDialog()` alike, showing one queued question at a time.                                                                   |
-| #99  | Lobby match settings are host-authored and per-player attributes owner-authored; `chimera:lobby:quick-start` is a third Zod-validated channel funnelling into those same verbs, and the host connection owns every pass-and-play local seat.                                       |
-| #101 | `snapshot.setup` is passed through `StateProjector.project()` verbatim and carries every seat kind's attributes, so a quick-started seat reaches every viewer exactly as a lobby-configured one does.                                                                              |
-| #96  | The `game` barrel publishes the shell PAGE SERVICES — `useShellState` / `getShellState` / `setShellDraft` / `useShellNavigate` / `useQuickStart` — and no setter for the route fields, so a game reacts to a route change and never authors one.                                   |
-| #108 | The snapshot-driven restore funnel is the sole disk→live-state entry; `close-session` is exit-side only and adds no second reader.                                                                                                                                                 |
+| #    | Rule                                                                                                                                                                                                                                                                            |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #137 | Quick start is SUGAR: `QuickStartCoordinator` composes only public `LobbyManager` verbs, so a quick-started session is born inside `onSessionHosted` like any other — held by the port slice, the ordered call log, and a scan of the coordinator's own source.                 |
+| #138 | `engine.sessionMode` is engine-owned: `SetGameParamPayloadSchema`, `QuickStartParamsSchema` and the coordinator's own post-merge check each refuse the key, and `QuickStartCoordinator` stamps it on every quick start, so its absence means the session was born in the lobby. |
+| #139 | Shell-state discipline: the route fields are written by enumerated engine sites and `draft` by the game, and reading or reacting to any of it opens no IPC channel, advances no tick and dispatches no `EngineAction`.                                                          |
+| #140 | One confirm surface: a single `ConfirmDialogHost` mounted once by `AppShell`, reached by the declarative `GameMenuConfirm` and the imperative `useConfirmDialog()` alike, showing one queued question at a time.                                                                |
+| #99  | Lobby game params are host-authored and per-player attributes owner-authored; `chimera:lobby:quick-start` is a third Zod-validated channel funnelling into those same verbs, and the host connection owns every pass-and-play local seat.                                       |
+| #101 | `snapshot.setup` is passed through `StateProjector.project()` verbatim and carries every seat kind's attributes, so a quick-started seat reaches every viewer exactly as a lobby-configured one does.                                                                           |
+| #96  | The `game` barrel publishes the shell PAGE SERVICES — `useShellState` / `getShellState` / `setShellDraft` / `useShellNavigate` / `useQuickStart` — and no setter for the route fields, so a game reacts to a route change and never authors one.                                |
+| #108 | The snapshot-driven restore funnel is the sole disk→live-state entry; `close-session` is exit-side only and adds no second reader.                                                                                                                                              |
 
 ---
 
 ## File map
 
-| Path                                              | What                                                                      |
-| ------------------------------------------------- | ------------------------------------------------------------------------- |
-| `simulation/foundation/quick-start-contract.ts`   | `QuickStartConfig`, `QuickStartSeat`, `QuickStartAiSeat` (zero-import)    |
-| `simulation/foundation/game-lobby-contract.ts`    | `SESSION_MODE_SETTING`, `SESSION_MODE_QUICK`, `GameLobbySetup.quickStart` |
-| `simulation/foundation/save-slots.ts`             | `AUTOSAVE_SLOT_NAME`, `autosaveSlotId(gameId)`                            |
-| `electron/main/runtime/QuickStartCoordinator.ts`  | the coordinator, its ports and its unwind                                 |
-| `electron/main/ipc/ipc-schemas.ts`                | `QuickStartParamsSchema`, `CloseSessionParamsSchema`, the two refusals    |
-| `electron/main/index.ts`                          | `closeActiveSession`, the coordinator's port wiring                       |
-| `electron/main/saves/SaveManager.ts`              | `onSlotsChanged` after every autosave                                     |
-| `renderer/hooks/useQuickStart.ts`                 | `start` / `close` / `continueFromAutosave` / `hasAutosave`                |
-| `renderer/bridge/useLeaveGame.ts`                 | the role-aware Leave fork on the session stamp                            |
-| `renderer/shell/matchEntryVerbs.ts`               | the armed-transition wrapper every match entry runs under                 |
-| `renderer/shell/shellStateStore.ts`               | the store, its writers and the game-writable `draft`                      |
-| `renderer/components/shell/ShellStateBridge.tsx`  | the single route-classification site                                      |
-| `renderer/state/confirmDialogStore.ts`            | the promise-resolving confirm queue                                       |
-| `renderer/components/shell/ConfirmDialogHost.tsx` | the one confirm surface `AppShell` mounts                                 |
+| Path                                              | What                                                                    |
+| ------------------------------------------------- | ----------------------------------------------------------------------- |
+| `simulation/foundation/quick-start-contract.ts`   | `QuickStartConfig`, `QuickStartSeat`, `QuickStartAiSeat` (zero-import)  |
+| `simulation/foundation/game-lobby-contract.ts`    | `SESSION_MODE_PARAM`, `SESSION_MODE_QUICK`, `GameLobbySetup.quickStart` |
+| `simulation/foundation/save-slots.ts`             | `AUTOSAVE_SLOT_NAME`, `autosaveSlotId(gameId)`                          |
+| `electron/main/runtime/QuickStartCoordinator.ts`  | the coordinator, its ports and its unwind                               |
+| `electron/main/ipc/ipc-schemas.ts`                | `QuickStartParamsSchema`, `CloseSessionParamsSchema`, the two refusals  |
+| `electron/main/index.ts`                          | `closeActiveSession`, the coordinator's port wiring                     |
+| `electron/main/saves/SaveManager.ts`              | `onSlotsChanged` after every autosave                                   |
+| `renderer/hooks/useQuickStart.ts`                 | `start` / `close` / `continueFromAutosave` / `hasAutosave`              |
+| `renderer/bridge/useLeaveGame.ts`                 | the role-aware Leave fork on the session stamp                          |
+| `renderer/shell/matchEntryVerbs.ts`               | the armed-transition wrapper every match entry runs under               |
+| `renderer/shell/shellStateStore.ts`               | the store, its writers and the game-writable `draft`                    |
+| `renderer/components/shell/ShellStateBridge.tsx`  | the single route-classification site                                    |
+| `renderer/state/confirmDialogStore.ts`            | the promise-resolving confirm queue                                     |
+| `renderer/components/shell/ConfirmDialogHost.tsx` | the one confirm surface `AppShell` mounts                               |
 
 ---
 
@@ -308,7 +308,7 @@ mechanism that killed each alternative.
 ## Cross-References
 
 - [Renderer Shell Pages UI Contract](renderer-shell-pages-ui-contract.md) — §4.37 menu definition, shell routes, shell state, page services
-- [Customizable Lobby Contract](customizable-lobby-contract.md) — §4.37.12 host-authored match settings, owner-authored attributes, `snapshot.setup`
+- [Customizable Lobby Contract](customizable-lobby-contract.md) — §4.37.12 host-authored game params, owner-authored attributes, `snapshot.setup`
 - [Multiplayer Provider & WebSocket](multiplayer-provider-websocket.md) — §4.14 `LobbyManager` verbs and session lifecycle
 - [Save / Load Persistence](save-load-persistence.md) — §4.11 `SaveFile`, the restore funnel, the autosave slot
 - [Renderer State Stores](renderer-state-stores.md) — §4.4 store catalogue, `saveStore`, `lobbyStore`

@@ -73,7 +73,7 @@ interface EngineSettings {
 >
 > The check is structural — sub-key ownership only, never sub-value types or ranges, so `controls: { bindings: 'wasd' }` passes. Game `defaults` are trusted first-party input and are range-validated on no runtime path: `getSettings()`/`updateSettings()` validate stored user overrides and incoming patches, never `schema.defaults`. The engine composition root wraps registration and calls `app.exit(1)` on refusal, because consumer roots launch `main()` as `void main(...)`, where a bare throw would otherwise leave a live, windowless process rather than refusing to start.
 >
-> **Invariant #36** — Settings are never read by the simulation core. Game parameters that affect simulation outcomes must be declared as match config, transmitted during lobby setup.
+> **Invariant #36** — Settings are never read by the simulation core. Values that affect simulation outcomes must be declared as lobby-agreed game params, transmitted during lobby setup.
 
 ---
 

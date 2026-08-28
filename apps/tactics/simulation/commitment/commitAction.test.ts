@@ -6,7 +6,7 @@
 // host-local in the reveal-staging store (Invariants #3/#8). The end-turn guard
 // reads the marker to gate `engine:end_turn` until every seat has committed.
 
-import { TACTICS_TURN_MODE_SETTING } from '../constants.js';
+import { TACTICS_TURN_MODE_PARAM } from '../constants.js';
 import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import type {
     BaseEntityState,
@@ -47,7 +47,7 @@ function makeSnapshot(turnMode = 'commitment'): BaseGameSnapshot {
         turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
         timers: {},
         gameResult: null,
-        setup: { matchSettings: { [TACTICS_TURN_MODE_SETTING]: turnMode }, playerAttributes: {} },
+        setup: { gameParams: { [TACTICS_TURN_MODE_PARAM]: turnMode }, playerAttributes: {} },
     };
 }
 

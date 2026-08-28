@@ -5,7 +5,7 @@
  * screen into a playable match, skipping the lobby (§4.37).
  *
  * A `QuickStartConfig` is the declarative answer to "what match do I open when
- * the player presses Play?": the host-authored match settings plus one entry
+ * the player presses Play?": the host-authored game params plus one entry
  * per seat. EVERY seat kind carries its own attributes — the host seat, each
  * pass-and-play local seat, and each AI seat — so a game whose seats differ by
  * character, colour, or faction can express that here. A bare seat COUNT would
@@ -54,8 +54,8 @@ export interface QuickStartAiSeat extends QuickStartSeat {
  * {@link hostAttributes}, so it never appears in {@link localSeats}.
  */
 export interface QuickStartConfig {
-    /** Host-authored match settings, exactly as a lobby would broadcast them. */
-    readonly matchSettings?: Readonly<Record<string, string>>;
+    /** Host-authored game params, exactly as a lobby would broadcast them. */
+    readonly gameParams?: Readonly<Record<string, string>>;
     /** Per-seat attributes for the host's own seat (seat 0). */
     readonly hostAttributes?: Readonly<Record<string, string>>;
     /** Additional pass-and-play seats owned by this machine, in seat order. */

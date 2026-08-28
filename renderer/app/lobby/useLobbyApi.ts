@@ -28,8 +28,8 @@ export interface LobbyApi {
     leave(): Promise<void>;
     startGame(): Promise<void>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
-    /** Host-only: set a host-authored match setting; main rejects non-host writes. */
-    setMatchSetting(key: string, value: string): Promise<void>;
+    /** Host-only: set a host-authored game param; main rejects non-host writes. */
+    setGameParam(key: string, value: string): Promise<void>;
     /** Owner-authored: set an attribute on the local player's OWN seat (`playerId` must be local); main rejects other seats. */
     setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
     /** Host-only: append an AI agent slot; main rejects non-host writes and a full lobby, then rebroadcasts the synced lobby state. */
@@ -126,12 +126,12 @@ export function useLobbyApi(): LobbyApi {
                 }
                 await bridge.lobby.updatePlayerReadyState(ready);
             },
-            async setMatchSetting(key: string, value: string): Promise<void> {
+            async setGameParam(key: string, value: string): Promise<void> {
                 const bridge = getLobbyBridge();
                 if (!bridge) {
                     throw new Error(MISSING_BRIDGE_ERROR);
                 }
-                await bridge.lobby.setMatchSetting(key, value);
+                await bridge.lobby.setGameParam(key, value);
             },
             async setPlayerAttribute(
                 targetPlayerId: PlayerId,

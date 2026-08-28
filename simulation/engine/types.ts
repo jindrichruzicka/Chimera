@@ -248,12 +248,13 @@ export interface BaseGameSnapshot {
     /** Pending two-phase scene transition, or null between transitions (§4.18). */
     readonly sceneTransition?: SceneTransitionState | null;
     /**
-     * Public host-authored lobby setup (chosen match settings + per-player
+     * Public host-authored lobby setup (chosen game params + per-player
      * attributes) written at `engine:start_game` and carried host-local on the
      * authoritative snapshot. Projected verbatim by `StateProjector.project()`
-     * so every client agrees on the match configuration — it holds no owner-only
-     * fields (§4.37, Invariant #1). Optional and backward-compatible: absent on
-     * older fixtures/saves and games with no lobby setup.
+     * so every client agrees on the same game params — it holds no owner-only
+     * fields (§4.37, Invariant #1). Optional: absent on older fixtures/saves and
+     * on games with no lobby setup. A save written before the `gameParams`
+     * rename is upgraded by the v6→v7 migration, not read as-is.
      */
     readonly setup?: GameSetupConfig;
     /**

@@ -79,7 +79,7 @@ export interface PlayerSnapshot {
     readonly isMyTurn: boolean;
     /**
      * Public host-authored lobby setup, passed through projection verbatim so
-     * every client agrees on the match configuration. Holds only public host
+     * every client agrees on the same game params. Holds only public host
      * config — no owner-only fields cross (Invariant #1). Optional: absent on
      * games with no lobby setup.
      */

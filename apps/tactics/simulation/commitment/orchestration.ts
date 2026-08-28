@@ -82,7 +82,7 @@ export const tacticsCommitmentOrchestration: CommitmentTurnOrchestration = {
     shouldReveal(action: ActionEnvelope, snapshot: Readonly<BaseGameSnapshot>): boolean {
         return (
             action.type === ENGINE_END_TURN &&
-            readTacticsTurnMode(snapshot.setup?.matchSettings) === 'commitment'
+            readTacticsTurnMode(snapshot.setup?.gameParams) === 'commitment'
         );
     },
 

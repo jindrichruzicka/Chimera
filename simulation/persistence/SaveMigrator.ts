@@ -23,7 +23,7 @@ import { deriveSessionManifest } from './SessionManifest.js';
  * of its nested types, and add a corresponding `SaveMigration` so that
  * older saves are automatically upgraded.
  */
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 // ─── SaveMigration interface ──────────────────────────────────────────────────
 
@@ -336,7 +336,7 @@ export const stagedRevealsMigration: SaveMigration = {
  * so the join-order fallback covers reclaim). An existing manifest is
  * preserved verbatim so the migration is additive and idempotent. The field
  * is top-level (alongside `pendingCommitments`), not on the checkpoint, and
- * stays out of the body checksum so pre-v6 stored checksums still verify.
+ * stays out of the body checksum.
  */
 export const sessionManifestMigration: SaveMigration = {
     fromVersion: 5,
@@ -354,6 +354,53 @@ export const sessionManifestMigration: SaveMigration = {
 };
 
 /**
+ * Migration from schema v6 to v7: rename `checkpoint.setup.matchSettings` to
+ * `checkpoint.setup.gameParams`.
+ *
+ * The host-authored lobby-configuration family was renamed engine-wide as a
+ * clean break, so a v6 checkpoint's `setup` carries a key no reader looks at
+ * any more. Without this step `turnMode` would be lost on restore and a
+ * commitment-mode match would resume as sequential — silent determinism
+ * divergence, not a cosmetic regression.
+ *
+ * The rename walks `Object.entries` into a fresh object so the key keeps its
+ * position, and the file is returned untouched whenever there is nothing to
+ * rename (no `setup`, a non-object `setup`, or an already-migrated one), which
+ * makes the migration idempotent.
+ */
+export const checkpointGameParamsMigration: SaveMigration = {
+    fromVersion: 6,
+    apply(file: SaveFile): SaveFile {
+        // Widen: `setup` is not declared by the checkpoint sub-schema and the
+        // current `GameSetupConfig` no longer names the legacy key, so neither
+        // can be probed through the static type.
+        const checkpoint = file.checkpoint as unknown as Record<string, unknown>;
+        const setup = checkpoint['setup'];
+        if (typeof setup !== 'object' || setup === null) {
+            return file;
+        }
+
+        const legacySetup = setup as Record<string, unknown>;
+        if (!('matchSettings' in legacySetup)) {
+            return file;
+        }
+
+        const migratedSetup: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(legacySetup)) {
+            migratedSetup[key === 'matchSettings' ? 'gameParams' : key] = value;
+        }
+
+        return {
+            ...file,
+            checkpoint: {
+                ...checkpoint,
+                setup: migratedSetup,
+            } as unknown as SaveFile['checkpoint'],
+        };
+    },
+};
+
+/**
  * Returns a fresh `SaveMigrator` with all built-in schema migrations
  * pre-registered in order.
  *
@@ -367,5 +414,6 @@ export function createDefaultMigrator(): SaveMigrator {
     migrator.register(checkpointGameResultMigration);
     migrator.register(stagedRevealsMigration);
     migrator.register(sessionManifestMigration);
+    migrator.register(checkpointGameParamsMigration);
     return migrator;
 }

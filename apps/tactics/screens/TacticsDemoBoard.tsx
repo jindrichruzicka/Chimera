@@ -267,7 +267,7 @@ export function TacticsDemoBoard({
     // Commitment battle mode: move/attack/reveal selections are buffered locally
     // (never dispatched) and shown as an optimistic view until the player commits.
     // The buffer is shared with the HUD via this module store.
-    const isCommitment = readTacticsTurnMode(snapshot.setup?.matchSettings) === 'commitment';
+    const isCommitment = readTacticsTurnMode(snapshot.setup?.gameParams) === 'commitment';
     const buffer = useCommitmentBuffer(selectBuffer);
     const committedLatch = useCommitmentBuffer(selectCommittedLatch);
     const appendBufferedAction = useCommitmentBuffer((state) => state.append);

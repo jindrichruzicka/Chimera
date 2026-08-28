@@ -265,7 +265,7 @@ export type JoinGateResult =
  *
  * Spectator admission is host policy — the classifier reads match phase, the
  * game's `resolveSpectatorSupport` capability, and the `allowSpectators`
- * match-setting. Prepares Invariant #114 (spectators are read-only viewers,
+ * game-param. Prepares Invariant #114 (spectators are read-only viewers,
  * never in `GameSnapshot.players`).
  */
 export type JoinClassification =
@@ -396,7 +396,7 @@ export interface HostTransport {
      * player seat; a `reject` result sends REJECT with the reason and closes.
      *
      * The classifier is host policy (match phase + game spectator capability +
-     * `allowSpectators` match-setting); the transport enforces the separate
+     * `allowSpectators` game-param); the transport enforces the separate
      * spectator cap and never counts spectators against player capacity.
      */
     setJoinClassifier(

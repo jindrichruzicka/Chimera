@@ -620,12 +620,12 @@ describe('ServerMessageSchema — LOBBY_STATE', () => {
         expect(result.success).toBe(true);
     });
 
-    it('parses LOBBY_STATE with host-authored matchSettings and per-player attributes', () => {
+    it('parses LOBBY_STATE with host-authored gameParams and per-player attributes', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'LOBBY_STATE',
             state: {
                 info: defaultLobbyInfo,
-                matchSettings: { boardColor: 'blue' },
+                gameParams: { boardColor: 'blue' },
                 players: [
                     {
                         playerId: toPlayerId('p1'),
@@ -639,7 +639,7 @@ describe('ServerMessageSchema — LOBBY_STATE', () => {
         expect(result.success).toBe(true);
     });
 
-    it('parses LOBBY_STATE with matchSettings and attributes absent (backward compatible)', () => {
+    it('parses LOBBY_STATE with gameParams and attributes absent (backward compatible)', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'LOBBY_STATE',
             state: {
@@ -649,17 +649,38 @@ describe('ServerMessageSchema — LOBBY_STATE', () => {
         });
         expect(result.success).toBe(true);
         if (result.success && result.data.type === 'LOBBY_STATE') {
-            expect(result.data.state.matchSettings).toBeUndefined();
+            expect(result.data.state.gameParams).toBeUndefined();
             expect(result.data.state.players[0]?.attributes).toBeUndefined();
         }
     });
 
-    it('rejects LOBBY_STATE matchSettings with a non-string value', () => {
+    // Pins the skew claim carried by `messages-schemas.ts`, `lobby-contract.ts`
+    // and the lobby contract doc: `LobbyState` is a plain `z.object`, so a peer
+    // still sending the pre-rename key is accepted and silently stripped —
+    // the joined client's lobby renders with defaults and nothing warns.
+    // Adding `.strict()` to `LobbyState` would falsify all three copies.
+    it('accepts LOBBY_STATE carrying the pre-rename key and strips it silently', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'LOBBY_STATE',
             state: {
                 info: defaultLobbyInfo,
-                matchSettings: { boardColor: 42 },
+                matchSettings: { boardColor: 'blue' },
+                players: [{ playerId: toPlayerId('p1'), displayName: 'Alice', ready: false }],
+            },
+        });
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'LOBBY_STATE') {
+            expect(Object.keys(result.data.state)).toStrictEqual(['info', 'players']);
+            expect(result.data.state.gameParams).toBeUndefined();
+        }
+    });
+
+    it('rejects LOBBY_STATE gameParams with a non-string value', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'LOBBY_STATE',
+            state: {
+                info: defaultLobbyInfo,
+                gameParams: { boardColor: 42 },
                 players: [{ playerId: toPlayerId('p1'), displayName: 'Alice', ready: false }],
             },
         });
@@ -848,13 +869,39 @@ describe('ServerMessageSchema — SNAPSHOT setup (synced lobby config)', () => {
             snapshot: {
                 ...baseSnapshot,
                 setup: {
-                    matchSettings: { boardColor: 'blue' },
+                    gameParams: { boardColor: 'blue' },
                     playerAttributes: { [toPlayerId('p1')]: { unitColor: 'red' } },
                 },
             },
             checksum: 42,
         });
         expect(result.success).toBe(true);
+    });
+
+    // The other half of the skew claim: `gameParams` is REQUIRED inside
+    // `GameSetupConfig`, so a peer sending the pre-rename key fails the schema
+    // outright rather than losing one field — and `ServerConnection` drops the
+    // whole frame on that failure. Making `gameParams` optional would turn the
+    // dead-match failure into a silent partial one and falsify the prose in
+    // `messages-schemas.ts`, `snapshot-contract.ts` and the lobby contract doc.
+    it('rejects SNAPSHOT whose setup carries the pre-rename key instead of gameParams', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: {
+                ...baseSnapshot,
+                setup: {
+                    matchSettings: { boardColor: 'blue' },
+                    playerAttributes: {},
+                },
+            },
+            checksum: 42,
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues.map((issue) => issue.path.join('.'))).toContain(
+                'snapshot.setup.gameParams',
+            );
+        }
     });
 
     it('parses SNAPSHOT with setup absent (backward compatible)', () => {
@@ -869,12 +916,12 @@ describe('ServerMessageSchema — SNAPSHOT setup (synced lobby config)', () => {
         }
     });
 
-    it('rejects SNAPSHOT setup.matchSettings with a non-string value', () => {
+    it('rejects SNAPSHOT setup.gameParams with a non-string value', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'SNAPSHOT',
             snapshot: {
                 ...baseSnapshot,
-                setup: { matchSettings: { boardColor: 1 }, playerAttributes: {} },
+                setup: { gameParams: { boardColor: 1 }, playerAttributes: {} },
             },
             checksum: 42,
         });
@@ -886,7 +933,7 @@ describe('ServerMessageSchema — SNAPSHOT setup (synced lobby config)', () => {
             type: 'SNAPSHOT',
             snapshot: {
                 ...baseSnapshot,
-                setup: { matchSettings: {}, playerAttributes: { [toPlayerId('p1')]: 'red' } },
+                setup: { gameParams: {}, playerAttributes: { [toPlayerId('p1')]: 'red' } },
             },
             checksum: 42,
         });
@@ -1307,12 +1354,12 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         }
     });
 
-    it('LOBBY_STATE preserves host matchSettings and per-player attributes', () => {
+    it('LOBBY_STATE preserves host gameParams and per-player attributes', () => {
         const msg = {
             type: 'LOBBY_STATE' as const,
             state: {
                 info: defaultLobbyInfo,
-                matchSettings: { boardColor: 'blue' },
+                gameParams: { boardColor: 'blue' },
                 players: [
                     {
                         playerId: toPlayerId('p1'),
@@ -1328,7 +1375,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
 
         expect(round.success).toBe(true);
         if (round.success && round.data.type === 'LOBBY_STATE') {
-            expect(round.data.state.matchSettings).toStrictEqual(msg.state.matchSettings);
+            expect(round.data.state.gameParams).toStrictEqual(msg.state.gameParams);
             expect(round.data.state.players[0]?.attributes).toStrictEqual(
                 msg.state.players[0]?.attributes,
             );
@@ -1346,7 +1393,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                 phase: 'game',
                 events: [],
                 setup: {
-                    matchSettings: { boardColor: 'blue' },
+                    gameParams: { boardColor: 'blue' },
                     playerAttributes: { [toPlayerId('p1')]: { unitColor: 'red' } },
                 },
                 gameResult: null,

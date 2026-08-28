@@ -66,15 +66,15 @@ describe('QuickStartAiSeat', () => {
 // ─── QuickStartConfig ─────────────────────────────────────────────────────────
 
 describe('QuickStartConfig', () => {
-    it('carries match settings, host attributes and every seat kind', () => {
+    it('carries game params, host attributes and every seat kind', () => {
         const config: QuickStartConfig = {
-            matchSettings: { boardColor: 'slate' },
+            gameParams: { boardColor: 'slate' },
             hostAttributes: { color: 'blue' },
             localSeats: [{ attributes: { color: 'green' } }],
             aiSeats: [{ attributes: { color: 'red' }, omniscient: true }],
         };
 
-        expect(config.matchSettings).toEqual({ boardColor: 'slate' });
+        expect(config.gameParams).toEqual({ boardColor: 'slate' });
         expect(config.hostAttributes).toEqual({ color: 'blue' });
         expect(config.localSeats?.[0]?.attributes).toEqual({ color: 'green' });
         expect(config.aiSeats?.[0]?.attributes).toEqual({ color: 'red' });
@@ -83,7 +83,7 @@ describe('QuickStartConfig', () => {
 
     it('accepts an empty config — every field is optional', () => {
         const config: QuickStartConfig = {};
-        expect(config.matchSettings).toBeUndefined();
+        expect(config.gameParams).toBeUndefined();
         expect(config.hostAttributes).toBeUndefined();
         expect(config.localSeats).toBeUndefined();
         expect(config.aiSeats).toBeUndefined();

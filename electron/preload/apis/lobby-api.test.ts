@@ -9,7 +9,7 @@ import {
     LOBBY_START_GAME_CHANNEL,
     LOBBY_RETURN_TO_LOBBY_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
-    LOBBY_SET_MATCH_SETTING_CHANNEL,
+    LOBBY_SET_GAME_PARAM_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
@@ -143,7 +143,7 @@ describe('createLobbyApi', () => {
             const api = createLobbyApi(stub.port);
             const params: QuickStartParams = {
                 gameId: 'sample-game',
-                matchSettings: { mapSize: 'small' },
+                gameParams: { mapSize: 'small' },
                 localSeats: [{ attributes: { team: 'blue' } }],
                 aiSeats: [{ omniscient: true }],
             };
@@ -428,16 +428,16 @@ describe('createLobbyApi', () => {
         });
     });
 
-    describe('setMatchSetting()', () => {
-        it('invokes chimera:lobby:set-match-setting with {key, value} and resolves to void', async () => {
+    describe('setGameParam()', () => {
+        it('invokes chimera:lobby:set-game-param with {key, value} and resolves to void', async () => {
             const stub = makeIpcStub();
             const api = createLobbyApi(stub.port);
 
-            const result = await api.setMatchSetting('boardColor', 'crimson');
+            const result = await api.setGameParam('boardColor', 'crimson');
 
             expect(stub.invocations).toEqual([
                 {
-                    channel: LOBBY_SET_MATCH_SETTING_CHANNEL,
+                    channel: LOBBY_SET_GAME_PARAM_CHANNEL,
                     arg: { key: 'boardColor', value: 'crimson' },
                 },
             ]);
@@ -449,7 +449,7 @@ describe('createLobbyApi', () => {
             const port: LobbyApiIpcPort = {
                 ...stub.port,
                 invoke: (channel) => {
-                    if (channel === LOBBY_SET_MATCH_SETTING_CHANNEL) {
+                    if (channel === LOBBY_SET_GAME_PARAM_CHANNEL) {
                         return Promise.reject(new Error('only hosted sessions'));
                     }
                     return stub.port.invoke(channel);
@@ -457,7 +457,7 @@ describe('createLobbyApi', () => {
             };
             const api = createLobbyApi(port);
 
-            await expect(api.setMatchSetting('boardColor', 'crimson')).rejects.toThrow(
+            await expect(api.setGameParam('boardColor', 'crimson')).rejects.toThrow(
                 'only hosted sessions',
             );
         });

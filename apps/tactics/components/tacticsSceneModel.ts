@@ -109,7 +109,7 @@ export function resolveTacticsBoardColor(
     setup: GameSetupConfig | undefined,
     boardColorHex: Readonly<Record<string, string>>,
 ): string {
-    const name = setup?.matchSettings['boardColor'] ?? DEFAULT_BOARD_COLOR;
+    const name = setup?.gameParams['boardColor'] ?? DEFAULT_BOARD_COLOR;
     return boardColorHex[name] ?? DEFAULT_BOARD_COLOR_HEX;
 }
 

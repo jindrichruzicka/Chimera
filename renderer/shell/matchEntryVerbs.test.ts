@@ -34,7 +34,7 @@ beforeEach(() => {
     installBridge();
 });
 
-const params: QuickStartParams = { gameId: 'tactics', matchSettings: { mapSize: 'small' } };
+const params: QuickStartParams = { gameId: 'tactics', gameParams: { mapSize: 'small' } };
 
 describe('startQuickMatch', () => {
     it('issues the quick-start verb with the params it was given', async () => {

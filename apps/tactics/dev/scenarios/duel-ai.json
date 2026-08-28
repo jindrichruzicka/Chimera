@@ -2,6 +2,6 @@
     "gameId": "tactics",
     "seats": [{ "profile": "alice.json", "attributes": { "color": "blue" } }],
     "aiSeats": 1,
-    "matchSettings": { "boardColor": "stone" },
+    "gameParams": { "boardColor": "stone" },
     "autoStart": true
 }

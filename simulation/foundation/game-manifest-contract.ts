@@ -148,7 +148,7 @@ export interface GameManifest {
      * Optional spectator capability. Absent ⇒ join-in-progress is always
      * rejected with `match_in_progress` (behaviour-neutral opt-out). Present ⇒
      * the host MAY enable spectating per match via the reserved
-     * `engine.allowSpectators` match setting (see `game-lobby-contract.ts`).
+     * `engine.allowSpectators` game param (see `game-lobby-contract.ts`).
      * Pure data here — no admission or projection logic (Invariant #1).
      */
     readonly spectators?: GameSpectatorSupport;

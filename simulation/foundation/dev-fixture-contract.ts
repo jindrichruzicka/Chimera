@@ -8,7 +8,7 @@
  *   - `DevScenarioSchema` — one scenario file (`dev/scenarios/<name>.json`):
  *     the human seat list (each with an optional profile-file ref and
  *     game-defined per-seat attributes such as a card game's deck), optional
- *     AI seats, host-authored match settings (arena, turn mode, …) and the
+ *     AI seats, host-authored game params (arena, turn mode, …) and the
  *     auto-start switch.
  *   - `DevAnnounceSchema` — the tiny handshake payload the auto-hosting
  *     instance writes inside its OWN userData dir (Invariant #78) so the
@@ -91,8 +91,8 @@ export const DevScenarioSchema = z
         seats: z.array(DevSeatSchema).min(1).max(DEV_SCENARIO_MAX_SEATS),
         /** Host-side `addAi()` count appended after the human seats. Default 0. */
         aiSeats: z.number().int().min(0).max(DEV_SCENARIO_MAX_AI_SEATS).optional(),
-        /** Host-authored match settings merged over the game's lobbySetup defaults. */
-        matchSettings: z.record(z.string().min(1), z.string()).optional(),
+        /** Host-authored game params merged over the game's lobbySetup defaults. */
+        gameParams: z.record(z.string().min(1), z.string()).optional(),
         /** Start the match once the roster is complete and every seat is ready. Default true. */
         autoStart: z.boolean().optional(),
     })

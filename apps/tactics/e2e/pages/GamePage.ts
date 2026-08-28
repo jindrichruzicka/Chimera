@@ -21,7 +21,7 @@ import {
  * match.
  */
 export interface GameSetupProjection {
-    readonly matchSettings: Readonly<Record<string, string>>;
+    readonly gameParams: Readonly<Record<string, string>>;
     readonly playerAttributes: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
@@ -1110,7 +1110,7 @@ function isGameSetupProjection(value: unknown): value is GameSetupProjection {
         return false;
     }
 
-    return isRecord(value['matchSettings']) && isRecord(value['playerAttributes']);
+    return isRecord(value['gameParams']) && isRecord(value['playerAttributes']);
 }
 
 function isTacticsUnitProjection(value: unknown): value is TacticsUnitProjection {

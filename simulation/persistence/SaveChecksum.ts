@@ -21,13 +21,13 @@ import type { SaveFile } from './SaveFile.js';
  * The portion of a `SaveFile` that participates in the integrity checksum.
  * The header is excluded because `header.checksum` itself is stored there.
  *
- * `session` is deliberately excluded too: the v5→v6 migration
- * backfills a manifest onto legacy files AFTER their checksum was stored, and
- * the repository verifies the checksum on the migrated file — including
- * `session` in the hash would fail every migrated v5 save. Unlike
- * `stagedReveals` (conditionally hashed because a populated map is gameplay
- * state needing integrity protection), the manifest is host-local
- * orchestration metadata and is never hashed at all, exactly like the header.
+ * `session` is deliberately excluded too: it is host-local orchestration
+ * metadata, never gameplay state, so it is no more integrity-protected than
+ * the header. The v5→v6 migration backfills a manifest onto legacy files
+ * AFTER their checksum was stored; leaving it out of the hash keeps the digest
+ * of a v5 save and its migrated v6 form identical. Unlike `stagedReveals`
+ * (conditionally hashed because a populated map IS gameplay state needing
+ * integrity protection), the manifest is never hashed at all.
  */
 export type SaveBody = Pick<
     SaveFile,
@@ -38,7 +38,7 @@ export type SaveBody = Pick<
 
 /**
  * Compute a SHA-256 checksum of the canonical JSON representation of the
- * save body fields (`checkpoint`, `deltaActions`, `pendingCommitments`).
+ * {@link SaveBody} fields.
  *
  * Returns a 64-character lowercase hex string.
  *
@@ -49,11 +49,11 @@ export type SaveBody = Pick<
  * @returns A 64-character hex SHA-256 digest.
  */
 export async function computeBodyChecksum(body: SaveBody): Promise<string> {
-    // `stagedReveals` is included only when non-empty so that a v4 save
-    // (whose stored checksum was computed over the three original fields) still
-    // verifies after the v4→v5 migration backfills `stagedReveals: {}`. An empty
-    // map is semantically "no staging", so omitting it from the hash is correct;
-    // a populated map IS integrity-protected.
+    // `stagedReveals` is included only when non-empty so that a v4 save — whose
+    // stored checksum was computed over the three original fields — hashes to
+    // the same digest whether it is read before or after the v4→v5 backfill of
+    // `stagedReveals: {}`. An empty map is semantically "no staging", so omitting
+    // it from the hash is correct; a populated map IS integrity-protected.
     const stagedReveals = body.stagedReveals ?? {};
     const canonical = JSON.stringify({
         checkpoint: body.checkpoint,

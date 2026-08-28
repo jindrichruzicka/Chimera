@@ -30,7 +30,7 @@ describe('DevScenarioSchema', () => {
         expect(result.success).toBe(true);
     });
 
-    it('parses a full scenario with profiles, attributes, ready flags, AI seats and match settings', () => {
+    it('parses a full scenario with profiles, attributes, ready flags, AI seats and game params', () => {
         const result = DevScenarioSchema.safeParse({
             schemaVersion: DEV_FIXTURE_SCHEMA_VERSION,
             gameId: 'sample',
@@ -39,7 +39,7 @@ describe('DevScenarioSchema', () => {
                 { profile: 'bob.json', attributes: { deck: '["fang"]' }, ready: false },
             ],
             aiSeats: 2,
-            matchSettings: { arena: 'lava-pit', turnMode: 'commitment' },
+            gameParams: { arena: 'lava-pit', turnMode: 'commitment' },
             autoStart: false,
         });
         expect(result.success).toBe(true);
@@ -123,10 +123,10 @@ describe('DevScenarioSchema', () => {
         ).toBe(false);
     });
 
-    it('rejects an empty match-setting key', () => {
-        expect(
-            DevScenarioSchema.safeParse({ seats: [{}], matchSettings: { '': 'x' } }).success,
-        ).toBe(false);
+    it('rejects an empty game-param key', () => {
+        expect(DevScenarioSchema.safeParse({ seats: [{}], gameParams: { '': 'x' } }).success).toBe(
+            false,
+        );
     });
 });
 

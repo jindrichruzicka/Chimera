@@ -7,7 +7,7 @@
  * `LoadedRendererGameShell.LobbyScreen`, it replaces the engine-default
  * `ActiveLobbyPanel` when a Tactics lobby is hosted. Two side-by-side panels
  * (stacking on narrow viewports): Battle Setup — the host's shareable lobby
- * address plus the match settings — and the roster panel, which carries the
+ * address plus the game params — and the roster panel, which carries the
  * ready-progress chip and merges human seats, AI seats, and the host's
  * add-AI control into one list. Leave/Start are NOT rendered here: the lobby
  * page's Modal footer owns them, aligned with every other modal's button row.
@@ -18,7 +18,7 @@
  *
  * Authority split: the board-colour select is host-authored — editable
  * only for the host (a client sees it `disabled`) and routed through
- * `setMatchSetting`. Each per-player colour select is owner-authored — editable
+ * `setGameParam`. Each per-player colour select is owner-authored — editable
  * only on the local player's OWN row (every other seat is `disabled`) and routed
  * through `setPlayerAttribute`, which `main` accepts only for the caller's own
  * seat. The screen performs no privileged writes itself.
@@ -43,13 +43,13 @@ import {
 } from '@chimera-engine/renderer/components/ui';
 import { useTranslate } from '@chimera-engine/renderer/i18n';
 import {
-    ALLOW_SPECTATORS_SETTING,
+    ALLOW_SPECTATORS_PARAM,
     readAllowSpectators,
     type GameLobbyScreenProps,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
     readTacticsTurnMode,
-    TACTICS_TURN_MODE_SETTING,
+    TACTICS_TURN_MODE_PARAM,
 } from '@chimera-engine/tactics/simulation/constants.js';
 import {
     DEFAULT_BOARD_COLOR,
@@ -75,7 +75,7 @@ export function TacticsLobbyScreen({
     content,
     isHost,
     pendingAction,
-    setMatchSetting,
+    setGameParam,
     setPlayerAttribute,
     addAiPlayer,
     removeAiPlayer,
@@ -88,11 +88,11 @@ export function TacticsLobbyScreen({
     const palette = paletteFromCollections(content ?? {});
     const readyCount = lobbyState.players.filter((player) => player.ready).length;
     const allReady = lobbyState.players.length > 0 && readyCount === lobbyState.players.length;
-    const boardColor = lobbyState.matchSettings?.['boardColor'] ?? DEFAULT_BOARD_COLOR;
-    // Commitment battle mode is a host-authored synced match setting: the toggle
+    const boardColor = lobbyState.gameParams?.['boardColor'] ?? DEFAULT_BOARD_COLOR;
+    // Commitment battle mode is a host-authored synced game param: the toggle
     // writes the shared `turnMode` key, off (`sequential`) by default, and rides
     // `snapshot.setup` into the match.
-    const commitmentEnabled = readTacticsTurnMode(lobbyState.matchSettings) === 'commitment';
+    const commitmentEnabled = readTacticsTurnMode(lobbyState.gameParams) === 'commitment';
     // AI agent slots come synced in the lobby state. The lobby is "full" on total
     // occupancy — humans + AI together against maxPlayers — matching the host's
     // auto-remove-on-overflow rule. The AI caption row renders for the host (to
@@ -149,7 +149,7 @@ export function TacticsLobbyScreen({
                     disabled={!isHost}
                     label={t(LOBBY_KEYS.boardColour)}
                     onValueChange={(value) => {
-                        setMatchSetting('boardColor', value);
+                        setGameParam('boardColor', value);
                     }}
                     options={palette.boardColors}
                     value={boardColor}
@@ -160,19 +160,16 @@ export function TacticsLobbyScreen({
                     disabled={!isHost}
                     label={t(LOBBY_KEYS.simultaneousTurns)}
                     onCheckedChange={(next) => {
-                        setMatchSetting(
-                            TACTICS_TURN_MODE_SETTING,
-                            next ? 'commitment' : 'sequential',
-                        );
+                        setGameParam(TACTICS_TURN_MODE_PARAM, next ? 'commitment' : 'sequential');
                     }}
                 />
                 <Toggle
-                    checked={readAllowSpectators(lobbyState.matchSettings)}
+                    checked={readAllowSpectators(lobbyState.gameParams)}
                     data-testid="tactics-allow-spectators-toggle"
                     disabled={!isHost}
                     label={t(LOBBY_KEYS.allowSpectators)}
                     onCheckedChange={(next) => {
-                        setMatchSetting(ALLOW_SPECTATORS_SETTING, next ? 'true' : 'false');
+                        setGameParam(ALLOW_SPECTATORS_PARAM, next ? 'true' : 'false');
                     }}
                 />
             </section>

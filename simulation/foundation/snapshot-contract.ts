@@ -76,7 +76,7 @@ export interface PlayerSnapshot {
     readonly gameResult: GameResult | null;
     readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     /**
-     * Public agreed lobby setup (host-authored match settings + owner-authored
+     * Public agreed lobby setup (host-authored game params + owner-authored
      * per-player attributes), passed through projection verbatim. Optional and
      * backward-compatible.
      */
@@ -137,11 +137,11 @@ export interface WirePlayerSnapshot {
      */
     readonly commitments?: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     /**
-     * Public agreed lobby setup (host-authored match settings + owner-authored
+     * Public agreed lobby setup (host-authored game params + owner-authored
      * per-player attributes), passed through projection verbatim so every client
-     * agrees on the match configuration. Optional for backward-compat: absent on
-     * games with no lobby setup and on older clients (Invariant #1 — only public
-     * config crosses).
+     * agrees on the same game params. Optional: absent on games with no lobby
+     * setup (Invariant #1 — only public config crosses). A pre-rename peer's
+     * `matchSettings` key fails the wire schema outright.
      */
     readonly setup?: GameSetupConfig;
     /**

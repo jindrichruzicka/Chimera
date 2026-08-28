@@ -150,7 +150,7 @@ export const LOBBY_KEYS = {
     leaveFailed: translationKey('engine.lobby.leaveFailed'),
     readyFailed: translationKey('engine.lobby.readyFailed'),
     startFailed: translationKey('engine.lobby.startFailed'),
-    matchSettingFailed: translationKey('engine.lobby.matchSettingFailed'),
+    gameParamFailed: translationKey('engine.lobby.gameParamFailed'),
     playerAttrFailed: translationKey('engine.lobby.playerAttrFailed'),
     addAiFailed: translationKey('engine.lobby.addAiFailed'),
     removeAiFailed: translationKey('engine.lobby.removeAiFailed'),

@@ -5,7 +5,7 @@ import type { LobbyAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { LeaveGameOptions } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import {
     SESSION_MODE_QUICK,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { useGameStore } from '../state/gameStore.js';
 import { useLobbyStore } from '../state/lobbyStore.js';
@@ -71,8 +71,7 @@ export function useLeaveGame(source: unknown = globalThis): LeaveGame {
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
     const isHost = hostId !== null && localPlayerId !== null && hostId === localPlayerId;
     const isQuickSession = useGameStore(
-        (state) =>
-            state.snapshot?.setup?.matchSettings[SESSION_MODE_SETTING] === SESSION_MODE_QUICK,
+        (state) => state.snapshot?.setup?.gameParams[SESSION_MODE_PARAM] === SESSION_MODE_QUICK,
     );
 
     return useCallback(

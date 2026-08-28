@@ -34,7 +34,7 @@ describe('QuickStartConfig from renderer/', () => {
         const localSeat: QuickStartSeat = { attributes: { team: 'blue' } };
         const aiSeat: QuickStartAiSeat = { attributes: { team: 'green' }, omniscient: true };
         const config: QuickStartConfig = {
-            matchSettings: { mapSize: 'small' },
+            gameParams: { mapSize: 'small' },
             hostAttributes: { team: 'red' },
             localSeats: [localSeat],
             aiSeats: [aiSeat],
@@ -47,8 +47,8 @@ describe('QuickStartConfig from renderer/', () => {
     it('rides the optional GameLobbySetup.quickStart defaults block', () => {
         const setup: GameLobbySetup = {
             maxPlayers: 2,
-            matchSettingsDefaults: {},
-            matchSettingsOptions: {},
+            gameParamDefaults: {},
+            gameParamOptions: {},
             playerAttributeOptions: {},
             resolveDefaultPlayerAttributes: () => ({}),
             quickStart: { aiSeats: [{ attributes: { team: 'green' } }] },

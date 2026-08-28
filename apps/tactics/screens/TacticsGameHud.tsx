@@ -63,7 +63,7 @@ export function TacticsGameHud({
     // Undo that pops the buffer, optimistic stamina, and an End Turn that is the
     // reveal trigger — enabled only once every seat has committed. All commitment
     // logic lives here so the game-agnostic GameShell stays untouched.
-    const isCommitment = readTacticsTurnMode(snapshot.setup?.matchSettings) === 'commitment';
+    const isCommitment = readTacticsTurnMode(snapshot.setup?.gameParams) === 'commitment';
     const buffer = useCommitmentBuffer(selectBuffer);
     const committedLatch = useCommitmentBuffer(selectCommittedLatch);
     const undoBuffer = useCommitmentBuffer((state) => state.undo);

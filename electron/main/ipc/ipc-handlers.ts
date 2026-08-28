@@ -32,7 +32,7 @@ import {
     LOBBY_START_GAME_CHANNEL,
     LOBBY_RETURN_TO_LOBBY_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
-    LOBBY_SET_MATCH_SETTING_CHANNEL,
+    LOBBY_SET_GAME_PARAM_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
@@ -131,7 +131,7 @@ import {
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
     LobbyReadyStateSchema,
-    SetMatchSettingPayloadSchema,
+    SetGameParamPayloadSchema,
     SetPlayerAttributePayloadSchema,
     SpectateSetTargetPayloadSchema,
     CloseSessionParamsSchema,
@@ -185,7 +185,7 @@ export {
     LOBBY_START_GAME_CHANNEL,
     LOBBY_RETURN_TO_LOBBY_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
-    LOBBY_SET_MATCH_SETTING_CHANNEL,
+    LOBBY_SET_GAME_PARAM_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
@@ -622,7 +622,7 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             LOBBY_START_GAME_CHANNEL,
             LOBBY_RETURN_TO_LOBBY_CHANNEL,
             LOBBY_UPDATE_READY_STATE_CHANNEL,
-            LOBBY_SET_MATCH_SETTING_CHANNEL,
+            LOBBY_SET_GAME_PARAM_CHANNEL,
             LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
             LOBBY_ADD_AI_CHANNEL,
             LOBBY_REMOVE_AI_CHANNEL,
@@ -717,13 +717,13 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
         return lobbyManager.updatePlayerReadyState(validated);
     });
 
-    ipcMain.handle(LOBBY_SET_MATCH_SETTING_CHANNEL, (_event, payload) => {
+    ipcMain.handle(LOBBY_SET_GAME_PARAM_CHANNEL, (_event, payload) => {
         const validated = parseInvokeRequest(
-            SetMatchSettingPayloadSchema,
-            LOBBY_SET_MATCH_SETTING_CHANNEL,
+            SetGameParamPayloadSchema,
+            LOBBY_SET_GAME_PARAM_CHANNEL,
             payload,
         );
-        return lobbyManager.setMatchSetting(validated.key, validated.value);
+        return lobbyManager.setGameParam(validated.key, validated.value);
     });
 
     ipcMain.handle(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL, (_event, payload) => {

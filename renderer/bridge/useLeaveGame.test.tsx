@@ -7,7 +7,7 @@ import type { PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types
 import type { LobbyState } from '@chimera-engine/simulation/foundation/messages-schemas.js';
 import {
     SESSION_MODE_QUICK,
-    SESSION_MODE_SETTING,
+    SESSION_MODE_PARAM,
 } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { useLeaveGame } from './useLeaveGame';
 import { useGameStore } from '../state/gameStore';
@@ -22,18 +22,18 @@ function makeLobbyState(hostId: string): LobbyState {
 }
 
 /**
- * A live match snapshot carrying `matchSettings` — the channel the session-mode
+ * A live match snapshot carrying `gameParams` — the channel the session-mode
  * stamp rides (Invariant #101), and therefore the one that survives a window
  * reload and a restore.
  */
-function applySnapshotWithSettings(matchSettings?: Readonly<Record<string, string>>): void {
+function applySnapshotWithGameParams(gameParams?: Readonly<Record<string, string>>): void {
     useGameStore.getState().applySnapshot({
         tick: 4,
         phase: 'playing',
         viewerId: 'p1',
         players: {},
         undoMeta: { canUndo: false, canRedo: false },
-        ...(matchSettings === undefined ? {} : { setup: { matchSettings, playerAttributes: {} } }),
+        ...(gameParams === undefined ? {} : { setup: { gameParams, playerAttributes: {} } }),
     } as unknown as PlayerSnapshot);
 }
 
@@ -135,7 +135,7 @@ describe('useLeaveGame', () => {
     describe('the quick-session fork', () => {
         it('closes the session and raises the main-menu intent when the stamp says quick', async () => {
             seatAsHost();
-            applySnapshotWithSettings({ [SESSION_MODE_SETTING]: SESSION_MODE_QUICK });
+            applySnapshotWithGameParams({ [SESSION_MODE_PARAM]: SESSION_MODE_QUICK });
             const lobby = makeLobbyBridge();
 
             const { result } = renderHook(() => useLeaveGame(makeSource(lobby)));
@@ -148,7 +148,7 @@ describe('useLeaveGame', () => {
 
         it('forwards an explicit autosave: false — abandoning is the caller’s call', async () => {
             seatAsHost();
-            applySnapshotWithSettings({ [SESSION_MODE_SETTING]: SESSION_MODE_QUICK });
+            applySnapshotWithGameParams({ [SESSION_MODE_PARAM]: SESSION_MODE_QUICK });
             const lobby = makeLobbyBridge();
 
             const { result } = renderHook(() => useLeaveGame(makeSource(lobby)));
@@ -162,7 +162,7 @@ describe('useLeaveGame', () => {
             // quick session, so a failed capture must leave the player on the
             // live match rather than on a main menu it never reached.
             seatAsHost();
-            applySnapshotWithSettings({ [SESSION_MODE_SETTING]: SESSION_MODE_QUICK });
+            applySnapshotWithGameParams({ [SESSION_MODE_PARAM]: SESSION_MODE_QUICK });
             const lobby = makeLobbyBridge();
             let release = (): void => {};
             lobby.closeSession.mockImplementation(
@@ -187,7 +187,7 @@ describe('useLeaveGame', () => {
 
         it('leaves the flag down and propagates the failure when the close rejects', async () => {
             seatAsHost();
-            applySnapshotWithSettings({ [SESSION_MODE_SETTING]: SESSION_MODE_QUICK });
+            applySnapshotWithGameParams({ [SESSION_MODE_PARAM]: SESSION_MODE_QUICK });
             const lobby = makeLobbyBridge();
             lobby.closeSession.mockRejectedValue(new Error('no hosted session is active'));
 
@@ -202,7 +202,7 @@ describe('useLeaveGame', () => {
             // on the snapshot, so the read must survive its absence, not just
             // the key's.
             seatAsHost();
-            applySnapshotWithSettings();
+            applySnapshotWithGameParams();
             const lobby = makeLobbyBridge();
 
             const { result } = renderHook(() => useLeaveGame(makeSource(lobby)));
@@ -213,12 +213,12 @@ describe('useLeaveGame', () => {
             expect(useLobbyUiStore.getState().leavingToMainMenu).toBe(false);
         });
 
-        it('returns a session whose setup has settings but no stamp to the lobby', async () => {
+        it('returns a session whose setup has game params but no stamp to the lobby', async () => {
             // The shape a save written before the stamp existed restores into:
-            // a populated `setup.matchSettings` with no session-mode key. The
+            // a populated `setup.gameParams` with no session-mode key. The
             // documented degraded default — such a session keeps lobby semantics.
             seatAsHost();
-            applySnapshotWithSettings({ mapSize: 'medium' });
+            applySnapshotWithGameParams({ mapSize: 'medium' });
             const lobby = makeLobbyBridge();
 
             const { result } = renderHook(() => useLeaveGame(makeSource(lobby)));
@@ -230,7 +230,7 @@ describe('useLeaveGame', () => {
 
         it('reads the stamp VALUE, not merely the key', async () => {
             seatAsHost();
-            applySnapshotWithSettings({ [SESSION_MODE_SETTING]: 'lobby' });
+            applySnapshotWithGameParams({ [SESSION_MODE_PARAM]: 'lobby' });
             const lobby = makeLobbyBridge();
 
             const { result } = renderHook(() => useLeaveGame(makeSource(lobby)));
@@ -253,7 +253,7 @@ describe('useLeaveGame', () => {
 
             const { result, rerender } = renderHook(() => useLeaveGame(source));
             act(() => {
-                applySnapshotWithSettings({ [SESSION_MODE_SETTING]: SESSION_MODE_QUICK });
+                applySnapshotWithGameParams({ [SESSION_MODE_PARAM]: SESSION_MODE_QUICK });
             });
             rerender();
             await result.current();
@@ -265,7 +265,7 @@ describe('useLeaveGame', () => {
         it('keeps a joined client on the leave path even inside a quick-stamped match', async () => {
             useLobbyStore.getState().applyLobbyState(makeLobbyState('host'));
             useLobbyUiStore.getState().setLocalLobbyContext(playerId('p2'), [playerId('p2')]);
-            applySnapshotWithSettings({ [SESSION_MODE_SETTING]: SESSION_MODE_QUICK });
+            applySnapshotWithGameParams({ [SESSION_MODE_PARAM]: SESSION_MODE_QUICK });
             const lobby = makeLobbyBridge();
 
             const { result } = renderHook(() => useLeaveGame(makeSource(lobby)));

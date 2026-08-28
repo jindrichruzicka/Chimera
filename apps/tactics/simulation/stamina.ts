@@ -84,7 +84,7 @@ export function readStamina(state: Readonly<BaseGameSnapshot>, playerId: PlayerI
     // (simultaneous) turns have every seat acting in parallel, so the
     // active-seat marker is irrelevant — any seat refreshes once a later turn
     // has begun than its last write.
-    const isCommitment = readTacticsTurnMode(state.setup?.matchSettings) === 'commitment';
+    const isCommitment = readTacticsTurnMode(state.setup?.gameParams) === 'commitment';
     const turnHasBegun = isCommitment
         ? state.turnNumber > entry.refreshedTurn
         : state.turnClock?.activePlayerId === playerId && state.turnNumber > entry.refreshedTurn;

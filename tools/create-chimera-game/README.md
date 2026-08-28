@@ -69,7 +69,7 @@ clients, each with an isolated `.dev-userdata/p<i>` profile, auto-readying and a
 match. The scaffold ships starter fixtures under `apps/<kebab>/dev/`: `profiles/*.json` (cosmetic
 identities) and `scenarios/default.json` — run it with `pnpm dev:mp --scenario default`. Author
 your own scenarios to inject game-defined per-seat attributes (e.g. a JSON-encoded deck) and
-host-authored match settings (e.g. an arena id); they ride the same lobby channels a real player
+host-authored game params (e.g. an arena id); they ride the same lobby channels a real player
 uses and land in `snapshot.setup`. `pnpm dev:mp 2 --dry-run` prints the validated spawn plan
 without launching anything.
 

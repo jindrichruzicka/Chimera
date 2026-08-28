@@ -292,6 +292,22 @@ describe('window.__chimera.lobby — contract', () => {
         ]);
     });
 
+    // The channel is declared once (`preload/apis/lobby-api.ts`) and imported by
+    // main, so both processes cannot hold different constants. What went unpinned
+    // was the channel's VALUE: no test named the literal. This case and its
+    // main-side twin (`ipc-handlers.test.ts` › 'registers
+    // chimera:lobby:set-game-param …') spell it out, so moving the value reds
+    // both the renderer-facing route and the main-side registration.
+    it('setGameParam() invokes chimera:lobby:set-game-param with {key, value}', async () => {
+        await api.lobby.setGameParam('boardColor', 'crimson');
+        expect(invokeCalls).toEqual([
+            {
+                channel: 'chimera:lobby:set-game-param',
+                args: [{ key: 'boardColor', value: 'crimson' }],
+            },
+        ]);
+    });
+
     it('onUpdate() registers on chimera:lobby:update; Unsubscribe removes the listener', () => {
         const calls: unknown[] = [];
         const unsubscribe = api.lobby.onUpdate((state) => {

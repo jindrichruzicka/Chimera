@@ -133,7 +133,7 @@ export const engineBundleEn: TranslationBundle = {
     'engine.lobby.leaveFailed': 'Failed to leave lobby',
     'engine.lobby.readyFailed': 'Failed to update ready state',
     'engine.lobby.startFailed': 'Failed to start game',
-    'engine.lobby.matchSettingFailed': 'Failed to update match setting',
+    'engine.lobby.gameParamFailed': 'Failed to update game param',
     'engine.lobby.playerAttrFailed': 'Failed to update player attribute',
     'engine.lobby.addAiFailed': 'Failed to add AI player',
     'engine.lobby.removeAiFailed': 'Failed to remove AI player',

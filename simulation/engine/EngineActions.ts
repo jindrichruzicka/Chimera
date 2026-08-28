@@ -100,9 +100,9 @@ export interface EngineStartGamePayload {
     readonly firstPlayerId?: PlayerId;
     readonly initialEntities?: BaseGameSnapshot['entities'];
     /**
-     * Public host-authored lobby setup (chosen match settings + per-player
+     * Public host-authored lobby setup (chosen game params + per-player
      * attributes) carried from the lobby into the snapshot at game start.
-     * Optional and backward-compatible.
+     * Optional: a game with no lobby setup sends none.
      */
     readonly setup?: GameSetupConfig;
     /**
@@ -183,12 +183,12 @@ function parseInitialEntities(raw: unknown): BaseGameSnapshot['entities'] | unde
 /**
  * Parses a flat `Record<string, string>` from raw input, rejecting non-string
  * values and unsafe (`__proto__` / `constructor` / `prototype`) keys. Used for
- * both `setup.matchSettings` and each `setup.playerAttributes` entry.
+ * both `setup.gameParams` and each `setup.playerAttributes` entry.
  */
 function parseStringMap(raw: unknown, context: string): Record<string, string> {
     if (!isRecord(raw)) {
         throw new TypeError(
-            `engine:start_game payload ${context} must be a string map when present; ` +
+            `engine:start_game payload ${context} must be a string map; ` +
                 `received ${JSON.stringify(raw)}.`,
         );
     }
@@ -208,7 +208,8 @@ function parseStringMap(raw: unknown, context: string): Record<string, string> {
 
 /**
  * Parses the optional host-authored `setup` config from a raw `start_game`
- * payload. Returns `undefined` when absent (backward-compatible). Defensively
+ * payload. Returns `undefined` when absent — a game with no lobby setup sends
+ * none, and a present `setup` must carry BOTH keys. Defensively
  * validates the public `GameSetupConfig` shape and rejects unsafe keys, mirroring
  * `parseInitialEntities` — `setup` originates from the wire and crosses to every
  * client via projection, so it must be sanitised at the engine boundary.
@@ -224,7 +225,7 @@ export function parseSetup(raw: unknown): GameSetupConfig | undefined {
         );
     }
 
-    const matchSettings = parseStringMap(raw['matchSettings'], '"setup.matchSettings"');
+    const gameParams = parseStringMap(raw['gameParams'], '"setup.gameParams"');
 
     const rawPlayerAttributes = raw['playerAttributes'];
     if (!isRecord(rawPlayerAttributes)) {
@@ -248,7 +249,7 @@ export function parseSetup(raw: unknown): GameSetupConfig | undefined {
         );
     }
 
-    return { matchSettings, playerAttributes };
+    return { gameParams, playerAttributes };
 }
 
 // ─── engine:tick ──────────────────────────────────────────────────────────────
