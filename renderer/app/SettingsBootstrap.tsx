@@ -2,9 +2,20 @@
 
 /**
  * Thin client component that wires the chimera:settings:change push channel
- * into the settingsStore on mount, hydrates the active lobby game's settings
- * and input actions when a game session is active, and hydrates the URL
- * `?gameId=` shell game's persisted settings on menu routes. Renders nothing.
+ * into the settingsStore on mount, hydrates the persisted settings of both game
+ * contexts a screen can be under — the lobby's game and the URL `?gameId=`
+ * shell game — and publishes ONE of them as the store's `activeGameId`.
+ * Renders nothing.
+ *
+ * The active-game slot is the lobby's game when a session is live, else the
+ * shell route's. It is not a label — it is the settings NAMESPACE, so which
+ * game holds it decides what every store-reading consumer resolves, and a slot
+ * left null resolves `__engine__` instead of the namespace the settings page
+ * wrote the player's choice into. Who those consumers are is a live set, read
+ * off `state.activeGameId`; the one that made this a defect rather than a
+ * preference is `KeyBindingRepository` (§4.26, Invariant #66), because a game's
+ * `game:*` default binding lives in the GAME's schema and nowhere else, so
+ * under `__engine__` the action has no key at all.
  */
 
 import { useEffect, useState } from 'react';
@@ -12,13 +23,8 @@ import { usePathname } from 'next/navigation';
 import { bootstrapSettingsStore } from '../state/settingsStoreBootstrap';
 import { useLobbyStore } from '../state/lobbyStore';
 import { useSettingsStore } from '../state/settingsStore';
-import { useInputActionRegistry } from '../input/InputActionRegistryContext.js';
 import { resolveShellGameId } from '../shell/resolveMainMenuGameId';
-import {
-    getSettingsApi,
-    hydrateActiveGameSettings,
-    registerActiveGameInputActions,
-} from './settingsGameContext';
+import { getSettingsApi, hydrateActiveGameSettings } from './settingsGameContext';
 
 function selectActiveLobbyGameId(state: {
     readonly lobbyState: { readonly info: { readonly gameId: string } } | null;
@@ -27,9 +33,12 @@ function selectActiveLobbyGameId(state: {
 }
 
 export function SettingsBootstrap(): null {
-    const activeGameId = useLobbyStore(selectActiveLobbyGameId);
-    const inputActionRegistry = useInputActionRegistry();
+    const lobbyGameId = useLobbyStore(selectActiveLobbyGameId);
     const urlGameId = useUrlShellGameId();
+    // The active-game slot: the lobby's game while a session is live, the shell
+    // route's `?gameId=` otherwise. A lobby for game A opened from game B's menu
+    // is the case that keeps this an ordering and not a merge.
+    const activeGameId = lobbyGameId ?? urlGameId;
 
     useEffect(() => {
         const settingsApi = getSettingsApi();
@@ -38,15 +47,13 @@ export function SettingsBootstrap(): null {
         return unsubscribe;
     }, []);
 
-    // Cold-boot locale fix: menu routes carry only a URL `?gameId=` (no lobby),
-    // so nothing else hydrates that game's persisted settings — leaving
-    // `useActiveGameTranslations` on the default locale until the settings page
-    // is opened. Hydrating here applies the persisted `gameplay.language` (and
-    // the rest of the resolved settings) as soon as the shell game context is
-    // known. URL-only context is hydration ONLY: the lobby effect below stays
-    // the sole owner of `activeGameId` and input-action registration.
+    // The OTHER context, hydrated for its settings alone. A menu still showing
+    // game A's branding while a lobby for game B holds the slot has to read A's
+    // persisted `gameplay.language` from somewhere, and the effect below only
+    // ever fetches the slot holder. Skipped when the two coincide, which is the
+    // ordinary case.
     useEffect(() => {
-        if (urlGameId === null) {
+        if (urlGameId === null || urlGameId === activeGameId) {
             return;
         }
 
@@ -55,28 +62,22 @@ export function SettingsBootstrap(): null {
         return () => {
             disposed = true;
         };
-    }, [urlGameId]);
+    }, [urlGameId, activeGameId]);
 
     useEffect(() => {
-        const settingsApi = getSettingsApi();
         if (activeGameId === null) {
             useSettingsStore.getState().setActiveGameId(null);
             return;
         }
 
         let disposed = false;
-        const settingsPromise = hydrateActiveGameSettings(
-            settingsApi,
-            activeGameId,
-            () => disposed,
-        );
-        const inputActionsPromise = registerActiveGameInputActions(
-            inputActionRegistry,
-            activeGameId,
-            () => disposed,
-        );
-
-        void Promise.allSettled([settingsPromise, inputActionsPromise]).then(() => {
+        // Published only once the settings are IN the store: the slot is what
+        // `KeyBindingRepository` resolves against, so claiming it first would
+        // publish a game context whose binding map is still empty.
+        // `hydrateActiveGameSettings` logs and swallows its own failures, so
+        // this continuation runs on the degraded path too — an unhydrated game
+        // still owns the slot, exactly as it did before.
+        void hydrateActiveGameSettings(getSettingsApi(), activeGameId, () => disposed).then(() => {
             if (!disposed) {
                 useSettingsStore.getState().setActiveGameId(activeGameId);
             }
@@ -85,7 +86,7 @@ export function SettingsBootstrap(): null {
         return () => {
             disposed = true;
         };
-    }, [activeGameId, inputActionRegistry]);
+    }, [activeGameId]);
 
     return null;
 }

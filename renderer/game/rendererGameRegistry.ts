@@ -144,6 +144,33 @@ export interface LoadedRendererGameShell {
      * dev-warns on a malformed set.
      */
     readonly icons?: GameIconSet;
+    /**
+     * The game's named input actions, declared on the SHELL payload so they can
+     * be registered at app boot — before a lobby exists and before any match
+     * has run (§4.26).
+     *
+     * The same table {@link LoadedRendererGame.inputActions} carries: a game
+     * declares it once and hands the same array to both payloads, so the
+     * app-boot registrar and `GameShell` register identical objects and the
+     * second call is a no-op. They are NOT required to be the same array —
+     * `registerInputActions` compares metadata, not identity — but a game that
+     * ships DIFFERENT metadata under one id gets a thrown error rather than
+     * last-write-win.
+     *
+     * Carried here rather than read off the game payload because the shell
+     * payload is what a menu route loads: resolving `inputActions` through
+     * `loadRendererGame` would pull the game's screens and asset manifest into
+     * the main menu's bundle to read a table of action metadata.
+     *
+     * Absent ⇒ nothing is registered from this payload, which is the path every
+     * game with no rebindable action stays on.
+     *
+     * Registration is app-lifetime and has no shell-scoped teardown: an action
+     * registered on the menu is still registered in the match. What that buys
+     * is `GameShell`'s registration becoming a proven no-op, and Settings >
+     * Controls listing game actions on a shell route.
+     */
+    readonly inputActions?: readonly InputAction[];
 }
 
 export interface LoadedRendererGame {

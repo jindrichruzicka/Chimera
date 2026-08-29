@@ -19,6 +19,7 @@ import { ThemeProvider } from '../theme/ThemeProvider';
 import { DebugI18nBootstrap } from './DebugI18nBootstrap';
 import { GameRegistrationBootstrap } from './GameRegistrationBootstrap';
 import { GameStoreBootstrap } from './GameStoreBootstrap';
+import { InputActionsBootstrap } from './InputActionsBootstrap';
 import { LoggingBootstrap } from './LoggingBootstrap';
 import { LobbyStoreBootstrap } from './LobbyStoreBootstrap';
 import { SaveStoreBootstrap } from './SaveStoreBootstrap';
@@ -85,6 +86,17 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                                  */}
                                 <I18nTokenModeToggle />
                                 <SettingsBootstrap />
+                                {/*
+                                 * Registers the active game's declared input
+                                 * actions off its SHELL payload (§4.26), so a
+                                 * shell background, a game page and the
+                                 * Settings > Controls pane all see them before
+                                 * any match has run. App-level and
+                                 * lifetime-free by design: GameShell's own
+                                 * registration then re-registers the same
+                                 * table and is a no-op.
+                                 */}
+                                <InputActionsBootstrap />
                                 <LobbyStoreBootstrap />
                                 <GameStoreBootstrap />
                                 <SaveStoreBootstrap />

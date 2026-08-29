@@ -14,6 +14,7 @@ import type {
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import type { GameIconSet } from '../components/ui/icons/registry.js';
+import type { InputAction } from '../input/InputAction.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
 import { CRITICAL_ASSET_PRELOAD_BUDGET_MS } from '../assets/criticalAssetPreload.js';
 import { SCENE_PRELOAD_BUDGET_MS } from '../components/scene/scenePreload.js';
@@ -1194,5 +1195,53 @@ describe('rendererGameRegistry', () => {
 
             expect(getRendererGameMenuCommand(game, commandId)).toBe(execute);
         });
+    });
+});
+
+describe('shell.inputActions carriage', () => {
+    const SHELL_ACTION: InputAction = {
+        id: 'game:select',
+        description: 'Select',
+        category: 'Game',
+        oneShot: true,
+    };
+
+    it('exposes the declared input actions on the loaded shell, by reference', async () => {
+        const inputActions = [SHELL_ACTION];
+        const shell = fakeShell({ inputActions });
+        registerRendererGame({
+            gameId: 'fake',
+            loadGame: () => Promise.resolve(fakeGame({ shell })),
+            loadShell: () => Promise.resolve(shell),
+        });
+
+        const loaded = await loadRendererGameShell('fake');
+
+        // By reference: the registry never clones the table, so the app-boot
+        // registrar and `GameShell` can be handed the SAME objects and the
+        // identity assert on a re-register is trivially satisfied.
+        expect(loaded.inputActions).toBe(inputActions);
+    });
+
+    it('leaves inputActions undefined when the shell declares none', async () => {
+        registerFake();
+
+        const loaded = await loadRendererGameShell('fake');
+
+        expect(loaded.inputActions).toBeUndefined();
+    });
+
+    it('carries the actions through a full game load that reuses its own shell', async () => {
+        const inputActions = [SHELL_ACTION];
+        const shell = fakeShell({ inputActions });
+        registerRendererGame({
+            gameId: 'fake',
+            loadGame: () => Promise.resolve(fakeGame({ shell, inputActions })),
+            loadShell: () => Promise.resolve(shell),
+        });
+
+        const game = await loadRendererGame('fake');
+
+        expect(game.shell?.inputActions).toBe(game.inputActions);
     });
 });

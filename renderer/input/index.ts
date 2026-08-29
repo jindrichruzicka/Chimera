@@ -5,8 +5,8 @@
  *
  * The reachability half of the rebindable-action seam (§4.26). A game could
  * already declare an action end to end — a default binding in its settings
- * schema, `InputAction` metadata on `LoadedRendererGame.inputActions`,
- * registration by `GameShell`, display and rebind and persistence in
+ * schema, `InputAction` metadata on `LoadedRendererGameShell.inputActions`,
+ * engine-side registration, display and rebind and persistence in
  * Settings > Controls, dispatch by `InputManager` — and then had nowhere to
  * receive the event, because a game surface reaches the shared renderer library
  * only through a public barrel (Invariant #96) and there was none for input.

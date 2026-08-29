@@ -136,22 +136,42 @@ Key bindings are stored in `settings.controls.bindings: GameBindingSchema<Engine
 
 ---
 
+## Action Registration
+
+`providers.tsx` seeds the `InputActionRegistry` with the engine's own actions when it builds it. A game's actions enter through its renderer-registry payloads, and they enter **at app boot**: `renderer/app/InputActionsBootstrap.tsx` resolves the active shell game through `useActiveShellGameId`, loads that game's **shell** payload, and registers `LoadedRendererGameShell.inputActions`. `GameShell` then re-registers the same table from `LoadedRendererGame.inputActions` when a match mounts.
+
+Three consequences, and they are the point of registering this early:
+
+- A shell surface — a live background, a game-owned page — can subscribe with `useInputAction` on a route that resolves a game context and be dispatched to before any match has run.
+- Settings > Controls lists the game's actions with no match ever started (`renderer/app/settings/page.test.tsx`, "lists a game action registered after the pane already rendered").
+- `GameShell`'s registration is normally a no-op, because every id is already present.
+
+Both sites go through one function, `renderer/input/registerInputActions.ts`, and it is idempotent in a specific way: an id already registered is left exactly as it is, and a re-registration whose `description`, `category` or `oneShot` **differs** throws. Last-write-win is what that rules out — a game shipping one table to the shell and another to the match would otherwise put a description in the rebind pane that no longer describes what the match dispatches.
+
+The table rides the **shell** payload rather than being read off the game payload because the shell payload is what a menu route already loads; resolving it through `loadRendererGame` would pull the game's screens and asset manifest into the main menu's bundle. A game hands the same array to both payloads (`apps/tactics/renderer/loaders.ts` reads `LoadedRendererGame.inputActions` back off its own shell), so the identity assert above is trivially satisfied.
+
+Registration is **app-lifetime and has no teardown**: an action registered on the menu is the same action in the match. There is deliberately no shell-scoped registration lifetime and no second registry — two registration paths with independent lifetimes drift, and the drift is invisible until a player's rebound key stops working.
+
+**A registered action still needs a binding to fire.** `KeyBindingRepository` resolves bindings through the settings store's `activeGameId` (Invariant #66), falling back to `__engine__` when no game holds it — and a `game:*` default binding lives in the _game's_ settings schema, never the engine's. `renderer/app/SettingsBootstrap.tsx` is what publishes that slot: the lobby's game while a session is live, the URL `?gameId=` shell game otherwise. Registration without the slot leaves the action listed but unbound. The slot is the settings NAMESPACE rather than a binding-only switch, so which game holds it decides more than the key — see `renderer/app/SettingsBootstrap.tsx`.
+
+---
+
 ## Reachability From a Game (`@chimera-engine/renderer/input`)
 
 A game surface reaches the shared renderer library only through its public barrels
 (Invariant #96). The one for this section is `@chimera-engine/renderer/input`, and it
 re-exports:
 
-| Symbol                      | Kind  | Why a game needs it                                                         |
-| --------------------------- | ----- | --------------------------------------------------------------------------- |
-| `useInputAction`            | value | run a callback when a declared action fires                                 |
-| `useInputManager`           | value | hold the manager, for the held-key recipe below                             |
-| `InputManagerProvider`      | value | what a game's own component tests mount to satisfy the hooks                |
-| `InputManagerProviderProps` | type  | the provider's props                                                        |
-| `InputAction`               | type  | annotate the action table a game hands to `LoadedRendererGame.inputActions` |
-| `InputActionId`             | type  | name an id outside an inline literal                                        |
-| `InputEvent`                | type  | the callback payload, needed by any handler extracted out of JSX            |
-| `InputManager`              | type  | the return type of `useInputManager`                                        |
+| Symbol                      | Kind  | Why a game needs it                                                                                                   |
+| --------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
+| `useInputAction`            | value | run a callback when a declared action fires                                                                           |
+| `useInputManager`           | value | hold the manager, for the held-key recipe below                                                                       |
+| `InputManagerProvider`      | value | what a game's own component tests mount to satisfy the hooks                                                          |
+| `InputManagerProviderProps` | type  | the provider's props                                                                                                  |
+| `InputAction`               | type  | annotate the action table a game puts on `LoadedRendererGameShell.inputActions` and `LoadedRendererGame.inputActions` |
+| `InputActionId`             | type  | name an id outside an inline literal                                                                                  |
+| `InputEvent`                | type  | the callback payload, needed by any handler extracted out of JSX                                                      |
+| `InputManager`              | type  | the return type of `useInputManager`                                                                                  |
 
 **What stays internal, and why.** The eight names above are the whole re-export list —
 `renderer/input/__tests__/input-barrel-side-effects.test.ts` pins it as a closed set — so
@@ -160,8 +180,8 @@ registry and repository interfaces, the context objects, `KeyBinding`, `EngineBi
 `RebindResult` and the input error classes stay behind it. The reasons: the manager is an
 app-lifetime singleton (see Lifecycle Ownership
 above), and a second one attaches a second pair of window `keydown`/`keyup` listeners and
-double-dispatches every action. Registration is engine-side and already complete:
-`GameShell` registers whatever the game declared. Bindings are settings (Invariant #66),
+double-dispatches every action. Registration is engine-side and already complete — see
+Action Registration above. Bindings are settings (Invariant #66),
 and rebinding stays with the engine settings page.
 
 That last point is prose, not a mechanism. Exporting `useInputManager` hands a game the

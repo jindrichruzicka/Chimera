@@ -38,7 +38,10 @@ import { useSettingsStore } from '../../state/settingsStore';
 import { useInputManager } from '../../input/InputManagerContext.js';
 import type { InputManager } from '../../input/InputManager.js';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
-import type { InputActionRegistry } from '../../input/InputActionRegistry.js';
+import {
+    createInputActionRegistry,
+    type InputActionRegistry,
+} from '../../input/InputActionRegistry.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import type { ResolvedSettings } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { GameLanguage } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
@@ -57,25 +60,25 @@ vi.mock('../../input/InputManagerContext.js', () => ({
     useInputManager: vi.fn(),
 }));
 
-// useInputActionRegistry() now throws outside the app-root provider (Invariant #83). The page
-// only forwards the registry into the input-action registration effect (never dereferences it
-// during render), so a stub registry keeps every render hermetic without mounting Providers.
-const { stubInputActionRegistry } = vi.hoisted(() => ({
-    stubInputActionRegistry: {
-        register: (): void => {},
-        get: (): never => {
-            throw new Error('unused input action registry stub');
-        },
-        has: (): boolean => false,
-        getAll: (): readonly [] => [],
-    } satisfies InputActionRegistry,
+// useInputActionRegistry() now throws outside the app-root provider (Invariant #83). The
+// Controls pane reads its action list THROUGH the registry (useRegisteredInputActions), so
+// the double is a real registry held in a mutable slot rather than a stub: a test seeds it,
+// and a test that registers into it after the render proves the pane re-renders.
+const { inputActionRegistryHolder } = vi.hoisted(() => ({
+    inputActionRegistryHolder: { current: null as InputActionRegistry | null },
 }));
 
 vi.mock('../../input/InputActionRegistryContext.js', () => ({
     InputActionRegistryContext: {
         Provider: ({ children }: { children: React.ReactNode }) => children,
     },
-    useInputActionRegistry: () => stubInputActionRegistry,
+    useInputActionRegistry: (): InputActionRegistry => {
+        const registry = inputActionRegistryHolder.current;
+        if (registry === null) {
+            throw new Error('input action registry not seeded for this test');
+        }
+        return registry;
+    },
 }));
 
 vi.mock('../../game/rendererGameRegistry', () => ({
@@ -221,6 +224,8 @@ beforeEach(() => {
     });
     // Default stub — existing tests don't exercise input manager behaviour
     vi.mocked(useInputManager).mockReturnValue(makeInputManagerDouble());
+    // The page reads the registry on every render, Controls tab open or not.
+    inputActionRegistryHolder.current = createInputActionRegistry(DEFAULT_REGISTERED_ACTIONS);
 });
 
 afterEach(() => {
@@ -987,8 +992,20 @@ function makeInputManagerDouble(overrides: Partial<InputManager> = {}): InputMan
     };
 }
 
-async function renderWithInputManager(inputManager: InputManager): Promise<void> {
+/** Every action the Controls pane sees unless a test narrows the seed. */
+const DEFAULT_REGISTERED_ACTIONS: readonly InputAction[] = [
+    UNDO_ACTION,
+    TOGGLE_MENU_ACTION,
+    END_TURN_ACTION,
+    CYCLE_UNIT_ACTION,
+];
+
+async function renderWithInputManager(
+    inputManager: InputManager,
+    registeredActions: readonly InputAction[] = DEFAULT_REGISTERED_ACTIONS,
+): Promise<void> {
     vi.mocked(useInputManager).mockReturnValue(inputManager);
+    inputActionRegistryHolder.current = createInputActionRegistry(registeredActions);
     await renderSettingsPageAndOpenTab('Controls');
 }
 
@@ -1034,24 +1051,18 @@ describe('SettingsPage — controls rebind panel', () => {
             category: 'Movement',
             oneShot: false,
         };
-        await renderWithInputManager(
-            makeInputManagerDouble({
-                getActions: vi
-                    .fn()
-                    .mockReturnValue([UNDO_ACTION, END_TURN_ACTION, moveCursorAction]),
-            }),
-        );
+        await renderWithInputManager(makeInputManagerDouble(), [
+            UNDO_ACTION,
+            END_TURN_ACTION,
+            moveCursorAction,
+        ]);
         expect(screen.getByRole('heading', { level: 3, name: 'Game' })).toBeTruthy();
         expect(screen.getByRole('heading', { level: 3, name: 'Movement' })).toBeTruthy();
         expect(screen.queryByText('Engine')).toBeNull();
     });
 
     it('shows the empty state when only engine actions are registered', async () => {
-        await renderWithInputManager(
-            makeInputManagerDouble({
-                getActions: vi.fn().mockReturnValue([UNDO_ACTION, TOGGLE_MENU_ACTION]),
-            }),
-        );
+        await renderWithInputManager(makeInputManagerDouble(), [UNDO_ACTION, TOGGLE_MENU_ACTION]);
         expect(screen.getByText('No controls registered.')).toBeTruthy();
         expect(screen.queryByTestId('binding-action-row')).toBeNull();
     });
@@ -1077,23 +1088,37 @@ describe('SettingsPage — controls rebind panel', () => {
         expect(actionLabelRule).not.toContain('var(--ch-font-size-md)');
     });
 
+    // The pane's whole reason for reading the registry rather than a render-time
+    // snapshot: game actions register at app boot from an async shell
+    // payload load, so on a direct boot to /settings they land AFTER the pane's
+    // first commit — with no settings-store write behind them to force a
+    // re-render. Registering into the live registry is the only stimulus here.
+    it('lists a game action registered after the pane already rendered', async () => {
+        await renderWithInputManager(makeInputManagerDouble(), [UNDO_ACTION]);
+
+        expect(screen.getByText('No controls registered.')).toBeTruthy();
+        expect(screen.queryByText('End current turn')).toBeNull();
+
+        act(() => {
+            inputActionRegistryHolder.current?.register(END_TURN_ACTION);
+        });
+
+        expect(screen.getByText('End current turn')).toBeTruthy();
+        expect(screen.queryByText('No controls registered.')).toBeNull();
+    });
+
     it('refreshes controls when the active game context changes after initial render', async () => {
         useSettingsStore.setState({
             settings: { __engine__: makeSettings(), [GAME_ID]: makeSettings() },
             activeGameId: null,
         });
-        let registeredActions: readonly InputAction[] = [UNDO_ACTION];
-        await renderWithInputManager(
-            makeInputManagerDouble({
-                getActions: vi.fn(() => registeredActions),
-            }),
-        );
+        await renderWithInputManager(makeInputManagerDouble(), [UNDO_ACTION]);
 
         expect(screen.getByText('No controls registered.')).toBeTruthy();
         expect(screen.queryByText('End current turn')).toBeNull();
 
-        registeredActions = [UNDO_ACTION, END_TURN_ACTION];
         act(() => {
+            inputActionRegistryHolder.current?.register(END_TURN_ACTION);
             useSettingsStore.getState().setActiveGameId(GAME_ID);
         });
 

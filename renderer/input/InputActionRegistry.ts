@@ -54,16 +54,41 @@ export interface InputActionRegistry {
     has(id: InputActionId): boolean;
 
     /**
-     * Returns all registered actions in registration order as a fresh array
-     * copy. Mutating the returned array does not affect the registry.
+     * Returns all registered actions in registration order.
+     *
+     * The array is FROZEN and STABLE: repeated reads with no registration
+     * between them return the same reference, and a registration replaces it.
+     * That is what makes this readable as a `useSyncExternalStore` snapshot —
+     * a fresh array per call would re-render its consumer forever — and the
+     * freeze is what keeps one shared array safe to hand out.
      */
     getAll(): readonly InputAction[];
+
+    /**
+     * Subscribe to registrations. The listener is called after each accepted
+     * {@link InputActionRegistry.register}, with the new action already
+     * readable through {@link InputActionRegistry.getAll}. Returns an
+     * unsubscribe function.
+     *
+     * Registration is asynchronous — the app-boot registrar resolves a game's
+     * shell payload before it can register anything — so a surface that LISTS
+     * actions (the Settings rebind pane) has to be told when the list changed
+     * rather than depending on some unrelated re-render to arrive later.
+     */
+    subscribe(listener: () => void): () => void;
 }
 
 // ─── Implementation ───────────────────────────────────────────────────────────
 
 class DefaultInputActionRegistry implements InputActionRegistry {
     private readonly actions = new Map<InputActionId, InputAction>();
+    private readonly listeners = new Set<() => void>();
+    /**
+     * The `getAll()` snapshot, rebuilt lazily on the first read after a
+     * registration. `null` means "stale"; it is never a legal snapshot value,
+     * so an empty registry still memoizes its (frozen, empty) array.
+     */
+    private snapshot: readonly InputAction[] | null = null;
 
     constructor(actions: readonly InputAction[] = []) {
         for (const action of actions) {
@@ -76,6 +101,20 @@ class DefaultInputActionRegistry implements InputActionRegistry {
             throw new DuplicateInputActionError(action.id);
         }
         this.actions.set(action.id, action);
+        this.snapshot = null;
+        // Notified AFTER the map write and the snapshot invalidation, so a
+        // listener that reads `getAll()` from inside the callback sees the
+        // action it is being told about.
+        for (const listener of this.listeners) {
+            listener();
+        }
+    }
+
+    subscribe(listener: () => void): () => void {
+        this.listeners.add(listener);
+        return () => {
+            this.listeners.delete(listener);
+        };
     }
 
     get(id: InputActionId): InputAction {
@@ -91,7 +130,8 @@ class DefaultInputActionRegistry implements InputActionRegistry {
     }
 
     getAll(): readonly InputAction[] {
-        return Array.from(this.actions.values());
+        this.snapshot ??= Object.freeze(Array.from(this.actions.values()));
+        return this.snapshot;
     }
 }
 

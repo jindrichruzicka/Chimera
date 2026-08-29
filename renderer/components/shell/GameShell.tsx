@@ -31,6 +31,7 @@ import { useSetGameAssetManager } from '../../assets/SetGameAssetManagerContext'
 import { useCriticalAssetPreload } from '../../assets/criticalAssetPreload.js';
 import type { InputAction } from '../../input/InputAction.js';
 import { useInputActionRegistry } from '../../input/InputActionRegistryContext.js';
+import { registerInputActions } from '../../input/registerInputActions.js';
 import { useActiveScreen } from '../../state/uiStore.js';
 import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
@@ -452,33 +453,23 @@ function useStopAudioOnGameEnd(audioManager: AudioManager, isGameEnded: boolean)
     }, [audioManager, isGameEnded]);
 }
 
+/**
+ * Registers the match payload's action table (§4.26).
+ *
+ * Normally a no-op: `InputActionsBootstrap` reads the same table off the game's
+ * SHELL payload at app boot, so by the time a match mounts every id is present
+ * and each call here hits the has-branch. It is not redundant, though — it is
+ * the registration that survives a game reaching `GameShell` with no shell
+ * context ever having resolved, and the identity assert `registerInputActions`
+ * performs is exactly what should fire if a game ever ships two different
+ * tables — here, as a throw inside an effect.
+ */
 function useRegisterInputActions(inputActions: readonly InputAction[] | undefined): void {
     const inputActionRegistry = useInputActionRegistry();
 
     React.useEffect(() => {
-        if (inputActions === undefined) {
-            return;
-        }
-
-        for (const action of inputActions) {
-            if (inputActionRegistry.has(action.id)) {
-                assertSameInputAction(inputActionRegistry.get(action.id), action);
-                continue;
-            }
-
-            inputActionRegistry.register(action);
-        }
+        registerInputActions(inputActionRegistry, inputActions);
     }, [inputActionRegistry, inputActions]);
-}
-
-function assertSameInputAction(existing: InputAction, next: InputAction): void {
-    if (
-        existing.description !== next.description ||
-        existing.category !== next.category ||
-        existing.oneShot !== next.oneShot
-    ) {
-        throw new Error(`Input action '${next.id}' is already registered with different metadata.`);
-    }
 }
 
 function createUnconfiguredAssetResolver(): AssetResolver {

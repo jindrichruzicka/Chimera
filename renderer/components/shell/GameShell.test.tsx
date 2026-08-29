@@ -35,6 +35,7 @@ import {
     type InputActionRegistry,
 } from '../../input/InputActionRegistry.js';
 import { InputActionRegistryContext } from '../../input/InputActionRegistryContext.js';
+import type { InputAction } from '../../input/InputAction.js';
 import { useTimeScaleStore } from '../../animation/timeScaleStore.js';
 import { useUiStore } from '../../state/uiStore.js';
 import {
@@ -286,6 +287,77 @@ describe('GameShell page object locators', () => {
             category: 'Game',
             oneShot: true,
         });
+    });
+
+    // The ORDINARY path: `InputActionsBootstrap` has already registered the
+    // same table off the shell payload before a match mounts, so what this
+    // asserts is that the mount adds nothing and replaces nothing.
+    it('is a no-op when the shell registration already registered the same actions', () => {
+        const shellRegistered: InputAction = {
+            id: 'game:end-turn',
+            description: 'End current turn',
+            category: 'Game',
+            oneShot: true,
+        };
+        const inputRegistry = createInputActionRegistry([shellRegistered]);
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+
+        renderWithAudio(
+            <GameShell
+                registry={{
+                    playfield: () => <div data-testid="registry-playfield">Registry playfield</div>,
+                }}
+                inputActions={[{ ...shellRegistered }]}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+            undefined,
+            { inputRegistry },
+        );
+
+        expect(inputRegistry.getAll()).toHaveLength(1);
+        // The SHELL's object is still the registered one: a re-register that
+        // replaced it would hand a later reader a different object for an id
+        // it already resolved.
+        expect(inputRegistry.get('game:end-turn')).toBe(shellRegistered);
+    });
+
+    it('throws the identity error when the match table diverges from the registered one', () => {
+        const inputRegistry = createInputActionRegistry([
+            {
+                id: 'game:end-turn',
+                description: 'End current turn',
+                category: 'Game',
+                oneShot: true,
+            },
+        ]);
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+
+        expect(() =>
+            renderWithAudio(
+                <GameShell
+                    registry={{
+                        playfield: () => (
+                            <div data-testid="registry-playfield">Registry playfield</div>
+                        ),
+                    }}
+                    inputActions={[
+                        {
+                            id: 'game:end-turn',
+                            description: 'Finish the turn',
+                            category: 'Game',
+                            oneShot: true,
+                        },
+                    ]}
+                    snapshot={snapshot}
+                    sendAction={vi.fn()}
+                    localPlayerId={playerId('p1')}
+                />,
+                undefined,
+                { inputRegistry },
+            ),
+        ).toThrow("Input action 'game:end-turn' is already registered with different metadata.");
     });
 
     it('does not dispose the context AudioManager on registry shell unmount — lifecycle owned by Providers', () => {

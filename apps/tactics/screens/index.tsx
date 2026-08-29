@@ -1,5 +1,4 @@
 import React from 'react';
-import type { InputAction } from '@chimera-engine/renderer/input';
 import type { GameScreenRegistry } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { TACTICS_REVEAL_TILE_ACTION } from '../simulation/actions.js';
 import { tacticsAudioRefs } from '../asset-manifest.js';
@@ -27,23 +26,6 @@ const TACTICS_EVENT_AUDIO_BINDING = {
         volume: 0.4,
     },
 } as const;
-
-// Description and category are game.tactics.actions.* translation tokens: the
-// settings Controls panel resolves both through t() (a literal falls back to
-// itself), so the row follows the active locale. The category doubles as the
-// grouping key — grouping compares the raw token string, which stays stable.
-// The IMPORT is the point: this file is tactics' adopter of the public
-// `@chimera-engine/renderer/input` barrel (§4.26). The annotation is what the
-// import is for — it states the contract where the table is authored, rather
-// than leaving `apps/tactics/renderer/loaders.ts` to be where it is first checked.
-export const TACTICS_INPUT_ACTIONS: readonly InputAction[] = [
-    {
-        id: 'game:end-turn',
-        description: 'game.tactics.actions.endTurn',
-        category: 'game.tactics.actions.categoryGame',
-        oneShot: true,
-    },
-];
 
 export const TacticsGameScreenRegistry: GameScreenRegistry = {
     playfield: TacticsDemoBoard,

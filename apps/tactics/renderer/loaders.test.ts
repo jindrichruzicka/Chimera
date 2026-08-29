@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { tacticsMainMenuDefinition } from '../shell/main-menu.js';
 import { tacticsManifest } from '../manifest.js';
+import { TACTICS_INPUT_ACTIONS } from './input-actions.js';
 import { loadTacticsRendererGame, loadTacticsRendererGameShell } from './loaders';
 
 describe('tactics renderer loaders', () => {
@@ -11,6 +12,20 @@ describe('tactics renderer loaders', () => {
         expect(game.registry.playfield).toBeDefined();
         expect(game.assetManifest?.gameId).toBe('tactics');
         expect(game.inputActions?.map((action) => action.id)).toContain('game:end-turn');
+    });
+
+    // The SHELL payload is the one a menu route loads, so it is the payload
+    // that has to carry the actions for pre-match input and the Controls pane
+    // (§4.26). Identity, not equality: one array reaches both payloads, so the
+    // engine's app-boot registration and `GameShell`'s cannot disagree.
+    it('loadTacticsRendererGameShell carries the same input action table as the game payload', async () => {
+        const [shell, game] = await Promise.all([
+            loadTacticsRendererGameShell(),
+            loadTacticsRendererGame(),
+        ]);
+
+        expect(shell.inputActions).toBe(TACTICS_INPUT_ACTIONS);
+        expect(game.inputActions).toBe(shell.inputActions);
     });
 
     it('loadTacticsRendererGame exposes the shell bundle (settings, lobby, main menu)', async () => {

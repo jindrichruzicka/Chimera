@@ -17,6 +17,7 @@ import type {
 import { resolveGameLanguages } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
 import { tacticsManifest } from '../manifest.js';
+import { TACTICS_INPUT_ACTIONS } from './input-actions.js';
 import { tacticsBundleEn } from '../shell/translations/en.js';
 import { tacticsBundleCs } from '../shell/translations/cs.js';
 
@@ -30,7 +31,12 @@ export async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
     return {
         registry: screenModule.TacticsGameScreenRegistry,
         assetManifest: assetManifestModule.tacticsAssetManifest,
-        inputActions: screenModule.TACTICS_INPUT_ACTIONS,
+        // Read back off the shell rather than re-stated: the same array reaches
+        // both payloads, so the engine's app-boot registration and `GameShell`'s
+        // re-registration cannot disagree about what an id means (§4.26). Spread
+        // rather than assigned because `exactOptionalPropertyTypes` refuses an
+        // explicit `undefined` for an optional field.
+        ...(shell.inputActions === undefined ? {} : { inputActions: shell.inputActions }),
         shell,
     };
 }
@@ -70,6 +76,13 @@ export async function loadTacticsRendererGameShell(): Promise<LoadedRendererGame
         // resolves `game.tactics.*` names against these via the app-wide
         // `<IconProvider>` — no DOM dispatch here (unlike cursor/fonts).
         icons: iconsModule.tacticsIcons,
+        // The rebindable action table (§4.26). Statically imported, unlike the
+        // modules above: it is plain data with no DOM or React in it, so a
+        // dynamic import would buy a chunk boundary for one small literal. Carrying it
+        // on the SHELL payload is what lets the engine register it at app boot
+        // — before a lobby, before a match — so a menu surface can subscribe
+        // and Settings > Controls can list it.
+        inputActions: TACTICS_INPUT_ACTIONS,
     };
 }
 

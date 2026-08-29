@@ -38,7 +38,7 @@ import { Toggle } from '../../components/ui/Toggle';
 import { loadRendererGame } from '../../game/rendererGameRegistry';
 import { ENGINE_SETTINGS_GAME_ID } from '../../input/KeyBindingRepository.js';
 import { useInputManager } from '../../input/InputManagerContext.js';
-import { useInputActionRegistry } from '../../input/InputActionRegistryContext.js';
+import { useRegisteredInputActions } from '../../input/useRegisteredInputActions.js';
 import { emitRendererError, readRendererLogsApi } from '../../logging/rendererLogger';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
@@ -51,11 +51,7 @@ import {
     useDeclaredLanguages,
 } from '../../shell/SettingsLanguageSelector';
 import { useSettingsStore } from '../../state/settingsStore';
-import {
-    getSettingsApi,
-    hydrateActiveGameSettings,
-    registerActiveGameInputActions,
-} from '../settingsGameContext';
+import { getSettingsApi, hydrateActiveGameSettings } from '../settingsGameContext';
 import styles from './page.module.css';
 
 type SettingPrimitive = boolean | number | string;
@@ -258,7 +254,11 @@ export default function SettingsPage(): React.ReactElement {
     const gameId = activeGameId ?? ENGINE_SETTINGS_GAME_ID;
     const resolvedSettings = useSettingsStore((state) => state.settings[gameId]);
     const inputManager = useInputManager();
-    const inputActionRegistry = useInputActionRegistry();
+    // Read from the REGISTRY, not from `inputManager.getActions()` during
+    // render: game actions register at app boot off an async shell-payload load
+    // (`InputActionsBootstrap`), so on a direct boot to this route they land
+    // after the first commit and nothing else re-renders the pane.
+    const registeredActions = useRegisteredInputActions();
 
     const [capturingId, setCapturingId] = React.useState<InputActionId | null>(null);
     const capturedBindingsRef = React.useRef<Partial<Record<InputActionId, KeyBinding>>>({});
@@ -276,7 +276,7 @@ export default function SettingsPage(): React.ReactElement {
     useEscapeLayer(cancelCapture, capturingId !== null);
 
     const actionsByCategory = groupActionsByCategory(
-        inputManager.getActions().filter((action) => !isEngineAction(action)),
+        registeredActions.filter((action) => !isEngineAction(action)),
     );
 
     React.useEffect(() => {
@@ -285,15 +285,7 @@ export default function SettingsPage(): React.ReactElement {
         }
 
         let disposed = false;
-        const settingsApi = getSettingsApi();
-        const settingsPromise = hydrateActiveGameSettings(settingsApi, urlGameId, () => disposed);
-        const inputActionsPromise = registerActiveGameInputActions(
-            inputActionRegistry,
-            urlGameId,
-            () => disposed,
-        );
-
-        void Promise.allSettled([settingsPromise, inputActionsPromise]).then(() => {
+        void hydrateActiveGameSettings(getSettingsApi(), urlGameId, () => disposed).then(() => {
             if (!disposed) {
                 useSettingsStore.getState().setActiveGameId(urlGameId);
             }
@@ -302,7 +294,7 @@ export default function SettingsPage(): React.ReactElement {
         return () => {
             disposed = true;
         };
-    }, [inputActionRegistry, urlGameId]);
+    }, [urlGameId]);
 
     const handleRebind = React.useCallback(
         (id: InputActionId, binding: KeyBinding): void => {

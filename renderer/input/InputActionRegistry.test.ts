@@ -14,7 +14,7 @@
  * this commit; `pnpm test` reported "cannot find module").
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { InputAction } from './InputAction.js';
 import {
     createInputActionRegistry,
@@ -164,14 +164,104 @@ describe('InputActionRegistry.getAll', () => {
         expect(all[2]).toBe(redoAction);
     });
 
-    it('returns a copy — mutating the array does not affect the registry', () => {
+    it('is not the registry map itself — draining a spread copy leaves it intact', () => {
         const registry = createInputActionRegistry([undoAction]);
 
         // getAll() returns readonly InputAction[]; spread into a mutable copy
-        // to verify the registry's internal state is not shared.
+        // to verify the registry's internal state is not shared. The returned
+        // array is FROZEN and shared between reads (see the snapshot cases
+        // below), so a caller that needs a mutable list must copy it — which is
+        // what this does.
         const mutableCopy = [...registry.getAll()];
         mutableCopy.splice(0);
 
         expect(registry.getAll()).toHaveLength(1);
+    });
+});
+
+// ─── Snapshot stability + subscribe ───────────────────────────────────────────
+
+describe('InputActionRegistry.getAll snapshot stability', () => {
+    it('returns the SAME array reference across reads with no registration between them', () => {
+        const registry = createInputActionRegistry([undoAction]);
+
+        // A stable snapshot is what lets a `useSyncExternalStore` consumer read
+        // this directly: a fresh array every call re-renders forever.
+        expect(registry.getAll()).toBe(registry.getAll());
+    });
+
+    it('returns a NEW array reference after a registration', () => {
+        const registry = createInputActionRegistry([undoAction]);
+        const before = registry.getAll();
+
+        registry.register(endTurnAction);
+
+        expect(registry.getAll()).not.toBe(before);
+        expect(before.map((action) => action.id)).toEqual(['engine:undo']);
+    });
+
+    it('returns a frozen array, so a consumer cannot mutate the shared snapshot', () => {
+        const registry = createInputActionRegistry([undoAction]);
+
+        expect(Object.isFrozen(registry.getAll())).toBe(true);
+    });
+});
+
+describe('InputActionRegistry.subscribe', () => {
+    it('notifies a listener when an action is registered', () => {
+        const registry = createInputActionRegistry();
+        const listener = vi.fn();
+        registry.subscribe(listener);
+
+        registry.register(endTurnAction);
+
+        expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('notifies every listener, and once per registration', () => {
+        const registry = createInputActionRegistry();
+        const first = vi.fn();
+        const second = vi.fn();
+        registry.subscribe(first);
+        registry.subscribe(second);
+
+        registry.register(endTurnAction);
+        registry.register(undoAction);
+
+        expect(first).toHaveBeenCalledTimes(2);
+        expect(second).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops notifying after the returned unsubscribe is called', () => {
+        const registry = createInputActionRegistry();
+        const listener = vi.fn();
+        const unsubscribe = registry.subscribe(listener);
+
+        unsubscribe();
+        registry.register(endTurnAction);
+
+        expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('does not notify for a rejected duplicate registration', () => {
+        const registry = createInputActionRegistry([endTurnAction]);
+        const listener = vi.fn();
+        registry.subscribe(listener);
+
+        expect(() => registry.register(endTurnAction)).toThrow(DuplicateInputActionError);
+
+        expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('exposes the newly registered action to a listener reading during the notification', () => {
+        const registry = createInputActionRegistry();
+        const seen: string[][] = [];
+        registry.subscribe(() => {
+            seen.push(registry.getAll().map((action) => action.id));
+        });
+
+        registry.register(endTurnAction);
+
+        expect(seen).toEqual([['game:end-turn']]);
     });
 });
