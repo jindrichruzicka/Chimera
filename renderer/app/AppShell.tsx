@@ -11,6 +11,7 @@ import { RestoreWaitingOverlay } from '../components/shell/RestoreWaitingOverlay
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { ScreenFadeRoot } from '../components/shell/ScreenFadeRoot';
 import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
+import { ShellContentLayer } from '../components/shell/ShellContentLayer';
 import { ShellStateBridge } from '../components/shell/ShellStateBridge';
 import { ToastHost } from '../components/shell/ToastHost';
 import { ActiveGameIconProvider } from '../components/ui/icons/ActiveGameIconProvider';
@@ -116,7 +117,14 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                                     <ShellStateBridge />
                                     <ShellBackgroundHost />
                                 </React.Suspense>
-                                <div style={{ position: 'relative', zIndex: 'var(--ch-z-raised)' }}>
+                                {/*
+                                 * The raised frame page content and the engine's
+                                 * overlay hosts render inside. A component rather
+                                 * than a bare div because it stands aside — goes
+                                 * click-through — under a game's interactive
+                                 * background opt-in (§4.37.9); see its own header.
+                                 */}
+                                <ShellContentLayer>
                                     <ConnectionStatusIndicator />
                                     <RootErrorBoundary>{children}</RootErrorBoundary>
                                     {/*
@@ -134,7 +142,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                                      */}
                                     <ConfirmDialogHost />
                                     <ToastHost />
-                                </div>
+                                </ShellContentLayer>
                             </ScreenFadeRoot>
                         </ActiveGameIconProvider>
                     </TokenModeI18nProvider>

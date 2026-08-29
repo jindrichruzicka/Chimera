@@ -3,3 +3,25 @@
     inset-inline-start: var(--ch-space-md);
     position: absolute;
 }
+
+/*
+ * The menu stands aside for an interactive shell background (§4.37.9).
+ *
+ * The container is the full viewport, and a box with `pointer-events: auto` is
+ * a hit target over its whole area whether or not it paints anything — so
+ * without this the background never hears a click aimed at it, wherever the
+ * player aims.
+ *
+ * The restore is on `> *` rather than on a list of controls, so it holds by
+ * CONSTRUCTION: whatever the menu grows next is clickable the day it is added,
+ * and nothing has to remember to add it here. The children are content-sized
+ * boxes (the button stack, the gallery affordance), so the area that falls
+ * through is everything they do not cover.
+ */
+.click-through {
+    pointer-events: none;
+}
+
+.click-through > * {
+    pointer-events: auto;
+}

@@ -837,3 +837,92 @@ describe('ShellBackgroundHost — the shell background asset session', () => {
         expect(setGameAssetManager).not.toHaveBeenCalled();
     });
 });
+
+/**
+ * The interactive opt-in (§4.37.9).
+ *
+ * jsdom performs no layout and ships no `document.elementFromPoint`, so nothing
+ * here is a coordinate hit-test — what it measures is the two DECLARATIONS the
+ * browser hit-tests with, read back off the element the host actually rendered.
+ * The coordinate-level proof is the action app's click-through e2e.
+ */
+describe('ShellBackgroundHost — the interactive opt-in', () => {
+    /**
+     * The host's markup under the opt-in, as an inline literal twin of
+     * `ZERO_DECLARATION_HOST_HTML`. Two bytes differ and both are the feature:
+     * `pointer-events: auto`, and no `aria-hidden`.
+     */
+    const INTERACTIVE_HOST_HTML =
+        '<div data-testid="shell-background" data-shell-background-kind="game" ' +
+        'data-shell-background-instance-id="#" data-shell-game-id="tactics" ' +
+        'style="position: fixed; inset: var(--ch-space-none); z-index: var(--ch-z-base); ' +
+        'pointer-events: auto; overflow: hidden; background-color: var(--ch-color-surface);"' +
+        '><div data-testid="tactics-shell-background"></div></div>';
+
+    it('accepts pointer events and drops aria-hidden under the opt-in', async () => {
+        setSurface('main-menu', '/main-menu', 'tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+            shellBackgroundInteractive: true,
+        } satisfies LoadedRendererGameShell);
+
+        const { container } = render(<ShellBackgroundHost />);
+        await screen.findByTestId('tactics-shell-background');
+
+        expect(withStableInstanceId(container.innerHTML)).toBe(INTERACTIVE_HOST_HTML);
+    });
+
+    it('stays inert decor when the shell declares the flag false', async () => {
+        setSurface('main-menu', '/main-menu', 'tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+            shellBackgroundInteractive: false,
+        } satisfies LoadedRendererGameShell);
+
+        render(<ShellBackgroundHost />);
+        await screen.findByTestId('tactics-shell-background');
+
+        const host = screen.getByTestId('shell-background');
+        expect(host.style.pointerEvents).toBe('none');
+        expect(host).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    // The engine default paints no game subtree, so there is nothing to click
+    // even when the payload says otherwise — and an `aria-hidden` dropped from a
+    // plain coloured plate would expose an empty region to assistive tech.
+    it('stays inert decor when the opt-in arrives without a background component', async () => {
+        setSurface('main-menu', '/main-menu', 'tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackgroundInteractive: true,
+        } satisfies LoadedRendererGameShell);
+
+        render(<ShellBackgroundHost />);
+        await waitFor(() => {
+            expect(screen.getByTestId('shell-background')).toHaveAttribute(
+                'data-shell-background-kind',
+                'engine-default',
+            );
+        });
+
+        const host = screen.getByTestId('shell-background');
+        expect(host.style.pointerEvents).toBe('none');
+        expect(host).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    // A payload is answered for ONE game context. On a route with none, the
+    // plate the host paints is the engine's, so the previous game's opt-in must
+    // not carry into it.
+    it('stays inert decor on a surface with no game context', async () => {
+        setSurface('main-menu', '/main-menu', null);
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+            shellBackgroundInteractive: true,
+        } satisfies LoadedRendererGameShell);
+
+        render(<ShellBackgroundHost />);
+
+        const host = await screen.findByTestId('shell-background');
+        expect(host.style.pointerEvents).toBe('none');
+        expect(host).toHaveAttribute('aria-hidden', 'true');
+    });
+});

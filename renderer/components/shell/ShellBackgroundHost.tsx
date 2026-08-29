@@ -4,23 +4,10 @@ import React from 'react';
 import type { ComponentType } from 'react';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import { GameAssetSession } from '../../app/gameAssetSession';
-import { loadRendererGameShell } from '../../game/rendererGameRegistry';
-import { SHELL_BACKGROUND_SURFACES } from '../../shell/shellRoutes';
 import { useShellState } from '../../shell/shellStateStore';
+import { useShellBackgroundPayload } from '../../shell/useShellBackgroundPayload';
 
 let nextShellBackgroundInstanceId = 1;
-
-type LoadedShellBackground = Readonly<{
-    gameId: string | null;
-    Background: ComponentType | null;
-    assets: AssetManifest | null;
-}>;
-
-const UNRESOLVED: LoadedShellBackground = {
-    gameId: null,
-    Background: null,
-    assets: null,
-};
 
 const hostStyle = {
     position: 'fixed',
@@ -29,6 +16,16 @@ const hostStyle = {
     pointerEvents: 'none',
     overflow: 'hidden',
     backgroundColor: 'var(--ch-color-surface)',
+} satisfies React.CSSProperties;
+
+/**
+ * The host under the interactive opt-in. One property differs, and the aria
+ * attribute the caller drops alongside it is the other half of the same flip:
+ * a region that takes pointer input must not be hidden from assistive tech.
+ */
+const interactiveHostStyle = {
+    ...hostStyle,
+    pointerEvents: 'auto',
 } satisfies React.CSSProperties;
 
 /**
@@ -41,49 +38,10 @@ const hostStyle = {
  * alive across `/main-menu → /<game page> → /settings`.
  */
 export function ShellBackgroundHost(): React.ReactElement | null {
-    const surface = useShellState((state) => state.surface);
     const gameId = useShellState((state) => state.gameId);
-    const isShellBackgroundSurface = SHELL_BACKGROUND_SURFACES.has(surface);
     const instanceIdRef = React.useRef(String(nextShellBackgroundInstanceId++));
-    const [loadedBackground, setLoadedBackground] =
-        React.useState<LoadedShellBackground>(UNRESOLVED);
-
-    React.useEffect(() => {
-        if (!isShellBackgroundSurface || gameId === null) {
-            setLoadedBackground(UNRESOLVED);
-            return;
-        }
-
-        let disposed = false;
-
-        loadRendererGameShell(gameId)
-            .then((shell) => {
-                if (!disposed) {
-                    setLoadedBackground({
-                        gameId,
-                        Background: shell.shellBackground ?? null,
-                        assets: shell.shellBackgroundAssets ?? null,
-                    });
-                }
-            })
-            .catch(() => {
-                if (!disposed) {
-                    setLoadedBackground({ gameId, Background: null, assets: null });
-                }
-            });
-
-        return () => {
-            disposed = true;
-        };
-    }, [gameId, isShellBackgroundSurface]);
-
-    // A payload answers only for the game context it was loaded for. Anything
-    // else is stale — a context change whose load is still in flight, or a route
-    // that dropped `?gameId=` before the effect above cleared the state — and a
-    // stale payload answers NOTHING. Read ONCE, through the destructuring below,
-    // so no later line can reach past it to the raw state.
-    const payloadIsForThisContext = loadedBackground.gameId === gameId;
-    const { Background, assets } = payloadIsForThisContext ? loadedBackground : UNRESOLVED;
+    const { Background, assets, isInteractive, isShellBackgroundSurface, isForThisContext } =
+        useShellBackgroundPayload();
 
     if (!isShellBackgroundSurface) {
         return null;
@@ -92,7 +50,7 @@ export function ShellBackgroundHost(): React.ReactElement | null {
     // With a game in context, nothing is painted until that game's payload has
     // landed: an engine default drawn here would flash before the game's own
     // background replaced it a frame later.
-    if (gameId !== null && !payloadIsForThisContext) {
+    if (gameId !== null && !isForThisContext) {
         return null;
     }
 
@@ -104,8 +62,8 @@ export function ShellBackgroundHost(): React.ReactElement | null {
             data-shell-background-kind={backgroundKind}
             data-shell-background-instance-id={instanceIdRef.current}
             data-shell-game-id={gameId ?? undefined}
-            style={hostStyle}
-            aria-hidden="true"
+            style={isInteractive ? interactiveHostStyle : hostStyle}
+            {...(isInteractive ? {} : { 'aria-hidden': 'true' as const })}
         >
             {renderBackground(Background, assets)}
         </div>

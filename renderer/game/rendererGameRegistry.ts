@@ -66,6 +66,31 @@ export interface LoadedRendererGameShell {
      */
     readonly shellBackgroundAssets?: AssetManifest;
     /**
+     * Opt in to a background the player can CLICK (§4.37.9). Absent or `false`
+     * keeps the inert-decor contract exactly: `pointer-events: none` and
+     * `aria-hidden="true"` on the host, which is what every game that renders a
+     * painted backdrop stays on.
+     *
+     * `true` does two things to the host and nothing else: the host stops
+     * refusing pointer events, and it stops hiding itself from assistive tech —
+     * an interactive region behind `aria-hidden` is a region a screen-reader
+     * user cannot reach, so the two flip together rather than separately.
+     *
+     * What it does NOT do is clear a path to the background. The engine's own
+     * layers sit above it and each is a hit target over its whole box whether
+     * or not it paints anything, so a click lands on the topmost of them
+     * regardless of this flag. Under the opt-in the engine makes its own layers
+     * click-through and restores `pointer-events: auto` on the controls
+     * themselves — `ShellContentLayer` for the app-level frame, the main menu
+     * for its own full-viewport container — and a game-owned page owns that
+     * construction for its own route, because it is the top layer there and the
+     * engine cannot know its markup.
+     *
+     * Declared WITHOUT a `shellBackground` is inert: there is no subtree to
+     * receive the events.
+     */
+    readonly shellBackgroundInteractive?: boolean;
+    /**
      * Optional game-provided lobby screen. When present, the lobby page renders
      * it in place of the engine-default `ActiveLobbyPanel`, passing the
      * {@link GameLobbyScreenProps} contract. Loaded via this registry only — the

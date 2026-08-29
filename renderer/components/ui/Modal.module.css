@@ -12,6 +12,13 @@
     inset: var(--ch-space-none);
     justify-content: center;
     padding: var(--ch-space-lg);
+    /* Stated, not inherited. `pointer-events` inherits, and the app-level
+     * `ShellContentLayer` sets it to `none` for the whole frame while a game's
+     * shell background is interactive (§4.37.9) — every dialog the engine owns
+     * renders inside that frame, so without this a settings or confirm dialog
+     * opened over such a background would be unclickable. The closing-phase
+     * rule below still overrides it. */
+    pointer-events: auto;
     position: fixed;
     z-index: var(--ch-z-modal);
 }

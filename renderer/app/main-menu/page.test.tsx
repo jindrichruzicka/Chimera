@@ -11,6 +11,9 @@ import { ScreenFadeOverlay } from '../../components/shell/ScreenFadeOverlay';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import MainMenuPage, { __resetMainMenuFadeForTest } from './page';
+import pageStyles from './page.module.css';
+import pageCss from './page.module.css?raw';
+import { _resetShellStateForTest, setShellRoute } from '../../shell/shellStateStore';
 
 const { mockLoadRendererGameShell } = vi.hoisted(() => ({
     mockLoadRendererGameShell: vi.fn(),
@@ -607,5 +610,160 @@ describe('MainMenuPage — button testid derivation', () => {
 
         const credits = await screen.findByRole('button', { name: 'Credits' });
         expect(credits.hasAttribute('data-testid')).toBe(false);
+    });
+});
+
+/**
+ * The click-through construction under a game's interactive-background opt-in
+ * (§4.37.9).
+ *
+ * jsdom performs no layout and ships no `document.elementFromPoint`, so nothing
+ * here is a coordinate hit-test. What it does instead is resolve the real
+ * cascade: the page's OWN stylesheet is injected with the CSS-module class
+ * names substituted in from the module itself, and `getComputedStyle` — which
+ * honours `<style>` rules, the child combinator and the inheritance of
+ * `pointer-events` — answers for each element the page rendered. A typo in the
+ * selector, a wrong property, or a class that never reaches `<main>` each fail
+ * here. The coordinate-level proof is the action app's click-through e2e.
+ */
+describe('MainMenuPage — click-through under an interactive shell background', () => {
+    let styleEl: HTMLStyleElement;
+
+    beforeEach(() => {
+        styleEl = document.createElement('style');
+        styleEl.textContent = pageCss.replaceAll(
+            '.click-through',
+            `.${pageStyles['click-through'] ?? 'click-through'}`,
+        );
+        document.head.appendChild(styleEl);
+        _resetShellStateForTest();
+    });
+
+    afterEach(() => {
+        styleEl.remove();
+        _resetShellStateForTest();
+    });
+
+    function setBackground(shell: LoadedRendererGameShell): void {
+        setMainMenuUrl('?gameId=fake');
+        act(() => {
+            setShellRoute({ surface: 'main-menu', pathname: '/main-menu', gameId: 'fake' });
+        });
+        mockLoadRendererGameShell.mockResolvedValue(shell);
+    }
+
+    function pointerEventsOf(element: Element): string {
+        return getComputedStyle(element).pointerEvents;
+    }
+
+    it('refuses pointer input on the container while the button stack takes it', async () => {
+        setBackground({
+            shellBackground: () => null,
+            shellBackgroundInteractive: true,
+            mainMenu: {
+                buttons: [{ label: 'Play', action: { type: 'open-lobby' } }],
+            },
+        });
+
+        renderMainMenuPage();
+
+        const play = await screen.findByRole('button', { name: 'Play' });
+        await waitFor(() => {
+            expect(pointerEventsOf(screen.getByTestId('main-menu'))).toBe('none');
+        });
+        // The two directions, on the elements the browser would hit-test: the
+        // full-viewport container refuses the event, the button takes it.
+        expect(pointerEventsOf(screen.getByTestId('menu-wrapper'))).toBe('auto');
+        expect(pointerEventsOf(play)).toBe('auto');
+    });
+
+    it('restores the gallery affordance too, not only the button stack', async () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+        setBackground({
+            shellBackground: () => null,
+            shellBackgroundInteractive: true,
+            mainMenu: { buttons: [{ label: 'Play', action: { type: 'open-lobby' } }] },
+        });
+
+        renderMainMenuPage();
+
+        const gallery = await screen.findByTestId('main-menu-component-gallery');
+        await waitFor(() => {
+            expect(pointerEventsOf(screen.getByTestId('main-menu'))).toBe('none');
+        });
+        expect(pointerEventsOf(gallery)).toBe('auto');
+    });
+
+    it('takes pointer events across the whole container with no opt-in', async () => {
+        setBackground({
+            shellBackground: () => null,
+            mainMenu: { buttons: [{ label: 'Play', action: { type: 'open-lobby' } }] },
+        });
+
+        renderMainMenuPage();
+
+        const play = await screen.findByRole('button', { name: 'Play' });
+        expect(screen.getByTestId('main-menu')).not.toHaveClass(
+            pageStyles['click-through'] ?? 'click-through',
+        );
+        expect(pointerEventsOf(screen.getByTestId('main-menu'))).toBe('auto');
+        expect(pointerEventsOf(play)).toBe('auto');
+    });
+
+    // The container is full-viewport from its FIRST commit, well before the
+    // menu it will hold resolves — so a class applied only to the resolved
+    // return leaves every click aimed at the background blocked for the whole
+    // shell load. Every other case here awaits a rendered button and so cannot
+    // see that window; this one holds the load open instead.
+    it('falls through while the menu itself is still loading', async () => {
+        const shell: LoadedRendererGameShell = {
+            shellBackground: () => null,
+            shellBackgroundInteractive: true,
+            mainMenu: { buttons: [{ label: 'Play', action: { type: 'open-lobby' } }] },
+        };
+        setMainMenuUrl('?gameId=fake');
+        act(() => {
+            setShellRoute({ surface: 'main-menu', pathname: '/main-menu', gameId: 'fake' });
+        });
+
+        // The page runs TWO independent loads — the shared background
+        // resolution's and its own menu load — and they are separate promises,
+        // so the first can settle while the second is still in flight. That
+        // window is the only one in which the loading return renders under a
+        // resolved opt-in, and it is the one the class on that return exists
+        // for. `useShellBackgroundPayload` is called in the page body, so its
+        // effect registers first and takes call #1.
+        let releaseMenu!: (loaded: LoadedRendererGameShell) => void;
+        mockLoadRendererGameShell.mockResolvedValueOnce(shell).mockReturnValueOnce(
+            new Promise<LoadedRendererGameShell>((resolve) => {
+                releaseMenu = resolve;
+            }),
+        );
+
+        renderMainMenuPage();
+
+        await waitFor(() => {
+            expect(pointerEventsOf(screen.getByTestId('main-menu'))).toBe('none');
+        });
+        // Still the loading return: the menu itself has not resolved.
+        expect(screen.queryByRole('button', { name: 'Play' })).toBeNull();
+
+        await act(async () => {
+            releaseMenu(shell);
+        });
+        expect(await screen.findByRole('button', { name: 'Play' })).toBeTruthy();
+        expect(pointerEventsOf(screen.getByTestId('main-menu'))).toBe('none');
+    });
+
+    it('takes pointer events when the opt-in arrives without a background component', async () => {
+        setBackground({
+            shellBackgroundInteractive: true,
+            mainMenu: { buttons: [{ label: 'Play', action: { type: 'open-lobby' } }] },
+        });
+
+        renderMainMenuPage();
+
+        await screen.findByRole('button', { name: 'Play' });
+        expect(pointerEventsOf(screen.getByTestId('main-menu'))).toBe('auto');
     });
 });

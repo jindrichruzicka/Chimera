@@ -49,7 +49,12 @@ function CrashFallback({
     // i18n provider above the boundary, so the fallback resolves after a catch.
     const t = useTranslate();
     return (
-        <div role="alert" aria-live="assertive">
+        // Stated, not inherited. `pointer-events` inherits, and the app-level
+        // `ShellContentLayer` sets it to `none` for the whole frame while a
+        // game's shell background is interactive (§4.37.9) — this fallback is a
+        // direct child of that frame, and a player who crashes there must still
+        // be able to reach a way out.
+        <div role="alert" aria-live="assertive" style={{ pointerEvents: 'auto' }}>
             <h1>{t(CRASH_KEYS.heading)}</h1>
             <p>{t(CRASH_KEYS.crashId, { crashId })}</p>
             <button type="button" onClick={onReturnToMenu}>

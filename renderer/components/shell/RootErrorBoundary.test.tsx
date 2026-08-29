@@ -247,3 +247,39 @@ describe('RootErrorBoundary vs. the app-level screen fade', () => {
         expect(screen.getByText('safe')).toBeTruthy();
     });
 });
+
+describe('RootErrorBoundary — pointer input under a click-through ancestor', () => {
+    // `pointer-events` is inherited, and `ShellContentLayer` sets it to `none`
+    // for the whole app-level frame when a game's shell background is
+    // interactive (§4.37.9). The crash fallback is a direct child of that
+    // frame, and its recovery buttons carry no stylesheet of their own — so
+    // without an explicit `auto` here a player who crashes under an interactive
+    // background cannot reach either way out of the crash.
+    it('accepts pointer input even when the surrounding frame refuses it', async () => {
+        const user = userEvent.setup();
+        render(
+            <div style={{ pointerEvents: 'none' }}>
+                <RootErrorBoundary>
+                    <Bomb shouldThrow={true} />
+                </RootErrorBoundary>
+            </div>,
+        );
+
+        const fallback = screen.getByRole('alert');
+        expect(getComputedStyle(fallback).pointerEvents).toBe('auto');
+
+        // Reachable, not merely styled: a real click reaches the handler the
+        // fallback wired. `restart` is the one probed because its handler is an
+        // injectable bridge call, while "return to menu" navigates.
+        const relaunch = vi.fn();
+        (globalThis as { __chimera?: unknown }).__chimera = { system: { relaunch } };
+        try {
+            const restart = screen.getByRole('button', { name: /restart/i });
+            expect(getComputedStyle(restart).pointerEvents).toBe('auto');
+            await user.click(restart);
+            expect(relaunch).toHaveBeenCalledOnce();
+        } finally {
+            Reflect.deleteProperty(globalThis, '__chimera');
+        }
+    });
+});

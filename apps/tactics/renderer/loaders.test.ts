@@ -70,6 +70,16 @@ describe('tactics renderer loaders', () => {
         }
     });
 
+    // The reference game is the opt-OUT pin for the interactive background
+    // (§4.37.9): it contributes a background and never asks for pointer input,
+    // so every hit-testing layer above it stays exactly as it was.
+    it('loadTacticsRendererGameShell contributes an INERT background', async () => {
+        const shell = await loadTacticsRendererGameShell();
+
+        expect(shell.shellBackground).toBeDefined();
+        expect(shell.shellBackgroundInteractive).toBeUndefined();
+    });
+
     it('loadTacticsRendererGameShell forwards the manifest cursor declaration verbatim', async () => {
         const shell = await loadTacticsRendererGameShell();
 

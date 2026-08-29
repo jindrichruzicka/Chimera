@@ -1,0 +1,19 @@
+/*
+ * The layer stands aside for an interactive shell background (§4.37.9).
+ *
+ * A box with `pointer-events: auto` is a hit target over its whole area whether
+ * or not it paints anything, and this layer grows to its content — a
+ * full-viewport page on a menu route — so without this rule a click aimed at
+ * the background lands here, on a transparent div, and the background never
+ * hears it. Measured in the Electron renderer on `/main-menu`: with only the
+ * page made click-through, `elementFromPoint` at an empty corner returns THIS
+ * element.
+ *
+ * There is deliberately no `> *` restore beside it: a surface this layer holds
+ * states its own `pointer-events: auto` where it lives, and the page below owns
+ * its own pass-through construction. A blanket restore here would immediately
+ * re-block the click it just let through.
+ */
+.click-through {
+    pointer-events: none;
+}

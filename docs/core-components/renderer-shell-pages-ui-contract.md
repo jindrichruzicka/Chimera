@@ -560,6 +560,7 @@ presentation slots, and is not serializable data.
 export interface LoadedRendererGameShell {
     readonly shellBackground?: React.ComponentType;
     readonly shellBackgroundAssets?: AssetManifest;
+    readonly shellBackgroundInteractive?: boolean;
 }
 ```
 
@@ -614,6 +615,63 @@ one; what it checks in each is [§4.10 CI Validation](asset-reference-system.md#
 Shell page canvases should not paint an opaque full-viewport surface when the background is meant to
 be visible. Individual panels, cards, and controls should continue to use raised surface tokens for
 readability.
+
+### Interactive Background
+
+`shellBackgroundInteractive?: boolean` opts a background into taking pointer input. Absent or
+`false` is the inert-decor contract every painted backdrop stays on: `pointer-events: none` and
+`aria-hidden="true"` on the host. `true` flips both together — a region that accepts clicks must not
+be hidden from assistive tech, so the two are never separated — and it is answered by the game's own
+SUBTREE, not by the flag: declared over the engine's plain coloured plate it stays inert, because
+there is nothing to click and nothing worth exposing.
+
+The AT surface the dropped `aria-hidden` exposes is the host element itself — a role-less, unnamed
+`<div>` wrapping the game's own subtree. The engine gives it no role and no name, because it does
+not know what the background is: naming a scene "background" for a screen-reader user is worse than
+not naming it. A game that makes a background clickable owes the accessible names and roles on
+whatever inside it is clickable, exactly as it would for any other game surface.
+
+**The flag alone clears no path to the background.** A box with `pointer-events: auto` is a hit
+target over its whole area whether or not it paints anything, and two boxes sit above the
+background: `ShellContentLayer` (the `--ch-z-raised` frame every route's content renders inside) and
+the page's own container. Neither is sized to the viewport by declaration — the frame grows to its
+content, and its content on a menu route is a page that is. Measured in the Electron renderer on
+`/main-menu`, with the menu alone made click-through: `document.elementFromPoint` at an empty corner
+returns the CONTENT LAYER. So the opt-in is honoured by three layers, each standing aside for
+itself:
+
+| Layer                 | Under the opt-in                                      | Restores                                                         |
+| --------------------- | ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `ShellBackgroundHost` | `pointer-events: auto`, no `aria-hidden`              | —                                                                |
+| `ShellContentLayer`   | `pointer-events: none`                                | nothing — see below                                              |
+| the route's page      | `pointer-events: none` on its full-viewport container | `auto` on the controls (`main-menu` uses `> *`, by construction) |
+
+`ShellContentLayer` restores nothing on purpose, so the rule for everything it holds is: **a surface
+that must stay usable states its own `pointer-events: auto`, where that surface lives.** It is not a
+list kept in step in the frame — a blanket `> *` restore there would re-block the very click it just
+let through, and it could not know the markup of a game-owned page anyway. What that costs is that a
+surface added inside the frame and given no such declaration is unusable under the opt-in and
+nowhere else, which is why each one is pinned beside itself rather than by a sentence here.
+
+**A game-owned page owns its own pass-through.** It is the top layer on its own route, so a route a
+game ships is click-through only where the page says so. The engine's `main-menu` construction is
+the pattern to copy: `pointer-events: none` on the full-viewport container, `auto` restored on the
+direct children with `> *` so whatever the page grows next is clickable the day it is added.
+
+The table's page row is not what happens on every background surface. `settings` and `lobby` are
+background surfaces whose pages render inside a `Modal`, and the modal overlay is `position: fixed`,
+`inset: 0` and now `pointer-events: auto` — so it covers the viewport and the background gets no
+clicks there at all, opt-in or not. That is the intended reading of a modal, not a gap: a dialog is
+meant to own the screen while it is open.
+
+The engine's three readers — the host, the content layer and `main-menu` — take the opt-in from one
+function, `useShellBackgroundPayload`, so the DERIVATION is shared even though each keeps its own
+state and its own load. It is engine-internal and reaches no barrel: a game does not read it, and
+does not need to, because a game that opts in knows statically that it did. It answers `false` on any surface that carries no background,
+including the match, which is what keeps the content layer from standing aside over a HUD.
+
+Inside the canvas nothing changes: r3f keeps its own inline `pointer-events: auto` wrapper, and
+`GameCanvas`'s `onPointerMissed` and `ThreeEvent` handlers work as they do in a match.
 
 ## 4.37.10 Game-Customizable Settings Page Definition
 

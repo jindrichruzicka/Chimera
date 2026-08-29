@@ -14,6 +14,7 @@ import {
     type LoadedRendererGameShell,
 } from '../../game/rendererGameRegistry';
 import { RenderMainMenuDefinition } from '../../shell/renderMainMenuDefinition';
+import { useShellBackgroundIsInteractive } from '../../shell/useShellBackgroundPayload';
 import {
     resolveMainMenuGameId,
     resolveShellGameId,
@@ -163,6 +164,14 @@ function useMainMenuFadeIn(): void {
 export default function MainMenuPage() {
     const [menuState, setMenuState] = React.useState<MenuLoadState>({ status: 'unresolved' });
     useMainMenuFadeIn();
+    // The engine menu is the top layer on its own route, so it is what decides
+    // whether a click aimed at an interactive shell background ever gets there
+    // (§4.37.9). Read through the shared resolution rather than derived from the
+    // shell this page loads for itself: the host, the app-level frame and this
+    // page have to agree on what the opt-in means, and sharing the derivation is
+    // what keeps a second reading of it from drifting.
+    const backgroundIsInteractive = useShellBackgroundIsInteractive();
+    const containerClassName = backgroundIsInteractive ? pageStyles['click-through'] : undefined;
 
     React.useEffect(() => {
         const gameId = resolveMainMenuGameId(new URLSearchParams(window.location.search));
@@ -197,7 +206,7 @@ export default function MainMenuPage() {
     // flash before the game shell settles.
     if (menuState.status === 'unresolved' || menuState.status === 'loading') {
         return (
-            <main data-testid="main-menu" style={styles.container}>
+            <main data-testid="main-menu" className={containerClassName} style={styles.container}>
                 <ComponentGalleryButton />
             </main>
         );
@@ -208,7 +217,7 @@ export default function MainMenuPage() {
     const menuCommands = menuState.status === 'loaded' ? menuState.shell.menuCommands : undefined;
 
     return (
-        <main data-testid="main-menu" style={styles.container}>
+        <main data-testid="main-menu" className={containerClassName} style={styles.container}>
             {/*
                 POM alignment guard literals, spelled out in source so a page
                 object can be checked against them. A testid a GAME names through

@@ -1245,3 +1245,29 @@ describe('shell.inputActions carriage', () => {
         expect(game.shell?.inputActions).toBe(game.inputActions);
     });
 });
+
+describe('shell.shellBackgroundInteractive carriage', () => {
+    it('exposes the declared opt-in on the loaded shell', async () => {
+        const shell = fakeShell({ shellBackgroundInteractive: true });
+        registerRendererGame({
+            gameId: 'fake',
+            loadGame: () => Promise.resolve(fakeGame({ shell })),
+            loadShell: () => Promise.resolve(shell),
+        });
+
+        const loaded = await loadRendererGameShell('fake');
+
+        expect(loaded.shellBackgroundInteractive).toBe(true);
+    });
+
+    // Absent is the inert-decor default every game that never mentions it stays
+    // on. `undefined` rather than `false`, so the host's own `=== true` gate is
+    // what turns interaction on and nothing here can turn it on by accident.
+    it('leaves the opt-in undefined when the shell declares none', async () => {
+        registerFake();
+
+        const loaded = await loadRendererGameShell('fake');
+
+        expect(loaded.shellBackgroundInteractive).toBeUndefined();
+    });
+});

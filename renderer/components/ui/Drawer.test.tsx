@@ -369,3 +369,45 @@ describe('Drawer — close-label i18n default', () => {
         expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument();
     });
 });
+
+describe('Drawer — pointer input under a click-through ancestor', () => {
+    // Same rule as `Modal.overlay`: `pointer-events` is inherited, and
+    // `ShellContentLayer` refuses it for the whole app-level frame while a
+    // game's shell background is interactive (§4.37.9). A drawer that inherited
+    // `none` would render and be unusable.
+    it('declares its own pointer-events: auto on the overlay', () => {
+        expect(drawerCss).toMatch(/\.overlay\s*\{[^}]*pointer-events:\s*auto;/s);
+    });
+
+    it('still refuses pointer input while closing', () => {
+        expect(drawerCss).toMatch(
+            /\.overlay\[data-ch-state='closing'\]\s*\{[^}]*pointer-events:\s*none;/s,
+        );
+    });
+
+    // The two regexes above read the source text; this reads what the cascade
+    // makes of it, so a later `.overlay` rule that overrode the declaration
+    // would fail here while leaving them green.
+    it('resolves auto on the overlay and none on it while closing', () => {
+        const style = document.createElement('style');
+        style.textContent = drawerCss.replaceAll('.overlay', '.probe-overlay');
+        document.head.appendChild(style);
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            '<div id="frame" style="pointer-events:none">' +
+                '<div class="probe-overlay" id="open"></div>' +
+                '<div class="probe-overlay" id="closing" data-ch-state="closing"></div>' +
+                '</div>',
+        );
+
+        try {
+            expect(getComputedStyle(document.getElementById('open')!).pointerEvents).toBe('auto');
+            expect(getComputedStyle(document.getElementById('closing')!).pointerEvents).toBe(
+                'none',
+            );
+        } finally {
+            style.remove();
+            document.getElementById('frame')?.remove();
+        }
+    });
+});

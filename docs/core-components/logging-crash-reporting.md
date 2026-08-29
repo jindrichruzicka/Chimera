@@ -175,10 +175,10 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
             <LoggingBootstrap />
             <Providers>
                 {/* … theme / i18n / icon / fade providers … */}
-                <div style={{ position: 'relative', zIndex: 'var(--ch-z-raised)' }}>
+                <ShellContentLayer>
                     <RootErrorBoundary>{children}</RootErrorBoundary>
                     <ToastHost /> {/* sibling — survives boundary catches */}
-                </div>
+                </ShellContentLayer>
             </Providers>
         </>
     );

@@ -554,3 +554,46 @@ describe('Modal — default action i18n', () => {
         expect(screen.getByRole('button', { name: 'Zavřít' })).toBeInTheDocument();
     });
 });
+
+describe('Modal — pointer input under a click-through ancestor', () => {
+    // `pointer-events` is inherited, and `ShellContentLayer` sets it to `none`
+    // for the whole app-level frame when a game's shell background is
+    // interactive (§4.37.9). Every dialog in the engine renders inside that
+    // frame — settings, the confirm surface, the restore-waiting overlay — so
+    // without an explicit `auto` here they would all become unclickable the
+    // moment a game opted in.
+    it('declares its own pointer-events: auto on the overlay', () => {
+        expect(modalCss).toMatch(/\.overlay\s*\{[^}]*pointer-events:\s*auto;/s);
+    });
+
+    // The closing phase deliberately stops accepting input while the exit
+    // animation plays; the base rule above must not have re-enabled it.
+    it('still refuses pointer input while closing', () => {
+        expect(modalCss).toMatch(
+            /\.overlay\[data-ch-state='closing'\]\s*\{[^}]*pointer-events:\s*none;/s,
+        );
+    });
+
+    it('resolves auto on the overlay and none on it while closing', () => {
+        const style = document.createElement('style');
+        style.textContent = modalCss.replaceAll('.overlay', '.probe-overlay');
+        document.head.appendChild(style);
+        document.body.insertAdjacentHTML(
+            'beforeend',
+            '<div id="frame" style="pointer-events:none">' +
+                '<div class="probe-overlay" id="open"></div>' +
+                '<div class="probe-overlay" id="closing" data-ch-state="closing"></div>' +
+                '</div>',
+        );
+
+        try {
+            expect(getComputedStyle(document.getElementById('open')!).pointerEvents).toBe('auto');
+            expect(getComputedStyle(document.getElementById('closing')!).pointerEvents).toBe(
+                'none',
+            );
+        } finally {
+            style.remove();
+            document.getElementById('frame')?.remove();
+        }
+    });
+});
