@@ -559,6 +559,7 @@ presentation slots, and is not serializable data.
 ```typescript
 export interface LoadedRendererGameShell {
     readonly shellBackground?: React.ComponentType;
+    readonly shellBackgroundAssets?: AssetManifest;
 }
 ```
 
@@ -579,6 +580,32 @@ shell navigation SPA-like while preventing menu background components from enter
 The host passes no props to the game component. Background components that need animation, canvas,
 or media own those renderer-local details internally. They must not dispatch gameplay actions or
 depend on Electron/main-process APIs directly.
+
+### Background Asset Session
+
+A background that renders manifest assets — a model, a sprite sheet, an animation sheet — needs a
+game-asset `AssetManager`, and above `GameShell` there is none: the manager in context is the
+app-level `DelegatingAssetManager`, whose delegate only a match sets, so every load rejects
+`NoActiveGameSessionError` (§4.10).
+
+`shellBackgroundAssets` is the opt-in. When the shell payload declares one, the host wraps the
+background component — and only that component — in the same `GameAssetSession` a game-owned page
+uses, so `useAsset` / `useModelInstance` / `useAnimationSheet` resolve on `main-menu`, `settings`,
+`lobby` and every declared `page`. The session is **keyed to the mount**:
+
+- It is built in a commit-phase effect when the background mounts (Invariant #21), and it runs that
+  manifest's critical preload (§4.10), exactly as it does for a page.
+- It is disposed when the background unmounts, which the shell-state surface flip off a background
+  surface does in one render — so no background session survives into a match, and there is no warm
+  cache across `/game`. What that flip is NOT is simultaneous with the router's: `ShellStateBridge`
+  publishes the surface from an effect, a commit after the route change, so the match route has
+  already committed by the time the background tears down.
+- It registers no `SetGameAssetManagerContext` delegate, so a menu manifest never stands in for a
+  match's assets when the app-level `AudioManager` resolves a clip.
+
+Declaring it is not required and is not free: a game that omits it renders through the host
+unchanged and builds no manager. Declared without a `shellBackground`, it is inert — a session with
+no subtree to publish to is never built.
 
 Shell page canvases should not paint an opaque full-viewport surface when the background is meant to
 be visible. Individual panels, cards, and controls should continue to use raised surface tokens for

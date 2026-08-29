@@ -2,6 +2,8 @@
 
 import React from 'react';
 import type { ComponentType } from 'react';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import { GameAssetSession } from '../../app/gameAssetSession';
 import { loadRendererGameShell } from '../../game/rendererGameRegistry';
 import { SHELL_BACKGROUND_SURFACES } from '../../shell/shellRoutes';
 import { useShellState } from '../../shell/shellStateStore';
@@ -11,11 +13,13 @@ let nextShellBackgroundInstanceId = 1;
 type LoadedShellBackground = Readonly<{
     gameId: string | null;
     Background: ComponentType | null;
+    assets: AssetManifest | null;
 }>;
 
 const UNRESOLVED: LoadedShellBackground = {
     gameId: null,
     Background: null,
+    assets: null,
 };
 
 const hostStyle = {
@@ -55,12 +59,16 @@ export function ShellBackgroundHost(): React.ReactElement | null {
         loadRendererGameShell(gameId)
             .then((shell) => {
                 if (!disposed) {
-                    setLoadedBackground({ gameId, Background: shell.shellBackground ?? null });
+                    setLoadedBackground({
+                        gameId,
+                        Background: shell.shellBackground ?? null,
+                        assets: shell.shellBackgroundAssets ?? null,
+                    });
                 }
             })
             .catch(() => {
                 if (!disposed) {
-                    setLoadedBackground({ gameId, Background: null });
+                    setLoadedBackground({ gameId, Background: null, assets: null });
                 }
             });
 
@@ -75,7 +83,7 @@ export function ShellBackgroundHost(): React.ReactElement | null {
     // stale payload answers NOTHING. Read ONCE, through the destructuring below,
     // so no later line can reach past it to the raw state.
     const payloadIsForThisContext = loadedBackground.gameId === gameId;
-    const { Background } = payloadIsForThisContext ? loadedBackground : UNRESOLVED;
+    const { Background, assets } = payloadIsForThisContext ? loadedBackground : UNRESOLVED;
 
     if (!isShellBackgroundSurface) {
         return null;
@@ -99,7 +107,45 @@ export function ShellBackgroundHost(): React.ReactElement | null {
             style={hostStyle}
             aria-hidden="true"
         >
-            {Background === null ? null : <Background />}
+            {renderBackground(Background, assets)}
         </div>
+    );
+}
+
+/**
+ * The background subtree, with the game's asset session around it when the
+ * shell payload declared one (§4.10).
+ *
+ * `GameAssetSession` is REUSED rather than re-implemented: it already owns the
+ * one-effect allocate → preload → abandon → dispose lifecycle a manager with no
+ * `GameShell` above it needs — the disposal and the commit-phase allocation are
+ * Invariant #21's, the critical preload and its abandon are §4.10's — and it
+ * already declines to register the app-level `SetGameAssetManagerContext`
+ * delegate. A second session hook written for this mount would be a second
+ * place to get all of it wrong.
+ *
+ * The session sits INSIDE the host element rather than around it, so the plate
+ * — the fixed, surface-coloured layer the host is — lands on the commit its
+ * payload lands on. The cost is that a declared background's own DOM arrives
+ * one commit later than the plate, because the session renders `null` until
+ * its manager is committed.
+ *
+ * A declared manifest with NO background component builds nothing: a session
+ * publishes to a subtree, and there is none.
+ */
+function renderBackground(
+    Background: ComponentType | null,
+    assets: AssetManifest | null,
+): React.ReactNode {
+    if (Background === null) {
+        return null;
+    }
+    if (assets === null) {
+        return <Background />;
+    }
+    return (
+        <GameAssetSession assetManifest={assets}>
+            <Background />
+        </GameAssetSession>
     );
 }

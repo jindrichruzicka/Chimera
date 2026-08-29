@@ -41,13 +41,11 @@ interface CommittedClone {
  * (Invariant #83).
  *
  * Loads reject into `error` whenever the manager in context is the app-level
- * `DelegatingAssetManager` with no delegate registered (no active match), so
- * a surface above `GameShell` — e.g. Invariant #96's `apps/<name>/shell/*.tsx`
- * — resolves loads only while a match is active. The other way to satisfy the
- * hook is to be under a manager that is not the delegating one at all:
- * `GameShell` publishes the match-level manager, and `GameAssetSession`
- * (`renderer/app/gameAssetSession.tsx`) publishes a matchless one for a route
- * that renders a game's assets outside a match.
+ * `DelegatingAssetManager` with no delegate registered. The other way to
+ * satisfy the hook is to be under a manager that is not the delegating one at
+ * all: `GameShell` publishes the match-level manager, and `GameAssetSession`
+ * (`renderer/app/gameAssetSession.tsx`) publishes a matchless one for a
+ * subtree that renders a game's assets outside a match.
  */
 export function useModelInstance(ref: AssetRef<GLTFModelAsset> | null): UseModelInstanceState {
     const { asset, error } = useAsset<GLTFModelAsset>(ref);

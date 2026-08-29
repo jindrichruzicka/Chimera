@@ -2,7 +2,7 @@
 
 // renderer/app/gameAssetSession.tsx
 //
-// The one place a game-asset `AssetManager` is built for a renderer route.
+// Where a game-asset `AssetManager` is built for a renderer subtree.
 //
 // Every route that shows a game's assets needs the same manager: the default
 // implementation, pointed at the `chimera://renderer/game-assets` protocol
@@ -17,9 +17,10 @@
 //     NOTHING. Its callers hand the manager to `<GameShell assetManager>`,
 //     and GameShell is the unique disposer of a match-level manager
 //     (Invariant #21). A dispose here would race that owner.
-//   * `GameAssetSession` is for a route with no GameShell above it — a
-//     game-owned page that renders assets outside a match. It builds,
-//     publishes and DISPOSES, because nothing else will.
+//   * `GameAssetSession` is for a subtree with no GameShell above it — a
+//     game-owned page that renders assets outside a match, and the shell
+//     background `ShellBackgroundHost` mounts on the shell surfaces. It
+//     builds, publishes and DISPOSES, because nothing else will.
 //
 // Architecture reference: §4.10 Asset Reference System.
 
@@ -91,9 +92,12 @@ export interface GameAssetSessionProps {
 }
 
 /**
- * Opens a self-contained game-asset session for a route that has no
+ * Opens a self-contained game-asset session for a subtree that has no
  * `GameShell` above it, and publishes its manager to `useAssetManager()` /
- * `useAsset()` / `useModelInstance()` consumers in the subtree.
+ * `useAsset()` / `useModelInstance()` consumers in it. Mounted by a game-owned
+ * Next page (through the `@chimera-engine/renderer/shell/gameAssetSession`
+ * export), and by `ShellBackgroundHost` around a background whose game declared
+ * `shellBackgroundAssets`.
  *
  * This is the second owner Invariant #21 names: it builds the manager AND
  * disposes it, on unmount and whenever the manifest identity changes, because

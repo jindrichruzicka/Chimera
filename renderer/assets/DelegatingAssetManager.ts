@@ -12,14 +12,15 @@ export interface DelegatingAssetManager extends AssetManager {
  * delegating manager — i.e. outside an active game session. `GameShell`
  * registers the delegate while a match is mounted, so surfaces above it (an
  * `apps/<name>/shell/*.tsx` contribution, Invariant #96) hit this whenever
- * they load before a match starts or after it ends.
+ * they load before a match starts or after it ends — unless something above
+ * them opened a session of its own, which publishes a real manager over this
+ * one for its subtree (`GameAssetSession`, Invariant #21).
  */
 export class NoActiveGameSessionError extends Error {
     constructor(public readonly ref: string) {
         super(
             `No active game session: cannot load '${ref}'. The AssetManager delegate is ` +
-                'registered by GameShell while a match is mounted; above GameShell, loads ' +
-                'resolve only during an active match.',
+                'registered by GameShell while a match is mounted.',
         );
         this.name = 'NoActiveGameSessionError';
     }

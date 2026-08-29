@@ -12,6 +12,7 @@ import type {
     GameCursorRole,
     GameLanguage,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import type { GameIconSet } from '../components/ui/icons/registry.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
 import { CRITICAL_ASSET_PRELOAD_BUDGET_MS } from '../assets/criticalAssetPreload.js';
@@ -1088,6 +1089,13 @@ describe('rendererGameRegistry', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['shellBackground']>().toEqualTypeOf<
                 ComponentType | undefined
+            >();
+        });
+
+        it('shell.shellBackgroundAssets is typed as AssetManifest | undefined', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['shellBackgroundAssets']>().toEqualTypeOf<
+                AssetManifest | undefined
             >();
         });
 

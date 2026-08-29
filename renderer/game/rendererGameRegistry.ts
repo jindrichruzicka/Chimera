@@ -49,6 +49,23 @@ export interface LoadedRendererGameShell {
     readonly settings?: GameSettingsPageDefinition;
     readonly shellBackground?: ComponentType;
     /**
+     * Optional asset manifest for the {@link shellBackground} component. When
+     * present, `ShellBackgroundHost` wraps the background in the same
+     * `GameAssetSession` a game-owned page uses, so `useAsset` /
+     * `useModelInstance` / `useAnimationSheet` resolve on shell routes instead
+     * of rejecting `NoActiveGameSessionError` against the delegate-less
+     * app-level manager (§4.10, Invariant #21).
+     *
+     * Absent ⇒ no session is opened and the host's markup is unchanged, which
+     * is the path every game that renders a plain DOM background stays on.
+     * Declared WITHOUT a `shellBackground` is inert for the same reason: a
+     * session with no subtree to publish to is never built.
+     *
+     * What the session's lifetime is — and what it deliberately is not — is
+     * §4.37.9's.
+     */
+    readonly shellBackgroundAssets?: AssetManifest;
+    /**
      * Optional game-provided lobby screen. When present, the lobby page renders
      * it in place of the engine-default `ActiveLobbyPanel`, passing the
      * {@link GameLobbyScreenProps} contract. Loaded via this registry only — the

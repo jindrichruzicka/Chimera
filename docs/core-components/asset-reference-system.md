@@ -260,7 +260,7 @@ export interface AssetManager {
 | Surface                             | Manager it preloads into                                                                       | Manifest                                  |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | `GameShell` (`useGameAssetManager`) | the match-level manager — injected by `/game` and `/replays/player`, or the fallback it builds | the `assetManifest` prop                  |
-| `GameAssetSession`                  | the manager it builds for a route with no `GameShell` above it                                 | its `assetManifest` prop                  |
+| `GameAssetSession`                  | the manager it builds for a subtree with no `GameShell` above it                               | its `assetManifest` prop                  |
 | `/game`, `/replays/player`          | the manager the route builds and then injects into `GameShell`                                 | the loaded game's, promoted (gate, below) |
 
 The module exposes the preload three ways. Two of them differ by where the caller allocates its
@@ -399,11 +399,12 @@ answered is what both halves turn on: answered with bytes or with a 404, every p
 
 ### Asset sessions outside a match — `GameAssetSession`
 
-The manager the hooks below read comes from `GameShell` while a match is running. Outside one — on a game-owned route that renders assets with no `GameShell` above it — the manager in context is the app-level `DelegatingAssetManager`, whose delegate only `GameShell` sets, so every load rejects `NoActiveGameSessionError`.
+The manager the hooks below read comes from `GameShell` while a match is running. Outside one — in a subtree that renders assets with no `GameShell` above it — the manager in context is the app-level `DelegatingAssetManager`, whose delegate only `GameShell` sets, so every load rejects `NoActiveGameSessionError`.
 
-`renderer/app/gameAssetSession.tsx` is the seam for that case, and it is the one place a game-asset manager is built for any renderer route:
+`renderer/app/gameAssetSession.tsx` is the seam for that case, and it is where a game-asset manager is built for a renderer subtree:
 
 - **`<GameAssetSession assetManifest>`** — exported to an app's own Next host tree as `@chimera-engine/renderer/shell/gameAssetSession` (Invariant #96). It builds a manager for the manifest and publishes it to `useAsset` / `useModelInstance` / `useAssetManager` consumers in the subtree. It registers no `SetGameAssetManagerContext` delegate, so a session outside a match never redirects the app-level `AudioManager` at its own manifest.
+    - The engine mounts it too: `ShellBackgroundHost` wraps a game's `shellBackground` in one when the shell payload declares `shellBackgroundAssets`. Same component, so the same one-effect lifecycle and the same refusal of the delegate; what that mount's lifetime is, is §4.37.9's.
 - **`useRendererGameAssetManager(loadedGame)`** — for a route that hands the manager to `<GameShell assetManager>` (`/game`, `/replays/player`). It is keyed on the loaded game rather than its manifest because `LoadedRendererGame.assetManifest` is optional, and a game that declares no manifest must still get a manager.
 
 Which surface disposes which manager is enumerated in **Invariant #21**.
