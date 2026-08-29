@@ -50,10 +50,10 @@ import { isDirectInvocation } from '../dev-harness/harness.js';
 const GAMES_DIR = 'apps';
 const GAMES_ROOT = [GAMES_DIR] as const;
 /**
- * The SHELL BACKGROUND's inventory, forwarded as the shell payload's
- * `shellBackgroundAssets`. A background that renders manifest assets gets its
- * own `GameAssetSession` above `GameShell`, so what it loads is an inventory the
- * game ships separately from the match's.
+ * The SHELL's inventory, forwarded as the shell payload's `shellBackgroundAssets`
+ * and/or `shellAudioAssets`. What a menu background renders and what the menu
+ * screens sound is loaded outside a match, through owners of its own, so it is an
+ * inventory the game ships separately from the match's.
  */
 const SHELL_ASSET_MANIFEST_FILE_NAME = 'shell-asset-manifest.ts';
 

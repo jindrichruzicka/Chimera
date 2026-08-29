@@ -215,8 +215,7 @@ chimera/
 │       ├── dev/                     # Dev-harness fixtures — profiles/ and scenarios/ (starter set scaffolded)
 │       ├── e2e/                     # Playwright E2E suite (fixtures, page objects, specs)
 │       ├── asset-manifest.ts        # The match inventory: AssetRefs + priority (critical|deferred)
-│       ├── shell-asset-manifest.ts  # Same, for the shell background's own assets — forwarded as shellBackgroundAssets
-│                                    #   (optional; only a background that renders manifest assets needs one)
+│       ├── shell-asset-manifest.ts  # Same, for what the shell renders and sounds — forwarded as shellBackgroundAssets / shellAudioAssets
 │       ├── manifest.ts              # GameManifest: displayName/window title, realtime + tickRateMs, optional icon + cursor + logoScreen + languages + spectators
 │       ├── settings-schema.ts       # Zod schema extending EngineSettings with game-specific fields
 │       └── package.json             # App identity + scripts; engine packages as devDependencies (#817),
@@ -251,6 +250,7 @@ chimera/
 │   │   │   ├── GameShell.tsx       # Hosts the active game's screen registry; game-agnostic
 │   │   │   ├── ShellStateBridge.tsx # The single route-classification site; publishes the shell state (§4.37.18)
 │   │   │   ├── ShellBackgroundHost.tsx  # Mounts the game's background on the shell surfaces (§4.37.9)
+│   │   │   ├── ShellAudioSession.tsx    # Binds the game's shell audio inventory app-level; plays and hands off the menu bed (§4.25)
 │   │   │   ├── SpectatorHud.tsx     # Read-only spectator overlay: followed-seat name + Tab switch hotkey (Invariants #114/#115)
 │   │   │   ├── RootErrorBoundary.tsx  # Top-level React error boundary; see §4.27
 │   │   │   ├── ToastHost.tsx        # Renders transient notifications; see §4.30

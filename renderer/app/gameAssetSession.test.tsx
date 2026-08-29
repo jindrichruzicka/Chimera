@@ -223,15 +223,16 @@ describe('GameAssetSession', () => {
 
     it('never registers itself as the app-level AudioManager delegate', async () => {
         // Invariant #21: this session is not a competing owner of the
-        // match-level manager. `SetGameAssetManagerContext` exists so the
-        // app-level AudioManager can reach a MATCH's assets; a session outside
-        // a match that registered here would silently redirect every engine
-        // sound lookup at its own manifest.
-        const setGameAssetManager = vi.fn();
+        // match-level manager. `SetGameAssetManagerContext` binds what the
+        // app-level `AudioManager` resolves a clip against, and a subtree
+        // publication is not that: a session that registered here would
+        // redirect every engine sound lookup at its own manifest, whichever
+        // registrant — a match or the shell audio session — was bound.
+        const binding = { set: vi.fn(), release: vi.fn() };
         const capture = captureManager();
 
         render(
-            <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
+            <SetGameAssetManagerContext.Provider value={binding}>
                 <GameAssetSession assetManifest={manifestWith('demo')}>
                     <capture.Probe />
                 </GameAssetSession>
@@ -241,7 +242,8 @@ describe('GameAssetSession', () => {
         await waitFor(() => {
             expect(capture.current()).not.toBeNull();
         });
-        expect(setGameAssetManager).not.toHaveBeenCalled();
+        expect(binding.set).not.toHaveBeenCalled();
+        expect(binding.release).not.toHaveBeenCalled();
     });
 
     it('renders its children once the manager is committed', async () => {

@@ -99,6 +99,30 @@ export const SHELL_BACKGROUND_SURFACES: ReadonlySet<ShellSurface> = new Set<Shel
     'page',
 ]);
 
+/**
+ * The surfaces the shell-scoped audio session runs on (§4.25).
+ *
+ * Deliberately its OWN set rather than a read of {@link SHELL_BACKGROUND_SURFACES},
+ * and wider than it: `/saves` and `/replays` carry no background — a browser list
+ * is a full-screen surface of its own — but they are still the menu, so a bed that
+ * cut out on the way to the save browser and came back on the way out of it would
+ * read as a bug. Sharing one constant would force the two to move together, which
+ * is exactly the silent widening a shared set makes easy.
+ *
+ * `'replay-player'` sits outside with `'match'`: a replay plays a match back, and
+ * the shell session must never be the delegate while match audio is sounding.
+ *
+ * A set of SURFACES rather than of routes, so reading it is not a classification.
+ */
+export const SHELL_AUDIO_SURFACES: ReadonlySet<ShellSurface> = new Set<ShellSurface>([
+    'main-menu',
+    'settings',
+    'lobby',
+    'saves',
+    'replays',
+    'page',
+]);
+
 /** The suffix the packaged static export appends when a route is served as a file. */
 const EXPORT_INDEX_SUFFIX = '/index.html';
 

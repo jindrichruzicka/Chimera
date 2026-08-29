@@ -16,10 +16,10 @@ import { isModelShowcaseEnabled } from './showcaseRouteGate.js';
  * when packaged: see `showcaseRouteGate.ts`.
  *
  * `<GameAssetSession>` is what makes this work outside a match. `useModelInstance`
- * needs a game `AssetManager`, and the app-level provider holds a delegating
- * manager whose delegate only `GameShell` sets — so on a bare route every load
- * would reject `NoActiveGameSessionError`. The session builds, publishes and
- * disposes a real game-asset manager for the manifest below (Invariant #21).
+ * needs a game `AssetManager`, and the app-level provider holds a delegating one
+ * that reaches only whatever inventory is bound to it — never this manifest. The
+ * session builds, publishes and disposes a real game-asset manager for the
+ * manifest below (Invariant #21).
  */
 export default function TacticsModelShowcasePage(): React.ReactElement {
     if (!isModelShowcaseEnabled()) {

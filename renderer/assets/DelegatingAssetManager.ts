@@ -5,22 +5,42 @@ import type { AssetManager, ResolvedAsset } from './AssetManager';
 
 export interface DelegatingAssetManager extends AssetManager {
     setDelegate(manager: AssetManager | null): void;
+    /**
+     * Clear the delegate, but only while it is still `manager` — the teardown
+     * half of a binding whose owner cannot assume it is still the current one.
+     *
+     * `setDelegate(null)` clears whatever is bound, which is what a match wants:
+     * `GameShell` owns the binding for the whole life of a mount and nothing
+     * else registers underneath it. A SHELL-scoped session has no such
+     * guarantee. Its mount is driven by the shell-state store, so on a shell
+     * surface → `/game` hop it tears down on a store update that lands after
+     * the router's own commit — the commit in which `GameShell` already
+     * registered the match manager, during render. An unconditional clear there
+     * would silence the match it just handed over to.
+     *
+     * Releasing a manager that is not the bound one is a no-op, and no release
+     * ever disposes: a manager's lifetime belongs to whoever built it
+     * (Invariant #21).
+     */
+    releaseDelegate(manager: AssetManager): void;
 }
 
 /**
- * A load ran while no match-level manager was registered with the app-level
- * delegating manager — i.e. outside an active game session. `GameShell`
- * registers the delegate while a match is mounted, so surfaces above it (an
- * `apps/<name>/shell/*.tsx` contribution, Invariant #96) hit this whenever
- * they load before a match starts or after it ends — unless something above
- * them opened a session of its own, which publishes a real manager over this
- * one for its subtree (`GameAssetSession`, Invariant #21).
+ * A load ran while nothing was registered with the app-level delegating
+ * manager. Who registers, and for how long, is each registrant's own contract —
+ * `GameShell` for a match and `ShellAudioSession` for the shell surfaces —
+ * so this says only that none of them was bound.
+ *
+ * A surface can also miss this entirely by publishing a real manager over this
+ * one for its own subtree (`GameAssetSession`, Invariant #21), which is a
+ * different reach: that manager answers `useAsset` and its siblings, never the
+ * app-level `AudioManager`.
  */
 export class NoActiveGameSessionError extends Error {
     constructor(public readonly ref: string) {
         super(
-            `No active game session: cannot load '${ref}'. The AssetManager delegate is ` +
-                'registered by GameShell while a match is mounted.',
+            `No active game session: cannot load '${ref}'. No AssetManager delegate is ` +
+                'registered with the app-level manager.',
         );
         this.name = 'NoActiveGameSessionError';
     }
@@ -31,6 +51,12 @@ class DefaultDelegatingAssetManager implements DelegatingAssetManager {
 
     setDelegate(manager: AssetManager | null): void {
         this.delegate = manager;
+    }
+
+    releaseDelegate(manager: AssetManager): void {
+        if (this.delegate === manager) {
+            this.delegate = null;
+        }
     }
 
     registerManifest(manifest: AssetManifest): void {
@@ -66,8 +92,8 @@ class DefaultDelegatingAssetManager implements DelegatingAssetManager {
     }
 
     dispose(): void {
-        // Clear the delegate reference but do not dispose it — the match-level
-        // AssetManager lifecycle is owned by GameShell, not by this delegating wrapper.
+        // Clear the delegate reference but do not dispose it — a registered
+        // manager's lifetime is its registrant's, never this wrapper's.
         this.delegate = null;
     }
 }

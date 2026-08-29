@@ -13,6 +13,7 @@ import type {
     GameLanguage,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import { SCENE_PRELOAD_BUDGET_MS } from '../components/scene/scenePreload.js';
 import type { GameIconSet } from '../components/ui/icons/registry.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
@@ -43,6 +44,33 @@ export interface GameTranslations {
     readonly bundles: Readonly<Record<string, TranslationBundle>>;
 }
 
+/**
+ * A game's menu music bed: the loop the engine plays for as long as the player is
+ * on a shell surface, and hands off when a match starts (§4.25).
+ *
+ * A DECLARATION rather than a call, for the same reason `shellBackground` is one:
+ * the bed has to outlive every individual shell screen — it plays across
+ * `/main-menu → /settings → /saves` as one voice — and no component that renders
+ * on any one of those screens has that lifetime. It also has to survive a game
+ * that contributes no shell component at all, which a hook could not.
+ *
+ * Inert without {@link LoadedRendererGameShell.shellAudioAssets}: the ref resolves
+ * through the shell session's manifest, and there is nothing to resolve it against.
+ */
+export interface GameShellMusicBed {
+    /** The looping clip, named as an entry of the shell audio manifest. */
+    readonly ref: AssetRef<AudioClipAsset>;
+    /**
+     * Bed volume within the `music` bus, defaulting to `1`. The bus itself
+     * carries the player's `audio.musicVolume`, `audio.masterVolume` and
+     * `audio.muted` (§4.13), so this is the game's mix against its own match
+     * music — never a way around a setting.
+     */
+    readonly volume?: number;
+    /** Fade-in from silence when the bed starts. Absent ⇒ it starts at `volume`. */
+    readonly fadeInMs?: number;
+}
+
 export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
@@ -52,9 +80,10 @@ export interface LoadedRendererGameShell {
      * Optional asset manifest for the {@link shellBackground} component. When
      * present, `ShellBackgroundHost` wraps the background in the same
      * `GameAssetSession` a game-owned page uses, so `useAsset` /
-     * `useModelInstance` / `useAnimationSheet` resolve on shell routes instead
-     * of rejecting `NoActiveGameSessionError` against the delegate-less
-     * app-level manager (§4.10, Invariant #21).
+     * `useModelInstance` / `useAnimationSheet` resolve on shell routes against an
+     * inventory the game declared for them (§4.10, Invariant #21). Without it
+     * those hooks reach the app-level manager instead, and what that reaches is
+     * whatever is bound to it at the time.
      *
      * Absent ⇒ no session is opened and the host's markup is unchanged, which
      * is the path every game that renders a plain DOM background stays on.
@@ -90,6 +119,33 @@ export interface LoadedRendererGameShell {
      * receive the events.
      */
     readonly shellBackgroundInteractive?: boolean;
+    /**
+     * Optional asset manifest for what the game SOUNDS on shell surfaces (§4.25).
+     * When present, `ShellAudioSession` builds a manager over it and registers it
+     * as the app-level `DelegatingAssetManager` delegate for as long as a shell
+     * surface with this game in context is mounted — so `useSound` and
+     * `useMusicTrack`, which resolve their clips through the app-level
+     * `AudioManager` (Invariant #64), play on `/main-menu` instead of dying in a
+     * swallowed `NoActiveGameSessionError`.
+     *
+     * Separate from {@link shellBackgroundAssets} because the two publish to
+     * different places: the background's manager is published to the background
+     * SUBTREE through `AssetManagerContext`, which the app-level `AudioManager`
+     * is not inside. A game may point both fields at the same
+     * `shell-asset-manifest.ts` value, and `validate-assets` covers that file by
+     * NAME, so neither field needs a build-time gate of its own.
+     *
+     * Absent ⇒ no session is opened and no delegate is ever registered from a
+     * shell surface, which is the path every game with a silent menu stays on.
+     */
+    readonly shellAudioAssets?: AssetManifest;
+    /**
+     * Optional menu music bed (see {@link GameShellMusicBed}), played by the
+     * shell audio session across the shell surfaces and handed off when a match
+     * starts. Declared WITHOUT {@link shellAudioAssets} is inert: the session
+     * that would resolve the ref is never opened.
+     */
+    readonly shellMusicBed?: GameShellMusicBed;
     /**
      * Optional game-provided lobby screen. When present, the lobby page renders
      * it in place of the engine-default `ActiveLobbyPanel`, passing the

@@ -10,6 +10,7 @@ import { I18nTokenModeToggle } from '../components/shell/debug/I18nTokenModeTogg
 import { RestoreWaitingOverlay } from '../components/shell/RestoreWaitingOverlay';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { ScreenFadeRoot } from '../components/shell/ScreenFadeRoot';
+import { ShellAudioSession } from '../components/shell/ShellAudioSession';
 import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
 import { ShellContentLayer } from '../components/shell/ShellContentLayer';
 import { ShellStateBridge } from '../components/shell/ShellStateBridge';
@@ -117,6 +118,20 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                                     <ShellStateBridge />
                                     <ShellBackgroundHost />
                                 </React.Suspense>
+                                {/*
+                                 * The shell-scoped audio session (§4.25): the
+                                 * app-level asset delegate that makes useSound /
+                                 * useMusicTrack resolve a clip outside a match,
+                                 * and the menu bed a game declares. App-level so
+                                 * ONE bed spans /main-menu → /settings → /saves;
+                                 * a session owned by a screen would restart the
+                                 * music on every hop. Outside the boundary above
+                                 * on purpose — it reads the store the bridge
+                                 * publishes and calls no router hook of its own,
+                                 * so a suspending sibling must not tear its
+                                 * delegate and its voice down.
+                                 */}
+                                <ShellAudioSession />
                                 {/*
                                  * The raised frame page content and the engine's
                                  * overlay hosts render inside. A component rather

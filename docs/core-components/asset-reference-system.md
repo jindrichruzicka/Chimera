@@ -21,7 +21,7 @@ The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-sy
 | `simulation/content/AssetRef.ts`           | `AssetRef<T>` type, open `AssetKindRegistry`, `buildAssetRef()` helper; re-exports parsing utilities from `simulation/foundation/asset-ref-parse.ts` |
 | `apps/<name>/data/*.json`                  | JSON data objects carry `AssetRef` strings as plain strings                                                                                          |
 | `apps/<name>/asset-manifest.ts`            | The match inventory: `AssetRef`s the game exposes there, runtime kind id, load priority, and optional loader metadata                                |
-| `apps/<name>/shell-asset-manifest.ts`      | The same declaration for the shell background's own assets, forwarded as `shellBackgroundAssets` (§4.37.9)                                           |
+| `apps/<name>/shell-asset-manifest.ts`      | The same declaration for what the shell renders and sounds, forwarded as `shellBackgroundAssets` / `shellAudioAssets`                                |
 | `renderer/assets/AssetResolver.ts`         | `AssetRef<T>` → `file://` URL (env-aware: dev vs prod)                                                                                               |
 | `renderer/assets/AssetLoaderRegistry.ts`   | Runtime kind id → loader, open to game-contributed loaders without engine edits                                                                      |
 | `renderer/assets/AssetManager.ts`          | Loads, caches, and disposes resolved assets                                                                                                          |
@@ -400,11 +400,11 @@ answered is what both halves turn on: answered with bytes or with a 404, every p
 
 ### Asset sessions outside a match — `GameAssetSession`
 
-The manager the hooks below read comes from `GameShell` while a match is running. Outside one — in a subtree that renders assets with no `GameShell` above it — the manager in context is the app-level `DelegatingAssetManager`, whose delegate only `GameShell` sets, so every load rejects `NoActiveGameSessionError`.
+The manager the hooks below read comes from `GameShell` while a match is running. Outside one — in a subtree that renders assets with no `GameShell` above it — the manager in context is the app-level `DelegatingAssetManager`, and what it can reach is whatever is bound to it at that moment: a match's manager, the shell audio session's inventory (§4.25), or nothing at all, in which case every load rejects `NoActiveGameSessionError`.
 
 `renderer/app/gameAssetSession.tsx` is the seam for that case, and it is where a game-asset manager is built for a renderer subtree:
 
-- **`<GameAssetSession assetManifest>`** — exported to an app's own Next host tree as `@chimera-engine/renderer/shell/gameAssetSession` (Invariant #96). It builds a manager for the manifest and publishes it to `useAsset` / `useModelInstance` / `useAssetManager` consumers in the subtree. It registers no `SetGameAssetManagerContext` delegate, so a session outside a match never redirects the app-level `AudioManager` at its own manifest.
+- **`<GameAssetSession assetManifest>`** — exported to an app's own Next host tree as `@chimera-engine/renderer/shell/gameAssetSession` (Invariant #96). It builds a manager for the manifest and publishes it to `useAsset` / `useModelInstance` / `useAssetManager` consumers in the subtree. It registers no `SetGameAssetManagerContext` delegate: a subtree publication and an app-level binding are different reaches, and this component only ever performs the first.
     - The engine mounts it too: `ShellBackgroundHost` wraps a game's `shellBackground` in one when the shell payload declares `shellBackgroundAssets`. Same component, so the same one-effect lifecycle and the same refusal of the delegate; what that mount's lifetime is, is §4.37.9's.
 - **`useRendererGameAssetManager(loadedGame)`** — for a route that hands the manager to `<GameShell assetManager>` (`/game`, `/replays/player`). It is keyed on the loaded game rather than its manifest because `LoadedRendererGame.assetManifest` is optional, and a game that declares no manifest must still get a manager.
 
@@ -570,8 +570,8 @@ The sharp edges here are different from the model ones:
 `electron/dev-tools/validate-assets/index.ts` crawls all content JSON files, collects every field whose value matches the `AssetRef` format (`<gameId>/<path>`), and asserts that the file exists on disk.
 
 Asset manifests are discovered under `apps/` by whole basename, and there are two names:
-`asset-manifest.ts`, the match inventory, and `shell-asset-manifest.ts`, the shell background's
-(§4.37.9). The name is what tells them apart; the location does not, since the walk is the whole `apps/`
+`asset-manifest.ts`, the match inventory, and `shell-asset-manifest.ts`, the shell's
+(§4.37.9, §4.25). The name is what tells them apart; the location does not, since the walk is the whole `apps/`
 crawl. Both go through the same reader under the same statically-readable-ref rules, both are resolved
 against disk, and both join the declared-ref set the on-demand membership check below reads — so a
 background asset a shell surface loads is a declared load.

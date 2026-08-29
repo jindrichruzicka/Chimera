@@ -15,13 +15,22 @@
 // packaged binary leaves behind.
 
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installMatchMedia } from '../__test-support__/installMatchMedia';
 import { createRecordingLogsApi } from '../logging/__test-support__/RecordingLogsApi';
 import { selectPendingConfirm, useConfirmDialogStore } from '../state/confirmDialogStore';
 import { _resetShellStateForTest, getShellState } from '../shell/shellStateStore';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import type { AssetManager } from '../assets/AssetManager';
+import { useAssetManager } from '../assets/AssetManagerContext.js';
+import {
+    registerRendererGame,
+    _resetRendererGameRegistryForTest,
+    type LoadedRendererGame,
+    type LoadedRendererGameShell,
+} from '../game/rendererGameRegistry';
 import { AppShell } from './AppShell';
 
 const audioMocks = vi.hoisted(() => ({
@@ -277,5 +286,94 @@ describe('AppShell — shell-state bridge', () => {
         );
 
         expect(getShellState().surface).toBe('settings');
+    });
+});
+
+// ── The shell-scoped audio session ────────────────────────────────────────────
+//
+// `useSound`/`useMusicTrack` resolve their clips through the APP-LEVEL asset
+// manager (Invariant #64), which has a delegate only while something registers
+// one. That the shell session is mounted HERE — at the app root, above every
+// screen — is what gives a menu bed one lifetime across `/main-menu → /settings`;
+// asserted through the manager a consumer actually reads, not on the JSX.
+describe('AppShell — shell audio session', () => {
+    const SHELL_CLIP = 'shell-audio-probe/audio/sfx/select.ogg' as AssetRef<AudioClipAsset>;
+    const CLIP_METADATA = { durationSeconds: 12 };
+
+    let appLevelManager: AssetManager | null;
+
+    beforeEach(() => {
+        // The load chain below settles on microtasks; the outer fake timers make
+        // every awaited flush a manual clock advance for no gain here.
+        vi.useRealTimers();
+        appLevelManager = null;
+    });
+
+    afterEach(() => {
+        _resetRendererGameRegistryForTest();
+    });
+
+    /** Captures the manager `useAssetManager()` hands a consumer under the shell. */
+    function CaptureAppLevelManager(): null {
+        appLevelManager = useAssetManager();
+        return null;
+    }
+
+    function registerProbeGame(shell: LoadedRendererGameShell): void {
+        registerRendererGame({
+            gameId: 'shell-audio-probe',
+            loadGame: () =>
+                Promise.resolve({ registry: { playfield: () => null } } as LoadedRendererGame),
+            loadShell: () => Promise.resolve(shell),
+        });
+    }
+
+    async function renderOnMainMenu(): Promise<void> {
+        navigationState.pathname = '/main-menu';
+        navigationState.search = 'gameId=shell-audio-probe';
+        window.history.replaceState({}, '', '/main-menu?gameId=shell-audio-probe');
+        render(
+            <AppShell>
+                <CaptureAppLevelManager />
+            </AppShell>,
+        );
+        await waitFor(() => {
+            expect(getShellState().gameId).toBe('shell-audio-probe');
+        });
+    }
+
+    it('leaves the app-level manager delegate-less when the game declares no shell audio', async () => {
+        // The negative control: without the declaration nothing registers, and a
+        // menu bed dies in the swallowed NoActiveGameSessionError it always has.
+        registerProbeGame({});
+
+        await renderOnMainMenu();
+
+        await waitFor(() => {
+            expect(appLevelManager).not.toBeNull();
+        });
+        expect(appLevelManager?.getManifestMetadata(SHELL_CLIP)).toBeUndefined();
+    });
+
+    it('registers the declaring game shell inventory on the app-level manager on /main-menu', async () => {
+        registerProbeGame({
+            shellAudioAssets: {
+                gameId: 'shell-audio-probe',
+                entries: [
+                    {
+                        ref: SHELL_CLIP,
+                        kind: 'audio-clip',
+                        priority: 'deferred',
+                        metadata: CLIP_METADATA,
+                    },
+                ],
+            },
+        });
+
+        await renderOnMainMenu();
+
+        await waitFor(() => {
+            expect(appLevelManager?.getManifestMetadata(SHELL_CLIP)).toEqual(CLIP_METADATA);
+        });
     });
 });

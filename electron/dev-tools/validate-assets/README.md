@@ -8,8 +8,8 @@ non-empty bucket, and `ok` is the conjunction over the ones that fail a build
 (`unresolvedOnDemandLoads` prints as a warning and does not).
 
 A game may ship two manifests — `asset-manifest.ts` for the match, and
-`shell-asset-manifest.ts` for what its shell background loads (forwarded as
-`shellBackgroundAssets`). How the two are discovered and where they differ is
+`shell-asset-manifest.ts` for what its shell surfaces load (forwarded as
+`shellBackgroundAssets` and/or `shellAudioAssets`). How the two are discovered and where they differ is
 [§4.10 CI Validation](../../../docs/core-components/asset-reference-system.md#ci-validation)'s.
 
 It enforces **Invariants #22, #52, #97 and #125**, and satisfies **#20** by

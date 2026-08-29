@@ -6,8 +6,8 @@
 `ShellBackgroundHost` wraps a declared `shellBackground` in the existing
 `GameAssetSession` when it is present. Until now a shell background rendered above
 every asset owner there is: the manager in context on `main-menu`, `settings`,
-`lobby` and a game's declared pages is the app-level `DelegatingAssetManager`, whose
-delegate only `GameShell` sets, so a background's `useAsset` / `useModelInstance` /
+`lobby` and a game's declared pages is the app-level `DelegatingAssetManager`, which
+held no background manifest, so a background's `useAsset` / `useModelInstance` /
 `useAnimationSheet` rejected `NoActiveGameSessionError`. With the manifest declared
 they resolve against the game's own manager, and that manifest's critical entries are
 preloaded like a page's.

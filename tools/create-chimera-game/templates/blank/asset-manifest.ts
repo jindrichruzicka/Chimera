@@ -34,10 +34,10 @@
 // per game: a name two of this game's manifests disagree about is dropped rather
 // than guessed at, and the loads that named it stop being checked.
 //
-// THE SHELL BACKGROUND HAS ITS OWN. A menu background that renders manifest
-// assets is loaded outside a match, so it gets its own asset session and its own
-// inventory: declare those refs in `shell-asset-manifest.ts` beside this file and
-// forward it from `renderer/loaders.ts` as the shell's `shellBackgroundAssets`.
+// THE SHELL HAS ITS OWN. What a menu background renders and what the menu
+// screens sound is loaded outside a match, so it gets its own inventory: declare
+// those refs in `shell-asset-manifest.ts` beside this file and forward it from
+// `renderer/loaders.ts` as `shellBackgroundAssets`, `shellAudioAssets`, or both.
 // Those two names are the ones `validate:assets` reads a manifest from — a file
 // under some other name is not one that fails to validate, it is one the gate
 // never opens.

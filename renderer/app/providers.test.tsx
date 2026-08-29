@@ -32,6 +32,7 @@ const providerMocks = vi.hoisted(() => {
         }),
         dispose: vi.fn(),
         setDelegate: vi.fn(),
+        releaseDelegate: vi.fn(),
     };
     const audioManager = {
         play: vi.fn(() => ({
@@ -126,6 +127,7 @@ beforeEach(() => {
     providerMocks.createKeyBindingRepository.mockClear();
     providerMocks.delegatingAssetManager.dispose.mockClear();
     providerMocks.delegatingAssetManager.setDelegate.mockClear();
+    providerMocks.delegatingAssetManager.releaseDelegate.mockClear();
     providerMocks.audioManager.dispose.mockClear();
     providerMocks.inputManager.start.mockClear();
     providerMocks.inputManager.stop.mockClear();
@@ -179,6 +181,14 @@ describe('Providers', () => {
             'data-audio-manager',
             'provided',
         );
+        expect(screen.getByTestId('provider-probe')).toHaveAttribute(
+            'data-set-game-delegate',
+            'provided',
+        );
+        expect(screen.getByTestId('provider-probe')).toHaveAttribute(
+            'data-release-game-delegate',
+            'provided',
+        );
         expect(providerMocks.createDelegatingAssetManager).toHaveBeenCalledOnce();
         expect(providerMocks.createAudioManager).toHaveBeenCalledOnce();
         expect(providerMocks.createAudioManager).toHaveBeenCalledWith(
@@ -212,6 +222,27 @@ describe('Providers', () => {
         expect(providerMocks.delegatingAssetManager.setDelegate).toHaveBeenLastCalledWith(null);
     });
 
+    it('provides a release verb wired to the delegating manager, distinct from the setter', () => {
+        const shellManager = createGameAssetManagerStub();
+        const { unmount } = render(
+            <Providers>
+                <DelegateReleaseProbe manager={shellManager} />
+            </Providers>,
+        );
+
+        expect(providerMocks.delegatingAssetManager.setDelegate).toHaveBeenCalledWith(shellManager);
+        expect(providerMocks.delegatingAssetManager.releaseDelegate).not.toHaveBeenCalled();
+
+        unmount();
+
+        // The release goes through `releaseDelegate`, NOT `setDelegate(null)`:
+        // a shell-scoped registrant must not clear a binding it no longer owns.
+        expect(providerMocks.delegatingAssetManager.releaseDelegate).toHaveBeenCalledWith(
+            shellManager,
+        );
+        expect(providerMocks.delegatingAssetManager.setDelegate).not.toHaveBeenCalledWith(null);
+    });
+
     it('logs and provides noop audio when AudioManager creation fails', () => {
         const setupError = new Error('AudioContext unavailable');
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -239,7 +270,7 @@ describe('Providers', () => {
 function ContextProbe(): React.ReactElement {
     const assetManager = useAssetManager();
     const audioManager = useAudioManager();
-    const setGameAssetManager = React.useContext(SetGameAssetManagerContext);
+    const binding = React.useContext(SetGameAssetManagerContext);
     const expectedAudioManager = providerMocks.audioManager as unknown as AudioManager;
     const expectedAssetManager =
         providerMocks.delegatingAssetManager as unknown as DelegatingAssetManager;
@@ -249,31 +280,44 @@ function ContextProbe(): React.ReactElement {
             data-testid="provider-probe"
             data-asset-manager={assetManager === expectedAssetManager ? 'provided' : 'wrong'}
             data-audio-manager={audioManager === expectedAudioManager ? 'provided' : 'wrong'}
-            data-set-game-delegate={
-                typeof setGameAssetManager === 'function' ? 'provided' : 'missing'
+            data-set-game-delegate={typeof binding?.set === 'function' ? 'provided' : 'missing'}
+            data-release-game-delegate={
+                typeof binding?.release === 'function' ? 'provided' : 'missing'
             }
         />
     );
 }
 
 function DelegateSetterProbe({ manager }: { readonly manager: AssetManager }): React.ReactElement {
-    const setGameAssetManager = React.useContext(SetGameAssetManagerContext);
+    const binding = React.useContext(SetGameAssetManagerContext);
 
     React.useEffect(() => {
-        setGameAssetManager?.(manager);
+        binding?.set(manager);
         return () => {
-            setGameAssetManager?.(null);
+            binding?.set(null);
         };
-    }, [manager, setGameAssetManager]);
+    }, [manager, binding]);
 
     return (
         <div
             data-testid="delegate-setter-probe"
-            data-set-game-delegate={
-                typeof setGameAssetManager === 'function' ? 'provided' : 'missing'
-            }
+            data-set-game-delegate={typeof binding?.set === 'function' ? 'provided' : 'missing'}
         />
     );
+}
+
+/** The shell-scoped registrant's shape: register with `set`, hand back with `release`. */
+function DelegateReleaseProbe({ manager }: { readonly manager: AssetManager }): React.ReactElement {
+    const binding = React.useContext(SetGameAssetManagerContext);
+
+    React.useEffect(() => {
+        binding?.set(manager);
+        return () => {
+            binding?.release(manager);
+        };
+    }, [manager, binding]);
+
+    return <div data-testid="delegate-release-probe" />;
 }
 
 function NoopAudioProbe(): React.ReactElement {

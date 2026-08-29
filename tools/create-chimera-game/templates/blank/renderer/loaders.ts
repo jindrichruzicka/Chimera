@@ -42,11 +42,19 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
 //     to ask first, through the engine's one confirm dialog.
 //   - `shellBackground` replaces the engine's flat menu surface with a component
 //     of this game's own. One that renders manifest assets also needs
-//     `shellBackgroundAssets`: outside a match there is no game asset manager in
-//     context, so every load rejects until the shell payload declares a manifest
-//     for the engine to open a session around. Declare those refs in
+//     `shellBackgroundAssets`, the declaration the engine opens an asset session
+//     around, so the background resolves its own refs rather than whatever the
+//     app-level manager happens to reach. Declare those refs in
 //     `shell-asset-manifest.ts` at the app root — the asset validator reads that
 //     name — and forward the manifest here.
+//   - `shellAudioAssets` gives the menu a voice. The audio hooks resolve their
+//     clips through the app-level audio manager, which reaches a game's clips
+//     only while something binds an inventory to it — a match does, and outside
+//     one this declaration is what does. Declare the clips in the same
+//     `shell-asset-manifest.ts` and forward it here, and `useSound` /
+//     `useMusicTrack` work on the menu screens. `shellMusicBed: { ref }` beside
+//     it hands the engine a loop to play across those screens for you; it fades
+//     out on its own when a match starts.
 //   - `shellRoutes` promotes this app's OWN Next routes — a credits screen, a
 //     codex — to first-class shell pages: declare `['/credits']` here, add
 //     `renderer/app/credits/page.tsx`, and the game background persists behind

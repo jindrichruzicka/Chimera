@@ -39,6 +39,7 @@ export {
     loadRendererGame,
     loadRendererGameShell,
     registerRendererGame,
+    type GameShellMusicBed,
     type GameTranslations,
     type LoadedRendererGame,
     type LoadedRendererGameShell,

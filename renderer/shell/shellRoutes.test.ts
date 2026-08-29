@@ -11,6 +11,7 @@ import {
     isEngineOwnedRoute,
     matchesDeclaredShellRoute,
     normalizeRoutePath,
+    SHELL_AUDIO_SURFACES,
     SHELL_BACKGROUND_SURFACES,
 } from './shellRoutes';
 
@@ -217,5 +218,42 @@ describe('SHELL_BACKGROUND_SURFACES', () => {
 
     it('excludes boot, so an unclassified route paints nothing', () => {
         expect(SHELL_BACKGROUND_SURFACES.has('boot')).toBe(false);
+    });
+});
+
+describe('SHELL_AUDIO_SURFACES', () => {
+    it('holds every shell screen a menu bed plays across, including the two the background skips', () => {
+        expect([...SHELL_AUDIO_SURFACES].sort()).toEqual([
+            'lobby',
+            'main-menu',
+            'page',
+            'replays',
+            'saves',
+            'settings',
+        ]);
+    });
+
+    it('is a separate set from the background one, not an alias of it', () => {
+        // The two answer different questions and the audio set is the wider of
+        // them: `/saves` and `/replays` carry no background but do carry the bed,
+        // so a shared constant would either silence those two or paint a
+        // background on them.
+        expect(SHELL_AUDIO_SURFACES).not.toBe(SHELL_BACKGROUND_SURFACES);
+        expect(SHELL_AUDIO_SURFACES.has('saves')).toBe(true);
+        expect(SHELL_BACKGROUND_SURFACES.has('saves')).toBe(false);
+        expect(SHELL_AUDIO_SURFACES.has('replays')).toBe(true);
+        expect(SHELL_BACKGROUND_SURFACES.has('replays')).toBe(false);
+    });
+
+    it('excludes the match surface, so the shell session never runs alongside a match', () => {
+        expect(SHELL_AUDIO_SURFACES.has('match')).toBe(false);
+    });
+
+    it('excludes the replay player, which plays a match back rather than framing one', () => {
+        expect(SHELL_AUDIO_SURFACES.has('replay-player')).toBe(false);
+    });
+
+    it('excludes boot, so the logo screen and the developer routes stay silent', () => {
+        expect(SHELL_AUDIO_SURFACES.has('boot')).toBe(false);
     });
 });

@@ -13,6 +13,7 @@ import type {
     GameLanguage,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import type { GameIconSet } from '../components/ui/icons/registry.js';
 import type { InputAction } from '../input/InputAction.js';
 import type { TranslationBundle } from '../i18n/translation-bundle.js';
@@ -25,6 +26,7 @@ import {
     loadRendererGame,
     loadRendererGameShell,
     registerRendererGame,
+    type GameShellMusicBed,
     type GameTranslations,
     type LoadedRendererGame,
     type LoadedRendererGameShell,
@@ -1098,6 +1100,29 @@ describe('rendererGameRegistry', () => {
             expectTypeOf<ShellShape['shellBackgroundAssets']>().toEqualTypeOf<
                 AssetManifest | undefined
             >();
+        });
+
+        it('shell.shellAudioAssets is typed as AssetManifest | undefined', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['shellAudioAssets']>().toEqualTypeOf<
+                AssetManifest | undefined
+            >();
+        });
+
+        it('shell.shellMusicBed is typed as GameShellMusicBed | undefined', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['shellMusicBed']>().toEqualTypeOf<
+                GameShellMusicBed | undefined
+            >();
+        });
+
+        it('a music bed names an audio clip ref and nothing else is required', () => {
+            // The bed is DECLARATION, not a call: `ref` alone is a complete one, and
+            // both knobs beside it stay optional so a game that just wants a menu
+            // loop writes one field.
+            expectTypeOf<GameShellMusicBed['ref']>().toEqualTypeOf<AssetRef<AudioClipAsset>>();
+            expectTypeOf<GameShellMusicBed['volume']>().toEqualTypeOf<number | undefined>();
+            expectTypeOf<GameShellMusicBed['fadeInMs']>().toEqualTypeOf<number | undefined>();
         });
 
         it('shell.preloadImages is typed as readonly string[] | undefined', () => {

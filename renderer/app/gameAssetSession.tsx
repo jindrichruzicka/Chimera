@@ -102,9 +102,9 @@ export interface GameAssetSessionProps {
  * This is the second owner Invariant #21 names: it builds the manager AND
  * disposes it, on unmount and whenever the manifest identity changes, because
  * no GameShell exists to do either. It does **not** register itself as the
- * app-level `DelegatingAssetManager` delegate — that binding exists so the
- * app-level `AudioManager` can reach a *match's* assets, and a session outside
- * a match must not impersonate one.
+ * app-level `DelegatingAssetManager` delegate: publishing to a subtree and
+ * binding the app-level manager are different reaches, and this component
+ * performs only the first.
  *
  * The manager is allocated in a commit-phase effect, never during render:
  * StrictMode double-invokes render-phase factories and discards one result,

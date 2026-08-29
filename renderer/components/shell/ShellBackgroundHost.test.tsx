@@ -504,7 +504,7 @@ describe('ShellBackgroundHost — the shell background asset session', () => {
      * through it rejects `NoActiveGameSessionError`. Wrapping the host in it is
      * what makes the session's provider have something to OVERRIDE — without it
      * a missing session would read as a thrown `useAssetManager` rather than as
-     * the delegate-less rejection the shell actually gets today.
+     * a rejected load.
      */
     function renderUnderAppLevelManager(node: React.ReactElement): ReturnType<typeof render> {
         return render(
@@ -811,16 +811,16 @@ describe('ShellBackgroundHost — the shell background asset session', () => {
     });
 
     it('never registers the shell session as the app-level game asset delegate', async () => {
-        // Invariant #21: `SetGameAssetManagerContext` exists so the app-level
-        // `AudioManager` reaches a MATCH's assets. A shell session that
-        // registered there would redirect every engine sound lookup at the
-        // menu background's manifest. This and the sibling above are guards on
+        // Invariant #21: `SetGameAssetManagerContext` binds what the app-level
+        // `AudioManager` resolves a clip against. A background session that
+        // registered here would redirect every engine sound lookup at the menu
+        // background's manifest. This and the sibling above are guards on
         // the session's SHAPE rather than on its arrival, so neither could be
         // red before one existed: their mutants are a host that reaches for a
         // fresh session hook instead of the one that already declines the
         // delegate, and one that builds a session with nothing to publish to.
         instrumentSessionManagers([]);
-        const setGameAssetManager = vi.fn();
+        const binding = { set: vi.fn(), release: vi.fn() };
         setSurface('main-menu', '/main-menu', 'tactics');
         mockLoadRendererGameShell.mockResolvedValue({
             shellBackground: AssetProbeBackground,
@@ -828,13 +828,14 @@ describe('ShellBackgroundHost — the shell background asset session', () => {
         } satisfies LoadedRendererGameShell);
 
         renderUnderAppLevelManager(
-            <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
+            <SetGameAssetManagerContext.Provider value={binding}>
                 <ShellBackgroundHost />
             </SetGameAssetManagerContext.Provider>,
         );
 
         await screen.findByTestId('tactics-shell-background');
-        expect(setGameAssetManager).not.toHaveBeenCalled();
+        expect(binding.set).not.toHaveBeenCalled();
+        expect(binding.release).not.toHaveBeenCalled();
     });
 });
 

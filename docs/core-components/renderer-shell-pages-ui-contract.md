@@ -586,8 +586,8 @@ depend on Electron/main-process APIs directly.
 
 A background that renders manifest assets — a model, a sprite sheet, an animation sheet — needs a
 game-asset `AssetManager`, and above `GameShell` there is none: the manager in context is the
-app-level `DelegatingAssetManager`, whose delegate only a match sets, so every load rejects
-`NoActiveGameSessionError` (§4.10).
+app-level `DelegatingAssetManager`, which reaches whatever inventory is bound to it at the time
+(§4.10).
 
 `shellBackgroundAssets` is the opt-in. When the shell payload declares one, the host wraps the
 background component — and only that component — in the same `GameAssetSession` a game-owned page
@@ -601,8 +601,8 @@ uses, so `useAsset` / `useModelInstance` / `useAnimationSheet` resolve on `main-
   cache across `/game`. What that flip is NOT is simultaneous with the router's: `ShellStateBridge`
   publishes the surface from an effect, a commit after the route change, so the match route has
   already committed by the time the background tears down.
-- It registers no `SetGameAssetManagerContext` delegate, so a menu manifest never stands in for a
-  match's assets when the app-level `AudioManager` resolves a clip.
+- It registers no `SetGameAssetManagerContext` delegate: publishing to a subtree and binding the
+  app-level manager are different reaches, and it only ever performs the first.
 
 Declaring it is not required and is not free: a game that omits it renders through the host
 unchanged and builds no manager. Declared without a `shellBackground`, it is inert — a session with

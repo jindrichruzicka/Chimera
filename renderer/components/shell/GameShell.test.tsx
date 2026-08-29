@@ -27,7 +27,10 @@ import { createDelegatingAssetManager } from '../../assets/DelegatingAssetManage
 import { createRecordingLogsApi } from '../../logging/__test-support__/RecordingLogsApi.js';
 import { createStubAssetManager } from '../../assets/__test-support__/StubAssetManager.js';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
-import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
+import {
+    SetGameAssetManagerContext,
+    type GameAssetManagerBinding,
+} from '../../assets/SetGameAssetManagerContext';
 import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerContext.js';
 import { createAudioManagerSpy } from '../../audio/__test-support__/AudioManagerStubs.js';
 import {
@@ -1006,6 +1009,28 @@ interface ShellContextOverrides {
     readonly setGameAssetManager?: (manager: AssetManager | null) => void;
 }
 
+/**
+ * One binding per setter identity. `wrapWithAudio` runs on every `rerender`, so
+ * building the binding inline would hand GameShell a new object each time and make
+ * its `[assetManager, setGameAssetManager]` dependency list unobservable — the
+ * register/clear counts below would then measure React re-running the effect rather
+ * than the component deciding to.
+ */
+const gameAssetManagerBindings = new WeakMap<
+    (manager: AssetManager | null) => void,
+    GameAssetManagerBinding
+>();
+
+function bindingFor(set: (manager: AssetManager | null) => void): GameAssetManagerBinding {
+    const existing = gameAssetManagerBindings.get(set);
+    if (existing !== undefined) {
+        return existing;
+    }
+    const binding: GameAssetManagerBinding = { set, release: vi.fn() };
+    gameAssetManagerBindings.set(set, binding);
+    return binding;
+}
+
 function renderWithAudio(
     element: React.ReactElement,
     audioManager = createAudioManagerSpy(),
@@ -1026,7 +1051,7 @@ function wrapWithAudio(
     const inputRegistry = overrides.inputRegistry ?? createInputActionRegistry();
     const setGameAssetManager = overrides.setGameAssetManager ?? vi.fn();
     return (
-        <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
+        <SetGameAssetManagerContext.Provider value={bindingFor(setGameAssetManager)}>
             <InputActionRegistryContext.Provider value={inputRegistry}>
                 <AudioManagerContext.Provider value={audioManager}>
                     {element}

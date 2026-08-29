@@ -6,7 +6,10 @@ import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/conten
 import type { AssetManager } from '../assets/AssetManager';
 import { AssetManagerProvider } from '../assets/AssetManagerProvider.js';
 import { createDelegatingAssetManager } from '../assets/DelegatingAssetManager';
-import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
+import {
+    SetGameAssetManagerContext,
+    type GameAssetManagerBinding,
+} from '../assets/SetGameAssetManagerContext';
 import { createAudioManager, type AudioHandle, type AudioManager } from '../audio/AudioManager';
 import { AudioManagerProvider } from '../audio/AudioManagerProvider.js';
 import type { InputAction } from '../input/InputAction.js';
@@ -69,7 +72,7 @@ export interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps): React.ReactElement {
     // DelegatingAssetManager forwards load/get/registerManifest calls to whatever
-    // game-level AssetManager GameShell registers via SetGameAssetManagerContext.
+    // game-level AssetManager is registered through SetGameAssetManagerContext.
     // This allows the app-level AudioManager to load game-specific audio assets
     // without owning the game AssetManager lifecycle.
     const delegatingAssetManager = React.useMemo(() => createDelegatingAssetManager(), []);
@@ -100,10 +103,18 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
         // §4.26: the Providers-owned InputManager is an app-lifetime singleton.
     }, []);
 
-    const setGameAssetManager = React.useCallback(
-        (manager: AssetManager | null) => {
-            delegatingAssetManager.setDelegate(manager);
-        },
+    // One binding object, memoised on the manager it wraps, so both verbs keep
+    // their identity for as long as the manager does and either is safe in a
+    // registrant's dependency list.
+    const gameAssetManagerBinding = React.useMemo<GameAssetManagerBinding>(
+        () => ({
+            set: (manager: AssetManager | null) => {
+                delegatingAssetManager.setDelegate(manager);
+            },
+            release: (manager: AssetManager) => {
+                delegatingAssetManager.releaseDelegate(manager);
+            },
+        }),
         [delegatingAssetManager],
     );
 
@@ -111,7 +122,7 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
 
     return (
         <DeviceInfoProvider systemApi={systemApi}>
-            <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
+            <SetGameAssetManagerContext.Provider value={gameAssetManagerBinding}>
                 <AssetManagerProvider assetManager={delegatingAssetManager}>
                     <AudioManagerProvider audioManager={audioManager}>
                         <InputActionRegistryContext.Provider value={inputRegistry}>
