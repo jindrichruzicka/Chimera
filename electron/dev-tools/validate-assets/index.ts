@@ -49,6 +49,28 @@ import { isDirectInvocation } from '../dev-harness/harness.js';
  */
 const GAMES_DIR = 'apps';
 const GAMES_ROOT = [GAMES_DIR] as const;
+/**
+ * The SHELL BACKGROUND's inventory, forwarded as the shell payload's
+ * `shellBackgroundAssets`. A background that renders manifest assets gets its
+ * own `GameAssetSession` above `GameShell`, so what it loads is an inventory the
+ * game ships separately from the match's.
+ */
+const SHELL_ASSET_MANIFEST_FILE_NAME = 'shell-asset-manifest.ts';
+
+/**
+ * The file names a game declares an `AssetManifest` in. What the rule is — the
+ * name deciding which inventory a file is, the depth not deciding anything — is
+ * §4.10's CI Validation section, and `findAssetManifestFiles`' tests measure it.
+ *
+ * Closed and matched on the WHOLE basename, because a suffix or case-folded
+ * match would pull in a game's `__test-support__` doubles and per-screen
+ * helpers, and a manifest nobody ships must never satisfy membership for a ref
+ * that is not really there.
+ */
+const ASSET_MANIFEST_FILE_NAMES: ReadonlySet<string> = new Set([
+    'asset-manifest.ts',
+    SHELL_ASSET_MANIFEST_FILE_NAME,
+]);
 /** Engine-side scene descriptors, scanned alongside each game's own. */
 const SCENE_ROOT = ['simulation', 'scene'] as const;
 /** Engine-side asset loaders, scanned to widen the known asset-kind set. */
@@ -268,12 +290,23 @@ export async function validateAssetWorkspace(
 
     const refs: AssetReference[] = [];
     const manifestRefs: AssetReference[] = [];
+    const shellManifestRefs: AssetReference[] = [];
     const fontRefs: AssetReference[] = [];
     const manifestKinds: UnknownAssetManifestKind[] = [];
     const invalidCueSheets: InvalidAudioCueSheet[] = [];
     const invalidAnimationSheets: InvalidAnimationSheet[] = [];
     const malformed: MalformedAssetReference[] = [];
     const manifestConstMembers = new Map<string, string>();
+    /**
+     * Const names one game's manifests disagree about. A game now ships more than one
+     * manifest file, and the tier-B key is `<gameId> <Const>.<member>` — the caller
+     * names a const, never a file — so two files declaring the same name with
+     * different refs leave the key unanswerable. Resolving it would report a ref the
+     * calling source never names, in whichever direction path order happened to fall.
+     * The entry is dropped instead, which degrades the load to the unresolved WARNING
+     * an unreadable ref already gets rather than inventing a finding.
+     */
+    const ambiguousConstMembers = new Set<string>();
 
     for (const filePath of dataJsonFiles) {
         const sourceText = await host.readFile(filePath);
@@ -293,20 +326,36 @@ export async function validateAssetWorkspace(
     for (const filePath of assetManifestFiles) {
         const sourceText = await host.readFile(filePath);
         const collected = collectAssetManifestRefs(sourceText, filePath);
-        manifestRefs.push(...collected.refs);
+        // Which inventory the entries belong to is the file's NAME. Only Invariant
+        // #22's coverage set reads the split; every other gate below takes both.
+        if (basename(filePath) === SHELL_ASSET_MANIFEST_FILE_NAME) {
+            shellManifestRefs.push(...collected.refs);
+        } else {
+            manifestRefs.push(...collected.refs);
+        }
         manifestKinds.push(...collected.kinds);
         invalidCueSheets.push(...collected.invalidCueSheets);
         invalidAnimationSheets.push(...collected.invalidAnimationSheets);
         malformed.push(...collected.malformed);
         // Key the tier-B const map by the manifest's own game so an identically-named
         // const in another game's manifest cannot cross-resolve an on-demand load
-        // (a manifest lives at apps/<gameId>/asset-manifest.ts).
+        // (a manifest lives under apps/<gameId>/).
         const manifestGameId = gameIdFromPath(workspaceRoot, filePath);
         if (manifestGameId !== undefined) {
             for (const [member, ref] of collected.constMembers) {
-                manifestConstMembers.set(`${manifestGameId} ${member}`, ref);
+                const key = `${manifestGameId} ${member}`;
+                const already = manifestConstMembers.get(key);
+                if (already !== undefined && already !== ref) {
+                    ambiguousConstMembers.add(key);
+                } else {
+                    manifestConstMembers.set(key, ref);
+                }
             }
         }
+    }
+
+    for (const key of ambiguousConstMembers) {
+        manifestConstMembers.delete(key);
     }
 
     for (const filePath of gameFontSourceFiles) {
@@ -343,7 +392,7 @@ export async function validateAssetWorkspace(
     }
 
     const missing: MissingAssetReference[] = [];
-    for (const ref of [...refs, ...manifestRefs]) {
+    for (const ref of [...refs, ...manifestRefs, ...shellManifestRefs]) {
         const expectedPath = resolve(
             workspaceRoot,
             ...GAMES_ROOT,
@@ -375,16 +424,34 @@ export async function validateAssetWorkspace(
         workspaceRoot,
     );
 
+    // Invariant #22's coverage set is the MATCH manifests alone. `refs` is content
+    // JSON and scene `requiredAssets` — match refs, resolved by the manager
+    // `GameShell` builds, which is handed the match manifest and never the shell
+    // background's. Letting the background's inventory answer for them would accept
+    // a ref the match cannot load, so the shell manifest widens the declared set
+    // below without widening this one.
     const manifestRefSet = new Set(manifestRefs.map((ref) => ref.ref));
     const unmanifested = refs.filter((ref) => !manifestRefSet.has(ref.ref));
     const unknownKinds = manifestKinds.filter((entry) => !assetLoaderKinds.has(entry.kind));
 
     // An on-demand load is "declared" if its ref appears in ANY declared surface
-    // (data JSON, scene requiredAssets, asset manifest, or font src). Manifest
-    // coverage per Invariant #22 is enforced transitively by `unmanifested`, so a
-    // declared-but-unmanifested ref is already flagged there — no double-counting.
+    // (data JSON, scene requiredAssets, either asset manifest, or font src).
+    // Manifest coverage per Invariant #22 is enforced transitively by
+    // `unmanifested`, so a declared-but-unmanifested ref is already flagged there —
+    // no double-counting.
+    //
+    // Union, not a per-surface set — the rule Invariant #52 already states, kept
+    // rather than narrowed. Its accepted cost grows by one shape here: a MATCH
+    // surface loading a ref only the shell background manifest declares now passes,
+    // and would reject at runtime with `UnknownAssetManifestEntryError`. It is the
+    // same hole another game's manifest has always opened, and the alternative needs
+    // a call-site→session classifier the tool cannot have: a background is composed
+    // from `components/` as readily as from `shell/`, so a shell-only union would
+    // fail legitimate trees to catch this one.
     const declaredRefSet = new Set(
-        [...refs, ...manifestRefs, ...fontRefs].map((reference) => reference.ref),
+        [...refs, ...manifestRefs, ...shellManifestRefs, ...fontRefs].map(
+            (reference) => reference.ref,
+        ),
     );
     const undeclaredOnDemandLoads = onDemandRefs.filter(
         (reference) => !declaredRefSet.has(reference.ref),
@@ -416,7 +483,7 @@ export async function validateAssetWorkspace(
         // tool prints could not fall when a whole manifest stopped being read — the
         // reason a walker that silently dropped every Tactics ref reported the same
         // "all files exist" as a working one. It counts declared refs.
-        checkedRefs: refs.length + manifestRefs.length + fontRefs.length,
+        checkedRefs: refs.length + manifestRefs.length + shellManifestRefs.length + fontRefs.length,
         missing,
         missingFontSources,
         forbiddenRendererPublicAssets,
@@ -2157,7 +2224,7 @@ async function findOnDemandLoadSourceFiles(workspaceRoot: string): Promise<reado
 
 async function findAssetManifestFiles(workspaceRoot: string): Promise<readonly string[]> {
     const appsRoot = resolve(workspaceRoot, ...GAMES_ROOT);
-    return collectFiles(appsRoot, (filePath) => basename(filePath) === 'asset-manifest.ts');
+    return collectFiles(appsRoot, (filePath) => ASSET_MANIFEST_FILE_NAMES.has(basename(filePath)));
 }
 
 async function findAssetLoaderSourceFiles(workspaceRoot: string): Promise<readonly string[]> {

@@ -1,12 +1,16 @@
 # validate-assets
 
 The build-time asset-reference gate. It reads every place an `AssetRef` can be
-declared and asserts that each one resolves to a file on disk, that declared
-refs also appear in an asset manifest, and that a handful of adjacent rules
-hold. `AssetValidationReport`'s buckets in [`index.ts`](index.ts) are the
+declared and asserts that each one resolves to a file on disk, plus a handful of
+adjacent rules. `AssetValidationReport`'s buckets in [`index.ts`](index.ts) are the
 enumeration of what it checks; the printed report names one section per
 non-empty bucket, and `ok` is the conjunction over the ones that fail a build
 (`unresolvedOnDemandLoads` prints as a warning and does not).
+
+A game may ship two manifests — `asset-manifest.ts` for the match, and
+`shell-asset-manifest.ts` for what its shell background loads (forwarded as
+`shellBackgroundAssets`). How the two are discovered and where they differ is
+[§4.10 CI Validation](../../../docs/core-components/asset-reference-system.md#ci-validation)'s.
 
 It enforces **Invariants #22, #52, #97 and #125**, and satisfies **#20** by
 living outside `simulation/` — the simulation never resolves an `AssetRef`, so

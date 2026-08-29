@@ -127,7 +127,7 @@ describe('validateAssetWorkspace', () => {
         expect(output).not.toContain('tactics/textures/existing-floor.webp');
     });
 
-    it('returns exit 1 when a data JSON ref is not declared in an asset manifest', async () => {
+    it('returns exit 1 when a data JSON ref is declared in no manifest at all', async () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
@@ -3180,6 +3180,55 @@ describe('createNodeWorkspaceFileHost', () => {
 
         expect(files).toEqual([]);
     });
+
+    it('findAssetManifestFiles discovers both manifest names, at any depth under apps/', async () => {
+        // Discovery is by EXACT basename over the whole apps/ crawl — the NAME
+        // says which inventory a file is, the location says nothing. Depth is
+        // pinned here rather than left implicit because a manifest in a file
+        // this walker does not open contributes nothing: not a failure, an
+        // absence, and an absence is what a clean tree looks like too.
+        const dir = await createTempDir('chimera-assets-test');
+        const gameDir = join(dir, 'apps', 'tactics');
+        await mkdir(join(gameDir, 'shell'), { recursive: true });
+        await mkdir(join(gameDir, 'renderer', 'app'), { recursive: true });
+        await writeFile(join(gameDir, 'asset-manifest.ts'), '');
+        await writeFile(join(gameDir, 'shell-asset-manifest.ts'), '');
+        await writeFile(join(gameDir, 'shell', 'asset-manifest.ts'), '');
+        await writeFile(join(gameDir, 'renderer', 'app', 'shell-asset-manifest.ts'), '');
+
+        const host = createNodeWorkspaceFileHost();
+        const files = (await host.findAssetManifestFiles?.(dir)) ?? [];
+
+        expect(files.map((file) => relative(dir, file).split(sep).join('/'))).toEqual([
+            'apps/tactics/asset-manifest.ts',
+            'apps/tactics/renderer/app/shell-asset-manifest.ts',
+            'apps/tactics/shell-asset-manifest.ts',
+            'apps/tactics/shell/asset-manifest.ts',
+        ]);
+    });
+
+    it('findAssetManifestFiles excludes near-miss basenames rather than reading them as manifests', async () => {
+        // Exactness in every direction. A test double or a per-screen helper
+        // whose name merely ENDS in the manifest name is not an inventory the
+        // game ships, and reading one would let a ref that exists nowhere in a
+        // shipped manifest satisfy the membership set. Case is part of the name:
+        // the crawl runs on case-insensitive file systems too, so a case-folded
+        // lookup would accept a spelling the repo does not use and cannot be
+        // ruled out by the platform.
+        const dir = await createTempDir('chimera-assets-test');
+        const gameDir = join(dir, 'apps', 'tactics');
+        await mkdir(gameDir, { recursive: true });
+        await writeFile(join(gameDir, 'shell-asset-manifest.test.ts'), '');
+        await writeFile(join(gameDir, 'shell-asset-manifest.d.ts'), '');
+        await writeFile(join(gameDir, 'menu-shell-asset-manifest.ts'), '');
+        await writeFile(join(gameDir, 'shell-asset-manifest.tsx'), '');
+        await writeFile(join(gameDir, 'Shell-Asset-Manifest.ts'), '');
+        await writeFile(join(gameDir, 'Asset-Manifest.ts'), '');
+
+        const host = createNodeWorkspaceFileHost();
+
+        expect((await host.findAssetManifestFiles?.(dir)) ?? []).toEqual([]);
+    });
 });
 
 // ── runValidateAssetsCli (real FS integration) ────────────────────────────────
@@ -3574,5 +3623,341 @@ describe('on-demand load detection — useModelInstance and the Invariant #96 su
             'apps/tactics/renderer/loaders.ts',
             'apps/tactics/shell/UnitPortrait.tsx',
         ]);
+    });
+});
+
+// ── the shell background manifest — a fixture game, run through the CLI ───────
+
+/**
+ * A game whose SHELL BACKGROUND renders manifest assets declares them in
+ * `apps/<name>/shell-asset-manifest.ts` and forwards that manifest as the shell
+ * payload's `shellBackgroundAssets`. What that second inventory is subject to,
+ * and where it parts from the match manifest, is §4.10's CI Validation section;
+ * each case below measures one of those.
+ *
+ * The corpus is driven through `runValidateAssetsCli` on a real tree
+ * rather than through `validateAssetWorkspace` with a fake host, because the
+ * fake host is HANDED the file list: it answers `findAssetManifestFiles` from
+ * the fixture and would report a union over a file the real walker never opens.
+ * That is the same run the published `chimera-validate-assets` bin performs —
+ * the bin is the tsc emit of this module and its CLI entry calls this function
+ * (`bin.test.ts` pins both), so there is no second implementation to diverge.
+ */
+describe('shell background manifest fixture game', () => {
+    const BACKGROUND_SOURCE = `
+        import { useModelInstance } from '@chimera-engine/renderer/assets';
+        export function ActionShellBackground() {
+            return useModelInstance('action/models/menu-stage.glb');
+        }
+    `;
+
+    /** Writes one file, creating the directories above it. */
+    async function plant(root: string, relativePath: string, contents: string): Promise<void> {
+        const absolutePath = join(root, ...relativePath.split('/'));
+        await mkdir(dirname(absolutePath), { recursive: true });
+        await writeFile(absolutePath, contents);
+    }
+
+    async function runFixture(
+        build: (root: string) => Promise<void>,
+    ): Promise<{ exitCode: number; output: string }> {
+        const dir = await createTempDir('chimera-assets-test');
+        await mkdir(join(dir, 'apps'), { recursive: true });
+        await build(dir);
+        const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+        const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        const exitCode = await runValidateAssetsCli([dir]);
+        const written = [...stdout.mock.calls, ...stderr.mock.calls]
+            .map(([chunk]) => String(chunk))
+            .join('');
+
+        return { exitCode, output: written };
+    }
+
+    it('passes a background load whose ref is declared ONLY in the shell background manifest', async () => {
+        const { exitCode, output } = await runFixture(async (root) => {
+            await plant(root, 'apps/action/shell/ActionShellBackground.tsx', BACKGROUND_SOURCE);
+            await plant(
+                root,
+                'apps/action/shell-asset-manifest.ts',
+                `
+                    export const actionShellBackgroundAssets = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: 'action/models/menu-stage.glb', kind: 'gltf-model', priority: 'critical' },
+                        ],
+                    };
+                `,
+            );
+            await plant(root, 'apps/action/assets/models/menu-stage.glb', '');
+        });
+
+        expect(exitCode).toBe(0);
+        // The COUNT, not just the exit code: a walker that never opened the
+        // file reports the same "all files exist" over zero refs, and the ref
+        // being the only declaration in the tree is what makes the number a
+        // discriminator rather than a coincidence.
+        expect(output).toContain('Checked 1 asset refs');
+    });
+
+    it('resolves a shell-manifest const member the background names (tier B)', async () => {
+        const { exitCode, output } = await runFixture(async (root) => {
+            await plant(
+                root,
+                'apps/action/shell/ActionShellBackground.tsx',
+                `
+                    import { actionShellRefs } from '../shell-asset-manifest.js';
+                    export function ActionShellBackground(assetManager) {
+                        return assetManager.load(actionShellRefs.stage);
+                    }
+                `,
+            );
+            await plant(
+                root,
+                'apps/action/shell-asset-manifest.ts',
+                `
+                    export const actionShellRefs = {
+                        stage: 'action/models/menu-stage.glb',
+                    } as const;
+                    export const actionShellBackgroundAssets = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: actionShellRefs.stage, kind: 'gltf-model', priority: 'critical' },
+                        ],
+                    };
+                `,
+            );
+            await plant(root, 'apps/action/assets/models/menu-stage.glb', '');
+        });
+
+        // The same statically-readable-ref rules the match manifest gets: the
+        // const map is per game, so the shell manifest's consts resolve the
+        // game's own loads and no other game's.
+        expect(exitCode).toBe(0);
+        expect(output).toContain('Checked 1 asset refs');
+        // Exit 0 and the count are BOTH silent about whether the const resolved:
+        // an unresolved load is a warning, so a walker that read the manifest
+        // for its entries but not for its consts passes this case identically.
+        // The warning's absence is the only thing that separates them.
+        expect(output).not.toContain('could not be statically verified');
+        expect(output).not.toContain('Warning:');
+    });
+
+    it("drops a const two of a game's manifests disagree about, rather than picking one", async () => {
+        const { exitCode, output } = await runFixture(async (root) => {
+            await plant(
+                root,
+                'apps/action/screens/ActionBoard.tsx',
+                `
+                    import { actionRefs } from '../asset-manifest.js';
+                    export function ActionBoard(assetManager) {
+                        return assetManager.load(actionRefs.icon);
+                    }
+                `,
+            );
+            await plant(
+                root,
+                'apps/action/asset-manifest.ts',
+                `
+                    export const actionRefs = { icon: 'action/textures/match.png' } as const;
+                    export const actionAssetManifest = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: actionRefs.icon, kind: 'texture', priority: 'deferred' },
+                        ],
+                    };
+                `,
+            );
+            await plant(
+                root,
+                'apps/action/shell-asset-manifest.ts',
+                `
+                    export const actionRefs = { icon: 'action/textures/menu.png' } as const;
+                    export const actionShellBackgroundAssets = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: actionRefs.icon, kind: 'texture', priority: 'critical' },
+                        ],
+                    };
+                `,
+            );
+            await plant(root, 'apps/action/assets/textures/match.png', '');
+            await plant(root, 'apps/action/assets/textures/menu.png', '');
+        });
+
+        // The tier-B key is `<gameId> <Const>.<member>` — the caller names a
+        // const, never a file — so a game whose two manifests disagree about a
+        // name leaves it unanswerable. Answering anyway resolves a MATCH
+        // screen's load to `action/textures/menu.png`, a string that source
+        // never names, decided by nothing but the shell manifest sorting last.
+        // The warning is the whole discriminator: both refs are declared and
+        // both files exist, so a last-wins map produces no finding at all.
+        expect(exitCode).toBe(0);
+        expect(output).toContain('could not be statically verified');
+    });
+
+    it("keeps a const both of a game's manifests declare with the SAME ref", async () => {
+        const { exitCode, output } = await runFixture(async (root) => {
+            await plant(
+                root,
+                'apps/action/screens/ActionBoard.tsx',
+                `
+                    import { actionRefs } from '../asset-manifest.js';
+                    export function ActionBoard(assetManager) {
+                        return assetManager.load(actionRefs.icon);
+                    }
+                `,
+            );
+            const sharedConst = `
+                    export const actionRefs = { icon: 'action/textures/shared.png' } as const;
+            `;
+            await plant(
+                root,
+                'apps/action/asset-manifest.ts',
+                `${sharedConst}
+                    export const actionAssetManifest = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: actionRefs.icon, kind: 'texture', priority: 'deferred' },
+                        ],
+                    };
+                `,
+            );
+            await plant(
+                root,
+                'apps/action/shell-asset-manifest.ts',
+                `${sharedConst}
+                    export const actionShellBackgroundAssets = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: actionRefs.icon, kind: 'texture', priority: 'critical' },
+                        ],
+                    };
+                `,
+            );
+            await plant(root, 'apps/action/assets/textures/shared.png', '');
+        });
+
+        // Two manifests naming one ref is the layout a game reaches for when its
+        // menu and its match show the same art — nothing is unanswerable there,
+        // and dropping the key on the mere fact of a repeat would silently
+        // withdraw static verification from every load that names it. Only
+        // DISAGREEMENT is ambiguous.
+        expect(exitCode).toBe(0);
+        expect(output).not.toContain('could not be statically verified');
+    });
+
+    it("reports an unknown loader kind on a shell background manifest's own entry", async () => {
+        const { exitCode, output } = await runFixture(async (root) => {
+            await plant(
+                root,
+                'apps/action/shell-asset-manifest.ts',
+                `
+                    export const actionShellBackgroundAssets = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: 'action/models/menu-stage.glb', kind: 'hologram', priority: 'critical' },
+                        ],
+                    };
+                `,
+            );
+            await plant(root, 'apps/action/assets/models/menu-stage.glb', '');
+        });
+
+        // The loader-kind set is collected before the name fork that splits the
+        // two inventories, so it reads both. Nothing about that is visible from
+        // the fork itself: moving the collection into the match arm would be a
+        // silent exemption for every shell background manifest.
+        expect(exitCode).toBe(1);
+        expect(output).toContain('hologram');
+    });
+
+    it('fails a background load whose ref is declared in no manifest at all', async () => {
+        const { exitCode, output } = await runFixture(async (root) => {
+            await plant(root, 'apps/action/shell/ActionShellBackground.tsx', BACKGROUND_SOURCE);
+            await plant(
+                root,
+                'apps/action/shell-asset-manifest.ts',
+                `
+                    export const actionShellBackgroundAssets = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: 'action/models/other.glb', kind: 'gltf-model', priority: 'critical' },
+                        ],
+                    };
+                `,
+            );
+            await plant(root, 'apps/action/assets/models/other.glb', '');
+        });
+
+        expect(exitCode).toBe(1);
+        expect(output).toContain('Undeclared on-demand asset loads');
+        expect(output).toContain('action/models/menu-stage.glb');
+    });
+
+    it('does not let the shell background manifest answer Invariant #22 for a content-JSON ref', async () => {
+        const { exitCode, output } = await runFixture(async (root) => {
+            await plant(
+                root,
+                'apps/action/data/units.json',
+                JSON.stringify({ icon: 'action/textures/unit.png' }),
+            );
+            await plant(
+                root,
+                'apps/action/asset-manifest.ts',
+                `
+                    export const actionAssetManifest = { gameId: 'action', entries: [] };
+                `,
+            );
+            await plant(
+                root,
+                'apps/action/shell-asset-manifest.ts',
+                `
+                    export const actionShellBackgroundAssets = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: 'action/textures/unit.png', kind: 'texture', priority: 'deferred' },
+                        ],
+                    };
+                `,
+            );
+            await plant(root, 'apps/action/assets/textures/unit.png', '');
+        });
+
+        // The manifest-coverage set is the MATCH manifests alone. Content JSON
+        // and scene `requiredAssets` are match refs, resolved by the manager
+        // `GameShell` builds — and that manager is handed the match manifest,
+        // never the background's. A background inventory answering for them
+        // would accept a ref the match cannot load: the union this task adds is
+        // to the DECLARED set the on-demand check reads, and to nothing else.
+        expect(exitCode).toBe(1);
+        expect(output).toContain('Asset refs missing from manifests');
+        expect(output).toContain('action/textures/unit.png');
+    });
+
+    it('fails a shell background manifest entry whose file is not on disk', async () => {
+        const { exitCode, output } = await runFixture(async (root) => {
+            await plant(root, 'apps/action/shell/ActionShellBackground.tsx', BACKGROUND_SOURCE);
+            await plant(
+                root,
+                'apps/action/shell-asset-manifest.ts',
+                `
+                    export const actionShellBackgroundAssets = {
+                        gameId: 'action',
+                        entries: [
+                            { ref: 'action/models/menu-stage.glb', kind: 'gltf-model', priority: 'critical' },
+                        ],
+                    };
+                `,
+            );
+        });
+
+        expect(exitCode).toBe(1);
+        expect(output).toContain('action/models/menu-stage.glb');
+        // The declared ref reaches the disk check, not only the membership set:
+        // an undeclared-load report alone would be the answer a tree with NO
+        // shell manifest gives.
+        expect(output).not.toContain('Undeclared on-demand asset loads');
     });
 });

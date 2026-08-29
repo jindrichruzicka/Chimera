@@ -214,7 +214,9 @@ chimera/
 │       ├── electron/                # Electron main composition root (main.ts) + build-main.ts, the thin driver over the engine `@chimera-engine/electron/build-main` bundle plan (paths, module resolution, esbuild)
 │       ├── dev/                     # Dev-harness fixtures — profiles/ and scenarios/ (starter set scaffolded)
 │       ├── e2e/                     # Playwright E2E suite (fixtures, page objects, specs)
-│       ├── asset-manifest.ts        # Declares every AssetRef this game owns + priority (critical|deferred)
+│       ├── asset-manifest.ts        # The match inventory: AssetRefs + priority (critical|deferred)
+│       ├── shell-asset-manifest.ts  # Same, for the shell background's own assets — forwarded as shellBackgroundAssets
+│                                    #   (optional; only a background that renders manifest assets needs one)
 │       ├── manifest.ts              # GameManifest: displayName/window title, realtime + tickRateMs, optional icon + cursor + logoScreen + languages + spectators
 │       ├── settings-schema.ts       # Zod schema extending EngineSettings with game-specific fields
 │       └── package.json             # App identity + scripts; engine packages as devDependencies (#817),

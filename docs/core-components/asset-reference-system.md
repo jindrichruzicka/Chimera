@@ -20,7 +20,8 @@ The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-sy
 | `simulation/foundation/asset-ref-parse.ts` | `parseAssetRef`, `isTraversalUnsafe`, `MalformedAssetRefError` — pure string logic, no deps; shared by `simulation/content` and `renderer/`          |
 | `simulation/content/AssetRef.ts`           | `AssetRef<T>` type, open `AssetKindRegistry`, `buildAssetRef()` helper; re-exports parsing utilities from `simulation/foundation/asset-ref-parse.ts` |
 | `apps/<name>/data/*.json`                  | JSON data objects carry `AssetRef` strings as plain strings                                                                                          |
-| `apps/<name>/asset-manifest.ts`            | Declares every `AssetRef` the game exposes, runtime kind id, load priority, and optional loader metadata                                             |
+| `apps/<name>/asset-manifest.ts`            | The match inventory: `AssetRef`s the game exposes there, runtime kind id, load priority, and optional loader metadata                                |
+| `apps/<name>/shell-asset-manifest.ts`      | The same declaration for the shell background's own assets, forwarded as `shellBackgroundAssets` (§4.37.9)                                           |
 | `renderer/assets/AssetResolver.ts`         | `AssetRef<T>` → `file://` URL (env-aware: dev vs prod)                                                                                               |
 | `renderer/assets/AssetLoaderRegistry.ts`   | Runtime kind id → loader, open to game-contributed loaders without engine edits                                                                      |
 | `renderer/assets/AssetManager.ts`          | Loads, caches, and disposes resolved assets                                                                                                          |
@@ -567,6 +568,32 @@ The sharp edges here are different from the model ones:
 ## CI Validation
 
 `electron/dev-tools/validate-assets/index.ts` crawls all content JSON files, collects every field whose value matches the `AssetRef` format (`<gameId>/<path>`), and asserts that the file exists on disk.
+
+Asset manifests are discovered under `apps/` by whole basename, and there are two names:
+`asset-manifest.ts`, the match inventory, and `shell-asset-manifest.ts`, the shell background's
+(§4.37.9). The name is what tells them apart; the location does not, since the walk is the whole `apps/`
+crawl. Both go through the same reader under the same statically-readable-ref rules, both are resolved
+against disk, and both join the declared-ref set the on-demand membership check below reads — so a
+background asset a shell surface loads is a declared load.
+
+What the two are not is interchangeable. Invariant #22's manifest-coverage check stays the MATCH
+manifests alone: content JSON and scene `requiredAssets` are match refs, resolved by the manager
+`GameShell` builds, and that manager is handed the match manifest and never the background's.
+
+A file under any other name is not a manifest that fails to validate; it is one the tool never opens.
+
+Two consequences of a game shipping two manifests, both deliberate:
+
+- **A const name two of a game's manifests DISAGREE about resolves to nothing.** The manifest-const map an on-demand load is
+  resolved through is keyed `<gameId> <Const>.<member>` — a call site names a const, never a file — so
+  two of a game's manifests declaring the same const name with different refs leave the key
+  unanswerable. It is dropped, and the loads that named it degrade to the unresolved-ref warning
+  rather than resolving to whichever file the crawl reached last. Give a const one value per game.
+- **The declared-ref union stays workspace-wide.** A ref only the shell background manifest declares
+  therefore satisfies a MATCH-surface load too, which would reject at runtime with
+  `UnknownAssetManifestEntryError`. This is the union rule Invariant #52 already states, applied to
+  one more file; narrowing it would need a call-site→session classifier the tool cannot have, since a
+  background is composed from `components/` as readily as from `shell/`.
 
 > **Invariant #22** — All `AssetRef` strings must pass this validation before merge. A data object referencing a non-existent file is a CI-blocking error.
 

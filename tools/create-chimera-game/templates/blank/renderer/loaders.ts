@@ -40,6 +40,13 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
 //     game's autosave. Neither navigates: the engine's snapshot gate carries the
 //     player into the match, fade included. A button may also declare `confirm`
 //     to ask first, through the engine's one confirm dialog.
+//   - `shellBackground` replaces the engine's flat menu surface with a component
+//     of this game's own. One that renders manifest assets also needs
+//     `shellBackgroundAssets`: outside a match there is no game asset manager in
+//     context, so every load rejects until the shell payload declares a manifest
+//     for the engine to open a session around. Declare those refs in
+//     `shell-asset-manifest.ts` at the app root — the asset validator reads that
+//     name — and forward the manifest here.
 //   - `shellRoutes` promotes this app's OWN Next routes — a credits screen, a
 //     codex — to first-class shell pages: declare `['/credits']` here, add
 //     `renderer/app/credits/page.tsx`, and the game background persists behind

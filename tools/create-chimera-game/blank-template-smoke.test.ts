@@ -503,9 +503,11 @@ describe('blank template smoke harness', () => {
     });
 
     it('ships an empty asset manifest at the basename the validator discovers', async () => {
-        // `chimera-validate-assets` finds a game's manifest by BASENAME —
-        // `asset-manifest.ts` and nothing else. A differently-named file is not a
-        // manifest that fails to validate, it is a manifest the gate never sees.
+        // `chimera-validate-assets` finds a game's manifests by BASENAME, and
+        // `asset-manifest.ts` is the one the match inventory has to carry (the
+        // shell background's is `shell-asset-manifest.ts`, which a blank game
+        // does not ship). A differently-named file is not a manifest that fails
+        // to validate, it is a manifest the gate never sees.
         const manifest = await read('asset-manifest.ts');
         expect(manifest).toContain(
             "import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';",

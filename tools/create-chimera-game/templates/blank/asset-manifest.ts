@@ -1,5 +1,5 @@
-// __Game Title__'s asset manifest — the complete inventory of the files this game
-// loads at runtime, and the only place a loadable asset is named.
+// __Game Title__'s asset manifest — the inventory of the files a match loads at
+// runtime.
 //
 // It starts empty on purpose. What matters is that it is DECLARED and WIRED
 // (`renderer/loaders.ts` forwards it), because that wiring is the part a game
@@ -27,10 +27,20 @@
 // preloads before the game starts — reach for it only when loading-on-demand is
 // visibly too late, as it is for a music bed that must fade in on cue.
 //
-// NAME EVERY REF ONCE, HERE. Screens import the const rather than retyping the
-// string, so a typo is a compile error instead of a runtime miss — and
-// `validate:assets` can only follow a `<Const>.<member>` argument back to a ref
-// when that const is declared in THIS file.
+// NAME A REF ONCE, AS A CONST IN THIS FILE. Screens import the const rather than
+// retyping the string, so a typo is a compile error instead of a runtime miss —
+// and `validate:assets` follows a `<Const>.<member>` argument back to a ref only
+// through a const a manifest file declares. Give a const one name and one value
+// per game: a name two of this game's manifests disagree about is dropped rather
+// than guessed at, and the loads that named it stop being checked.
+//
+// THE SHELL BACKGROUND HAS ITS OWN. A menu background that renders manifest
+// assets is loaded outside a match, so it gets its own asset session and its own
+// inventory: declare those refs in `shell-asset-manifest.ts` beside this file and
+// forward it from `renderer/loaders.ts` as the shell's `shellBackgroundAssets`.
+// Those two names are the ones `validate:assets` reads a manifest from — a file
+// under some other name is not one that fails to validate, it is one the gate
+// never opens.
 
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 // Uncomment alongside your first entry:

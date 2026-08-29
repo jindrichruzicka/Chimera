@@ -129,7 +129,7 @@ apps/<kebab>/
 ├── eslint.config.mjs      # STANDALONE ONLY — this game's flat config, composing the engine's architecture rules
 ├── manifest.ts            # GameManifest (registration surface, stays at the root)
 ├── asset-manifest.ts      # AssetManifest — empty, already wired through renderer/loaders.ts;
-│                          #   the basename chimera-validate-assets discovers, so keep it
+│                          #   a basename chimera-validate-assets discovers, so keep it
 ├── settings-schema.ts     # zod settings schema extending EngineSettings
 ├── manifest.test.ts       # co-located tests for the two root manifests
 ├── asset-manifest.test.ts #   (loops over entries, so they grow with the game)

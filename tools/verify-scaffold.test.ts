@@ -1153,9 +1153,9 @@ describe('verifyScaffold', () => {
     });
 
     it('reports validate-assets when the scaffold ships no asset-manifest.ts at all', async () => {
-        // The basename is the discovery key: a manifest under any other name is
-        // not a manifest that fails to validate, it is one the tool never opens —
-        // and the clean run's `Checked 0` looks identical either way.
+        // The basename is the discovery key (the set is §4.10's): a manifest the
+        // tool does not open is not one that fails to validate, and the clean
+        // run's `Checked 0` looks identical either way.
         const { fs, files } = makeFakeFs();
         const appDir = path.join(TMP_ROOT, 'apps', PROBE_GAME.kebab);
         const { run } = makeFakeRun(files, TMP_ROOT, (cmd, args) => {

@@ -607,6 +607,10 @@ Declaring it is not required and is not free: a game that omits it renders throu
 unchanged and builds no manager. Declared without a `shellBackground`, it is inert — a session with
 no subtree to publish to is never built.
 
+Author the manifest in `apps/<name>/shell-asset-manifest.ts` and forward it from the game's
+`renderer/loaders.ts`. That name is how `validate-assets` tells a background inventory from a match
+one; what it checks in each is [§4.10 CI Validation](asset-reference-system.md#ci-validation)'s.
+
 Shell page canvases should not paint an opaque full-viewport surface when the background is meant to
 be visible. Individual panels, cards, and controls should continue to use raised surface tokens for
 readability.

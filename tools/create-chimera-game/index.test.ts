@@ -102,9 +102,10 @@ describe('scaffoldGame', () => {
             "import styles from './__GamePascal__Playfield.module.css';\nexport function __GamePascal__Playfield() { return styles; }",
         );
         // A ROOT-level file whose basename is load-bearing: `chimera-validate-assets`
-        // discovers a game's manifest by the exact name `asset-manifest.ts`, so a
-        // copy pipeline that renamed or dropped it would leave the scaffolded game
-        // with an inventory nothing reads — and the gate silently checking zero refs.
+        // discovers manifests by basename, and `asset-manifest.ts` is the one a match
+        // inventory has to carry, so a copy pipeline that renamed or dropped it would
+        // leave the scaffolded game with an inventory nothing reads — and the gate
+        // silently checking zero refs.
         await write(
             'templates/blank/asset-manifest.ts',
             [
@@ -265,9 +266,8 @@ describe('scaffoldGame', () => {
         expect(playfieldCss).toContain('.playfield');
         expect(playfieldCss).toContain('My Game');
 
-        // The asset manifest, at the basename the validator discovers, with its
-        // export substituted. A game whose manifest lands under any other name is
-        // one the build gate never opens.
+        // The asset manifest, at a basename the validator discovers (§4.10), with
+        // its export substituted.
         const assetManifest = await readFile(path.join(result.appDir, 'asset-manifest.ts'), 'utf8');
         expect(assetManifest).toContain('myGameAssetManifest');
         expect(assetManifest).toContain('MY_GAME_GAME_ID');
