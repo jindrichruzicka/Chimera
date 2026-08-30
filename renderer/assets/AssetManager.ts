@@ -1,4 +1,3 @@
-import { TextureLoader } from 'three';
 import type { AnimationClip, Group, Texture } from 'three';
 
 import { isTraversalUnsafe } from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
@@ -453,7 +452,27 @@ class ParticleConfigAssetLoader implements AssetLoader<
     }
 }
 
-function loadTexture(url: string): Promise<Texture> {
+/**
+ * Loads one texture, reaching `three` through a DYNAMIC import.
+ *
+ * A static `import { TextureLoader } from 'three'` at the top of this file was
+ * enough to put the renderer core in the always-mounted shell layout chunk: the
+ * shell mounts this module's consumers unconditionally, so every exported route
+ * carried it, including the boot and logo screens of a game that declares no 3D
+ * surface at all.
+ *
+ * Behind `await import` the edge is a chunk BOUNDARY instead, and `three`
+ * arrives with the first texture load — or, on a 3D route, with the r3f canvas
+ * that already pulls it. Free to do here because every caller is already
+ * awaiting: `AssetLoader.load` returns a promise by contract, so the extra
+ * module-load tick lands inside a wait the caller performs anyway.
+ *
+ * This is the shape `loadGltf` below has always had for `GLTFLoader`. Which
+ * consumers reach this module, and that neither loader's edge is a static one,
+ * are measured by `renderer/__tests__/shell-layout-graph-census.test.ts`.
+ */
+async function loadTexture(url: string): Promise<Texture> {
+    const { TextureLoader } = await import('three');
     const loader = new TextureLoader();
     return new Promise((resolve, reject) => {
         loader.load(url, resolve, undefined, reject);

@@ -41,17 +41,19 @@ describe('the sheet readers bundle to themselves alone', () => {
         const { externals } = await analyzeModule(moduleFile);
 
         // `Texture` and the sheet types are imported `import type`, so neither
-        // reaches an input NOR leaves a specifier behind. A plain
-        // `import { Texture } from 'three'` would leave one even unused.
+        // reaches an input NOR leaves a specifier behind. A VALUE import of
+        // `three` would leave one even unused — which is the shape the control
+        // below measures, in the dynamic form `AssetManager.ts` uses.
         expect([...externals]).toEqual([]);
     });
 });
 
 describe('the purity claim is a measurement', () => {
     it('reports the runtime three import a sibling module really has', async () => {
-        // The control. `AssetManager.ts` names `TextureLoader` at runtime for its
-        // default loader registry; if the analyzer could not see that, the two
-        // empty sets above would mean nothing.
+        // The control. `AssetManager.ts` reaches `three` at runtime for its
+        // default loader registry — through `await import` inside `loadTexture`,
+        // which is a specifier the analyzer records all the same. If it could
+        // not see that, the two empty sets above would mean nothing.
         const { inputs, externals } = await analyzeModule('AssetManager.ts');
 
         expect(importsRuntime(externals, 'three')).toBe(true);

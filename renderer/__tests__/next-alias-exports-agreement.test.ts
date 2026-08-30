@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 import nextConfig from '../next.config';
+import { nodeGraphFileSystem, sourceForDistTarget } from './shellLayoutGraphCensus';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RENDERER_DIR = resolve(__dirname, '..');
@@ -79,19 +80,6 @@ export function resolveAliasSource(
         `${target}/index.tsx`,
     ];
     return candidates.find((candidate) => fileExists(candidate)) ?? null;
-}
-
-/** The repo-relative source module a published `./dist/<stem>.js` target is built from. */
-export function sourceForDistTarget(
-    distTarget: string,
-    fileExists: (path: string) => boolean,
-): string | null {
-    const stem = distTarget.replace(/^\.\/dist\//u, '').replace(/\.js$/u, '');
-    return (
-        [`renderer/${stem}.ts`, `renderer/${stem}.tsx`].find((candidate) =>
-            fileExists(candidate),
-        ) ?? null
-    );
 }
 
 const onDisk = (path: string): boolean => existsSync(resolve(REPO_ROOT, path));
@@ -170,7 +158,16 @@ describe('renderer/next.config.ts aliases agree with the published exports map',
             const distTarget = typeof entry === 'string' ? entry : entry?.default;
             expect(distTarget, `${exportsKey} declares no default condition`).toBeDefined();
 
-            const published = sourceForDistTarget(distTarget ?? '', onDisk);
+            // The shared mapper answers with an absolute path; this comparison
+            // is in repo-relative terms, which is what `resolveAliasSource`
+            // returns.
+            const publishedAbsolute = sourceForDistTarget(
+                distTarget ?? '',
+                nodeGraphFileSystem,
+                REPO_ROOT,
+            );
+            const published =
+                publishedAbsolute === null ? null : relative(REPO_ROOT, publishedAbsolute);
             const aliased = resolveAliasSource(relative(REPO_ROOT, target), onDisk);
 
             expect(
@@ -232,31 +229,5 @@ describe('resolveAliasSource', () => {
 
     it('is null when nothing resolves', () => {
         expect(resolveAliasSource('renderer/nope', () => false)).toBeNull();
-    });
-});
-
-describe('sourceForDistTarget', () => {
-    it('maps a dist barrel back to its source index', () => {
-        const exists = (path: string): boolean => path === 'renderer/game/index.ts';
-
-        expect(sourceForDistTarget('./dist/game/index.js', exists)).toBe('renderer/game/index.ts');
-    });
-
-    it('maps a dist module back to its source module', () => {
-        const exists = (path: string): boolean => path === 'renderer/game/rendererGameRegistry.ts';
-
-        expect(sourceForDistTarget('./dist/game/rendererGameRegistry.js', exists)).toBe(
-            'renderer/game/rendererGameRegistry.ts',
-        );
-    });
-
-    it('accepts a .tsx source', () => {
-        const exists = (path: string): boolean => path === 'renderer/app/layout.tsx';
-
-        expect(sourceForDistTarget('./dist/app/layout.js', exists)).toBe('renderer/app/layout.tsx');
-    });
-
-    it('is null when nothing resolves', () => {
-        expect(sourceForDistTarget('./dist/nope.js', () => false)).toBeNull();
     });
 });
