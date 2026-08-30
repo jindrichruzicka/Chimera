@@ -33,7 +33,9 @@ Committing implementation code without a corresponding test is a workflow violat
 - Unit tests: `<Module>.test.ts` / `<Module>.test.tsx` co-located with the source file.
 - Integration tests spanning multiple modules: `<package>/__tests__/<name>.test.ts`.
 - Test doubles (fakes, stubs): `<package>/__test-support__/`.
-- E2E fixtures and specs: `apps/tactics/e2e/` only. Never imported from unit tests.
+- E2E fixtures and specs: the consumer app's own `apps/<game>/e2e/`. Never imported from
+  unit tests, and never from another app — a suite that needs a fixture its neighbour has
+  carries its own copy (§3 forbids a game directory reaching into another's).
 
 ## 12.4 Coverage targets
 

@@ -34,7 +34,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';
-import type { ActionEnvelope, PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type {
+    ActionEnvelope,
+    GameSetupConfig,
+    PlayerId,
+} from '@chimera-engine/simulation/engine/types.js';
 import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
 import {
@@ -200,6 +204,53 @@ function commitAction(
         },
     };
 }
+
+describe('the harness mirrors the composition root it stands in for', () => {
+    it('hands the lobby-built setup to the game’s buildInitialEntities hook', async () => {
+        // The harness's `onGameStartRequested` is a hand-written copy of the
+        // one in `index.ts`, and every test in this file runs against the copy.
+        // A copy that stopped forwarding the setup would leave those tests green
+        // over a composition production no longer has — and the seating a game
+        // derives from `playerAttributes` would silently fall back to seat order
+        // there, exactly as it did in production before it was fixed.
+        const seen: { setup: GameSetupConfig | undefined; called: boolean } = {
+            setup: undefined,
+            called: false,
+        };
+        const recording: MainGameContribution = {
+            ...contribution,
+            registerActions: (registry) => {
+                contribution.registerActions(registry);
+                const registered = registry.resolveGame(TACTICS_GAME_ID);
+                registry.registerGame(TACTICS_GAME_ID, {
+                    ...registered,
+                    buildInitialEntities: (playerIds, setup) => {
+                        seen.called = true;
+                        seen.setup = setup;
+                        return registered?.buildInitialEntities?.(playerIds, setup) ?? {};
+                    },
+                });
+            },
+        };
+
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider, recording);
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 2,
+        });
+        // An attribute the HOST seat authored, so the assertion is about a value
+        // that travelled rather than about the shape of an empty default.
+        await host.lobbyManager.setPlayerAttribute(hostInfo.hostId, 'color', 'teal');
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        expect(seen.called, 'the game’s buildInitialEntities hook never ran').toBe(true);
+        expect(seen.setup?.playerAttributes[hostInfo.hostId]?.['color']).toBe('teal');
+    });
+});
 
 describe('session restore protocol (F68) — integration', () => {
     it('S1: full protocol — save (host + remote + AI), restore, claimed rejoin, deferred start, state intact', async () => {

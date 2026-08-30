@@ -2,12 +2,13 @@
 //
 // Each consumer app's Playwright `global-setup.ts` must LOAD before any engine
 // `dist` exists, because loading it is what triggers the build that creates one.
-// Which runners this bites is stated in `apps/tactics/e2e/tsconfig.json`, beside
-// the mapping that makes it work.
+// Which runners this bites is stated in each suite's own `e2e/tsconfig.json`,
+// beside the mapping that makes it work; `TREES` below enumerates them.
 //
-// Both trees are checked here, in one place, because the fix is per-tsconfig and
-// the reference app got it first: the template shipped the engine import with no
-// matching `paths` entry, which is the same blocker one copy further out. The
+// Every tree is checked here, in one place, because the fix is per-tsconfig and
+// each copy has to make it for itself: the template shipped the engine import with
+// no matching `paths` entry, which is the same blocker one copy further out, and a
+// second consumer app arrives with the same one copy sideways. The
 // template tree is outside vitest and outside `tsconfig.json`, so a pin on it
 // has to live in `tools/` — as `packaged-build-flag.test.ts` already does for
 // the drivers themselves. (Standalone scaffolds never reach this: the initializer
@@ -58,6 +59,11 @@ const TREES: readonly Tree[] = [
     {
         label: 'apps/tactics',
         dir: path.join(ROOT, 'apps/tactics/e2e'),
+        read: (file) => readFileSync(file, 'utf8'),
+    },
+    {
+        label: 'apps/action',
+        dir: path.join(ROOT, 'apps/action/e2e'),
         read: (file) => readFileSync(file, 'utf8'),
     },
     {

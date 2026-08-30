@@ -24,6 +24,7 @@
         "test": "pnpm build:packages && pnpm -r test && vitest run --dir tools",
         "test:watch": "pnpm build:packages && vitest",
         "test:e2e": "pnpm build:packages && playwright test --config=apps/tactics/e2e/playwright.config.ts --project=electron-e2e",
+        "test:e2e:action": "pnpm build:packages && playwright test --config=apps/action/e2e/playwright.config.ts --project=electron-e2e",
         "verify:pack": "tsx tools/verify-pack.ts",
         "verify:pack:selftest": "tsx tools/verify-pack.ts --self-test",
         "verify:scaffold": "tsx tools/verify-scaffold.ts",

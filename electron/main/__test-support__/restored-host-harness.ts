@@ -720,9 +720,9 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 ...aiPlayerIds,
             ];
             const playerIds = [firstPlayer, ...allPlayerIds.filter((id) => id !== firstPlayer)];
-            const initialEntities =
-                gameRegistry.resolveGame(gameId)?.buildInitialEntities?.(playerIds) ?? {};
             const setup = buildSetupFromLobbyState(state);
+            const initialEntities =
+                gameRegistry.resolveGame(gameId)?.buildInitialEntities?.(playerIds, setup) ?? {};
             // mirrors index.ts: the host mints the stable match identity once
             // per match start (F68 #820, Invariant #101).
             const matchId = crypto.randomUUID();

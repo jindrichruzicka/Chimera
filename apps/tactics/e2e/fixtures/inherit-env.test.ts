@@ -33,7 +33,10 @@ describe('inheritEnv', () => {
     it('drops undefined values to satisfy the launch env type', () => {
         const result = inheritEnv({ DEFINED: 'x', MISSING: undefined });
 
-        expect(result).toEqual({ DEFINED: 'x' });
+        // Asserted over the KEY SET: `toEqual` reads an own property holding
+        // `undefined` and an absent one as the same object, so comparing against
+        // `{ DEFINED: 'x' }` passes whether the key was dropped or not.
+        expect(Object.keys(result)).toEqual(['DEFINED']);
     });
 
     it('preserves unrelated variables verbatim', () => {

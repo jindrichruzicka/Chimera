@@ -101,12 +101,13 @@ export default defineConfig({
         "test": "pnpm build:packages && pnpm -r test && vitest run --dir tools",
         "test:watch": "pnpm build:packages && vitest",
         "test:e2e": "pnpm build:packages && playwright test --config=apps/tactics/e2e/playwright.config.ts --project=electron-e2e",
+        "test:e2e:action": "pnpm build:packages && playwright test --config=apps/action/e2e/playwright.config.ts --project=electron-e2e",
         "coverage": "pnpm build:packages && vitest run --coverage"
     }
 }
 ```
 
-`test` runs all unit + integration tests — fast, no Electron launch. `test:e2e` is always separate. `CHIMERA_E2E=1` is set by the Playwright fixture when it launches Electron, not by the script; `tools/e2e-workflow.test.ts` pins that it never appears in the CI workflow's `env:` block either. The flag's contract is [§13.10 CHIMERA_E2E Flag Contract](e2e-testing-playwright.md).
+`test` runs all unit + integration tests — fast, no Electron launch. The e2e scripts are always separate, and there is ONE PER CONSUMER APP rather than one script running both: a suite's `global-setup` deletes its whole build root and reaps its own throwaway-profile root, which is safe on two CI runners and not safe inside one working directory (§13.3), so locally they are run one at a time. `CHIMERA_E2E=1` is set by the Playwright fixture when it launches Electron, not by the script; `tools/e2e-workflow.test.ts` pins that it never appears in the CI workflow's `env:` block either. The flag's contract is [§13.10 CHIMERA_E2E Flag Contract](e2e-testing-playwright.md).
 
 ---
 

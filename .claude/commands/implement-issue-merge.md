@@ -8,7 +8,7 @@ Given issue number `$1`:
 1. Load the issue with `gh issue view $1 --repo jindrichruzicka/Chimera --json number,title,body,labels,state,milestone,url`; extract acceptance criteria, docs, invariants. Issue rationale is a claim, not an authority — measure any library/tooling fact it asserts before repeating it.
 2. Load and follow [create-branch](../skills/git/create-branch/SKILL.md), [TDD](../skills/tdd/SKILL.md), [commit-and-push](../skills/git/commit-and-push/SKILL.md), [merge](../skills/git/merge/SKILL.md), and [close-issue](../skills/github/close-issue/SKILL.md).
 3. Load the touched area's docs: [architecture overview](../../docs/architecture-overview.md), [module boundaries](../../docs/executive-architecture/module-boundaries-file-tree.md), [coding standards](../../docs/coding-standards.md).
-4. Implement red → green → refactor, keep scope tight, run focused tests plus the full merge gate (`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:packaged-bundle`). If the change touches rendering, e2e page objects, or Electron wiring, also run `pnpm test:e2e` every round — no review gate runs it for you.
+4. Implement red → green → refactor, keep scope tight, run focused tests plus the full merge gate (`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:packaged-bundle`). If the change touches rendering, e2e page objects, or Electron wiring, also run the e2e suite of every consumer app it reaches (`pnpm test:e2e`, `pnpm test:e2e:action`) every round, one at a time — no review gate runs them for you.
 5. Commit/push with the git skill.
 6. **Review loop — repeat until merge-ready:**
     1. Run the **chimera-code-reviewer** subagent against the current branch; capture its findings report.

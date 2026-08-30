@@ -22,7 +22,9 @@
  * What it deliberately does NOT do is start a real `RealtimeTicker`: the ticker
  * is `electron/main/runtime` internal, unreachable through the package `exports`
  * map, and a wall-clock timer proves nothing here that a fake one would not.
- * The Electron-side arming is the e2e suite's.
+ * The Electron-side arming is the e2e suite's: `e2e/tests/movement.spec.ts`
+ * waits on the HUD's own tick advancing with nobody touching a key, which is a
+ * fact about a real ticker in a real host and about nothing else.
  */
 
 import { describe, expect, it } from 'vitest';

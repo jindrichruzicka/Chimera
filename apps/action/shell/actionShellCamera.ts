@@ -78,6 +78,18 @@ export type ActionShellYawPhase = 'home' | 'moving' | 'away';
 /** Which end of the dolly the camera is at, or that it is between them. */
 export type ActionShellDollyPhase = 'wide' | 'moving' | 'close';
 
+/**
+ * The host-element attributes the rig publishes each phase on.
+ *
+ * They live here, beside the two describers whose answers they carry, rather
+ * than in the component that writes them: a reader outside the renderer — the
+ * e2e suite is the one that exists — needs the NAME and the phase vocabulary
+ * together, and this module is the half of the pair that is a plain `.ts` with
+ * no React in it, so taking them from here costs a reader nothing.
+ */
+export const ACTION_SHELL_YAW_ATTRIBUTE = 'data-action-shell-yaw';
+export const ACTION_SHELL_DOLLY_ATTRIBUTE = 'data-action-shell-dolly';
+
 /** The pose the current shell state calls for. */
 export function resolveActionShellCameraTarget(input: {
     readonly isSettings: boolean;

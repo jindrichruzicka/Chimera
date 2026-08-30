@@ -4,10 +4,10 @@
  *
  * Proves the engine's wall-clock heartbeat — the host-side `RealtimeTicker` that
  * dispatches `engine:tick` at the manifest's `tickRateMs` — actually drives a
- * live match and reaches clients. Tactics is the only game wired for e2e and it
- * is turn-based (`realtime: false`), so `resolveTickerHz` returns null and no
- * other spec ever starts a live ticker: its autonomous firing and its broadcast
- * path had zero end-to-end coverage. The `realtimeTickMs` fixture option flips
+ * live match and reaches CLIENTS. This game is turn-based (`realtime: false`),
+ * so `resolveTickerHz` returns null and no other spec in this suite starts a
+ * live ticker — and the broadcast half needs the two-window match only this
+ * suite runs. The `realtimeTickMs` fixture option flips
  * an e2e-only seam (`CHIMERA_E2E_REALTIME_TICK_MS`) that forces the host to run
  * a real ticker for this file only, without touching tactics' real manifest.
  *

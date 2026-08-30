@@ -1,0 +1,37 @@
+{
+    // Playwright-runner resolution shim ONLY (referenced by playwright.config.ts
+    // `tsconfig`). The root tsconfig carries no `@chimera-engine/*` `paths`, so
+    // production `tsc` resolves through real workspace deps. But the Playwright
+    // test transform loads Electron main/preload source (which imports
+    // `@chimera-engine/*`) and resolves bare specifiers ONLY via tsconfig paths —
+    // it has no webpack/vite-style alias hook like next.config.ts /
+    // vitest.config.mts / global-setup.ts. These paths restore resolution for the
+    // runner without reintroducing an alias into any production/typecheck
+    // tsconfig (`pnpm typecheck` does not use this file). Paths below are
+    // baseUrl-relative (repo root).
+
+    "extends": "../../../tsconfig.json",
+    "compilerOptions": {
+        "baseUrl": "../../..",
+        "paths": {
+            "@chimera-engine/simulation/*": ["simulation/dist/*"],
+            "@chimera-engine/ai/*": ["ai/dist/*"],
+            "@chimera-engine/networking": ["networking/dist/index.d.ts"],
+            "@chimera-engine/networking/*": ["networking/dist/*"],
+            "@chimera-engine/renderer/*": ["renderer/dist/*"],
+            "@chimera-engine/electron/*": ["electron/dist/*"],
+            // BOOTSTRAP ORDER, not a preference. global-setup imports the app's
+            // build:app driver, which imports the engine bundle plan — and
+            // global-setup is what RUNS `pnpm build:packages`, so on a clean
+            // checkout `electron/dist` does not exist yet when the runner
+            // resolves this import. The module would fail to load and the
+            // bootstrap it contains would never run. An exact key beats the
+            // `@chimera-engine/electron/*` wildcard above (Playwright resolves by
+            // longest key prefix). It does move the suite off the built plan and
+            // onto the source one, benignly: the plan is pure derivation over its
+            // arguments, and global-setup rebuilds that dist on every run anyway.
+            "@chimera-engine/electron/build-main": ["electron/build-main/index.ts"],
+            "@chimera-engine/action/*": ["apps/action/*"]
+        }
+    }
+}

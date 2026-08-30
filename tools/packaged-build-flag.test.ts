@@ -35,7 +35,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * builtins only; both sides assert it in tests").
  *
  * The distinction is IMPORT boundary, not file access: this suite still READS
- * the plan and both drivers below, which creates no module-graph edge from
+ * the plan and the drivers below, which creates no module-graph edge from
  * `tools/`. The block below asserts the plan declares exactly this value, so the
  * duplication cannot drift.
  */
@@ -43,8 +43,9 @@ const PACKAGED_BUILD_ENV = 'CHIMERA_PACKAGED_BUILD';
 
 const TEMPLATE_DIR = path.join(ROOT, 'tools/create-chimera-game/templates/blank');
 const APP_BUILD_MAIN = path.join(ROOT, 'apps/tactics/electron/build-main.ts');
+const ACTION_BUILD_MAIN = path.join(ROOT, 'apps/action/electron/build-main.ts');
 const TEMPLATE_BUILD_MAIN = path.join(TEMPLATE_DIR, 'electron/build-main.ts');
-/** The engine-owned plan the two drivers above run, and its public barrel. */
+/** The engine-owned plan the drivers above run, and its public barrel. */
 const ENGINE_BUNDLE_PLAN = path.join(ROOT, 'electron/build-main/bundle-plan.ts');
 const ENGINE_BUNDLE_PLAN_BARREL = path.join(ROOT, 'electron/build-main/index.ts');
 
@@ -268,7 +269,7 @@ describe('the packaging define, in its single home', () => {
     // "Single home" is the whole justification for the move, and membership
     // cannot establish it: `toContain` on the engine file says the plan declares
     // its symbols, never that nothing else does. A second EXPORTED declaration
-    // outside the two drivers — an engine module, a tool, a fixture — is exactly
+    // outside the drivers — an engine module, a tool, a fixture — is exactly
     // the multi-copy drift the move exists to end, and the driver ratchet below
     // sees only the drivers.
     //
@@ -533,6 +534,11 @@ describe('the build:app drivers stay thin', () => {
             path.join(ROOT, 'apps/tactics/electron/__tests__/packaged-bundle-content.test.ts'),
         ],
         [
+            'action app e2e global-setup',
+            ACTION_BUILD_MAIN,
+            path.join(ROOT, 'apps/action/e2e/global-setup.ts'),
+        ],
+        [
             'template e2e global-setup',
             TEMPLATE_BUILD_MAIN,
             path.join(TEMPLATE_DIR, 'e2e/global-setup.ts'),
@@ -568,11 +574,15 @@ describe('the build:app drivers stay thin', () => {
         },
     );
 
-    it('the two drivers are code-identical once comments are stripped', () => {
+    it('every driver is code-identical once comments are stripped', () => {
         // They differ only in prose (the template names no game and carries no
         // engine doc references). Divergence in the CODE would mean a scaffolded
-        // game runs a bundler this repo never exercises.
-        expect(stripComments(read(TEMPLATE_BUILD_MAIN))).toBe(stripComments(read(APP_BUILD_MAIN)));
+        // game — or a consumer app — runs a bundler this repo never exercises,
+        // so each driver is held to the same body rather than only the first two.
+        const reference = stripComments(read(APP_BUILD_MAIN));
+
+        expect(stripComments(read(TEMPLATE_BUILD_MAIN))).toBe(reference);
+        expect(stripComments(read(ACTION_BUILD_MAIN))).toBe(reference);
     });
 });
 

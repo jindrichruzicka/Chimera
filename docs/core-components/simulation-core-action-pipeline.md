@@ -142,10 +142,10 @@ interface ReduceContext {
 ## ActionRegistry
 
 ```typescript
-interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapshot> {
-    /** Called once by the host when a session is being created for this game. */
-    readonly buildInitialEntities?: (hostPlayerId: PlayerId | undefined) => TState['entities'];
-}
+// GameDefinition — the game-level hooks, declared in
+// `simulation/engine/ActionRegistry.ts`. Not transcribed here: its
+// `buildInitialEntities` signature drifted from a copy in this position once
+// already, and a reader who needs the parameters needs the file.
 
 interface ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     register<TPayload extends object>(definition: ActionDefinition<TPayload, TState>): void;

@@ -117,6 +117,35 @@ describe('e2e.yml CI workflow', () => {
         expect(content).toMatch(/run:\s*pnpm verify:scaffold/);
     });
 
+    // ── The second consumer app's suite ──────────────────────────────────────
+    //
+    // apps/action ships its own Playwright suite, its own build root and its own
+    // throwaway-profile root, so it runs as a SEPARATE job rather than as more
+    // specs in the tactics one: the two global-setups each delete their whole
+    // build root and reap their own profile root, which is safe across machines
+    // and not safe inside one working directory.
+
+    it('runs the action suite through its own pnpm script', () => {
+        expect(content).toMatch(/run:\s*pnpm test:e2e:action/);
+    });
+
+    it('uploads the action report from the action suite’s own directory', () => {
+        // Both jobs upload a `playwright-report`; pointing the second at the
+        // tactics path would upload the OTHER suite's report, or nothing.
+        expect(content).toMatch(/path:\s*apps\/action\/e2e\/playwright-report\//);
+    });
+
+    it('gives the two report artifacts different names', () => {
+        // `actions/upload-artifact@v4` FAILS a second upload under a name that
+        // already exists, so a copied name reds the whole action job on a
+        // green suite.
+        const names = [...content.matchAll(/^\s*name:\s*(playwright-report\S*)\s*$/gm)].map(
+            (match) => match[1],
+        );
+        expect(names.length).toBeGreaterThan(1);
+        expect(new Set(names).size).toBe(names.length);
+    });
+
     it('does NOT have a standalone "build:electron" step — global-setup.ts esbuild handles main compilation into .e2e-build/', () => {
         // global-setup.ts uses esbuild to compile electron/main/index.ts → .e2e-build/electron/main/index.js.
         // pnpm build:electron writes to a different path (electron/main/index.js) not used by e2e,

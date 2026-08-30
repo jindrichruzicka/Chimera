@@ -2,12 +2,12 @@
  * electron/main/runtime/e2e-realtime-seam.test.ts
  *
  * Unit tests for the e2e-only real-time seam. `resolveE2eForcedTickerHz` lets
- * the heartbeat e2e spec force a live `RealtimeTicker` onto the (turn-based)
- * tactics host — the only game wired for e2e — so the wall-clock engine-tick
- * loop and its broadcast path get end-to-end coverage. The seam MUST be inert
- * outside e2e: it is double-gated on `CHIMERA_E2E === '1'` AND an explicit,
- * valid `CHIMERA_E2E_REALTIME_TICK_MS`, and returns null (⇒ the caller falls
- * back to the manifest's `resolveTickerHz`) in every other case.
+ * the heartbeat e2e spec force a live `RealtimeTicker` onto a turn-based host,
+ * so the wall-clock engine-tick loop and its BROADCAST path get end-to-end
+ * coverage. The seam MUST be inert outside e2e: it is double-gated on
+ * `CHIMERA_E2E === '1'` AND an explicit, valid `CHIMERA_E2E_REALTIME_TICK_MS`,
+ * and returns null (⇒ the caller falls back to the manifest's
+ * `resolveTickerHz`) in every other case.
  */
 
 import { describe, expect, it } from 'vitest';

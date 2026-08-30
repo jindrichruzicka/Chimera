@@ -62,20 +62,19 @@ export interface E2eElectronLaunchOptions {
     readonly gameAssetsRoot?: string;
     /**
      * Force the hosted game to look like it declares NO spectator capability
-     * (`CHIMERA_E2E_DISABLE_SPECTATORS=1`). Only tactics is wired for e2e
-     * matches, so this lets the spectator spec exercise the "game has no
-     * capability" reject path (`match_in_progress`) that is otherwise
-     * unreachable with a capability-declaring game.
+     * (`CHIMERA_E2E_DISABLE_SPECTATORS=1`). This game declares the capability,
+     * so it lets the spectator spec exercise the "game has no capability" reject
+     * path (`match_in_progress`) that is otherwise unreachable here.
      */
     readonly disableSpectators?: boolean;
     /**
      * Force the host to run a live wall-clock `RealtimeTicker` at this interval
      * (`CHIMERA_E2E_REALTIME_TICK_MS`), overriding the manifest's `realtime`
-     * flag. Only tactics is wired for e2e matches and tactics is turn-based
-     * (`realtime: false`, null ticker), so this seam lets the heartbeat spec
-     * exercise the real-time engine-tick loop — its autonomous firing and its
-     * broadcast to clients — that is otherwise unreachable with a turn-based
-     * game. Off outside this option: unset ⇒ the manifest flag stands.
+     * flag. This game is turn-based (`realtime: false`, null ticker), so the
+     * seam is what lets the heartbeat spec exercise the real-time engine-tick
+     * loop here — its autonomous firing, and its broadcast to CLIENTS, which
+     * needs the two-window match only this suite runs. Off outside this option:
+     * unset ⇒ the manifest flag stands.
      */
     readonly realtimeTickMs?: number;
 }
@@ -245,7 +244,9 @@ function attachRendererConsoleCapture(page: Page, entries: RendererConsoleEntry[
  * Teardown calls app.close() unconditionally.
  *
  * Invariant 5:  window.__chimera is exposed only through preload/api.ts.
- * Invariant 27: CHIMERA_E2E must never appear in production packaging — set here only.
+ * Invariant 27: CHIMERA_E2E must never appear in production packaging — no
+ *               packaging script sets it, and `tools/e2e-workflow.test.ts` pins
+ *               that the CI workflow's `env:` blocks do not either.
  */
 export const test = base.extend<ElectronFixtures>({
     // eslint-disable-next-line no-empty-pattern

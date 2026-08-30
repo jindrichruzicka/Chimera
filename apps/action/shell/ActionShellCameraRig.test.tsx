@@ -7,12 +7,13 @@ import { Vector3 } from 'three';
 import type { PerspectiveCamera } from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ActionShellCameraRig } from './ActionShellCameraRig';
 import {
     ACTION_SHELL_DOLLY_ATTRIBUTE,
     ACTION_SHELL_YAW_ATTRIBUTE,
-    ActionShellCameraRig,
-} from './ActionShellCameraRig';
-import { ACTION_SHELL_YAW_MS, actionShellCameraView } from './actionShellCamera.js';
+    ACTION_SHELL_YAW_MS,
+    actionShellCameraView,
+} from './actionShellCamera.js';
 
 // The shell state the rig reads TRANSIENTLY. A mutable module-level value
 // rather than a store, so a test can move the shell between frames the way a

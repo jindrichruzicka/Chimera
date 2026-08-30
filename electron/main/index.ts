@@ -180,6 +180,7 @@ import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineA
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
+    GameSetupConfig,
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
 import { gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
@@ -301,12 +302,26 @@ export async function ensureActiveProfile(
     return profileManager.getLocal(profileId);
 }
 
+/**
+ * The registered game's initial entity set, or an empty one.
+ *
+ * `setup` is the host-authored lobby configuration for the match being started
+ * — the game params the host chose and, per seat, the attributes that seat's
+ * owner authored (Invariant #101). It reaches the hook because a game seeds
+ * from it: the action app seats each player on the primitive that seat PICKED,
+ * and a hook called without it can only fall back to seat order, which looks
+ * correct in every snapshot afterwards — the picks still ride the setup — while
+ * the players are on the wrong pieces.
+ *
+ * Absent for a session being hosted, where no match has been configured yet.
+ */
 export function resolveInitialEntitiesForGame(
     gameRegistry: ActionRegistry<BaseGameSnapshot>,
     gameId: string,
     playerIds: readonly PlayerId[],
+    setup?: GameSetupConfig,
 ): BaseGameSnapshot['entities'] {
-    return gameRegistry.resolveGame(gameId)?.buildInitialEntities?.(playerIds) ?? {};
+    return gameRegistry.resolveGame(gameId)?.buildInitialEntities?.(playerIds, setup) ?? {};
 }
 
 export function resolveFirstPlayerFromLobbyState(
@@ -2871,10 +2886,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 classifyJoin({
                     phase: sessionRuntime.getSnapshot().phase,
                     reconnect: ctx.reconnect || registeredPlayers.has(pid),
-                    // E2E-only seam: only tactics is wired for e2e matches, so to
-                    // exercise the "game declares no spectator capability" reject
-                    // path (match_in_progress) the harness forces the capability
-                    // absent. Off outside e2e — real support comes from the manifest.
+                    // E2E-only seam: a spec driving a host whose game DOES
+                    // declare spectator support cannot reach the "game declares
+                    // no spectator capability" reject path (match_in_progress),
+                    // so the harness forces the capability absent for it.
+                    // Off outside e2e — real support comes from the manifest.
                     spectatorSupport:
                         process.env['CHIMERA_E2E_DISABLE_SPECTATORS'] === '1'
                             ? undefined
@@ -3186,18 +3202,22 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             ];
             const playerIds = [firstPlayer, ...allPlayerIds.filter((id) => id !== firstPlayer)];
 
-            const initialEntities = resolveInitialEntitiesForGame(
-                gameRegistry,
-                HOSTED_GAME_ID,
-                playerIds,
-            );
-
             // Carry the agreed lobby setup into the match — see
             // `buildSetupFromLobbyState` for what it reads and how it keys each
             // seat. Keyed by seat id, so the firstPlayer turn-order reorder
             // above does not affect it. Omitted (undefined) for games with no
             // lobby setup, keeping the payload backward-compatible.
+            //
+            // Built BEFORE the entities, because they are seeded FROM it: a game
+            // that seats each player on that seat's own pick reads it here.
             const setup = buildSetupFromLobbyState(state);
+
+            const initialEntities = resolveInitialEntitiesForGame(
+                gameRegistry,
+                HOSTED_GAME_ID,
+                playerIds,
+                setup,
+            );
 
             // Mint the stable match identity here — host-side, once per match
             // start — and carry it in the action payload so deterministic

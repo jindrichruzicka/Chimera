@@ -2,7 +2,8 @@
  * tools/e2e-file-tree-single-source.test.ts
  *
  * What `docs/executive-architecture/module-boundaries-file-tree.md` and
- * `docs/testing/e2e-testing-playwright.md` §13.3 each owe about `apps/tactics/e2e/`.
+ * `docs/testing/e2e-testing-playwright.md` §13.3 each owe about a consumer app's
+ * `e2e/` directory — every one of them, enumerated in `E2E_SUITES` below.
  *
  * The directory was described in both. Only one of them is opened when the directory
  * changes, so the other fell behind — and in one direction only: every name it listed
@@ -38,8 +39,33 @@ const repoRoot = path.resolve(import.meta.dirname, '..');
 const BOUNDARIES_DOC = 'docs/executive-architecture/module-boundaries-file-tree.md';
 /** The doc that owns the tree, in its §13.3. */
 const E2E_DOC = 'docs/testing/e2e-testing-playwright.md';
-/** The directory both docs describe. */
-const E2E_DIR = 'apps/tactics/e2e';
+/** One consumer app's suite, as the two docs describe it. */
+interface E2eSuite {
+    /** The directory both docs describe. */
+    readonly dir: string;
+    /**
+     * Floor for the row count of this suite's tree in §13.3.
+     *
+     * Per suite rather than shared: an unparsed tree names nothing, and one
+     * floor over both would be met by the larger tree alone. Each sits a little
+     * under its tree's real size, so it fires on a parser that stopped matching
+     * rather than on a row someone removed.
+     */
+    readonly minRows: number;
+}
+
+/**
+ * Every suite the two docs owe a tree for.
+ *
+ * A CENSUS, not a sample: the defect this file exists for is a directory that
+ * changed while the doc describing it did not, and a suite missing from this
+ * list is a suite nothing holds to its tree at all. A second consumer app
+ * (`apps/action`) is exactly how that arrives.
+ */
+const E2E_SUITES: readonly E2eSuite[] = [
+    { dir: 'apps/tactics/e2e', minRows: 20 },
+    { dir: 'apps/action/e2e', minRows: 20 },
+];
 
 /**
  * A row opts out of the completeness check by naming the `ls` that supersedes it —
@@ -217,64 +243,73 @@ function unaccountedUnder(
 
 const read = (relative: string): Promise<string> => readFile(path.join(repoRoot, relative), 'utf8');
 
-describe('the e2e file tree, across the two docs that describe it', () => {
-    it('is named but NOT re-listed by the architecture file tree', async () => {
-        const markdown = await read(BOUNDARIES_DOC);
-        const entries = treeEntries(markdown, 'chimera/');
+describe.each(E2E_SUITES)(
+    '$dir, across the two docs that describe it',
+    ({ dir: E2E_DIR, minRows }) => {
+        it('is named but NOT re-listed by the architecture file tree', async () => {
+            const markdown = await read(BOUNDARIES_DOC);
+            const entries = treeEntries(markdown, 'chimera/');
 
-        // Floor: without it, a parser that stops matching reports every directory as
-        // childless and this whole case passes by finding nothing.
-        expect(entries.length).toBeGreaterThan(100);
+            // Floor: without it, a parser that stops matching reports every directory as
+            // childless and this whole case passes by finding nothing.
+            expect(entries.length).toBeGreaterThan(100);
 
-        // The entry stays — the architecture tree should still say the suite exists.
-        expect(entries.map((entry) => entry.name)).toContain(E2E_DIR);
-        // Its contents do not. Any child here is a second tree maintained by nobody.
-        const relisted = entries.filter(
-            (entry) => entry.parent === E2E_DIR || entry.parent.startsWith(`${E2E_DIR}/`),
-        );
-        expect(relisted).toEqual([]);
-    });
+            // The entry stays — the architecture tree should still say the suite exists.
+            expect(entries.map((entry) => entry.name)).toContain(E2E_DIR);
+            // Its contents do not. Any child here is a second tree maintained by nobody.
+            const relisted = entries.filter(
+                (entry) => entry.parent === E2E_DIR || entry.parent.startsWith(`${E2E_DIR}/`),
+            );
+            expect(relisted).toEqual([]);
+        });
 
-    it('sends the reader on from the entry itself, not from a footer', async () => {
-        const markdown = await read(BOUNDARIES_DOC);
-        const target = path.relative(path.dirname(BOUNDARIES_DOC), E2E_DOC);
+        it('sends the reader on from the entry itself, not from a footer', async () => {
+            const markdown = await read(BOUNDARIES_DOC);
+            const target = path.relative(path.dirname(BOUNDARIES_DOC), E2E_DOC);
 
-        // The pointer has to sit ON the entry: that is where a reader who came looking
-        // for the listing is standing. A row in the doc's Cross-References footer is a
-        // convenience and cannot stand in for it, so this is scoped to the entry's own
-        // annotation rather than to the file, which the footer row alone would satisfy.
-        const entry = treeEntries(markdown, 'chimera/').find((row) => row.name === E2E_DIR);
+            // The pointer has to sit ON the entry: that is where a reader who came looking
+            // for the listing is standing. A row in the doc's Cross-References footer is a
+            // convenience and cannot stand in for it, so this is scoped to the entry's own
+            // annotation rather than to the file, which the footer row alone would satisfy.
+            const entry = treeEntries(markdown, 'chimera/').find((row) => row.name === E2E_DIR);
 
-        expect(entry).toBeDefined();
-        expect(entry?.annotation).toContain(target);
-    });
+            expect(entry).toBeDefined();
+            expect(entry?.annotation).toContain(target);
+        });
 
-    it('names only paths that exist', async () => {
-        const entries = treeEntries(await read(E2E_DOC), `${E2E_DIR}/`);
+        it('names only paths that exist', async () => {
+            const entries = treeEntries(await read(E2E_DOC), `${E2E_DIR}/`);
 
-        // Floor, as above: an unparsed tree names nothing and would resolve vacuously.
-        expect(entries.length).toBeGreaterThan(20);
+            // Floor, as above: an unparsed tree names nothing and would resolve vacuously.
+            expect(entries.length).toBeGreaterThan(minRows);
 
-        const missing = entries
-            // `*.test.ts` is a stated wildcard row, not a filename.
-            .filter((entry) => !entry.name.includes('*'))
-            .map((entry) => path.join(E2E_DIR, entry.parent, entry.name))
-            .filter((relative) => !existsSync(path.join(repoRoot, relative)));
+            const missing = entries
+                // `*.test.ts` is a stated wildcard row, not a filename.
+                .filter((entry) => !entry.name.includes('*'))
+                .map((entry) => path.join(E2E_DIR, entry.parent, entry.name))
+                .filter((relative) => !existsSync(path.join(repoRoot, relative)));
 
-        expect(missing).toEqual([]);
-    });
+            expect(missing).toEqual([]);
+        });
 
-    it('leaves nothing tracked unrepresented, in the directories it does not call a selection', async () => {
-        const entries = treeEntries(await read(E2E_DOC), `${E2E_DIR}/`);
+        it('leaves nothing tracked unrepresented, in the directories it does not call a selection', async () => {
+            const entries = treeEntries(await read(E2E_DOC), `${E2E_DIR}/`);
 
-        // Floor: the checked set collapsing to the root alone would quietly shrink this
-        // to a single directory while still passing. The root is always in it, so a
-        // bare non-empty floor could never fire.
-        expect(completeDirectoriesOf(entries, E2E_DIR).length).toBeGreaterThan(1);
+            // Floor: the checked set collapsing to the root alone would quietly shrink this
+            // to a single directory while still passing. The root is always in it, so a
+            // bare non-empty floor could never fire.
+            expect(completeDirectoriesOf(entries, E2E_DIR).length).toBeGreaterThan(1);
 
-        expect(unaccountedUnder(entries, E2E_DIR, trackedEntries)).toEqual([]);
-    });
-});
+            // A second floor, and this one is about the DISK. `trackedEntries` reads
+            // `git ls-files`, so a suite whose files are not committed yet reports
+            // nothing to account for — and the check below would pass against an empty
+            // listing while the doc said whatever it liked.
+            expect(trackedEntries(E2E_DIR).length).toBeGreaterThan(1);
+
+            expect(unaccountedUnder(entries, E2E_DIR, trackedEntries)).toEqual([]);
+        });
+    },
+);
 
 /**
  * The cases above read the real docs, which are green — so they exercise only the
@@ -457,17 +492,23 @@ describe('the predicates those checks are built from', () => {
         );
     });
 
-    it('lists the real directory, so an empty listing cannot make the check vacuous', () => {
-        // `unaccountedUnder` asserts an EMPTY result over the real docs. That is only a
-        // statement about the tree while the disk side actually reports something, so
-        // the production listing is pinned here rather than only through the fixtures'
-        // own closures.
-        const entries = trackedEntries(E2E_DIR);
+    it.each(E2E_SUITES)(
+        'lists $dir for real, so an empty listing cannot make the check vacuous',
+        ({ dir }) => {
+            // `unaccountedUnder` asserts an EMPTY result over the real docs. That is only
+            // a statement about the tree while the disk side actually reports something,
+            // so the production listing is pinned here rather than only through the
+            // fixtures' own closures. Both suites, because `git ls-files` answers nothing
+            // for a directory that is not committed yet — which is exactly the state a
+            // NEW suite arrives in, and the state in which every doc check above would
+            // pass against an empty listing.
+            const entries = trackedEntries(dir);
 
-        expect(entries).toContain('fixtures');
-        expect(entries).toContain('playwright.config.ts');
-        // Reporter output, which the suite writes into its own directory: untracked,
-        // so `git ls-files` leaves it out without a skip list naming it.
-        expect(entries).not.toContain('playwright-report');
-    });
+            expect(entries).toContain('fixtures');
+            expect(entries).toContain('playwright.config.ts');
+            // Reporter output, which a suite writes into its own directory: untracked,
+            // so `git ls-files` leaves it out without a skip list naming it.
+            expect(entries).not.toContain('playwright-report');
+        },
+    );
 });

@@ -12,6 +12,7 @@ import type {
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
+    GameSetupConfig,
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
 import { sceneId, type SceneRegistry } from '@chimera-engine/simulation/scene/index.js';
@@ -4464,7 +4465,40 @@ describe('resolveInitialEntitiesForGame', () => {
         const resolved = resolveInitialEntitiesForGame(registry, 'custom-game', playerIds);
 
         expect(resolved).toBe(initialEntities);
-        expect(buildInitialEntities).toHaveBeenCalledWith(playerIds);
+        expect(buildInitialEntities).toHaveBeenCalledWith(playerIds, undefined);
+    });
+
+    it('hands the host-authored setup to the hook, so a seat can be seeded from its own pick', () => {
+        // The reason the hook's second parameter exists (§4.37, Invariant #101):
+        // a game seats each player on what `playerAttributes` says that seat
+        // chose. Dropped here, every such game falls silently back to seat
+        // order — the picks still ride the snapshot, so nothing downstream looks
+        // wrong; the players are simply on the wrong pieces.
+        const registry = new ActionRegistry<BaseGameSnapshot>();
+        const host = playerId('host-setup-forwarded');
+        const seat = playerId('host-setup-forwarded-local-2');
+        const playerIds = [host, seat] as const;
+        const setup: GameSetupConfig = {
+            gameParams: { mapSize: 'small' },
+            playerAttributes: {
+                [host]: { primitive: 'cube' },
+                [seat]: { primitive: 'cone' },
+            },
+        };
+        const buildInitialEntities = vi.fn<
+            (
+                playerIds: readonly PlayerId[],
+                setup?: GameSetupConfig,
+            ) => BaseGameSnapshot['entities']
+        >(() => ({}));
+        registry.registerGame('setup-reading-game', { buildInitialEntities });
+
+        resolveInitialEntitiesForGame(registry, 'setup-reading-game', playerIds, setup);
+
+        // The same object, not a rebuilt copy: what the seats agreed to in the
+        // lobby is what the entity builder reads.
+        expect(buildInitialEntities).toHaveBeenCalledWith(playerIds, setup);
+        expect(buildInitialEntities.mock.calls[0]?.[1]).toBe(setup);
     });
 
     it('returns an empty entity map when the game has no GameDefinition', () => {

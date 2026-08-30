@@ -2,11 +2,12 @@
  * electron/main/runtime/e2e-realtime-seam.ts
  *
  * E2E-only seam that forces a live wall-clock {@link RealtimeTicker} onto a host
- * whose manifest is turn-based. Tactics — the only game wired for e2e — is
- * `realtime: false`, so `resolveTickerHz` returns null and no Playwright e2e
- * ever exercises the real-time engine-tick heartbeat (its autonomous firing and
- * its broadcast to clients). This seam lets the heartbeat spec opt one host into
- * a live ticker via `CHIMERA_E2E_REALTIME_TICK_MS`.
+ * whose manifest is turn-based. A turn-based game is `realtime: false`, so
+ * `resolveTickerHz` returns null and a spec driving that host can never see the
+ * engine-tick heartbeat — its autonomous firing, or its broadcast to CLIENTS,
+ * which is the half a single-window realtime game cannot show either. This seam
+ * lets such a spec opt one host into a live ticker via
+ * `CHIMERA_E2E_REALTIME_TICK_MS`.
  *
  * It is deliberately double-gated and production-inert: it fires ONLY when
  * `CHIMERA_E2E === '1'` (never set outside e2e) AND an explicit, valid tick

@@ -28,7 +28,9 @@ import { getShellState } from '@chimera-engine/renderer/game';
 
 import {
     ACTION_SHELL_CAMERA_HOME,
+    ACTION_SHELL_DOLLY_ATTRIBUTE,
     ACTION_SHELL_DOLLY_RETURN_MS,
+    ACTION_SHELL_YAW_ATTRIBUTE,
     actionShellCameraView,
     advanceActionShellPose,
     describeActionShellDolly,
@@ -36,11 +38,6 @@ import {
     resolveActionShellCameraTarget,
     type ActionShellCameraPose,
 } from './actionShellCamera.js';
-
-/** The attribute naming which end of the yaw the camera is at. */
-export const ACTION_SHELL_YAW_ATTRIBUTE = 'data-action-shell-yaw';
-/** The attribute naming which end of the dolly the camera is at. */
-export const ACTION_SHELL_DOLLY_ATTRIBUTE = 'data-action-shell-dolly';
 
 export interface ActionShellCameraRigProps {
     /**

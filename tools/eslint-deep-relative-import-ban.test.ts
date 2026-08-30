@@ -265,8 +265,8 @@ const ZONES: readonly Zone[] = [
     },
 ];
 
-/** The deliberate `'off'` — the e2e suite reaches electron source on purpose. */
-const E2E_PROBE = 'apps/tactics/e2e/global-setup.ts';
+/** The deliberate `'off'` — each app's e2e suite reaches electron source on purpose. */
+const E2E_PROBES = ['apps/tactics/e2e/global-setup.ts', 'apps/action/e2e/global-setup.ts'];
 
 /**
  * What a config block that sets `no-restricted-imports` is allowed to be.
@@ -337,7 +337,7 @@ const CENSUS: readonly CensusRow[] = [
         disposition: 'carries',
         probes: ['electron/preload/api.ts'],
     },
-    { files: ['apps/tactics/e2e/**/*.{ts,tsx}'], disposition: 'off', probes: [E2E_PROBE] },
+    { files: ['apps/*/e2e/**/*.{ts,tsx}'], disposition: 'off', probes: E2E_PROBES },
     {
         files: ['electron/main/**/*.{ts,tsx}'],
         disposition: 'carries',
@@ -531,7 +531,7 @@ describe('deep-relative import ban — every block that sets the rule', () => {
             })),
         ).toEqual([
             { files: signatureOf(['renderer/**/*.{ts,tsx}']), disposition: 'renderer-exempt' },
-            { files: signatureOf(['apps/tactics/e2e/**/*.{ts,tsx}']), disposition: 'off' },
+            { files: signatureOf(['apps/*/e2e/**/*.{ts,tsx}']), disposition: 'off' },
         ]);
     });
 
@@ -587,7 +587,7 @@ describe('deep-relative import ban — every block that sets the rule', () => {
         // stops a zone being probed while every remaining assertion passes,
         // and a census probe nothing resolves is a claim of coverage with no
         // check under it.
-        const resolvedHere = [...ZONES.map((zone) => zone.probe), E2E_PROBE].sort();
+        const resolvedHere = [...ZONES.map((zone) => zone.probe), ...E2E_PROBES].sort();
 
         expect(resolvedHere).toEqual(CENSUS.flatMap((row) => [...row.probes]).sort());
     });
@@ -598,7 +598,7 @@ describe('deep-relative import ban — per-zone resolution', () => {
         // `eslint --print-config <missing>` exits 0 and answers for the path the
         // globs WOULD match, so every assertion below would pass against a file
         // that no longer exists. This is the only check that says otherwise.
-        const missing = [...ZONES.map((zone) => zone.probe), E2E_PROBE].filter(
+        const missing = [...ZONES.map((zone) => zone.probe), ...E2E_PROBES].filter(
             (rel) => !existsSync(resolve(repoRoot, rel)),
         );
 
@@ -709,20 +709,24 @@ describe('deep-relative import ban — per-zone resolution', () => {
         ESLINT_PRINT_CONFIG_TIMEOUT_MS,
     );
 
-    it(
-        'keeps the rule OFF for the apps/*/e2e suite',
-        async () => {
-            // Deliberate, and argued at the zone in eslint.config.mjs.
-            const { severity, patterns } = await resolveRestrictedImports(E2E_PROBE);
+    it.each(E2E_PROBES)(
+        'keeps the rule OFF for %s',
+        async (probe) => {
+            // Deliberate, and argued at the zone in eslint.config.mjs. BOTH apps
+            // are probed because the zone is an `apps/*/e2e/**` glob: a widening
+            // that reached only the app it was written for would leave the other
+            // suite's electron-source reaches banned, and only `--print-config`
+            // says which files a glob actually reaches.
+            const { severity, patterns } = await resolveRestrictedImports(probe);
 
-            expect(severity, E2E_PROBE).toBe(0);
+            expect(severity, probe).toBe(0);
             // The block supplies severity ONLY, and that is the one case flat
             // config does not replace the options: the base group is still
             // resolved here, switched off rather than dropped. Which is the
             // exception the base-block comment claims, so it is pinned where a
             // reader would look for it — and it says the `'off'` is doing the
             // exempting, not an absent pattern.
-            expect(patterns, E2E_PROBE).toContain(DEEP_RELATIVE);
+            expect(patterns, probe).toContain(DEEP_RELATIVE);
         },
         ESLINT_PRINT_CONFIG_TIMEOUT_MS,
     );

@@ -63,6 +63,66 @@ jobs:
           path: apps/tactics/e2e/playwright-report/
           retention-days: 14
 
+  e2e-action:
+    name: Playwright e2e — action app
+    runs-on: ubuntu-latest
+    # A SEPARATE job, not more specs in the tactics one. Each suite's
+    # global-setup deletes its whole build root and reaps its own throwaway
+    # Chromium profile root, which is safe on two runners and not safe inside one
+    # working directory — and running them side by side keeps this workflow's
+    # wall time the slower job's rather than the sum of both.
+    #
+    # The budget below mirrors the tactics job's rather than being scaled to this
+    # suite's size: a timeout is headroom, not an estimate, and the two jobs pay
+    # the same per-run cost of building the packages, a Next host and the
+    # Electron bundles before a single spec runs.
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Start Xvfb
+        run: Xvfb :99 -screen 0 1024x768x24 &
+
+      - name: Run action e2e tests
+        run: pnpm test:e2e:action
+        env:
+          CI: true
+          DISPLAY: ':99'
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          # A name of its own: upload-artifact@v4 FAILS a second upload under a
+          # name already claimed, so sharing the tactics job's would red this job
+          # on a green suite.
+          name: playwright-report-action
+          path: apps/action/e2e/playwright-report/
+          retention-days: 14
+
   verify-scaffold:
     name: verify:scaffold — generated-app smoke
     runs-on: ubuntu-latest

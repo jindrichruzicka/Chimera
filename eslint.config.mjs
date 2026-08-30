@@ -85,8 +85,12 @@ export default tseslint.config(
             'apps/*/ai/__tests__/fixtures/**',
             'apps/*/content/__tests__/fixtures/**',
             // Playwright output directories — generated artefacts, not source.
+            // One build root per consumer app's suite: they delete their own on
+            // every run, so a shared one would have each side remove the other's
+            // bundles out from under a running app.
             '.e2e-build/**',
-            'apps/tactics/e2e/playwright-report/**',
+            '.e2e-build-action/**',
+            'apps/*/e2e/playwright-report/**',
             'test-results/**',
             // In-tree Electron bundle outputs — source lives in the adjacent .ts files.
             'electron/main/index.js',
@@ -627,18 +631,18 @@ export default tseslint.config(
         },
     },
 
-    // The Playwright e2e suite (apps/tactics/e2e/, relocated under the tactics consumer
-    // app in F63 #785) is test infrastructure that drives the running app over IPC
+    // A consumer app's Playwright e2e suite (apps/<game>/e2e/, put under the app it
+    // proves in F63 #785) is test infrastructure that drives the running app over IPC
     // (Invariant #3). It legitimately reaches into electron main/preload SOURCE for the
     // shared constants it asserts on (CHIMERA_RENDERER_HOST, SYSTEM_QUIT_CHANNEL) — these
     // are internal, not part of @chimera-engine/electron's curated public exports, so they
     // cannot be imported through the package alias. Pre-move these were shallow
     // `../../electron/*` reaches under the global `../../../*` deep-relative ban; nesting
-    // the suite three levels deeper pushed the identical reaches past that threshold.
-    // Exempt the suite from the deep-relative import pattern; every other rule still
-    // applies (the per-package boundary bans below never match apps/tactics/e2e/**).
+    // a suite three levels deeper pushed the identical reaches past that threshold.
+    // Exempt the suites from the deep-relative import pattern; every other rule still
+    // applies (the per-package boundary bans below never match apps/*/e2e/**).
     {
-        files: ['apps/tactics/e2e/**/*.{ts,tsx}'],
+        files: ['apps/*/e2e/**/*.{ts,tsx}'],
         rules: {
             'no-restricted-imports': 'off',
         },

@@ -377,11 +377,15 @@ chimera/
 ├── tools/
 │   └── dev-server.ts                # Hot-reload dev harness
 │
-└── apps/tactics/e2e/                # Playwright end-to-end test suite (owned by the tactics consumer app).
-                                     #   Deliberately NOT expanded here — the suite's tree is
-                                     #   §13.3 of ../testing/e2e-testing-playwright.md, and one
-                                     #   directory described in two places is one description
-                                     #   nobody opens when the directory changes.
+├── apps/tactics/e2e/                # Playwright end-to-end test suite (owned by the tactics consumer app).
+│                                    #   Deliberately NOT expanded here — the suite's tree is
+│                                    #   §13.3 of ../testing/e2e-testing-playwright.md, and one
+│                                    #   directory described in two places is one description
+│                                    #   nobody opens when the directory changes.
+└── apps/action/e2e/                 # The action consumer app's own suite — its own build root,
+                                     #   profile root and CI job. Not expanded here either, for
+                                     #   the reason above; its tree is §13.3 of
+                                     #   ../testing/e2e-testing-playwright.md.
 ```
 
 ---
@@ -401,5 +405,5 @@ chimera/
 - [Electron Shell and IPC Bridge](../core-components/electron-shell-ipc-bridge.md) — `electron/` in detail
 - [Simulation Core](../core-components/simulation-core-action-pipeline.md) — `simulation/engine/` in detail
 - [Renderer State Stores](../core-components/renderer-state-stores.md) — `renderer/state/` in detail
-- [Playwright E2E](../testing/e2e-testing-playwright.md) — §13.3 carries the `apps/tactics/e2e/` tree
+- [Playwright E2E](../testing/e2e-testing-playwright.md) — §13.3 carries each consumer suite's tree
 - [Spectator Mode Contract](../core-components/spectator-mode-contract.md) — read-only spectators, the join classifier, and perspective projection (F72)

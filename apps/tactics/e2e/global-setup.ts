@@ -89,8 +89,9 @@ export default function globalSetup(): void {
     // holds: this runs in the runner process before any worker spawns, and the
     // lazy `ensureE2eBuild` path that also calls it only fires when the bundles
     // are missing, which already means no app of this run is running. It does
-    // NOT hold across two e2e runs sharing one temp dir, whichever suite they
-    // belong to — run them one at a time.
+    // NOT hold across two runs of THIS suite sharing one temp dir — run those one
+    // at a time. Another consumer app's suite reaps a root of its own
+    // (`apps/action/e2e`), so it cannot reach this one.
     rmSync(E2E_USER_DATA_ROOT, { recursive: true, force: true });
 
     // Build the engine packages (the shell dist the app re-exports), then the app's

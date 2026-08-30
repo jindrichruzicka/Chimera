@@ -17,7 +17,9 @@ export interface LobbyFixtures {
  * unconditionally (host first, then client).
  *
  * Invariant 5:  window.__chimera is exposed only through preload/api.ts.
- * §13.11 (CHIMERA_E2E production gate): CHIMERA_E2E must never appear in production packaging — set here only.
+ * §13.11 (CHIMERA_E2E production gate): CHIMERA_E2E must never appear in production packaging — no
+ * packaging script sets it, and `tools/e2e-workflow.test.ts` pins that the CI workflow's `env:`
+ * blocks do not either.
  */
 export const test = electronTest.extend<LobbyFixtures>({
     // @chimera-review: Playwright fixture signature requires empty destructuring for unused fixture dependencies

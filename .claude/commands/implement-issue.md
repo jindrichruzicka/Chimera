@@ -9,7 +9,7 @@ Given issue number `$1`:
 2. Load and follow [create-branch](../skills/git/create-branch/SKILL.md), [TDD](../skills/tdd/SKILL.md), [commit-and-push](../skills/git/commit-and-push/SKILL.md).
 3. Load the touched area's docs: [architecture overview](../../docs/architecture-overview.md), [module boundaries](../../docs/executive-architecture/module-boundaries-file-tree.md), [coding standards](../../docs/coding-standards.md).
 4. Implement red → green → refactor, scoped to the issue; update docs only when behaviour, APIs, commands, or workflows change.
-5. Focused tests first, then the gate required by risk; default full gate `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`. If the change touches rendering, e2e page objects, or Electron wiring, also run `pnpm test:e2e` yourself — no review gate runs it for you.
+5. Focused tests first, then the gate required by risk; default full gate `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`. If the change touches rendering, e2e page objects, or Electron wiring, also run the e2e suite of every consumer app it reaches (`pnpm test:e2e`, `pnpm test:e2e:action`) yourself, one at a time — no review gate runs them for you.
 6. Stage only intentional files; run the commit/push skill (first commit: conventional subject + body mentioning red confirmation; later commits: `fixup!`).
 
 Report: branch + HEAD SHA, criteria addressed, tests/gates run, open questions or gaps.

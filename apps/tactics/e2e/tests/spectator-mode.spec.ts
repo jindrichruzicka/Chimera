@@ -15,7 +15,7 @@
  *   2. spectators_disabled — with the toggle OFF, a mid-match join is rejected;
  *      the game DOES declare the capability, so the reason is `spectators_disabled`.
  *   3. match_in_progress — with the manifest capability forced absent (the
- *      `disableSpectators` e2e seam — only tactics is wired for e2e matches), a
+ *      `disableSpectators` e2e seam, since this game declares the capability), a
  *      mid-match join is rejected as `match_in_progress`.
  *
  * Why host + AI (not host + human client): every e2e process boots the same

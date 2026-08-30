@@ -88,11 +88,69 @@ apps/tactics/e2e/
 > full E2E run. Playwright's `testDir: './tests'` correctly excludes them; they are picked
 > up by Vitest's `include` glob instead.
 
+### The action suite
+
+`apps/action` ships a suite of its own. It is a SECOND Playwright project, not
+more specs in the one above: a suite's `global-setup` deletes its whole build
+root and reaps its own throwaway-profile root, so two suites sharing either
+would pull artefacts out from under each other's live apps. Each therefore owns
+both — `.e2e-build-action/` beside the tactics suite's `.e2e-build/`, and
+`chimera-e2e-userdata-action` beside its `chimera-e2e-userdata` — and they run
+as separate CI jobs (§13.11). Two runs of ONE suite still share its roots: run
+those one at a time.
+
+It is deliberately smaller. The action app ships no multiplayer flow, so there
+is no host/client pair and no lobby bootstrap to model; every spec boots where
+production boots the app — `/main-menu/?gameId=action` — and drives the shipped
+verbs from there. The `CHIMERA_E2E` auto-start seams are not offered by its
+fixture at all, because a spec that booted straight into a match would leave
+`chimera:lobby:quick-start` untested on its only production path.
+
+```
+apps/action/e2e/
+├── playwright.config.ts
+├── *.test.ts                    # Vitest coverage of the config, the launch fixture and the
+│                                #   build layout, as at the tactics root above (NOT
+│                                #   enumerated — `ls apps/action/e2e/*.test.ts` is the census)
+├── global-setup.ts              # Builds this app's Next host + Electron bundles; owns the
+│                                #   build-root / profile-root layout both sides read back
+├── tsconfig.json                # Restores @chimera-engine/* path resolution for the runner
+├── fixtures/
+│   ├── *.test.ts                # Vitest coverage co-located with some of the modules
+│   │                            #   beside them — a selection, not a census; the launch
+│   │                            #   config's own tests sit at the suite root above
+│   ├── electron.fixture.ts      # One app per test, booted at this game's menu; `actionPort`
+│   │                            #   is a Playwright OPTION, so each spec file takes its own
+│   ├── inherit-env.ts           # Sanitised env passthrough (this app's own copy — a game
+│   │                            #   directory may not import another's, §3)
+│   ├── open-window.ts           # firstWindow + domcontentloaded, diagnosed on timeout
+│   └── user-data-root.ts        # Root of the per-launch throwaway Chromium profiles
+├── helpers/
+│   ├── *.test.ts                # Vitest coverage co-located with some of the modules
+│   │                            #   beside them — a selection, not a census
+│   ├── action-snapshot.ts       # Arena reads off the projected snapshot — NOT a clock
+│   ├── attribute-timeline.ts    # MutationObserver recorder for the camera phase attributes
+│   ├── enter-match.ts           # Menu → /select → a revealed match, and the Leave that ends it
+│   └── route-trace.ts           # Records the routes a window VISITS (this app's own copy)
+├── pages/
+│   ├── ActionInGameMenuPage.ts  # The ENGINE-default Resume/Leave menu this game selects by
+│   │                            #   registering no `inGameMenu` slot
+│   ├── ActionMainMenuPage.ts
+│   ├── ActionMatchPage.ts
+│   ├── ActionSelectPage.ts      # The game-owned `/select` route declared through `shellRoutes`
+│   ├── ActionSettingsPage.ts
+│   └── ActionShellBackgroundPage.ts
+└── tests/                       # The specs. Deliberately NOT enumerated here, for the reason
+                                 #   the tactics tree gives — `ls apps/action/e2e/tests/` is
+                                 #   the census.
+```
+
 ---
 
 ## §13.4 Playwright Configuration
 
-`apps/tactics/e2e/playwright.config.ts`.
+`apps/tactics/e2e/playwright.config.ts`, and `apps/action/e2e/playwright.config.ts`
+beside it.
 `apps/tactics/e2e/playwright.config.test.ts` pins the values the suite's behaviour depends on,
 so a reproduction here would be a second copy free to drift from both.
 
@@ -845,31 +903,21 @@ The flag is not forwarded to the renderer process. Main-process code paths that 
 
 ## §13.11 CI Integration
 
-```yaml
-# .github/workflows/e2e.yml
-jobs:
-    e2e:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-node@v4
-              with: { node-version: '20' }
-            - run: npm ci
-            - run: npm run build:renderer
-            - run: npm run build:electron
-            - name: Install Playwright browsers
-              run: npx playwright install --with-deps chromium
-            - name: Run E2E tests
-              run: npx playwright test --project=electron-e2e
-              env:
-                  CI: true
-                  DISPLAY: ':99' # Xvfb for headless Electron on Linux
-            - uses: actions/upload-artifact@v4
-              if: always()
-              with:
-                  name: playwright-report
-                  path: apps/tactics/e2e/playwright-report/
-```
+`.github/workflows/e2e.yml` is the file; it is not transcribed here, because a
+copy of a workflow is a second workflow nobody runs. What the shape means:
+
+- **One job per consumer suite** — `pnpm test:e2e` for tactics, `pnpm test:e2e:action`
+  for action — rather than one job running both. Each suite's `global-setup`
+  deletes its own build root and reaps its own profile root (§13.3), which is
+  safe on two runners and not safe inside one working directory. The jobs run
+  side by side, so the workflow's wall time is the slower job's rather than the
+  sum.
+- **A report artifact per job, under distinct names.** `actions/upload-artifact@v4`
+  fails a second upload under a name already claimed, so a shared name would red
+  a job on a green suite.
+- **No build step of its own.** Each `global-setup` builds the packages, that
+  app's Next host and its Electron bundles; a workflow step doing it again would
+  be dead work.
 
 On macOS runners, `DISPLAY` is not required. On Linux, an `Xvfb` step is needed because Electron requires a display server.
 
@@ -877,12 +925,12 @@ On macOS runners, `DISPLAY` is not required. On Linux, an `Xvfb` step is needed 
 
 ## §13.12 Security Notes
 
-| Concern               | Rule                                                                                                                                                       |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Test hook surface     | `__e2eHooks` exposes only `dispatchTick` as an active method; all other fields are read-only from tests. All dispatched ticks go through `ActionPipeline`. |
-| Isolated ports        | Each test suite uses a dedicated port (`CHIMERA_PORT`). `workers: 1` prevents fixed-port collision.                                                        |
-| No credentials in env | `CHIMERA_E2E` env block must never log or expose lobby tokens, seeds, or player data.                                                                      |
-| Production gate       | `CHIMERA_E2E` is never set in production packaging scripts. `electron-builder` config explicitly omits it.                                                 |
+| Concern               | Rule                                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Test hook surface     | `__e2eHooks` exposes only `dispatchTick` as an active method; all other fields are read-only from tests. All dispatched ticks go through `ActionPipeline`.                                                                                                                                                                                                                           |
+| Isolated ports        | A spec that hosts a session binds `CHIMERA_PORT`. `fullyParallel: false` serialises the tests inside one file, not the files themselves, and both configs run two workers — so which specs may share a port is a per-suite question. What each suite does is in its own fixture (`apps/<game>/e2e/fixtures/electron.fixture.ts`) and, for the action suite, its `actionPort` option. |
+| No credentials in env | `CHIMERA_E2E` env block must never log or expose lobby tokens, seeds, or player data.                                                                                                                                                                                                                                                                                                |
+| Production gate       | `CHIMERA_E2E` is never set in production packaging scripts. `electron-builder` config explicitly omits it.                                                                                                                                                                                                                                                                           |
 
 ---
 

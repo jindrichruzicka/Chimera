@@ -21,6 +21,7 @@ pnpm test              # all unit and integration tests, every package
 pnpm test:watch        # vitest — interactive watch mode
 pnpm coverage          # vitest run --coverage (reported, not threshold-gated)
 pnpm test:e2e          # playwright test --config=apps/tactics/e2e/playwright.config.ts --project=electron-e2e
+pnpm test:e2e:action   # the same for apps/action/e2e — one suite per consumer app, run one at a time
 pnpm lint              # eslint with all chimera/* rules
 pnpm validate:assets   # check AssetRef strings in game data and SceneDescriptor.requiredAssets
 pnpm icons:generate    # regenerate the app icon set (.icns/.ico/PNG) from docs/assets/chimera-logo-compact.png into electron/assets/icons/
