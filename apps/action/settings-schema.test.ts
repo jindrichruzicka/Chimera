@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ENGINE_DEFAULTS } from '@chimera-engine/simulation/settings/index.js';
 
 import { ACTION_GAME_ID } from './simulation/constants.js';
-import { ACTION_DEFAULT_MOVE_BINDINGS, ACTION_MOVE_ACTION_IDS } from './input-action-ids.js';
+import { ACTION_ALL_MOVE_ACTION_IDS, ACTION_DEFAULT_MOVE_BINDINGS } from './input-action-ids.js';
 import { ACTION_DEFAULTS, actionSettingsSchema } from './settings-schema.js';
 
 describe('actionSettingsSchema', () => {
@@ -24,12 +24,25 @@ describe('actionSettingsSchema', () => {
         expect(ACTION_DEFAULTS).toEqual(actionSettingsSchema.defaults);
     });
 
-    it('adds the four arrow-key movement bindings on top of the engine ones', () => {
+    it("adds BOTH seats' movement bindings on top of the engine ones", () => {
+        // Both clusters, not seat one's: the pass-and-play seat arrives bound
+        // or it is a seat nobody can move on a fresh install, and the seat-one
+        // list would iterate clean either way.
         const bindings = actionSettingsSchema.defaults.controls.bindings;
 
-        for (const id of ACTION_MOVE_ACTION_IDS) {
+        for (const id of ACTION_ALL_MOVE_ACTION_IDS) {
             expect(bindings[id], id).toEqual(ACTION_DEFAULT_MOVE_BINDINGS[id]);
         }
+    });
+
+    it('carries every binding the id table declares, and invents none', () => {
+        // The count, as a set difference rather than a number: a game id in the
+        // defaults that the table does not declare is a row the rebind pane
+        // lists for an action nothing dispatches.
+        const bindings = actionSettingsSchema.defaults.controls.bindings;
+        const gameIds = Object.keys(bindings).filter((id) => id.startsWith('game:'));
+
+        expect(gameIds.sort()).toEqual([...ACTION_ALL_MOVE_ACTION_IDS].sort());
     });
 
     it('keeps every engine binding it did not author', () => {

@@ -15,10 +15,13 @@ import { InputManagerProvider, type InputManager } from '@chimera-engine/rendere
 import type { InputActionId, InputEvent } from '@chimera-engine/renderer/input';
 
 import {
+    ACTION_CONTROL_ATTRIBUTE,
+    ACTION_PRIMITIVE_ATTRIBUTE,
     ACTION_SELECT_PRIMITIVE_ACTION,
     ACTION_SET_VELOCITY_ACTION,
+    ACTION_WASD_CONTROL,
 } from '../simulation/constants.js';
-import { ACTION_MOVE_ACTION_IDS } from '../input-action-ids.js';
+import { ACTION_ALL_MOVE_ACTION_IDS, ACTION_MOVE_ACTION_IDS } from '../input-action-ids.js';
 import { ACTION_PRIMITIVE_HEIGHT, arenaToWorld } from '../components/actionSceneModel.js';
 import { ActionPlayfield } from './ActionPlayfield';
 import playfieldStyles from './ActionPlayfield.module.css';
@@ -190,6 +193,7 @@ function renderPlayfield(
         readonly snapshot?: PlayerSnapshot;
         readonly localPlayerId?: PlayerId;
         readonly sendAction?: ReturnType<typeof vi.fn>;
+        readonly isHost?: boolean;
     } = {},
 ): { readonly sendAction: ReturnType<typeof vi.fn> } {
     const sendAction = options.sendAction ?? vi.fn();
@@ -199,6 +203,7 @@ function renderPlayfield(
                 snapshot={options.snapshot ?? makeSnapshot()}
                 localPlayerId={options.localPlayerId ?? P1}
                 sendAction={sendAction as GameSendAction}
+                {...(options.isHost === undefined ? {} : { isHost: options.isHost })}
             />
         </InputManagerProvider>,
     );
@@ -611,5 +616,111 @@ describe('ActionPlayfield — selection', () => {
 
         expect(second).toHaveBeenCalledTimes(1);
         expect(first).not.toHaveBeenCalled();
+    });
+});
+
+// ── The pass-and-play seat ───────────────────────────────────────────────────
+
+describe('ActionPlayfield — the pass-and-play seat', () => {
+    /** A snapshot whose setup marks P2 as the WASD-driven local seat. */
+    function twoSeatSnapshot(): PlayerSnapshot {
+        return {
+            ...makeSnapshot(),
+            setup: {
+                gameParams: {},
+                playerAttributes: {
+                    [P1]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'cube' },
+                    [P2]: {
+                        [ACTION_PRIMITIVE_ATTRIBUTE]: 'sphere',
+                        [ACTION_CONTROL_ATTRIBUTE]: ACTION_WASD_CONTROL,
+                    },
+                },
+            },
+        };
+    }
+
+    it('subscribes only seat one’s cluster when the match has no second local seat', () => {
+        renderPlayfield();
+
+        expect([...subscribers.keys()].sort()).toEqual([...ACTION_MOVE_ACTION_IDS].sort());
+    });
+
+    it('subscribes BOTH clusters once a WASD seat is declared', () => {
+        renderPlayfield({ snapshot: twoSeatSnapshot() });
+
+        expect([...subscribers.keys()].sort()).toEqual([...ACTION_ALL_MOVE_ACTION_IDS].sort());
+    });
+
+    it('stamps a WASD velocity with the SECOND seat’s player id', () => {
+        const { sendAction } = renderPlayfield({ snapshot: twoSeatSnapshot() });
+
+        fireInput('game:p2-move-right', true);
+
+        expect(sendAction).toHaveBeenCalledWith({
+            type: ACTION_SET_VELOCITY_ACTION,
+            playerId: P2,
+            tick: 12,
+            payload: { dx: 1, dy: 0 },
+        });
+    });
+
+    it('still stamps an arrow velocity with the viewer’s own id', () => {
+        const { sendAction } = renderPlayfield({ snapshot: twoSeatSnapshot() });
+
+        fireInput('game:move-left', true);
+
+        expect(sendAction).toHaveBeenCalledWith(
+            expect.objectContaining({ playerId: P1, payload: { dx: -1, dy: 0 } }),
+        );
+    });
+
+    it('keeps the two seats’ held sets apart', () => {
+        // One shared held set would fold the second player's key into the first
+        // player's velocity — both primitives would move as one.
+        const { sendAction } = renderPlayfield({ snapshot: twoSeatSnapshot() });
+
+        fireInput('game:move-right', true);
+        sendAction.mockClear();
+        fireInput('game:p2-move-up', true);
+
+        expect(sendAction).toHaveBeenCalledTimes(1);
+        expect(sendAction).toHaveBeenCalledWith(
+            expect.objectContaining({ playerId: P2, payload: { dx: 0, dy: -1 } }),
+        );
+    });
+
+    it('drives no second seat for a joined (non-host) viewer', () => {
+        const { sendAction } = renderPlayfield({ snapshot: twoSeatSnapshot(), isHost: false });
+
+        expect([...subscribers.keys()].sort()).toEqual([...ACTION_MOVE_ACTION_IDS].sort());
+        fireInput('game:p2-move-right', true);
+        expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('names only the arrow keys in the hint while the match is solo', () => {
+        // A solo match has no second seat to announce: telling one player
+        // about player 2's keys is an instruction they cannot follow.
+        renderPlayfield();
+
+        const hint = screen.getByText(/arrow keys/iu);
+        expect(hint.textContent).not.toMatch(/wasd/iu);
+    });
+
+    it('names BOTH clusters in the hint once a second seat is declared', () => {
+        renderPlayfield({ snapshot: twoSeatSnapshot() });
+
+        const hint = screen.getByText(/arrow keys/iu);
+        expect(hint.textContent).toMatch(/wasd/iu);
+        expect(hint.textContent).toMatch(/player 2/iu);
+    });
+
+    it('selects for the VIEWER when a primitive is clicked, never for the second seat', () => {
+        const { sendAction } = renderPlayfield({ snapshot: twoSeatSnapshot() });
+
+        screen.getByTestId('action-primitive-primitive-sphere').click();
+
+        expect(sendAction).toHaveBeenCalledWith(
+            expect.objectContaining({ type: ACTION_SELECT_PRIMITIVE_ACTION, playerId: P1 }),
+        );
     });
 });

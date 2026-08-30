@@ -3,8 +3,18 @@ import { entityId, playerId } from '@chimera-engine/simulation/engine/types.js';
 import type { ObservedEntityState } from '@chimera-engine/simulation/projection/types.js';
 import type { EntityId } from '@chimera-engine/simulation/engine/types.js';
 
-import { ACTION_ARENA_DEPTH_CELLS, ACTION_ARENA_WIDTH_CELLS } from '../simulation/constants.js';
-import { ACTION_PRIMITIVE_HEIGHT, arenaToWorld, parseActionScene } from './actionSceneModel.js';
+import {
+    ACTION_ARENA_DEPTH_CELLS,
+    ACTION_ARENA_WIDTH_CELLS,
+    ACTION_PRIMITIVE_SEEDS,
+    ACTION_PRIMITIVE_SHAPES,
+} from '../simulation/constants.js';
+import {
+    ACTION_PRIMITIVE_HEIGHT,
+    arenaToWorld,
+    buildActionShellScene,
+    parseActionScene,
+} from './actionSceneModel.js';
 
 const P1 = playerId('player-1');
 
@@ -134,5 +144,51 @@ describe('parseActionScene', () => {
         const scene = parseActionScene(entities(cube, sphere));
 
         expect(scene.primitives.find((p) => p.ownerId === P1)?.id).toBe('primitive-cube');
+    });
+});
+
+describe('buildActionShellScene', () => {
+    it('mounts one primitive per seed, at the seed’s own world position', () => {
+        const scene = buildActionShellScene();
+
+        expect(scene.primitives.map((primitive) => primitive.shape)).toEqual([
+            ...ACTION_PRIMITIVE_SHAPES,
+        ]);
+        for (const seed of ACTION_PRIMITIVE_SEEDS) {
+            const primitive = scene.primitives.find((candidate) => candidate.shape === seed.shape);
+            expect(primitive?.id, seed.shape).toBe(seed.id);
+            expect(primitive?.world, seed.shape).toEqual(
+                arenaToWorld({ x: seed.x, y: seed.y }, ACTION_PRIMITIVE_HEIGHT),
+            );
+        }
+    });
+
+    it('leaves every primitive unowned', () => {
+        // The shell has no session and no seats: an ownerId here would colour a
+        // primitive as somebody's before a match exists.
+        for (const primitive of buildActionShellScene().primitives) {
+            expect(primitive.ownerId, primitive.id).toBeNull();
+        }
+    });
+
+    it('sizes the ground from the arena extents', () => {
+        const scene = buildActionShellScene();
+
+        expect(scene.ground).toEqual({
+            widthCells: ACTION_ARENA_WIDTH_CELLS,
+            depthCells: ACTION_ARENA_DEPTH_CELLS,
+        });
+    });
+
+    it('builds an independent scene per call', () => {
+        expect(buildActionShellScene()).not.toBe(buildActionShellScene());
+    });
+
+    it('orders the primitives by seed, so the picker row reads left to right', () => {
+        // The `/select` page steps along this row; a scene sorted by id instead
+        // would step in an order the arena does not show.
+        const xs = buildActionShellScene().primitives.map((primitive) => primitive.world[0]);
+
+        expect(xs).toEqual([...xs].sort((left, right) => left - right));
     });
 });

@@ -1,15 +1,15 @@
 /**
  * apps/action/settings-schema.ts
  *
- * The action app's settings schema — the engine defaults plus the four arrow-key
- * movement bindings, and nothing else. The host registers it with
+ * The action app's settings schema — the engine defaults plus the movement
+ * bindings, and nothing else. The host registers it with
  * `SettingsManager` at startup so the settings page and persistence work.
  *
  * There is no game-specific FIELD here on purpose: the app is a movement
  * sandbox, so an `arenaGridVisible`-style toggle would be a settings row
- * nothing reads. What it does own is `controls.bindings` — the four movement
- * actions have to arrive with default keys or the rebind UI lists them unbound
- * and the arrow keys do nothing on a fresh install.
+ * nothing reads. What it does own is `controls.bindings` — every movement
+ * action has to arrive with a default key or the rebind UI lists it unbound and
+ * nothing moves on a fresh install.
  *
  * Architecture reference: §4.13
  *

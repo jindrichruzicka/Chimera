@@ -543,9 +543,10 @@ describe('the workspace itself', () => {
         // A crawl that found nothing to read would make the assertion below
         // vacuous whatever the games declare.
         expect(filesScanned).toBeGreaterThan(0);
-        // And the count the crawl DID find, so the day a game declares a route
-        // this number is a hostage that has to be re-read rather than a silence.
-        expect(routesDeclared).toBe(0);
+        // And the count the crawl DID find, so a route added or dropped is a
+        // number that has to be re-read here rather than a silence. One today:
+        // the action app's `/select` picker.
+        expect(routesDeclared).toBe(1);
         expect(findings, formatShellRouteFindings(findings)).toEqual([]);
     });
 

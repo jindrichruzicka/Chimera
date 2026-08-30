@@ -5,14 +5,19 @@ import {
     ACTION_ARENA_MAX_Y,
     ACTION_ARENA_MIN_X,
     ACTION_ARENA_MIN_Y,
+    ACTION_CONTROL_ATTRIBUTE,
     ACTION_GAME_ID,
     ACTION_GROUND_ENTITY_ID_VALUE,
+    ACTION_PRIMITIVE_ATTRIBUTE,
     ACTION_PRIMITIVE_SEEDS,
+    ACTION_PRIMITIVE_SHAPES,
     ACTION_SELECT_PRIMITIVE_ACTION,
     ACTION_SET_VELOCITY_ACTION,
     ACTION_TICK_RATE_MS,
+    ACTION_WASD_CONTROL,
     clampToArenaX,
     clampToArenaY,
+    isActionPrimitiveShape,
 } from './constants.js';
 
 // The action app's identity + arena geometry. Every other module derives from
@@ -115,5 +120,33 @@ describe('action constants', () => {
     it('clamps X on the X bounds, not the Y ones', () => {
         expect(clampToArenaX(ACTION_ARENA_MAX_X)).toBe(ACTION_ARENA_MAX_X);
         expect(ACTION_ARENA_MAX_X).not.toBe(ACTION_ARENA_MAX_Y);
+    });
+});
+
+describe('seat attributes', () => {
+    it('names the two attribute keys the shell writes and the match reads', () => {
+        expect(ACTION_PRIMITIVE_ATTRIBUTE).toBe('primitive');
+        expect(ACTION_CONTROL_ATTRIBUTE).toBe('control');
+        expect(ACTION_WASD_CONTROL).toBe('wasd');
+    });
+
+    describe('isActionPrimitiveShape', () => {
+        it.each(ACTION_PRIMITIVE_SHAPES)('admits the declared shape %s', (shape) => {
+            expect(isActionPrimitiveShape(shape)).toBe(true);
+        });
+
+        it('rejects a string that names no shape', () => {
+            expect(isActionPrimitiveShape('dodecahedron')).toBe(false);
+        });
+
+        it('rejects a shape name in the wrong case', () => {
+            // The attribute travels on the wire verbatim; a case-folding check
+            // would admit a value the seed list cannot match.
+            expect(isActionPrimitiveShape('Cube')).toBe(false);
+        });
+
+        it.each([undefined, null, 0, {}, ['cube']])('rejects the non-string %s', (value) => {
+            expect(isActionPrimitiveShape(value)).toBe(false);
+        });
     });
 });

@@ -5,6 +5,7 @@ import type { EntityId } from '@chimera-engine/simulation/engine/types.js';
 import {
     ACTION_ARENA_DEPTH_CELLS,
     ACTION_ARENA_WIDTH_CELLS,
+    ACTION_PRIMITIVE_ATTRIBUTE,
     ACTION_GROUND_ENTITY_ID_VALUE,
     ACTION_PRIMITIVE_SEEDS,
 } from './constants.js';
@@ -124,3 +125,107 @@ describe('buildInitialActionEntities', () => {
         expect(secondCube.ownerId).toBe(bob);
     });
 });
+
+describe('buildInitialActionEntities — primitive-driven seating', () => {
+    const setupWith = (attributes: Record<string, Record<string, string>>) => ({
+        gameParams: {},
+        playerAttributes: attributes,
+    });
+
+    it('seats a player on the primitive their primitive attribute names', () => {
+        const entities = buildInitialActionEntities(
+            [alice],
+            setupWith({ [alice]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'cone' } }),
+        );
+
+        expect(ownerOfShape(entities, 'cone')).toBe(alice);
+        expect(ownerOfShape(entities, 'cube')).toBeNull();
+    });
+
+    it('gives the SECOND seat its own named primitive, not the next seed in order', () => {
+        const entities = buildInitialActionEntities(
+            [alice, bob],
+            setupWith({
+                [alice]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'cone' },
+                [bob]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'cube' },
+            }),
+        );
+
+        expect(ownerOfShape(entities, 'cone')).toBe(alice);
+        expect(ownerOfShape(entities, 'cube')).toBe(bob);
+        expect(ownerOfShape(entities, 'sphere')).toBeNull();
+    });
+
+    it('falls back to seat order for a seat that names nothing', () => {
+        const entities = buildInitialActionEntities([alice, bob], setupWith({}));
+
+        expect(ownerOfShape(entities, 'cube')).toBe(alice);
+        expect(ownerOfShape(entities, 'sphere')).toBe(bob);
+    });
+
+    it('gives a NAMED primitive to the seat that named it, over an earlier seat with no pick', () => {
+        // Why there are two passes at all — the rule itself is
+        // `assignActionPrimitiveOwners`' JSDoc. Folding the fallback into one
+        // pass would let alice — who named nothing — take seed 0 first, and bob
+        // would watch someone else drive the cube he chose.
+        const entities = buildInitialActionEntities(
+            [alice, bob],
+            setupWith({ [bob]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'cube' } }),
+        );
+
+        expect(ownerOfShape(entities, 'cube')).toBe(bob);
+        expect(ownerOfShape(entities, 'sphere')).toBe(alice);
+    });
+
+    it('gives an earlier seat the primitive both named, and the later seat the first free one', () => {
+        // Exclusivity is enforced on the shell side, so this is the wire arriving
+        // in a state the picker cannot produce. It must still seat both.
+        const entities = buildInitialActionEntities(
+            [alice, bob],
+            setupWith({
+                [alice]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'cone' },
+                [bob]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'cone' },
+            }),
+        );
+
+        expect(ownerOfShape(entities, 'cone')).toBe(alice);
+        expect(ownerOfShape(entities, 'cube')).toBe(bob);
+    });
+
+    it('ignores a primitive value that names no shape', () => {
+        const entities = buildInitialActionEntities(
+            [alice],
+            setupWith({ [alice]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'dodecahedron' } }),
+        );
+
+        expect(ownerOfShape(entities, 'cube')).toBe(alice);
+    });
+
+    it('reads the primitive off the ACTING seat, never the first entry in the map', () => {
+        // A lookup that took `Object.values(playerAttributes)[0]` would pass a
+        // one-seat fixture and seat bob on alice's pick here.
+        const entities = buildInitialActionEntities(
+            [bob],
+            setupWith({
+                [alice]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'cone' },
+                [bob]: { [ACTION_PRIMITIVE_ATTRIBUTE]: 'sphere' },
+            }),
+        );
+
+        expect(ownerOfShape(entities, 'sphere')).toBe(bob);
+        expect(ownerOfShape(entities, 'cone')).toBeNull();
+    });
+});
+
+/** The seat driving the primitive of `shape`, or `null` when it is unclaimed. */
+function ownerOfShape(
+    entities: ReturnType<typeof buildInitialActionEntities>,
+    shape: string,
+): string | null {
+    for (const entity of Object.values(entities)) {
+        if (isActionPrimitiveEntity(entity) && entity.shape === shape) {
+            return entity.ownerId;
+        }
+    }
+    throw new Error(`no primitive of shape ${shape}`);
+}

@@ -28,17 +28,24 @@ describe('actionManifest', () => {
     });
 
     it('declares no cursor, logo screen or icon override', () => {
-        // The shell task adds what the menu needs; until then the surface stays
-        // minimal and the engine defaults apply.
+        // This app ships no cursor art and no boot sequence, so the engine
+        // defaults apply.
         expect(actionManifest.cursor).toBeUndefined();
         expect(actionManifest.logoScreen).toBeUndefined();
         expect(actionManifest.icon).toBeUndefined();
     });
 
+    it('names the ONE locale its translation bundle is keyed at', () => {
+        // The registry loader dev-warns for every contributed bundle whose
+        // locale matches no declared language, so an app that ships a bundle
+        // owes the declaration even when it ships only one.
+        expect(actionManifest.languages).toEqual([{ code: 'en-US', label: 'English' }]);
+    });
+
     it('is single-language, so the engine hides the language selector', () => {
         // Asserted through `resolveGameLanguages`, the engine's own reader, so
-        // the claim is about what the engine SEES rather than about the field.
-        expect(actionManifest.languages).toBeUndefined();
+        // the claim is about what the engine SEES rather than about the field:
+        // one declared language resolves to `undefined`, exactly as none does.
         expect(resolveGameLanguages(actionManifest)).toBeUndefined();
     });
 

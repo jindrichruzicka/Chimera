@@ -3,6 +3,9 @@ import path from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { ACTION_GAME_ID } from './simulation/constants.js';
+import { actionShellAudioRefs } from './shell-asset-manifest.js';
+
 // Locks the contract of the apps/action electron-builder packaging config. Like
 // its apps/tactics sibling it reads the YAML as text and asserts shape rather
 // than parsing it (the repo intentionally carries no YAML-parser dependency).
@@ -73,6 +76,27 @@ describe('apps/action electron-builder.yml packaging config', () => {
 
     it('excludes renderer source maps from the packaged renderer/out file set', () => {
         expect(content).toMatch(/from:\s*renderer\/out[\s\S]{0,200}?!\*\*\/\*\.map/);
+    });
+
+    // The path math the packaged host needs: resolveRuntimePaths resolves game
+    // assets at <app>/apps/<gameId>/assets. Ship them anywhere else and the
+    // shell's menu bed and select blip resolve to files that are not there.
+    it('remaps the game assets into the apps/action/ subtree (gameAssetsRoot path math)', () => {
+        expect(content).toMatch(/from:\s*assets\s*\n\s*to:\s*apps\/action\/assets\b/);
+    });
+
+    it('ships every committed game asset the shell manifest declares', () => {
+        // The config names a DIRECTORY, so this is not a per-file allowlist to
+        // keep in step — what it holds is that the directory it names is the one
+        // the refs resolve into, and that the files are actually committed.
+        for (const ref of Object.values(actionShellAudioRefs)) {
+            const relative = String(ref).slice(`${ACTION_GAME_ID}/`.length);
+            expect(existsSync(path.join(appRoot, 'assets', relative)), String(ref)).toBe(true);
+        }
+    });
+
+    it('ships no data directory, because the app declares no content collections', () => {
+        expect(content).not.toMatch(/to:\s*apps\/action\/data\b/);
     });
 
     // Runtime window-icon contract: the bundled host's resolveAppIcon loads the

@@ -12,15 +12,22 @@ import { ACTION_GAME_ID, ACTION_TICK_RATE_MS } from './simulation/constants.js';
  * pass rides that tick, so the manifest and the simulation must agree on the
  * interval — hence the imported constant rather than a second literal here.
  *
+ * `languages` names the ONE locale the shell's bundle is keyed at. A single
+ * entry is behaviour-neutral by design — `resolveGameLanguages` answers
+ * `undefined` below two, so the engine hides the language selector and never
+ * switches locale — and declaring it is what stops the registry loader
+ * dev-warning that the app's only translation bundle matches no declared
+ * language.
+ *
  * The rest of the surface is deliberately EMPTY. No `cursor`, no `logoScreen`,
- * no `icon`, no `languages`, no `spectators`: this task lands the app skeleton,
- * the simulation and the match screens, and every menu-facing declaration
- * belongs to the shell task that authors the menu it is for. An option declared
- * here before anything reads it is a claim the app cannot yet keep.
+ * no `icon`, no `spectators`: this app ships no cursor art, no boot sequence and
+ * no spectator mode, and an option declared here before anything reads it is a
+ * claim the app cannot keep.
  */
 export const actionManifest: GameManifest = {
     gameId: ACTION_GAME_ID,
     displayName: 'Action',
     realtime: true,
     tickRateMs: ACTION_TICK_RATE_MS,
+    languages: [{ code: 'en-US', label: 'English' }],
 };

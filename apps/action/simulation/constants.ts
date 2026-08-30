@@ -40,7 +40,7 @@ export const ACTION_ARENA_MAX_Y = 5;
 export const ACTION_ARENA_WIDTH_CELLS = ACTION_ARENA_MAX_X - ACTION_ARENA_MIN_X + 1;
 export const ACTION_ARENA_DEPTH_CELLS = ACTION_ARENA_MAX_Y - ACTION_ARENA_MIN_Y + 1;
 
-/** The three primitive shapes a match seeds, in seat order. */
+/** The three primitive shapes a match seeds, in the order they are laid out. */
 export const ACTION_PRIMITIVE_SHAPES = ['cube', 'sphere', 'cone'] as const;
 export type ActionPrimitiveShape = (typeof ACTION_PRIMITIVE_SHAPES)[number];
 
@@ -56,9 +56,9 @@ export interface ActionPrimitiveSeed {
 }
 
 /**
- * The primitives every match starts with, in seat order: seat 0 drives the
- * cube, seat 1 the sphere, seat 2 the cone. A shorter roster leaves the
- * remaining primitives unowned and stationary until a seat selects one.
+ * The primitives every match starts with. Which seat drives which is decided by
+ * `assignActionPrimitiveOwners` in `entities.ts`; a primitive no seat took stays
+ * unowned and stationary until one selects it.
  *
  * Spread across the arena's long axis so a two-seat match starts with visible
  * space between the driven primitives and the spare one.
@@ -81,4 +81,34 @@ export function clampToArenaY(y: number): number {
     if (y < ACTION_ARENA_MIN_Y) return ACTION_ARENA_MIN_Y;
     if (y > ACTION_ARENA_MAX_Y) return ACTION_ARENA_MAX_Y;
     return y;
+}
+
+// ── Seat attributes ──────────────────────────────────────────────────────────
+//
+// The per-seat picks the shell's `/select` page writes onto the quick-start
+// draft and the lobby carries into `snapshot.setup.playerAttributes`
+// (Invariant #101). They are named HERE, beside the shapes and the seeds,
+// because both ends read them: the shell writes them and `entities.ts` seats
+// each player on the primitive its `primitive` names.
+
+/** Seat attribute naming the {@link ACTION_PRIMITIVE_SHAPES} member a seat drives. */
+export const ACTION_PRIMITIVE_ATTRIBUTE = 'primitive';
+
+/**
+ * Seat attribute naming which key cluster on the HOST machine drives a seat.
+ *
+ * Only the pass-and-play seat carries it. The host's own seat needs none: the
+ * engine already names that seat to the renderer as `localPlayerId`, so a
+ * marker on it would be a second answer to a question already answered.
+ */
+export const ACTION_CONTROL_ATTRIBUTE = 'control';
+
+/** The one {@link ACTION_CONTROL_ATTRIBUTE} value this app declares. */
+export const ACTION_WASD_CONTROL = 'wasd';
+
+/** Whether `value` names one of the three primitive shapes. */
+export function isActionPrimitiveShape(value: unknown): value is ActionPrimitiveShape {
+    return (
+        typeof value === 'string' && (ACTION_PRIMITIVE_SHAPES as readonly string[]).includes(value)
+    );
 }

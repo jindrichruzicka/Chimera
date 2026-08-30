@@ -1,0 +1,53 @@
+/*
+ * The `/select` page's own layer.
+ *
+ * CLICK-THROUGH BY CONSTRUCTION. This page is the top layer on its own route,
+ * and under the game's `shellBackgroundInteractive` opt-in the engine's layers
+ * below it have already stood aside (§4.37.9) — so a container that took
+ * pointer events over its whole box would be the one thing left swallowing the
+ * click aimed at a primitive. The container refuses them and restores them on
+ * its direct children with `> *`, the same construction the engine's own
+ * main-menu page uses, so whatever this page grows next is clickable the day it
+ * is added.
+ */
+.container {
+    position: fixed;
+    inset: var(--ch-space-none);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--ch-space-xl);
+    pointer-events: none;
+}
+
+.container > * {
+    pointer-events: auto;
+}
+
+.header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--ch-space-xs);
+    text-align: center;
+}
+
+.footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--ch-space-md);
+}
+
+.picks {
+    display: flex;
+    gap: var(--ch-space-lg);
+    justify-content: center;
+}
+
+.actions {
+    display: flex;
+    gap: var(--ch-space-sm);
+    justify-content: center;
+}

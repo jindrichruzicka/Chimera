@@ -1,0 +1,13 @@
+/*
+ * The background's own box.
+ *
+ * `ShellBackgroundHost` is a fixed, inset-0, overflow-hidden plate, so an
+ * absolutely positioned child at inset 0 fills it and gives the r3f wrapper a
+ * DEFINITE size to resolve its 100%/100% against. An in-flow div here would
+ * resolve to auto height instead and the canvas would collapse to a strip —
+ * the failure camera-system.md §4.22 "Sizing the wrapper" names.
+ */
+.host {
+    position: absolute;
+    inset: var(--ch-space-none);
+}

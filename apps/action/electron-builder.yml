@@ -47,9 +47,16 @@ files:
     filter:
       - '**/*'
       - '!**/*.map'
-  # There is deliberately no `from: assets` / `from: data` block: this app
-  # declares no manifest `icon` and ships no content collections, so both dirs
-  # would be empty. The shell task adds them alongside the assets it introduces.
+  # The game's own asset root, remapped INTO an apps/action/ subtree because
+  # that is where the packaged host looks for it: resolveRuntimePaths
+  # (@chimera-engine/electron) resolves game assets at
+  # __dirname/../../apps/<gameId>/assets (gameAssetsRoot = ../../apps), and the
+  # esbuild bundle sits at <app>/dist/electron/. Without this block the shell's
+  # menu bed and select blip resolve to files the package does not contain.
+  - from: assets
+    to: apps/action/assets
+  # There is still no `from: data` block: this app ships no content collections,
+  # so the directory would be empty.
   #
   # Default RUNTIME window icon: the bundled host's createMainWindow
   # (resolveAppIcon, @chimera-engine/electron) loads the default Chimera PNG from

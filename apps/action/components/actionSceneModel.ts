@@ -13,7 +13,12 @@
 import type { EntityId } from '@chimera-engine/simulation/engine/types.js';
 import type { ObservedEntityState } from '@chimera-engine/simulation/projection/types.js';
 
-import type { ActionPrimitiveShape } from '../simulation/constants.js';
+import {
+    ACTION_ARENA_DEPTH_CELLS,
+    ACTION_ARENA_WIDTH_CELLS,
+    ACTION_PRIMITIVE_SEEDS,
+    type ActionPrimitiveShape,
+} from '../simulation/constants.js';
 import { isActionGroundEntity, isActionPrimitiveEntity } from '../simulation/entity-guards.js';
 
 /**
@@ -102,4 +107,37 @@ export function parseActionScene(
     primitives.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
 
     return { primitives, ground };
+}
+
+/**
+ * The scene the SHELL background mounts: the seeded primitives and the arena
+ * floor, with no match behind them.
+ *
+ * Built from {@link ACTION_PRIMITIVE_SEEDS} rather than from a snapshot,
+ * because on a menu route there is none — and built from the same seeds the
+ * match starts from, so the primitive a player picks in the background is the
+ * one they are looking at a moment later inside the match.
+ *
+ * Every primitive is UNOWNED. Ownership is a match fact; the shell's own
+ * selection is the F87 draft, which the background draws as a ring rather than
+ * as a colour.
+ *
+ * Seed order, not id order, unlike {@link parseActionScene}: the seeds are laid
+ * out along the arena's long axis, so this is the row the `/select` page steps
+ * along, left to right.
+ */
+export function buildActionShellScene(): ActionScene {
+    return {
+        primitives: ACTION_PRIMITIVE_SEEDS.map((seed) => ({
+            id: seed.id,
+            shape: seed.shape,
+            grid: { x: seed.x, y: seed.y },
+            world: arenaToWorld({ x: seed.x, y: seed.y }, ACTION_PRIMITIVE_HEIGHT),
+            ownerId: null,
+        })),
+        ground: {
+            widthCells: ACTION_ARENA_WIDTH_CELLS,
+            depthCells: ACTION_ARENA_DEPTH_CELLS,
+        },
+    };
 }
