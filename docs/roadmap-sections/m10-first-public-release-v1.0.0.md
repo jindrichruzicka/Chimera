@@ -900,6 +900,205 @@ latent in-tree, because tactics' AI is turn-gated and no shipped game declares `
 | A renderer-store launch origin for the Leave fork               | The `engine.sessionMode` stamp in `snapshot.setup`.                                                                           | A renderer store survives neither a window reload nor a restore, and both are ordinary on this path — the fork would silently take the lobby exit out of a lobby-less session.                                                                                                                              |
 | Tactics declaring a `shellRoutes` page as the reference adopter | Tactics adopts Quick Match and Continue only, and declares NO `shellRoutes`; the route mechanism is proven by its own guards. | The issue required tactics' existing menu e2e to pass pixel-identical, so the declared-route count is asserted rather than left as a silence — see `tools/shell-page-routes.test.ts` — and the static cross-check is fixture-driven, which is what lets it cover shapes no shipped game happens to declare. |
 
+### F88 — Live Shell Background: Assets, Interaction, Pre-Match Input & Shell Audio `§4.10, §4.22, §4.25–§4.26, §4.37, §4.41`
+
+**Status: implemented across [#1062](https://github.com/jindrichruzicka/Chimera/issues/1062)–[#1070](https://github.com/jindrichruzicka/Chimera/issues/1070).**
+F87 gave the shell its flows; F88 gives the surface underneath them a life. Before it,
+`LoadedRendererGameShell.shellBackground` was a prop-less component the host rendered inert:
+`ShellBackgroundHost` pinned `pointer-events: none` and `aria-hidden`, there was no asset session
+above it — a `useAsset` on a shell route reached the app-level `DelegatingAssetManager`, whose
+delegate only a match ever set, so every load rejected `NoActiveGameSessionError` — no game input
+action existed before a match, because `useRegisterInputActions` ran from `GameShell` alone, and a
+menu blip or a music bed was silent for the same delegate reason with nothing in the log. A menu
+that is a 3D scene — the camera yawing when Settings opens, dollying into the picked character as
+the match fades in, the pick happening _in the scene_ — was not expressible.
+
+**Every capability is a sibling opt-in on the slot that already existed, never a parallel slot.**
+`shellBackgroundAssets`, `shellBackgroundInteractive`, `shellAudioAssets`, `shellMusicBed` and
+`inputActions` are five optional fields on the shell payload, and a game that declares none of them
+renders exactly as it did. The contracts live where their subject already lives — the background's
+two in [§4.37.9](../core-components/renderer-shell-pages-ui-contract.md), the audio session in
+[§4.25](../core-components/audio-system.md), registration in
+[§4.26](../core-components/input-keybindings.md), the two manifests in
+[§4.10](../core-components/asset-reference-system.md) — and what
+[§4.41](../core-components/quick-start-and-shell-flow.md) adds is the part none of them owns alone:
+what a shell surface may DO, and the order the three lifetimes hand over in on the way into a match.
+
+**Assets: the session was reused, not rebuilt.** `GameAssetSession` already owned the one-effect
+allocate → preload → abandon → dispose lifecycle a manager with no `GameShell` above it needs, and
+already declined to register the `SetGameAssetManagerContext` delegate, so `ShellBackgroundHost`
+wraps the background in that same component rather than growing a session hook of its own. It is
+keyed to the mount, which is the whole of the cross-`/game` question: the surface flip off a
+background surface unmounts the background and disposes the session, so no background session
+survives into a match and there is no warm cache to reason about. The session sits INSIDE the host
+element rather than around it, so the plate — the fixed, surface-coloured layer the host is — still
+lands on the commit its payload lands on; the cost is that a declared background's own DOM arrives
+one commit after the plate, because the session renders `null` until its manager is committed.
+
+**A second manifest, discovered by name.** `validate-assets` finds asset manifests under `apps/` by
+whole basename, and the set is now `asset-manifest.ts` plus `shell-asset-manifest.ts`. Both go
+through the same reader, so the shell inventory gets the statically-readable-ref rules unchanged, is
+resolved against disk, and joins the declared-ref set the on-demand membership check is stated over
+— a background asset a shell surface loads is a declared load. Invariant #22's manifest-coverage
+check was deliberately NOT widened: content JSON and scene `requiredAssets` are match refs, resolved
+by the manager `GameShell` builds, and that manager is handed the match manifest and never the
+background's. Discovery stays a whole-basename match rather than a suffix or case-folded one,
+because a game's test doubles and per-screen helpers must not be read as inventories it ships — a
+manifest nobody ships satisfying membership is how a ref that is not really there passes. Two
+consequences of a game holding two manifests are documented rather than worked around: a const name
+the two disagree about resolves to nothing rather than to whichever file the crawl reached last, and
+the declared-ref union stays workspace-wide, so a shell-only ref also satisfies a match-surface load.
+
+**Interaction: the flag alone clears no path, and that was measured rather than reasoned about.** A
+box with `pointer-events: auto` is a hit target over its whole area whether or not it paints
+anything, and two boxes sit above the background. With the menu alone made click-through,
+`document.elementFromPoint` at an empty corner of `/main-menu` in the Electron renderer returned the
+app-level frame, not the background. So the opt-in is honoured by three layers, each standing aside
+for itself: the host takes `pointer-events: auto` and drops `aria-hidden` (the two flip together — a
+region that accepts clicks must not be hidden from assistive tech); a new `ShellContentLayer`,
+extracted from `AppShell`'s bare `<div>`, takes `pointer-events: none` and restores NOTHING; and the
+route's page states its own pass-through. `ShellContentLayer` restoring nothing is the design, not
+an omission — a blanket `> *` restore there would re-block the click it just let through, and it
+could not know the markup of a game-owned page anyway. What that costs is that a surface inside the
+frame with no declaration of its own is unusable under the opt-in and nowhere else, which is why
+`Modal.overlay`, `Drawer.overlay` and the `RootErrorBoundary` crash fallback each gained the
+declaration beside themselves rather than by a sentence in the frame. A global wrapper flip was
+rejected on the same measurement: it kills clicks on sibling surfaces the engine owns.
+
+**Pre-match input was a hoist, and the registration was never the hard half.** The action table was
+already registration data and the registrar was already idempotent, so moving it onto the shell
+payload and registering it from a new `InputActionsBootstrap` at app boot is most of the feature.
+Two things had to change for a shell surface to actually RECEIVE such an action, and neither was
+registration. `InputManager` dispatches off the BINDING map, and `KeyBindingRepository` resolves
+bindings through the settings store's `activeGameId` — a slot only the lobby ever claimed, so a menu
+route had no key for a `game:*` action even once it was registered; `SettingsBootstrap` now publishes
+it as `lobbyGameId ?? urlGameId`, and because that slot is the settings NAMESPACE rather than a
+binding-only switch, every store-reading consumer now resolves the game's own namespace on a menu
+route instead of `__engine__`. And Settings > Controls read `inputManager.getActions()` during
+render while being re-rendered by a settings-store write the old registration was sequenced ahead
+of; registration is no longer sequenced with any store write, so the pane reads the registry through
+`useSyncExternalStore` over a stable frozen snapshot. Both registration sites now call one function
+whose identity assert throws on a re-registration with different metadata — a game shipping one
+description to the shell and another to the match would otherwise put a row in the rebind pane that
+no longer describes what the match dispatches. Registration is app-lifetime with no unregister, and
+the cost is stated rather than hidden: two games browsed in one session both keep their entries, so
+a `game:*` id they declare with different metadata collides on the menu hop between them.
+
+**A menu has a voice, and the handoff is a definition rather than a fade.** `ShellAudioSession`
+binds a manager built over the game's `shellAudioAssets` to the app-level delegate on the shell
+surfaces, and plays a declared `shellMusicBed` as a looping `music`-bus voice at
+`MUSIC_PRIORITY` for the session's whole life — a declaration rather than a hook call, because the
+bed outlives every individual shell screen. `SHELL_AUDIO_SURFACES` is deliberately its own set and
+wider than the background's: `/saves` and `/replays` carry no background, but a bed that cut out on
+the way to the save browser would read as a bug. The menu→match handoff rides F87's `transition`,
+which the entry flows arm BEFORE they navigate — so the release runs while the shell route is still
+current, ahead of `GameShell`'s registration rather than after it, and every ordering the arm does
+not cover is caught by releasing on IDENTITY, which cannot clear a binding a match already took
+over. On that arm the bed leaves through F85's cue-aligned fade when its clip declares an `'outro'`
+cue and over the screen fade when it does not; the check is on the CUE rather than on the sheet,
+because an unknown cue name resolves to the clip's decoded end and a sheet-exists check would arm
+the transition against an instant the game never authored. **A handed-off bed is not a finished
+one** — a cue-aligned ramp is booked at the cue and holds the voice at full volume until the
+playhead arrives, a whole loop period away for a menu loop, and nothing else ends it: no bus is
+exclusive, preemption fires only on a saturated pool, and an `audio-clip` has no dispose path. So
+the session remembers the voice it let go of and stops it before starting the next one, which is
+what keeps a cancelled entry or an ordinary quit to the menu from laying a second copy of the loop
+over the first.
+
+**The proof is a second app, and it is the engine's first realtime one.** `apps/action` declares
+`realtime: true` with a 100 ms tick, and its per-beat movement pass rides `engine:tick` through the
+game definition's `onBeat` hook with no clock, no RNG and no dispatch inside it. Its shell is F88's
+demo of F87's flow layer: a four-entry menu whose Start is a `navigate` to the game's own `/select`
+route rather than a `start-game`, because the pick belongs to the player — which is what makes the
+`draft` load-bearing rather than decorative — with a `when: 'autosave-exists'` confirmation so a
+first-run player is never warned about overwriting a save that does not exist. The background mounts
+one `GameCanvas role="overlay"` over the same seeds the match starts from and splits its reads on
+purpose: the selection rings subscribe to the draft, because a pick is a render, while the camera
+reads `getShellState()` transiently inside `useFrame`, because a per-frame subscription would
+re-render a canvas subtree sixty times a second. The pose surfaces as phase data attributes written
+from the frame loop, since Playwright-Electron freezes CSS transitions and a WebGL camera transform
+is not observable from the DOM at all. The two selection rings move on the same rebindable actions
+the match moves primitives with, and the second four-id cluster bound to WASD is both how player two
+picks and how player two plays.
+
+**Defects worth recording**, each found by something that did not exist when the code was written.
+The **dropped setup**: `GameDefinition.buildInitialEntities` takes `(playerIds, setup?)` and its
+contract says the second argument is there so a game can seed starting entities from the
+host-authored configuration — and nothing passed it. Every game reading it fell back to seat order,
+invisibly, because the picks still ride `snapshot.setup` and every projection afterwards looks
+correct; the players are simply on the wrong pieces. `apps/tactics` takes the parameter as `_setup`,
+which is why nothing caught it for months, and the killer is a two-seat e2e that picks shapes seat
+order would not produce rather than any unit test. The composition root now builds the setup before
+the entities, and the restored-host harness that mirrors that call does the same. The **forbidden
+word**: the seat attribute was designed as `avatar`, and the invariants gate refuses that spelling in
+`apps/*/simulation` because it is one of the profile-data identifiers Invariants #32/#57/#59 keep out
+of authoritative state. `primitive` is the honest word anyway — it names which shape the seat drives,
+not who the player is. The **unsavable fixed point**: `FixedPoint` positions were asked for and
+measured impossible, because `JsonSaveSerializer` is bare `JSON.stringify`, which throws on a bigint,
+and its reviver can never produce one — integer arena cells instead, so nothing fractional exists in
+the simulation and Invariant #75 is not engaged.
+
+**Invariants: four amended, none minted.** #21 gains what this feature adds to it — the engine
+mounting `GameAssetSession` under `ShellBackgroundHost` around a declared background, and
+`ShellAudioSession` as a second writer of the app-level asset delegate that releases by identity and
+disposes what it built. Neither clause counts the sites, because nothing in the tree enumerates them.
+#52 gains the second manifest basename and the union it feeds. #65 gains the registration contract: at shell load,
+into the app-lifetime registry, through one idempotent registrar whose identity assert throws on
+conflicting metadata. #127 gains a clarifying sentence — an `overlay` `GameCanvas` may mount on a
+shell surface — and the role union is unchanged. The shell-audio scoping statement was authored as
+part of #21's amendment rather than as a new row, because the rule it states is about who may bind
+the app-level asset delegate, which is #21's subject and no other row's; the behavioural half
+(non-spatial, one bed at a time, the cue-aligned handoff) is §4.25 prose held by tests. The ledger
+therefore stays at 140, and the roll-call's coverage table, total, numbering line and automatic share
+are unchanged across the whole arc — an absence this feature's gate record ratifies with a
+both-ends-pinned diff rather than with a digest.
+
+| Task                                                                         | Issue                                                           |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Open a game asset session under the shell background                         | [#1062](https://github.com/jindrichruzicka/Chimera/issues/1062) |
+| Union the shell background manifest into validate-assets                     | [#1063](https://github.com/jindrichruzicka/Chimera/issues/1063) |
+| Register game input actions at shell load                                    | [#1064](https://github.com/jindrichruzicka/Chimera/issues/1064) |
+| Make the shell background interactive with pass-through hit-testing          | [#1065](https://github.com/jindrichruzicka/Chimera/issues/1065) |
+| Open the shell-scoped audio session                                          | [#1066](https://github.com/jindrichruzicka/Chimera/issues/1066) |
+| Create the action app: manifest, simulation and match screens                | [#1067](https://github.com/jindrichruzicka/Chimera/issues/1067) |
+| Give the action app its shell: menu, select page and the reactive background | [#1068](https://github.com/jindrichruzicka/Chimera/issues/1068) |
+| Prove the action app end-to-end and wire it into CI                          | [#1069](https://github.com/jindrichruzicka/Chimera/issues/1069) |
+| Extend the docs, author the F88 amendments and open the review gate          | [#1070](https://github.com/jindrichruzicka/Chimera/issues/1070) |
+
+Feature issue: [#1061](https://github.com/jindrichruzicka/Chimera/issues/1061).
+
+**Out of scope (deferred):** An **asset-gated background reveal** — F83's loaded / failed / budget /
+nothing-to-load vocabulary applied to a menu scene. The action app's primitives need none, and the
+machinery composes later; **backdrop-specific frame pacing**, a menu-only fps clamp — the user's
+`display.targetFps` cap already applies through the per-canvas `FrameRateLimiter`, and inventing more
+before measuring is how a second pacing path is born; **spatializing menu audio** or any shell-side
+listener-pose management beyond what F84 shipped — the shell session consumes the landed audio
+features and does not extend them, and a game that wants a positioned shell sound passes `spatial` to
+its own `useSound` call; **cross-`/game` background session survival** — a warm cache through a match,
+whose Suspense re-mount holes and double-residency cost outweigh the win; and **S6 write facades**,
+unchanged from F87's deferral.
+
+Two things were measured during the arc and recorded rather than fixed. A held arrow key **survives a
+window blur**, because `InputManager` owns `pressedActions` and nothing clears them when the window
+loses focus — filed as [#1168](https://github.com/jindrichruzicka/Chimera/issues/1168), and an engine
+fix rather than a game one. And a **game's own e2e fixture may offer no auto-start seam at all**: the
+action suite opens every match by clicking Start, which is what exercises
+`chimera:lobby:quick-start` on its only production path — a deliberate asymmetry with the tactics
+suite rather than a gap in it.
+
+#### Scope decisions
+
+| Asked                                                                 | Delivered                                                                                         | Why                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A new `GameCanvas role="backdrop"`                                    | `role="overlay"` on a shell surface, with a clarifying sentence on Invariant #127.                | It would be behaviourally identical to `overlay` today, and minting it obliges a verbatim #127 amendment, a repo-wide stale-quote sweep and role-union churn. The role is worth minting when backdrop-specific pacing actually exists — the F81/F82 precedent against speculative surface.          |
+| One global `pointer-events` flip on the app frame                     | Three layers each standing aside for itself, with the page authoring its own pass-through.        | Measured: a flip on a shared wrapper kills clicks on every sibling surface the engine owns, and a page-only construction never reaches the background at all because the content layer is a full-area hit target above it.                                                                          |
+| A background asset session that survives a match                      | A session keyed to the mount, disposed on the surface flip.                                       | Surviving means holding a decoded, GPU-resident inventory beside the match's for the length of a match, through Suspense re-mounts the engine does not control. The win is a warm menu on the way back out; the cost is double residency on every match.                                            |
+| A shell-scoped input-action registry with its own lifetime            | One app-lifetime registry, no unregister, and an identity assert on re-registration.              | Two registration paths with independent lifetimes drift, and the drift is invisible until a player's rebound key stops working. The stated cost — two games browsed in one session both keep their entries — is smaller than a second registry's.                                                   |
+| A `shellMusicBed` fade timed from the moment the player pressed Start | A cue-aligned fade when the clip declares an `'outro'` cue, and the screen fade when it does not. | A bed is a loop with a musical boundary the game authored; cutting it at an arbitrary instant is the hard cut the handoff exists to avoid. Checking the CUE rather than the sheet is what keeps an unknown name from arming the transition against the clip's decoded end.                          |
+| A new invariant row for the shell audio session                       | An amendment to #21, which already owns who may bind the app-level asset delegate.                | The rule is about delegate ownership, not about audio: a second row would state #21's subject twice and the two copies would have to be kept true together. What is genuinely audio — non-spatial, one bed at a time — is behaviour with tests, and §4.25 is where behaviour with tests is written. |
+| `FixedPoint` positions in the reference realtime app                  | Integer arena cells.                                                                              | Measured, not preferred: `JsonSaveSerializer.serialize` is bare `JSON.stringify` and throws on a bigint, and `deserialize`'s reviver can never return one — so a `FixedPoint` position makes the app unsavable, which the autosave-and-Continue flow this feature demonstrates depends on.          |
+| An `avatar` seat attribute naming each seat's pick                    | `primitive`.                                                                                      | The invariants gate greps the profile-data identifiers out of `apps/*/simulation` and honours no suppression marker, and the attribute rides `snapshot.setup.playerAttributes` — authoritative state. The refusal is right: the value names which shape the seat drives, not who the player is.     |
+
 ### F89 — Blended Clip Transitions, Finished-Clip Pose Retention & Authored Blend Durations `§4.40`
 
 Two defects sat under F82's animation layer, and the second is the reason the first was worth

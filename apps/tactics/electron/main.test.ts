@@ -1,7 +1,7 @@
 // apps/tactics/electron/main.test.ts
 //
 // The tactics composition root (F62/T2; relocated here from `app/` in F63/#783).
-// This is the sole place that names a game AND drives the Electron bootstrap: it
+// This is the sole place that names this game AND drives the Electron bootstrap: it
 // constructs the tactics `MainGameContribution` from `@chimera-engine/tactics/*` and
 // injects it into the game-agnostic host `main(contributions)`.
 //

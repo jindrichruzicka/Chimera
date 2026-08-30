@@ -578,9 +578,10 @@ shell navigation SPA-like while preventing menu background components from enter
    render the engine default solid surface using `--ch-color-surface`.
 3. If the current surface is not a background surface (§4.37.17, §4.37.18), render no shell background.
 
-The host passes no props to the game component. Background components that need animation, canvas,
-or media own those renderer-local details internally. They must not dispatch gameplay actions or
-depend on Electron/main-process APIs directly.
+The host passes no props to the game component, and what it does provide it provides by WRAPPING
+rather than by prop: the asset session and the pointer-input opt-in below. Everything else a
+background needs — its animation, its canvas, its own state — it owns internally. It must not dispatch
+gameplay actions or depend on Electron/main-process APIs directly.
 
 ### Background Asset Session
 

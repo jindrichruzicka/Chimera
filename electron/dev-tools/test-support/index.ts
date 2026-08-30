@@ -4,8 +4,10 @@
  * Asset-fact readers for a game's own unit tests, published at the
  * `@chimera-engine/electron/test-support` subpath.
  *
- * Every game declares an `asset-manifest.ts`, and the build gate that reads it
- * (`chimera-validate-assets`) checks MEMBERSHIP and self-consistency: a declared
+ * Every game declares an `asset-manifest.ts` for its match, and may declare a
+ * `shell-asset-manifest.ts` for what its shell surfaces load. The build gate
+ * reads both by name (`chimera-validate-assets`) and checks each for MEMBERSHIP
+ * and self-consistency: a declared
  * ref must resolve to a file that exists (Invariant #52), and a cue sheet must
  * be internally coherent (Invariant #125). Neither opens the file. So the class
  * of defect where the manifest and the bytes disagree — an authored

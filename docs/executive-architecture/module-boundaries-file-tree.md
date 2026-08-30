@@ -251,6 +251,7 @@ chimera/
 │   │   │   ├── ShellStateBridge.tsx # The single route-classification site; publishes the shell state (§4.37.18)
 │   │   │   ├── ShellBackgroundHost.tsx  # Mounts the game's background on the shell surfaces (§4.37.9)
 │   │   │   ├── ShellAudioSession.tsx    # Binds the game's shell audio inventory app-level; plays and hands off the menu bed (§4.25)
+│   │   │   ├── ShellContentLayer.tsx    # The app-level frame every route renders inside; stands aside under the interactive background opt-in (§4.37.9)
 │   │   │   ├── SpectatorHud.tsx     # Read-only spectator overlay: followed-seat name + Tab switch hotkey (Invariants #114/#115)
 │   │   │   ├── RootErrorBoundary.tsx  # Top-level React error boundary; see §4.27
 │   │   │   ├── ToastHost.tsx        # Renders transient notifications; see §4.30

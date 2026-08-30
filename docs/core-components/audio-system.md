@@ -203,6 +203,10 @@ When saturated, `play()` reclaims one voice to host the new one, ranked **worst 
 - On match end (`phase: ended`) it calls `AudioManager.stopAll()` to stop all active voices.
 - On unmount it clears the delegate (`setGameAssetManager(null)`) and disposes the game-level `AssetManager`.
 
+`GameShell` is not that delegate's only registrant. `ShellAudioSession` binds one over a game's shell
+inventory — [Shell-Scoped Audio](#shell-scoped-audio) below for when it opens and when it hands the
+binding back, and Invariant #21 for how the two are scoped against each other.
+
 ---
 
 ## Shell-Scoped Audio

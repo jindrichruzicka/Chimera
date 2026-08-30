@@ -32,7 +32,7 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
 // `LoadedRendererGameShell` field (`mainMenu`, `settings`, `icons`,
 // `shellRoutes`, …) is an optional customisation returned here.
 //
-// Two of those are worth knowing about before the menu is customised:
+// Some of those are worth knowing about before the menu is customised:
 //
 //   - A `mainMenu` button may declare `{ type: 'start-game' }` to open a match
 //     without the lobby UI (optionally with a `QuickStartConfig` naming match
@@ -47,6 +47,16 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
 //     app-level manager happens to reach. Declare those refs in
 //     `shell-asset-manifest.ts` at the app root — the asset validator reads that
 //     name — and forward the manifest here.
+//   - `shellBackgroundInteractive: true` lets that background take pointer input.
+//     The engine's own layers stand aside for it — the frame around every route's
+//     content stops eating clicks, and so does the main menu's container — but a
+//     surface inside that frame keeps working only because it declares
+//     `pointer-events: auto` for itself, and that includes any page this game
+//     ships. Copy the engine main menu's construction on a game page:
+//     `pointer-events: none` on the full-viewport container, `auto` restored on
+//     `> *`, so whatever the page grows next is clickable the day it is added.
+//     Absent or `false`, the background stays inert decor and is hidden from
+//     assistive tech, which is what a painted backdrop should be.
 //   - `shellAudioAssets` gives the menu a voice. The audio hooks resolve their
 //     clips through the app-level audio manager, which reaches a game's clips
 //     only while something binds an inventory to it — a match does, and outside
@@ -55,6 +65,14 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
 //     `useMusicTrack` work on the menu screens. `shellMusicBed: { ref }` beside
 //     it hands the engine a loop to play across those screens for you; it fades
 //     out on its own when a match starts.
+//   - `inputActions` on THIS payload registers the game's rebindable actions at
+//     app boot, so a menu background or a game page can react to them and the
+//     Settings > Controls pane lists them before any match has run. The same
+//     array reaches `LoadedRendererGame.inputActions` above; hand both the one
+//     value rather than restating it, because a re-registration whose
+//     description, category or oneShot differs throws rather than winning. Put
+//     the table in a plain-data module of its own if the shell payload should
+//     not pull `screens/` into the menu bundle.
 //   - `shellRoutes` promotes this app's OWN Next routes — a credits screen, a
 //     codex — to first-class shell pages: declare `['/credits']` here, add
 //     `renderer/app/credits/page.tsx`, and the game background persists behind

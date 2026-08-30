@@ -41,6 +41,33 @@ A game needing a second view — a minimap, a unit preview — mounts a second `
 - **Every** role mounts `FrameRateLimiter` and takes `frameloop={useEngineFrameloop()}`: each canvas is paced by the `display.targetFps` cap.
 - Placement and size are the game's: the corner anchor and the explicit size live on a game-owned wrapper element, and the curated `className` prop carries canvas chrome (a zero-height wrapper never mounts the scene). What pins the canvas box inside that wrapper is "Canvas-fit rules" below.
 
+### Where a `GameCanvas` may mount
+
+Neither role names a PLACE. A `GameCanvas` is a game's canvas root wherever a game renders three.js,
+and that includes the shell: a game's `shellBackground` mounts one with `role="overlay"` behind the
+main menu, the settings and lobby screens and its own declared pages, and a game-owned shell page may
+mount one of its own (§4.37.9, §4.41). Invariant #127 is unchanged by that — the ban is on the raw
+`<Canvas>` binding, and both of its arms scan the whole `apps/<name>/` tree with `shell/` in it.
+
+Three things differ on a shell mount, and each follows from a rule already stated rather than from a
+role of its own:
+
+- **No `PerfProbe`**, because the background is an `overlay`. The perf HUD measures a match's main
+  canvas, and a menu background is not it.
+- **The wrapper belongs to the host.** `ShellBackgroundHost` is `position: fixed` with `inset: 0`, so
+  the collapsing-height trap below does not arise there: nothing auto-height sits between the canvas
+  and the viewport. A game's own shell page owns its wrapper exactly as a screen does, and the same
+  rule applies to it.
+- **Pointer input is off unless the game asks for it.** The host pins `pointer-events: none` until the
+  shell payload declares `shellBackgroundInteractive`, so `onPointerMissed` and `ThreeEvent` handlers
+  on a background receive nothing by default. Under the opt-in nothing inside the canvas changes —
+  r3f keeps its own inline `pointer-events: auto` wrapper — and which layers above it stand aside is
+  §4.37.9's.
+
+A `backdrop` role was considered and deliberately not minted: it would be behaviourally identical to
+`overlay` today, and the role union is a contract quoted in Invariant #127 and in the r3f barrel's
+own surface — widening it buys a name and costs a verbatim amendment plus a repo-wide sweep.
+
 ### Sizing the wrapper — for every role, not just overlays
 
 The wrapper rule above is not an overlay detail; the **main** canvas needs it too, and gets it wrong more quietly. A screen mounts inside `div.chimera-scene-router`, which carries no styles and therefore has an auto block size, under a host `<section>` whose only sizing is `position: relative` plus a `minHeight` floor. So:
