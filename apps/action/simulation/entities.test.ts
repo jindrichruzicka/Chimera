@@ -1,0 +1,126 @@
+import { describe, expect, it } from 'vitest';
+import { playerId } from '@chimera-engine/simulation/engine/types.js';
+import type { EntityId } from '@chimera-engine/simulation/engine/types.js';
+
+import {
+    ACTION_ARENA_DEPTH_CELLS,
+    ACTION_ARENA_WIDTH_CELLS,
+    ACTION_GROUND_ENTITY_ID_VALUE,
+    ACTION_PRIMITIVE_SEEDS,
+} from './constants.js';
+import { buildInitialActionEntities } from './entities.js';
+import { isActionGroundEntity, isActionPrimitiveEntity } from './entity-guards.js';
+
+const alice = playerId('alice');
+const bob = playerId('bob');
+const carol = playerId('carol');
+const dave = playerId('dave');
+
+describe('buildInitialActionEntities', () => {
+    it('seeds three primitives plus one ground plane', () => {
+        const entities = buildInitialActionEntities([alice]);
+
+        const kinds = Object.values(entities).map((entity) =>
+            isActionPrimitiveEntity(entity)
+                ? 'primitive'
+                : isActionGroundEntity(entity)
+                  ? 'ground'
+                  : 'unrecognised',
+        );
+        expect(kinds.filter((kind) => kind === 'primitive')).toHaveLength(3);
+        expect(kinds.filter((kind) => kind === 'ground')).toHaveLength(1);
+        expect(Object.keys(entities)).toHaveLength(4);
+    });
+
+    it('seeds one primitive per declared shape at its declared cell, stationary', () => {
+        const entities = buildInitialActionEntities([]);
+
+        for (const seed of ACTION_PRIMITIVE_SEEDS) {
+            const entity = entities[seed.id as EntityId];
+            expect(isActionPrimitiveEntity(entity), seed.id).toBe(true);
+            if (!isActionPrimitiveEntity(entity)) throw new Error('unreachable');
+            expect(entity.shape).toBe(seed.shape);
+            expect(entity.x).toBe(seed.x);
+            expect(entity.y).toBe(seed.y);
+            expect(entity.dx).toBe(0);
+            expect(entity.dy).toBe(0);
+        }
+    });
+
+    it('sizes the ground plane from the arena extents', () => {
+        const entities = buildInitialActionEntities([]);
+
+        const ground = entities[ACTION_GROUND_ENTITY_ID_VALUE as keyof typeof entities];
+        expect(isActionGroundEntity(ground)).toBe(true);
+        if (!isActionGroundEntity(ground)) throw new Error('unreachable');
+        expect(ground.widthCells).toBe(ACTION_ARENA_WIDTH_CELLS);
+        expect(ground.depthCells).toBe(ACTION_ARENA_DEPTH_CELLS);
+        // The two extents differ, so a width/depth swap is observable here.
+        expect(ground.widthCells).not.toBe(ground.depthCells);
+    });
+
+    it('gives seat N the Nth primitive and leaves the rest unclaimed', () => {
+        const entities = buildInitialActionEntities([alice, bob]);
+
+        const owners = ACTION_PRIMITIVE_SEEDS.map((seed) => {
+            const entity = entities[seed.id as keyof typeof entities];
+            if (!isActionPrimitiveEntity(entity)) throw new Error(`missing primitive ${seed.id}`);
+            return entity.ownerId;
+        });
+        expect(owners).toEqual([alice, bob, null]);
+    });
+
+    it('leaves every primitive unclaimed for an empty roster', () => {
+        const entities = buildInitialActionEntities([]);
+
+        for (const seed of ACTION_PRIMITIVE_SEEDS) {
+            const entity = entities[seed.id as keyof typeof entities];
+            if (!isActionPrimitiveEntity(entity)) throw new Error(`missing primitive ${seed.id}`);
+            expect(entity.ownerId, seed.id).toBeNull();
+        }
+    });
+
+    it('refuses a roster longer than the seeded primitives rather than colliding two seats', () => {
+        expect(() => buildInitialActionEntities([alice, bob, carol, dave])).toThrow(
+            /exceeds 3 available primitives/u,
+        );
+    });
+
+    it('seats the longest roster it does accept', () => {
+        // The ON-boundary case for the guard above: three seats is the last
+        // roster that fits, so a `>=` there would reject a legal match.
+        const entities = buildInitialActionEntities([alice, bob, carol]);
+
+        const owners = ACTION_PRIMITIVE_SEEDS.map((seed) => {
+            const entity = entities[seed.id as keyof typeof entities];
+            if (!isActionPrimitiveEntity(entity)) throw new Error(`missing primitive ${seed.id}`);
+            return entity.ownerId;
+        });
+        expect(owners).toEqual([alice, bob, carol]);
+    });
+
+    it('does not mutate the roster it is handed', () => {
+        const roster = [alice, bob];
+        const before = [...roster];
+
+        buildInitialActionEntities(roster);
+
+        expect(roster).toEqual(before);
+    });
+
+    it('builds an independent record per call', () => {
+        // A module-level record reused across matches would leak one match's
+        // ownership into the next.
+        const first = buildInitialActionEntities([alice]);
+        const second = buildInitialActionEntities([bob]);
+
+        expect(first).not.toBe(second);
+        const firstCube = first[ACTION_PRIMITIVE_SEEDS[0]?.id as keyof typeof first];
+        const secondCube = second[ACTION_PRIMITIVE_SEEDS[0]?.id as keyof typeof second];
+        if (!isActionPrimitiveEntity(firstCube) || !isActionPrimitiveEntity(secondCube)) {
+            throw new Error('missing seeded cube');
+        }
+        expect(firstCube.ownerId).toBe(alice);
+        expect(secondCube.ownerId).toBe(bob);
+    });
+});

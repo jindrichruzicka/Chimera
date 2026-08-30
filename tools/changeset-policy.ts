@@ -12,7 +12,7 @@
  * This gate reads the pending `.changeset/*.md`, merges their declared releases
  * (strongest bump wins), and asserts the cascade: if a PUBLISHABLE package is given a
  * `major`, every publishable package that depends on it — directly or transitively —
- * must also be `major`. Private packages (the `@chimera-engine/tactics` reference app) are
+ * must also be `major`. Private packages (the `@chimera-engine/*` reference apps) are
  * exempt: Changesets auto-bumps them and they publish nothing, so they make no semver
  * promise to protect.
  *
@@ -296,8 +296,9 @@ if (process.env['VITEST'] === undefined) {
         const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
         const log = (message: string): void => console.log(`[verify:changeset-policy] ${message}`);
 
-        // Every @chimera-engine/* package: the 5 publishable engine packages plus the private
-        // tactics app, so the graph is complete and tactics is correctly exempted.
+        // Every @chimera-engine/* package: the 5 publishable engine packages plus the
+        // private consumer apps, so the graph is complete and each app is correctly
+        // exempted from the major cascade.
         const PACKAGE_DIRS = [
             'simulation',
             'ai',
@@ -305,6 +306,7 @@ if (process.env['VITEST'] === undefined) {
             'renderer',
             'electron',
             'apps/tactics',
+            'apps/action',
         ];
 
         const deps: VerifyChangesetPolicyDeps = {

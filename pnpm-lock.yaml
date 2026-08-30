@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@chimera-engine/action':
+        specifier: workspace:*
+        version: link:apps/action
       '@chimera-engine/ai':
         specifier: workspace:*
         version: link:ai
@@ -168,6 +171,31 @@ importers:
       '@chimera-engine/simulation':
         specifier: workspace:*
         version: link:../simulation
+
+  apps/action:
+    dependencies:
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@chimera-engine/ai':
+        specifier: workspace:*
+        version: link:../../ai
+      '@chimera-engine/electron':
+        specifier: workspace:*
+        version: link:../../electron
+      '@chimera-engine/renderer':
+        specifier: workspace:*
+        version: link:../../renderer
+      '@chimera-engine/simulation':
+        specifier: workspace:*
+        version: link:../../simulation
+      electron:
+        specifier: ^33.2.0
+        version: 33.4.11
+      electron-builder:
+        specifier: ^25.1.8
+        version: 25.1.8(electron-builder-squirrel-windows@25.1.8)
 
   apps/tactics:
     dependencies:

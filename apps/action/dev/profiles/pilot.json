@@ -1,0 +1,6 @@
+{
+    "localProfileId": "pilot",
+    "displayName": "Pilot",
+    "avatar": { "kind": "builtin", "ref": "avatar/default" },
+    "locale": "en-US"
+}

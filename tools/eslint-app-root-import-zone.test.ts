@@ -74,6 +74,8 @@ const AI_GAME_GROUP = [
     '@chimera-engine/electron/*',
     '@chimera-engine/tactics',
     '@chimera-engine/tactics/*',
+    '@chimera-engine/action',
+    '@chimera-engine/action/*',
     'renderer/*',
     '**/renderer/*',
     'electron/*',

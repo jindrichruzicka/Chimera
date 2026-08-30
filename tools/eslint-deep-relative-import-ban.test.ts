@@ -246,7 +246,7 @@ const ZONES: readonly Zone[] = [
             },
             {
                 message:
-                    'renderer/ must name no game (Invariants #80, #94). The renderer host is a runtime injection seam; a game enters only at the consumer-app renderer composition root (apps/tactics/renderer/register.ts), selected by the chimera-game-registration build alias — never by a renderer source import. See coding-standards.md §3.',
+                    'renderer/ must name no game (Invariants #80, #94). The renderer host is a runtime injection seam; a game enters only at its own consumer-app renderer composition root (apps/<game>/renderer/register.ts), selected by the chimera-game-registration build alias — never by a renderer source import. See coding-standards.md §3.',
                 patterns: [
                     '@chimera-engine/tactics',
                     '@chimera-engine/tactics/*',

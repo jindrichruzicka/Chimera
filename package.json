@@ -20,7 +20,7 @@
         "build:watch": "tsx tools/watch-packages.ts",
         "dev": "pnpm build:watch",
         "build:packages": "tsc -b tsconfig.build.json && tsx tools/copy-renderer-css.ts",
-        "typecheck": "pnpm build:packages && tsc --noEmit && tsc --noEmit -p simulation/tsconfig.json && tsc --noEmit -p ai/tsconfig.json && tsc --noEmit -p networking/tsconfig.json && tsc --noEmit -p renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.json && tsc --noEmit -p apps/tactics/tsconfig.json",
+        "typecheck": "pnpm build:packages && tsc --noEmit && tsc --noEmit -p simulation/tsconfig.json && tsc --noEmit -p ai/tsconfig.json && tsc --noEmit -p networking/tsconfig.json && tsc --noEmit -p renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.json && tsc --noEmit -p apps/tactics/tsconfig.json && tsc --noEmit -p apps/action/tsconfig.json",
         "test": "pnpm build:packages && pnpm -r test && vitest run --dir tools",
         "test:watch": "pnpm build:packages && vitest",
         "test:e2e": "pnpm build:packages && playwright test --config=apps/tactics/e2e/playwright.config.ts --project=electron-e2e",
@@ -104,6 +104,7 @@
         "vitest": "^3.2.4"
     },
     "dependencies": {
+        "@chimera-engine/action": "workspace:*",
         "@chimera-engine/ai": "workspace:*",
         "@chimera-engine/electron": "workspace:*",
         "@chimera-engine/networking": "workspace:*",

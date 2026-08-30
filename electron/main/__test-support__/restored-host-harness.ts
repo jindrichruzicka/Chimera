@@ -18,8 +18,8 @@
  *
  * This module is game-agnostic (`chimera/no-main-games-import` guards
  * `__test-support__`): the game arrives as an injected `MainGameContribution`
- * plus a prebuilt `GameLobbySetup` — the same seam the production composition
- * root uses (`apps/tactics/electron/main.ts`).
+ * plus a prebuilt `GameLobbySetup` — the same seam a production composition root
+ * (`apps/<game>/electron/main.ts`) uses.
  */
 
 import type {

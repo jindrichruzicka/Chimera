@@ -1330,7 +1330,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     }
 
     // Derive the host-side game registry from the contributions injected by the
-    // consumer app composition root (apps/tactics/electron/main.ts) — the host
+    // consumer app composition root (apps/<game>/electron/main.ts) — the host
     // names no game, it indexes whatever set it is given. Built before any
     // consumer so the registerActions loop below registers the game into
     // ActionRegistry before the tick loop starts (Invariant #10).
@@ -4217,8 +4217,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     });
 }
 
-// The Electron entry point is the consumer app composition root
-// (apps/tactics/electron/main.ts): it constructs the game contribution(s) and
+// The Electron entry point is the consumer app's own composition root
+// (apps/<game>/electron/main.ts): it constructs the game contribution(s) and
 // calls `main(contributions)`. `index.ts`
 // (this file, the `@chimera-engine/electron` package's `./main` surface) names no game
 // and no longer self-bootstraps.

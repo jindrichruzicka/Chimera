@@ -1,0 +1,39 @@
+/*
+ * The action playfield's styles.
+ *
+ * `position: absolute; inset: 0` on the scene host is load-bearing, not
+ * decoration. The engine mounts this screen inside `div.chimera-scene-router`,
+ * which carries no styles and so has an AUTO block size. A percentage height
+ * against an auto-height parent resolves to auto, so the obvious
+ * `block-size: 100%` collapses onto the host section's own `minHeight` floor —
+ * a short strip at the top of a full-screen window, with no error and no
+ * warning. Absolute positioning skips the auto-height div and resolves against
+ * the positioned host above it.
+ *
+ * The size has to live on THIS element rather than on the canvas: r3f pins
+ * position and size as INLINE styles on its own wrapper div, so a class handed
+ * to `<GameCanvas>` can never re-place or re-size it. And a zero-height wrapper
+ * never mounts the scene at all — r3f renders the canvas children only once it
+ * has measured a non-zero box, so the failure is a scene that silently never
+ * loads rather than one that looks wrong.
+ */
+.sceneHost {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+/*
+ * The keyboard hint. Positioned and written AFTER the canvas (both are
+ * required: the engine frame the canvas sits in is a positioned element with no
+ * z-index, and it can carry an opaque backdrop), and inert to the pointer so it
+ * never eats a click meant for a primitive.
+ */
+.hint {
+    position: absolute;
+    inset-block-end: var(--ch-space-sm);
+    inset-inline-start: var(--ch-space-sm);
+    pointer-events: none;
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+}

@@ -27,8 +27,9 @@
     // runtime injection through `MainGameContribution` (mainGameRegistry in T2/#778;
     // content schemas + lobby setup in #788/#789), so the package no longer imports
     // `@chimera-engine/tactics` at all — there is no game reference, composite or
-    // node_modules-symlink, to resolve. The consumer app composition root
-    // (apps/tactics/electron/main.ts) is the sole place that names a game.
+    // node_modules-symlink, to resolve. A game enters at a consumer app's own
+    // Electron composition root; what keeps this package off one is
+    // `chimera/no-main-games-import` plus the invariants gate's Check 10.
     "extends": "../tsconfig.json",
     "compilerOptions": {
         "composite": true,

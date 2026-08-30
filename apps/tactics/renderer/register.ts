@@ -1,9 +1,10 @@
 // Renderer composition root for the tactics app — the renderer twin of
-// `apps/tactics/electron/main.ts`. This is the SOLE renderer-side module that
-// names a concrete game AND drives renderer registration: it builds the tactics
+// `apps/tactics/electron/main.ts`, and where this game meets renderer
+// registration: it builds the tactics
 // `RendererGameContribution` and injects it into the game-agnostic renderer host
 // through `registerRendererGame`. The host (`@chimera-engine/renderer`) ships no
-// game-specific renderer code; a game's renderer surfaces enter only here.
+// game-specific renderer code; a game's renderer surfaces arrive at a root like
+// this one.
 //
 // The renderer selects this module by build config, not by source import:
 // `renderer/next.config.ts` aliases the synthetic `chimera-game-registration`

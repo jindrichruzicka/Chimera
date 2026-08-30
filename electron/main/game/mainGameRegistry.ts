@@ -7,8 +7,8 @@
  * which turns the per-game contributions injected at bootstrap into the lookup
  * maps the host (`index.ts`) consumes.
  *
- * Any apps/* coupling lives in the consumer app composition root
- * `apps/tactics/electron/main.ts`, not here. That root constructs each game's
+ * Any apps/* coupling lives in a consumer app's own Electron composition root
+ * (`apps/<game>/electron/main.ts`), not here. Such a root constructs its game's
  * `MainGameContribution` from `@chimera-engine/<game>/*` and injects it into
  * `main(contributions)` at runtime — so this file, and the rest of
  * `electron/main/`, never import a game. The boundary is enforced by ESLint

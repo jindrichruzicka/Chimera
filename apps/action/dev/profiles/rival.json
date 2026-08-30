@@ -1,0 +1,6 @@
+{
+    "localProfileId": "rival",
+    "displayName": "Rival",
+    "avatar": { "kind": "builtin", "ref": "avatar/default" },
+    "locale": "en-US"
+}

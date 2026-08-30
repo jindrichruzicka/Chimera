@@ -22,7 +22,7 @@ summary for working with changesets.
 
 Changesets treats a `fixed` group as **one unit**: a changeset touching _any_ member bumps
 **all** members to the same version, so they are always aligned. The private
-`@chimera-engine/tactics` reference app and the `templates/blank` scaffolding source are **not**
+reference apps under `apps/` and the `templates/blank` scaffolding source are **not**
 in the group — they publish nothing.
 
 ## Declaring a change

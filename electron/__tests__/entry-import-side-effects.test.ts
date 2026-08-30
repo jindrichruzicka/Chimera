@@ -12,7 +12,7 @@
  * RUNNING it. No Electron app lifecycle may fire at module-load time — no
  * `app.whenReady()`, no lifecycle listeners, no IPC registration, no window
  * creation, no protocol/session wiring. All of that lives inside `main()`,
- * which the consumer app's composition root (apps/tactics/electron/main.ts)
+ * which a consumer app's own composition root (apps/<game>/electron/main.ts)
  * invokes explicitly.
  *
  * This is what makes the package a thin, composable wrapper (F62):

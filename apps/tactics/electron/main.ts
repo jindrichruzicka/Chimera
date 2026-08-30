@@ -1,11 +1,11 @@
 // apps/tactics/electron/main.ts
 //
-// Composition root for the tactics Electron app. This is the SOLE module that names a
-// concrete game AND drives the Electron bootstrap: it constructs the tactics
+// Composition root for the tactics Electron app — where this game meets the
+// Electron bootstrap: it constructs the tactics
 // `MainGameContribution` from `@chimera-engine/tactics/*` and injects it into the
 // game-agnostic host `main(contributions)` exposed by the `@chimera-engine/electron`
-// package. The host (`@chimera-engine/electron`) ships no game-specific code; game
-// definitions enter only here, at runtime.
+// package. The host (`@chimera-engine/electron`) ships no game-specific code; a
+// game definition arrives at a consumer app root like this one, at runtime.
 //
 // This is the standalone consumer app's entry, not part of the `@chimera-engine/tactics`
 // library: it owns the `@chimera-engine/electron` + `@chimera-engine/tactics` coupling and

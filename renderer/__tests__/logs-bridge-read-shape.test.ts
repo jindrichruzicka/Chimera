@@ -874,8 +874,12 @@ describe('the walked trees', () => {
     const walkedPaths = (): string[] => (cachedPaths ??= listCensusSourceFiles(repoRoot));
 
     it('names the roots this repository actually holds', () => {
+        // Every child of `apps/` is a root, so a second consumer app joins the
+        // census the day it lands rather than needing this guard widened by
+        // hand — which is what this list is here to notice.
         expect(listCensusRoots(repoRoot)).toEqual([
             'renderer',
+            'apps/action',
             'apps/tactics',
             `${TEMPLATES_ROOT_PARENT}/blank`,
         ]);
@@ -888,6 +892,7 @@ describe('the walked trees', () => {
         expect(walkedPaths()).toContain('renderer/logging/rendererLogger.ts');
         expect(walkedPaths()).toContain('renderer/app/LoggingBootstrap.tsx');
         expect(walkedPaths()).toContain('apps/tactics/renderer/register.ts');
+        expect(walkedPaths()).toContain('apps/action/renderer/register.ts');
         expect(walkedPaths()).toContain(`${TEMPLATES_ROOT_PARENT}/blank/renderer/register.ts`);
         expect(walkedPaths().some((file) => file.split('/').length > 3)).toBe(true);
         // The walk hands over what the filter is there to drop, so the census

@@ -276,6 +276,8 @@ export default tseslint.config(
                                 '@chimera-engine/electron/*',
                                 '@chimera-engine/tactics',
                                 '@chimera-engine/tactics/*',
+                                '@chimera-engine/action',
+                                '@chimera-engine/action/*',
                                 'renderer/*',
                                 '**/renderer/*',
                                 'electron/*',
@@ -380,6 +382,8 @@ export default tseslint.config(
                                 '@chimera-engine/electron/*',
                                 '@chimera-engine/tactics',
                                 '@chimera-engine/tactics/*',
+                                '@chimera-engine/action',
+                                '@chimera-engine/action/*',
                                 'ai/*',
                                 '**/ai/*',
                                 'renderer/*',
@@ -466,8 +470,8 @@ export default tseslint.config(
     // game-agnostic: it must not import any game — `@chimera-engine/tactics`, an
     // `apps/*` consumer path, or a legacy `games/*` path. The renderer host is a
     // runtime injection seam (`renderer/game/rendererGameRegistry.ts` →
-    // `registerRendererGame`); a game's renderer contribution enters only at the
-    // consumer-app renderer composition root (`apps/tactics/renderer/register.ts`),
+    // `registerRendererGame`); a game's renderer contribution enters only at its own
+    // consumer-app renderer composition root (`apps/<game>/renderer/register.ts`),
     // selected by the synthetic `chimera-game-registration` build alias — never by
     // a renderer source import. What a game may import from renderer is decided
     // by `chimera/no-game-renderer-internals` (Invariant #96), which enumerates
@@ -522,6 +526,8 @@ export default tseslint.config(
                             group: [
                                 '@chimera-engine/tactics',
                                 '@chimera-engine/tactics/*',
+                                '@chimera-engine/action',
+                                '@chimera-engine/action/*',
                                 'apps/*',
                                 'apps/**',
                                 '**/apps/*',
@@ -532,7 +538,7 @@ export default tseslint.config(
                                 '**/games/**',
                             ],
                             message:
-                                'renderer/ must name no game (Invariants #80, #94). The renderer host is a runtime injection seam; a game enters only at the consumer-app renderer composition root (apps/tactics/renderer/register.ts), selected by the chimera-game-registration build alias — never by a renderer source import. See coding-standards.md §3.',
+                                'renderer/ must name no game (Invariants #80, #94). The renderer host is a runtime injection seam; a game enters only at its own consumer-app renderer composition root (apps/<game>/renderer/register.ts), selected by the chimera-game-registration build alias — never by a renderer source import. See coding-standards.md §3.',
                         },
                     ],
                 },
@@ -570,6 +576,8 @@ export default tseslint.config(
                                 '@chimera-engine/renderer/*',
                                 '@chimera-engine/tactics',
                                 '@chimera-engine/tactics/*',
+                                '@chimera-engine/action',
+                                '@chimera-engine/action/*',
                                 '@chimera-engine/electron/main',
                                 '@chimera-engine/electron/main/*',
                                 'ai/*',

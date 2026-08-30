@@ -28,12 +28,48 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+import { VERIFIED_APPS, verifyAllApps } from './verify-packaged-bundle.js';
 
 const workspaceRoot = path.resolve(import.meta.dirname, '..');
 const driverPath = path.join(workspaceRoot, 'tools/verify-packaged-bundle.ts');
-const appBuildMainPath = path.join(workspaceRoot, 'apps/tactics/electron/build-main.ts');
 const engineMarkersPath = 'electron/packaged-bundle/debug-bundle-markers.ts';
+
+/**
+ * Every `apps/<game>` carrying an Electron composition root — the apps whose own
+ * `build:app` and `electron-builder.yml` can reship the debug layer, and
+ * therefore the apps this gate must cover. DISCOVERED, so an app added without
+ * an entry in the driver's `VERIFIED_APPS` fails here rather than going
+ * silently unverified.
+ */
+function discoverElectronApps(): readonly string[] {
+    const appsRoot = path.join(workspaceRoot, 'apps');
+    if (!existsSync(appsRoot)) return [];
+    return readdirSync(appsRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => `apps/${entry.name}`)
+        .filter((dir) => existsSync(path.join(workspaceRoot, dir, 'electron/build-main.ts')))
+        .sort();
+}
+
+/**
+ * The app directories the driver's `VERIFIED_APPS` names, read positionally off
+ * the IMPORTED array rather than out of the file's text.
+ *
+ * Importing the driver is safe and is the stronger reading: its `main()` is
+ * double-guarded (`VITEST` unset AND direct run), so nothing builds, and the
+ * value cannot be satisfied by a path that merely appears somewhere in the
+ * source. Reading the first member by POSITION is what makes a swapped
+ * `[package, dir]` tuple fail loudly instead of resolving to a plausible string.
+ *
+ * The sibling ratchet below still parses each app's `build-main.ts` with the
+ * AST — that one is an `apps/` file, and importing it would be the §3 edge
+ * `tools/` must not have.
+ */
+function verifiedAppDirs(): readonly string[] {
+    return VERIFIED_APPS.map(([dir]) => dir).sort();
+}
 
 /** Build-output and dependency dirs — generated copies of the source are expected there. */
 const SKIP_DIRS = new Set([
@@ -107,79 +143,170 @@ describe('verify:packaged-bundle thin driver (Invariant #27, single-definition c
     });
 
     it('imports nothing from apps/ (§3 dependency direction)', () => {
-        // Reading the plan through the engine subpath rather than through
-        // `apps/tactics/electron/build-main.js` is what keeps `tools/` off an
-        // app import — the same rule its sibling `tools/verify-pack.ts` holds
+        // Reading the plan through the engine subpath rather than through an
+        // app's `electron/build-main.js` is what keeps `tools/` off an app
+        // import — the same rule its sibling `tools/verify-pack.ts` holds
         // itself to.
         const source = readFileSync(driverPath, 'utf8');
         expect(source).not.toMatch(/from '[^']*\bapps\//u);
     });
 
-    it("takes the engine default only because the app's driver does too", () => {
-        // The cost of the import above: this gate no longer reads the APP's
-        // outfile map, so it is right only while the app driver passes none of
-        // its own. A scaffolded game's gate has no such luxury and imports from
-        // `./build-main.js`, whose re-export tracks that game's driver.
+    it('verifies every app that ships an Electron composition root', () => {
+        // The driver's app list is a literal (each entry costs two real esbuild
+        // runs, so it is a deliberate choice rather than a directory scan). That
+        // makes an app easy to forget — and a forgotten app is one whose
+        // app-owned `build:app` / `electron-builder.yml` can reship the debug
+        // layer with the gate green. This is the census that notices.
         //
-        // AST, not a substring: the property could arrive through a spread, and
-        // an opaque spread is exactly the shape that would hide it — so the walk
-        // reports one rather than quietly stepping over it.
-        const source = readFileSync(appBuildMainPath, 'utf8');
-        const parsed = ts.createSourceFile(appBuildMainPath, source, ts.ScriptTarget.Latest, true);
-
-        let call: ts.CallExpression | undefined;
-        const findCall = (node: ts.Node): void => {
-            if (
-                ts.isCallExpression(node) &&
-                ts.isIdentifier(node.expression) &&
-                node.expression.text === 'buildAppBundles'
-            ) {
-                call = node;
-            }
-            ts.forEachChild(node, findCall);
-        };
-        findCall(parsed);
-        expect(call, 'no buildAppBundles(…) call found in the app driver').toBeDefined();
-
-        const argument = call?.arguments[0];
-        expect(argument !== undefined && ts.isObjectLiteralExpression(argument)).toBe(true);
-
-        const assigned: string[] = [];
-        const opaqueSpreads: string[] = [];
-        const collect = (node: ts.Node): void => {
-            if (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) {
-                assigned.push(node.name.getText());
-            }
-            if (ts.isSpreadAssignment(node)) {
-                // A spread is auditable only when its members are inline object
-                // literals — which this same walk then descends into. Anything
-                // else (a variable, a call) could carry any key at all.
-                let spreadsInlineObject = false;
-                const findObject = (inner: ts.Node): void => {
-                    if (ts.isObjectLiteralExpression(inner)) spreadsInlineObject = true;
-                    ts.forEachChild(inner, findObject);
-                };
-                findObject(node.expression);
-                if (!spreadsInlineObject) opaqueSpreads.push(node.expression.getText());
-            }
-            ts.forEachChild(node, collect);
-        };
-        if (argument !== undefined) collect(argument);
-
-        expect(opaqueSpreads, 'an opaque spread could smuggle any option past this check').toEqual(
-            [],
-        );
-        // Floor: a collector that found nothing would pass while checking nothing.
-        expect(assigned).toContain('build');
-        for (const forbidden of ['outfiles', 'overrides']) {
-            expect(
-                assigned,
-                `the app driver passes "${forbidden}" — its plan no longer matches the engine ` +
-                    'default this gate reads, so the gate is now checking the wrong files. Import ' +
-                    "the app's own map here, or drop the override.",
-            ).not.toContain(forbidden);
-        }
+        // The EXACT set, both ways: an app the driver misses is unverified, and
+        // an entry naming a directory with no composition root is a build the
+        // gate would try to run and fail on.
+        expect(verifiedAppDirs()).toEqual(discoverElectronApps());
+        // Two floors: an empty discovery, or an empty declaration, would each
+        // make the comparison above vacuously true.
+        expect(discoverElectronApps().length).toBeGreaterThan(1);
+        expect(verifiedAppDirs().length).toBeGreaterThan(1);
     });
+
+    it('names each app with its own workspace package', () => {
+        // The other member of each tuple, which the census above reads past. A
+        // wrong package name is a `--filter` that matches nothing, and pnpm
+        // exits 0 on an empty filter — so the gate would report a pass for an
+        // app it never built.
+        const workspacePackages = new Map(
+            discoverElectronApps().map((dir) => [
+                dir,
+                (
+                    JSON.parse(
+                        readFileSync(path.join(workspaceRoot, dir, 'package.json'), 'utf8'),
+                    ) as { name: string }
+                ).name,
+            ]),
+        );
+
+        expect(new Map(VERIFIED_APPS.map(([dir, pkg]) => [dir, pkg]))).toEqual(workspacePackages);
+    });
+
+    it('decides the verdict on EVERY app, and only when all of them passed', () => {
+        // Neither half is observable through the CLI: `main()` is unexported and
+        // double-guarded, so a `some` that lets a passing first app mask a
+        // failing second one — or a short-circuit that never builds the second
+        // app at all — would ship with this suite green.
+        const verify = vi.fn((dir: string) => dir !== 'apps/second');
+        const apps = [
+            ['apps/first', '@scope/first'],
+            ['apps/second', '@scope/second'],
+            ['apps/third', '@scope/third'],
+        ] as const;
+
+        expect(verifyAllApps(apps, verify)).toBe(false);
+        // EAGER: the failing middle app must not stop the third from running.
+        expect(verify.mock.calls.map(([dir]) => dir)).toEqual([
+            'apps/first',
+            'apps/second',
+            'apps/third',
+        ]);
+    });
+
+    it('passes only when no app failed', () => {
+        // The positive control for the check above: a verdict wired to a
+        // constant `false` would satisfy it while failing every real run.
+        expect(verifyAllApps([['apps/first', '@scope/first']], () => true)).toBe(true);
+        expect(verifyAllApps([], () => false)).toBe(true);
+    });
+
+    it('hands each app its own package name', () => {
+        const verify = vi.fn(() => true);
+
+        verifyAllApps(
+            [
+                ['apps/first', '@scope/first'],
+                ['apps/second', '@scope/second'],
+            ],
+            verify,
+        );
+
+        expect(verify.mock.calls).toEqual([
+            ['apps/first', '@scope/first'],
+            ['apps/second', '@scope/second'],
+        ]);
+    });
+
+    it.each(discoverElectronApps())(
+        "takes the engine default only because %s's driver does too",
+        (appDir) => {
+            // The cost of the import above: this gate no longer reads the APP's
+            // outfile map, so it is right only while each app driver passes none
+            // of its own. A scaffolded game's gate has no such luxury and imports
+            // from `./build-main.js`, whose re-export tracks that game's driver.
+            //
+            // AST, not a substring: the property could arrive through a spread,
+            // and an opaque spread is exactly the shape that would hide it — so
+            // the walk reports one rather than quietly stepping over it.
+            const appBuildMainPath = path.join(workspaceRoot, appDir, 'electron/build-main.ts');
+            const source = readFileSync(appBuildMainPath, 'utf8');
+            const parsed = ts.createSourceFile(
+                appBuildMainPath,
+                source,
+                ts.ScriptTarget.Latest,
+                true,
+            );
+
+            let call: ts.CallExpression | undefined;
+            const findCall = (node: ts.Node): void => {
+                if (
+                    ts.isCallExpression(node) &&
+                    ts.isIdentifier(node.expression) &&
+                    node.expression.text === 'buildAppBundles'
+                ) {
+                    call = node;
+                }
+                ts.forEachChild(node, findCall);
+            };
+            findCall(parsed);
+            expect(call, 'no buildAppBundles(…) call found in the app driver').toBeDefined();
+
+            const argument = call?.arguments[0];
+            expect(argument !== undefined && ts.isObjectLiteralExpression(argument)).toBe(true);
+
+            const assigned: string[] = [];
+            const opaqueSpreads: string[] = [];
+            const collect = (node: ts.Node): void => {
+                if (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) {
+                    assigned.push(node.name.getText());
+                }
+                if (ts.isSpreadAssignment(node)) {
+                    // A spread is auditable only when its members are inline
+                    // object literals — which this same walk then descends into.
+                    // Anything else (a variable, a call) could carry any key.
+                    let spreadsInlineObject = false;
+                    const findObject = (inner: ts.Node): void => {
+                        if (ts.isObjectLiteralExpression(inner)) spreadsInlineObject = true;
+                        ts.forEachChild(inner, findObject);
+                    };
+                    findObject(node.expression);
+                    if (!spreadsInlineObject) opaqueSpreads.push(node.expression.getText());
+                }
+                ts.forEachChild(node, collect);
+            };
+            if (argument !== undefined) collect(argument);
+
+            expect(
+                opaqueSpreads,
+                'an opaque spread could smuggle any option past this check',
+            ).toEqual([]);
+            // Floor: a collector that found nothing would pass while checking nothing.
+            expect(assigned).toContain('build');
+            for (const forbidden of ['outfiles', 'overrides']) {
+                expect(
+                    assigned,
+                    `${appDir}'s driver passes "${forbidden}" — its plan no longer matches the ` +
+                        'engine default this gate reads, so the gate is now checking the wrong ' +
+                        "files. Import the app's own map here, or drop the override.",
+                ).not.toContain(forbidden);
+            }
+        },
+    );
 
     it('remains reachable from the pinned root script', () => {
         // ci-workflow.test.ts and merge-gate.test.ts pin `pnpm

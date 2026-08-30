@@ -1,0 +1,24 @@
+/*
+ * Action — design token overrides.
+ *
+ * Redefining an engine `--ch-*` token here re-themes the whole UI at once: the
+ * shell, the built-in screens and this app's own components all read the same
+ * variables. This is the sanctioned way a game themes Chimera — the alternative,
+ * hardcoding colours in components, is what the `screens/` lint rules exist to
+ * stop.
+ *
+ * Only tokens the engine ALREADY declares may be redefined here
+ * (`chimera/no-unknown-token-overrides`): inventing a new `--ch-*` name would
+ * look like theming and do nothing, because nothing in the engine reads it.
+ *
+ * ONE family, on purpose. The accent trio is what primary buttons and the
+ * pressed toggle read, and the three members are read by different components —
+ * moving one alone themes some of the UI and not the rest, so they are set as a
+ * group.
+ */
+
+:root {
+    --ch-color-accent: #f59e0b;
+    --ch-color-accent-hover: #fbbf24;
+    --ch-color-accent-strong: #fcd34d;
+}

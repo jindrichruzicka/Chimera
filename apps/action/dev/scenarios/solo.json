@@ -1,0 +1,5 @@
+{
+    "gameId": "action",
+    "seats": [{ "profile": "pilot.json" }],
+    "autoStart": true
+}

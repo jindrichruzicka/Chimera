@@ -53,7 +53,7 @@ export interface AlignmentResult {
 /**
  * The first-party published set that must stay lock-stepped: the five engine packages
  * (inward dependency order, `simulation` is the zero-dep leaf) plus the initializer.
- * The private `@chimera-engine/tactics` reference app and the `templates/blank` scaffolding
+ * The private reference apps under `apps/` and the `templates/blank` scaffolding
  * source publish nothing and are deliberately absent. Kept in sync with the `fixed` group
  * in `.changeset/config.json`.
  */

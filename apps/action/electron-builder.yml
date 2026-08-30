@@ -1,0 +1,82 @@
+# Action — Electron app packaging config.
+#
+# Produces a MINIMAL, UNSIGNED local app bundle on the host platform. Like
+# apps/tactics it takes the engine's own icon set (no duplicated logo bytes) and
+# keeps the same things out of scope: no code signing, no notarisation, no CI
+# release matrix (mac `identity: null`).
+#
+# This config lives in the consumer app, never in @chimera-engine/electron,
+# which stays game-agnostic. It must not embed the debug-mode env flag —
+# `pnpm verify:packaged-bundle` reads the bytes a real build emits and fails if
+# it does.
+
+appId: com.chimera.action
+productName: Action
+
+directories:
+  # Installers/bundles go to release/ — NOT dist/, which holds the esbuild-bundled
+  # main/preload JS (and is gitignored separately); writing here would clobber it.
+  output: release
+
+# Plain directory layout (no asar): the host serves the renderer through a custom
+# protocol and reads game content with ordinary filesystem reads, so an unpacked
+# app works exactly as in dev.
+asar: false
+
+# The app has NO native node modules: dist/electron/main.js and dist/preload/api.js
+# are fully esbuild-bundled (only `electron` + node builtins stay external). Skip
+# @electron/rebuild — it has nothing to rebuild and would walk the pnpm virtual
+# store and fail.
+npmRebuild: false
+
+# Packaged file layout is dictated by the host's resolveRuntimePaths
+# (@chimera-engine/electron), which walks UP from the main bundle's __dirname:
+#   preload   = __dirname/../preload/api.js
+#   renderer  = __dirname/../../renderer/out/index.html
+# Each shipped bundle is named INDIVIDUALLY rather than swept in by a recursive
+# dist glob: a widened allowlist ships whatever an earlier dev build left in
+# dist, and `verify:packaged-bundle` rejects it for exactly that reason.
+files:
+  - dist/electron/main.js
+  - dist/preload/api.js
+  # Debug builds (the .vscode launch tasks) emit *.map files with full TSX
+  # sourcesContent into renderer/out; never ship them (this bare app-level
+  # `package` script packages out/ as-is, without a fresh `next build`).
+  - from: renderer/out
+    to: renderer/out
+    filter:
+      - '**/*'
+      - '!**/*.map'
+  # There is deliberately no `from: assets` / `from: data` block: this app
+  # declares no manifest `icon` and ships no content collections, so both dirs
+  # would be empty. The shell task adds them alongside the assets it introduces.
+  #
+  # Default RUNTIME window icon: the bundled host's createMainWindow
+  # (resolveAppIcon, @chimera-engine/electron) loads the default Chimera PNG from
+  # <app>/assets/icons/chimera.png (moduleDirname/../../assets/icons/chimera.png —
+  # the esbuild bundle sits at <app>/dist/electron/). Ship the engine's icon set
+  # there or window creation logs an unhandled rejection. `from` is a DIRECTORY
+  # (a file set, like renderer/out above); no byte duplication — sourced from the
+  # installed @chimera-engine/electron package.
+  - from: node_modules/@chimera-engine/electron/assets/icons
+    to: assets/icons
+
+mac:
+  icon: node_modules/@chimera-engine/electron/assets/icons/chimera.icns
+  category: public.app-category.games
+  identity: null # unsigned — code signing is OUT OF SCOPE
+  target:
+    - dir
+    - dmg
+
+win:
+  icon: node_modules/@chimera-engine/electron/assets/icons/chimera.ico
+  target:
+    - nsis
+
+linux:
+  icon: node_modules/@chimera-engine/electron/assets/icons/chimera.png
+  category: Game
+  target:
+    - dir
+    - AppImage

@@ -5,8 +5,8 @@
  * segment (a game's on-disk home), a legacy `games/` segment, or a
  * non-engine `@chimera-engine/<pkg>` specifier — so the host
  * (main process) stays agnostic of which games exist — required for packaged,
- * multi-game builds. The game's wiring lives in the consumer app's composition
- * root (`apps/tactics/electron/main.ts`), a flat file under `electron/` rather
+ * multi-game builds. A game's wiring lives in its own consumer app's composition
+ * root (`apps/<game>/electron/main.ts`), a flat file under `electron/` rather
  * than `electron/main/`, so it is outside this rule's scope; it injects the
  * game's `MainGameContribution` at runtime. There are NO in-package composition
  * points: content schemas (`MainGameContribution.contentSchemas`) and lobby-setup
@@ -61,7 +61,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             mainGamesImport:
-                'electron/main must not import from a game — apps/*, games/*, or a non-engine @chimera-engine/* package (multi-game packaging). Inject the game at runtime via the consumer app composition root (apps/tactics/electron/main.ts), which constructs the MainGameContribution (including contentSchemas and lobbySetup) and calls main(contributions). Mirrors renderer/game/rendererGameRegistry.ts.',
+                'electron/main must not import from a game — apps/*, games/*, or a non-engine @chimera-engine/* package (multi-game packaging). Inject the game at runtime via the consumer app composition root (apps/<game>/electron/main.ts), which constructs the MainGameContribution (including contentSchemas and lobbySetup) and calls main(contributions). Mirrors renderer/game/rendererGameRegistry.ts.',
         },
         schema: [],
     },

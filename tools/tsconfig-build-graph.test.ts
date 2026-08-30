@@ -28,8 +28,8 @@ const ENGINE_PACKAGE_DIRS = ['simulation', 'ai', 'networking', 'renderer', 'elec
 /**
  * Consumer apps are DISCOVERED, not enumerated: every `apps/<game>` carrying a composite
  * `tsconfig.build.json` is a layer-3 app that joins the `tsc -b` solution (F65 — a
- * scaffolded app is first-class without editing this guard). Today that is just
- * `apps/tactics`, but a `create-chimera-game` output is picked up automatically.
+ * scaffolded app is first-class without editing this guard). A
+ * `create-chimera-game` output is picked up automatically.
  */
 function discoverAppDirs(): string[] {
     const appsRoot = path.join(repoRoot, 'apps');
@@ -59,12 +59,12 @@ const APP_LAYER_PACKAGE_DIRS = [] as const;
  * Same-rank (sibling) or higher-rank (back-edge) references would form a cycle or escape
  * the core.
  *
- * `apps/tactics` is the LAYER-3 consumer app: it sits ABOVE `@chimera-engine/electron`
- * (layer 2) and may reference it. This is sound because, since the game-agnosticism
- * work, no engine package statically imports a game — electron and renderer
- * reach the game only by runtime registration — so `apps/tactics` is a pure sink (depends
- * on everything, nothing depends on it). Engine packages stay ≤ layer 2 and never
- * reference the app layer.
+ * Every discovered `apps/<game>` is a LAYER-3 consumer app: it sits ABOVE
+ * `@chimera-engine/electron` (layer 2) and may reference it. This is sound
+ * because, since the game-agnosticism work, no engine package statically imports
+ * a game — electron and renderer reach the game only by runtime registration — so
+ * a consumer app is a pure sink (depends on everything, nothing depends on it).
+ * Engine packages stay ≤ layer 2 and never reference the app layer.
  */
 const ENGINE_PACKAGE_LAYER: Readonly<Record<string, number>> = {
     simulation: 0,

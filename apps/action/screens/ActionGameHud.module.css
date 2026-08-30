@@ -1,0 +1,37 @@
+/*
+ * The action HUD's styles.
+ *
+ * Colours and sizes come from `var(--ch-*)` tokens, so the HUD follows whatever
+ * `styles/tokens-override.css` sets — writing them literally would look right
+ * until someone themed the game.
+ *
+ * The bar is corner-anchored and non-interactive apart from its own controls:
+ * `pointer-events: none` on the bar with `auto` restored on the controls means a
+ * click anywhere along the strip that is not ON a control falls through to the
+ * arena behind it, so the HUD never eats a selection click.
+ */
+.hud {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ch-space-md);
+    padding: var(--ch-space-sm) var(--ch-space-md);
+    pointer-events: none;
+    color: var(--ch-color-text-primary);
+}
+
+.tick {
+    font-size: var(--ch-font-size-sm);
+    color: var(--ch-color-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: var(--ch-space-sm);
+    pointer-events: auto;
+}

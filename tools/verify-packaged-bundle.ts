@@ -3,9 +3,9 @@
  *
  * `verify:packaged-bundle` — the MONOREPO's thin driver for the engine-owned
  * packaged-bundle guard (§4.12, Invariant #27). It asserts the Runtime Debug
- * Layer is absent from the bundles a REAL packaging run of the reference app
- * emits, by pointing `verifyPackagedBundle` from
- * `@chimera-engine/electron/packaged-bundle` at `apps/tactics`.
+ * Layer is absent from the bundles a REAL packaging run emits, by pointing
+ * `verifyPackagedBundle` from `@chimera-engine/electron/packaged-bundle` at each
+ * consumer app in `VERIFIED_APPS` below.
  *
  * Everything of substance lives in the engine export — the marker set, the
  * content predicates, the electron-builder allowlist checks, and the
@@ -23,13 +23,13 @@
  * CLOSED: outputs are deleted before each build, so a diverged map finds no
  * file and fails loudly rather than reading a stale one.
  *
- * Reaching the plan through the ENGINE rather than through
- * `apps/tactics/electron/build-main.ts` is what keeps `tools/` off an `apps/`
- * import (§3 dependency direction). The app driver is free to pass its own
- * `outfiles` — a scaffolded game's gate therefore imports from `./build-main.js`,
- * whose re-export tracks whatever that game's driver does. This one can take the
- * engine default only because the reference app takes it too, which
- * `tools/verify-packaged-bundle.test.ts` pins on the driver's source.
+ * Reaching the plan through the ENGINE rather than through an app's
+ * `electron/build-main.ts` is what keeps `tools/` off an `apps/` import
+ * (§3 dependency direction). An app driver is free to pass its own `outfiles` —
+ * a scaffolded game's gate therefore imports from `./build-main.js`, whose
+ * re-export tracks whatever that game's driver does. This one can take the
+ * engine default only because the apps it verifies take it too, which
+ * `tools/verify-packaged-bundle.test.ts` pins on each app driver's source.
  *
  * ⚠️ SIDE EFFECT: `build:app` writes the same `apps/<game>/dist` path a dev
  * launch runs from, so a packaged build leaves the F9 Inspector dead until the
@@ -53,12 +53,45 @@ import { appBundleOutfiles, PACKAGED_BUILD_ENV } from '@chimera-engine/electron/
 import { verifyPackagedBundle } from '@chimera-engine/electron/packaged-bundle';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const APP_DIR = path.join(ROOT, 'apps/tactics');
-const APP_PACKAGE = '@chimera-engine/tactics';
 
-function main(): void {
-    const ok = verifyPackagedBundle(
-        { appDir: APP_DIR, outfiles: appBundleOutfiles(APP_DIR) },
+/**
+ * Every consumer app whose real packaging build this gate verifies, as
+ * `[workspace-relative dir, package name]`.
+ *
+ * Enumerated rather than discovered from `apps/`, because each entry costs two
+ * real esbuild runs: an app added here is a deliberate decision to pay that on
+ * every merge gate, not something a new directory should trigger silently. The
+ * cost of MISSING one is the whole point of the gate, though — `build:app` and
+ * `electron-builder.yml` are app-owned and either can reship the debug layer —
+ * so a new app belongs here the moment it has an Electron composition root.
+ */
+export const VERIFIED_APPS: readonly (readonly [string, string])[] = [
+    ['apps/tactics', '@chimera-engine/tactics'],
+    ['apps/action', '@chimera-engine/action'],
+];
+
+/**
+ * Runs `verify` for EVERY app and answers whether all of them passed.
+ *
+ * Split out of `main()` and injected rather than inlined, because both halves of
+ * it are decisions a mutant can quietly reverse and neither is observable
+ * through the CLI: `some` in place of `every` lets a passing first app mask a
+ * failing second one, and a short-circuiting `every(([dir, pkg]) => verify(…))`
+ * in place of the eager `map` stops the second app being BUILT at all the moment
+ * the first fails — so a fix round would only ever surface the next problem after
+ * the previous one lands. `verify-packaged-bundle.test.ts` pins both.
+ */
+export function verifyAllApps(
+    apps: readonly (readonly [string, string])[],
+    verify: (appDir: string, appPackage: string) => boolean,
+): boolean {
+    const results = apps.map(([dir, appPackage]) => verify(dir, appPackage));
+    return results.every((ok) => ok);
+}
+
+function verifyApp(appDir: string, appPackage: string): boolean {
+    return verifyPackagedBundle(
+        { appDir, outfiles: appBundleOutfiles(appDir) },
         {
             /**
              * Run the app's real bundler exactly as the packaging scripts do —
@@ -69,7 +102,7 @@ function main(): void {
              * restatement of the shipped command.
              */
             buildApp: (packaged) => {
-                execFileSync('pnpm', ['--filter', APP_PACKAGE, 'build:app'], {
+                execFileSync('pnpm', ['--filter', appPackage, 'build:app'], {
                     cwd: ROOT,
                     stdio: 'inherit',
                     env: packaged ? { ...process.env, [PACKAGED_BUILD_ENV]: '1' } : process.env,
@@ -78,9 +111,15 @@ function main(): void {
             readFile: (file) => readFileSync(file, 'utf8'),
             fileExists: existsSync,
             removeFile: (file) => rmSync(file, { force: true }),
-            log: (message) => console.log(`[verify:packaged-bundle] ${message}`),
+            log: (message) => console.log(`[verify:packaged-bundle] ${appPackage}: ${message}`),
             error: (message) => console.error(message),
         },
+    );
+}
+
+function main(): void {
+    const ok = verifyAllApps(VERIFIED_APPS, (dir, appPackage) =>
+        verifyApp(path.join(ROOT, dir), appPackage),
     );
 
     if (ok) {

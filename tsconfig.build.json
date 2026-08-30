@@ -7,15 +7,15 @@
     //
     // The references mirror the acyclic, inward `workspace:*` graph (Invariant #1):
     // simulation is the zero-dep leaf; ai / networking / renderer reference it; electron
-    // and the tactics consumer app sit at the top (layer 2). electron references
-    // simulation/ai/networking/renderer; tactics (apps/tactics) references
-    // simulation/ai/renderer. The result stays acyclic: nothing points back out to a
-    // sibling above it, and the two layer-2 nodes never reference each other. The chat
+    // and the consumer apps sit at the top. electron references
+    // simulation/ai/networking/renderer; each consumer app (apps/tactics, apps/action)
+    // references simulation/ai/renderer/electron and is referenced by nothing. The result
+    // stays acyclic: nothing points back out to a sibling above it. The chat
     // barrel's type-only `@chimera-engine/electron/preload/api-types` back-edge is resolved by
     // renderer/tsconfig.build.json onto electron SOURCE via a `paths` alias (NOT a
     // project reference), so it never closes a renderer → electron reference cycle.
-    // `tsc --build` derives the order from the reference graph (simulation →
-    // ai/networking/renderer → electron/tactics), so this list order is informational.
+    // `tsc --build` derives the order from the reference graph, so this list order
+    // is informational; `tools/tsconfig-build-graph.test.ts` is what holds the shape.
     // Only renderer's SCOPED component-library build participates as a partial
     // compilation — the full renderer Next app stays on the flat `tsc --noEmit` checks
     // (renderer/tsconfig.json via the Next plugin). electron joined the composite graph
@@ -32,6 +32,7 @@
         { "path": "./networking/tsconfig.build.json" },
         { "path": "./renderer/tsconfig.build.json" },
         { "path": "./electron/tsconfig.build.json" },
-        { "path": "./apps/tactics/tsconfig.build.json" }
+        { "path": "./apps/tactics/tsconfig.build.json" },
+        { "path": "./apps/action/tsconfig.build.json" }
     ]
 }

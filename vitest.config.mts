@@ -103,6 +103,7 @@ export default defineConfig({
                 'ai/**/*.ts',
                 'renderer/**/*.ts',
                 'apps/tactics/**/*.ts',
+                'apps/action/**/*.ts',
                 'networking/**/*.ts',
                 'tools/**/*.ts',
             ],
