@@ -15,7 +15,7 @@ Source of truth:
 Fast BLOCK checklist:
 
 - No `Invariant #nn` references. State the rule in the sentence, or name the lint rule that enforces it — an adopter has no `architecture-invariants.md`, and may number their own invariants differently.
-- No `§n.n` or `<doc>.md` doc-section references. The adopter cannot open the doc, so the constraint has to be stated in full where it applies.
+- No `§n.n` references, and no pointer to a doc THIS repo owns. The adopter cannot open it, so the constraint has to be stated in full where it applies. A markdown file the template itself ships is the exception — it lands in their project, so `renderer/loaders.ts` pointing at the `shell-contributions.md` beside it names a file they have.
 - No engine milestone, feature, issue, PR, or AC references (`M9`, `F67`, `#813`) — already banned repo-wide by §16.4, and doubly meaningless here.
 - Do not redirect a dropped reference at a different guard without checking that guard's scope first. A wrong pointer is worse than none; delete instead.
 - Rules the template relies on stay stated — dropping a reference must not drop the constraint it carried.

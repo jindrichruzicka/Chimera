@@ -10,16 +10,10 @@
 // unset for the engine default; declare 0 to drop the floor entirely.
 
 import React from 'react';
-import type { InputAction } from '@chimera-engine/renderer/input';
 import type { GameScreenRegistry } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 
 // Every screen registered here must be wrapped in React.lazy.
 const __GamePascal__Playfield = React.lazy(() => import('./__GamePascal__Playfield.js'));
-
-// Adopter-extensible list of game-contributed input actions. Add entries here
-// to register custom key-bindable actions in the engine's Controls settings
-// panel. See `@chimera-engine/renderer/input` (`InputAction`) for the contract.
-export const __GamePascal__INPUT_ACTIONS: readonly InputAction[] = [];
 
 export const __GamePascal__GameScreenRegistry: GameScreenRegistry = {
     playfield: __GamePascal__Playfield,

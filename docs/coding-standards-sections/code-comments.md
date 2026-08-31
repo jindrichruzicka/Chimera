@@ -56,13 +56,15 @@ Applies **only** to files under `tools/create-chimera-game/templates/`. Everywhe
 
 A template file does not ship into this repo. It is copied verbatim into an adopter's own project, which has no `architecture-invariants.md`, no `docs/`, and its own numbering if it keeps invariants at all. There, `Invariant #96` is either unresolvable or resolves to a rule that is not the one meant. So in template files these are forbidden too:
 
-| Forbidden in templates | Instead                                                                   |
-| ---------------------- | ------------------------------------------------------------------------- |
-| `Invariant #nn`        | State the rule in the sentence, or name the lint rule that enforces it    |
-| `§n.n`, `<doc>.md`     | State the constraint in full — the adopter has no copy of the doc to open |
-| Engine milestones      | Drop; `M9 / F67` names nothing an adopter can look up (already §16.4)     |
+| Forbidden in templates              | Instead                                                                |
+| ----------------------------------- | ---------------------------------------------------------------------- |
+| `Invariant #nn`                     | State the rule in the sentence, or name the lint rule that enforces it |
+| `§n.n`, a `<doc>.md` THIS repo owns | State the constraint in full — the adopter has no copy of it to open   |
+| Engine milestones                   | Drop; `M9 / F67` names nothing an adopter can look up (already §16.4)  |
 
 The number is never the point — the rule is. `// Invariant #87: every screen registered here must be wrapped in React.lazy` becomes `// Every screen registered here must be wrapped in React.lazy` and loses nothing.
+
+A markdown file the TEMPLATE ships is different: it is copied into the adopter's project alongside the code, so a pointer at it names a file they have open in the same editor. `templates/blank/renderer/loaders.ts` pointing at `shell-contributions.md` beside it is a reference to THEIR tree. A reference back into `docs/` is not, whatever it is spelled like.
 
 Do not redirect a dropped reference at a different guard unless you have checked that guard's scope. Swapping a dangling reference for a wrong one is worse than deleting it.
 

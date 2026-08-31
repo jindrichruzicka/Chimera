@@ -35,12 +35,12 @@
 // than guessed at, and the loads that named it stop being checked.
 //
 // THE SHELL HAS ITS OWN. What a menu background renders and what the menu
-// screens sound is loaded outside a match, so it gets its own inventory: declare
-// those refs in `shell-asset-manifest.ts` beside this file and forward it from
-// `renderer/loaders.ts` as `shellBackgroundAssets`, `shellAudioAssets`, or both.
-// Those two names are the ones `validate:assets` reads a manifest from — a file
-// under some other name is not one that fails to validate, it is one the gate
-// never opens.
+// screens sound is loaded outside a match, so it gets its own inventory:
+// `shell-asset-manifest.ts` beside this file, which ships empty and already
+// forwarded from `renderer/loaders.ts` as both `shellBackgroundAssets` and
+// `shellAudioAssets`. Those two basenames are the only ones `validate:assets`
+// reads a manifest from — a file under some other name is not one that fails to
+// validate, it is one the gate never opens.
 
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 // Uncomment alongside your first entry:

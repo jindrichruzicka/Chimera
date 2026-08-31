@@ -119,20 +119,28 @@ apps/<kebab>/
 ├── screens/               # the screens the registry names (playfield screen + registry)
 ├── components/            # EMPTY (.gitkeep) — every reusable piece those screens are built
 │                          #   from: shared React, shared hooks, in-Canvas r3f primitives
-├── renderer/              # per-app Next.js app + register.ts registration seam
+├── renderer/              # per-app Next.js app + register.ts registration seam, loaders.ts
+│                          #   (every optional shell feature) and input-actions.ts; the
+│                          #   shell-contributions.md catalogue sits beside them
 ├── electron/              # Electron main composition root + build-main.ts, your bundler driver
 ├── dev/                   # starter harness fixtures — profiles/ and scenarios/
 ├── e2e/                   # Playwright boot-smoke suite
-├── shell/                 # renderer shell declarations — fonts.ts gameFonts stub (empty until fetched)
+├── shell/                 # renderer shell declarations — fonts.ts gameFonts stub (empty until
+│                          #   fetched) + contributions.tsx, this game's own UI slots
 ├── assets/                # game-owned binary assets (icon; fonts/ for self-hosted .woff2 — Invariant #97)
-├── styles/                # tokens-override.css — redefine any `--ch-*` the engine declares
+├── styles/                # tokens-override.css — redefine any `--ch-*` the engine declares —
+│                          #   plus register-token-overrides.ts, the module that installs it
 ├── eslint.config.mjs      # STANDALONE ONLY — this game's flat config, composing the engine's architecture rules
 ├── manifest.ts            # GameManifest (registration surface, stays at the root)
-├── asset-manifest.ts      # AssetManifest — empty, already wired through renderer/loaders.ts;
-│                          #   a basename chimera-validate-assets discovers, so keep it
+├── asset-manifest.ts      # AssetManifest for a MATCH — empty, already wired through
+│                          #   renderer/loaders.ts; a basename chimera-validate-assets
+│                          #   discovers, so keep it
+├── shell-asset-manifest.ts # AssetManifest for the MENU — the other basename the validator
+│                          #   discovers; empty, wired as shellAudioAssets + shellBackgroundAssets
 ├── settings-schema.ts     # zod settings schema extending EngineSettings
-├── manifest.test.ts       # co-located tests for the two root manifests
-├── asset-manifest.test.ts #   (loops over entries, so they grow with the game)
+├── manifest.test.ts       # co-located test for the game manifest
+├── asset-manifest.test.ts # co-located test for BOTH inventories above (loops over
+│                          #   entries, so they grow with the game)
 └── package.json / tsconfig*.json / electron-builder.yml
 ```
 
@@ -186,13 +194,35 @@ literals are not checked, and keeping them on tokens is on you.
 
 `styles/tokens-override.css` is where you theme the game. Redefine any token the engine
 declares and the whole UI follows — the shell, the built-in screens, and your own components
-read the same variables. The file ships with the accent family already overridden, so you can
-see it working; keep it, because the token rule matches that path by name, and deleting the
-file takes the guardrail with it.
+read the same variables. It ships with the accent family already overridden, so the first
+thing you change is a value rather than a file. Keep the file: the token rule matches that
+path by name, and deleting it takes the guardrail with it.
+
+A stylesheet is loaded by nothing unless a module imports it, so the override reaches the app
+through `styles/register-token-overrides.ts` — a side-effect module whose only job is that
+import. `renderer/loaders.ts` awaits it as the first thing the shell loader does, because the
+shell renders as soon as that loader resolves and tokens arriving after first paint are a
+visible flash of the engine defaults. Move the import, and the theme stops applying with
+nothing to say so.
 
 The config is yours. It ships without type-aware linting (no Chimera rule needs it, and
 turning it on reds a fresh scaffold on files outside the app's TypeScript program) — the
 comments in the file say what to add if you want it, and what to keep passing when you do.
+
+### Turning on the optional shell features
+
+The engine renders a complete main menu, settings pane, lobby and background before this game
+contributes anything. A menu of your own, a live background, menu music, game-owned shell
+routes, contributed icons, translations and rebindable input actions are all optional, and all
+of them are turned on from `renderer/loaders.ts`. It ships with the values you edit named at
+the top of the file, so switching most of them on is changing a value rather than discovering
+a field. The exceptions are the four that REPLACE an engine default rather than adding to it —
+`mainMenu`, `settings`, `shellBackground` and `LobbyScreen`. An empty `mainMenu` is a menu with
+no buttons, not the engine's, so those four ship commented out in `shell/contributions.tsx`
+instead of as stubs: uncomment a line and write the value beside it.
+
+The catalogue — what each field does, which of the two payloads it belongs on, and what it
+costs — ships with the game as `renderer/shell-contributions.md`.
 
 ### Self-hosting Google fonts
 

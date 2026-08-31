@@ -1,7 +1,9 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { collectShellRouteDeclarations, suggestedPagePath } from '../shell-page-routes.js';
 import { GROWTH_DIRECTORIES } from './__test-support__/template-contract.js';
 import { GAME_TOKENS } from './tokens.js';
 
@@ -504,10 +506,10 @@ describe('blank template smoke harness', () => {
 
     it('ships an empty asset manifest at the basename the validator discovers', async () => {
         // `chimera-validate-assets` finds a game's manifests by BASENAME, and
-        // `asset-manifest.ts` is the one the match inventory has to carry (the
-        // shell background's is `shell-asset-manifest.ts`, which a blank game
-        // does not ship). A differently-named file is not a manifest that fails
-        // to validate, it is a manifest the gate never sees.
+        // `asset-manifest.ts` is the one the MATCH inventory has to carry; the
+        // shell's is the sibling `shell-asset-manifest.ts`, pinned below. A
+        // differently-named file is not a manifest that fails to validate, it is
+        // a manifest the gate never sees.
         const manifest = await read('asset-manifest.ts');
         expect(manifest).toContain(
             "import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';",
@@ -529,14 +531,24 @@ describe('blank template smoke harness', () => {
         expect(loaders).toContain('assetManifest: assetManifestModule.__gameCamel__AssetManifest');
     });
 
-    it('ships a manifest test that grows with the manifest rather than pinning it empty', async () => {
+    it('ships a manifest test covering BOTH inventories, growing rather than pinning them empty', async () => {
         // An `expect(entries).toHaveLength(0)` would red the moment an author
         // followed the manifest's own instructions. The per-entry checks are
         // loops, so they cost nothing empty and start working at the first asset.
         const test = await read('asset-manifest.test.ts');
         expect(test).toContain("from '@chimera-engine/electron/test-support'");
-        expect(test).toContain('for (const entry of __gameCamel__AssetManifest.entries)');
+        expect(test).toContain('for (const entry of manifest.entries)');
         expect(test).not.toMatch(/toHaveLength\(0\)|entries\)\.toEqual\(\[\]\)/u);
+        // The shell inventory earns the same checks. It resolves its refs under
+        // the same asset directory, so a menu clip declared with the wrong kind
+        // fails at runtime exactly as a match texture would; only the basename
+        // the validator discovers it by differs.
+        expect(test).toContain("from './asset-manifest.js'");
+        expect(test).toContain("from './shell-asset-manifest.js'");
+        expect(test).toContain("['__gameCamel__AssetManifest', __gameCamel__AssetManifest]");
+        expect(test).toContain(
+            "['__gameCamel__ShellAssetManifest', __gameCamel__ShellAssetManifest]",
+        );
     });
 
     it('wires an app-level fetch:fonts script naming the bin with an explicit --out-dir', async () => {
@@ -694,30 +706,18 @@ describe('blank template smoke harness', () => {
         }
     });
 
-    it('names no model game in any smoke file (tokens only)', async () => {
-        const files = [
-            'manifest.test.ts',
-            'asset-manifest.ts',
-            'asset-manifest.test.ts',
-            'screens/__GamePascal__Playfield.test.tsx',
-            'screens/__GamePascal__Playfield.module.css',
-            'e2e/tests/boot-smoke.spec.ts',
-            'e2e/fixtures/electron.fixture.ts',
-            'e2e/fixtures/inherit-env.ts',
-            'e2e/fixtures/user-data-root.ts',
-            'e2e/global-setup.ts',
-            'e2e/playwright.config.ts',
-            'e2e/tsconfig.json',
-            'electron-builder.yml',
-            'electron/build-main.ts',
-            'electron/verify-packaged-bundle.ts',
-            'shell/fonts.ts',
-            'renderer/loaders.ts',
-            'package.json',
-        ];
-        for (const rel of files) {
-            expect((await read(rel)).toLowerCase()).not.toContain('tactics');
+    it('names no model game anywhere in the template (tokens only)', async () => {
+        // The WHOLE tree rather than a hand-written file list. A list goes stale
+        // the moment the template grows a file, and the file it stops covering
+        // is precisely the newest one — the one likeliest to have been written
+        // by copying a model game's.
+        const offenders: string[] = [];
+        for (const rel of await collectTemplateFiles(blankTemplateDir)) {
+            const raw = await readFile(path.join(blankTemplateDir, rel));
+            if (raw.includes(0)) continue; // binary asset
+            if (raw.toString('utf8').toLowerCase().includes('tactics')) offenders.push(rel);
         }
+        expect(offenders.sort()).toEqual([]);
     });
 });
 
@@ -905,6 +905,49 @@ describe('blank template lint guardrails', () => {
  * fixture and never the tree that ships. These read the real one.
  */
 describe('blank template, whole-tree properties', () => {
+    it('walks exactly what the copier emits', async () => {
+        // Every check below reads file CONTENTS off this walk, so the walk has to
+        // subtract the same directories the copier does — no more and no less.
+        // Skip one the copier emits and a shipped file goes unchecked; keep one
+        // it drops and a stale local install or build output is graded as
+        // template source.
+        const copier = await readFile(path.resolve(import.meta.dirname, 'index.ts'), 'utf8');
+        const declared = /const SKIP_DIRS = new Set\(\[([^\]]*)\]\)/u.exec(copier)?.[1];
+        expect(declared, 'SKIP_DIRS not found in index.ts').toBeDefined();
+        const skipped = [...(declared ?? '').matchAll(/'([^']+)'/gu)].map(
+            (match) => match[1] ?? '',
+        );
+
+        expect(skipped.length, 'no SKIP_DIRS entries parsed').toBeGreaterThan(0);
+        expect([...NON_TEMPLATE_DIRECTORIES].sort()).toEqual([...skipped].sort());
+    });
+
+    it('actually subtracts those directories when it walks', async () => {
+        // The check above compares two CONSTANTS; this one runs the walk. Without
+        // it, deleting the skip leaves every check that reads file contents
+        // grading whatever a previous local scaffold or build wrote into the
+        // template — and the real tree has no such directory today, so nothing
+        // else here would notice.
+        const fixture = await mkdtemp(path.join(tmpdir(), 'chimera-template-walk-'));
+        try {
+            await mkdir(path.join(fixture, 'src'), { recursive: true });
+            await writeFile(path.join(fixture, 'src', 'kept.ts'), '');
+            for (const dropped of NON_TEMPLATE_DIRECTORIES) {
+                // At the root AND nested, because the walk decides per entry at
+                // every level: a root-only skip would let `src/node_modules/`
+                // straight back in.
+                for (const parent of [fixture, path.join(fixture, 'src')]) {
+                    await mkdir(path.join(parent, dropped), { recursive: true });
+                    await writeFile(path.join(parent, dropped, 'ignored.ts'), '');
+                }
+            }
+
+            expect(await collectTemplateFiles(fixture)).toEqual(['src/kept.ts']);
+        } finally {
+            await rm(fixture, { recursive: true, force: true });
+        }
+    });
+
     it('leaves no placeholder of any spelling in any template file', async () => {
         // `findLeftoverTokens` knows only the CANONICAL literals, by design — so
         // a near-miss like `__GameTitle__` (the real token is `__Game Title__`,
@@ -1002,6 +1045,477 @@ describe('blank template, whole-tree properties', () => {
                 `'${ignored}'`,
             );
         }
+    });
+});
+
+/**
+ * The optional shell contributions, and the WIRING that makes each one
+ * reachable.
+ *
+ * Four of them shipped DECLARED but inert, and every failure was silent: the
+ * token stylesheet nothing imported, a `settings` definition the settings page
+ * cannot see because it reads that field off the GAME payload, an action table
+ * on the game payload only — so the rebind pane stays empty until a match has
+ * run — and a shell inventory under no name the asset validator opens.
+ *
+ * So these assert the WIRING, never the file. Three of the four files already
+ * existed while the feature did nothing, which is exactly the state a
+ * `readFile` resolving proves nothing about.
+ */
+describe('blank template shell contributions', () => {
+    /** The template's `renderer/loaders.ts`, parsed. */
+    const loadersSource = async (): Promise<ts.SourceFile> =>
+        ts.createSourceFile(
+            'loaders.ts',
+            await read('renderer/loaders.ts'),
+            ts.ScriptTarget.Latest,
+            true,
+            ts.ScriptKind.TS,
+        );
+
+    /** One loader's body, by declared name. */
+    const loaderBody = (source: ts.SourceFile, name: string): ts.Block => {
+        const declaration = source.statements.find(
+            (statement): statement is ts.FunctionDeclaration =>
+                ts.isFunctionDeclaration(statement) && statement.name?.text === name,
+        );
+        if (declaration?.body === undefined) {
+            throw new Error(`renderer/loaders.ts declares no function \`${name}\``);
+        }
+        return declaration.body;
+    };
+
+    /** The payload object a loader returns, whether returned bare or wrapped. */
+    const returnedPayload = (body: ts.Block): ts.ObjectLiteralExpression => {
+        for (const statement of body.statements) {
+            if (!ts.isReturnStatement(statement) || statement.expression === undefined) continue;
+            const returned = statement.expression;
+            if (ts.isObjectLiteralExpression(returned)) return returned;
+            if (ts.isCallExpression(returned)) {
+                const [argument] = returned.arguments;
+                if (argument !== undefined && ts.isObjectLiteralExpression(argument)) {
+                    return argument;
+                }
+            }
+        }
+        throw new Error('the loader returns no object literal payload');
+    };
+
+    /** Field name → the initializer text it is wired to. Spreads are separate. */
+    const payloadFields = (payload: ts.ObjectLiteralExpression): Map<string, string> => {
+        const fields = new Map<string, string>();
+        for (const property of payload.properties) {
+            if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name)) {
+                fields.set(property.name.text, property.initializer.getText());
+            } else if (ts.isShorthandPropertyAssignment(property)) {
+                fields.set(property.name.text, property.name.text);
+            }
+        }
+        return fields;
+    };
+
+    /** The spread expressions of one payload, as written. */
+    const payloadSpreads = (payload: ts.ObjectLiteralExpression): readonly string[] =>
+        payload.properties
+            .filter(ts.isSpreadAssignment)
+            .map((spread) => spread.expression.getText());
+
+    /**
+     * What one conditional spread of a payload actually emits, run against a
+     * stand-in binding.
+     *
+     * The spread's OWN source, never a re-implementation of its condition here:
+     * a re-implementation agrees with an inverted fork by construction, which is
+     * exactly the mutant this exists to kill.
+     */
+    const emitSpread = (fork: string, binding: string, value: unknown): Record<string, unknown> =>
+        // eslint-disable-next-line @typescript-eslint/no-implied-eval
+        new Function(binding, `return { ...${fork} };`)(value) as Record<string, unknown>;
+
+    const shellPayloadFields = async (): Promise<Map<string, string>> => {
+        const source = await loadersSource();
+        return payloadFields(
+            returnedPayload(loaderBody(source, 'load__GamePascal__RendererGameShell')),
+        );
+    };
+
+    it('installs the token overrides from the shell loader, ahead of everything else it does', async () => {
+        // The stylesheet is inert on its own — nothing in a Next app loads a CSS
+        // file it does not import — so the wiring is the whole feature. A
+        // scaffolded game whose author edits the accent family and sees no
+        // change has no signal pointing anywhere.
+        const register = await read('styles/register-token-overrides.ts');
+        expect(register).toContain("import './tokens-override.css';");
+
+        const [first] = loaderBody(
+            await loadersSource(),
+            'load__GamePascal__RendererGameShell',
+        ).statements;
+        // AWAITED, and FIRST. The shell renders as soon as this loader resolves,
+        // so tokens installed after it are a visible flash of the engine
+        // defaults rather than a theme.
+        expect(first?.getText()).toBe("await import('../styles/register-token-overrides.js');");
+    });
+
+    it('imports the token stylesheet from exactly one module', async () => {
+        // One import site, so the bundler dedupes it to one stylesheet and every
+        // surface that needs the tokens before it paints names the same module.
+        const importers: string[] = [];
+        for (const rel of await collectTemplateFiles(blankTemplateDir)) {
+            if (!/\.(?:ts|tsx|mjs)$/u.test(rel)) continue;
+            if (/import\s+'[^']*tokens-override\.css'/u.test(await read(rel))) importers.push(rel);
+        }
+        expect(importers).toEqual(['styles/register-token-overrides.ts']);
+    });
+
+    it('forwards the shell payload on the GAME payload, which is where the settings page reads it', async () => {
+        // `settings` is declared on `LoadedRendererGameShell`, so the obvious
+        // edit is to return it from the shell loader — and that edit does
+        // nothing. The engine's settings page resolves the definition through
+        // `loadRendererGame(gameId).shell?.settings` and never calls the shell
+        // loader, so a game with no `shell` on its match payload gets the engine
+        // default no matter what it declares.
+        const source = await loadersSource();
+        const body = loaderBody(source, 'load__GamePascal__RendererGame');
+
+        expect(payloadFields(returnedPayload(body)).get('shell')).toBe('shell');
+        // And it is the value the shell LOADER answered, so the two payloads
+        // cannot disagree about what this game contributes.
+        expect(body.getText()).toContain('load__GamePascal__RendererGameShell()');
+    });
+
+    it('authors the input action table in a plain-data module rather than the screen registry', async () => {
+        const table = await read('renderer/input-actions.ts');
+        expect(table).toContain(
+            "import type { InputAction } from '@chimera-engine/renderer/input';",
+        );
+        expect(table).toContain(
+            'export const __GamePascal__INPUT_ACTIONS: readonly InputAction[] = [];',
+        );
+
+        // Not in `screens/index.tsx`: the shell payload has to carry the table,
+        // and reading it off the screen registry would pull that module — and
+        // its whole `React.lazy` graph — into the menu bundle.
+        const screens = await read('screens/index.tsx');
+        expect(screens).not.toContain('INPUT_ACTIONS');
+        expect(screens).not.toContain('InputAction');
+    });
+
+    it('registers the actions at app boot by carrying them on the SHELL payload', async () => {
+        // The engine's boot-time registrar reads `shell.inputActions`. On the
+        // game payload alone nothing registers until a match starts, so
+        // Settings > Controls shows its empty caption for a game that declared
+        // a full key map.
+        expect((await shellPayloadFields()).get('inputActions')).toBe(
+            '__GamePascal__INPUT_ACTIONS',
+        );
+
+        const source = await loadersSource();
+        const gamePayload = returnedPayload(loaderBody(source, 'load__GamePascal__RendererGame'));
+        // Read BACK off the shell rather than restated: registering one id twice
+        // with different metadata throws instead of last-write-winning.
+        expect(payloadFields(gamePayload).has('inputActions')).toBe(false);
+        expect(payloadSpreads(gamePayload).join('\n')).toContain('shell.inputActions');
+        expect(source.text).not.toContain('screenModule.__GamePascal__INPUT_ACTIONS');
+    });
+
+    it('ships an empty shell inventory at the SECOND basename the asset validator opens', async () => {
+        // `chimera-validate-assets` matches a manifest on the WHOLE basename
+        // against a closed two-name set. A shell inventory under any other name
+        // is not a manifest that fails to validate; it is one the gate never
+        // reads.
+        const manifest = await read('shell-asset-manifest.ts');
+        expect(manifest).toContain(
+            "import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';",
+        );
+        expect(manifest).toContain(
+            'export const __gameCamel__ShellAssetManifest: AssetManifest = {',
+        );
+        expect(manifest).toContain('gameId: __GAME_CONSTANT___GAME_ID,');
+        // Empty, but a real array literal — the shape an author appends to.
+        expect(manifest).toMatch(/entries:\s*\[[\s\n]*(?:\/\/[^\n]*\n\s*)*\],/u);
+    });
+
+    it('ships a manifest for every basename the validator opens', async () => {
+        // The two halves of "discovered by NAME" sit in different trees: the
+        // closed set is the validator's, the files are the template's. Pinning
+        // each against its own literal is what leaves a rename on one side
+        // invisible to the other — and a manifest the tool never opens fails
+        // nothing, it just stops being checked.
+        const validator = await readFile(
+            path.resolve(import.meta.dirname, '../../electron/dev-tools/validate-assets/index.ts'),
+            'utf8',
+        );
+        const block =
+            /const ASSET_MANIFEST_FILE_NAMES: ReadonlySet<string> = new Set\(\[([\s\S]*?)\]\)/u.exec(
+                validator,
+            )?.[1];
+        expect(block, 'ASSET_MANIFEST_FILE_NAMES not found in the validator').toBeDefined();
+
+        // Entries are string literals OR same-file consts naming one; the set
+        // currently mixes both, so resolving only literals would silently drop
+        // half of it.
+        const names = new Set<string>();
+        for (const entry of (block ?? '').split(',')) {
+            const literal = /'([^']+)'/u.exec(entry)?.[1];
+            if (literal !== undefined) {
+                names.add(literal);
+                continue;
+            }
+            const identifier = /\b([A-Z][A-Z0-9_]*)\b/u.exec(entry)?.[1];
+            if (identifier === undefined) continue;
+            const declared = new RegExp(`const ${identifier} = '([^']+)'`, 'u').exec(
+                validator,
+            )?.[1];
+            expect(declared, `${identifier} is not a same-file string const`).toBeDefined();
+            if (declared !== undefined) names.add(declared);
+        }
+
+        // A floor above ONE: the set mixes literals with an identifier, so a
+        // resolver that handled only literals would still find `asset-manifest.ts`
+        // and pass every check below while reading half the set.
+        expect(names.size, 'no manifest basenames resolved out of the validator').toBeGreaterThan(
+            1,
+        );
+        for (const name of names) {
+            await expect(read(name), `the template ships no ${name}`).resolves.toBeTypeOf('string');
+        }
+    });
+
+    it('forwards that inventory as both shell fields a menu resolves through', async () => {
+        // The two fields publish to different owners — the background's manager
+        // goes to its own subtree, the audio one becomes the app-level
+        // delegate — so a game that wants both points both at this one file.
+        const shell = await shellPayloadFields();
+        expect(shell.get('shellAudioAssets')).toBe('__gameCamel__ShellAssetManifest');
+        expect(shell.get('shellBackgroundAssets')).toBe('__gameCamel__ShellAssetManifest');
+    });
+
+    it('wires every named dial at the top of the file into the shell payload', async () => {
+        // The dials are the whole point of the restructure: an author edits a
+        // named value instead of a function body. What makes editing one DO
+        // anything is the forward, and dropping a forward is invisible — the
+        // field is simply absent, which is what each dial's shipped value looks
+        // like at runtime anyway. So each one is pinned to the field it feeds.
+        const shell = await shellPayloadFields();
+        expect(shell.get('translations')).toBe('TRANSLATIONS');
+        expect(shell.get('menuCommands')).toBe('MENU_COMMANDS');
+        expect(shell.get('preloadImages')).toBe('PRELOAD_IMAGES');
+        expect(shell.get('shellBackgroundInteractive')).toBe('SHELL_BACKGROUND_INTERACTIVE');
+        expect(shell.get('shellRoutes')).toBe('SHELL_ROUTES');
+
+        // …and the enumeration, so a dial ADDED to the block and never wired
+        // reds here rather than shipping as a value that does nothing.
+        // `SHELL_MUSIC_BED` is the one that cannot be a plain forward — an
+        // explicit `undefined` is not assignable to an optional field under
+        // `exactOptionalPropertyTypes` — so a spread counts as wired too.
+        const loaders = await read('renderer/loaders.ts');
+        const dials = [...loaders.matchAll(/^(?:export )?const ([A-Z][A-Z0-9_]*)\b/gmu)].map(
+            (match) => match[1] ?? '',
+        );
+        expect(dials, 'no module-level dials parsed out of the loaders').toContain(
+            'SHELL_MUSIC_BED',
+        );
+
+        const payload = returnedPayload(
+            loaderBody(await loadersSource(), 'load__GamePascal__RendererGameShell'),
+        );
+        const wired = [...payloadFields(payload).values(), ...payloadSpreads(payload)].join('\n');
+        expect(dials.filter((dial) => !new RegExp(`\\b${dial}\\b`, 'u').test(wired))).toEqual([]);
+    });
+
+    it('emits the music bed only when the dial is SET', async () => {
+        // The enumeration above sees only that the name appears somewhere in the
+        // payload, which a conditional spread satisfies whichever way round it
+        // is written. Inverted, the field is emitted exactly when the dial is
+        // UNSET: a scaffolded game ships `shellMusicBed: undefined`, and the day
+        // an author fills the dial in the bed is dropped from the payload and
+        // never plays — the silent-inert-dial class this template is being
+        // repaired to remove. So the fork is EVALUATED, both ways.
+        const payload = returnedPayload(
+            loaderBody(await loadersSource(), 'load__GamePascal__RendererGameShell'),
+        );
+        const fork = payloadSpreads(payload).find((text) => text.includes('SHELL_MUSIC_BED'));
+        expect(fork, 'the shell payload spreads no SHELL_MUSIC_BED fork').toBeDefined();
+
+        const declared = { ref: '__game_kebab__/audio/music/menu-bed.wav' };
+        expect(emitSpread(fork ?? '{}', 'SHELL_MUSIC_BED', declared)).toEqual({
+            shellMusicBed: declared,
+        });
+        // An unset dial contributes NO key — not an explicit `undefined`, which
+        // `exactOptionalPropertyTypes` refuses for an optional field.
+        expect(Object.keys(emitSpread(fork ?? '{}', 'SHELL_MUSIC_BED', undefined))).toEqual([]);
+    });
+
+    it('carries the action table onto the match payload only when the shell HAS one', async () => {
+        // The music-bed fork's sibling, and unpinned for the same reason: an
+        // inverted condition keeps the identifier present and keeps it a spread,
+        // so every text-shaped assertion above stays green. What it changes is
+        // that the match payload drops the table exactly when the shell has one —
+        // and the engine's second registration inside the game shell, which
+        // `renderer/input-actions.ts` describes as a no-op, stops happening at
+        // all.
+        const payload = returnedPayload(
+            loaderBody(await loadersSource(), 'load__GamePascal__RendererGame'),
+        );
+        const fork = payloadSpreads(payload).find((text) => text.includes('shell.inputActions'));
+        expect(fork, 'the match payload spreads no shell.inputActions fork').toBeDefined();
+
+        const table = [{ id: 'game:probe', description: 'Probe', category: 'Probe' }];
+        expect(emitSpread(fork ?? '{}', 'shell', { inputActions: table })).toEqual({
+            inputActions: table,
+        });
+        expect(Object.keys(emitSpread(fork ?? '{}', 'shell', { inputActions: undefined }))).toEqual(
+            [],
+        );
+    });
+
+    it('declares SHELL_ROUTES where the route/page cross-check can still read it', async () => {
+        // The workspace check that pairs a declared route with a real page
+        // resolves the identifier inside THIS source file and follows no import.
+        // Extract the constant to a module and the declaration reads as
+        // unreadable, which turns the missing-page check OFF for the game rather
+        // than failing it — and a declared route with no page is a static 404
+        // the renderer never observes.
+        const loaders = await read('renderer/loaders.ts');
+        expect(loaders).toMatch(/^const SHELL_ROUTES: readonly `\/\$\{string\}`\[\] = \[\];$/mu);
+        expect((await shellPayloadFields()).get('shellRoutes')).toBe('SHELL_ROUTES');
+
+        expect(collectShellRouteDeclarations(loaders).unreadable).toEqual([]);
+        // …and the reader BITES: renaming the declaration out from under the
+        // reference is exactly what extracting it to a module looks like here.
+        expect(
+            collectShellRouteDeclarations(loaders.replace('const SHELL_ROUTES', 'const MOVED'))
+                .unreadable,
+        ).toEqual(['SHELL_ROUTES']);
+    });
+
+    it('serves every route the template itself declares', async () => {
+        // The workspace guard that pairs declared routes with real pages walks
+        // `apps/<game>` only, so it never reads the template. This is the same
+        // pairing, over the template's own tree.
+        //
+        // A loop over an EMPTY list on purpose, the way the template's manifest
+        // test loops over empty `entries`: the template ships no shell route, so
+        // this costs nothing today and starts checking the day one is added —
+        // which is the day a route with no page would ship into every game.
+        const routes = collectShellRouteDeclarations(await read('renderer/loaders.ts')).routes;
+        for (const route of routes) {
+            const page = suggestedPagePath(route);
+            await expect(
+                read(page),
+                `${route} is declared but ${page} does not exist`,
+            ).resolves.toBeTypeOf('string');
+        }
+    });
+
+    it('keeps every static import of the loaders plain data', async () => {
+        // Everything this module imports statically is loaded on every screen
+        // the shell mounts, main menu included. A React component or a `three`
+        // module named here would put this game's rendering in front of the
+        // menu; the component-valued slots go through the dynamic import below.
+        const source = await loadersSource();
+        const valueImports = source.statements
+            .filter(ts.isImportDeclaration)
+            .filter((statement) => statement.importClause?.isTypeOnly !== true)
+            .map((statement) => (statement.moduleSpecifier as ts.StringLiteral).text)
+            .sort();
+
+        expect(valueImports).toEqual([
+            '../manifest.js',
+            '../shell-asset-manifest.js',
+            '../shell/fonts.js',
+            './input-actions.js',
+        ]);
+    });
+
+    it('routes the UI contributions through one dynamically imported module', async () => {
+        const contributions = await read('shell/contributions.tsx');
+        expect(contributions).toContain(
+            "import type { LoadedRendererGameShell } from '@chimera-engine/renderer/game';",
+        );
+        expect(contributions).toContain('export const __gameCamel__ShellContributions = {');
+        // `icons` ships empty-but-wired, like every other stub in the template:
+        // an empty glyph set is exactly what contributing none looks like.
+        expect(contributions).toMatch(/^\s+icons: \{\},$/mu);
+        // The four that REPLACE an engine default cannot: an empty `mainMenu` is
+        // a menu with no buttons, not the engine's. They ship commented out.
+        for (const slot of ['mainMenu', 'settings', 'shellBackground', 'LobbyScreen']) {
+            expect(contributions, `${slot} must ship as a commented-out example`).toMatch(
+                new RegExp(`^\\s*// ${slot}:`, 'mu'),
+            );
+        }
+
+        // The `satisfies` constraint is the only thing that types the slot KEYS.
+        // The object is spread wholesale into the shell payload and every field
+        // of that contract is optional, so without the constraint a mis-spelled
+        // `mainmenu:` rides in as an excess property nobody reads — the silent
+        // no-op this whole branch exists to close, one level up.
+        const constraint =
+            /\} satisfies Partial<\s*Pick<\s*LoadedRendererGameShell,\s*([^>]*)>\s*>;/u.exec(
+                contributions,
+            )?.[1];
+        expect(
+            constraint,
+            'the contributions object declares no satisfies constraint',
+        ).toBeDefined();
+        expect(
+            [...(constraint ?? '').matchAll(/'([^']+)'/gu)].map((match) => match[1] ?? '').sort(),
+        ).toEqual(['LobbyScreen', 'icons', 'mainMenu', 'settings', 'shellBackground']);
+
+        const body = loaderBody(await loadersSource(), 'load__GamePascal__RendererGameShell');
+        expect(body.getText()).toContain("import('../shell/contributions.js')");
+        expect(payloadSpreads(returnedPayload(body)).join('\n')).toContain(
+            '__gameCamel__ShellContributions',
+        );
+    });
+
+    it('catalogues every optional shell field in a doc rather than in the file an author edits', async () => {
+        // Prose inside `loaders.ts` goes stale the moment someone edits around
+        // it, and the catalogue that shipped there invited four features that
+        // could not work. The doc is the adopter's, shipped beside the file.
+        const loaders = await read('renderer/loaders.ts');
+        expect(loaders).toContain('shell-contributions.md');
+
+        const registry = await readFile(
+            path.resolve(import.meta.dirname, '../../renderer/game/rendererGameRegistry.ts'),
+            'utf8',
+        );
+        const contract = ts.createSourceFile(
+            'rendererGameRegistry.ts',
+            registry,
+            ts.ScriptTarget.Latest,
+            true,
+            ts.ScriptKind.TS,
+        );
+        const declaration = contract.statements.find(
+            (statement): statement is ts.InterfaceDeclaration =>
+                ts.isInterfaceDeclaration(statement) &&
+                statement.name.text === 'LoadedRendererGameShell',
+        );
+        if (declaration === undefined) {
+            throw new Error('LoadedRendererGameShell not found in the engine contract');
+        }
+        const optionalFields = declaration.members
+            .filter(ts.isPropertySignature)
+            .filter((member) => member.questionToken !== undefined)
+            .map((member) => (ts.isIdentifier(member.name) ? member.name.text : ''))
+            .filter((name) => name !== '');
+
+        // A floor: an extraction that found nothing would pass the loop below
+        // by looking at an empty set.
+        expect(optionalFields.length).toBeGreaterThan(10);
+
+        const doc = await read('renderer/shell-contributions.md');
+        expect(optionalFields.filter((field) => !doc.includes(`\`${field}\``))).toEqual([]);
+    });
+
+    it('documents theming against the module that actually installs the tokens', async () => {
+        // The README claimed the shipped accent override was working. It was
+        // not: nothing imported the stylesheet. A reader following that sentence
+        // edits a token, sees nothing, and has no next step.
+        const readme = await readFile(path.resolve(import.meta.dirname, 'README.md'), 'utf8');
+        expect(readme).toContain('styles/register-token-overrides.ts');
     });
 });
 
@@ -1138,11 +1652,22 @@ function escapeForRegExp(literal: string): string {
     return literal.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
-/** Every file under `dir`, as paths relative to it, skipping nothing. */
+/**
+ * Every file the template SHIPS, as paths relative to `dir`.
+ *
+ * The copier's own skip set is subtracted, and for the same reason it has one:
+ * running the CLI or a build inside the template leaves install and output
+ * directories behind, none of which is emitted into a scaffolded game. A walk
+ * that kept them would grade whatever a previous local run happened to write —
+ * and the checks over this list read file CONTENTS.
+ */
+const NON_TEMPLATE_DIRECTORIES = new Set(['node_modules', 'dist', 'out', '.next']);
+
 async function collectTemplateFiles(dir: string, prefix = ''): Promise<string[]> {
     const entries = await readdir(dir, { withFileTypes: true });
     const files: string[] = [];
     for (const entry of entries) {
+        if (NON_TEMPLATE_DIRECTORIES.has(entry.name)) continue;
         const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
         if (entry.isDirectory()) {
             files.push(...(await collectTemplateFiles(path.join(dir, entry.name), rel)));

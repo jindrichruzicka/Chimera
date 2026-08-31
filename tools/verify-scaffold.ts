@@ -299,8 +299,9 @@ export const PROBE_LINT_PLANTS = [
  * `@chimera-engine/renderer/*` straight onto `dist/`, bypassing the exports
  * map, so an e2e file can type-resolve an import game source can never
  * write. Nothing mounts it, and no model or Canvas enters the blank template.
- * (An asset MANIFEST does — an empty one, wired through the renderer loaders —
- * but it declares no asset and mounts nothing.)
+ * (Asset MANIFESTS do — two empty ones, the match inventory and the shell's,
+ * both wired through the renderer loaders — but they declare no asset and mount
+ * nothing.)
  */
 export const PROBE_SEAM_PLANT = {
     rel: path.join('screens', 'VerifyScaffoldSeamProbe.tsx'),
