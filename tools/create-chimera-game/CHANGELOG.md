@@ -1,5 +1,153 @@
 # create-chimera-game
 
+## 1.0.0-rc.12
+
+### Patch Changes
+
+- 306a83b: Close F88 in the documentation: extend §4.41 with what a LIVE shell surface may do, amend the four
+  invariants the feature moved, and tell a scaffolded game about the two capabilities its background
+  gained.
+
+    §4.41 keeps pointing at the owner docs rather than restating them — the background's two opt-ins are
+    §4.37.9's, the shell audio session is §4.25's, action registration is §4.26's, and the second asset
+    manifest is §4.10's — so what it gains is the part none of those owns alone. The capability table and
+    the one rule it exists to restate at the point where it is easiest to break: everything F88 adds
+    changes what the player sees, hears and points at, and none of it changes how a match is born. A key
+    press on a menu is the sharpest case now that one is possible: what a shell surface does with an
+    action stays renderer-local — it moves a ring or names a pick in `draft` — and the pick becomes
+    authoritative when `useQuickStart().start()` hands that draft to `chimera:lobby:quick-start`. Then
+    the three lifetimes a live surface holds — the background's own `AssetManager` keyed to its mount,
+    the app-level delegate binding opened across the audio surfaces and handed back at the arm, and an
+    app-lifetime action table with no unregister — with why each differs. And the ordered handover into
+    a match, which is the fact no single owner doc states. Its two writers are §4.37.18's —
+    `underArmedTransition` around the quick-start and continue IPC calls, and
+    the snapshot gate when a match snapshot lands on a shell surface, which is how the lobby's own Start
+    reaches `/game` — and what they share is the property the handover rests on: the arm lands while the
+    shell route is still current. From there the audio session lets go on that arm's own
+    commit, `GameShell` registers during render on the `/game` commit, and the surface flip disposes the
+    background a commit after that. Two spellings are wrong the obvious way and the section says why: the
+    release is by IDENTITY because step 4 lands after step 3, and the session's effect keys on
+    `kind === 'to-match'` so that only a match ENTRY runs the teardown.
+
+    §4.22 gains the mount question the multi-canvas section never had to answer: neither role names a
+    place, so a `GameCanvas role="overlay"` is a game's canvas root on a shell surface exactly as it is
+    in a match. Three things differ on a shell mount and each follows from a rule already stated — no
+    `PerfProbe` because it is an overlay, a host wrapper that is `position: fixed; inset: 0` so the
+    collapsing-height trap cannot arise, and pointer input off until the game opts in. A `backdrop` role
+    was considered and not minted: behaviourally identical to `overlay` today, and the union is a quoted
+    contract.
+
+    Four invariants amended, none minted. **#21** gains what a live shell surface adds: the engine
+    mounting `GameAssetSession` under `ShellBackgroundHost` around a declared background — the same
+    component, so the same one-effect lifecycle and the same refusal of the delegate — and
+    `ShellAudioSession` as a second writer of the app-level delegate, opening on the shell surfaces,
+    publishing to no subtree, releasing by identity and disposing what it built. Neither clause counts
+    the sites: nothing in the tree enumerates them, and a count no guard reads is falsified by the next
+    mount. The identity release is load-bearing rather than defensive, because the
+    surface flip that tears the session down lands a commit after `GameShell` has registered. **#52**
+    gains the second manifest basename and what follows from it: both names go through one reader into
+    one workspace-wide declared-ref union, Invariant #22's coverage check is deliberately not widened to
+    the shell name, discovery is a whole-basename match so a game's test doubles are never read as
+    inventories it ships, and a const name two of a game's manifests disagree about resolves to nothing.
+    **#65** gains the registration contract — at shell load, into the app-lifetime registry, through one
+    registrar that leaves a held id alone and throws on differing metadata, with no unregister and the
+    cost of that stated. **#127** gains the clarifying sentence that an `overlay` canvas may mount on a
+    shell surface, with the role union unchanged. The shell-audio scoping statement was authored as part
+    of #21 rather than as a new row, because what it states is who may bind the app-level asset delegate
+    — #21's subject and no other row's. The ledger therefore stays at 140 and the roll-call's coverage
+    table, total, numbering line and automatic share are byte-unchanged across the whole arc.
+
+    The stale-phrasing sweep converged every sentence it found by pointer or by deletion, never by
+    narrowing; the F88 gate record in the invariant roll-call lists what it repaired. The claim the issue
+    predicted would be stale — that the background host "passes no props" — measured TRUE at this tree:
+    `renderBackground` renders `<Background />` in both arms, so the sentence stands and only its
+    neighbour moved.
+
+    The blank scaffold's shell loader gains growth comments for `shellBackgroundInteractive` and for
+    `inputActions` on the shell payload. The interactive one states the whole construction an adopter
+    needs, because the engine's layers standing aside is only half of it: a surface inside the frame
+    works because it declares `pointer-events: auto` for itself, and a game's own page is one of those.
+    The input one says to hand both payloads the one array rather than restating it, since a
+    re-registration with different metadata throws rather than winning. No invariant, section, or issue
+    reference (the template-only rule), and the list's stale "two of those" count came out with them.
+
+- 4843fe0: `validate-assets` now discovers a game's shell background manifest as well as its
+  match one. Asset manifests are found under `apps/` by whole basename, and the set is
+  now `asset-manifest.ts` plus `shell-asset-manifest.ts` — the inventory a game forwards
+  as the shell payload's `shellBackgroundAssets`, for what its menu background loads
+  outside a match.
+
+    Both names go through the same reader, so the shell manifest gets the existing
+    statically-readable-ref rules unchanged, is resolved against disk, has its `kind` and
+    any cue or animation sheet it carries checked, feeds the per-game manifest-const map,
+    and joins the declared-ref set the on-demand membership check is stated over. A
+    background asset the shell surface loads is therefore a declared load.
+
+    Invariant #22's manifest-coverage check is deliberately NOT widened: content JSON and
+    scene `requiredAssets` are match refs, resolved by the manager `GameShell` builds, and
+    that manager is handed the match manifest and never the background's. A content ref the
+    match manifest omits still fails even when the shell manifest declares it.
+
+    Two consequences of a game shipping two manifests are documented in §4.10 rather than
+    worked around: a const name the two disagree about resolves to nothing (the load
+    degrades to the unresolved-ref warning instead of picking whichever file the crawl
+    reached last), and the declared-ref union stays workspace-wide, so a shell-only ref
+    also satisfies a match-surface load.
+
+    Discovery stays a whole-basename match rather than a suffix or case-folded one: a
+    game's test doubles and per-screen helpers must not be read as inventories it ships,
+    because a manifest nobody ships satisfying membership is how a ref that is not really
+    there passes.
+
+    Nothing changes for a game with no shell background manifest — none exists in the tree
+    today and the reported ref count is unmoved.
+
+- d980cc8: The shell now has a voice. `useSound` and `useMusicTrack` resolve a game's clips through
+  the app-level `AudioManager`, which loads through the app-level `DelegatingAssetManager` —
+  and with nothing bound to that manager every load rejected `NoActiveGameSessionError`,
+  which `play()` swallows. A menu bed or a select blip outside a match was therefore silent,
+  with nothing in the log. `ShellAudioSession`, mounted by `AppShell`, is the binding for the
+  shell surfaces.
+
+    A game declares two new optional fields on its shell payload. `shellAudioAssets` is the
+    inventory the session builds its manager over — the same `shell-asset-manifest.ts` a
+    background may already use, which the asset validator discovers by name, so it needs no
+    gate of its own. `shellMusicBed: { ref, volume?, fadeInMs? }` is a menu bed the engine
+    plays for the session's whole life as a looping `music`-bus voice at `MUSIC_PRIORITY`; it
+    is a declaration rather than a hook call because the bed outlives every individual shell
+    screen. Volumes and mute need nothing new: the bed plays through the app-level manager's
+    `music` bus, which already carries `EngineSettings.audio.*`.
+
+    The session runs on `SHELL_AUDIO_SURFACES` — the menu, settings, lobby, saves, replays and
+    every declared game page. That is deliberately its own set and wider than the background's,
+    which skips saves and replays: a bed that cut out on the way to the save browser would read
+    as a bug. The two match surfaces sit outside it, and the session is non-spatial — it never
+    touches the listener pose, because a menu is not a place.
+
+    The menu→match handoff is defined behaviour. The entry flows arm a `to-match` transition
+    before they navigate, and on it the bed leaves through the cue-aligned fade when its clip
+    declares an `'outro'` cue, and over the screen fade when it does not. The check is on the
+    CUE rather than on the sheet: an unknown cue name resolves to the clip's decoded end, so a
+    sheet-exists check would arm the transition against an instant the game never authored.
+    Either way the fade schedules the voice's own stop, so the session lets go of a bed that is
+    still sounding rather than cutting it — and because a cue-aligned ramp is booked at the cue
+    rather than run from the call, the session remembers that voice and ends it before starting
+    the next one. Otherwise a cancelled entry or an ordinary quit to the menu would lay a second
+    copy of the same loop over the first.
+
+    `DelegatingAssetManager` gains `releaseDelegate(manager)`, which clears the binding only
+    while it is still the caller's, and `SetGameAssetManagerContext` now carries the register
+    and release verbs as one object. `GameShell` is unaffected — a match owns the binding for
+    its whole life — but a shell-scoped registrant does not: a session driven by the shell-state
+    store tears down on a store update that lands after the router's own commit — the commit in
+    which `GameShell` already registered the match manager, during render — so an unconditional
+    clear there could silence the match it just handed over to. The arm-time release runs while
+    the shell route is still current, ahead of that registration; releasing by identity is what
+    covers every entry the arm does not.
+
+    The `NoActiveGameSessionError` message no longer names `GameShell` as the registrant, since
+    it is no longer the only one.
+
 ## 1.0.0-rc.11
 
 ### Patch Changes

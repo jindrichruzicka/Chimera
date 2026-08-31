@@ -5,11 +5,12 @@
 Add `apps/action` — the engine's second reference consumer, and its FIRST realtime one.
 
 The app skeleton mirrors `apps/tactics` (manifest, asset manifest, settings schema, `simulation/`,
-`screens/`, `components/`, `renderer/{register,loaders,next.config,app/**}`, `electron/{main,
-build-main}`, `styles/`, `dev/` fixtures) and carries a deliberately minimal surface: no cursor, no
-logo screen, no icon override, no languages, no spectators, no lobby setup, no AI, no content
-collections. Every one of those is a capability the host branches on, so declaring one empty would
-announce something the app has not built; the shell task adds the menu-facing half.
+`screens/`, `components/`, `renderer/{register,loaders,next.config,app/**}`,
+`electron/{main,build-main}`, `styles/`, `dev/` fixtures) and carries a deliberately minimal
+surface: no cursor, no logo screen, no icon override, no languages, no spectators, no lobby setup,
+no AI, no content collections. Every one of those is a capability the host branches on, so
+declaring one empty would announce something the app has not built; the shell task adds the
+menu-facing half.
 
 **Realtime is the point.** `realtime: true` with `tickRateMs: 100` is what makes the host arm a
 `RealtimeTicker`, and the simulation's per-beat movement pass rides the resulting `engine:tick`

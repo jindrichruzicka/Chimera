@@ -1,5 +1,274 @@
 # @chimera-engine/renderer
 
+## 1.0.0-rc.12
+
+### Minor Changes
+
+- 2485e39: Let a game's shell background take pointer input, with pass-through hit-testing instead of a global
+  flip.
+
+    `LoadedRendererGameShell` gains `shellBackgroundInteractive?: boolean`. Absent or `false` is the
+    inert-decor contract every painted backdrop stays on — `pointer-events: none` and
+    `aria-hidden="true"` on `ShellBackgroundHost` — and the reference game is the opt-out pin. `true`
+    flips both together: a region that accepts clicks must not be hidden from assistive tech. It is
+    answered by the game's own SUBTREE, not by the flag, so an opt-in declared over the engine's plain
+    coloured plate stays inert.
+
+    **The flag alone clears no path to the background, and a page-only construction is not enough.** A
+    box with `pointer-events: auto` is a hit target over its whole area whether or not it paints
+    anything, and two boxes sit above the background — the app-level `--ch-z-raised` frame and the
+    page's own container. Measured in the Electron renderer on `/main-menu`, with the menu alone made
+    click-through: `document.elementFromPoint` at an empty corner returns the FRAME, not the background.
+    So three layers stand aside, each for itself:
+    - `ShellBackgroundHost` — `pointer-events: auto`, `aria-hidden` dropped.
+    - `ShellContentLayer` (new) — the `--ch-z-raised` frame, extracted from `AppShell`'s bare `<div>`
+      so it can go `pointer-events: none`. It restores NOTHING, which makes the rule for everything it
+      holds: a surface that must stay usable states its own `pointer-events: auto`, where that surface
+      lives. `Modal.overlay`, `Drawer.overlay` and the `RootErrorBoundary` crash fallback each gain that
+      declaration here — without it a settings or confirm dialog, a drawer, and both crash-recovery
+      buttons are unusable the moment a game opts in. `ToastHost`'s toast already had one, and
+      `ConnectionStatusIndicator` keeps `none` because it is decor.
+    - the route's page — `main-menu` puts `pointer-events: none` on its full-viewport container and
+      restores `auto` on `> *`, so whatever the menu grows next is clickable the day it is added. A
+      game-owned page owns the same construction for its own route, being the top layer there.
+      `/settings` and `/lobby` render inside a `Modal` whose overlay covers the viewport, so the
+      background takes no clicks there at all — a dialog owning the screen while it is open.
+
+    The engine's three readers — the host, the content layer and `main-menu` — take the opt-in from one
+    function, `useShellBackgroundPayload`, so the derivation is shared even though each keeps its own
+    state and its own load. It is engine-internal, reaches no barrel, and answers `false` on any surface
+    carrying no background, including the match.
+
+    Nothing changes for a game that does not opt in: the host's markup, the frame's hit-testing and
+    every engine control are byte-identical, pinned by the host's inline-literal markup assertion and
+    the tactics e2e suite.
+
+- 11a218b: Rename the host-authored lobby-configuration family from `matchSettings` to `gameParams`. This is a
+  **clean break** — there is no back-compat shim and no dual-read tolerance window.
+
+    "Match" presumed a bounded, competitive session with an outcome. An arcade or action game built on
+    Chimera has a lobby, host-authored configuration, seats and a snapshot, but no match — nothing to
+    win, no scoreboard, no opponent, and yet it was forced to write `matchSettings` in its
+    `GameLobbySetup` and answer an IPC channel called `set-match-setting`. `gameParams` follows the
+    `AIParams` convention the repo already establishes for a flat, primitive-only bag of game-defined
+    knobs. `gameSettings` was rejected: it collides with the §4.13 settings system, which owns
+    `EngineSettings` / `GameSettingsSchema` and means per-game persisted user preferences — a different
+    concept that Invariant #36 exists to keep apart.
+
+    **What renamed.** `GameSetupConfig.matchSettings` → `gameParams`; `LobbyState.matchSettings` →
+    `gameParams`; `QuickStartConfig.matchSettings` → `gameParams`;
+    `GameLobbySetup.matchSettingsDefaults` / `matchSettingsOptions` →
+    `gameParamDefaults` / `gameParamOptions` (singular noun, mirroring the sibling
+    `playerAttributeOptions`); `resolveMatchSettingsDefaults` → `resolveGameParamDefaults`;
+    `setMatchSetting` → `setGameParam` on `GameLobbyScreenProps`, `LobbyAPI` and `LobbyManager`;
+    `SetMatchSettingPayloadSchema` → `SetGameParamPayloadSchema`;
+    `LOBBY_SET_MATCH_SETTING_CHANNEL` → `LOBBY_SET_GAME_PARAM_CHANNEL`;
+    `ALLOW_SPECTATORS_SETTING` / `SESSION_MODE_SETTING` / `TACTICS_TURN_MODE_SETTING` →
+    `ALLOW_SPECTATORS_PARAM` / `SESSION_MODE_PARAM` / `TACTICS_TURN_MODE_PARAM`; and the i18n key
+    `engine.lobby.matchSettingFailed` → `engine.lobby.gameParamFailed`. The three reserved key VALUES —
+    `engine.allowSpectators`, `engine.sessionMode` and tactics' `turnMode` — do not move.
+
+    **Three persisted or transmitted surfaces change with it.**
+    - **The wire key.** `GameSetupConfig.gameParams` is required inside `PlayerSnapshot.setup`, which
+      rides the strict `SnapshotMessage`. There is no protocol version and no handshake check, so
+      mismatched peers cannot be refused at join time: the client receive boundary discards the whole
+      malformed frame rather than the field, and from `engine:start_game` onward the mismatched peer
+      receives zero snapshots — no board, no ticks, no game-over, no user-visible error. The snapshot
+      CRC gate runs on the pre-schema bytes and passes, so it neither catches nor explains it.
+      `LobbyState.gameParams` is optional on a non-strict object, so across the same skew the joined
+      client's lobby silently renders with defaults. Run both peers on the same engine version.
+    - **The IPC channel.** `chimera:lobby:set-match-setting` → `chimera:lobby:set-game-param`. Two of
+      the three Zod boundaries it crosses are strict, so a preload/main skew rejects rather than strips.
+    - **The dev-scenario JSON key.** `DevScenarioSchema` is strict, so every adopter with
+      `dev/scenarios/*.json` must rename `matchSettings` to `gameParams` there; a stale key fails loudly
+      at the CLI. The scaffold's own starter fixture declares none and needs no edit.
+
+    **Saves migrate at schema v7.** `CURRENT_SCHEMA_VERSION` moves 6 → 7 with a registered v6→v7
+    migration renaming `checkpoint.setup.matchSettings`. Without it a restored commitment-mode match
+    would resume as sequential — silent determinism divergence, since the turn mode gates stamina, the
+    turn gate and commit refusal. Because the migration rewrites a checksummed field,
+    `FileSaveRepository.load()` now verifies the stored digest against the body **as stored** rather than
+    against the object the migration chain returns; tampering is still caught, and the error precedence
+    of `SaveSchemaTooNewError` is unchanged.
+
+    **Replays from an older app version are already refused** — `ReplayMigrator.isCompatible` requires
+    exact `engineVersion` equality and registers no migrations, so any mismatch throws a typed
+    `ReplayVersionError`. One hole remains: an adopter who ships the renamed engine WITHOUT bumping
+    their own app version passes that gate and reaches the parser with no `gameParams` key, which throws
+    a bare `TypeError` rather than a `ReplayParseError` — so `instanceof` handling misses it and it
+    surfaces as an unhandled crash. Bump your app version with the engine.
+
+- 0b1ba72: `LoadedRendererGameShell` gained `shellBackgroundAssets?: AssetManifest`, and
+  `ShellBackgroundHost` wraps a declared `shellBackground` in the existing
+  `GameAssetSession` when it is present. Until now a shell background rendered above
+  every asset owner there is: the manager in context on `main-menu`, `settings`,
+  `lobby` and a game's declared pages is the app-level `DelegatingAssetManager`, which
+  held no background manifest, so a background's `useAsset` / `useModelInstance` /
+  `useAnimationSheet` rejected `NoActiveGameSessionError`. With the manifest declared
+  they resolve against the game's own manager, and that manifest's critical entries are
+  preloaded like a page's.
+
+    The session is reused, not rebuilt: `GameAssetSession` already owns the one-effect
+    allocate → preload → abandon → dispose lifecycle a manager with no `GameShell` above
+    it needs — the disposal and the commit-phase allocation are Invariant #21's, the
+    critical preload and its abandon are §4.10's — and already declines to register the
+    `SetGameAssetManagerContext` delegate, so a menu manifest never stands in for a
+    match's assets when the app-level `AudioManager` resolves a clip.
+
+    It is keyed to the mount. The shell-state surface flip off a background surface
+    unmounts the background and disposes the session in one render, so no background
+    session survives into a match and there is no warm cache across `/game`.
+
+    A game that declares nothing is untouched — the host builds no manager and emits
+    byte-identical markup — and a manifest declared without a `shellBackground` is inert,
+    since a session with no subtree to publish to is never built.
+
+- d5c3732: Register a game's input actions at shell load, so they exist before any match.
+
+    `LoadedRendererGameShell` gains `inputActions?: readonly InputAction[]` — the same table
+    `LoadedRendererGame.inputActions` already carried, now also on the payload a MENU route loads. A
+    new `InputActionsBootstrap` (mounted in `AppShell`, beside the other bootstraps) resolves the
+    active shell game through `useActiveShellGameId`, loads that game's shell payload and registers
+    what it declares. There is no second registry and no shell-scoped registration lifetime: it writes
+    into the app-lifetime `InputActionRegistry` `providers.tsx` builds, and nothing unregisters, so
+    `GameShell`'s own registration is normally a no-op by the time a match mounts.
+
+    Both registration sites now call ONE function, `renderer/input/registerInputActions.ts`: an id
+    already held is left exactly as it is, and a re-registration whose metadata differs throws. That
+    assert is the point — a game shipping one description to the shell and another to the match would
+    otherwise put a row in the rebind pane that no longer describes what the match dispatches.
+
+    Two things had to change for a shell surface to actually RECEIVE such an action, and neither was
+    registration:
+    - `InputManager` dispatches off the BINDING map, and `KeyBindingRepository` resolves bindings
+      through the settings store's `activeGameId` — a slot only the lobby ever claimed. So a menu route
+      had no key for a `game:*` action even once it was registered. `SettingsBootstrap` now publishes
+      the slot as `lobbyGameId ?? urlGameId`: the lobby's game while a session is live, the URL
+      `?gameId=` shell game otherwise. It still hydrates BOTH contexts' settings when they differ, and
+      still claims the slot only after the settings behind it have landed. That slot is the settings
+      NAMESPACE, not only the binding one, so every store-reading consumer of `activeGameId` now
+      resolves the game's own namespace on a menu route — the one the settings page wrote the player's
+      choice into — instead of `__engine__`.
+    - The Settings > Controls pane read `inputManager.getActions()` during render, and was re-rendered
+      by a settings-store write the old registration was sequenced ahead of. Registration is no longer
+      sequenced with any store write, so the pane reads the registry through `useSyncExternalStore`:
+      `InputActionRegistry` gains `subscribe(listener)` and a STABLE, frozen `getAll()` snapshot that a
+      registration replaces.
+
+    `registerActiveGameInputActions` is gone from `settingsGameContext`; neither `SettingsBootstrap`
+    nor the settings page loads the full game payload FOR INPUT ACTIONS any more (the page still
+    loads it for the game's settings-page definition). The public
+    `@chimera-engine/renderer/input` barrel is unchanged — no new export (Invariant #96).
+
+    The reference game moves its table to `apps/tactics/renderer/input-actions.ts` and hands the SAME
+    array to both payloads (the game payload reads it back off its own shell), so the identity assert
+    above is trivially satisfied for it.
+
+- d980cc8: The shell now has a voice. `useSound` and `useMusicTrack` resolve a game's clips through
+  the app-level `AudioManager`, which loads through the app-level `DelegatingAssetManager` —
+  and with nothing bound to that manager every load rejected `NoActiveGameSessionError`,
+  which `play()` swallows. A menu bed or a select blip outside a match was therefore silent,
+  with nothing in the log. `ShellAudioSession`, mounted by `AppShell`, is the binding for the
+  shell surfaces.
+
+    A game declares two new optional fields on its shell payload. `shellAudioAssets` is the
+    inventory the session builds its manager over — the same `shell-asset-manifest.ts` a
+    background may already use, which the asset validator discovers by name, so it needs no
+    gate of its own. `shellMusicBed: { ref, volume?, fadeInMs? }` is a menu bed the engine
+    plays for the session's whole life as a looping `music`-bus voice at `MUSIC_PRIORITY`; it
+    is a declaration rather than a hook call because the bed outlives every individual shell
+    screen. Volumes and mute need nothing new: the bed plays through the app-level manager's
+    `music` bus, which already carries `EngineSettings.audio.*`.
+
+    The session runs on `SHELL_AUDIO_SURFACES` — the menu, settings, lobby, saves, replays and
+    every declared game page. That is deliberately its own set and wider than the background's,
+    which skips saves and replays: a bed that cut out on the way to the save browser would read
+    as a bug. The two match surfaces sit outside it, and the session is non-spatial — it never
+    touches the listener pose, because a menu is not a place.
+
+    The menu→match handoff is defined behaviour. The entry flows arm a `to-match` transition
+    before they navigate, and on it the bed leaves through the cue-aligned fade when its clip
+    declares an `'outro'` cue, and over the screen fade when it does not. The check is on the
+    CUE rather than on the sheet: an unknown cue name resolves to the clip's decoded end, so a
+    sheet-exists check would arm the transition against an instant the game never authored.
+    Either way the fade schedules the voice's own stop, so the session lets go of a bed that is
+    still sounding rather than cutting it — and because a cue-aligned ramp is booked at the cue
+    rather than run from the call, the session remembers that voice and ends it before starting
+    the next one. Otherwise a cancelled entry or an ordinary quit to the menu would lay a second
+    copy of the same loop over the first.
+
+    `DelegatingAssetManager` gains `releaseDelegate(manager)`, which clears the binding only
+    while it is still the caller's, and `SetGameAssetManagerContext` now carries the register
+    and release verbs as one object. `GameShell` is unaffected — a match owns the binding for
+    its whole life — but a shell-scoped registrant does not: a session driven by the shell-state
+    store tears down on a store update that lands after the router's own commit — the commit in
+    which `GameShell` already registered the match manager, during render — so an unconditional
+    clear there could silence the match it just handed over to. The arm-time release runs while
+    the shell route is still current, ahead of that registration; releasing by identity is what
+    covers every entry the arm does not.
+
+    The `NoActiveGameSessionError` message no longer names `GameShell` as the registrant, since
+    it is no longer the only one.
+
+### Patch Changes
+
+- 1686477: Held input actions are now released when the window loses focus. `InputManager` cleared a
+  held action from its `keyup` handler alone, and a key let go while the app is in the
+  background sends the window no key-up at all — so the action stayed in `pressedActions`
+  forever and no subscriber was ever told it came up.
+
+    In a turn-based game that is invisible: a held key contributes nothing between presses. In
+    a realtime one a held key is a standing order, so it is a control that cannot be stopped —
+    in the action reference app an arrow writes a velocity the per-beat pass re-applies every
+    heartbeat, and alt-tabbing while holding one ran the primitive into the arena wall.
+
+    `start()` now also listens for the window's `blur` and the document's `visibilitychange`.
+    On a blur, or on a change whose new `visibilityState` is `hidden`, every held action is
+    dispatched with `pressed: false` in press order, and the pressed set is emptied before the
+    first callback runs — so a subscriber reading `isPressed` from inside its own release
+    callback cannot find that action still down. The reset is idempotent: the real key-up, if
+    one ever arrives, dispatches nothing a second time. `stop()` detaches both listeners.
+
+    A game needs no change to benefit — a screen already handling `pressed: false` receives the
+    synthesised release the way it receives a key-up, though the synthesised one carries no
+    modifiers and the code that pressed the action rather than the one that released it. A
+    screen that treated a release as proof the player pressed a key will now see one it did
+    not cause.
+
+    The release reaches a held gamepad action; it does not outlast one. `getGamepads()` goes on
+    reporting a button that is physically down, so the next `pollGamepad()` re-arms a
+    non-`oneShot` action; `InputManager.test.ts` pins that behaviour rather than leaving it to
+    be discovered.
+
+- 270bb30: `three` no longer ships in the always-mounted shell layout chunk. `AssetManager` named
+  `TextureLoader` at module scope, and that alone was enough to pull the renderer core into
+  the chunk webpack builds for `@chimera-engine/renderer/shell/layout`, which every exported
+  route loads. The shell mounts that module's consumers unconditionally, so a game that
+  declares no `shellBackgroundAssets` and opens no session still paid for `three` on its boot
+  screen, its logo screen and its settings pane.
+
+    `loadTexture` now reaches the package through `await import`, which is the shape
+    `loadGltf` beside it already had for `GLTFLoader`. Every caller was already awaiting,
+    because `AssetLoader.load` returns a promise by contract, so
+    the module-load tick lands inside a wait that was happening anyway. `three` arrives with
+    the first texture load, or — on a 3D route — with the canvas that pulls it regardless.
+
+    Measured with `next build` over the `/layout` entry's JS chunks: the reference apps'
+    layout sets drop the 381,907-byte `three` core chunk, about 100 kB gzipped, and no
+    exported route of either app carries it in its initial `<script>` set any more, except the
+    dev-only `/model-showcase`, which names `three` itself.
+
+    `renderer/__tests__/shell-layout-graph-census.test.ts` is what keeps it out. It walks each
+    consumer app's layout by static value edges — following relative specifiers, the
+    `@chimera-engine/renderer/*` subpaths the app names, and the `chimera-game-registration`
+    alias into the game's own composition root — and refuses a `three` or `@react-three/*`
+    specifier anywhere it arrives. Type-only edges and `await import` are not edges. Every
+    bare specifier the walk declines is reported, and pinned by
+    `stops at exactly the package boundaries this census names`.
+
+- Updated dependencies [11a218b]
+    - @chimera-engine/simulation@1.0.0-rc.12
+
 ## 1.0.0-rc.11
 
 ### Minor Changes

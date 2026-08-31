@@ -1,5 +1,141 @@
 # @chimera-engine/electron
 
+## 1.0.0-rc.12
+
+### Minor Changes
+
+- 11a218b: Rename the host-authored lobby-configuration family from `matchSettings` to `gameParams`. This is a
+  **clean break** — there is no back-compat shim and no dual-read tolerance window.
+
+    "Match" presumed a bounded, competitive session with an outcome. An arcade or action game built on
+    Chimera has a lobby, host-authored configuration, seats and a snapshot, but no match — nothing to
+    win, no scoreboard, no opponent, and yet it was forced to write `matchSettings` in its
+    `GameLobbySetup` and answer an IPC channel called `set-match-setting`. `gameParams` follows the
+    `AIParams` convention the repo already establishes for a flat, primitive-only bag of game-defined
+    knobs. `gameSettings` was rejected: it collides with the §4.13 settings system, which owns
+    `EngineSettings` / `GameSettingsSchema` and means per-game persisted user preferences — a different
+    concept that Invariant #36 exists to keep apart.
+
+    **What renamed.** `GameSetupConfig.matchSettings` → `gameParams`; `LobbyState.matchSettings` →
+    `gameParams`; `QuickStartConfig.matchSettings` → `gameParams`;
+    `GameLobbySetup.matchSettingsDefaults` / `matchSettingsOptions` →
+    `gameParamDefaults` / `gameParamOptions` (singular noun, mirroring the sibling
+    `playerAttributeOptions`); `resolveMatchSettingsDefaults` → `resolveGameParamDefaults`;
+    `setMatchSetting` → `setGameParam` on `GameLobbyScreenProps`, `LobbyAPI` and `LobbyManager`;
+    `SetMatchSettingPayloadSchema` → `SetGameParamPayloadSchema`;
+    `LOBBY_SET_MATCH_SETTING_CHANNEL` → `LOBBY_SET_GAME_PARAM_CHANNEL`;
+    `ALLOW_SPECTATORS_SETTING` / `SESSION_MODE_SETTING` / `TACTICS_TURN_MODE_SETTING` →
+    `ALLOW_SPECTATORS_PARAM` / `SESSION_MODE_PARAM` / `TACTICS_TURN_MODE_PARAM`; and the i18n key
+    `engine.lobby.matchSettingFailed` → `engine.lobby.gameParamFailed`. The three reserved key VALUES —
+    `engine.allowSpectators`, `engine.sessionMode` and tactics' `turnMode` — do not move.
+
+    **Three persisted or transmitted surfaces change with it.**
+    - **The wire key.** `GameSetupConfig.gameParams` is required inside `PlayerSnapshot.setup`, which
+      rides the strict `SnapshotMessage`. There is no protocol version and no handshake check, so
+      mismatched peers cannot be refused at join time: the client receive boundary discards the whole
+      malformed frame rather than the field, and from `engine:start_game` onward the mismatched peer
+      receives zero snapshots — no board, no ticks, no game-over, no user-visible error. The snapshot
+      CRC gate runs on the pre-schema bytes and passes, so it neither catches nor explains it.
+      `LobbyState.gameParams` is optional on a non-strict object, so across the same skew the joined
+      client's lobby silently renders with defaults. Run both peers on the same engine version.
+    - **The IPC channel.** `chimera:lobby:set-match-setting` → `chimera:lobby:set-game-param`. Two of
+      the three Zod boundaries it crosses are strict, so a preload/main skew rejects rather than strips.
+    - **The dev-scenario JSON key.** `DevScenarioSchema` is strict, so every adopter with
+      `dev/scenarios/*.json` must rename `matchSettings` to `gameParams` there; a stale key fails loudly
+      at the CLI. The scaffold's own starter fixture declares none and needs no edit.
+
+    **Saves migrate at schema v7.** `CURRENT_SCHEMA_VERSION` moves 6 → 7 with a registered v6→v7
+    migration renaming `checkpoint.setup.matchSettings`. Without it a restored commitment-mode match
+    would resume as sequential — silent determinism divergence, since the turn mode gates stamina, the
+    turn gate and commit refusal. Because the migration rewrites a checksummed field,
+    `FileSaveRepository.load()` now verifies the stored digest against the body **as stored** rather than
+    against the object the migration chain returns; tampering is still caught, and the error precedence
+    of `SaveSchemaTooNewError` is unchanged.
+
+    **Replays from an older app version are already refused** — `ReplayMigrator.isCompatible` requires
+    exact `engineVersion` equality and registers no migrations, so any mismatch throws a typed
+    `ReplayVersionError`. One hole remains: an adopter who ships the renamed engine WITHOUT bumping
+    their own app version passes that gate and reaches the parser with no `gameParams` key, which throws
+    a bare `TypeError` rather than a `ReplayParseError` — so `instanceof` handling misses it and it
+    surfaces as an unhandled crash. Bump your app version with the engine.
+
+### Patch Changes
+
+- c066986: Prove the action app end to end, and fix the defect that proof found: the host never handed a
+  game's own lobby `setup` to its `buildInitialEntities` hook.
+
+    `GameDefinition.buildInitialEntities` takes `(playerIds, setup?)`, and its contract in
+    `simulation/engine/ActionRegistry.ts` says the second argument is there so a game can seed starting
+    entities from the host-authored configuration. Nothing passed it. `resolveInitialEntitiesForGame` dropped the parameter, so every
+    game reading it fell back to seat order — and the fallback is invisible from the outside, because
+    the picks still ride `snapshot.setup` and every projection afterwards looks correct. The players are
+    simply on the wrong pieces. The composition root now builds the setup before the entities and hands
+    it over; the restored-host test harness, which mirrors that call, does the same.
+
+    The suite that caught it is `apps/action/e2e/` — the action app's own Playwright project, with its
+    own build root (`.e2e-build-action/`), its own throwaway-profile root and its own CI job. Two suites
+    sharing either would delete each other's artefacts mid-run, so nothing is shared; the fixtures the
+    tactics suite has an equivalent of are this app's own copies, because a game directory may not
+    import another's. Its fixture offers no `CHIMERA_E2E` auto-start seam at all: every match here is
+    opened by clicking Start, so `chimera:lobby:quick-start` is exercised on its only production path.
+
+    Eight specs: the fresh-profile menu over the live background, held-key movement on the realtime
+    heartbeat, autosave-on-leave and Continue restoring the arena as it was left, the Start overwrite
+    confirm and both its answers, background persistence across `menu → select → settings`, in-scene
+    picking plus a click-through sweep of the shell controls those surfaces carry, each clicked with the
+    interactive plate mounted under it, a rebind that reaches the pre-match picker with no match ever
+    run, and the pass-and-play seat picking,
+    playing and moving on its own keys. The two seats end up on shapes seat order would not have chosen,
+    which is what makes the last one the killer for the fix above.
+
+    `ACTION_SHELL_YAW_ATTRIBUTE` / `ACTION_SHELL_DOLLY_ATTRIBUTE` move from `ActionShellCameraRig.tsx`
+    to `actionShellCamera.ts`, beside the two describers whose answers they carry — a reader outside the
+    renderer needs the attribute name and the phase vocabulary together, and only the plain `.ts` half
+    of that pair is reachable from a Playwright runner.
+
+- 4843fe0: `validate-assets` now discovers a game's shell background manifest as well as its
+  match one. Asset manifests are found under `apps/` by whole basename, and the set is
+  now `asset-manifest.ts` plus `shell-asset-manifest.ts` — the inventory a game forwards
+  as the shell payload's `shellBackgroundAssets`, for what its menu background loads
+  outside a match.
+
+    Both names go through the same reader, so the shell manifest gets the existing
+    statically-readable-ref rules unchanged, is resolved against disk, has its `kind` and
+    any cue or animation sheet it carries checked, feeds the per-game manifest-const map,
+    and joins the declared-ref set the on-demand membership check is stated over. A
+    background asset the shell surface loads is therefore a declared load.
+
+    Invariant #22's manifest-coverage check is deliberately NOT widened: content JSON and
+    scene `requiredAssets` are match refs, resolved by the manager `GameShell` builds, and
+    that manager is handed the match manifest and never the background's. A content ref the
+    match manifest omits still fails even when the shell manifest declares it.
+
+    Two consequences of a game shipping two manifests are documented in §4.10 rather than
+    worked around: a const name the two disagree about resolves to nothing (the load
+    degrades to the unresolved-ref warning instead of picking whichever file the crawl
+    reached last), and the declared-ref union stays workspace-wide, so a shell-only ref
+    also satisfies a match-surface load.
+
+    Discovery stays a whole-basename match rather than a suffix or case-folded one: a
+    game's test doubles and per-screen helpers must not be read as inventories it ships,
+    because a manifest nobody ships satisfying membership is how a ref that is not really
+    there passes.
+
+    Nothing changes for a game with no shell background manifest — none exists in the tree
+    today and the reported ref count is unmoved.
+
+- Updated dependencies [1686477]
+- Updated dependencies [2485e39]
+- Updated dependencies [11a218b]
+- Updated dependencies [0b1ba72]
+- Updated dependencies [d5c3732]
+- Updated dependencies [d980cc8]
+- Updated dependencies [270bb30]
+    - @chimera-engine/renderer@1.0.0-rc.12
+    - @chimera-engine/simulation@1.0.0-rc.12
+    - @chimera-engine/networking@1.0.0-rc.12
+    - @chimera-engine/ai@1.0.0-rc.12
+
 ## 1.0.0-rc.11
 
 ### Minor Changes

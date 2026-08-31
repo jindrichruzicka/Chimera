@@ -25,5 +25,5 @@ consumer app's layout by static value edges — following relative specifiers, t
 `@chimera-engine/renderer/*` subpaths the app names, and the `chimera-game-registration`
 alias into the game's own composition root — and refuses a `three` or `@react-three/*`
 specifier anywhere it arrives. Type-only edges and `await import` are not edges. Every
-bare specifier the walk declines is reported, and pinned by `stops at exactly the package
-boundaries this census names`.
+bare specifier the walk declines is reported, and pinned by
+`stops at exactly the package boundaries this census names`.
