@@ -1078,13 +1078,10 @@ its own `useSound` call; **cross-`/game` background session survival** — a war
 whose Suspense re-mount holes and double-residency cost outweigh the win; and **S6 write facades**,
 unchanged from F87's deferral.
 
-Two things were measured during the arc and recorded rather than fixed. A held arrow key **survives a
-window blur**, because `InputManager` owns `pressedActions` and nothing clears them when the window
-loses focus — filed as [#1168](https://github.com/jindrichruzicka/Chimera/issues/1168), and an engine
-fix rather than a game one. And a **game's own e2e fixture may offer no auto-start seam at all**: the
-action suite opens every match by clicking Start, which is what exercises
-`chimera:lobby:quick-start` on its only production path — a deliberate asymmetry with the tactics
-suite rather than a gap in it.
+Measured during the arc and recorded rather than fixed: a **game's own e2e fixture may offer no
+auto-start seam at all**. The action suite opens every match by clicking Start, which is what
+exercises `chimera:lobby:quick-start` on its only production path — a deliberate asymmetry with the
+tactics suite rather than a gap in it.
 
 #### Scope decisions
 

@@ -1,5 +1,16 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
+/**
+ * The window globals {@link ActionMatchPage.blurWindow}'s in-page callback
+ * touches. Structural rather than the DOM lib's own: Playwright ships that
+ * callback into the renderer as SOURCE TEXT, and this program carries no DOM
+ * lib to type it against.
+ */
+interface BlurEventTarget {
+    readonly Event: new (type: string) => object;
+    dispatchEvent(event: object): boolean;
+}
+
 /** How long a REVEAL may take on a CI runner, which runs an order slower. */
 const REVEAL_TIMEOUT_MS = 30_000;
 
@@ -77,11 +88,39 @@ export class ActionMatchPage {
      * velocity into every later step.
      */
     public async holdKey(key: string, durationMs: number): Promise<void> {
+        await this.whileHoldingKey(key, async () => {
+            await this.page.waitForTimeout(durationMs);
+        });
+    }
+
+    /**
+     * Run `body` with `key` held down throughout, releasing it afterwards.
+     *
+     * For the assertions that have to be made WHILE the key is down — a hold
+     * whose key-up the app never receives is the whole of the focus-loss case,
+     * and `holdKey` would send that key-up before the assertion could run.
+     */
+    public async whileHoldingKey(key: string, body: () => Promise<void>): Promise<void> {
         await this.page.keyboard.down(key);
         try {
-            await this.page.waitForTimeout(durationMs);
+            await body();
         } finally {
             await this.page.keyboard.up(key);
         }
+    }
+
+    /**
+     * Deliver the window `blur` the OS sends when the player alt-tabs away.
+     *
+     * Dispatched into the page rather than produced by moving the real focus: a
+     * headless runner has no second window to take it. What is under test is the
+     * listener and everything downstream of it, and this is the event that
+     * listener is registered for.
+     */
+    public async blurWindow(): Promise<void> {
+        await this.page.evaluate(() => {
+            const browser = globalThis as unknown as BlurEventTarget;
+            browser.dispatchEvent(new browser.Event('blur'));
+        });
     }
 }

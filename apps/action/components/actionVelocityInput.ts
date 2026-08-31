@@ -6,6 +6,12 @@
 // keys are currently down" the state the playfield has to keep, and this module
 // is that state plus the one derivation off it.
 //
+// The release is not always a key-up: the manager also dispatches one for every
+// held action when the window loses focus, because the key-up for a key let go
+// in another window never arrives. Nothing here has to know the difference —
+// that is the point of taking the release as an event rather than reading the
+// keyboard.
+//
 // A SET rather than "the last key pressed", because both of the obvious
 // simplifications are wrong to play: with a last-key model, holding Up and then
 // tapping Right leaves the player stopped when Right is released, and diagonal

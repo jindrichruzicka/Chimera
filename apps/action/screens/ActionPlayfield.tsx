@@ -7,10 +7,10 @@
 //   1. The arena is MOUNTED: one `GameCanvas role="main"` on the `top-down`
 //      preset, the ground plane, and one mesh per primitive, all read off the
 //      projected snapshot through `parseActionScene`.
-//   2. Movement keys become VELOCITY, per SEAT. The input layer dispatches on
-//      key down AND key up, so a held key is one press event and one release
-//      event — each seat keeps its own set of held directions and derives one
-//      velocity from it (`components/actionVelocityInput.ts`).
+//   2. Movement keys become VELOCITY, per SEAT. A held key is one press event
+//      and one release event (see `@chimera-engine/renderer/input` for when
+//      each arrives) — each seat keeps its own set of held directions and
+//      derives one velocity from it (`components/actionVelocityInput.ts`).
 //   3. A click on a primitive becomes `action:select-primitive`.
 //
 // TWO SEATS on one keyboard. A quick-started match may open a pass-and-play

@@ -88,7 +88,7 @@ export type GameBindingSchema<T> = T extends { readonly [K in keyof T]: KeyBindi
 // renderer/input/InputManager.ts
 
 export interface InputManager {
-    start(): void; // Attaches window listeners (called once on app mount)
+    start(): void; // Attaches window/document listeners (called once on app mount)
     stop(): void;
 
     onAction(id: InputActionId, cb: (event: InputEvent) => void): Unsubscribe;
@@ -179,8 +179,8 @@ re-exports:
 registry and repository interfaces, the context objects, `KeyBinding`, `EngineBindings`,
 `RebindResult` and the input error classes stay behind it. The reasons: the manager is an
 app-lifetime singleton (see Lifecycle Ownership
-above), and a second one attaches a second pair of window `keydown`/`keyup` listeners and
-double-dispatches every action. Registration is engine-side and already complete — see
+above), and a second one attaches a second set of listeners and double-dispatches every
+action. Registration is engine-side and already complete — see
 Action Registration above. Bindings are settings (Invariant #66),
 and rebinding stays with the engine settings page.
 
@@ -201,6 +201,21 @@ useInputAction('game:jump', (event) => {
     // …
 });
 ```
+
+**A release also arrives on focus loss.** `start()` listens for the window's `blur` and
+for the document's `visibilitychange`. On either — a blur, or a change whose new
+`visibilityState` is `hidden` — every action currently held is dispatched with
+`pressed: false`, in press order, and the pressed set is emptied before the first callback
+runs. The reset is idempotent: the real key-up, if one ever arrives, dispatches nothing a
+second time. Without it the key-up for a key let go while the app was in the background
+would never reach the app at all, leaving the action down forever — invisible in a
+turn-based game, a control that cannot be stopped in a realtime one, where a held key is a
+standing order.
+
+The release REACHES a held gamepad action; it does not OUTLAST one. `getGamepads()` goes
+on reporting a button that is physically down, so the next `pollGamepad()` takes the
+held-button arm and re-arms a non-`oneShot` action. `InputManager.test.ts` pins that.
+Closing it is a change to the gamepad path rather than to this one.
 
 **Held keys are polled, not subscribed.** `InputManager.isPressed(id)` is a membership
 test that publishes no event and notifies nothing when the pressed set changes, so there

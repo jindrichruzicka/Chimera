@@ -34,6 +34,12 @@
  * **Dispatch fires on key DOWN and key UP.** A handler that should run once per
  * press must guard on the event: `if (!event.pressed) return;`.
  *
+ * **A release also arrives on focus loss.** When the window blurs or the
+ * document is hidden, every held action is dispatched with `pressed: false` and
+ * the pressed set is emptied — the key-up for a key let go while the app was in
+ * the background never reaches it. A game that turns a held key into a standing
+ * order therefore stops on alt-tab rather than running on with nobody watching.
+ *
  * **Held keys are polled, not subscribed.** `InputManager.isPressed(id)` is a
  * membership test that publishes no event, so there is no held-key hook here.
  * The supported recipe for a continuous action is to hold the manager and poll

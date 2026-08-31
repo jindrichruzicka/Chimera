@@ -996,3 +996,339 @@ describe('InputManager — resetBinding()', () => {
         expect(manager.getBinding('engine:undo')).toEqual({ primary: 'KeyZ', modifiers: ['Ctrl'] });
     });
 });
+
+// ─── Focus loss ──────────────────────────────────────────────────────────────
+
+/** Fire a window `blur`, the way alt-tabbing away from the app does. */
+function fireBlur(): void {
+    window.dispatchEvent(new Event('blur'));
+}
+
+/**
+ * Fire a `visibilitychange` with `document.visibilityState` reading as `state`
+ * for the duration of the dispatch.
+ *
+ * jsdom's `visibilityState` is a getter on the Document prototype with no
+ * setter, so the value has to be redefined on the instance and taken back off
+ * again — leaving it defined would make every later test in this file run
+ * against a document that claims to be hidden.
+ */
+function fireVisibilityChange(state: 'hidden' | 'visible'): void {
+    Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => state,
+    });
+    try {
+        document.dispatchEvent(new Event('visibilitychange'));
+    } finally {
+        Reflect.deleteProperty(document, 'visibilityState');
+    }
+}
+
+describe('InputManager — focus loss releases held actions', () => {
+    let manager: InputManager;
+    let events: InputEvent[];
+
+    /** One recorder across both actions, so the ORDER of the releases is visible. */
+    function recordReleases(m: InputManager): void {
+        for (const id of ['engine:toggle-menu', 'game:move'] as const) {
+            m.onAction(id, (event) => {
+                events.push(event);
+            });
+        }
+    }
+
+    beforeEach(() => {
+        events = [];
+        const registry = createInputActionRegistry([UNDO_ACTION, TOGGLE_MENU_ACTION, MOVE_ACTION]);
+        const repo = makeRepo(DEFAULT_BINDINGS);
+        manager = createInputManager(registry, repo);
+        manager.start();
+        recordReleases(manager);
+    });
+
+    afterEach(() => {
+        manager.stop();
+    });
+
+    it('attaches the focus-loss listeners on start() and detaches THOSE on stop()', () => {
+        // The removal is pinned by HANDLER IDENTITY rather than by behaviour,
+        // because `stop()` also empties the pressed set: a leaked blur listener
+        // would find nothing held and dispatch nothing, so no key sequence can
+        // tell a detached listener from an attached one. The leak is the defect,
+        // and the identity is what proves it does not happen.
+        const spies = {
+            windowAdd: vi.spyOn(window, 'addEventListener'),
+            windowRemove: vi.spyOn(window, 'removeEventListener'),
+            documentAdd: vi.spyOn(document, 'addEventListener'),
+            documentRemove: vi.spyOn(document, 'removeEventListener'),
+        };
+        const second = createInputManager(
+            createInputActionRegistry([TOGGLE_MENU_ACTION]),
+            makeRepo(DEFAULT_BINDINGS),
+        );
+        second.start();
+        second.stop();
+
+        const blurHandler = spies.windowAdd.mock.calls.find((c) => c[0] === 'blur')?.[1];
+        const visibilityHandler = spies.documentAdd.mock.calls.find(
+            (c) => c[0] === 'visibilitychange',
+        )?.[1];
+        expect(blurHandler).toBeDefined();
+        expect(visibilityHandler).toBeDefined();
+        expect(
+            spies.windowRemove.mock.calls.some((c) => c[0] === 'blur' && c[1] === blurHandler),
+        ).toBe(true);
+        expect(
+            spies.documentRemove.mock.calls.some(
+                (c) => c[0] === 'visibilitychange' && c[1] === visibilityHandler,
+            ),
+        ).toBe(true);
+    });
+
+    it('dispatches exactly one release per held action on blur', () => {
+        fireKeydown('Escape');
+        fireKeydown('KeyM');
+        events.length = 0;
+
+        fireBlur();
+
+        expect(events.map((e) => e.actionId)).toEqual(['engine:toggle-menu', 'game:move']);
+        expect(events.every((e) => e.pressed === false)).toBe(true);
+    });
+
+    it('releases in PRESS order — the reverse press order releases in reverse', () => {
+        fireKeydown('KeyM');
+        fireKeydown('Escape');
+        events.length = 0;
+
+        fireBlur();
+
+        expect(events.map((e) => e.actionId)).toEqual(['game:move', 'engine:toggle-menu']);
+    });
+
+    it('reports the code that PRESSED the action, with no modifiers and no repeat', () => {
+        fireKeydown('KeyZ', { ctrlKey: true }); // Ctrl+Z → engine:undo
+        const undoReleases: InputEvent[] = [];
+        manager.onAction('engine:undo', (event) => {
+            undoReleases.push(event);
+        });
+
+        fireBlur();
+
+        expect(undoReleases).toHaveLength(1);
+        const release = undoReleases[0]!;
+        expect(release.code).toBe('KeyZ');
+        expect(release.modifiers).toEqual([]);
+        expect(release.repeat).toBe(false);
+        expect(release.pressed).toBe(false);
+        expect(typeof release.timestamp).toBe('number');
+    });
+
+    it('reports the SECONDARY code when the action was pressed through it', () => {
+        // The binding is two keys; the press is one of them. Reading the code
+        // off the binding rather than off the press would answer with the
+        // primary here — a key the player never touched, on a release they did
+        // not make.
+        const twoKeyManager = createInputManager(
+            createInputActionRegistry([MOVE_ACTION]),
+            makeRepo({ 'game:move': { primary: 'KeyM', secondary: 'KeyN' } }),
+        );
+        const moveEvents: InputEvent[] = [];
+        twoKeyManager.onAction('game:move', (event) => {
+            moveEvents.push(event);
+        });
+
+        try {
+            twoKeyManager.start();
+            fireKeydown('KeyN');
+            expect(twoKeyManager.isPressed('game:move')).toBe(true);
+            moveEvents.length = 0;
+
+            fireBlur();
+
+            expect(moveEvents.map((e) => e.code)).toEqual(['KeyN']);
+        } finally {
+            twoKeyManager.stop();
+        }
+    });
+
+    it('reports the code that was PRESSED even after the action is rebound mid-hold', async () => {
+        // Not a binding lookup: the binding can have moved since the press, and
+        // a release naming a key the player never touched is a lie the mid-hold
+        // rebind is the cheapest way to produce.
+        const moveEvents: InputEvent[] = [];
+        manager.onAction('game:move', (event) => {
+            moveEvents.push(event);
+        });
+        fireKeydown('KeyM');
+        await manager.rebind('game:move', { primary: 'KeyN' });
+        moveEvents.length = 0;
+
+        fireBlur();
+
+        expect(moveEvents.map((e) => e.code)).toEqual(['KeyM']);
+    });
+
+    it('empties the pressed set — isPressed answers false for every held id', () => {
+        fireKeydown('Escape');
+        fireKeydown('KeyM');
+
+        fireBlur();
+
+        expect(manager.isPressed('engine:toggle-menu')).toBe(false);
+        expect(manager.isPressed('game:move')).toBe(false);
+    });
+
+    it('has already emptied the pressed set by the time a release callback runs', () => {
+        // The re-entrant read: a subscriber told "your action came up" must not
+        // find that same action still down when it asks.
+        const seen: boolean[] = [];
+        manager.onAction('game:move', () => {
+            seen.push(manager.isPressed('game:move'));
+        });
+        fireKeydown('KeyM');
+        seen.length = 0;
+
+        fireBlur();
+
+        expect(seen).toEqual([false]);
+    });
+
+    it('a subscriber added after the reset sees no phantom held state', () => {
+        fireKeydown('Escape');
+        fireBlur();
+
+        const late = vi.fn();
+        manager.onAction('engine:toggle-menu', late);
+        fireBlur();
+
+        expect(late).not.toHaveBeenCalled();
+        expect(manager.isPressed('engine:toggle-menu')).toBe(false);
+    });
+
+    it('is idempotent — a real key-up after the reset dispatches nothing', () => {
+        fireKeydown('Escape');
+        fireBlur();
+        events.length = 0;
+
+        fireKeyup('Escape');
+
+        expect(events).toEqual([]);
+    });
+
+    it('is idempotent for a key-up whose modifiers no longer match', () => {
+        const undoReleases: InputEvent[] = [];
+        manager.onAction('engine:undo', (event) => {
+            undoReleases.push(event);
+        });
+        fireKeydown('KeyZ', { ctrlKey: true });
+        fireBlur();
+        undoReleases.length = 0;
+
+        fireKeyup('KeyZ'); // Ctrl already up — takes the code-only fallback
+
+        expect(undoReleases).toEqual([]);
+    });
+
+    it('ignores a blur that came from an element rather than the window', () => {
+        // `blur` does not bubble, and the listener is registered in the BUBBLE
+        // phase — which is the whole reason moving focus between two fields on
+        // a settings page does not drop every key the player is holding. A
+        // capture-phase registration would catch all of them.
+        const field = document.createElement('input');
+        document.body.appendChild(field);
+        try {
+            fireKeydown('KeyM');
+            events.length = 0;
+
+            field.dispatchEvent(new FocusEvent('blur', { bubbles: false }));
+
+            expect(events).toEqual([]);
+            expect(manager.isPressed('game:move')).toBe(true);
+        } finally {
+            field.remove();
+        }
+    });
+
+    it('dispatches nothing when the window blurs with no key held', () => {
+        fireBlur();
+        expect(events).toEqual([]);
+    });
+
+    it('releases held actions when the document becomes hidden', () => {
+        fireKeydown('KeyM');
+        events.length = 0;
+
+        fireVisibilityChange('hidden');
+
+        expect(events.map((e) => e.actionId)).toEqual(['game:move']);
+        expect(manager.isPressed('game:move')).toBe(false);
+    });
+
+    it('does NOT release when the document becomes VISIBLE', () => {
+        fireKeydown('KeyM');
+        events.length = 0;
+
+        fireVisibilityChange('visible');
+
+        expect(events).toEqual([]);
+        expect(manager.isPressed('game:move')).toBe(true);
+    });
+
+    it('re-arms a still-held GAMEPAD button on the next poll — the release does not outlast the hold', () => {
+        // The LIMIT of the reset, pinned rather than left to be discovered. The
+        // release reaches a held gamepad action but does not outlast one: a
+        // button the player is still holding is reported as held by the next
+        // poll, which has no way to tell it from a fresh hold. Closing that is a
+        // change to the gamepad path, which the focus-loss reset does not touch.
+        const padManager = createInputManager(
+            createInputActionRegistry([MOVE_ACTION]),
+            makeRepo({ 'game:move': { primary: 'button:1' } }),
+        );
+        const padEvents: InputEvent[] = [];
+        padManager.onAction('game:move', (event) => {
+            padEvents.push(event);
+        });
+        const getGamepads = vi
+            .fn()
+            .mockReturnValue([
+                { connected: true, buttons: [{ pressed: false }, { pressed: true }] },
+            ]);
+        vi.stubGlobal('navigator', { ...navigator, getGamepads });
+
+        try {
+            padManager.start();
+            padManager.pollGamepad();
+            expect(padManager.isPressed('game:move')).toBe(true);
+
+            window.dispatchEvent(new Event('blur'));
+            expect(padManager.isPressed('game:move')).toBe(false);
+            // The release names the BUTTON, and does so by reading the pressed
+            // map — the press dispatch's own `code` is a separate expression, so
+            // asserting only that one would leave the map write unmeasured.
+            expect(padEvents.map((e) => ({ pressed: e.pressed, code: e.code }))).toEqual([
+                { pressed: true, code: 'button:1' },
+                { pressed: false, code: 'button:1' },
+            ]);
+
+            padManager.pollGamepad();
+            expect(padManager.isPressed('game:move')).toBe(true);
+            expect(padEvents.map((e) => e.pressed)).toEqual([true, false, true]);
+        } finally {
+            padManager.stop();
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('a key released normally is not released a second time by a later blur', () => {
+        fireKeydown('KeyM');
+        fireKeyup('KeyM');
+        expect(events.map((e) => e.pressed)).toEqual([true, false]);
+        events.length = 0;
+
+        fireBlur();
+
+        expect(events).toEqual([]);
+    });
+});

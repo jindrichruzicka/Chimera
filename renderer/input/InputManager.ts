@@ -19,7 +19,12 @@ import { emitRendererError, readRendererLogsApi } from '../logging/rendererLogge
 // ─── Public interface ─────────────────────────────────────────────────────────
 
 export interface InputManager {
-    /** Attach window event listeners and start gamepad polling. Idempotent. */
+    /**
+     * Attach the input event listeners and start gamepad polling. Idempotent.
+     *
+     * Includes the focus-loss listeners: losing the window or hiding the
+     * document releases every held action — see {@link InputManager.onAction}.
+     */
     start(): void;
     /** Detach listeners, stop gamepad polling, clear pressed state. Idempotent. */
     stop(): void;
@@ -28,6 +33,11 @@ export interface InputManager {
     /**
      * Subscribe to action events. Returns an unsubscribe function.
      * Callbacks registered before `start()` will fire once `start()` is called.
+     *
+     * A `pressed: false` event also arrives for every held action when the
+     * window loses focus or the document is hidden — the key-up for a key let
+     * go in the background never reaches the app, so the manager reports the
+     * release itself rather than leaving the action down forever.
      */
     onAction(id: InputActionId, callback: (event: InputEvent) => void): () => void;
     /** Restrict dispatch to one category. `null` means all categories. */
@@ -144,7 +154,13 @@ export function createInputManager(
     }
 
     const subscribers = new Map<InputActionId, Set<(event: InputEvent) => void>>();
-    const pressedActions = new Set<InputActionId>();
+    // Action id → the code that pressed it. A MAP rather than a set because a
+    // release the manager synthesises has to name a key: on focus loss there is
+    // no KeyboardEvent to read one off, and the binding is the wrong place to
+    // look it up — a rebind while the key is down would make the release report
+    // a key nobody ever pressed. Insertion order is press order, which is what
+    // makes the focus-loss releases deterministic.
+    const pressedActions = new Map<InputActionId, string>();
 
     let started = false;
     let rafId: number | null = null;
@@ -228,7 +244,7 @@ export function createInputManager(
         // oneShot: skip key-repeat events
         if (action?.oneShot === true && e.repeat) return;
 
-        pressedActions.add(id);
+        pressedActions.set(id, e.code);
         dispatchEvent({
             actionId: id,
             code: e.code,
@@ -263,6 +279,11 @@ export function createInputManager(
             }
             return;
         }
+        // Only an action that is actually DOWN comes up. Without the guard a key
+        // released after the focus-loss reset — the ordinary case, since the
+        // player let go while the app was in the background — would dispatch a
+        // second release for an action already reported as up.
+        if (!pressedActions.has(id)) return;
         pressedActions.delete(id);
         dispatchEvent({
             actionId: id,
@@ -272,6 +293,45 @@ export function createInputManager(
             pressed: false,
             timestamp: performance.now(),
         });
+    };
+
+    // ─── Focus loss ───────────────────────────────────────────────────────────
+
+    /**
+     * Report every held action as released.
+     *
+     * The window stops receiving key events the moment it loses focus, so a key
+     * let go while the app is in the background never arrives as a key-up and
+     * the action stays down forever. For a turn-based game that is invisible; a
+     * REALTIME game holds a standing order off a held key, so the same gap is a
+     * control that cannot be stopped.
+     *
+     * The pressed set is emptied BEFORE the first callback runs, not after the
+     * last: a subscriber reading `isPressed` from inside its own release
+     * callback must not find the action it is being told about still down, and
+     * a callback that somehow triggered another focus loss must not release the
+     * same action twice.
+     */
+    function releaseHeldActions(): void {
+        const released = [...pressedActions];
+        pressedActions.clear();
+        for (const [id, code] of released) {
+            dispatchEvent({
+                actionId: id,
+                code,
+                // No KeyboardEvent, so no modifier state to report. A synthetic
+                // release claims nothing about which modifiers were down.
+                modifiers: [],
+                repeat: false,
+                pressed: false,
+                timestamp: performance.now(),
+            });
+        }
+    }
+
+    const handleVisibilityChange = (): void => {
+        // Only the HIDDEN half — becoming visible is not a loss of input.
+        if (document.visibilityState === 'hidden') releaseHeldActions();
     };
 
     // ─── Gamepad polling ──────────────────────────────────────────────────────
@@ -300,7 +360,7 @@ export function createInputManager(
 
                 if (isNowPressed && !wasPressed) {
                     if (matchedActionId !== undefined) {
-                        pressedActions.add(matchedActionId);
+                        pressedActions.set(matchedActionId, buttonId);
                         dispatchEvent({
                             actionId: matchedActionId,
                             code: buttonId,
@@ -313,7 +373,7 @@ export function createInputManager(
                 } else if (isNowPressed && wasPressed) {
                     // Held button: repeat only for non-oneShot actions.
                     if (matchedActionId !== undefined && matchedAction?.oneShot === false) {
-                        pressedActions.add(matchedActionId);
+                        pressedActions.set(matchedActionId, buttonId);
                         dispatchEvent({
                             actionId: matchedActionId,
                             code: buttonId,
@@ -363,6 +423,8 @@ export function createInputManager(
             started = true;
             window.addEventListener('keydown', handleKeydown);
             window.addEventListener('keyup', handleKeyup);
+            window.addEventListener('blur', releaseHeldActions);
+            document.addEventListener('visibilitychange', handleVisibilityChange);
             if (typeof requestAnimationFrame !== 'undefined') {
                 scheduleGamepadPoll();
             }
@@ -373,6 +435,8 @@ export function createInputManager(
             started = false;
             window.removeEventListener('keydown', handleKeydown);
             window.removeEventListener('keyup', handleKeyup);
+            window.removeEventListener('blur', releaseHeldActions);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
             if (rafId !== null) {
                 cancelAnimationFrame(rafId);
                 rafId = null;

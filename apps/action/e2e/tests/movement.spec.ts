@@ -6,6 +6,12 @@
  * the host's wall-clock heartbeat turns that velocity into arena cells, and
  * releasing the key stops the primitive.
  *
+ * Releasing it is TWO paths, and both are covered here. The player letting go is
+ * one; the window losing focus is the other, and only the second is a stop the
+ * player cannot make for themselves — no key-up is coming for a key let go in
+ * another window, so a velocity nothing cleared would run the primitive into the
+ * arena wall while the app sat in the background.
+ *
  * Position is read off the PROJECTED SNAPSHOT, never off pixels. A primitive's
  * place in the arena is a WebGL transform the DOM cannot see, and a pixel probe
  * of a small shaded mesh answers "something changed colour here" rather than
@@ -84,6 +90,60 @@ test.describe('Action movement', () => {
             .poll(async () => (await readOwnCell())?.y ?? null, { timeout: SETTLE_TIMEOUT_MS })
             .toBeLessThan(afterRight?.y ?? 0);
         expect((await readOwnCell())?.x).toBe(afterRight?.x);
+    });
+
+    test('a window blur releases a held arrow key, and the primitive stops', async ({
+        mainWindow,
+    }) => {
+        test.slow();
+
+        const match = await enterActionMatch(mainWindow);
+
+        const viewerId = await readViewerId(mainWindow);
+        expect(viewerId, 'the match projected no viewer id').not.toBeNull();
+
+        const readOwnPrimitive = async () => readSeatPrimitive(mainWindow, viewerId ?? '');
+        const readOwnCell = async (): Promise<ActionCell | null> =>
+            cellOf(await readOwnPrimitive());
+
+        await expect.poll(readOwnCell, { timeout: MATCH_ENTRY_TIMEOUT_MS }).not.toBeNull();
+        const start = await readOwnCell();
+        expect(start).not.toBeNull();
+
+        // The key stays DOWN for the whole of this block. That is the case: a
+        // player who alt-tabs away and lets go in another window sends this app
+        // no key-up at all, ever — so a spec that released the key would be
+        // testing the path that already worked.
+        await match.whileHoldingKey('ArrowRight', async () => {
+            // Moving FIRST. Without this the stop below would read the same on a
+            // primitive that never started, and on a match that never seated one.
+            await expect
+                .poll(async () => (await readOwnCell())?.x ?? null, { timeout: SETTLE_TIMEOUT_MS })
+                .toBeGreaterThan(start?.x ?? 0);
+
+            await match.blurWindow();
+
+            // The MECHANISM, read off the projection: the synthesised release
+            // reached the playfield, which dispatched one `action:set-velocity`
+            // of zero. `dx` is the standing order itself, not its consequence.
+            await expect
+                .poll(async () => (await readOwnPrimitive())?.dx ?? null, {
+                    timeout: SETTLE_TIMEOUT_MS,
+                })
+                .toBe(0);
+
+            // And the CONSEQUENCE: beats pass with the cell unchanged. The
+            // clock is the HUD's, because a beat that moves nothing broadcasts
+            // no new snapshot.
+            const afterBlur = await readOwnCell();
+            // Both-null would satisfy the `toEqual` below on its own.
+            expect(afterBlur).not.toBeNull();
+            const beatAtBlur = await match.hudTick();
+            await expect
+                .poll(() => match.hudTick(), { timeout: SETTLE_TIMEOUT_MS })
+                .toBeGreaterThan(beatAtBlur + IDLE_BEATS);
+            expect(await readOwnCell()).toEqual(afterBlur);
+        });
     });
 
     test('the HUD tick advances on the host’s heartbeat with nobody touching a key', async ({
