@@ -32,6 +32,32 @@
             "options": { "cwd": "${workspaceFolder}" },
             "problemMatcher": [],
             "presentation": { "reveal": "always", "focus": false, "panel": "shared", "clear": true }
+        },
+        {
+            // The action app's own default launch build — same three steps as the
+            // Tactics task above, against apps/action's OWN Next host
+            // (apps/action/renderer) and its OWN Electron bundle. It is a task of its
+            // own rather than a shared one because a launch config names exactly one
+            // preLaunchTask label, and the two builds target different app dirs.
+            "label": "Build Action (renderer + bundle)",
+            "type": "shell",
+            "command": "pnpm build:packages && pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/action/renderer && pnpm --filter @chimera-engine/action build:app",
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "focus": false, "panel": "shared", "clear": true }
+        },
+        {
+            // Scorched-earth variant for the "Run Action (Clean)" launch. Wipes the
+            // action app's Next build cache, its renderer static export, and its
+            // Electron bundle output before the same full rebuild. Touches only
+            // apps/action/** — a clean Action run must not delete the Tactics
+            // bundles a parallel Tactics launch is using.
+            "label": "Build Action (clean renderer + bundle)",
+            "type": "shell",
+            "command": "rm -rf apps/action/renderer/.next apps/action/renderer/out apps/action/dist && pnpm build:packages && pnpm exec cross-env CHIMERA_DEBUG=1 next build apps/action/renderer && pnpm --filter @chimera-engine/action build:app",
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "focus": false, "panel": "shared", "clear": true }
         }
     ]
 }
