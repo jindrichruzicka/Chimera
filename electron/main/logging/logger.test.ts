@@ -12,6 +12,7 @@ import {
     createPinoSink,
     createStderrSink,
     createStdoutSink,
+    isLogLevel,
     startPeriodicFlush,
 } from './logger.js';
 import type { LogEntry, LogSource } from '@chimera-engine/simulation/foundation/logging.js';
@@ -660,6 +661,22 @@ describe('createFanOutSink', () => {
         });
 
         expect(() => sink.write(entry('refusal'))).not.toThrow();
+    });
+});
+
+describe('isLogLevel', () => {
+    it('accepts each of the six declared LogLevel names', () => {
+        const levels: LogEntry['level'][] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+        expect(levels.filter((level) => !isLogLevel(level))).toStrictEqual([]);
+    });
+
+    it('rejects a near-miss, a differently-cased name, and an inherited key', () => {
+        expect(isLogLevel('verbose')).toBe(false);
+        expect(isLogLevel('WARN')).toBe(false);
+        expect(isLogLevel('')).toBe(false);
+        // `Object.hasOwn`, not `in` — a prototype key is not a level.
+        expect(isLogLevel('toString')).toBe(false);
+        expect(isLogLevel('constructor')).toBe(false);
     });
 });
 

@@ -18,7 +18,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { StateBroadcaster } from './StateBroadcaster.js';
 import type { SpectatorViewSource } from './StateBroadcaster.js';
-import { createNoopLogger } from '../logging/logger.js';
+import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { GAME_SNAPSHOT_CHANNEL } from '../../preload/apis/game-api.js';
 import { playerId as toPlayerId } from '@chimera-engine/networking';
 import type { HostTransport, PlayerId } from '@chimera-engine/networking';
@@ -534,5 +534,59 @@ describe('StateBroadcaster — spectator perspective fan-out (Invariant #114)', 
 
         expect(transport.sendSnapshot).not.toHaveBeenCalled();
         expect(transport.sendTick).not.toHaveBeenCalled();
+    });
+});
+
+// ── Per-beat log levels (§4.27) ───────────────────────────────────────────────
+
+describe('StateBroadcaster — per-beat log levels', () => {
+    const SPEC_A = toPlayerId('spectator-a');
+
+    /** Every path a realtime beat drives, in one call each. */
+    function driveOneBeat(broadcaster: StateBroadcaster): void {
+        broadcaster.broadcastWave(makeSnapshot(PLAYER_A), PLAYER_A);
+        broadcaster.broadcastTick(7, PLAYER_A);
+    }
+
+    it('emits nothing at debug or above on the paths a beat drives', () => {
+        const sink = createMemorySink();
+        const logger = createLogger({
+            source: { process: 'main', module: 'state-broadcaster' },
+            sink,
+        });
+        const broadcaster = new StateBroadcaster(
+            makeTransport(),
+            makePerViewerProjector(),
+            logger,
+            { spectators: makeSpectatorSource([[SPEC_A, PLAYER_A]]) },
+        );
+
+        driveOneBeat(broadcaster);
+
+        // The file sink's default threshold is `info`, so anything at `debug`
+        // or above here is a line written per beat for the length of a match.
+        expect(sink.entries.filter((e) => e.level !== 'trace')).toStrictEqual([]);
+    });
+
+    it('still records each beat path at trace, so an explicit request gets them', () => {
+        const sink = createMemorySink();
+        const logger = createLogger({
+            source: { process: 'main', module: 'state-broadcaster' },
+            sink,
+        });
+        const broadcaster = new StateBroadcaster(
+            makeTransport(),
+            makePerViewerProjector(),
+            logger,
+            { spectators: makeSpectatorSource([[SPEC_A, PLAYER_A]]) },
+        );
+
+        driveOneBeat(broadcaster);
+
+        expect(sink.entries.map((e) => e.message)).toStrictEqual([
+            'broadcast',
+            'spectator broadcast',
+            'broadcast tick',
+        ]);
     });
 });

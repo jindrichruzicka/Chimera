@@ -16,10 +16,12 @@ import type {
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
 import { sceneId, type SceneRegistry } from '@chimera-engine/simulation/scene/index.js';
+import type { LogEntry, LogLevel } from '@chimera-engine/simulation/foundation/logging.js';
 import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
 import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type * as LoadGameContentModule from './content/loadGameContent.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
+import { LOGS_EMIT_CHANNEL } from '../preload/apis/logs-api.js';
 import {
     SESSION_MODE_QUICK,
     SESSION_MODE_PARAM,
@@ -631,6 +633,8 @@ const {
     ensureActiveProfile,
     resolveInitialEntitiesForGame,
     refuseToStart,
+    resolveFileLogLevel,
+    createMainLoggerSink,
     main,
 } = await import('./index.js');
 const {
@@ -1594,6 +1598,116 @@ describe('resolveChimeraEnv', () => {
     });
 });
 
+describe('resolveFileLogLevel', () => {
+    it('defaults to "info" when CHIMERA_LOG_LEVEL is undefined', () => {
+        expect(resolveFileLogLevel(undefined)).toBe('info');
+    });
+
+    it('returns each recognised level verbatim', () => {
+        const levels: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+        expect(levels.map((level) => resolveFileLogLevel(level))).toEqual(levels);
+    });
+
+    it('accepts a level in mixed case and with surrounding whitespace', () => {
+        expect(resolveFileLogLevel('  DEBUG ')).toBe('debug');
+    });
+
+    it('falls back to "info" for an unrecognised value', () => {
+        expect(resolveFileLogLevel('verbose')).toBe('info');
+        expect(resolveFileLogLevel('')).toBe('info');
+    });
+});
+
+describe('createMainLoggerSink', () => {
+    const entry = (level: LogLevel): LogEntry => ({
+        level,
+        message: `a ${level} entry`,
+        timestamp: 1000,
+        source: { process: 'main', module: 'root' },
+    });
+
+    const ALL_LEVELS: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+
+    function collector(): { sink: { write: (e: LogEntry) => void }; seen: LogEntry[] } {
+        const seen: LogEntry[] = [];
+        return { sink: { write: (e: LogEntry) => void seen.push(e) }, seen };
+    }
+
+    it('drops sub-threshold entries on the file leg only', () => {
+        const file = collector();
+        const memory = collector();
+        const harnessStdout = collector();
+
+        const sink = createMainLoggerSink({
+            file: file.sink,
+            memory: memory.sink,
+            harnessStdout: harnessStdout.sink,
+            devStderr: null,
+            fileMinLevel: 'info',
+        });
+        for (const level of ALL_LEVELS) sink.write(entry(level));
+
+        expect(file.seen.map((e) => e.level)).toEqual(['info', 'warn', 'error', 'fatal']);
+        // The ring buffer backing `readRecent` and the harness stream keep
+        // everything — the threshold is on the durable file leg alone.
+        expect(memory.seen.map((e) => e.level)).toEqual(ALL_LEVELS);
+        expect(harnessStdout.seen.map((e) => e.level)).toEqual(ALL_LEVELS);
+    });
+
+    it('forwards a warn and an error to the file leg unchanged', () => {
+        const file = collector();
+
+        const sink = createMainLoggerSink({
+            file: file.sink,
+            memory: collector().sink,
+            harnessStdout: null,
+            devStderr: null,
+            fileMinLevel: 'info',
+        });
+        sink.write(entry('warn'));
+        sink.write(entry('error'));
+
+        expect(file.seen).toStrictEqual([entry('warn'), entry('error')]);
+    });
+
+    it('restores debug delivery to the file leg when the override lowers the threshold', () => {
+        const file = collector();
+
+        const sink = createMainLoggerSink({
+            file: file.sink,
+            memory: collector().sink,
+            harnessStdout: null,
+            devStderr: null,
+            fileMinLevel: resolveFileLogLevel('debug'),
+        });
+        for (const level of ALL_LEVELS) sink.write(entry(level));
+
+        expect(file.seen.map((e) => e.level)).toEqual(['debug', 'info', 'warn', 'error', 'fatal']);
+    });
+
+    it('keeps each leg isolated: a throwing file leg still delivers to the others', () => {
+        const memory = collector();
+
+        const sink = createMainLoggerSink({
+            file: {
+                write: () => {
+                    throw new Error('EBADF');
+                },
+            },
+            memory: memory.sink,
+            harnessStdout: null,
+            devStderr: null,
+            fileMinLevel: 'info',
+        });
+
+        expect(() => sink.write(entry('error'))).not.toThrow();
+        // The surviving leg takes the entry AND the fan-out's by-name notice, so
+        // a file sink that silently stops recording is still announced.
+        expect(memory.seen.map((e) => e.message)).toContain(entry('error').message);
+        expect(memory.seen.some((e) => e.message.includes('file'))).toBe(true);
+    });
+});
+
 describe('resolveRuntimePaths', () => {
     const moduleDirname = path.join('/app', 'electron', 'main');
 
@@ -2221,6 +2335,76 @@ describe('main', () => {
             vi.doUnmock('./content/loadGameContent.js');
             vi.unstubAllEnvs();
             vi.resetModules();
+        }
+    });
+
+    // ── File log sink threshold (§4.27) ──────────────────────────────────────
+    // These drive the real `main()` composition. The helper tests above pin
+    // `createMainLoggerSink` and `resolveFileLogLevel` in isolation; neither can
+    // see what `main()` passes for `fileMinLevel`, which is the decision that
+    // reaches a shipped binary.
+
+    /**
+     * Push one entry of `level` through the `chimera:logs:emit` handler, whose
+     * sink is the root `LogRingBufferSink` — the same chain every main-process
+     * log call takes to the fan-out. Returns the levels the mocked Pino
+     * destination received.
+     *
+     * Filtered to `process: 'renderer'`, which the handler stamps on the entry
+     * it forwards: an `error`/`fatal` payload is ALSO re-reported through the
+     * main-process logger, so an unfiltered count would carry that second,
+     * main-sourced entry and stop being a statement about the threshold.
+     */
+    function fileSinkLevelsFor(level: LogLevel): string[] {
+        const handler = ipcMainOn.mock.calls.find(
+            ([channel]) => channel === LOGS_EMIT_CHANNEL,
+        )?.[1] as ((event: unknown, arg: unknown) => void) | undefined;
+        expect(handler).toBeDefined();
+        fakeDest.write.mockClear();
+        handler!(
+            {},
+            { level, message: `probe-${level}`, timestamp: 1, source: { module: 'probe' } },
+        );
+        return fakeDest.write.mock.calls
+            .map(([data]) => JSON.parse(data) as LogEntry)
+            .filter((e) => e.source.process === 'renderer' && e.message === `probe-${level}`)
+            .map((e) => e.level);
+    }
+
+    it('drops a debug entry at the file sink and keeps info, warn and error (default level)', async () => {
+        await main(makeTestContributions());
+
+        expect(fileSinkLevelsFor('trace')).toStrictEqual([]);
+        expect(fileSinkLevelsFor('debug')).toStrictEqual([]);
+        // `info` is the threshold itself — the inclusive boundary, not one above it.
+        expect(fileSinkLevelsFor('info')).toStrictEqual(['info']);
+        expect(fileSinkLevelsFor('warn')).toStrictEqual(['warn']);
+        expect(fileSinkLevelsFor('error')).toStrictEqual(['error']);
+    });
+
+    it('restores debug delivery to the file sink when CHIMERA_LOG_LEVEL asks for it', async () => {
+        vi.stubEnv('CHIMERA_LOG_LEVEL', 'debug');
+        try {
+            await main(makeTestContributions());
+
+            expect(fileSinkLevelsFor('debug')).toStrictEqual(['debug']);
+            // Still a threshold, one rank lower — not "the override turns the
+            // filter off".
+            expect(fileSinkLevelsFor('trace')).toStrictEqual([]);
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+
+    it('raises the file sink threshold too, when CHIMERA_LOG_LEVEL asks for it', async () => {
+        vi.stubEnv('CHIMERA_LOG_LEVEL', 'error');
+        try {
+            await main(makeTestContributions());
+
+            expect(fileSinkLevelsFor('warn')).toStrictEqual([]);
+            expect(fileSinkLevelsFor('error')).toStrictEqual(['error']);
+        } finally {
+            vi.unstubAllEnvs();
         }
     });
 

@@ -579,18 +579,40 @@ describe('PerspectiveReplayManager — delegation', () => {
 // ── Logging (invariant #67) ──────────────────────────────────────────────────
 
 describe('PerspectiveReplayManager — logging', () => {
-    it('logs at debug under the perspective-replay-manager module on public methods', async () => {
+    it('logs start, finalise and list at debug under its own module', async () => {
         const { manager, sink } = makeManager();
 
         manager.start(makeStartHeader());
-        manager.recordSnapshot(frame(VIEWER, 0));
         await manager.finalise();
         await manager.list('tactics');
 
         const debugFromManager = sink.entries.filter(
             (e) => e.level === 'debug' && e.source.module === 'perspective-replay-manager',
         );
-        expect(debugFromManager.length).toBeGreaterThan(0);
-        expect(debugFromManager.map((e) => e.message)).toContain('start');
+        expect(debugFromManager.map((e) => e.message)).toStrictEqual([
+            'start',
+            'finalise',
+            'finalise: saved',
+            'list',
+        ]);
+    });
+
+    it('logs recordSnapshot at trace, so a recorded beat writes no debug line', () => {
+        const { manager, sink } = makeManager();
+
+        manager.start(makeStartHeader());
+        const beforeRecording = sink.entries.length;
+        manager.recordSnapshot(frame(VIEWER, 0));
+        manager.recordSnapshot(frame(VIEWER, 1));
+
+        // recordSnapshot runs once per recorded beat; the file sink's default
+        // threshold is `info`, so a `debug` here is a per-beat line on disk.
+        const recorded = sink.entries
+            .slice(beforeRecording)
+            .map((e) => ({ level: e.level, message: e.message }));
+        expect(recorded).toStrictEqual([
+            { level: 'trace', message: 'recordSnapshot' },
+            { level: 'trace', message: 'recordSnapshot' },
+        ]);
     });
 });

@@ -130,7 +130,7 @@ export class StateBroadcaster {
     broadcast(snapshot: Readonly<BaseGameSnapshot>, viewerId: PlayerId): void {
         if (this.disposed) return;
         const playerSnapshot = this.projector.project(snapshot, viewerId);
-        this.log.debug('broadcast', { viewerId, tick: playerSnapshot.tick });
+        this.log.trace('broadcast', { viewerId, tick: playerSnapshot.tick });
         this.transport.sendSnapshot(viewerId, playerSnapshot);
         this.sendToRendererRecipients(viewerId, playerSnapshot);
         this.notifyE2eHooks(viewerId, playerSnapshot);
@@ -161,7 +161,7 @@ export class StateBroadcaster {
      */
     broadcastTick(tick: number, viewerId: PlayerId): void {
         if (this.disposed) return;
-        this.log.debug('broadcast tick', { viewerId, tick });
+        this.log.trace('broadcast tick', { viewerId, tick });
         this.transport.sendTick(viewerId, tick);
         this.sendTickToRendererRecipients(viewerId, tick);
         this.options.e2eHooks?.onClockTick(tick, viewerId);
@@ -169,10 +169,10 @@ export class StateBroadcaster {
     }
 
     /**
-     * Unicast the followed seat's projection to one spectator — the
-     * join-time initial push. Does not consume the per-wave fan-out marker,
-     * so the next regular wave still reaches every spectator. No-op with a
-     * warn for a spectator the view source does not know.
+     * Unicast the followed seat's projection to one spectator. Does not
+     * consume the per-wave fan-out marker, so the next regular wave still
+     * reaches every spectator. No-op with a warn for a spectator the view
+     * source does not know.
      */
     broadcastSpectator(snapshot: Readonly<BaseGameSnapshot>, spectatorId: PlayerId): void {
         if (this.disposed) return;
@@ -200,7 +200,7 @@ export class StateBroadcaster {
         this.lastSpectatorSnapshot = snapshot;
         for (const [spectatorId, followedId] of spectators.entries()) {
             const projected = this.projector.project(snapshot, followedId);
-            this.log.debug('spectator broadcast', {
+            this.log.trace('spectator broadcast', {
                 spectatorId,
                 followedId,
                 tick: projected.tick,

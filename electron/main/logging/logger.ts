@@ -25,6 +25,7 @@
 //   - `createFanOutSink(sinks)`           — one entry to many sinks, each leg
 //                                           isolated from the others.
 //   - `createMinLevelSink(min, sink)`     — level threshold in front of a sink.
+//   - `isLogLevel(value)`                 — type guard for a raw level name.
 //   - `startPeriodicFlush(sink, ms)`      — interval drain for a buffered sink.
 //
 // Invariant 67: no module emits logs via raw `console.*`; all structured
@@ -43,10 +44,10 @@ import type {
     Logger,
 } from '@chimera-engine/simulation/foundation/logging.js';
 
-// `Logger` is declared in `simulation/foundation/logging.ts` so that
+// `Logger` and `LogLevel` are declared in `simulation/foundation/logging.ts` so that
 // `simulation/` and `ai/` can accept an injected Logger without importing from
 // `electron/`. Re-exported here so main-process callers have one import site.
-export type { Logger };
+export type { Logger, LogLevel };
 
 /**
  * Output port for a `Logger`. The root logger owns level routing and
@@ -475,11 +476,21 @@ const LOG_LEVEL_RANK: Readonly<Record<LogLevel, number>> = {
 };
 
 /**
+ * Type guard for a raw {@link LogLevel} name.
+ *
+ * Keyed off the same rank table the threshold compares on, so a level added to
+ * the union is a compile error in {@link LOG_LEVEL_RANK} rather than a value
+ * this guard silently rejects.
+ */
+export function isLogLevel(value: string): value is LogLevel {
+    return Object.hasOwn(LOG_LEVEL_RANK, value);
+}
+
+/**
  * Wrap a {@link LoggerSink} so it only receives entries at or above `minLevel`.
  *
  * Level routing deliberately lives here rather than in the `Logger` or in a
- * sink: the root logger fans out to several sinks with different appetites (the
- * file sink keeps everything; the dev terminal mirror wants failures only), so
+ * sink: the root logger fans out to several sinks with different appetites, so
  * a single threshold on the logger would starve one of them.
  */
 export function createMinLevelSink(minLevel: LogLevel, sink: LoggerSink): LoggerSink {

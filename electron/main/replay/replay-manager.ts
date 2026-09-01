@@ -13,8 +13,8 @@
  * Architecture reference: §4.28
  *
  * Invariants upheld:
- *   #67 — constructed with an injected Logger child; every public method logs
- *           at debug level.
+ *   #67 — constructed with an injected Logger child; it reports through that
+ *           Logger, never `console.*`.
  *   #71 — persists the full ReplayFile (seed + actions mandatory); never
  *           projects snapshots, never imports ReplayPlayer.
  */

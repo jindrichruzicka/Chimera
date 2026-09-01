@@ -45,10 +45,12 @@ import {
     createStderrSink,
     createMinLevelSink,
     createFanOutSink,
+    isLogLevel,
     startPeriodicFlush,
     type Logger,
     type LoggerSink,
     type FlushableSink,
+    type LogLevel,
 } from './logging/logger.js';
 import { makeRendererGoneHandler, registerCrashReporter } from './logging/crash-reporter.js';
 import { LogRingBufferSink } from './logging/log-ring-buffer-sink.js';
@@ -941,6 +943,68 @@ export function resolveChimeraEnv(raw: string | undefined): ChimeraEnv {
     return raw === 'development' ? 'development' : 'production';
 }
 
+/** Threshold applied to the durable file sink when nothing overrides it. */
+const DEFAULT_FILE_LOG_LEVEL: LogLevel = 'info';
+
+/**
+ * Resolve the durable file sink's level threshold from the raw
+ * `CHIMERA_LOG_LEVEL` environment variable.
+ *
+ * The default is `info` because the file leg is unbounded: a daily-rotated file
+ * with no size cap, so a host that logs per beat writes for as long as the match
+ * runs. An unrecognised or missing
+ * value resolves to that default rather than failing the boot — a mistyped
+ * variable must not cost a shipped build its log file.
+ *
+ * The override exists so a bug report can still ask for `debug` (or `trace`)
+ * without a rebuild; it is read once, at wire-up, so a level cannot change
+ * mid-session.
+ *
+ * Exported for its own tests, not for consumers; `main()` is the only caller.
+ */
+export function resolveFileLogLevel(raw: string | undefined): LogLevel {
+    const normalised = raw?.trim().toLowerCase();
+    return normalised !== undefined && isLogLevel(normalised) ? normalised : DEFAULT_FILE_LOG_LEVEL;
+}
+
+/**
+ * Compose the main process's root {@link LoggerSink} from its transport legs.
+ *
+ * Isolated legs, not a hand-rolled fan-out: these transports fail
+ * independently, and the file sink is written first, so an `EBADF` there would
+ * otherwise take the ring buffer and whichever console mirror is wired, leaving
+ * a fatal refusal with nothing on disk and nothing on the terminal. A failing
+ * leg is announced by name on the legs that still work, so a broken file sink
+ * cannot fail silently.
+ *
+ * `fileMinLevel` applies to the file leg ONLY. The memory ring buffer keeps
+ * every entry because it is capacity-bounded and is what `chimera:logs:readRecent`
+ * reads; the harness stdout leg keeps every entry because `dev:mp` is a live
+ * developer stream. Filtering the file leg is what stops a
+ * realtime host from writing a `debug` line per beat for the length of a match
+ * (§4.27) — the root logger deliberately owns no threshold of its own, so
+ * without this the file sink took every level.
+ *
+ * Extracted from `main()` so the composition is unit-testable: which leg carries
+ * the threshold is the load-bearing decision here, and it is not observable from
+ * a test of the threshold helper alone. Exported for those tests, not for
+ * consumers; `main()` is the only caller.
+ */
+export function createMainLoggerSink(options: {
+    readonly file: LoggerSink;
+    readonly memory: LoggerSink;
+    readonly harnessStdout: LoggerSink | null;
+    readonly devStderr: LoggerSink | null;
+    readonly fileMinLevel: LogLevel;
+}): LoggerSink {
+    return createFanOutSink({
+        file: createMinLevelSink(options.fileMinLevel, options.file),
+        memory: options.memory,
+        harnessStdout: options.harnessStdout,
+        devStderr: options.devStderr,
+    });
+}
+
 export function resolveRuntimePaths(options: ResolveRuntimePathOptions): RuntimePaths {
     const preloadPath = path.join(options.moduleDirname, '..', 'preload', 'api.js');
     const rendererEntry = path.join(
@@ -1405,17 +1469,16 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         harnessFlags === null && !app.isPackaged
             ? createMinLevelSink('error', createStderrSink())
             : null;
-    // Isolated legs, not a hand-rolled fan-out: these transports fail
-    // independently, and the Pino sink is written first, so an `EBADF` there
-    // would otherwise take the ring buffer and whichever console mirror is wired
-    // leaving a fatal refusal with nothing on disk and nothing on the terminal.
-    // A failing leg is announced by name on the legs that still work, so a
-    // broken file sink cannot fail silently.
-    const combinedSink: LoggerSink = createFanOutSink({
+    // Isolated legs plus the file leg's level threshold — see
+    // `createMainLoggerSink`. `pinoSink` itself stays unwrapped here so
+    // `startPeriodicFlush` above and `refuseToStart` below keep draining the
+    // real SonicBoom buffer.
+    const combinedSink: LoggerSink = createMainLoggerSink({
         file: pinoSink,
         memory: memorySink,
         harnessStdout: harnessStdoutSink,
         devStderr: devConsoleSink,
+        fileMinLevel: resolveFileLogLevel(process.env['CHIMERA_LOG_LEVEL']),
     });
     const crashLogSink = new LogRingBufferSink(combinedSink);
 

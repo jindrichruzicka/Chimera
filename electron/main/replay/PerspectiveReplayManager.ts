@@ -19,8 +19,10 @@
  * Architecture reference: §4.28
  *
  * Invariants upheld:
- *   #67 — constructed with an injected Logger child; every public method logs
- *           at debug level.
+ *   #67 — constructed with an injected Logger child; it reports through that
+ *           Logger, never `console.*`. `recordSnapshot` reports at `trace` rather
+ *           than `debug` because it runs once per recorded beat — see the file
+ *           sink threshold in §4.27.
  *   #98 — `viewerId` is locked at `start`; `recordSnapshot` skips (never
  *           appends) any frame whose `snapshot.viewerId` differs from it, whose
  *           `tick` is not strictly greater than the last appended tick, or whose
@@ -135,7 +137,7 @@ export class PerspectiveReplayManager {
      * @throws {Error} if no recording is in progress.
      */
     recordSnapshot(frame: PerspectiveReplayFrame): void {
-        this.log.debug('recordSnapshot', { tick: frame.tick });
+        this.log.trace('recordSnapshot', { tick: frame.tick });
         if (this.recording === null) {
             throw new Error('PerspectiveReplayManager.recordSnapshot: no recording in progress');
         }
