@@ -269,8 +269,8 @@ interface UndoManager {
 interface ActionHistory {
     /**
      * Append a new entry to the history. If the history exceeds MAX_ACTION_HISTORY_ENTRIES,
-     * the oldest entry is evicted and an `action-history:overflow` warn is emitted with the
-     * entry count and the most-recent memento's turn number.
+     * the oldest entry is evicted and an `action-history:overflow` warn carrying `capacity`
+     * is emitted — once per saturation episode, not once per eviction.
      */
     append(entry: ActionHistoryEntry): void;
     sinceLastMemento(): readonly ActionHistoryEntry[];
@@ -326,10 +326,10 @@ Floats are permitted inside the renderer (camera, animation, UI) but must never 
 
 ### ActionHistory Bounding
 
-| Constant                     | Value    | Role                                                                            |
-| ---------------------------- | -------- | ------------------------------------------------------------------------------- |
-| `TURN_MEMENTO_RETENTION`     | `4`      | Turns of undo reach; mementoes older than this are evicted                      |
-| `MAX_ACTION_HISTORY_ENTRIES` | `10_000` | Safety-net memory cap; overflow emits `action-history:overflow` warn and evicts |
+| Constant                     | Value    | Role                                                                                                                   |
+| ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `TURN_MEMENTO_RETENTION`     | `4`      | Turns of undo reach; mementoes older than this are evicted                                                             |
+| `MAX_ACTION_HISTORY_ENTRIES` | `10_000` | Safety-net memory cap; overflow evicts on every append and warns `action-history:overflow` once per saturation episode |
 
 ---
 

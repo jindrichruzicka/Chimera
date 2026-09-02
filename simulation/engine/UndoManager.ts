@@ -39,8 +39,9 @@ export const TURN_MEMENTO_RETENTION = 4;
 
 /**
  * Safety-net upper bound on the number of entries in `InMemoryActionHistory`.
- * When `append()` would exceed this cap it evicts the oldest entry and emits
- * an `action-history:overflow` warn log.
+ * Every `append()` that would exceed this cap evicts the oldest entry; the
+ * `action-history:overflow` warn reports the SATURATION, once per episode,
+ * rather than once per eviction (see the latch on `InMemoryActionHistory`).
  *
  * Architecture: §4.5, Invariant #45
  */
@@ -200,6 +201,17 @@ export class InMemoryActionHistory implements ActionHistory {
     private readonly entries: ActionHistoryEntry[] = [];
     private head = 0;
     private mementoBoundary = 0;
+    /**
+     * Latch for the `action-history:overflow` warn. Set on the FIRST eviction,
+     * cleared by a `pruneTo` that drops the live size back below capacity, so
+     * each saturation episode reports exactly once.
+     *
+     * Saturation is a state transition — retention has just become lossy — not a
+     * per-append event. Without the latch a history that stays saturated warns
+     * on every append for the rest of the run, which is what a realtime host
+     * does: `pruneTo` is reached from `ActionPipeline`'s `engine:end_turn` branch.
+     */
+    #overflowReported = false;
     private readonly logger: Logger | undefined;
     private readonly maxEntries: number;
 
@@ -220,9 +232,13 @@ export class InMemoryActionHistory implements ActionHistory {
         if (this.#size() >= this.maxEntries) {
             this.head++;
             this.#clampMementoBoundary();
-            this.logger?.warn('action-history:overflow', {
-                capacity: this.maxEntries,
-            });
+            // Eviction itself is unconditional; only the REPORT is latched.
+            if (!this.#overflowReported) {
+                this.#overflowReported = true;
+                this.logger?.warn('action-history:overflow', {
+                    capacity: this.maxEntries,
+                });
+            }
         }
         this.entries.push(entry);
         this.#compactIfNeeded();
@@ -246,6 +262,15 @@ export class InMemoryActionHistory implements ActionHistory {
         }
         this.#clampMementoBoundary();
         this.#compactIfNeeded();
+        // Re-arm only on a prune that actually freed space. A `pruneTo` that
+        // evicts nothing leaves the history saturated, so nothing transitioned
+        // and the next append must not re-report the same episode. `#size()`,
+        // not `entries.length`: the two differ while the head cursor still holds
+        // tombstoned slots `#compactIfNeeded()` has not reclaimed, and it is the
+        // live size the eviction branch compares on.
+        if (this.#size() < this.maxEntries) {
+            this.#overflowReported = false;
+        }
     }
 
     #size(): number {

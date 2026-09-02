@@ -14,7 +14,8 @@
  * Invariants:
  *   #43 — No Math.random() or Date.now() — pure data operations only
  *   #45 — ActionHistory bounded by MAX_ACTION_HISTORY_ENTRIES=10_000;
- *          overflow evicts oldest AND emits 'action-history:overflow' warn log
+ *          overflow evicts oldest on every append AND emits an
+ *          'action-history:overflow' warn log once per saturation episode
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -193,15 +194,106 @@ describe('InMemoryActionHistory — overflow cap (Invariant #45)', () => {
         expect(logger.warn).toHaveBeenCalledWith('action-history:overflow', expect.any(Object));
     });
 
-    it('emits a warn log on every overflow, not just the first', () => {
+    it('stays silent at exactly the cap and reports on the eviction that follows', () => {
+        const cap = 3;
+        const logger = makeNoopLogger();
+        const history = new InMemoryActionHistory({ maxEntries: cap, logger });
+        for (let i = 1; i <= cap; i++) history.append(makeEntry(i, i));
+
+        // Full, but nothing has been dropped: retention is still lossless, and
+        // the warn means retention has BECOME lossy. Reporting on reaching the
+        // cap rather than on the first eviction would fire here.
+        expect(history.sinceLastMemento()).toHaveLength(cap);
+        expect(logger.warn).not.toHaveBeenCalled();
+
+        history.append(makeEntry(cap + 1, cap + 1));
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns ONCE across a long run of overflowing appends, not once per append', () => {
         const cap = 2;
         const logger = makeNoopLogger();
         const history = new InMemoryActionHistory({ maxEntries: cap, logger });
+        // Saturation is a state transition — retention just became lossy — not a
+        // per-append event, however long the run past it goes.
+        for (let i = 1; i <= cap + 50; i++) {
+            history.append(makeEntry(i, i));
+        }
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith('action-history:overflow', { capacity: cap });
+    });
+
+    it('warns again for a second episode, once pruneTo has freed space', () => {
+        const cap = 2;
+        const logger = makeNoopLogger();
+        const history = new InMemoryActionHistory({ maxEntries: cap, logger });
+        // Episode 1: saturate and overflow.
         history.append(makeEntry(1, 1));
         history.append(makeEntry(2, 2));
-        history.append(makeEntry(3, 3)); // overflow #1
-        history.append(makeEntry(4, 4)); // overflow #2
+        history.append(makeEntry(3, 3));
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+
+        // A turn-based game prunes on end_turn; the history drops below capacity.
+        history.pruneTo(3);
+        expect(history.sinceLastMemento().length).toBeLessThan(cap);
+
+        // Episode 2: saturating again is a NEW transition and reports again.
+        history.append(makeEntry(4, 4));
+        history.append(makeEntry(5, 5));
         expect(logger.warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('re-arms on freed space while tombstoned slots are still uncompacted', () => {
+        // The re-arm guard must read the LIVE size, not the backing array's
+        // length. They differ only while the head cursor holds tombstoned slots
+        // that `#compactIfNeeded()` has not yet reclaimed, and no append/prune
+        // sequence at cap 2 reaches the guard in a state where the two answer
+        // the comparison differently — so a test written at that cap cannot see
+        // which accessor is used. Cap 4 reaches the check with head = 2 and a
+        // backing array of 5, where they disagree.
+        const cap = 4;
+        const logger = makeNoopLogger();
+        const history = new InMemoryActionHistory({ maxEntries: cap, logger });
+        for (let i = 1; i <= cap; i++) history.append(makeEntry(i, i));
+        history.append(makeEntry(5, 5)); // overflow — episode 1
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+
+        // Frees exactly one entry; the live size drops to 3 while the backing
+        // array is still 5 long.
+        history.pruneTo(3);
+        expect(history.sinceLastMemento()).toHaveLength(cap - 1);
+
+        history.append(makeEntry(6, 6)); // back to capacity, no eviction
+        history.append(makeEntry(7, 7)); // evicts — episode 2
+        expect(logger.warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not re-arm on a pruneTo that frees nothing', () => {
+        const cap = 2;
+        const logger = makeNoopLogger();
+        const history = new InMemoryActionHistory({ maxEntries: cap, logger });
+        history.append(makeEntry(1, 5));
+        history.append(makeEntry(2, 5));
+        history.append(makeEntry(3, 5)); // overflow — warns once
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+
+        // Every live entry is at or above the cutoff, so the head does not move
+        // and the history is still saturated. Nothing transitioned.
+        history.pruneTo(5);
+        history.append(makeEntry(4, 5));
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('evicts oldest on every overflowing append, latched warn or not', () => {
+        const cap = 2;
+        const logger = makeNoopLogger();
+        const history = new InMemoryActionHistory({ maxEntries: cap, logger });
+        for (let i = 1; i <= 6; i++) {
+            history.append(makeEntry(i, i));
+        }
+        // Retention is unchanged by the latch: the cap still holds and the
+        // survivors are still the newest `cap` entries.
+        expect(history.sinceLastMemento().map((e) => e.tickApplied)).toEqual([5, 6]);
     });
 
     it('does not call warn when the cap has not been reached', () => {

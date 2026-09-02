@@ -137,7 +137,32 @@ describe('buildHostSessionPipeline — #45: action-history:overflow warn is wire
         const overflowWarns = sink.entries.filter(
             (e) => e.level === 'warn' && e.message === 'action-history:overflow',
         );
-        expect(overflowWarns.length).toBeGreaterThanOrEqual(1);
+        expect(overflowWarns).toHaveLength(1);
+    });
+
+    it('warns ONCE, not once per beat, when the pipeline keeps appending past the cap', () => {
+        const { logger, sink } = makeMemoryLogger();
+        const { pipeline } = buildHostSessionPipeline(makeRegistry(advanceDef), () => {}, {
+            gameId: 'test',
+            savePort: noopSavePort,
+            logger,
+        });
+
+        // The realtime shape this exists for: nothing here prunes, so every
+        // action past saturation evicts. Unlatched, that is one warn per beat for
+        // the rest of the match, on a file sink — measured at 200 here.
+        let s = makeBaseSnapshot(0);
+        for (let i = 0; i < MAX_ACTION_HISTORY_ENTRIES + 200; i++) {
+            s = pipeline.process(s, advanceEnvelope(s.tick));
+        }
+
+        const overflowWarns = sink.entries.filter(
+            (e) => e.level === 'warn' && e.message === 'action-history:overflow',
+        );
+        expect(overflowWarns).toHaveLength(1);
+        expect(overflowWarns[0]?.context).toStrictEqual({
+            capacity: MAX_ACTION_HISTORY_ENTRIES,
+        });
     });
 });
 
