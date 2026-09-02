@@ -205,9 +205,53 @@ describe('action:set-velocity', () => {
         expect(primitive(next, CUBE).y).toBe(primitive(snapshot, CUBE).y);
     });
 
+    it('advances the tick by exactly one', () => {
+        // Invariant #42. A reducer that changes the snapshot without advancing
+        // the tick records an action `ReplayPlayer.step()` refuses to replay.
+        //
+        // Off the fixed point on purpose: `makeSnapshot` seeds tick 1, where
+        // `+ 1` and `* 2` agree. Three tells them apart, and the expectation
+        // is the literal rather than the formula, so it cannot be satisfied by
+        // copying whatever the reducer does.
+        const snapshot = { ...makeSnapshot(), tick: 3 };
+
+        const next = actionSetVelocityDefinition.reduce(
+            snapshot,
+            { dx: -1, dy: 1 },
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        expect(next.tick).toBe(4);
+    });
+
+    it('returns the SAME snapshot when the seat drives nothing', () => {
+        // The total-reduce arm. `validate` already refuses this, so the arm is
+        // reachable only from an engine path that reduced without validating —
+        // and it must stay a true no-op: reference-identical, tick unadvanced.
+        // An unconditional `tick: state.tick + 1` on the way out would break
+        // both halves at once, so each is asserted.
+        //
+        // `action:select-primitive` has two arms of the same shape, each with
+        // its own test below.
+        const snapshot = makeSnapshot({ 'primitive-cube': { ownerId: null } });
+
+        const next = actionSetVelocityDefinition.reduce(
+            snapshot,
+            { dx: 1, dy: 0 },
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        expect(next).toBe(snapshot);
+        expect(next.tick).toBe(snapshot.tick);
+    });
+
     it('does not mutate the input snapshot', () => {
+        // The whole snapshot, not just `entities`: a tick advance written as
+        // `state.tick += 1` would leave the entity map untouched.
         const snapshot = makeSnapshot();
-        const before = structuredClone(snapshot.entities);
+        const before = structuredClone(snapshot);
 
         actionSetVelocityDefinition.reduce(
             snapshot,
@@ -216,7 +260,7 @@ describe('action:set-velocity', () => {
             makeReduceContext(snapshot),
         );
 
-        expect(snapshot.entities).toEqual(before);
+        expect(snapshot).toEqual(before);
     });
 
     it('is not predictable — the host owns the realtime clock', () => {
@@ -251,7 +295,13 @@ describe('action:select-primitive', () => {
         ).toEqual({ ok: true });
     });
 
-    it('accepts re-selecting the primitive the seat already drives', () => {
+    it('refuses re-selecting the primitive the seat already drives', () => {
+        // A click on your own primitive changes nothing. Accepting it would let
+        // the pipeline APPLY an action whose reduce returns the input reference
+        // — see `HostSessionPipeline.processAction` for what an applied action
+        // then meets, and the recording tests in
+        // `__tests__/replay-determinism.test.ts`, which drive the gesture
+        // through the real pipeline.
         const snapshot = makeSnapshot();
 
         expect(
@@ -261,7 +311,7 @@ describe('action:select-primitive', () => {
                 P1,
                 makeReduceContext(snapshot),
             ),
-        ).toEqual({ ok: true });
+        ).toEqual({ ok: false, reason: 'already_controlled' });
     });
 
     it('rejects an entity id no entity carries', () => {
@@ -364,9 +414,26 @@ describe('action:select-primitive', () => {
         expect(primitive(next, CUBE).dx).toBe(1);
     });
 
+    it('advances the tick by exactly one', () => {
+        // Invariant #42, same rule — and the same off-the-fixed-point tick as
+        // `action:set-velocity`, for the same reason.
+        const snapshot = { ...makeSnapshot(), tick: 3 };
+
+        const next = actionSelectPrimitiveDefinition.reduce(
+            snapshot,
+            { entityId: 'primitive-cone' },
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        expect(next.tick).toBe(4);
+    });
+
     it('does not mutate the input snapshot', () => {
+        // The whole snapshot, not just `entities` — see the same guard on
+        // `action:set-velocity`.
         const snapshot = makeSnapshot();
-        const before = structuredClone(snapshot.entities);
+        const before = structuredClone(snapshot);
 
         actionSelectPrimitiveDefinition.reduce(
             snapshot,
@@ -375,7 +442,7 @@ describe('action:select-primitive', () => {
             makeReduceContext(snapshot),
         );
 
-        expect(snapshot.entities).toEqual(before);
+        expect(snapshot).toEqual(before);
     });
 
     it('leaves the ground plane in the record it rewrites', () => {
@@ -391,10 +458,26 @@ describe('action:select-primitive', () => {
         expect(next.entities[GROUND]).toStrictEqual(snapshot.entities[GROUND]);
     });
 
+    it('returns the SAME snapshot when the target is not a primitive', () => {
+        // The other total-reduce arm. `validate` refuses the ground plane with
+        // `not_a_primitive`, so this is reachable only from an engine path that
+        // reduced without validating — and like every no-op arm it must stay
+        // reference-identical with the tick unadvanced.
+        const snapshot = makeSnapshot();
+
+        const next = actionSelectPrimitiveDefinition.reduce(
+            snapshot,
+            { entityId: GROUND },
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        expect(next).toBe(snapshot);
+        expect(next.tick).toBe(snapshot.tick);
+    });
+
     it('returns the SAME snapshot when a seat re-selects what it already drives', () => {
-        // The fast path. Its result is value-identical to the long way round —
-        // release the entity, then overwrite the same key from the unchanged
-        // input — so reference identity is the only thing that can pin it.
+        // The fast path.
         const snapshot = makeSnapshot({ 'primitive-cube': { dx: 1, dy: 0 } });
 
         expect(

@@ -147,6 +147,32 @@ describe('ActionPrimitiveMesh', () => {
         }
     });
 
+    it('reports no click on the primitive the viewer already drives', async () => {
+        // Re-picking what you already drive is a no-op the simulation refuses
+        // (`already_controlled`). Dispatching it anyway would take the host's
+        // rejection arm and write a warn line per click, so the click is not
+        // reported. The ray still stops here — the ground plane sits behind.
+        const onSelect = vi.fn();
+        const renderer = await ReactThreeTestRenderer.create(
+            <ActionPrimitiveMesh
+                primitive={makePrimitive({ id: 'primitive-cone' })}
+                isControlled
+                onSelect={onSelect}
+            />,
+        );
+        try {
+            const stopPropagation = vi.fn();
+            await renderer.fireEvent(findByType(renderer.scene, 'Mesh'), 'click', {
+                stopPropagation,
+            });
+
+            expect(onSelect).not.toHaveBeenCalled();
+            expect(stopPropagation).toHaveBeenCalledOnce();
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
     it('colours an unclaimed primitive distinctly from another seat’s', async () => {
         const unclaimed = await ReactThreeTestRenderer.create(
             <ActionPrimitiveMesh

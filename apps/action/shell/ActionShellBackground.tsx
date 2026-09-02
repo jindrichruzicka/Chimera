@@ -100,9 +100,8 @@ export function ActionShellBackground(): React.ReactElement {
             // page's own WASD pick, is already a version behind.
             const patch = selectActionPick(getShellState().draft, 'host', primitive.shape);
             if (patch === null) {
-                // Refused: the shape is already the host's, or it is the second
-                // seat's. Nothing changed, so nothing sounds — a blip on a click
-                // that moved no ring reads as a bug.
+                // Refused by `selectActionPick`. Nothing changed, so nothing
+                // sounds — a blip on a click that moved no ring reads as a bug.
                 return;
             }
             setShellDraft(patch);

@@ -84,6 +84,9 @@ interface PrimitiveMockProps {
     readonly onSelect: (entityId: string) => void;
 }
 
+// The double keeps the real mesh's one judgement — it does not report a click
+// on the primitive this viewer already drives. Without it a composed test can
+// assert a dispatch the real tree never makes.
 vi.mock('../components/ActionPrimitiveMesh.js', () => ({
     ActionPrimitiveMesh: ({ primitive, isControlled, onSelect }: PrimitiveMockProps) => (
         <button
@@ -93,6 +96,7 @@ vi.mock('../components/ActionPrimitiveMesh.js', () => ({
             data-controlled={String(isControlled)}
             type="button"
             onClick={() => {
+                if (isControlled) return;
                 onSelect(primitive.id);
             }}
         >
@@ -171,6 +175,16 @@ function makeSnapshot(
             dx: 0,
             dy: 0,
             ownerId: P2,
+        },
+        'primitive-cone': {
+            id: entityId('primitive-cone'),
+            kind: 'primitive',
+            shape: 'cone',
+            x: 4,
+            y: 0,
+            dx: 0,
+            dy: 0,
+            ownerId: null,
         },
     };
     const entities = { ...base, ...overrides };
@@ -286,6 +300,12 @@ describe('ActionPlayfield — the arena', () => {
             'true',
         );
         expect(screen.getByTestId('action-primitive-primitive-sphere')).toHaveAttribute(
+            'data-controlled',
+            'false',
+        );
+        // The whole rendered set, so "only" is exhaustive: an ownerless
+        // primitive is not the viewer’s either.
+        expect(screen.getByTestId('action-primitive-primitive-cone')).toHaveAttribute(
             'data-controlled',
             'false',
         );
@@ -516,13 +536,24 @@ describe('ActionPlayfield — selection', () => {
     });
 
     it('names the clicked primitive, not the first one', () => {
+        // The cone: third in the record, and not one the viewer drives.
+        const { sendAction } = renderPlayfield();
+
+        screen.getByTestId('action-primitive-primitive-cone').click();
+
+        expect(sendAction).toHaveBeenCalledWith(
+            expect.objectContaining({ payload: { entityId: 'primitive-cone' } }),
+        );
+    });
+
+    it('sends nothing when the viewer clicks the primitive it already drives', () => {
+        // The mesh declines to report it, so no `action:select-primitive`
+        // reaches the host to be refused and logged.
         const { sendAction } = renderPlayfield();
 
         screen.getByTestId('action-primitive-primitive-cube').click();
 
-        expect(sendAction).toHaveBeenCalledWith(
-            expect.objectContaining({ payload: { entityId: 'primitive-cube' } }),
-        );
+        expect(sendAction).not.toHaveBeenCalled();
     });
 
     it('stamps a click made after several beats with the tick current at the click', () => {

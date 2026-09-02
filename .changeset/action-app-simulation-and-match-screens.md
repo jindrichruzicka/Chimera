@@ -30,8 +30,8 @@ HUD's save affordance and F88's autosave/Continue flow both depend on.
 
 Two actions, both with real validation branches: `action:set-velocity { dx, dy ∈ -1|0|1 }` writes a
 standing order onto the primitive the acting seat owns (rejected outright when the seat owns none),
-and `action:select-primitive { entityId }` claims one exclusively — rejecting an unknown id, the
-ground plane, and a primitive another seat drives — releasing and STOPPING whatever the seat drove
+and `action:select-primitive { entityId }` claims one exclusively — its `validate` branches are
+enumerated in `actions.test.ts` — releasing and STOPPING whatever the seat drove
 before, so an abandoned primitive cannot coast on with nobody at the controls. Ownership lives on
 the entity rather than in a per-player field, so the renderer's selection colouring and the
 reducer's authority read one value.

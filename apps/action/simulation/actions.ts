@@ -11,6 +11,13 @@
 // as the game's per-beat hook. Nothing in this module reads a clock — the beat
 // arrives as an ordinary reduce, so the same recorded actions replay to the same
 // state (Invariants #43/#70).
+//
+// Each reducer below advances `tick` whenever it returns a CHANGED snapshot
+// (Invariant #42) — that is what makes its recorded action replayable. Its
+// no-op arms return the input reference instead, and `validate` refuses each
+// of them; the arm tests in `actions.test.ts` measure both halves. The
+// per-beat hook advances nothing either: it runs inside `engine:tick`'s own
+// reduce, which has already advanced.
 
 import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import type { ClosedAnimationWindow } from '@chimera-engine/simulation/engine/AnimationWindow.js';
@@ -100,7 +107,11 @@ export const actionSetVelocityDefinition: ActionDefinition<
             dx: payload.dx,
             dy: payload.dy,
         };
-        return { ...state, entities: { ...state.entities, [controlled.id]: next } };
+        return {
+            ...state,
+            tick: state.tick + 1,
+            entities: { ...state.entities, [controlled.id]: next },
+        };
     },
 };
 
@@ -133,7 +144,16 @@ export const actionSelectPrimitiveDefinition: ActionDefinition<
             // not enough to say a seat may drive it.
             return { ok: false, reason: 'not_a_primitive' };
         }
-        if (target.ownerId !== null && target.ownerId !== playerId) {
+        if (target.ownerId === playerId) {
+            // A click on the primitive the seat already drives changes nothing,
+            // and `reduce` returns the input reference for it. Refusing keeps
+            // it off the path to `HostSessionPipeline.processAction`, which is
+            // where an applied action meets the replay recorder — and an entry
+            // that leaves the tick where it was is one `ReplayPlayer.step()`
+            // refuses (Invariant #42).
+            return { ok: false, reason: 'already_controlled' };
+        }
+        if (target.ownerId !== null) {
             return { ok: false, reason: 'primitive_taken' };
         }
         return { ok: true };
@@ -141,6 +161,8 @@ export const actionSelectPrimitiveDefinition: ActionDefinition<
 
     reduce(state, payload, playerId): BaseGameSnapshot {
         const target = state.entities[payload.entityId as EntityId];
+        // Both arms are refused by `validate`, but `reduce` must be total for
+        // an engine path that reduced without validating.
         if (!isActionPrimitiveEntity(target)) return state;
         if (target.ownerId === playerId) return state;
 
@@ -162,7 +184,7 @@ export const actionSelectPrimitiveDefinition: ActionDefinition<
 
         const claimed: ActionPrimitiveEntity = { ...target, ownerId: playerId };
         entities[target.id] = claimed;
-        return { ...state, entities };
+        return { ...state, tick: state.tick + 1, entities };
     },
 };
 

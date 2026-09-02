@@ -28,9 +28,10 @@ export interface ActionPrimitiveMeshProps {
     /** True when the local viewer is the seat driving this primitive. */
     readonly isControlled: boolean;
     /**
-     * In-scene selection: called with this primitive's entity id on click. The
-     * playfield turns it into `action:select-primitive`; the host decides
-     * whether the claim is legal, so this reports the click and judges nothing.
+     * In-scene selection: called with this primitive's entity id on click.
+     * What a consumer does with it is the consumer's business. Which clicks
+     * are reported at all is `handleClick`'s, and `ActionPrimitiveMesh.test.tsx`
+     * measures it.
      */
     readonly onSelect: (entityId: string) => void;
 }
@@ -61,6 +62,10 @@ export function ActionPrimitiveMesh({
         // Stop the ray here so the click does not also reach the ground plane
         // behind the primitive.
         event.stopPropagation();
+        // Re-picking what this viewer already drives is not reported —
+        // `ActionPrimitiveMesh.test.tsx > reports no click on the primitive the
+        // viewer already drives` is the pin.
+        if (isControlled) return;
         onSelect(primitive.id);
     };
 

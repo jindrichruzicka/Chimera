@@ -58,9 +58,9 @@ Meanwhile:
 | `apps/tactics/components/TacticsUnitPrimitive.tsx` | 149  | `castShadow`    |
 | `apps/tactics/components/TacticsGroundPlane.tsx`   | 51   | `receiveShadow` |
 | `apps/action/screens/ActionPlayfield.tsx`          | 154  | `castShadow`    |
-| `apps/action/components/ActionPrimitiveMesh.tsx`   | 68   | `castShadow`    |
+| `apps/action/components/ActionPrimitiveMesh.tsx`   | —    | `castShadow`    |
 | `apps/action/components/ActionGroundPlane.tsx`     | 30   | `receiveShadow` |
-| `apps/action/shell/ActionShellBackground.tsx`      | 120  | `castShadow`    |
+| `apps/action/shell/ActionShellBackground.tsx`      | —    | `castShadow`    |
 
 All six are inert. This is worth treating as a bug fix ahead of the feature
 work: it is the cheapest of the gaps and the only one that makes existing code

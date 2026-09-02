@@ -89,6 +89,10 @@ vi.mock('../components/ActionPrimitiveMesh.js', () => ({
             data-testid={`action-shell-primitive-${primitive.shape}`}
             data-controlled={String(isControlled)}
             onClick={() => {
+                // The real mesh does not report a click on the shape this
+                // viewer already holds; a double that did would let a test
+                // assert a pick the shell never sees.
+                if (isControlled) return;
                 onSelect(primitive.id);
             }}
         >
@@ -281,11 +285,17 @@ describe('ActionShellBackground — the click', () => {
 
     it('writes nothing and sounds nothing when the click changes no pick', () => {
         // A blip on a click that moved no ring reads as a bug: the player hears
-        // a confirmation for something that did not happen.
+        // a confirmation for something that did not happen. Clicking the shape
+        // the host already holds is the case the mesh itself declines to
+        // report; `refuses the primitive the SECOND seat holds` below covers
+        // the one that does reach `selectActionPick`.
         render(<ActionShellBackground />);
 
         screen.getByTestId('action-shell-primitive-cube').click();
 
+        // The default draft carries no `primitive` attribute at all, and a
+        // click that changed no pick must not write one.
+        expect(getShellState().draft.hostAttributes?.['primitive']).toBeUndefined();
         expect(playSelect).not.toHaveBeenCalled();
     });
 
